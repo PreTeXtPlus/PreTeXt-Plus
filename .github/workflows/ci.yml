@@ -41,6 +41,8 @@ jobs:
 
   lint:
     runs-on: ubuntu-latest
+    env:
+      RUBOCOP_CACHE_ROOT: tmp/rubocop
     steps:
       - name: Checkout code
         uses: actions/checkout@v5
@@ -74,12 +76,6 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v5
-
-      # - name: Set up Ruby
-      #   uses: ruby/setup-ruby@v1
-      #   with:
-      #     bundler-cache: true
-
       - name: Run tests
         env:
           RAILS_ENV: test
@@ -92,8 +88,6 @@ jobs:
 
   system-test:
     runs-on: ubuntu-latest
-    container:
-      image: '.devcontainer/Dockerfile'
 
     # services:
     #  redis:
@@ -104,12 +98,6 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v5
-
-      # - name: Set up Ruby
-      #   uses: ruby/setup-ruby@v1
-      #   with:
-      #     bundler-cache: true
-
       - name: Run System Tests
         env:
           RAILS_ENV: test
@@ -119,7 +107,6 @@ jobs:
         with:
           # The command you want to run inside the dev container
           runCmd: bin/rails db:test:prepare test:system
-
       - name: Keep screenshots from failed system tests
         uses: actions/upload-artifact@v4
         if: failure()
