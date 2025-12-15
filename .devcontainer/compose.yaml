@@ -1,63 +1,45 @@
-name: "pretext_plus"
-
+---
+name: pretext_plus
 services:
   rails-app:
     build:
-      context: ..
-      dockerfile: .devcontainer/Dockerfile
-
+      context: ".."
+      dockerfile: ".devcontainer/Dockerfile"
     volumes:
-    - ../..:/workspaces:cached
-
-    # Overrides default command so things don't shut down after the process ends.
+    - "../..:/workspaces:cached"
     command: sleep infinity
-
-    # Uncomment the next line to use a non-root user for all processes.
-    # user: vscode
-
-    # Use "forwardPorts" in **devcontainer.json** to forward an app port locally.
-    # (Adding the "ports" property to this file will not forward from a Codespace.)
     depends_on:
+    - postgres
     - selenium
     - redis
-
   selenium:
     image: selenium/standalone-chromium
     restart: unless-stopped
-
   db:
     image: postgres:16
     restart: unless-stopped
     command: postgres -c "pg_stat_statements.track=all" -c "shared_preload_libraries=pg_stat_statements"
     volumes:
-      - postgres-data:/var/lib/postgresql/data
+    - postgres-data:/var/lib/postgresql/data
     environment:
       POSTGRES_USER: postgres
       POSTGRES_DB: postgres
       POSTGRES_PASSWORD: postgres
-      # Your config/database.yml should use the user and password you set here,
-      # and host "db" (as that's the name of this service). You can use whatever
-      # database name you want. Use `bin/rails db:prepare` to create the database.
-      #
-      # Example:
-      #
-      #  development:
-      #    <<: *default
-      #    host: db
-      #    username: postgres
-      #    password: postgres
-      #    database: myapp_development
-
-      # Add "forwardPorts": ["5432"] to **devcontainer.json** to forward PostgreSQL locally.
-      # (Adding the "ports" property to this file will not forward from a Codespace.)
-
   redis:
     image: redis:7.2
     restart: unless-stopped
     volumes:
     - redis-data:/data
-
-  
+  postgres:
+    image: postgres:16.1
+    restart: unless-stopped
+    networks:
+    - default
+    volumes:
+    - postgres-data:/var/lib/postgresql/data
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
 volumes:
-  redis-data:
   postgres-data:
+  redis-data:
