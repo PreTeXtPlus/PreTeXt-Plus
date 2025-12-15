@@ -66,8 +66,9 @@ jobs:
         run: bin/rubocop -f github
 
   test:
-    using: 'docker'
-    image: '.devcontainer/Dockerfile'
+    runs:
+      using: 'docker'
+      image: '.devcontainer/Dockerfile'
     # services:
     #  redis:
     #    image: valkey/valkey:8
@@ -91,8 +92,9 @@ jobs:
         run: bin/rails db:test:prepare test
 
   system-test:
-    using: 'docker'
-    image: '.devcontainer/Dockerfile'
+    runs:
+      using: 'docker'
+      image: '.devcontainer/Dockerfile'
 
     # services:
     #  redis:
