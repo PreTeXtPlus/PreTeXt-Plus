@@ -1,14 +1,14 @@
 <!DOCTYPE html>
 <html>
   <head>
-    <title>PreTeXt.Plus | Authoring Accessible Documents in the Browser</title>
+    <title>PreTeXt.Plus | Author accessible mathematical documents in your browser</title>
     <meta name="viewport" content="width=device-width,initial-scale=1">
     <meta name="apple-mobile-web-app-capable" content="yes">
-    <meta property="og:title" content="PreTeXt.Plus | Authoring Accessible Documents in the Browser">
-    <meta name="twitter:title" content="PreTeXt.Plus | Authoring Accessible Documents in the Browser">
-    <meta name="description" content="PreTeXt.Plus is a service that supports the authoring and sharing of PreTeXt documents in a web browser.">
-    <meta property="og:description" content="PreTeXt.Plus is a service that supports the authoring and sharing of PreTeXt documents in a web browser.">
-    <meta name="twitter:description" content="PreTeXt.Plus is a service that supports the authoring and sharing of PreTeXt documents in a web browser.">
+    <meta property="og:title" content="PreTeXt.Plus | Author accessible mathematical documents in your browser">
+    <meta name="twitter:title" content="PreTeXt.Plus | Author accessible mathematical documents in your browser">
+    <meta name="description" content="PreTeXt.Plus is a service that supports the authoring and sharing of PreTeXt documents using only a web browser.">
+    <meta property="og:description" content="PreTeXt.Plus is a service that supports the authoring and sharing of PreTeXt documents using only a web browser.">
+    <meta name="twitter:description" content="PreTeXt.Plus is a service that supports the authoring and sharing of PreTeXt documents using only a web browser.">
     <meta property="og:image" content="<%= url_to_image("logo.png") %>">
     <meta name="twitter:image" content="<%= url_to_image("logo.png") %>">
     <%= csrf_meta_tags %>
@@ -20,6 +20,10 @@
     <%= stylesheet_link_tag "application", "data-turbo-track": "reload" %>
     <%= stylesheet_link_tag "tailwind", "data-turbo-track": "reload" %>
     <%= javascript_importmap_tags %>
+
+    <link rel="icon" href="/icon.png" type="image/png">
+    <link rel="icon" href="/icon.svg" type="image/svg+xml">
+    <link rel="apple-touch-icon" href="/icon.png">
   </head>
 <body>
     <header class="fixed w-full">
