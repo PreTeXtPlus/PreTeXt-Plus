@@ -1,3 +1,5 @@
+<% content_for(:title, 'Sign in') %>
+
 <div class="mx-auto md:w-2/3 w-full">
   <% if alert = flash[:alert] %>
     <p class="py-2 px-3 bg-red-50 mb-5 text-red-500 font-medium rounded-lg inline-block" id="alert"><%= alert %></p>
@@ -6,6 +8,11 @@
   <% if notice = flash[:notice] %>
     <p class="py-2 px-3 bg-green-50 mb-5 text-green-500 font-medium rounded-lg inline-block" id="notice"><%= notice %></p>
   <% end %>
+
+  <p class="text-center">
+    Email <a href="mailto:pretextplus@scholarlattice.org" class="underline hover:no-underline">PreTeXtPlus@ScholarLattice.org</a>
+    to request an account!
+  </p>
 
   <h1 class="font-bold text-4xl">Sign in</h1>
 
