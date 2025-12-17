@@ -4,6 +4,7 @@ class ProjectsController < ApplicationController
   # GET /projects or /projects.json
   def index
     @projects = Project.where user: current_user
+    @invitations = Invitation.where owner_user: current_user, recipient_user: nil
   end
 
   # GET /projects/1 or /projects/1.json
