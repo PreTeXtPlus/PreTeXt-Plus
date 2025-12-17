@@ -10,20 +10,41 @@
     <%= link_to "New project", new_project_path, class: "rounded-md px-3.5 py-2.5 bg-blue-600 hover:bg-blue-500 text-white block font-medium" %>
   </div>
 
-  <div id="projects" class="min-w-full divide-y divide-gray-200 space-y-5">
+  <div id="projects" class="min-w-full space-y-5">
     <% if @projects.any? %>
       <% @projects.each do |project| %>
-        <div class="flex flex-col sm:flex-row justify-between items-center pb-5 sm:pb-0">
-          <%= render project %>
-          <div class="w-full sm:w-auto flex flex-col sm:flex-row space-x-2 space-y-2">
-            <%= link_to "Show", project, class: "w-full sm:w-auto text-center rounded-md px-3.5 py-2.5 bg-gray-100 hover:bg-gray-50 inline-block font-medium" %>
-            <%= link_to "Edit", edit_project_path(project), class: "w-full sm:w-auto text-center rounded-md px-3.5 py-2.5 bg-gray-100 hover:bg-gray-50 inline-block font-medium" %>
-            <%= button_to "Destroy", project, method: :delete, class: "w-full sm:w-auto rounded-md px-3.5 py-2.5 text-white bg-red-600 hover:bg-red-500 font-medium cursor-pointer", data: { turbo_confirm: "Are you sure?" } %>
-          </div>
-        </div>
+        <%= link_to project, class: "block rounded-xl bg-white p-4 m-3 ring-2 ring-gray-100 hover:ring-indigo-200 sm:p-6 lg:p-8" do %>
+          <span class="flex items-start sm:gap-8">
+            <span class="hidden sm:grid sm:size-20 sm:shrink-0 sm:place-content-center" aria-hidden="true">
+              <%= image_tag "/icon.svg" %>
+            </span>
+
+            <span>
+              <strong class="rounded-sm border border-indigo-500 bg-indigo-500 px-3 py-1.5 text-[10px] font-medium text-white">
+                Project
+              </strong>
+
+              <h3 class="mt-4 text-lg font-medium sm:text-xl">
+                <%= project.title %>
+              </h3>
+
+              <p class="mt-1 text-sm text-gray-700">
+                <%= project.content %>
+              </p>
+            </span>
+          </span>
+        <% end %>
       <% end %>
     <% else %>
       <p class="text-center my-10">No projects found.</p>
+    <% end %>
+    <% if @invitations.present? %>
+      <h1 class="font-semibold text-3xl my-2">Invitation codes</h1>
+      <ul>
+        <% @invitations.each do |invitation| %>
+          <li><code class="p-2 rounded-sm bg-blue-100 text-blue-900"><%= invitation.code %></code></li>
+        <% end %>
+      </ul>
     <% end %>
   </div>
 </div>

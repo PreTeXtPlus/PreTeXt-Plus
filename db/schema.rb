@@ -10,10 +10,21 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2025_12_16_162150) do
+ActiveRecord::Schema[8.1].define(version: 2025_12_17_003039) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
   enable_extension "pgcrypto"
+
+  create_table "invitations", id: :uuid, default: -> { "gen_random_uuid()" }, force: :cascade do |t|
+    t.uuid "code", default: -> { "gen_random_uuid()" }, null: false
+    t.datetime "created_at", null: false
+    t.uuid "owner_user_id", null: false
+    t.uuid "recipient_user_id"
+    t.datetime "updated_at", null: false
+    t.index ["code"], name: "index_invitations_on_code", unique: true
+    t.index ["owner_user_id"], name: "index_invitations_on_owner_user_id"
+    t.index ["recipient_user_id"], name: "index_invitations_on_recipient_user_id"
+  end
 
   create_table "projects", id: :uuid, default: -> { "gen_random_uuid()" }, force: :cascade do |t|
     t.text "content"
@@ -41,6 +52,8 @@ ActiveRecord::Schema[8.1].define(version: 2025_12_16_162150) do
     t.index ["email_address"], name: "index_users_on_email_address", unique: true
   end
 
+  add_foreign_key "invitations", "users", column: "owner_user_id"
+  add_foreign_key "invitations", "users", column: "recipient_user_id"
   add_foreign_key "projects", "users"
   add_foreign_key "sessions", "users"
 end

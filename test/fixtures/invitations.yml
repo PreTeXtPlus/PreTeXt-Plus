@@ -1,0 +1,11 @@
+# Read about fixtures at https://api.rubyonrails.org/classes/ActiveRecord/FixtureSet.html
+
+one:
+  code: 
+  owner_user: one
+  recipient_user: one
+
+two:
+  code: 
+  owner_user: two
+  recipient_user: two
