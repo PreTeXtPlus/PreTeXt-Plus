@@ -9,6 +9,12 @@
   </div>
   <div>
     <strong class="block font-medium mb-1">Content:</strong>
-    <%= project.content %>
+    <form action="https://build.pretext.plus" method="POST" target="pretext">
+      <input type="hidden" name="source" value="<%= project.content %>">
+      <input type="hidden" name="title" value="<%= project.title %>">
+      <input type="hidden" name="token" value="<%= ENV.fetch("BUILD_TOKEN") %>">
+      <button type="submit" class="bg-blue-500 text-white px-3 py-1 rounded">Build</button>
+    </form>
+    <iframe title="Pretext Build" name="pretext" src="https://build.pretext.plus" class="w-full h-96 border border-gray-300"></iframe>
   </div>
 </div>
