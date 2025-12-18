@@ -11,8 +11,10 @@
     </div>
     <div class="w-1/2 h-full pt-16 justify-center border-l border-gray-200">
       <div class="p-4 w-full border-b border-gray-200 fixed w-full z-10 h-18">
+        <%= button_tag "Preview", type: "button", class: "w-full sm:w-auto rounded-md px-3.5 py-2.5 bg-green-700 hover:bg-green-600 text-white inline-block font-medium cursor-pointer", onclick: "window.preview()" %>
         <%= form.submit "Save and Close", class: "w-full sm:w-auto rounded-md px-3.5 py-2.5 bg-blue-600 hover:bg-blue-500 text-white inline-block font-medium cursor-pointer" %>
-        <%= link_to "Cancel", @project, class: "w-full sm:w-auto text-center mt-2 sm:mt-0 sm:ml-2 rounded-md px-3.5 py-2.5 bg-gray-100 hover:bg-gray-50 inline-block font-medium" %>
+        <%= link_to "Cancel", @project, class: "w-full sm:w-auto text-center mt-2 sm:mt-0 rounded-md px-3.5 py-2.5 bg-gray-100 hover:bg-gray-50 inline-block font-medium" %>
+        <%= button_to "Destroy this project", @project, method: :delete, form_class: "sm:inline-block mt-2 sm:mt-0 sm:ml-2", class: "w-full sm:w-auto text-white cursor-pointer text-center mt-2 sm:mt-0 rounded-md px-3.5 py-2.5 bg-red-600 hover:bg-red-500 inline-block font-medium", data: { turbo_confirm: "Are you sure?" } %>
       </div>
       <iframe src="https://build.pretext.plus" name="preview" class="pt-18 w-full h-full"></iframe>
     </div>
@@ -50,3 +52,40 @@
   </div>
   <% end %>
 <% end %>
+
+<script>
+function postToIframe(url, data, iframeName) {
+    // Create a temporary form element
+    const form = document.createElement('form');
+    form.method = 'POST';
+    form.action = url;
+    form.target = iframeName; // This must match the iframe's 'name' attribute
+    form.style.display = 'none'; // Keep it hidden
+
+    // Add data as hidden input fields
+    for (const key in data) {
+        if (Object.hasOwnProperty.call(data, key)) {
+            const input = document.createElement('input');
+            input.type = 'hidden';
+            input.name = key;
+            input.value = data[key];
+            form.appendChild(input);
+        }
+    }
+
+    // Append form to body, submit it, and then remove it
+    document.body.appendChild(form);
+    form.submit();
+    form.remove(); // Clean up the form after submission
+}
+
+function preview() {
+    const source = document.querySelector('textarea[name="project[content]"]').value;
+    const title = document.querySelector('input[name="project[title]"]').value;
+    const token = "<%= ENV["BUILD_TOKEN"] %>";
+    const postData = { source: source, title: title, token: token };
+    postToIframe('https://build.pretext.plus', postData, 'preview');
+}
+
+preview();
+</script>
