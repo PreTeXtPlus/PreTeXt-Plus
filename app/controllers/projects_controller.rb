@@ -1,4 +1,5 @@
 class ProjectsController < ApplicationController
+  allow_unauthenticated_access only: :share
   before_action :set_project, only: %i[ show edit update destroy ]
 
   # GET /projects or /projects.json
@@ -58,6 +59,20 @@ class ProjectsController < ApplicationController
       format.html { redirect_to projects_path, notice: "Project was successfully destroyed.", status: :see_other }
       format.json { head :no_content }
     end
+  end
+
+  def share
+    require "uri"
+    require "net/http"
+    @project = Project.find(params.expect(:project_id))
+    # post @project to build.pretext.plus
+    params = {
+      source: @project.content,
+      title: @project.title,
+      token: ENV["BUILD_TOKEN"]
+    }
+    response = Net::HTTP.post_form(URI.parse("https://build.pretext.plus"), params)
+    render html: response.body.html_safe
   end
 
   private
