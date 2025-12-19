@@ -60,6 +60,15 @@ class ProjectsController < ApplicationController
     end
   end
 
+  def share
+    @project = Project.find(params.expect(:project_id))
+    if @project.html.present?
+      render html: @project.html
+    else
+      render html: "HTML build not available."
+    end
+  end
+
   private
     # Use callbacks to share common setup or constraints between actions.
     def set_project
