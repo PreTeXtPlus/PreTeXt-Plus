@@ -1,5 +1,5 @@
 <%= form_with(model: project, class: "contents") do |form| %>
-  <div class="flex w-full h-screen">
+  <div class="md:flex w-full h-screen">
     <% if project.errors.any? %>
       <div id="error_explanation" class="bg-red-50 text-red-500 px-3 py-2 font-medium rounded-md mt-3">
         <h2><%= pluralize(project.errors.count, "error") %> prohibited this project from being saved:</h2>
@@ -11,17 +11,17 @@
         </ul>
       </div>
     <% end %>
-    <div class="w-1/2 h-full items-center justify-center">
-      <div class="p-4 w-1/2 border-b border-gray-200 fixed z-10 h-18 flex items-center justify-center">
+    <div class="w-full md:w-1/2 h-full items-center justify-center">
+      <div class="p-4 w-1/2 border-b border-gray-200 md:fixed z-10 h-18 flex items-center justify-center">
         <%= form.label :title, class: "inline-block font-semibold pr-4" %>
         <%= form.text_field :title, class: ["w-2/3 p-2 inline-block shadow-sm rounded-md border font-mono", {"border-gray-400 focus:outline-blue-600": project.errors[:title].none?, "border-red-400 focus:outline-red-600": project.errors[:title].any?}] %>
       </div>
-      <div class="p-4 pt-20 v-full h-full">
+      <div class="p-4 md:pt-20 v-full h-full">
         <%= form.textarea :content, class: "w-full h-full !outline-none font-mono resize-none" %>
       </div>
     </div>
-    <div class="w-1/2 h-full justify-center border-l border-gray-200">
-      <div class="p-4 w-full border-b border-gray-200 fixed w-full z-10 h-18">
+    <div class="w-full md:w-1/2 h-full justify-center border-l border-gray-200">
+      <div class="p-4 w-full border-b border-gray-200 md:fixed w-full md:z-10 md:h-18">
         <%= button_tag "Rebuild Preview", type: "button", class: "w-full sm:w-auto rounded-md px-3.5 py-2.5 bg-green-700 hover:bg-green-600 text-white inline-block font-medium cursor-pointer", onclick: "window.preview()" %>
         <%= form.submit "Save and...", class: "w-full sm:w-auto rounded-md px-3.5 py-2.5 bg-blue-600 hover:bg-blue-500 text-white inline-block font-medium cursor-pointer" %>
         <%= link_to "Cancel", @project, class: "w-full sm:w-auto text-center mt-2 sm:mt-0 rounded-md px-3.5 py-2.5 bg-gray-100 hover:bg-gray-50 inline-block font-medium" %>
