@@ -1,6 +1,6 @@
 <% content_for :title, "Showing #{@project.title}" %>
 
-<div class="px-4 w-full">
+<div class="px-4 pt-20 w-full">
   <div class="my-4">
     <%= link_to "Get share link", project_share_path(@project), class: "w-full sm:w-auto text-center rounded-md px-3.5 py-2.5 bg-gray-100 hover:bg-gray-50 inline-block font-medium" %>
     <%= link_to "Edit this project", edit_project_path(@project), class: "w-full sm:w-auto text-center rounded-md px-3.5 py-2.5 bg-gray-100 hover:bg-gray-50 inline-block font-medium" %>

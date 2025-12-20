@@ -1,5 +1,5 @@
 <%= form_with(model: project, class: "contents") do |form| %>
-  <div class="md:flex w-full h-screen">
+  <div class="md:flex pt-16 w-full h-screen">
     <% if project.errors.any? %>
       <div id="error_explanation" class="bg-red-50 text-red-500 px-3 py-2 font-medium rounded-md mt-3">
         <h2><%= pluralize(project.errors.count, "error") %> prohibited this project from being saved:</h2>
@@ -22,34 +22,13 @@
     </div>
     <div class="w-full md:w-1/2 h-full justify-center border-l border-gray-200">
       <div class="p-4 w-full border-b border-gray-200 md:fixed w-full md:z-10 md:h-18">
-        <%= button_tag "Rebuild Preview", type: "button", class: "w-full sm:w-auto rounded-md px-3.5 py-2.5 bg-green-700 hover:bg-green-600 text-white inline-block font-medium cursor-pointer", onclick: "window.preview()" %>
-        <%= form.submit "Save and...", class: "w-full sm:w-auto rounded-md px-3.5 py-2.5 bg-blue-600 hover:bg-blue-500 text-white inline-block font-medium cursor-pointer" %>
+        <%= button_tag "Rebuild Preview", type: "button", class: "w-full sm:w-auto rounded-md px-3.5 py-2.5 bg-green-700 hover:bg-green-600 text-white inline-block font-medium cursor-pointer", onclick: "window.preview()", title: "Ctrl/Cmd+B" %>
+        <%= form.submit "Save and...", class: "w-full sm:w-auto rounded-md px-3.5 py-2.5 bg-blue-600 hover:bg-blue-500 text-white inline-block font-medium cursor-pointer", title: "Ctrl/Cmd+S" %>
         <%= link_to "Cancel", @project, class: "w-full sm:w-auto text-center mt-2 sm:mt-0 rounded-md px-3.5 py-2.5 bg-gray-100 hover:bg-gray-50 inline-block font-medium" %>
       </div>
       <iframe src="https://build.pretext.plus" name="preview" class="pt-18 w-full h-full"></iframe>
     </div>
   </div>
-  <% if false %>
-
-  <div class="my-5">
-    <%= form.label :user %>
-    <%= project.user.email_address %>
-  </div>
-
-  <div class="my-5">
-    <%= form.label :title %>
-    <%= form.text_field :title, class: ["block shadow-sm rounded-md border px-3 py-2 mt-2 w-full", {"border-gray-400 focus:outline-blue-600": project.errors[:title].none?, "border-red-400 focus:outline-red-600": project.errors[:title].any?}] %>
-  </div>
-
-  <div class="my-5">
-    <%= form.label :content %>
-    <%= form.textarea :content, rows: 4, class: ["block shadow-sm rounded-md border px-3 py-2 mt-2 w-full", {"border-gray-400 focus:outline-blue-600": project.errors[:content].none?, "border-red-400 focus:outline-red-600": project.errors[:content].any?}] %>
-  </div>
-
-  <div class="inline">
-    <%= form.submit class: "w-full sm:w-auto rounded-md px-3.5 py-2.5 bg-blue-600 hover:bg-blue-500 text-white inline-block font-medium cursor-pointer" %>
-  </div>
-  <% end %>
 <% end %>
 
 <script>
@@ -85,6 +64,25 @@ function preview() {
     const postData = { source: source, title: title, token: token };
     postToIframe('https://build.pretext.plus', postData, 'preview');
 }
+
+// Save with Ctrl+S or Cmd+S
+document.addEventListener("keydown", function(e) {
+  if (e.keyCode === 83 && (navigator.platform.match("Mac") ? e.metaKey : e.ctrlKey)) {
+    e.preventDefault();
+    // confirm before submitting
+    if (confirm("Save and close the project?")) {
+      document.querySelector('form.contents').requestSubmit();
+    }
+  }
+}, false);
+
+// Preview with Ctrl+B or Cmd+B
+document.addEventListener("keydown", function(e) {
+  if (e.keyCode === 66 && (navigator.platform.match("Mac") ? e.metaKey : e.ctrlKey)) {
+    e.preventDefault();
+    preview();
+  }
+}, false);
 
 preview();
 </script>
