@@ -42,8 +42,8 @@
                   About
                 <% end %>
                 <% if @current_user.present? %>
-                  <%= link_to :session, data: { turbo_method: :delete }, class: "my-1 text-gray-800 hover:text-blue-500 md:mx-4 md:my-0" do %>
-                    Sign out (<%= @current_user.email %>)
+                  <%= link_to :session, class: "my-1 text-gray-800 hover:text-blue-500 md:mx-4 md:my-0" do %>
+                    Account (<%= @current_user.email %>)
                   <% end %>
                 <% end %>
             </div>
