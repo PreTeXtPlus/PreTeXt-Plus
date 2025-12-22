@@ -1,28 +1,15 @@
 <div class="mx-auto md:w-2/3 w-full pt-20">
   <h1 class="font-bold text-4xl">Register</h1>
+  <p class="text-center">
+    Email <a href="mailto:pretextplus@scholarlattice.org" class="underline hover:no-underline">PreTeXtPlus@ScholarLattice.org</a>
+    to request an invite code,<br>or find us at the <a href="https://aimath.org" class="underline hover:no-underline">AIM booth</a>
+    at the 2026 Joint Math Meetings in Washington D.C.! 
+  </p>
   <%= form_with model: @user do |form| %>
-    <% if form.object.errors.any? %>
-      <div class="text-red-600">Error: <%= form.object.errors.full_messages.first %></div>
-    <% end %>
-
-    <div class="my-5">
-      <%= form.text_field :name, required: true, autofocus: true, autocomplete: "Your Name", placeholder: "Enter your name", value: params[:email], class: "block shadow-sm rounded-md border border-gray-400 focus:outline-blue-600 px-3 py-2 mt-2 w-full" %>
-    </div>
-
-    <div class="my-5">
-      <%= form.email_field :email, required: true, autofocus: true, autocomplete: "email@example.com", placeholder: "Enter your email address", value: params[:email], class: "block shadow-sm rounded-md border border-gray-400 focus:outline-blue-600 px-3 py-2 mt-2 w-full" %>
-    </div>
-
-    <div class="my-5">
-      <%= form.password_field :password, required: true, autocomplete: "current-password", placeholder: "Enter your password", maxlength: 72, class: "block shadow-sm rounded-md border border-gray-400 focus:outline-blue-600 px-3 py-2 mt-2 w-full" %>
-    </div>
-
-    <div class="my-5">
-      <%= form.text_field :invite_code, required: true, autocomplete: "off", placeholder: "Enter your invitation code", class: "block shadow-sm rounded-md border border-gray-400 focus:outline-blue-600 px-3 py-2 mt-2 w-full" %>
-    </div>
-
+    <%= render "fields_for", form: form %>
     <div class="inline">
       <%= form.submit "Register and sign in", class: "w-full sm:w-auto text-center rounded-md px-3.5 py-2.5 bg-blue-600 hover:bg-blue-500 text-white inline-block font-medium cursor-pointer" %>
+      <%= link_to "Sign into existing account", new_session_path, class: "w-full sm:w-auto text-center rounded-md px-3.5 py-2.5 bg-blue-300 hover:bg-blue-200 text-white inline-block font-medium cursor-pointer" %>
     </div>
   <% end %>
 </div>

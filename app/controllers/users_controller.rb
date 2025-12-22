@@ -1,5 +1,5 @@
 class UsersController < ApplicationController
-  unauthenticated_access_only
+  require_unauthenticated_access only: [ :new, :create ]
 
   def new
     @user = User.new
@@ -15,9 +15,21 @@ class UsersController < ApplicationController
     end
   end
 
+  def update
+    if @current_user.update(update_params)
+      redirect_to projects_path, notice: "Profile successfully updated!"
+    else
+      render :new, status: :unprocessable_entity
+    end
+  end
+
   private
 
   def sign_up_params
     params.expect(user: [ :email, :password, :name, :invite_code ])
+  end
+
+  def update_params
+    params.expect(user: [ :name ])
   end
 end

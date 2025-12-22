@@ -11,9 +11,9 @@ module Authentication
       skip_before_action :require_authentication, **options
     end
 
-    def unauthenticated_access_only(**options)
+    def require_unauthenticated_access(**options)
       allow_unauthenticated_access **options
-      before_action -> { redirect_to root_path if authenticated? }, **options
+      before_action -> { redirect_to projects_path if authenticated? }, **options
     end
   end
 
