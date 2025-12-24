@@ -5,7 +5,7 @@ Rails.application.routes.draw do
   resources :projects do
     get "share" => "projects#share"
   end
-  post "subscribe" => "pages#subscribe"
+  post "subscribe" => "subscriptions#subscribe"
   get "projects/:id/article.html", to: redirect("/projects/%{id}/share")
   get "*root/external/icon.svg", to: redirect("/icon-small.svg")
   # Define your application routes per the DSL in https://guides.rubyonrails.org/routing.html
