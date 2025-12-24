@@ -14,6 +14,11 @@ class User < ApplicationRecord
   before_create :validate_invite_code
   after_create_commit :expire_invite
 
+  def project_quota
+    return 100 if self.sustaining_subscription?
+    10
+  end
+
   private
 
   def validate_invite_code

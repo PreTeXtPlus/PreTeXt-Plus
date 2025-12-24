@@ -93,8 +93,8 @@ class ProjectsController < ApplicationController
 
     # redirect if user has too many projects
     def limit_projects
-      if @current_user && @current_user.projects.count >= 10
-        redirect_to projects_path, alert: "You have reached the maximum number of projects allowed."
+      if @current_user.projects.count >= @current_user.project_quota
+        redirect_to projects_path, alert: "Project quota (#{@current_user.project_quota}) cannot be exceeded"
       end
     end
 end
