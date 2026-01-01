@@ -13,6 +13,7 @@ export default class extends Controller {
     const contentField = this.targets.find("contentField");
     const titleField = this.targets.find("titleField");
     const railsForm = this.targets.find("form");
+    const tokenField = this.targets.find("tokenField")
 
     const onCancelButton = () => {
       if (confirm("Cancel without saving?")) {
@@ -26,6 +27,13 @@ export default class extends Controller {
       }
     }
 
+    const onPreviewRebuild = async (content, title, postToIframe) => {
+      console.log('foo')
+      const token = tokenField.value;
+      const postData = { source: content, title: title, token: token };
+      postToIframe('https://build.pretext.plus', postData);
+    }
+
     const props = {
       content: contentField.value,
       onContentChange: (v) => contentField.value = v,
@@ -34,7 +42,8 @@ export default class extends Controller {
       onSaveButton: onSaveButton,
       saveButtonLabel: "Save and...",
       onCancelButton: onCancelButton,
-      cancelButtonLabel: "Cancel"
+      cancelButtonLabel: "Cancel",
+      onPreviewRebuild: onPreviewRebuild
     };
 
     this.component.render(root, props);

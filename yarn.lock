@@ -259,10 +259,10 @@
   resolved "https://registry.yarnpkg.com/@pretextbook/format/-/format-0.0.5.tgz#4b561ad984ac261e1df4e6eef73aaf5c9c183264"
   integrity sha512-453+oVkRbhL/vZ72qGJZgkgkoy6QPVl7+Pb75gpAWIlAyXECcvR8F+JhBqtAOR4ojv/uACPFBsy9GKSIT0ps6w==
 
-"@pretextbook/web-editor@^0.0.5":
-  version "0.0.5"
-  resolved "https://registry.yarnpkg.com/@pretextbook/web-editor/-/web-editor-0.0.5.tgz#8511a55f12760b081813ebfb72c8bfd9dedbfbb4"
-  integrity sha512-kW/ew/0e9AeWHMsltRIPE27iOLirH0JEUB5rn7svCjL3yKAvkqshORkAEk5btt3pRboohYn0ODxKlqVSJ7OkIA==
+"@pretextbook/web-editor@^0.0.7":
+  version "0.0.7"
+  resolved "https://registry.yarnpkg.com/@pretextbook/web-editor/-/web-editor-0.0.7.tgz#e1741e372b61736fc27b1ae74041f8842f7a5d0e"
+  integrity sha512-AX8L17b2hjzGFeyhGV1vqNxAZ2aL6ILk4yaWYQtHYlFYmNkso/OVeqm5pzGpnUff7QlLMrNKvu/kp/T5dWJf0A==
   dependencies:
     "@floating-ui/dom" "^1.7.4"
     "@monaco-editor/react" "^4.7.0"

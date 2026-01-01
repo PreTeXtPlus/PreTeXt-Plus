@@ -1,8 +1,8 @@
-<script>window.buildToken = "<%= ENV["BUILD_TOKEN"] %>"</script>
 <div class="md:flex pt-16 w-full h-screen" data-controller="editor">
   <div data-editor-target="root" class="h-full w-full"></div>
   <%= form_with(model: project, class: "hidden", html: {"data-editor-target" => "form"}) do |form| %>
     <%= form.hidden_field :title, "data-editor-target" => "titleField" %>
     <%= form.hidden_field :content, "data-editor-target" => "contentField" %>
+    <%= form.hidden_field :token, "data-editor-target" => "tokenField", value: ENV["BUILD_TOKEN"] %>
   <% end %>
 </div>
