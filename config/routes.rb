@@ -6,6 +6,7 @@ Rails.application.routes.draw do
     get "share" => "projects#share"
   end
   post "subscribe" => "subscriptions#subscribe"
+  post "subscribe/webhooks" => "subscriptions#webhooks"
   get "projects/:id/article.html", to: redirect("/projects/%{id}/share")
   get "*root/external/icon.svg", to: redirect("/icon-small.svg")
   # Define your application routes per the DSL in https://guides.rubyonrails.org/routing.html

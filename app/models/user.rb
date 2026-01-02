@@ -22,7 +22,7 @@ class User < ApplicationRecord
   private
 
   def validate_invite_code
-    return if User.all.count == 1  # first user doesn't need invite
+    return if User.all.count == 0  # first user doesn't need invite
     valid_invite = Invitation.where(recipient_user_id: nil).find_by(code: invite_code)
     unless valid_invite.present?
       errors.add(:invite_code, "is invalid")
@@ -38,10 +38,5 @@ class User < ApplicationRecord
       throw :abort
     end
     valid_invite.update!(recipient_user_id: self.id)
-  end
-
-  def pay_should_sync_customer?
-    # super will invoke Pay's default (e-mail changed)
-    super || self.saved_change_to_name?
   end
 end
