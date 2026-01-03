@@ -14,7 +14,7 @@ class SubscriptionsController < ApplicationController
       alert = CGI.escape "Your subscription has successfully been created!"
       session = Stripe::Checkout::Session.create({
         line_items: [ {
-          price: "pretextplus_sustaining",
+          price: ENV["STRIPE_SUSTAINING_PRICE"],
           quantity: 1
         } ],
         customer_email: @current_user.email,
