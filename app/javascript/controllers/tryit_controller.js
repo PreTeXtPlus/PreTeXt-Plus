@@ -20,8 +20,12 @@ export default class extends Controller {
       postToIframe('https://build.pretext.plus', postData);
     }
 
-    const onCancelButton = () => {
+    const onSaveButton = () => {
       window.location.href = "/users/new";
+    }
+
+    const onCancelButton = () => {
+      window.location.href = "/session/new";
     }
 
     const props = {
@@ -29,8 +33,10 @@ export default class extends Controller {
       onContentChange: (v) => contentField.value = v,
       title: titleField.value,
       onTitleChange: (v) => titleField.value = v,
+      onSaveButton: onSaveButton,
+      saveButtonLabel: "Create your account!",
       onCancelButton: onCancelButton,
-      cancelButtonLabel: "Create your account!",
+      cancelButtonLabel: "Sign in",
       onPreviewRebuild: onPreviewRebuild
     };
 
