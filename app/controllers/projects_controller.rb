@@ -1,5 +1,6 @@
 class ProjectsController < ApplicationController
   allow_unauthenticated_access only: :share
+  require_unauthenticated_access only: :tryit
   before_action :set_project, only: %i[ show edit update destroy ]
   before_action :limit_projects, only: %i[ new create ]
 
@@ -45,6 +46,44 @@ class ProjectsController < ApplicationController
 
   <p>
     Feel free to delete this sample content and start creating your own project. Happy writing!
+  </p>
+</section>
+    eos
+  end
+
+  # GET /tryit
+  def tryit
+    @title = "Try it!"
+    @content = <<-eos
+<?xml version="1.0" encoding="UTF-8"?>
+
+<section>
+  <title> Thanks for trying PreTeXt.Plus! </title>
+
+  <p>
+    This is a sample project to show you what PreTeXt.Plus can do.
+    You can edit its content using the PreTeXt markup language.
+    <me>
+      \\left|\\sum_{i=0}^n a_i\\right|\\leq\\sum_{i=0}^n|a_i|
+    </me>
+  </p>
+
+  <fact>
+    <statement>
+      <p>
+        For more information on how to use PreTeXt, please visit <c>https://pretextbook.org/doc/guide/html/</c>.
+      </p>
+    </statement>
+  </fact>
+
+  <note>
+    <p>
+      Changes you make here will not be saved.
+    </p>
+  </note>
+
+  <p>
+    Click <em>Create your account</em> to be able to write and save your work!
   </p>
 </section>
     eos
