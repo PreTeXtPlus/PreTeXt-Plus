@@ -41,11 +41,20 @@
     <% end %>
     <% if @invitations.present? %>
       <h1 class="font-semibold text-3xl my-2">Invitation codes</h1>
-      <ul>
+      <ol class="list-decimal">
         <% @invitations.each do |invitation| %>
-          <li><code class="p-2 rounded-sm bg-blue-100 text-blue-900"><%= invitation.code %></code></li>
+          <li>
+            <% if invitation.recipient_user.blank? %>
+            <a href="mailto:?subject=PreTeXt.Plus%20Invite%20Code!&body=Use%20the%20below%20invite%20code%20at%20https%3A%2F%2Fpretext.plus%2Fusers%2Fnew%20to%20create%20your%20own%20account!%0A%0A<%= invitation.code %>">
+              <code class="p-2 rounded-sm bg-blue-100 text-blue-900"><%= invitation.code %></code>
+            </a>
+            <% else %>
+              <code class="p-2 rounded-sm bg-gray-100 text-gray-900"><%= invitation.code %></code> — claimed by
+              <code class="text-gray-900"><%= invitation.recipient_user.email %></code>
+            <% end %>
+          </li>
         <% end %>
-      </ul>
+      </ol>
     <% end %>
   </div>
 </div>
