@@ -6,3 +6,6 @@ import { application } from "./application"
 
 import EditorController from "./editor_controller"
 application.register("editor", EditorController)
+
+import TryitController from "./tryit_controller"
+application.register("tryit", TryitController)
