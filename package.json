@@ -10,6 +10,6 @@
   "dependencies": {
     "@hotwired/stimulus": "^3.2.2",
     "@hotwired/turbo-rails": "^8.0.20",
-    "@pretextbook/web-editor": "^0.0.12"
+    "@pretextbook/web-editor": "^0.0.13"
   }
 }
