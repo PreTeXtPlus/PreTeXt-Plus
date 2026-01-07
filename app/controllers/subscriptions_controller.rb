@@ -61,6 +61,7 @@ class SubscriptionsController < ApplicationController
       user = User.find_by stripe_customer_id: customer_id
       if user.present?
         user.update subscription: :sustaining
+        10.times { user.invitations.create }
       else
         render json: { error: "Invalid customer" }, status: 400 and return
       end

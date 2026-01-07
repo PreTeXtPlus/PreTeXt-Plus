@@ -2,6 +2,7 @@ class User < ApplicationRecord
   has_secure_password
   has_many :sessions, dependent: :destroy
   has_many :projects, dependent: :destroy
+  has_many :invitations, dependent: :destroy, foreign_key: "owner_user_id"
 
   enum :subscription, { beta: 0, sustaining: 1 }, suffix: true
 
