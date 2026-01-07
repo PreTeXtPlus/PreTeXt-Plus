@@ -2,6 +2,7 @@ Rails.application.routes.draw do
   resource :session
   resources :passwords, param: :token
   resources :users, only: [ :new, :create, :update ]
+  resources :invitations, only: [ :new, :create ]
   resources :projects do
     get "share" => "projects#share"
   end
