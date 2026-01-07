@@ -69,3 +69,5 @@ gem "tailwindcss-rails", "~> 4.4"
 gem "jsbundling-rails", "~> 1.3"
 
 gem "stripe", "~> 18.1"
+
+gem "resend", "~> 1.0"

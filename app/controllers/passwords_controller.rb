@@ -18,9 +18,10 @@ class PasswordsController < ApplicationController
   end
 
   def update
-    if @user.update(params.permit(:password, :password_confirmation))
+    if @user.update(params.permit(:password))
       @user.sessions.destroy_all
-      redirect_to new_session_path, notice: "Password has been reset."
+      start_new_session_for @user
+      redirect_to projects_path, notice: "Password has been reset. You are now logged in."
     else
       redirect_to edit_password_path(params[:token]), alert: "Passwords did not match."
     end
