@@ -22,16 +22,16 @@ export default class extends Controller {
     }
 
     const onSaveButton = () => {
-      if (confirm("Save and exit?")) {
-        railsForm.submit();
-      }
+      railsForm.submit();
     }
 
     // Save with Ctrl+S or Cmd+S
     document.addEventListener("keydown", function(e) {
       if ((e.key === 's' || e.key === 'S') && (e.metaKey || e.ctrlKey)) {
         e.preventDefault();
-        onSaveButton();
+        if (confirm("Save and exit?")) {
+          railsForm.submit();
+        }
       }
     }, false);
 
