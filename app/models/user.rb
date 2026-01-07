@@ -16,6 +16,7 @@ class User < ApplicationRecord
   after_create_commit :expire_invite
 
   def project_quota
+    return 10_000 if self.admin
     return 100 if self.sustaining_subscription?
     10
   end
