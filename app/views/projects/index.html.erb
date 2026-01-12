@@ -7,14 +7,14 @@
       (<%= @projects.count %>/<%= @current_user.project_quota %>)
     </h1>
     <% if @current_user && @current_user.projects.count < @current_user.project_quota %>
-      <%= link_to "New project", new_project_path, class: "rounded-md px-3.5 py-2.5 bg-blue-600 hover:bg-blue-500 text-white block font-medium" %>
+      <%= link_to "New project", new_project_path, class: "rounded-md px-3.5 py-2.5 bg-blue-600 hover:bg-blue-500 text-white block font-medium", data: { turbo: false } %>
     <% end %>
   </div>
 
   <div id="projects" class="min-w-full space-y-5">
     <% if @projects.any? %>
       <% @projects.each do |project| %>
-        <%= link_to edit_project_path(project), class: "block rounded-xl bg-white p-4 m-3 ring-2 ring-gray-100 hover:ring-indigo-200 sm:p-6 lg:p-8" do %>
+        <%= link_to edit_project_path(project), class: "block rounded-xl bg-white p-4 m-3 ring-2 ring-gray-100 hover:ring-indigo-200 sm:p-6 lg:p-8", data: { turbo: false } do %>
           <span class="flex items-start sm:gap-8">
             <span class="hidden sm:grid sm:size-20 sm:shrink-0 sm:place-content-center" aria-hidden="true">
               <%= image_tag "/icon.svg", alt: "PreTeXt.Plus icon" %>
