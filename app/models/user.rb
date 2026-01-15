@@ -15,8 +15,13 @@ class User < ApplicationRecord
   before_create :validate_invite_code
   after_create_commit :expire_invite
 
+  def invited?
+    Invitation.where(recipient_user: self).exists?
+  end
+
   def project_quota
     return 10_000 if self.admin
+    return 0 unless self.invited?
     return 100 if self.sustaining_subscription?
     10
   end
