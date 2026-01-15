@@ -10,11 +10,6 @@ class User < ApplicationRecord
 
   validates_uniqueness_of :email
 
-  attr_accessor :invite_code
-
-  before_create :validate_invite_code
-  after_create_commit :expire_invite
-
   def invited?
     Invitation.where(recipient_user: self).exists?
   end
@@ -24,26 +19,5 @@ class User < ApplicationRecord
     return 0 unless self.invited?
     return 100 if self.sustaining_subscription?
     10
-  end
-
-  private
-
-  def validate_invite_code
-    return if User.all.count == 0  # first user doesn't need invite
-    valid_invite = Invitation.where(recipient_user_id: nil).find_by(code: invite_code)
-    unless valid_invite.present?
-      errors.add(:invite_code, "is invalid")
-      throw :abort
-    end
-  end
-
-  def expire_invite
-    return if User.all.count == 1  # first user doesn't need invite
-    valid_invite = Invitation.where(recipient_user_id: nil).find_by(code: invite_code)
-    unless valid_invite.present?
-      errors.add(:invite_code, "is invalid")
-      throw :abort
-    end
-    valid_invite.update!(recipient_user_id: self.id)
   end
 end

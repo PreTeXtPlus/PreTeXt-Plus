@@ -1,10 +1,5 @@
 <div class="mx-auto md:w-2/3 w-full pt-20">
   <h1 class="font-bold text-4xl">Register</h1>
-  <p class="text-center">
-    Email <a href="mailto:pretextplus@scholarlattice.org" class="underline hover:no-underline">PreTeXtPlus@ScholarLattice.org</a>
-    to request an invite code,<br>or find us at the <a href="https://aimath.org" class="underline hover:no-underline">AIM booth</a>
-    at the 2026 Joint Math Meetings in Washington D.C.! 
-  </p>
   <%= form_with model: @user do |form| %>
     <%= render "fields_for", form: form %>
     <div class="inline">
