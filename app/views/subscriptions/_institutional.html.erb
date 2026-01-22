@@ -1,0 +1,13 @@
+<%= render "subscriptions/card", {
+        name: "Institutional",
+        description: "Support for departments and institutions to adopt PreTeXt seamlessly!",
+        price: "Let's talk!",
+        per_month: false,
+        features: [
+            "Get WCAG 2.1, Level AA compliant",
+            "Import inaccessible LaTeX documents",
+            "Contact us to learn more",
+        ]
+    } do %>
+    <%= yield %>
+<% end %>
