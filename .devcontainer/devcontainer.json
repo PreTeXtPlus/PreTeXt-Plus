@@ -34,5 +34,5 @@
 
 
   // Use 'postCreateCommand' to run commands after the container is created.
-  "postCreateCommand": "bin/setup --skip-server && bin/rails javascript:install:esbuild"
+  "postCreateCommand": "bin/setup --skip-server"
 }

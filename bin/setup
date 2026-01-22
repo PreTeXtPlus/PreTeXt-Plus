@@ -19,6 +19,9 @@ FileUtils.chdir APP_ROOT do
   # unless File.exist?("config/database.yml")
   #   FileUtils.cp "config/database.yml.sample", "config/database.yml"
   # end
+  
+  puts "\n== Setting up Javascript =="
+  system! "bin/rails javascript:install:esbuild"
 
   puts "\n== Preparing database =="
   system! "bin/rails db:prepare"
