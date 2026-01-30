@@ -6,21 +6,37 @@ class InvitationsController < ApplicationController
   end
 
   def create
-    u = User.find_by email: params[:email]
-    unless u.present?
-      flash[:notice] = "User with email #{params[:email]} does not exist"
-      render :new, status: :unprocessable_entity and return
+    mode = params[:mode]
+    if mode == "for_user"
+      u = User.find_by email: params[:email]
+      unless u.present?
+        flash[:notice] = "User with email #{params[:email]} does not exist"
+        render :new, status: :unprocessable_entity and return
+      end
+      amount = params[:amount].to_i
+      if amount < 1
+        flash[:notice] = "#{params[:amount]} is not a valid amount"
+        render :new, status: :unprocessable_entity and return
+      end
+      amount = [ amount, 100 ].min
+      amount.times do
+        u.invitations.create!
+      end
+      redirect_to projects_path, notice: "Created #{amount} invitations for #{u.email}"
+    elsif mode == "for_all"
+      amount = params[:amount].to_i
+      if amount < 1
+        flash[:notice] = "#{params[:amount]} is not a valid amount"
+        render :new, status: :unprocessable_entity and return
+      end
+      amount = [ amount, 5 ].min
+      User.joins("INNER JOIN invitations ON users.id = invitations.recipient_user_id").find_each do |u|
+        amount.times do
+          u.invitations.create!
+        end
+      end
+      redirect_to projects_path, notice: "Created #{amount} invitations for all users"
     end
-    amount = params[:amount].to_i
-    if amount < 1
-      flash[:notice] = "#{params[:amount]} is not a valid amount"
-      render :new, status: :unprocessable_entity and return
-    end
-    amount = [ amount, 100 ].min
-    amount.times do
-      u.invitations.create!
-    end
-    redirect_to projects_path, notice: "Created #{amount} invitations for #{u.email}"
   end
 
   def redeem
