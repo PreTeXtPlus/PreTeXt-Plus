@@ -1,0 +1,9 @@
+You've been invited to PreTeXt.Plus!
+
+<% if @user.present? %>
+Log into your account <%= @user.email %> to get started:
+<%= new_session_url(email: @user.email) %>
+<% else %>
+Use the following link to create an account for <%= @email %>:
+<%= new_user_url(email: @email) %>
+<% end %>

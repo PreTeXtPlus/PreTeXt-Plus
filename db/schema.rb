@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_01_16_045223) do
+ActiveRecord::Schema[8.1].define(version: 2026_01_31_215706) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
   enable_extension "pgcrypto"
@@ -18,6 +18,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_01_16_045223) do
   create_table "invitations", id: :uuid, default: -> { "gen_random_uuid()" }, force: :cascade do |t|
     t.uuid "code", default: -> { "gen_random_uuid()" }, null: false
     t.datetime "created_at", null: false
+    t.string "intended_email"
     t.uuid "owner_user_id", null: false
     t.uuid "recipient_user_id"
     t.datetime "updated_at", null: false

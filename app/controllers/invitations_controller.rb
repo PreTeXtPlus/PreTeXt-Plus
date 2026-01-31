@@ -36,6 +36,25 @@ class InvitationsController < ApplicationController
         end
       end
       redirect_to projects_path, notice: "Created #{amount} invitations for all users"
+    elsif mode == "direct_email"
+      emails = params[:emails]
+      if emails.blank?
+        flash[:notice] = "Email addresses cannot be blank"
+        render :new, status: :unprocessable_entity and return
+      end
+      emails.split(",").map(&:strip).uniq.each do |email|
+        u = User.find_by email: email
+        if u.present?
+          Invitation.create! owner_user: @current_user, recipient_user: u
+        else
+          Invitation.create! owner_user: @current_user, intended_email: email
+        end
+        InvitationsMailer.invite(email, u).deliver_later
+      end
+      redirect_to projects_path, notice: "Invited all specified emails"
+    else
+      flash[:notice] = "Invalid mode"
+      render :new, status: :unprocessable_entity and return
     end
   end
 

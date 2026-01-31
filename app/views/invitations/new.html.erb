@@ -1,10 +1,10 @@
 <% content_for(:title, 'Invitations') %>
 
-<div class="mx-auto md:w-2/3 w-full pt-20">
-  <h1 class="font-bold text-4xl">Generate invitation codes</h1>
+<div class="mx-auto md:w-2/3 w-full pt-16">
+  <h1 class="font-bold text-4xl mb-4">Generate invitation codes</h1>
+  <%= form_with url: invitations_path, class: "py-4" do |form| %>
 
-  <h2 class="font-bold text-3xl">To a specific user</h2>
-  <%= form_with url: invitations_path, class: "contents" do |form| %>
+    <h2 class="font-bold text-3xl mb-4">To a specific user</h2>
 
     <%= form.hidden_field :mode, value: "for_user" %>
 
@@ -25,8 +25,9 @@
     </div>
   <% end %>
 
-  <h2 class="font-bold text-3xl">To all invited users</h2>
-  <%= form_with url: invitations_path, class: "contents" do |form| %>
+  <%= form_with url: invitations_path, class: "py-4" do |form| %>
+
+    <h2 class="font-bold text-3xl mb-4">To all invited users</h2>
 
     <%= form.hidden_field :mode, value: "for_all" %>
 
@@ -38,6 +39,24 @@
     <div class="col-span-6 sm:flex sm:items-center sm:gap-4">
       <div class="inline">
         <%= form.submit "Generate invitations", class: "w-full sm:w-auto text-center rounded-md px-3.5 py-2.5 bg-blue-600 hover:bg-blue-500 text-white inline-block font-medium cursor-pointer" %>
+      </div>
+    </div>
+  <% end %>
+
+  <%= form_with url: invitations_path, class: "py-4" do |form| %>
+
+    <h1 class="font-bold text-4xl mb-4">Direct email invites</h1>
+
+    <%= form.hidden_field :mode, value: "direct_email" %>
+
+    <div class="my-5">
+      <%= form.label :emails do %>Email addresses (comma separated)<% end %>
+      <%= form.text_field :emails, required: true, placeholder: "e.g. foo@bar.com, baz@example.org", value: params[:emails], class: "block shadow-sm rounded-md border border-gray-400 focus:outline-blue-600 px-3 py-2 mt-2 w-full" %>
+    </div>
+
+    <div class="col-span-6 sm:flex sm:items-center sm:gap-4">
+      <div class="inline">
+        <%= form.submit "Invite emails", class: "w-full sm:w-auto text-center rounded-md px-3.5 py-2.5 bg-blue-600 hover:bg-blue-500 text-white inline-block font-medium cursor-pointer" %>
       </div>
     </div>
   <% end %>
