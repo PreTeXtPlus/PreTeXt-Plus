@@ -1,5 +1,10 @@
 <div class="md:flex pt-16 w-full h-screen" data-controller="editor">
-  <div data-editor-target="root" class="h-full w-full"></div>
+  <div data-editor-target="root" class="h-full w-full">
+    <div class="mx-5">
+      PreTeXt.Plus (beta) works best in a Chromium-based browser such as Google Chrome or Microsoft Edge.
+      If you're seeing this message, please switch to a supported browser.
+    </div>
+  </div>
   <%= form_with(model: project, class: "hidden", html: {"data-editor-target" => "form"}) do |form| %>
     <%= form.hidden_field :title, "data-editor-target" => "titleField" %>
     <%= form.hidden_field :content, "data-editor-target" => "contentField" %>
