@@ -2,7 +2,7 @@ class ProjectsController < ApplicationController
   allow_unauthenticated_access only: :share
   require_unauthenticated_access only: :tryit
   before_action :set_project, only: %i[ show edit update destroy ]
-  before_action :limit_projects, only: %i[ new create ]
+  before_action :limit_projects, only: %i[ new create copy ]
   before_action :require_ownership, only: %i[ show edit update destroy ]
   after_action :allow_iframe, only: :share
 
