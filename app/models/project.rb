@@ -3,6 +3,8 @@ class Project < ApplicationRecord
 
   before_save :set_html_source
 
+  default_scope { order(updated_at: :desc) }
+
   private
 
   def set_html_source
