@@ -35,6 +35,10 @@ class User < ApplicationRecord
     10
   end
 
+  def has_copiable_projects?
+    self.sustaining_subscription? or self.admin?
+  end
+
   private
 
   def claim_intended_invitations

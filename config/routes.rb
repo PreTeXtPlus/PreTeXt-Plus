@@ -6,7 +6,8 @@ Rails.application.routes.draw do
   resources :invitations, only: [ :new, :create ]
   post "invitations/redeem" => "invitations#redeem", as: :redeem_invitation
   resources :projects do
-    get "share" => "projects#share"
+    get "share" => "projects#share", as: "share"
+    get "share/copy" => "projects#copy", as: "copy"
   end
   post "subscribe" => "subscriptions#subscribe"
   post "stripe/webhooks" => "subscriptions#webhooks"

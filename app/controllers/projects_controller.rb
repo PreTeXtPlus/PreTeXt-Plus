@@ -20,8 +20,6 @@ class ProjectsController < ApplicationController
   def new
     @project = Project.new user: @current_user, title: "New Project"
     @project.content = <<-eos
-<?xml version="1.0" encoding="UTF-8"?>
-
 <section>
   <title> Welcome to PreTeXt.Plus! </title>
 
@@ -57,8 +55,6 @@ class ProjectsController < ApplicationController
   def tryit
     @title = "Try it!"
     @content = <<-eos
-<?xml version="1.0" encoding="UTF-8"?>
-
 <section>
   <title> Thanks for trying PreTeXt.Plus! </title>
 
@@ -137,6 +133,18 @@ class ProjectsController < ApplicationController
   def share
     @project = Project.find(params.expect(:project_id))
     render html: @project.html_source.html_safe
+  end
+
+  # GET /projects/:project_id/share/copy
+  def copy
+    @project = Project.find(params.expect(:project_id)).dup
+    unless @project.user.has_copiable_projects? or @current_user.admin?
+      flash[:alert] = "Only sustaining subscribers can share copiable projects. Consider subscribing for this feature and to support PreTeXt.Plus!"
+      redirect_to projects_path and return
+    end
+    @project.user = @current_user
+    @project.title = "Copy of " + @project.title
+    render :new
   end
 
   private
