@@ -71,3 +71,5 @@ gem "jsbundling-rails", "~> 1.3"
 gem "stripe", "~> 18.1"
 
 gem "resend", "~> 1.0"
+
+gem "react_on_rails", "= 16.3"
