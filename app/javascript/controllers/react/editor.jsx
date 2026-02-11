@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React from 'react';
 import ReactDOM from "react-dom/client";
 import { Editors } from '@pretextbook/web-editor';
 import '@pretextbook/web-editor/dist/web-editor.css';
