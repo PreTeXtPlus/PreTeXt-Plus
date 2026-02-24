@@ -14,6 +14,7 @@ export default class extends Controller {
     const titleField = this.targets.find("titleField");
     const railsForm = this.targets.find("form");
     const tokenField = this.targets.find("tokenField")
+    const hostField = this.targets.find("hostField")
 
     const onCancelButton = () => {
       if (confirm("Cancel without saving?")) {
@@ -36,9 +37,10 @@ export default class extends Controller {
     }, false);
 
     const onPreviewRebuild = async (content, title, postToIframe) => {
-      const token = tokenField.value;
-      const postData = { source: content, title: title, token: token };
-      postToIframe('https://build.pretext.plus', postData);
+      const buildToken = tokenField.value;
+      const buildHost = hostField.value;
+      const postData = { source: content, title: title, token: buildToken };
+      postToIframe(`https://${buildHost}`, postData);
     }
 
     const props = {

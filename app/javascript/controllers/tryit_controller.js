@@ -13,11 +13,13 @@ export default class extends Controller {
     const contentField = this.targets.find("contentField");
     const titleField = this.targets.find("titleField");
     const tokenField = this.targets.find("tokenField");
+    const hostField = this.targets.find("hostField");
 
     const onPreviewRebuild = async (content, title, postToIframe) => {
-      const token = tokenField.value;
-      const postData = { source: content, title: title, token: token };
-      postToIframe('https://build.pretext.plus', postData);
+      const buildToken = tokenField.value;
+      const buildHost = hostField.value;
+      const postData = { source: content, title: title, token: buildToken };
+      postToIframe(`https://${buildHost}`, postData);
     }
 
     const onSaveButton = () => {

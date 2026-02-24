@@ -10,13 +10,13 @@ class Project < ApplicationRecord
   def set_html_source
     require "uri"
     require "net/http"
-    # post self to build.pretext.plus
+    # post self to build server
     params = {
       source: self.content,
       title: self.title,
       token: ENV["BUILD_TOKEN"]
     }
-    response = Net::HTTP.post_form(URI.parse("https://build.pretext.plus"), params)
+    response = Net::HTTP.post_form(URI.parse("https://#{ENV['BUILD_HOST']}"), params)
     self.html_source = response.body
   end
 end
