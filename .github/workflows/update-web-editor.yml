@@ -1,0 +1,64 @@
+name: Update @pretextbook/web-editor
+
+on:
+  schedule:
+    - cron: "0 6 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  update-web-editor:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Check for newer version
+        id: check
+        run: |
+          current=$(node -p "require('./package.json').dependencies['@pretextbook/web-editor'] || ''")
+          current=${current#^}
+          current=${current#~}
+          latest=$(npm view @pretextbook/web-editor version)
+
+          echo "current=$current" >> "$GITHUB_OUTPUT"
+          echo "latest=$latest" >> "$GITHUB_OUTPUT"
+
+          if [ "$latest" != "$current" ]; then
+            echo "update_available=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "update_available=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Update dependency
+        if: steps.check.outputs.update_available == 'true'
+        run: npm install @pretextbook/web-editor@latest
+
+      - name: Create pull request
+        if: steps.check.outputs.update_available == 'true'
+        id: cpr
+        uses: peter-evans/create-pull-request@v7
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          commit-message: "chore(deps): bump @pretextbook/web-editor to ${{ steps.check.outputs.latest }}"
+          title: "chore(deps): bump @pretextbook/web-editor to ${{ steps.check.outputs.latest }}"
+          body: |
+            This automated PR updates `@pretextbook/web-editor` from `${{ steps.check.outputs.current }}` to `${{ steps.check.outputs.latest }}`.
+          branch: chore/update-web-editor
+          delete-branch: true
+
+      - name: Enable auto-merge
+        if: steps.cpr.outputs.pull-request-number != ''
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: gh pr merge ${{ steps.cpr.outputs.pull-request-number }} --squash --auto --delete-branch
