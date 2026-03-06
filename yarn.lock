@@ -93,18 +93,26 @@
   dependencies:
     "@monaco-editor/loader" "^1.5.0"
 
+"@pretextbook/completions@^0.0.3":
+  version "0.0.3"
+  resolved "https://registry.npmjs.org/@pretextbook/completions/-/completions-0.0.3.tgz"
+  integrity sha512-wJt3quh0j2sCFpDxB4KYWrcu5QKrnOkSkbf9cg7UPimVMC0SHdGpXx7T32UhQF52MnRZPyq6ZgeIqYbPYwfWTg==
+  dependencies:
+    vscode-languageserver "^9.0.1"
+
 "@pretextbook/format@^0.0.5":
   version "0.0.5"
   resolved "https://registry.npmjs.org/@pretextbook/format/-/format-0.0.5.tgz"
   integrity sha512-453+oVkRbhL/vZ72qGJZgkgkoy6QPVl7+Pb75gpAWIlAyXECcvR8F+JhBqtAOR4ojv/uACPFBsy9GKSIT0ps6w==
 
-"@pretextbook/web-editor@^0.0.19":
-  version "0.0.19"
-  resolved "https://registry.npmjs.org/@pretextbook/web-editor/-/web-editor-0.0.19.tgz"
-  integrity sha512-h2IGYbKjK/YrGzRvNBFnVRFSRW5IHttGAEOCdiv5nTe5DK0wD15aXb8B1Jt5NwgQP7l2cXkD8ejMfXenX2FG0Q==
+"@pretextbook/web-editor@^0.0.20":
+  version "0.0.20"
+  resolved "https://registry.npmjs.org/@pretextbook/web-editor/-/web-editor-0.0.20.tgz"
+  integrity sha512-ohjDIvFMECOaQwLy/CDf/+Z38yfO3At2dU5FIyyzldYoVr2loU8p1Obj562LSTInoZZ/xIP+dhX5Cr9AT6WU5A==
   dependencies:
     "@floating-ui/dom" "^1.7.4"
     "@monaco-editor/react" "^4.7.0"
+    "@pretextbook/completions" "^0.0.3"
     "@pretextbook/format" "^0.0.5"
     "@tailwindcss/vite" "^4.1.18"
     "@tiptap/extension-code-block" "^3.14.0"
@@ -142,6 +150,11 @@
   resolved "https://registry.npmjs.org/@rollup/rollup-linux-x64-gnu/-/rollup-linux-x64-gnu-4.59.0.tgz"
   integrity sha512-3AHmtQq/ppNuUspKAlvA8HtLybkDflkMuLK4DPo77DfthRb71V84/c4MlWJXixZz4uruIH4uaa07IqoAkG64fg==
 
+"@rollup/rollup-linux-x64-musl@4.59.0":
+  version "4.59.0"
+  resolved "https://registry.npmjs.org/@rollup/rollup-linux-x64-musl/-/rollup-linux-x64-musl-4.59.0.tgz"
+  integrity sha512-2UdiwS/9cTAx7qIUZB/fWtToJwvt0Vbo0zmnYt7ED35KPg13Q0ym1g442THLC7VyI6JfYTP4PiSOWyoMdV2/xg==
+
 "@tailwindcss/node@4.1.18":
   version "4.1.18"
   resolved "https://registry.npmjs.org/@tailwindcss/node/-/node-4.1.18.tgz"
@@ -159,6 +172,11 @@
   version "4.1.18"
   resolved "https://registry.npmjs.org/@tailwindcss/oxide-linux-x64-gnu/-/oxide-linux-x64-gnu-4.1.18.tgz"
   integrity sha512-v3gyT0ivkfBLoZGF9LyHmts0Isc8jHZyVcbzio6Wpzifg/+5ZJpDiRiUhDLkcr7f/r38SWNe7ucxmGW3j3Kb/g==
+
+"@tailwindcss/oxide-linux-x64-musl@4.1.18":
+  version "4.1.18"
+  resolved "https://registry.npmjs.org/@tailwindcss/oxide-linux-x64-musl/-/oxide-linux-x64-musl-4.1.18.tgz"
+  integrity sha512-bhJ2y2OQNlcRwwgOAGMY0xTFStt4/wyU6pvI6LSuZpRgKQwxTec0/3Scu91O8ir7qCR3AuepQKLU/kX99FouqQ==
 
 "@tailwindcss/oxide@4.1.18":
   version "4.1.18"
@@ -464,6 +482,11 @@ lightningcss-linux-x64-gnu@1.30.2:
   version "1.30.2"
   resolved "https://registry.npmjs.org/lightningcss-linux-x64-gnu/-/lightningcss-linux-x64-gnu-1.30.2.tgz"
   integrity sha512-Cfd46gdmj1vQ+lR6VRTTadNHu6ALuw2pKR9lYq4FnhvgBc4zWY1EtZcAc6EffShbb1MFrIPfLDXD6Xprbnni4w==
+
+lightningcss-linux-x64-musl@1.30.2:
+  version "1.30.2"
+  resolved "https://registry.npmjs.org/lightningcss-linux-x64-musl/-/lightningcss-linux-x64-musl-1.30.2.tgz"
+  integrity sha512-XJaLUUFXb6/QG2lGIW6aIk6jKdtjtcffUT0NKvIqhSBY3hh9Ch+1LCeH80dR9q9LBjG3ewbDjnumefsLsP6aiA==
 
 lightningcss@^1.21.0, lightningcss@1.30.2:
   version "1.30.2"
@@ -891,6 +914,31 @@ vfile@^6.0.0:
     tinyglobby "^0.2.15"
   optionalDependencies:
     fsevents "~2.3.3"
+
+vscode-jsonrpc@8.2.0:
+  version "8.2.0"
+  resolved "https://registry.npmjs.org/vscode-jsonrpc/-/vscode-jsonrpc-8.2.0.tgz"
+  integrity sha512-C+r0eKJUIfiDIfwJhria30+TYWPtuHJXHtI7J0YlOmKAo7ogxP20T0zxB7HZQIFhIyvoBPwWskjxrvAtfjyZfA==
+
+vscode-languageserver-protocol@3.17.5:
+  version "3.17.5"
+  resolved "https://registry.npmjs.org/vscode-languageserver-protocol/-/vscode-languageserver-protocol-3.17.5.tgz"
+  integrity sha512-mb1bvRJN8SVznADSGWM9u/b07H7Ecg0I3OgXDuLdn307rl/J3A9YD6/eYOssqhecL27hK1IPZAsaqh00i/Jljg==
+  dependencies:
+    vscode-jsonrpc "8.2.0"
+    vscode-languageserver-types "3.17.5"
+
+vscode-languageserver-types@3.17.5:
+  version "3.17.5"
+  resolved "https://registry.npmjs.org/vscode-languageserver-types/-/vscode-languageserver-types-3.17.5.tgz"
+  integrity sha512-Ld1VelNuX9pdF39h2Hgaeb5hEZM2Z3jUrrMgWQAu82jMtZp7p3vJT3BzToKtZI7NgQssZje5o0zryOrhQvzQAg==
+
+vscode-languageserver@^9.0.1:
+  version "9.0.1"
+  resolved "https://registry.npmjs.org/vscode-languageserver/-/vscode-languageserver-9.0.1.tgz"
+  integrity sha512-woByF3PDpkHFUreUa7Hos7+pUWdeWMXRd26+ZX2A8cFx6v/JPTtd4/uN0/jB6XQHYaOlHbio03NTHCqrgG5n7g==
+  dependencies:
+    vscode-languageserver-protocol "3.17.5"
 
 w3c-keyname@^2.2.0:
   version "2.2.8"
