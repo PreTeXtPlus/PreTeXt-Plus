@@ -79,19 +79,19 @@
     "@jridgewell/resolve-uri" "^3.1.0"
     "@jridgewell/sourcemap-codec" "^1.4.14"
 
-"@monaco-editor/loader@^1.5.0":
+"@monaco-editor/loader@^1.7.0":
   version "1.7.0"
   resolved "https://registry.npmjs.org/@monaco-editor/loader/-/loader-1.7.0.tgz"
   integrity sha512-gIwR1HrJrrx+vfyOhYmCZ0/JcWqG5kbfG7+d3f/C1LXk2EvzAbHSg3MQ5lO2sMlo9izoAZ04shohfKLVT6crVA==
   dependencies:
     state-local "^1.0.6"
 
-"@monaco-editor/react@^4.7.0":
-  version "4.7.0"
-  resolved "https://registry.npmjs.org/@monaco-editor/react/-/react-4.7.0.tgz"
-  integrity sha512-cyzXQCtO47ydzxpQtCGSQGOC8Gk3ZUeBXFAxD+CWXYFo5OqZyZUonFl0DwUlTyAfRHntBfw2p3w4s9R6oe1eCA==
+"@monaco-editor/react@^4.8.0-rc.3":
+  version "4.8.0-rc.3"
+  resolved "https://registry.npmjs.org/@monaco-editor/react/-/react-4.8.0-rc.3.tgz"
+  integrity sha512-fNGFOqgHZKisVv7FlDbRL31oCRJfHBi7vIZJfy4zcbWElxqLRR5nLeG0CYwIUnq7txgPvRnRR1otcFvbs7ZSdA==
   dependencies:
-    "@monaco-editor/loader" "^1.5.0"
+    "@monaco-editor/loader" "^1.7.0"
 
 "@pretextbook/completions@^0.0.3":
   version "0.0.3"
@@ -105,15 +105,26 @@
   resolved "https://registry.npmjs.org/@pretextbook/format/-/format-0.0.5.tgz"
   integrity sha512-453+oVkRbhL/vZ72qGJZgkgkoy6QPVl7+Pb75gpAWIlAyXECcvR8F+JhBqtAOR4ojv/uACPFBsy9GKSIT0ps6w==
 
-"@pretextbook/web-editor@^0.0.20":
-  version "0.0.20"
-  resolved "https://registry.npmjs.org/@pretextbook/web-editor/-/web-editor-0.0.20.tgz"
-  integrity sha512-ohjDIvFMECOaQwLy/CDf/+Z38yfO3At2dU5FIyyzldYoVr2loU8p1Obj562LSTInoZZ/xIP+dhX5Cr9AT6WU5A==
+"@pretextbook/latex-pretext@^0.0.3":
+  version "0.0.3"
+  resolved "https://registry.npmjs.org/@pretextbook/latex-pretext/-/latex-pretext-0.0.3.tgz"
+  integrity sha512-Ngk8l4MADszmATLqyKM7vgM1rOb/7JpboACs1pab5KS42zFuOWLiOt9+jmXRqlE/VHI3naYZ4irJqrgO0/J6pA==
+  dependencies:
+    "@unified-latex/unified-latex-to-pretext" "github:pretextplus/unified-latex#release/unified-latex-to-pretext"
+    "@unified-latex/unified-latex-types" "github:pretextplus/unified-latex#release/unified-latex-types"
+    "@unified-latex/unified-latex-util-parse" "github:pretextplus/unified-latex#release/unified-latex-util-parse"
+    tslib "^2.3.0"
+
+"@pretextbook/web-editor@^0.0.21":
+  version "0.0.21"
+  resolved "https://registry.npmjs.org/@pretextbook/web-editor/-/web-editor-0.0.21.tgz"
+  integrity sha512-vqr66/JpQVke2VY3Jkst3fY9i5yg6XKbfzIbmdngsY/qSWyC/7H2c5Q2cf/OKqXnZzx7TaMy96Va8DuHmSjo5g==
   dependencies:
     "@floating-ui/dom" "^1.7.4"
-    "@monaco-editor/react" "^4.7.0"
+    "@monaco-editor/react" "^4.8.0-rc.3"
     "@pretextbook/completions" "^0.0.3"
     "@pretextbook/format" "^0.0.5"
+    "@pretextbook/latex-pretext" "^0.0.3"
     "@tailwindcss/vite" "^4.1.18"
     "@tiptap/extension-code-block" "^3.14.0"
     "@tiptap/extension-hard-break" "^3.14.0"
@@ -124,7 +135,7 @@
     "@tiptap/react" "^3.14.0"
     hast-util-whitespace "^3.0.0"
     katex "^0.16.27"
-    react-resizable-panels "^2.1.7"
+    react-resizable-panels "^4.7.2"
     tailwindcss "^4.1.18"
     unist-util-visit "^5.0.0"
     xast-util-from-xml "^4.0.0"
@@ -335,6 +346,11 @@
   resolved "https://registry.npmjs.org/@types/unist/-/unist-3.0.3.tgz"
   integrity sha512-ko/gIFJRv177XgZsZcBwnqJN5x/Gien8qNOn0D5bQU/zAzVf9Zt3BlcUiLqhV9y4ARk0GbT3tnUiPNgnTXzc/Q==
 
+"@types/unist@^2.0.0":
+  version "2.0.11"
+  resolved "https://registry.npmjs.org/@types/unist/-/unist-2.0.11.tgz"
+  integrity sha512-CmBKiL6NNo/OqgmMn95Fk9Whlp2mtvIv+KNpQKN2F4SjvrEesubTRWGYSg+BnWZOnlCaSTU1sMpsBOzgbYhnsA==
+
 "@types/use-sync-external-store@^0.0.6":
   version "0.0.6"
   resolved "https://registry.npmjs.org/@types/use-sync-external-store/-/use-sync-external-store-0.0.6.tgz"
@@ -347,10 +363,352 @@
   dependencies:
     "@types/unist" "*"
 
+"@unified-latex/unified-latex-builder@^1.8.3":
+  version "1.8.3"
+  resolved "https://registry.npmjs.org/@unified-latex/unified-latex-builder/-/unified-latex-builder-1.8.3.tgz"
+  integrity sha512-DxZZHcSBUYaJD4LIDsgHqHG3sxY1Ycb+C+Ig/Xc7yjxV38CF6Hq+AfpgfT4dS5fs/sj0FK2/tNGwKEqRTgXy1w==
+  dependencies:
+    "@unified-latex/unified-latex-types" "^1.8.0"
+
+"@unified-latex/unified-latex-ctan@^1.8.3":
+  version "1.8.3"
+  resolved "https://registry.npmjs.org/@unified-latex/unified-latex-ctan/-/unified-latex-ctan-1.8.3.tgz"
+  integrity sha512-bqApSRcGFNMPdAV939E9/oxhGp0AJZ5EfOp1LfdH0qhn0OXMqHYD30GJvvgOh+mfb8MdCcDNKU4QWUHBsvovwQ==
+  dependencies:
+    "@unified-latex/unified-latex-builder" "^1.8.3"
+    "@unified-latex/unified-latex-types" "^1.8.0"
+    "@unified-latex/unified-latex-util-argspec" "^1.8.3"
+    "@unified-latex/unified-latex-util-arguments" "^1.8.3"
+    "@unified-latex/unified-latex-util-comments" "^1.8.3"
+    "@unified-latex/unified-latex-util-match" "^1.8.0"
+    "@unified-latex/unified-latex-util-pegjs" "^1.8.1"
+    "@unified-latex/unified-latex-util-print-raw" "^1.8.0"
+    "@unified-latex/unified-latex-util-render-info" "^1.8.3"
+    "@unified-latex/unified-latex-util-replace" "^1.8.3"
+    "@unified-latex/unified-latex-util-scan" "^1.8.0"
+    "@unified-latex/unified-latex-util-split" "^1.8.0"
+    "@unified-latex/unified-latex-util-trim" "^1.8.3"
+    "@unified-latex/unified-latex-util-visit" "^1.8.3"
+    color "^4.2.3"
+
+"@unified-latex/unified-latex-lint@^1.8.3":
+  version "1.8.3"
+  resolved "https://registry.npmjs.org/@unified-latex/unified-latex-lint/-/unified-latex-lint-1.8.3.tgz"
+  integrity sha512-OJPIt8Xby1Zw+u1FWvztJz7RjQYP+o1oL4WiNiyxYDibb38VhiF8cXcl3Z3l2KTIc/qj+82UrMGOkPQg7JNkfQ==
+  dependencies:
+    "@unified-latex/unified-latex-builder" "^1.8.3"
+    "@unified-latex/unified-latex-ctan" "^1.8.3"
+    "@unified-latex/unified-latex-types" "^1.8.0"
+    "@unified-latex/unified-latex-util-glue" "^1.8.3"
+    "@unified-latex/unified-latex-util-match" "^1.8.0"
+    "@unified-latex/unified-latex-util-packages" "^1.8.3"
+    "@unified-latex/unified-latex-util-print-raw" "^1.8.0"
+    "@unified-latex/unified-latex-util-replace" "^1.8.3"
+    "@unified-latex/unified-latex-util-scan" "^1.8.0"
+    "@unified-latex/unified-latex-util-trim" "^1.8.3"
+    "@unified-latex/unified-latex-util-visit" "^1.8.3"
+    unified-lint-rule "^2.1.2"
+    unist-util-position "^4.0.4"
+
+"@unified-latex/unified-latex-prettier@^1.8.3":
+  version "1.8.3"
+  resolved "https://registry.npmjs.org/@unified-latex/unified-latex-prettier/-/unified-latex-prettier-1.8.3.tgz"
+  integrity sha512-sat9VSBJQriX/biqAD+gBG2OkVy1mXMdqn4vy323es3RyBU9IHxl43dVR8QGXRhbD6lMRABxWdxfj0lRG6KU9g==
+  dependencies:
+    "@unified-latex/unified-latex-ctan" "^1.8.3"
+    "@unified-latex/unified-latex-types" "^1.8.0"
+    "@unified-latex/unified-latex-util-align" "^1.8.1"
+    "@unified-latex/unified-latex-util-match" "^1.8.0"
+    "@unified-latex/unified-latex-util-parse" "^1.8.3"
+    "@unified-latex/unified-latex-util-pgfkeys" "^1.8.1"
+    "@unified-latex/unified-latex-util-print-raw" "^1.8.0"
+    "@unified-latex/unified-latex-util-trim" "^1.8.3"
+    "@unified-latex/unified-latex-util-visit" "^1.8.3"
+    prettier "^3.0.3"
+
+"@unified-latex/unified-latex-to-pretext@github:pretextplus/unified-latex#release/unified-latex-to-pretext":
+  version "1.8.3"
+  resolved "git+ssh://git@github.com/pretextplus/unified-latex.git#5ea20aa2e2251a387f36baf99d189de4bfab89b5"
+  dependencies:
+    "@unified-latex/unified-latex" "^1.8.3"
+    "@unified-latex/unified-latex-builder" "^1.8.3"
+    "@unified-latex/unified-latex-ctan" "^1.8.3"
+    "@unified-latex/unified-latex-lint" "^1.8.3"
+    "@unified-latex/unified-latex-types" "^1.8.0"
+    "@unified-latex/unified-latex-util-align" "^1.8.1"
+    "@unified-latex/unified-latex-util-arguments" "^1.8.3"
+    "@unified-latex/unified-latex-util-comments" "^1.8.3"
+    "@unified-latex/unified-latex-util-html-like" "^1.8.3"
+    "@unified-latex/unified-latex-util-ligatures" "^1.8.3"
+    "@unified-latex/unified-latex-util-macros" "^1.8.3"
+    "@unified-latex/unified-latex-util-match" "^1.8.0"
+    "@unified-latex/unified-latex-util-print-raw" "^1.8.0"
+    "@unified-latex/unified-latex-util-replace" "^1.8.3"
+    "@unified-latex/unified-latex-util-split" "^1.8.0"
+    "@unified-latex/unified-latex-util-trim" "^1.8.3"
+    "@unified-latex/unified-latex-util-visit" "^1.8.3"
+    cssesc "^3.0.0"
+    unified "^10.1.2"
+    unified-lint-rule "^3.0.1"
+    vfile "^6.0.3"
+    vfile-message "^4.0.2"
+    xast-util-to-xml "^4.0.0"
+    xastscript "^4.0.0"
+
+"@unified-latex/unified-latex-types@^1.8.0", "@unified-latex/unified-latex-types@github:pretextplus/unified-latex#release/unified-latex-types":
+  version "1.8.0"
+  resolved "git+ssh://git@github.com/pretextplus/unified-latex.git#be2450f0350a228e98f8ad41445719242483d96e"
+
+"@unified-latex/unified-latex-util-align@^1.8.1":
+  version "1.8.1"
+  resolved "https://registry.npmjs.org/@unified-latex/unified-latex-util-align/-/unified-latex-util-align-1.8.1.tgz"
+  integrity sha512-csJxLrvziRc5ZkhcRsYI7gSQBGC4fXucPtwNkTscbSIy7PfYF7BfWBPc61sb9jXQg4T4R6MLdG/Tz6Pgb6z1bw==
+  dependencies:
+    "@unified-latex/unified-latex-types" "^1.8.0"
+    "@unified-latex/unified-latex-util-match" "^1.8.0"
+    "@unified-latex/unified-latex-util-pegjs" "^1.8.1"
+
+"@unified-latex/unified-latex-util-argspec@^1.8.3":
+  version "1.8.3"
+  resolved "https://registry.npmjs.org/@unified-latex/unified-latex-util-argspec/-/unified-latex-util-argspec-1.8.3.tgz"
+  integrity sha512-GPJIycwLIVpt3g9LIdv+ut5F2N0xscpMlDsrCnjRutgD1GzpbLeROxmRNfZ6EaOlL7POLCyL8TY6S79U2tuTBA==
+  dependencies:
+    "@unified-latex/unified-latex-util-pegjs" "^1.8.1"
+
+"@unified-latex/unified-latex-util-arguments@^1.8.3":
+  version "1.8.3"
+  resolved "https://registry.npmjs.org/@unified-latex/unified-latex-util-arguments/-/unified-latex-util-arguments-1.8.3.tgz"
+  integrity sha512-CNazx2/PdimzQW7zo9Z1M+/4GBTdpE2hUJdxbXkn9G/dGF4QE63++GWbFiPK/N7+CzVgnewi0TOq6ARL+frN3Q==
+  dependencies:
+    "@unified-latex/unified-latex-builder" "^1.8.3"
+    "@unified-latex/unified-latex-types" "^1.8.0"
+    "@unified-latex/unified-latex-util-argspec" "^1.8.3"
+    "@unified-latex/unified-latex-util-match" "^1.8.0"
+    "@unified-latex/unified-latex-util-render-info" "^1.8.3"
+    "@unified-latex/unified-latex-util-scan" "^1.8.0"
+    "@unified-latex/unified-latex-util-visit" "^1.8.3"
+    unified "^10.1.2"
+
+"@unified-latex/unified-latex-util-catcode@^1.8.3":
+  version "1.8.3"
+  resolved "https://registry.npmjs.org/@unified-latex/unified-latex-util-catcode/-/unified-latex-util-catcode-1.8.3.tgz"
+  integrity sha512-EHdsqGPGh3pbuQTw8ejcGhDbIKp3ghibT7MCGkDhUK5cUqm8tTPknTg5/cGm3G+te5AsxT8fjlYbFQ/nQGi3UQ==
+  dependencies:
+    "@unified-latex/unified-latex-types" "^1.8.0"
+    "@unified-latex/unified-latex-util-match" "^1.8.0"
+    "@unified-latex/unified-latex-util-visit" "^1.8.3"
+
+"@unified-latex/unified-latex-util-comments@^1.8.3":
+  version "1.8.3"
+  resolved "https://registry.npmjs.org/@unified-latex/unified-latex-util-comments/-/unified-latex-util-comments-1.8.3.tgz"
+  integrity sha512-eC1RXiFia8Fw6RxXKAOI0sVQqqwJhyTO3JhvRSTWAjrvwLoMi9b/96Ny7sBO68haRo4HarwyxmBaIWL3SYVjyQ==
+  dependencies:
+    "@unified-latex/unified-latex-types" "^1.8.0"
+    "@unified-latex/unified-latex-util-match" "^1.8.0"
+    "@unified-latex/unified-latex-util-replace" "^1.8.3"
+
+"@unified-latex/unified-latex-util-environments@^1.8.3":
+  version "1.8.3"
+  resolved "https://registry.npmjs.org/@unified-latex/unified-latex-util-environments/-/unified-latex-util-environments-1.8.3.tgz"
+  integrity sha512-5cw+lCxLwv/+VRz2WQpLEG7Emok5SOVgT42bBTpJkeHyrxewiTqnqTbTmZMYYVep1D0lE/1RsO/xd+7+mrVToA==
+  dependencies:
+    "@unified-latex/unified-latex-types" "^1.8.0"
+    "@unified-latex/unified-latex-util-arguments" "^1.8.3"
+    "@unified-latex/unified-latex-util-match" "^1.8.0"
+    "@unified-latex/unified-latex-util-print-raw" "^1.8.0"
+    "@unified-latex/unified-latex-util-render-info" "^1.8.3"
+    "@unified-latex/unified-latex-util-visit" "^1.8.3"
+    unified "^10.1.2"
+
+"@unified-latex/unified-latex-util-glue@^1.8.3":
+  version "1.8.3"
+  resolved "https://registry.npmjs.org/@unified-latex/unified-latex-util-glue/-/unified-latex-util-glue-1.8.3.tgz"
+  integrity sha512-DZuDs/LWU3ZCM4CzweaRGgYSrXPh9hsNrWzarf+Rpfc+0eUkw1jh0/cSQyyKh/R3WUNmcJvkJcn/+2NHEv7ccQ==
+  dependencies:
+    "@unified-latex/unified-latex-types" "^1.8.0"
+    "@unified-latex/unified-latex-util-match" "^1.8.0"
+    "@unified-latex/unified-latex-util-pegjs" "^1.8.1"
+
+"@unified-latex/unified-latex-util-html-like@^1.8.3":
+  version "1.8.3"
+  resolved "https://registry.npmjs.org/@unified-latex/unified-latex-util-html-like/-/unified-latex-util-html-like-1.8.3.tgz"
+  integrity sha512-a6m+7vGlMX0v7TolAT5/+b58hq2Zq9eV30EBPJQlSO4F0d1rVUQHhbfRkqF73oXpdPGAL5gwzNsSLMOCJ9DeSg==
+  dependencies:
+    "@unified-latex/unified-latex-builder" "^1.8.3"
+    "@unified-latex/unified-latex-types" "^1.8.0"
+    "@unified-latex/unified-latex-util-match" "^1.8.0"
+    "@unified-latex/unified-latex-util-print-raw" "^1.8.0"
+
+"@unified-latex/unified-latex-util-ligatures@^1.8.3":
+  version "1.8.3"
+  resolved "https://registry.npmjs.org/@unified-latex/unified-latex-util-ligatures/-/unified-latex-util-ligatures-1.8.3.tgz"
+  integrity sha512-gxQZrDy3rjWv5kDXZbk/eqidyBVLLVYD+8K9xAeRhS/WhREi1V9H8JOD0gMe2VfCNX7ZYohOiBaR1b0oIeQ0cw==
+  dependencies:
+    "@unified-latex/unified-latex-types" "^1.8.0"
+    "@unified-latex/unified-latex-util-match" "^1.8.0"
+    "@unified-latex/unified-latex-util-pegjs" "^1.8.1"
+    "@unified-latex/unified-latex-util-visit" "^1.8.3"
+
+"@unified-latex/unified-latex-util-macros@^1.8.3":
+  version "1.8.3"
+  resolved "https://registry.npmjs.org/@unified-latex/unified-latex-util-macros/-/unified-latex-util-macros-1.8.3.tgz"
+  integrity sha512-xJfeEHEXnZaNiFQlOO0ywTmCDkuCAgytxD93NbAGPu3y/kUTEQ+vY6+k/iwbMDFeCsidEBjMvghtiKY/HqsXJA==
+  dependencies:
+    "@unified-latex/unified-latex-types" "^1.8.0"
+    "@unified-latex/unified-latex-util-arguments" "^1.8.3"
+    "@unified-latex/unified-latex-util-match" "^1.8.0"
+    "@unified-latex/unified-latex-util-parse" "^1.8.3"
+    "@unified-latex/unified-latex-util-pegjs" "^1.8.1"
+    "@unified-latex/unified-latex-util-print-raw" "^1.8.0"
+    "@unified-latex/unified-latex-util-replace" "^1.8.3"
+    "@unified-latex/unified-latex-util-visit" "^1.8.3"
+
+"@unified-latex/unified-latex-util-match@^1.8.0":
+  version "1.8.0"
+  resolved "https://registry.npmjs.org/@unified-latex/unified-latex-util-match/-/unified-latex-util-match-1.8.0.tgz"
+  integrity sha512-fjuLI1KVhWTHkfWn0kR8/RhM2oD2hxWhzgskUMLJ/IZMye9ESvVo8ItG4y+BtpwGFWpTmCtpMNXHjknIQxza9Q==
+  dependencies:
+    "@unified-latex/unified-latex-types" "^1.8.0"
+    "@unified-latex/unified-latex-util-print-raw" "^1.8.0"
+
+"@unified-latex/unified-latex-util-packages@^1.8.3":
+  version "1.8.3"
+  resolved "https://registry.npmjs.org/@unified-latex/unified-latex-util-packages/-/unified-latex-util-packages-1.8.3.tgz"
+  integrity sha512-1Rzk9uElWiheVMcji7G7mlIdvX9lV8zdFH4eafe8747fUrI/LNN6Bv8w4cG9TfbPYR1WGEFsUrHu5qVr9psIsg==
+  dependencies:
+    "@unified-latex/unified-latex-types" "^1.8.0"
+    "@unified-latex/unified-latex-util-match" "^1.8.0"
+    "@unified-latex/unified-latex-util-print-raw" "^1.8.0"
+    "@unified-latex/unified-latex-util-trim" "^1.8.3"
+    "@unified-latex/unified-latex-util-visit" "^1.8.3"
+
+"@unified-latex/unified-latex-util-parse@^1.8.3", "@unified-latex/unified-latex-util-parse@github:pretextplus/unified-latex#release/unified-latex-util-parse":
+  version "1.8.3"
+  resolved "git+ssh://git@github.com/pretextplus/unified-latex.git#11d2154beb372acc93c9e1d4ee6914c0f9940c96"
+  dependencies:
+    "@unified-latex/unified-latex-ctan" "^1.8.3"
+    "@unified-latex/unified-latex-types" "^1.8.0"
+    "@unified-latex/unified-latex-util-arguments" "^1.8.3"
+    "@unified-latex/unified-latex-util-catcode" "^1.8.3"
+    "@unified-latex/unified-latex-util-environments" "^1.8.3"
+    "@unified-latex/unified-latex-util-match" "^1.8.0"
+    "@unified-latex/unified-latex-util-pegjs" "^1.8.1"
+    "@unified-latex/unified-latex-util-print-raw" "^1.8.0"
+    "@unified-latex/unified-latex-util-trim" "^1.8.3"
+    "@unified-latex/unified-latex-util-visit" "^1.8.3"
+    unified "^10.1.2"
+
+"@unified-latex/unified-latex-util-pegjs@^1.8.1":
+  version "1.8.1"
+  resolved "https://registry.npmjs.org/@unified-latex/unified-latex-util-pegjs/-/unified-latex-util-pegjs-1.8.1.tgz"
+  integrity sha512-1N6WknnzKGACFCmgaEZ2j89j5C2dKhmAOCfy6moD+AMm6nUb69Xp9pJ1jDfqz+Uz9+zRo5I6ksr6q5GgmAJvtw==
+  dependencies:
+    "@unified-latex/unified-latex-types" "^1.8.0"
+    "@unified-latex/unified-latex-util-match" "^1.8.0"
+
+"@unified-latex/unified-latex-util-pgfkeys@^1.8.1":
+  version "1.8.1"
+  resolved "https://registry.npmjs.org/@unified-latex/unified-latex-util-pgfkeys/-/unified-latex-util-pgfkeys-1.8.1.tgz"
+  integrity sha512-VwZeUzmPgKwO2sZ9xx4Ul0Mp82DVdWg32krOlH9dzW4ZQDOBTnRtvx6LQmg9b7Iz3F2pHLYU0LCCaJlvFNBm1A==
+  dependencies:
+    "@unified-latex/unified-latex-types" "^1.8.0"
+    "@unified-latex/unified-latex-util-match" "^1.8.0"
+    "@unified-latex/unified-latex-util-pegjs" "^1.8.1"
+    "@unified-latex/unified-latex-util-print-raw" "^1.8.0"
+
+"@unified-latex/unified-latex-util-print-raw@^1.8.0":
+  version "1.8.0"
+  resolved "https://registry.npmjs.org/@unified-latex/unified-latex-util-print-raw/-/unified-latex-util-print-raw-1.8.0.tgz"
+  integrity sha512-lMuLqnHXCDNqrjslf6hBAA2McEI+oaaxvjA9zfeAeWZyZh+DUJjkmwiuxYejwHHKbQvqzregNP4wtb9OvaC21g==
+  dependencies:
+    "@unified-latex/unified-latex-types" "^1.8.0"
+
+"@unified-latex/unified-latex-util-render-info@^1.8.3":
+  version "1.8.3"
+  resolved "https://registry.npmjs.org/@unified-latex/unified-latex-util-render-info/-/unified-latex-util-render-info-1.8.3.tgz"
+  integrity sha512-L1orYqc9U5DGObSqjYIAclAybMWYpL41eR5E2NkJjZAAypSPkLeRT7yvaGz879HJNS2C1C9UoIsPlHDPok0Gcg==
+  dependencies:
+    "@unified-latex/unified-latex-types" "^1.8.0"
+    "@unified-latex/unified-latex-util-visit" "^1.8.3"
+
+"@unified-latex/unified-latex-util-replace@^1.8.3":
+  version "1.8.3"
+  resolved "https://registry.npmjs.org/@unified-latex/unified-latex-util-replace/-/unified-latex-util-replace-1.8.3.tgz"
+  integrity sha512-HdrWVF+pwfsXkAiIGK5q7y2klBt5QK7r5sxbSZD+X3wXzpJFuFCYQQYe2Tmi5lOcssqLK94+1OUqRTrmA/rFbg==
+  dependencies:
+    "@unified-latex/unified-latex-types" "^1.8.0"
+    "@unified-latex/unified-latex-util-match" "^1.8.0"
+    "@unified-latex/unified-latex-util-split" "^1.8.0"
+    "@unified-latex/unified-latex-util-trim" "^1.8.3"
+    "@unified-latex/unified-latex-util-visit" "^1.8.3"
+    unified "^10.1.2"
+
+"@unified-latex/unified-latex-util-scan@^1.8.0":
+  version "1.8.0"
+  resolved "https://registry.npmjs.org/@unified-latex/unified-latex-util-scan/-/unified-latex-util-scan-1.8.0.tgz"
+  integrity sha512-4WWDTcLOhlkZsGmGl/IZA0Jg2rTitVwGf6ktxs57AyuCEdzHA5ZeNwzSewW8wpHQdLfnPX+LNEnaukwEdWfF1g==
+  dependencies:
+    "@unified-latex/unified-latex-types" "^1.8.0"
+    "@unified-latex/unified-latex-util-match" "^1.8.0"
+    "@unified-latex/unified-latex-util-print-raw" "^1.8.0"
+    trie-prefix-tree "^1.5.1"
+
+"@unified-latex/unified-latex-util-split@^1.8.0":
+  version "1.8.0"
+  resolved "https://registry.npmjs.org/@unified-latex/unified-latex-util-split/-/unified-latex-util-split-1.8.0.tgz"
+  integrity sha512-gRlRge72wcvLRs6bEoVbh0fDACbkioEPDJOr7XaCuQqjNNu1VTXlcvImZQVXCdMG6CJ4lqiaJRwnUupK4rsmsA==
+  dependencies:
+    "@unified-latex/unified-latex-types" "^1.8.0"
+    "@unified-latex/unified-latex-util-match" "^1.8.0"
+
+"@unified-latex/unified-latex-util-to-string@^1.8.3":
+  version "1.8.3"
+  resolved "https://registry.npmjs.org/@unified-latex/unified-latex-util-to-string/-/unified-latex-util-to-string-1.8.3.tgz"
+  integrity sha512-Tw1ZfFtC3n0zI1BkmNBbfJf0dYA9jBNVMkL6A15H48l1/uvsKnthACgu8CjxutskEstEOlp8LyYU2tSIICwg8w==
+  dependencies:
+    "@unified-latex/unified-latex-prettier" "^1.8.3"
+    "@unified-latex/unified-latex-types" "^1.8.0"
+    "@unified-latex/unified-latex-util-print-raw" "^1.8.0"
+    prettier "^2.8.8"
+    unified "^10.1.2"
+
+"@unified-latex/unified-latex-util-trim@^1.8.3":
+  version "1.8.3"
+  resolved "https://registry.npmjs.org/@unified-latex/unified-latex-util-trim/-/unified-latex-util-trim-1.8.3.tgz"
+  integrity sha512-Vb5YcVyebWuwU0koBTsVOvxKFWKfqP1T7nJdpzT+IUrfX7zcMiA4HlGdL/3imbEfuLBTHJb3IoLsymU0XfWCZg==
+  dependencies:
+    "@unified-latex/unified-latex-types" "^1.8.0"
+    "@unified-latex/unified-latex-util-match" "^1.8.0"
+    "@unified-latex/unified-latex-util-visit" "^1.8.3"
+    unified "^10.1.2"
+
+"@unified-latex/unified-latex-util-visit@^1.8.3":
+  version "1.8.3"
+  resolved "https://registry.npmjs.org/@unified-latex/unified-latex-util-visit/-/unified-latex-util-visit-1.8.3.tgz"
+  integrity sha512-y1uxwXLbzXliAhTrxaDx4+LgIWaeNWMgS7q4DC/i/5RXXRQOImdCqQsTWwvQk2x5/8zQ3eweiTsd3q1gbBCqAA==
+  dependencies:
+    "@unified-latex/unified-latex-types" "^1.8.0"
+    "@unified-latex/unified-latex-util-match" "^1.8.0"
+
+"@unified-latex/unified-latex@^1.8.3":
+  version "1.8.3"
+  resolved "https://registry.npmjs.org/@unified-latex/unified-latex/-/unified-latex-1.8.3.tgz"
+  integrity sha512-LRyXYXkjoidIVoX4bPX9fuaoa++ef94wao5tFEOIbFmcrF3SRZDqGnlAKSftP8g8/9YbtXOe61D3hviXux5Q4A==
+  dependencies:
+    "@unified-latex/unified-latex-types" "^1.8.0"
+    "@unified-latex/unified-latex-util-parse" "^1.8.3"
+    "@unified-latex/unified-latex-util-to-string" "^1.8.3"
+    unified "^10.1.2"
+
 argparse@^2.0.1:
   version "2.0.1"
   resolved "https://registry.npmjs.org/argparse/-/argparse-2.0.1.tgz"
   integrity sha512-8+9WqebbFzpX9OR+Wa6O29asIogeRMzcGtAINdpMHHyAg10f05aSFVBbcEqGf/PXw1EjAZ+q2/bEBg3DvurK3Q==
+
+bail@^2.0.0:
+  version "2.0.2"
+  resolved "https://registry.npmjs.org/bail/-/bail-2.0.2.tgz"
+  integrity sha512-0xO6mYd7JB2YesxDKplafRpsiOzPt9V02ddPCLbY1xYGPOX24NTyN50qnUxgCPcSoYMhKpAuBTjQoRZCAkUDRw==
 
 ccount@^2.0.0:
   version "2.0.1"
@@ -367,6 +725,34 @@ character-entities-legacy@^3.0.0:
   resolved "https://registry.npmjs.org/character-entities-legacy/-/character-entities-legacy-3.0.0.tgz"
   integrity sha512-RpPp0asT/6ufRm//AJVwpViZbGM/MkjQFxJccQRHmISF/22NBtsHqAWmL+/pmkPWoIUJdWyeVleTl1wydHATVQ==
 
+color-convert@^2.0.1:
+  version "2.0.1"
+  resolved "https://registry.npmjs.org/color-convert/-/color-convert-2.0.1.tgz"
+  integrity sha512-RRECPsj7iu/xb5oKYcsFHSppFNnsj/52OVTRKb4zP5onXwVF3zVmmToNcOfGC+CRDpfK/U584fMg38ZHCaElKQ==
+  dependencies:
+    color-name "~1.1.4"
+
+color-name@^1.0.0, color-name@~1.1.4:
+  version "1.1.4"
+  resolved "https://registry.npmjs.org/color-name/-/color-name-1.1.4.tgz"
+  integrity sha512-dOy+3AuW3a2wNbZHIuMZpTcgjGuLU/uBL/ubcZF9OXbDo8ff4O8yVp5Bf0efS8uEoYo5q4Fx7dY9OgQGXgAsQA==
+
+color-string@^1.9.0:
+  version "1.9.1"
+  resolved "https://registry.npmjs.org/color-string/-/color-string-1.9.1.tgz"
+  integrity sha512-shrVawQFojnZv6xM40anx4CkoDP+fZsw/ZerEMsW/pyzsRbElpsL/DBVW7q3ExxwusdNXI3lXpuhEZkzs8p5Eg==
+  dependencies:
+    color-name "^1.0.0"
+    simple-swizzle "^0.2.2"
+
+color@^4.2.3:
+  version "4.2.3"
+  resolved "https://registry.npmjs.org/color/-/color-4.2.3.tgz"
+  integrity sha512-1rXeuUUiGGrykh+CeBdu5Ie7OJwinCgQY0bc7GCRxy5xVHy+moaqkpL/jqQq0MtQOeYcrqEz4abc5f0KtU7W4A==
+  dependencies:
+    color-convert "^2.0.1"
+    color-string "^1.9.0"
+
 commander@^8.3.0:
   version "8.3.0"
   resolved "https://registry.npmjs.org/commander/-/commander-8.3.0.tgz"
@@ -377,15 +763,32 @@ crelt@^1.0.0:
   resolved "https://registry.npmjs.org/crelt/-/crelt-1.0.6.tgz"
   integrity sha512-VQ2MBenTq1fWZUH9DJNGti7kKv6EeAuYr3cLwxUWhIu1baTaXh4Ib5W2CqHVqib4/MqbYGJqiL3Zb8GJZr3l4g==
 
+cssesc@^3.0.0:
+  version "3.0.0"
+  resolved "https://registry.npmjs.org/cssesc/-/cssesc-3.0.0.tgz"
+  integrity sha512-/Tb/JcjK111nNScGob5MNtsntNM1aCNUDipB/TkwZFhyDrrE47SOx/18wF2bbjgc3ZzCSKW1T5nt5EbFoAz/Vg==
+
 csstype@^3.2.2:
   version "3.2.3"
   resolved "https://registry.npmjs.org/csstype/-/csstype-3.2.3.tgz"
   integrity sha512-z1HGKcYy2xA8AGQfwrn0PAy+PB7X/GSj3UVJW9qKyn43xWa+gl5nXmU4qqLMRzWVLFC8KusUX8T/0kCiOYpAIQ==
 
+dequal@^2.0.0:
+  version "2.0.3"
+  resolved "https://registry.npmjs.org/dequal/-/dequal-2.0.3.tgz"
+  integrity sha512-0je+qPKHEMohvfRTCEo3CrPG6cAzAYgmzKyxRiYSSDkS6eGJdyVJm7WaYA5ECaAD9wLB2T4EEeymA5aFVcYXCA==
+
 detect-libc@^2.0.3:
   version "2.1.2"
   resolved "https://registry.npmjs.org/detect-libc/-/detect-libc-2.1.2.tgz"
   integrity sha512-Btj2BOOO83o3WyH59e8MgXsxEQVcarkUOpEYrubB0urwnN10yQ364rsiByU11nZlqWYZm05i/of7io4mzihBtQ==
+
+devlop@^1.0.0:
+  version "1.1.0"
+  resolved "https://registry.npmjs.org/devlop/-/devlop-1.1.0.tgz"
+  integrity sha512-RWmIqhcFf1lRYBvNmr7qTNuyCt/7/ns2jbpp1+PalgE/rDQcBT0fioSMUpJ93irlUhC5hrg4cYqe6U+0ImW0rA==
+  dependencies:
+    dequal "^2.0.0"
 
 dompurify@3.2.7:
   version "3.2.7"
@@ -444,6 +847,11 @@ escape-string-regexp@^4.0.0:
   resolved "https://registry.npmjs.org/escape-string-regexp/-/escape-string-regexp-4.0.0.tgz"
   integrity sha512-TtpcNJ3XAzx3Gq8sWRzJaVajRs0uVxA2YAkdb1jm2YkPz4G6egUFAyA3n5vtEIZefPk5Wa4UXbKuS5fKkJWdgA==
 
+extend@^3.0.0:
+  version "3.0.2"
+  resolved "https://registry.npmjs.org/extend/-/extend-3.0.2.tgz"
+  integrity sha512-fjquC59cD7CyW6urNXK0FBufkZcoiGG80wTuPujX590cB5Ttln20E2UB4S/WARVqhXffZl2LNgS+gQdPIIim/g==
+
 fast-equals@^5.3.3:
   version "5.4.0"
   resolved "https://registry.npmjs.org/fast-equals/-/fast-equals-5.4.0.tgz"
@@ -465,6 +873,21 @@ hast-util-whitespace@^3.0.0:
   integrity sha512-88JUN06ipLwsnv+dVn+OIYOvAuvBMy/Qoi6O7mQHxdPXpjy+Cd6xRkWwux7DKO+4sYILtLBRIKgsdpS2gQc7qw==
   dependencies:
     "@types/hast" "^3.0.0"
+
+is-arrayish@^0.3.1:
+  version "0.3.4"
+  resolved "https://registry.npmjs.org/is-arrayish/-/is-arrayish-0.3.4.tgz"
+  integrity sha512-m6UrgzFVUYawGBh1dUsWR5M2Clqic9RVXC/9f8ceNlv2IcO9j9J/z8UoCLPqtsPBFNzEpfR3xftohbfqDx8EQA==
+
+is-buffer@^2.0.0:
+  version "2.0.5"
+  resolved "https://registry.npmjs.org/is-buffer/-/is-buffer-2.0.5.tgz"
+  integrity sha512-i2R6zNFDwgEHJyQUtJEk0XFi1i0dPFn/oqjK3/vPCcDeJvW5NQ83V8QbicfF1SupOaB0h8ntgBC2YiE7dfyctQ==
+
+is-plain-obj@^4.0.0:
+  version "4.1.0"
+  resolved "https://registry.npmjs.org/is-plain-obj/-/is-plain-obj-4.1.0.tgz"
+  integrity sha512-+Pgi+vMuUNkJyExiMBt5IlFoMyKnr5zhJ4Uspz58WOhBF5QoIZkFyNHIbBAtHwzVAgk5RtndVNsDRN61/mmDqg==
 
 jiti@^2.6.1, jiti@>=1.21.0:
   version "2.6.1"
@@ -579,6 +1002,16 @@ postcss@^8.5.6:
     nanoid "^3.3.11"
     picocolors "^1.1.1"
     source-map-js "^1.2.1"
+
+prettier@^2.8.8:
+  version "2.8.8"
+  resolved "https://registry.npmjs.org/prettier/-/prettier-2.8.8.tgz"
+  integrity sha512-tdN8qQGvNjw4CHbY+XXk0JgCXn9QiF21a55rBe5LJAU+kDyC4WQn4+awm2Xfk2lQMk5fKup9XgzTZtGkjBdP9Q==
+
+prettier@^3.0.3:
+  version "3.8.1"
+  resolved "https://registry.npmjs.org/prettier/-/prettier-3.8.1.tgz"
+  integrity sha512-UOnG6LftzbdaHZcKoPFtOcCKztrQ57WkHDeRD9t/PTQtmT0NHSeWWepj6pS0z/N7+08BHFDQVUrfmfMRcZwbMg==
 
 prosemirror-changeset@^2.3.0:
   version "2.3.1"
@@ -739,19 +1172,19 @@ punycode.js@^2.3.1:
   resolved "https://registry.npmjs.org/punycode.js/-/punycode.js-2.3.1.tgz"
   integrity sha512-uxFIHU0YlHYhDQtV4R9J6a52SLx28BCjT+4ieh7IGbgwVJWO+km431c4yRlREUAsAmt/uMjQUyQHNEPf0M39CA==
 
-"react-dom@^16.14.0 || ^17.0.0 || ^18.0.0 || ^19.0.0 || ^19.0.0-rc", "react-dom@^16.8.0 || ^17.0.0 || ^18.0.0 || ^19.0.0", "react-dom@^17.0.0 || ^18.0.0 || ^19.0.0", "react-dom@^18.0.0 || ^19.0.0", react-dom@^19.2.0:
+"react-dom@^16.8.0 || ^17.0.0 || ^18.0.0 || ^19.0.0", "react-dom@^17.0.0 || ^18.0.0 || ^19.0.0", "react-dom@^18.0.0 || ^19.0.0", react-dom@^19.2.0:
   version "19.2.4"
   resolved "https://registry.npmjs.org/react-dom/-/react-dom-19.2.4.tgz"
   integrity sha512-AXJdLo8kgMbimY95O2aKQqsz2iWi9jMgKJhRBAxECE4IFxfcazB2LmzloIoibJI3C12IlY20+KFaLv+71bUJeQ==
   dependencies:
     scheduler "^0.27.0"
 
-react-resizable-panels@^2.1.7:
-  version "2.1.9"
-  resolved "https://registry.npmjs.org/react-resizable-panels/-/react-resizable-panels-2.1.9.tgz"
-  integrity sha512-z77+X08YDIrgAes4jl8xhnUu1LNIRp4+E7cv4xHmLOxxUPO/ML7PSrE813b90vj7xvQ1lcf7g2uA9GeMZonjhQ==
+react-resizable-panels@^4.7.2:
+  version "4.7.2"
+  resolved "https://registry.npmjs.org/react-resizable-panels/-/react-resizable-panels-4.7.2.tgz"
+  integrity sha512-1L2vyeBG96hp7N6x6rzYXJ8EjYiDiffMsqj3cd+T9aOKwscvuyCn2CuZ5q3PoUSTIJUM6Q5DgXH1bdDe6uvh2w==
 
-"react@^16.14.0 || ^17.0.0 || ^18.0.0 || ^19.0.0 || ^19.0.0-rc", "react@^16.8.0 || ^17.0.0 || ^18.0.0 || ^19.0.0", "react@^17.0.0 || ^18.0.0 || ^19.0.0", "react@^18.0.0 || ^19.0.0", react@^19.2.0, react@^19.2.4:
+"react@^16.8.0 || ^17.0.0 || ^18.0.0 || ^19.0.0", "react@^17.0.0 || ^18.0.0 || ^19.0.0", "react@^18.0.0 || ^19.0.0", react@^19.2.0, react@^19.2.4:
   version "19.2.4"
   resolved "https://registry.npmjs.org/react/-/react-19.2.4.tgz"
   integrity sha512-9nfp2hYpCwOjAN+8TZFGhtWEwgvWHXqESH8qT89AT/lWklpLON22Lc8pEtnpsZz7VmawabSU0gCjnj8aC0euHQ==
@@ -800,6 +1233,13 @@ scheduler@^0.27.0:
   resolved "https://registry.npmjs.org/scheduler/-/scheduler-0.27.0.tgz"
   integrity sha512-eNv+WrVbKu1f3vbYJT/xtiF5syA5HPIMtf9IgY/nKg0sWqzAUEvqY/xm7OcZc/qafLx/iO9FgOmeSAp4v5ti/Q==
 
+simple-swizzle@^0.2.2:
+  version "0.2.4"
+  resolved "https://registry.npmjs.org/simple-swizzle/-/simple-swizzle-0.2.4.tgz"
+  integrity sha512-nAu1WFPQSMNr2Zn9PGSZK9AGn4t/y97lEm+MXTtUDwfP0ksAIX4nO+6ruD9Jwut4C49SB1Ws+fbXsm/yScWOHw==
+  dependencies:
+    is-arrayish "^0.3.1"
+
 source-map-js@^1.2.1:
   version "1.2.1"
   resolved "https://registry.npmjs.org/source-map-js/-/source-map-js-1.2.1.tgz"
@@ -836,10 +1276,71 @@ tinyglobby@^0.2.15:
     fdir "^6.5.0"
     picomatch "^4.0.3"
 
+trie-prefix-tree@^1.5.1:
+  version "1.5.1"
+  resolved "https://registry.npmjs.org/trie-prefix-tree/-/trie-prefix-tree-1.5.1.tgz"
+  integrity sha512-Jjvj/dA97wXnabG/NLJUgo4IQMj6vucH+Qxm7of/omfWSmZlPqdRU6Ta4GmQqCZH+n3/iYZUwfvUoEhB0Hs83Q==
+
+trough@^2.0.0:
+  version "2.2.0"
+  resolved "https://registry.npmjs.org/trough/-/trough-2.2.0.tgz"
+  integrity sha512-tmMpK00BjZiUyVyvrBK7knerNgmgvcV/KLVyuma/SC+TQN167GrMRciANTz09+k3zW8L8t60jWO1GpfkZdjTaw==
+
+tslib@^2.3.0:
+  version "2.8.1"
+  resolved "https://registry.npmjs.org/tslib/-/tslib-2.8.1.tgz"
+  integrity sha512-oJFu94HQb+KVduSUQL7wnpmqnfmLsOA/nAh6b6EH0wCEoK0/mPeXU6c3wKDV83MkOuHPRHtSXKKU99IBazS/2w==
+
 uc.micro@^2.0.0, uc.micro@^2.1.0:
   version "2.1.0"
   resolved "https://registry.npmjs.org/uc.micro/-/uc.micro-2.1.0.tgz"
   integrity sha512-ARDJmphmdvUk6Glw7y9DQ2bFkKBHwQHLi2lsaH6PPmz/Ka9sFOBsBluozhDltWmnv9u/cF6Rt87znRTPV+yp/A==
+
+unified-lint-rule@^2.1.2:
+  version "2.1.2"
+  resolved "https://registry.npmjs.org/unified-lint-rule/-/unified-lint-rule-2.1.2.tgz"
+  integrity sha512-JWudPtRN7TLFHVLEVZ+Rm8FUb6kCAtHxEXFgBGDxRSdNMnGyTU5zyYvduHSF/liExlFB3vdFvsAHnNVE/UjAwA==
+  dependencies:
+    "@types/unist" "^2.0.0"
+    trough "^2.0.0"
+    unified "^10.0.0"
+    vfile "^5.0.0"
+
+unified-lint-rule@^3.0.1:
+  version "3.0.1"
+  resolved "https://registry.npmjs.org/unified-lint-rule/-/unified-lint-rule-3.0.1.tgz"
+  integrity sha512-HxIeQOmwL19DGsxHXbeyzKHBsoSCFO7UtRVUvT2v61ptw/G+GbysWcrpHdfs5jqbIFDA11MoKngIhQK0BeTVjA==
+  dependencies:
+    "@types/unist" "^3.0.0"
+    trough "^2.0.0"
+    unified "^11.0.0"
+    vfile "^6.0.0"
+
+unified@^10.0.0, unified@^10.1.2:
+  version "10.1.2"
+  resolved "https://registry.npmjs.org/unified/-/unified-10.1.2.tgz"
+  integrity sha512-pUSWAi/RAnVy1Pif2kAoeWNBa3JVrx0MId2LASj8G+7AiHWoKZNTomq6LG326T68U7/e263X6fTdcXIy7XnF7Q==
+  dependencies:
+    "@types/unist" "^2.0.0"
+    bail "^2.0.0"
+    extend "^3.0.0"
+    is-buffer "^2.0.0"
+    is-plain-obj "^4.0.0"
+    trough "^2.0.0"
+    vfile "^5.0.0"
+
+unified@^11.0.0:
+  version "11.0.5"
+  resolved "https://registry.npmjs.org/unified/-/unified-11.0.5.tgz"
+  integrity sha512-xKvGhPWw3k84Qjh8bI3ZeJjqnyadK+GEFtazSfZv/rKeTkTjOJho6mFqh2SM96iIcZokxiOpg78GazTSg8+KHA==
+  dependencies:
+    "@types/unist" "^3.0.0"
+    bail "^2.0.0"
+    devlop "^1.0.0"
+    extend "^3.0.0"
+    is-plain-obj "^4.0.0"
+    trough "^2.0.0"
+    vfile "^6.0.0"
 
 unist-util-is@^6.0.0:
   version "6.0.1"
@@ -847,6 +1348,20 @@ unist-util-is@^6.0.0:
   integrity sha512-LsiILbtBETkDz8I9p1dQ0uyRUWuaQzd/cuEeS1hoRSyW5E5XGmTzlwY1OrNzzakGowI9Dr/I8HVaw4hTtnxy8g==
   dependencies:
     "@types/unist" "^3.0.0"
+
+unist-util-position@^4.0.4:
+  version "4.0.4"
+  resolved "https://registry.npmjs.org/unist-util-position/-/unist-util-position-4.0.4.tgz"
+  integrity sha512-kUBE91efOWfIVBo8xzh/uZQ7p9ffYRtUbMRZBNFYwf0RK8koUMx6dGUfwylLOKmaT2cs4wSW96QoYUSXAyEtpg==
+  dependencies:
+    "@types/unist" "^2.0.0"
+
+unist-util-stringify-position@^3.0.0:
+  version "3.0.3"
+  resolved "https://registry.npmjs.org/unist-util-stringify-position/-/unist-util-stringify-position-3.0.3.tgz"
+  integrity sha512-k5GzIBZ/QatR8N5X2y+drfpWG8IDBzdnVj6OInRNWm1oXrzydiaAT2OQiA8DPRRZyAKb9b6I2a6PxYklZD0gKg==
+  dependencies:
+    "@types/unist" "^2.0.0"
 
 unist-util-stringify-position@^4.0.0:
   version "4.0.0"
@@ -885,7 +1400,15 @@ vfile-location@^5.0.0:
     "@types/unist" "^3.0.0"
     vfile "^6.0.0"
 
-vfile-message@^4.0.0:
+vfile-message@^3.0.0:
+  version "3.1.4"
+  resolved "https://registry.npmjs.org/vfile-message/-/vfile-message-3.1.4.tgz"
+  integrity sha512-fa0Z6P8HUrQN4BZaX05SIVXic+7kE3b05PWAtPuYP9QLHsLKYR7/AlLW3NtOrpXRLeawpDLMsVkmk5DG0NXgWw==
+  dependencies:
+    "@types/unist" "^2.0.0"
+    unist-util-stringify-position "^3.0.0"
+
+vfile-message@^4.0.0, vfile-message@^4.0.2:
   version "4.0.3"
   resolved "https://registry.npmjs.org/vfile-message/-/vfile-message-4.0.3.tgz"
   integrity sha512-QTHzsGd1EhbZs4AsQ20JX1rC3cOlt/IWJruk893DfLRr57lcnOeMaWG4K0JrRta4mIJZKth2Au3mM3u03/JWKw==
@@ -893,7 +1416,17 @@ vfile-message@^4.0.0:
     "@types/unist" "^3.0.0"
     unist-util-stringify-position "^4.0.0"
 
-vfile@^6.0.0:
+vfile@^5.0.0:
+  version "5.3.7"
+  resolved "https://registry.npmjs.org/vfile/-/vfile-5.3.7.tgz"
+  integrity sha512-r7qlzkgErKjobAmyNIkkSpizsFPYiUPuJb5pNW1RB4JcYVZhs4lIbVqk8XPk033CV/1z8ss5pkax8SuhGpcG8g==
+  dependencies:
+    "@types/unist" "^2.0.0"
+    is-buffer "^2.0.0"
+    unist-util-stringify-position "^3.0.0"
+    vfile-message "^3.0.0"
+
+vfile@^6.0.0, vfile@^6.0.3:
   version "6.0.3"
   resolved "https://registry.npmjs.org/vfile/-/vfile-6.0.3.tgz"
   integrity sha512-KzIbH/9tXat2u30jf+smMwFCsno4wHVdNmzFyL+T/L3UGqqk6JKfVqOFOZEpZSHADH1k40ab6NUIXZq422ov3Q==
@@ -963,3 +1496,10 @@ xast-util-to-xml@^4.0.0:
     "@types/xast" "^2.0.0"
     ccount "^2.0.0"
     stringify-entities "^4.0.0"
+
+xastscript@^4.0.0:
+  version "4.0.0"
+  resolved "https://registry.npmjs.org/xastscript/-/xastscript-4.0.0.tgz"
+  integrity sha512-r7a0kObEyivkML0dLrp/nOH5l51y9v5DL1MT/Xc6qUgGGNP1mZZUmT6NXtWAmx2FLfjonop++PtpVMwp1Hw/Gw==
+  dependencies:
+    "@types/xast" "^2.0.0"
