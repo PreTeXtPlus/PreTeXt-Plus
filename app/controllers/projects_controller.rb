@@ -146,7 +146,8 @@ class ProjectsController < ApplicationController
     end
     @project.user = @current_user
     @project.title = "Copy of " + @project.title
-    render :new
+    @project.save!
+    redirect_to edit_project_path(@project)
   end
 
   private
