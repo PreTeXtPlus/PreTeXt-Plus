@@ -13,6 +13,8 @@ export default class extends Controller {
     const contentField = this.targets.find("contentField");
     const titleField = this.targets.find("titleField");
     const railsForm = this.targets.find("form");
+    const sourceFormatField = this.targets.find("sourceFormatField")
+    const pretextContentField = this.targets.find("pretextContentField")
     const tokenField = this.targets.find("tokenField")
     const hostField = this.targets.find("hostField")
 
@@ -28,9 +30,9 @@ export default class extends Controller {
 
     const onSave = async () => {
       try {
-        // 4. Send the POST request asynchronously
         const response = await fetch(railsForm.getAttribute("action"), {
-          method: "POST",
+          method: "PATCH",
+          headers: { "Accept": "application/json" },
           body: new FormData(railsForm),
         });
 
@@ -47,7 +49,7 @@ export default class extends Controller {
     }
 
     // run onSave every 10 seconds to auto-save the document
-    setInterval(onSave, 10000);
+    this.saveInterval = setInterval(onSave, 10000);
 
     const onPreviewRebuild = async (content, title, postToIframe) => {
       const buildToken = tokenField.value;
@@ -58,7 +60,13 @@ export default class extends Controller {
 
     const props = {
       content: contentField.value,
-      onContentChange: (v) => contentField.value = v,
+      sourceFormat: sourceFormatField.value,
+      pretextContent: pretextContentField.value || undefined,
+      onContentChange: (v, meta) => {
+        contentField.value = v;
+        if (meta?.sourceFormat) sourceFormatField.value = meta.sourceFormat;
+        if (meta?.pretextContent) pretextContentField.value = meta.pretextContent;
+      },
       title: titleField.value,
       onTitleChange: (v) => titleField.value = v,
       onSaveButton: onSaveButton,
@@ -73,8 +81,9 @@ export default class extends Controller {
   }
 
   disconnect() {
-    const root = this.targets.find("root");
+    clearInterval(this.saveInterval);
 
+    const root = this.targets.find("root");
     this.component.destroy(root);
   }
 }
