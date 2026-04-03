@@ -1,9 +1,5 @@
 @import "tailwindcss";
 
-.navbarMenu {
-  color: blue;
-}
-
 .navbarMenuToggle + .navbarMenu {
   display: none;
 }
