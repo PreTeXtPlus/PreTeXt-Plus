@@ -13,6 +13,8 @@ export default class extends Controller {
     const contentField = this.targets.find("contentField");
     const titleField = this.targets.find("titleField");
     const railsForm = this.targets.find("form");
+    const sourceFormatField = this.targets.find("sourceFormatField")
+    const pretextSourceField = this.targets.find("pretextSourceField")
     const tokenField = this.targets.find("tokenField")
     const hostField = this.targets.find("hostField")
 
@@ -26,11 +28,22 @@ export default class extends Controller {
       railsForm.submit();
     }
 
+    let lastSavedContent = contentField.value;
+    let lastSavedTitle = titleField.value;
+    let lastSavedPretextSource = pretextSourceField.value;
+
+    const isDirty = () =>
+      contentField.value !== lastSavedContent ||
+      titleField.value !== lastSavedTitle ||
+      pretextSourceField.value !== lastSavedPretextSource;
+
     const onSave = async () => {
+      if (!isDirty()) return;
+
       try {
-        // 4. Send the POST request asynchronously
         const response = await fetch(railsForm.getAttribute("action"), {
-          method: "POST",
+          method: "PATCH",
+          headers: { "Accept": "application/json" },
           body: new FormData(railsForm),
         });
 
@@ -38,6 +51,9 @@ export default class extends Controller {
           throw new Error(`Error saving document! Status: ${response.status}`);
         }
 
+        lastSavedContent = contentField.value;
+        lastSavedTitle = titleField.value;
+        lastSavedPretextSource = pretextSourceField.value;
         console.log("Success saving document!");
 
       } catch (error) {
@@ -46,8 +62,8 @@ export default class extends Controller {
       }
     }
 
-    // run onSave every 10 seconds to auto-save the document
-    setInterval(onSave, 10000);
+    // run onSave every 10 seconds; only fires if content has changed since last save
+    this.saveInterval = setInterval(onSave, 10000);
 
     const onPreviewRebuild = async (content, title, postToIframe) => {
       const buildToken = tokenField.value;
@@ -58,7 +74,13 @@ export default class extends Controller {
 
     const props = {
       content: contentField.value,
-      onContentChange: (v) => contentField.value = v,
+      sourceFormat: sourceFormatField.value,
+      pretextSource: pretextSourceField.value || undefined,
+      onContentChange: (v, meta) => {
+        contentField.value = v;
+        if (meta?.sourceFormat) sourceFormatField.value = meta.sourceFormat;
+        if (meta?.pretextSource) pretextSourceField.value = meta.pretextSource;
+      },
       title: titleField.value,
       onTitleChange: (v) => titleField.value = v,
       onSaveButton: onSaveButton,
@@ -73,8 +95,9 @@ export default class extends Controller {
   }
 
   disconnect() {
-    const root = this.targets.find("root");
+    clearInterval(this.saveInterval);
 
+    const root = this.targets.find("root");
     this.component.destroy(root);
   }
 }
