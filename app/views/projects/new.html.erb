@@ -21,8 +21,8 @@
       <div>
         <p class="block text-sm font-semibold text-gray-700 mb-3">Source format</p>
         <div class="grid grid-cols-2 gap-4">
-          <% [["pretext", "PreTeXt", "Mathematical markup language designed for academic writing."],
-              ["latex", "LaTeX", "Classic typesetting language widely used in academia."]]
+          <% [["pretext", "PreTeXt", "Semantic markup language designed for academic writing."],
+              ["latex", "Accessible LaTeX", "A subset of the classic typesetting language focused on semantic markup and accessible output."]]
              .each do |value, label, description| %>
             <label class="relative flex cursor-pointer flex-col rounded-xl border-2 p-4 hover:border-indigo-400 has-[:checked]:border-indigo-600 has-[:checked]:bg-indigo-50 transition-colors">
               <%= form.radio_button :source_format, value, class: "sr-only" %>
