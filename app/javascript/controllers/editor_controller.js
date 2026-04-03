@@ -28,7 +28,18 @@ export default class extends Controller {
       railsForm.submit();
     }
 
+    let lastSavedContent = contentField.value;
+    let lastSavedTitle = titleField.value;
+    let lastSavedPretextSource = pretextSourceField.value;
+
+    const isDirty = () =>
+      contentField.value !== lastSavedContent ||
+      titleField.value !== lastSavedTitle ||
+      pretextSourceField.value !== lastSavedPretextSource;
+
     const onSave = async () => {
+      if (!isDirty()) return;
+
       try {
         const response = await fetch(railsForm.getAttribute("action"), {
           method: "PATCH",
@@ -40,6 +51,9 @@ export default class extends Controller {
           throw new Error(`Error saving document! Status: ${response.status}`);
         }
 
+        lastSavedContent = contentField.value;
+        lastSavedTitle = titleField.value;
+        lastSavedPretextSource = pretextSourceField.value;
         console.log("Success saving document!");
 
       } catch (error) {
@@ -48,7 +62,7 @@ export default class extends Controller {
       }
     }
 
-    // run onSave every 10 seconds to auto-save the document
+    // run onSave every 10 seconds; only fires if content has changed since last save
     this.saveInterval = setInterval(onSave, 10000);
 
     const onPreviewRebuild = async (content, title, postToIframe) => {
