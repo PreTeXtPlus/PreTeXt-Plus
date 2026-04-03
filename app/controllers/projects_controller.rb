@@ -67,7 +67,7 @@ class ProjectsController < ApplicationController
     @project.user = @current_user
     @project.source_format ||= :pretext
     @project.title = "New Project" if @project.title.blank?
-    @project.content = Project.default_content_for(@project.source_format)
+    @project.source = Project.default_content_for(@project.source_format)
 
     respond_to do |format|
       if @project.save
@@ -129,13 +129,15 @@ class ProjectsController < ApplicationController
 
     # Only allow a list of trusted parameters through.
     def project_params
-      params.expect(project: [ :title, :content, :pretext_content, :source_format, :document_type ])
+      params.expect(project: [ :title, :source, :pretext_source, :source_format, :document_type ])
     end
 
     # Strips enum fields to known values before mass-assignment so invalid
     # inputs produce nil (handled by validations) rather than ArgumentError.
     def safe_project_params
       p = project_params
+      p[:source] = p.delete(:content) if p.key?(:content) && !p.key?(:source)
+      p[:pretext_source] = p.delete(:pretext_content) if p.key?(:pretext_content) && !p.key?(:pretext_source)
       if p.key?(:source_format)
         p[:source_format] = p[:source_format].presence_in(Project.source_formats.keys)
       end

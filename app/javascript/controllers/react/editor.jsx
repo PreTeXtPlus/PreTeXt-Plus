@@ -9,12 +9,12 @@ function EditorWrapper({ onContentChange, onTitleChange, ...rest }) {
   const [content, setContent] = useState(rest.content);
   const [title, setTitle] = useState(rest.title);
   const [sourceFormat, setSourceFormat] = useState(rest.sourceFormat);
-  const [pretextContent, setPretextContent] = useState(rest.pretextContent);
+  const [pretextSource, setPretextSource] = useState(rest.pretextSource);
 
   const handleContentChange = useCallback((v, meta) => {
     setContent(v);
     if (meta?.sourceFormat) setSourceFormat(meta.sourceFormat);
-    if (meta?.pretextContent) setPretextContent(meta.pretextContent);
+    if (meta?.pretextSource) setPretextSource(meta.pretextSource);
     onContentChange?.(v, meta);
   }, [onContentChange]);
 
@@ -29,7 +29,7 @@ function EditorWrapper({ onContentChange, onTitleChange, ...rest }) {
       content={content}
       title={title}
       sourceFormat={sourceFormat}
-      pretextContent={pretextContent}
+      pretextSource={pretextSource}
       onContentChange={handleContentChange}
       onTitleChange={handleTitleChange}
     />

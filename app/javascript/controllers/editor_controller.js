@@ -14,7 +14,7 @@ export default class extends Controller {
     const titleField = this.targets.find("titleField");
     const railsForm = this.targets.find("form");
     const sourceFormatField = this.targets.find("sourceFormatField")
-    const pretextContentField = this.targets.find("pretextContentField")
+    const pretextSourceField = this.targets.find("pretextSourceField")
     const tokenField = this.targets.find("tokenField")
     const hostField = this.targets.find("hostField")
 
@@ -61,11 +61,11 @@ export default class extends Controller {
     const props = {
       content: contentField.value,
       sourceFormat: sourceFormatField.value,
-      pretextContent: pretextContentField.value || undefined,
+      pretextSource: pretextSourceField.value || undefined,
       onContentChange: (v, meta) => {
         contentField.value = v;
         if (meta?.sourceFormat) sourceFormatField.value = meta.sourceFormat;
-        if (meta?.pretextContent) pretextContentField.value = meta.pretextContent;
+        if (meta?.pretextSource) pretextSourceField.value = meta.pretextSource;
       },
       title: titleField.value,
       onTitleChange: (v) => titleField.value = v,

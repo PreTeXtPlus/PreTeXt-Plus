@@ -7,9 +7,9 @@
   </div>
   <%= form_with(model: project, class: "hidden", html: {"data-editor-target" => "form"}) do |form| %>
     <%= form.hidden_field :title, "data-editor-target" => "titleField" %>
-    <%= form.hidden_field :content, "data-editor-target" => "contentField" %>
+    <%= form.hidden_field :source, "data-editor-target" => "contentField" %>
     <%= form.hidden_field :source_format, "data-editor-target" => "sourceFormatField" %>
-    <%= form.hidden_field :pretext_content, "data-editor-target" => "pretextContentField" %>
+    <%= form.hidden_field :pretext_source, "data-editor-target" => "pretextSourceField" %>
     <%= form.hidden_field :token, "data-editor-target" => "tokenField", value: ENV["BUILD_TOKEN"] %>
     <%= form.hidden_field :host, "data-editor-target" => "hostField", value: ENV["BUILD_HOST"] %>
   <% end %>
