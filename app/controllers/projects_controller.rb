@@ -1,6 +1,6 @@
 class ProjectsController < ApplicationController
-  allow_unauthenticated_access only: :share
-  require_unauthenticated_access only: :tryit
+  allow_unauthenticated_access only: %i[ share preview ]
+  require_unauthenticated_access only: %i[ tryit ]
   before_action :set_project, only: %i[ show edit update destroy ]
   before_action :limit_projects, only: %i[ new create copy ]
   before_action :require_ownership, only: %i[ show edit update destroy ]
@@ -148,6 +148,19 @@ class ProjectsController < ApplicationController
     @project.title = "Copy of " + @project.title
     @project.save!
     redirect_to edit_project_path(@project)
+  end
+
+  def preview
+    require "uri"
+    require "net/http"
+    # post params to build server
+    post_params = {
+      source: params["source"],
+      title: params["title"],
+      token: ENV["BUILD_TOKEN"]
+    }
+    response = Net::HTTP.post_form(URI.parse("https://#{ENV['BUILD_HOST']}"), post_params)
+    render html: response.body.html_safe
   end
 
   private

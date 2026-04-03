@@ -13,8 +13,6 @@ export default class extends Controller {
     const contentField = this.targets.find("contentField");
     const titleField = this.targets.find("titleField");
     const railsForm = this.targets.find("form");
-    const tokenField = this.targets.find("tokenField")
-    const hostField = this.targets.find("hostField")
 
     const onCancelButton = () => {
       if (confirm("Cancel without saving?")) {
@@ -50,10 +48,10 @@ export default class extends Controller {
     setInterval(onSave, 10000);
 
     const onPreviewRebuild = async (content, title, postToIframe) => {
-      const buildToken = tokenField.value;
-      const buildHost = hostField.value;
-      const postData = { source: content, title: title, token: buildToken };
-      postToIframe(`https://${buildHost}`, postData);
+      const buildHost = "/projects/preview";
+      const authenticityToken = document.querySelector("meta[name='csrf-token']").getAttribute("content");
+      const postData = { source: content, title: title, authenticity_token: authenticityToken };
+      postToIframe(buildHost, postData);
     }
 
     const props = {

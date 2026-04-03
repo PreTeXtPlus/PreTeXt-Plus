@@ -6,9 +6,7 @@
     </div>
   </div>
   <%= form_with(class: "hidden", html: {"data-tryit-target" => "form"}) do |form| %>
-    <%= form.hidden_field :content, "data-tryit-target" => "contentField", value: @content %>
-    <%= form.hidden_field :title, "data-tryit-target" => "titleField", value: @title %>
-    <%= form.hidden_field :token, "data-tryit-target" => "tokenField", value: ENV["BUILD_TOKEN"] %>
-    <%= form.hidden_field :host, "data-tryit-target" => "hostField", value: ENV["BUILD_HOST"] %>
+    <%= form.hidden_field :content, "data-tryit-target" => "contentField", value: content %>
+    <%= form.hidden_field :title, "data-tryit-target" => "titleField", value: title %>
   <% end %>
 </div>

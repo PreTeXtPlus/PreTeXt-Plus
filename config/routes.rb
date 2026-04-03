@@ -9,6 +9,7 @@ Rails.application.routes.draw do
     get "share" => "projects#share", as: "share"
     get "share/copy" => "projects#copy", as: "copy"
   end
+  post "projects/preview" => "projects#preview", as: "preview"
   post "subscribe" => "subscriptions#subscribe"
   post "stripe/webhooks" => "subscriptions#webhooks"
   get "tryit" => "projects#tryit"
