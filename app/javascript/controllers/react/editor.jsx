@@ -6,16 +6,25 @@ import '@pretextbook/web-editor/dist/web-editor.css';
 let root = null;
 
 function EditorWrapper({ onContentChange, onTitleChange, ...rest }) {
-  const [content, setContent] = useState(rest.content);
-  const [title, setTitle] = useState(rest.title);
-  const [sourceFormat, setSourceFormat] = useState(rest.sourceFormat);
-  const [pretextSource, setPretextSource] = useState(rest.pretextSource);
+  const {
+    source: sourceProp,
+    title: titleProp,
+    sourceFormat: sourceFormatProp,
+    pretextSource: pretextSourceProp,
+    ...editorProps
+  } = rest;
+
+  const [source, setSource] = useState(sourceProp ?? "");
+  const [title, setTitle] = useState(titleProp);
+  const [sourceFormat, setSourceFormat] = useState(sourceFormatProp);
+  const [pretextSource, setPretextSource] = useState(pretextSourceProp);
 
   const handleContentChange = useCallback((v, meta) => {
-    setContent(v);
+    const nextSource = v ?? meta?.sourceContent ?? "";
+    setSource(nextSource);
     if (meta?.sourceFormat) setSourceFormat(meta.sourceFormat);
     if (meta?.pretextSource) setPretextSource(meta.pretextSource);
-    onContentChange?.(v, meta);
+    onContentChange?.(nextSource, meta);
   }, [onContentChange]);
 
   const handleTitleChange = useCallback((v) => {
@@ -25,8 +34,8 @@ function EditorWrapper({ onContentChange, onTitleChange, ...rest }) {
 
   return (
     <Editors
-      {...rest}
-      content={content}
+      {...editorProps}
+      source={source}
       title={title}
       sourceFormat={sourceFormat}
       pretextSource={pretextSource}

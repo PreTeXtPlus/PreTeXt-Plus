@@ -73,7 +73,7 @@ export default class extends Controller {
     }
 
     const props = {
-      content: contentField.value,
+      source: contentField.value,
       sourceFormat: sourceFormatField.value,
       pretextSource: pretextSourceField.value || undefined,
       onContentChange: (v, meta) => {
