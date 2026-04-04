@@ -63,7 +63,7 @@ class ProjectsControllerTest < ActionDispatch::IntegrationTest
 
   test "should update project" do
     stub_build_server do
-      patch project_url(@project), params: { project: { content: @project.content, title: @project.title } }
+      patch project_url(@project), params: { project: { source: @project.source, title: @project.title } }
     end
     assert_redirected_to project_url(@project)
   end
@@ -85,5 +85,66 @@ class ProjectsControllerTest < ActionDispatch::IntegrationTest
     end
 
     assert_redirected_to projects_url
+  end
+
+  test "non-owner cannot view project" do
+    other_project = projects(:two)
+    get project_url(other_project)
+    assert_redirected_to projects_path
+  end
+
+  test "non-owner cannot edit project" do
+    other_project = projects(:two)
+    get edit_project_url(other_project)
+    assert_redirected_to projects_path
+  end
+
+  test "non-owner cannot update project" do
+    other_project = projects(:two)
+    stub_build_server do
+      patch project_url(other_project), params: { project: { title: "Stolen" } }
+    end
+    assert_redirected_to projects_path
+    assert_not_equal "Stolen", other_project.reload.title
+  end
+
+  test "non-owner cannot destroy project" do
+    other_project = projects(:two)
+    assert_no_difference("Project.count") do
+      delete project_url(other_project)
+    end
+    assert_redirected_to projects_path
+  end
+
+  test "admin can view any project" do
+    @user.update!(admin: true)
+    other_project = projects(:two)
+    get project_url(other_project)
+    assert_response :success
+  end
+
+  test "share is publicly accessible without authentication" do
+    delete session_path  # sign out
+    get project_share_url(@project)
+    assert_response :success
+  end
+
+  test "copy creates a duplicate for sustaining subscriber" do
+    @user.update!(subscription: :sustaining)
+    stub_build_server do
+      assert_difference("Project.count") do
+        post project_copy_url(@project)
+      end
+    end
+    copy = Project.find_by!(title: "Copy of #{@project.title}", user: @user)
+    assert_redirected_to edit_project_path(copy)
+  end
+
+  test "copy is blocked for beta subscribers" do
+    @user.update!(subscription: :beta, admin: false)
+    assert_no_difference("Project.count") do
+      post project_copy_url(@project)
+    end
+    assert_redirected_to projects_path
   end
 end

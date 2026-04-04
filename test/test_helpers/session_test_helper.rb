@@ -1,3 +1,12 @@
+module BuildServerHelper
+  # Stubs the external PreTeXt build server call so tests don't need
+  # BUILD_HOST / BUILD_TOKEN env vars set.
+  def stub_build_server(&block)
+    fake_response = Struct.new(:body).new("<html><body>stub</body></html>")
+    Net::HTTP.stub(:post_form, fake_response, &block)
+  end
+end
+
 module SessionTestHelper
   def sign_in_as(user)
     Current.session = user.sessions.create!
@@ -12,13 +21,10 @@ module SessionTestHelper
     Current.session&.destroy!
     cookies.delete("session_id")
   end
+end
 
-  # Stubs the external PreTeXt build server call so tests don't need
-  # BUILD_HOST / BUILD_TOKEN env vars set.
-  def stub_build_server(&block)
-    fake_response = Struct.new(:body).new("<html><body>stub</body></html>")
-    Net::HTTP.stub(:post_form, fake_response, &block)
-  end
+ActiveSupport.on_load(:active_support_test_case) do
+  include BuildServerHelper
 end
 
 ActiveSupport.on_load(:action_dispatch_integration_test) do
