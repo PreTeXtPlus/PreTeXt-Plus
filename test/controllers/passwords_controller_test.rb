@@ -46,12 +46,15 @@ class PasswordsControllerTest < ActionDispatch::IntegrationTest
     end
   end
 
-  test "update with blank password follows success flow without changing password" do
+  test "update with blank password fails and redirects back to edit" do
     token = @user.password_reset_token
     assert_no_changes -> { @user.reload.password_digest } do
       put password_path(token), params: { password: "" }
-      assert_redirected_to projects_path
+      assert_redirected_to edit_password_path(token)
     end
+
+    follow_redirect!
+    assert_select "div", /Passwords did not match/
   end
 
   private
