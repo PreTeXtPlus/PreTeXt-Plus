@@ -147,4 +147,39 @@ class ProjectsControllerTest < ActionDispatch::IntegrationTest
     end
     assert_redirected_to projects_path
   end
+
+  test "copy allows sustaining requester to copy another user's project" do
+    owner = users(:one)
+    owner.update!(subscription: :beta, admin: false)
+    requester = users(:two)
+    requester.update!(subscription: :sustaining, admin: false)
+    other_project = projects(:one)
+
+    delete session_path
+    sign_in_as(requester)
+
+    stub_build_server do
+      assert_difference("Project.count", 1) do
+        post project_copy_url(other_project)
+      end
+    end
+    copied = Project.find_by!(title: "Copy of #{other_project.title}", user: requester)
+    assert_redirected_to edit_project_path(copied)
+  end
+
+  test "copy blocks beta requester even when source owner is sustaining" do
+    owner = users(:one)
+    owner.update!(subscription: :sustaining, admin: false)
+    requester = users(:two)
+    requester.update!(subscription: :beta, admin: false)
+    other_project = projects(:one)
+
+    delete session_path
+    sign_in_as(requester)
+
+    assert_no_difference("Project.count") do
+      post project_copy_url(other_project)
+    end
+    assert_redirected_to projects_path
+  end
 end

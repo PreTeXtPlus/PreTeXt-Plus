@@ -111,7 +111,7 @@ class ProjectsController < ApplicationController
   # GET /projects/:project_id/share/copy
   def copy
     @project = Project.find(params.expect(:project_id)).dup
-    unless @project.user.has_copiable_projects? or @current_user.admin?
+    unless @current_user.has_copiable_projects? or @current_user.admin?
       flash[:alert] = "Only sustaining subscribers can share copiable projects. Consider subscribing for this feature and to support PreTeXt.Plus!"
       redirect_to projects_path and return
     end

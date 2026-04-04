@@ -39,6 +39,32 @@ class InvitationsControllerTest < ActionDispatch::IntegrationTest
     assert_response :unprocessable_entity
   end
 
+  test "create for_user caps invitation amount at 100" do
+    sign_in_as(@admin)
+    assert_difference("Invitation.count", 100) do
+      post invitations_path, params: { mode: "for_user", email: @non_admin.email, amount: "200" }
+    end
+    assert_redirected_to projects_path
+  end
+
+  test "create for_all creates invitations for all invited users" do
+    sign_in_as(@admin)
+    invited_users_count = User.joins("INNER JOIN invitations ON users.id = invitations.recipient_user_id").distinct.count
+    assert_difference("Invitation.count", invited_users_count * 2) do
+      post invitations_path, params: { mode: "for_all", amount: "2" }
+    end
+    assert_redirected_to projects_path
+  end
+
+  test "create for_all caps invitation amount at 5 per user" do
+    sign_in_as(@admin)
+    invited_users_count = User.joins("INNER JOIN invitations ON users.id = invitations.recipient_user_id").distinct.count
+    assert_difference("Invitation.count", invited_users_count * 5) do
+      post invitations_path, params: { mode: "for_all", amount: "99" }
+    end
+    assert_redirected_to projects_path
+  end
+
   test "create direct_email sends invitation email" do
     sign_in_as(@admin)
     assert_difference("Invitation.count") do

@@ -46,14 +46,10 @@ class PasswordsControllerTest < ActionDispatch::IntegrationTest
     end
   end
 
-  test "update with non matching passwords" do
+  test "update with blank password follows success flow without changing password" do
     token = @user.password_reset_token
-    # has_secure_password only validates confirmation when password_confirmation is explicitly
-    # set on the model; the controller only permits :password so confirmation is ignored.
-    # A genuinely unprocessable update would require a DB/model-level failure.
-    # This test verifies the token-based flow still works end-to-end.
-    assert_changes -> { @user.reload.password_digest } do
-      put password_path(token), params: { password: "anyvalue" }
+    assert_no_changes -> { @user.reload.password_digest } do
+      put password_path(token), params: { password: "" }
       assert_redirected_to projects_path
     end
   end

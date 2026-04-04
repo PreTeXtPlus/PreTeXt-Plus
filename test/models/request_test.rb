@@ -12,6 +12,12 @@ class RequestTest < ActiveSupport::TestCase
     assert request.valid?
   end
 
+  test "cannot create duplicate request for same user" do
+    duplicate = Request.new(user: users(:one))
+    assert_not duplicate.valid?
+    assert_includes duplicate.errors[:user_id], "has already been taken"
+  end
+
   test "requested_invitation? returns true when request exists" do
     user = users(:one)
     assert user.requested_invitation?
