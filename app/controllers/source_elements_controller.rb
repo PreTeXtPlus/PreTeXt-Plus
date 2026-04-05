@@ -27,9 +27,18 @@ class SourceElementsController < ApplicationController
   # PATCH /projects/:project_id/source_elements/:id
   def update
     if @source_element.update(source_element_params)
-      render json: element_json(@source_element), status: :ok
+      respond_to do |format|
+        format.html do
+          @project.reassemble_and_build!
+          redirect_to @project, notice: "Project was successfully updated.", status: :see_other
+        end
+        format.json { render json: element_json(@source_element), status: :ok }
+      end
     else
-      render json: { errors: @source_element.errors }, status: :unprocessable_entity
+      respond_to do |format|
+        format.html { redirect_to edit_project_path(@project, element: @source_element.id), alert: "Failed to save." }
+        format.json { render json: { errors: @source_element.errors }, status: :unprocessable_entity }
+      end
     end
   end
 

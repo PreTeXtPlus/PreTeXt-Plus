@@ -44,6 +44,13 @@ class Project < ApplicationRecord
     xml
   end
 
+  # Assembles source from elements into the project's source column and
+  # triggers the build server (via the before_update callback).
+  def reassemble_and_build!
+    assembled = assemble_source
+    update!(source: assembled)
+  end
+
   # Scaffolds the default source_elements tree for a new project.
   def scaffold_elements!
     content = self.class.default_content_for(source_format)
