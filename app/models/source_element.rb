@@ -19,6 +19,18 @@ class SourceElement < ApplicationRecord
 
   TITLE_BEARING_TYPES = %w[chapter section subsection preface appendix].freeze
 
+  # Valid child types for each container element type.
+  CHILD_TYPES = {
+    "frontmatter" => %w[preface colophon],
+    "backmatter"  => %w[appendix colophon references],
+    "chapter"     => %w[introduction section conclusion],
+    "section"     => %w[subsection],
+    "appendix"    => %w[subsection]
+  }.freeze
+
+  # Top-level element types that can be added at the root of a project.
+  ROOT_TYPES = %w[docinfo frontmatter chapter section backmatter].freeze
+
   def container?
     children.any?
   end
@@ -29,6 +41,17 @@ class SourceElement < ApplicationRecord
 
   def title_bearing?
     element_type.in?(TITLE_BEARING_TYPES)
+  end
+
+  # Returns the child types allowed for this element, or empty if it can't have children.
+  def allowed_child_types
+    CHILD_TYPES.fetch(element_type, [])
+  end
+
+  # Returns the next available position among siblings.
+  def next_sibling_position
+    siblings = project.source_elements.where(parent_id: parent_id)
+    (siblings.maximum(:position) || -1) + 1
   end
 
   # Recursively build the PreTeXt XML for this element and its descendants.
