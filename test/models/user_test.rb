@@ -89,6 +89,7 @@ class UserTest < ActiveSupport::TestCase
       email: "newuser@example.com",
       password: "secret123"
     )
+    new_user.send(:claim_intended_invitations)
 
     assert_equal new_user, invitation.reload.recipient_user
   end
