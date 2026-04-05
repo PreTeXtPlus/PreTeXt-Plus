@@ -1,3 +1,6 @@
+require "net/http"
+require "uri"
+
 module BuildServerHelper
   # Stubs the external PreTeXt build server call so tests don't need
   # BUILD_HOST / BUILD_TOKEN env vars set.
