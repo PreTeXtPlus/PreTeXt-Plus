@@ -1,0 +1,33 @@
+New feedback received on PreTeXt.Plus
+=====================================
+
+<% if @user_email.present? %>
+From: <%= @user_email %>
+<% else %>
+From: (anonymous - no email provided)
+<% end %>
+
+Message:
+--------
+<%= @message %>
+
+<% if @project_id.present? %>
+Project: <%= project_url(@project_id) %>
+<% end %>
+
+<% if @source_content.present? %>
+PreTeXt source:
+---------------
+<%= @source_content %>
+<% end %>
+
+<% if @latex_source.present? %>
+Original LaTeX source:
+----------------------
+<%= @latex_source %>
+<% end %>
+
+<% if @user_agent.present? %>
+---
+User agent: <%= @user_agent %>
+<% end %>

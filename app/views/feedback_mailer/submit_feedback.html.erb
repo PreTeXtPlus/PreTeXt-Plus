@@ -1,0 +1,31 @@
+<p><strong>New feedback received on PreTeXt.Plus</strong></p>
+
+<% if @user_email.present? %>
+  <p><strong>From:</strong> <%= @user_email %></p>
+<% else %>
+  <p><em>No email provided (anonymous feedback)</em></p>
+<% end %>
+
+<p><strong>Message:</strong></p>
+<blockquote style="border-left: 4px solid #ccc; padding-left: 1em; margin-left: 0; white-space: pre-wrap;"><%= @message %></blockquote>
+
+<% if @project_id.present? %>
+  <p><strong>Project:</strong> <%= link_to project_url(@project_id), project_url(@project_id) %></p>
+<% end %>
+
+<% if @source_content.present? %>
+  <hr>
+  <p><strong>PreTeXt source:</strong></p>
+  <pre style="background: #f5f5f5; padding: 1em; overflow-x: auto; white-space: pre-wrap; word-break: break-all; font-size: 12px;"><%= @source_content %></pre>
+<% end %>
+
+<% if @latex_source.present? %>
+  <hr>
+  <p><strong>Original LaTeX source:</strong></p>
+  <pre style="background: #f5f5f5; padding: 1em; overflow-x: auto; white-space: pre-wrap; word-break: break-all; font-size: 12px;"><%= @latex_source %></pre>
+<% end %>
+
+<% if @user_agent.present? %>
+  <hr>
+  <p style="color: #999; font-size: 12px;"><strong>User agent:</strong> <%= @user_agent %></p>
+<% end %>

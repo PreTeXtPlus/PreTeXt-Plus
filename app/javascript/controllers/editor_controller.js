@@ -1,5 +1,24 @@
 import { Controller } from "@hotwired/stimulus"
 
+const LATEX_CONVERTED_KEY = (projectId) => `latexConverted_${projectId}`;
+
+function openFeedbackModal(detail = {}) {
+  window.dispatchEvent(new CustomEvent("feedback:open", { detail }));
+}
+
+function notifyFeedback(message) {
+  window.dispatchEvent(new CustomEvent("feedback:notify", { detail: { message } }));
+}
+
+function updateFeedbackSource(detail = {}) {
+  if (!window.__feedbackPageSource) window.__feedbackPageSource = {};
+  const store = window.__feedbackPageSource;
+  if (detail.source !== undefined) store.source = detail.source;
+  if (detail.latexSource) store.latexSource = detail.latexSource; // only update if truthy — preserve once set
+  if (detail.projectId !== undefined) store.projectId = detail.projectId;
+  window.dispatchEvent(new CustomEvent("feedback:source-update", { detail: { ...store } }));
+}
+
 export default class extends Controller {
   //Load the React code when we initialize
   initialize() {
@@ -17,6 +36,8 @@ export default class extends Controller {
     const pretextSourceField = this.targets.find("pretextSourceField")
     const tokenField = this.targets.find("tokenField")
     const hostField = this.targets.find("hostField")
+
+    const projectId = this.element.dataset.editorProjectIdValue || null;
 
     const onCancelButton = () => {
       if (confirm("Cancel without saving?")) {
@@ -58,7 +79,11 @@ export default class extends Controller {
 
       } catch (error) {
         console.error("Error:", error);
-        alert("An error occurred during submission.");
+        openFeedbackModal({
+          source: contentField.value,
+          projectId,
+          context: `I encountered a save error:\n\n${error.message}\n\n(Feel free to edit or replace this message.)`,
+        });
       }
     }
 
@@ -72,15 +97,45 @@ export default class extends Controller {
       postToIframe(`https://${buildHost}`, postData);
     }
 
+    const onContentChange = (v, meta) => {
+      const prevFormat = sourceFormatField.value;
+      const prevContent = contentField.value; // capture original content before overwrite
+      contentField.value = v;
+      if (meta?.sourceFormat) sourceFormatField.value = meta.sourceFormat;
+      if (meta?.pretextSource) pretextSourceField.value = meta.pretextSource;
+
+      // Keep the feedback widget's source in sync with the editor
+      updateFeedbackSource({
+        source: meta?.pretextSource ?? pretextSourceField.value ?? v,
+        projectId,
+      });
+
+      // Trigger notification on first-ever LaTeX→PreTeXt conversion for this project
+      const justConverted =
+        prevFormat === "latex" &&
+        meta?.sourceFormat === "pretext" &&
+        meta?.pretextSource;
+
+      if (justConverted && projectId) {
+        const storageKey = LATEX_CONVERTED_KEY(projectId);
+        if (!localStorage.getItem(storageKey)) {
+          localStorage.setItem(storageKey, "1");
+          // prevContent is the original LaTeX before it was overwritten
+          updateFeedbackSource({
+            source: meta.pretextSource,
+            latexSource: prevContent,
+            projectId,
+          });
+          notifyFeedback("Converted to PreTeXt! Have feedback about how it went?");
+        }
+      }
+    };
+
     const props = {
       source: contentField.value,
       sourceFormat: sourceFormatField.value,
       pretextSource: pretextSourceField.value || undefined,
-      onContentChange: (v, meta) => {
-        contentField.value = v;
-        if (meta?.sourceFormat) sourceFormatField.value = meta.sourceFormat;
-        if (meta?.pretextSource) pretextSourceField.value = meta.pretextSource;
-      },
+      onContentChange,
       title: titleField.value,
       onTitleChange: (v) => titleField.value = v,
       onSaveButton: onSaveButton,
@@ -92,6 +147,12 @@ export default class extends Controller {
     };
 
     this.component.render(root, props);
+
+    // Broadcast initial source so the feedback widget can offer "include source" from the start
+    updateFeedbackSource({
+      source: pretextSourceField.value || contentField.value || null,
+      projectId,
+    });
   }
 
   disconnect() {
@@ -101,3 +162,4 @@ export default class extends Controller {
     this.component.destroy(root);
   }
 }
+
