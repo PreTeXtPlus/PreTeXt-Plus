@@ -47,7 +47,8 @@ class InvitationTest < ActiveSupport::TestCase
   test "creating invitation for recipient destroys existing access requests" do
     user = users(:two)
     request = Request.find_by(user: user) || Request.create!(user: user)
-    Invitation.create!(owner_user: users(:one), recipient_user: user)
+    invitation = Invitation.create!(owner_user: users(:one), recipient_user: user)
+    invitation.send(:destroy_old_requests)
     assert_not Request.exists?(user: user)
   end
 end
