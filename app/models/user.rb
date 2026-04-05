@@ -11,6 +11,7 @@ class User < ApplicationRecord
   normalizes :email, with: ->(e) { e.strip.downcase }
 
   validates_uniqueness_of :email
+  validates :password, length: { minimum: 1 }, allow_nil: true
 
   def invited?
     Invitation.where(recipient_user: self).exists?
