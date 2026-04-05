@@ -7,5 +7,8 @@ import { application } from "./application"
 import EditorController from "./editor_controller"
 application.register("editor", EditorController)
 
+import TocController from "./toc_controller"
+application.register("toc", TocController)
+
 import TryitController from "./tryit_controller"
 application.register("tryit", TryitController)

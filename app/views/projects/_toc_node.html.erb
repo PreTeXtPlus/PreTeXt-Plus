@@ -1,0 +1,25 @@
+<%# Recursive tree node for the ToC sidebar %>
+<% element = node[:element] %>
+<% children = node[:children] %>
+<% is_current = current_element&.id == element.id %>
+<% is_container = children.any? %>
+
+<li class="<%= 'ml-3' if depth > 0 %>">
+  <% if is_container %>
+    <%# Container: show label but not clickable as editable %>
+    <div class="flex items-center px-3 py-1.5 text-gray-500">
+      <span class="mr-1 text-xs">▾</span>
+      <span class="truncate font-medium"><%= element.title.presence || element.element_type.titleize %></span>
+    </div>
+    <ul>
+      <%= render partial: "projects/toc_node", collection: children, as: :node, locals: { project: project, current_element: current_element, depth: depth + 1 } %>
+    </ul>
+  <% else %>
+    <%# Content element: clickable link to edit %>
+    <%= link_to edit_project_path(project, element: element.id),
+          class: "flex items-center px-3 py-1.5 rounded-md mx-1 #{is_current ? 'bg-blue-100 text-blue-800 font-medium' : 'text-gray-700 hover:bg-gray-100'}",
+          data: { turbo: false } do %>
+      <span class="truncate"><%= element.title.presence || element.element_type.titleize %></span>
+    <% end %>
+  <% end %>
+</li>

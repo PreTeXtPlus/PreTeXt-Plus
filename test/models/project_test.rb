@@ -42,6 +42,8 @@ class ProjectTest < ActiveSupport::TestCase
 
   test "before_update uses pretext_source when source_format is latex" do
     project = projects(:one)
+    # Remove source elements to test the legacy fallback path
+    project.source_elements.destroy_all
     captured_params = nil
     fake_response = Struct.new(:body).new("<html><body>latex</body></html>")
 
