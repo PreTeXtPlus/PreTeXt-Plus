@@ -22,10 +22,16 @@ If running in a GitHub Codespace, set port 3000 to **Public** then preview the a
 ## Testing
 
 ```bash
-bin/rails test                          # Full suite (Minitest, parallelized)
-bin/rails test test/models/user_test.rb # Single file
-bin/rails test test/models/user_test.rb:27  # Single test by line number
+bin/rails test                                   # Full suite (Minitest, parallelized)
+bin/rails test test/models/user_test.rb          # Single file
+bin/rails test test/models/user_test.rb:27       # Single test by line number
+bin/rails test:system                            # Browser-based system tests (requires Chrome)
 ```
+
+### Test helpers
+
+- **`stub_build_server { ... }`** — stubs the external build server (`Net::HTTP.post_form`). Available in all test types via `BuildServerHelper`. Wrap any test that saves a project.
+- **`sign_in_as(user)`** / **`sign_out`** — creates a session cookie for a fixture user. Available in integration tests via `SessionTestHelper`.
 
 ---
 
@@ -43,7 +49,7 @@ bin/bundler-audit  # Gem dependency vulnerability check
 
 **Stack:** Rails 8.1 · PostgreSQL · React 19 + Stimulus + Turbo · Tailwind CSS 4 · ESBuild · Propshaft
 
-**Frontend entry:** `app/javascript/application.js` loads Stimulus. The editor is a Stimulus controller (`editor_controller.js`) that mounts a React component (`react/editor.jsx`), which wraps `@pretextbook/web-editor`. The Stimulus controller handles auto-save (10s intervals) and triggers preview rebuilds via iframe.
+**Frontend entry:** `app/javascript/application.js` loads Stimulus. The editor is a Stimulus controller (`controllers/editor_controller.js`) that lazy-imports a React component (`controllers/react/editor.jsx`), which wraps `@pretextbook/web-editor`. The Stimulus controller handles auto-save (10s intervals, only when dirty) and triggers preview rebuilds by posting to the build server via iframe.
 
 **Background jobs:** Solid Queue (production only, or in-process via `SOLID_QUEUE_IN_PUMA=1`). Solid Cache and Solid Cable also run on separate DB roles.
 
@@ -56,7 +62,7 @@ bin/bundler-audit  # Gem dependency vulnerability check
 | Model | Notes |
 |---|---|
 | `User` | `subscription` enum (`beta:0`, `sustaining:1`); `admin` boolean; project quota enforced at controller layer |
-| `Project` | `source_format` enum (`pretext:0`, `latex:1`); `html_source` set via `before_save` by calling the external build server; default scope: `order(updated_at: :desc)` |
+| `Project` | `source_format` enum (`pretext:0`, `latex:1`, `pmd:2`), `document_type` enum (`article:0`, `book:1`, `slideshow:2`), both with `suffix: true`; `html_source` set via `before_update` by calling the external build server; default scope: `order(updated_at: :desc)` |
 | `Session` | Tracks `ip_address`, `user_agent`; stored in signed cookie |
 | `Invitation` | Has `owner_user` and optional `recipient_user`; `code` used for redemption link |
 | `Request` | Users requesting early access |
@@ -97,5 +103,7 @@ Authorization is inline (no Pundit/CanCan):
 - **Email normalization:** `normalizes :email, with: ->(e) { e.strip.downcase }` — always stored lowercase/stripped
 - **Rate limiting:** Native Rails rate limiting on `SessionsController#create` and `PasswordsController#create` (10 requests / 3 min)
 - **Mailers use `deliver_later`** and go through the Resend API (configured in `config/initializers/mailer.rb`)
-- **Project build** happens in `Project#before_save` — modifying `content` or `title` triggers an HTTP call to the build server
+- **Project build** happens in `Project#before_update` — saving a project triggers an HTTP call to the build server; always wrap controller tests that save projects with `stub_build_server`
 - **Sharing:** Projects have a public `/projects/:id/share` route (no auth required) and a copy-to-account feature gated to sustaining/admin users
+- **Strong parameters:** Use `params.expect(...)` (Rails 8 style) instead of `params.require(...).permit(...)`
+- **Enum safety:** Enum fields in `safe_project_params` are sanitized with `presence_in(...)` to return `nil` instead of raising `ArgumentError` on unknown values
