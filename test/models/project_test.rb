@@ -68,40 +68,9 @@ class ProjectTest < ActiveSupport::TestCase
 
   # --- Docinfo ---
 
-  test "docinfo_xml returns nil when no docinfo fields are set" do
+  test "full_pretext_source includes docinfo when present" do
     project = projects(:one)
-    assert_nil project.docinfo_xml
-  end
-
-  test "docinfo_xml includes macros when present" do
-    project = projects(:one)
-    project.docinfo_macros = '\newcommand{\N}{\mathbb{N}}'
-    xml = project.docinfo_xml
-    assert_includes xml, "<docinfo>"
-    assert_includes xml, "<macros>"
-    assert_includes xml, '\newcommand{\N}{\mathbb{N}}'
-  end
-
-  test "docinfo_xml includes latex-image-preamble when present" do
-    project = projects(:one)
-    project.docinfo_latex_image_preamble = '\usepackage{tikz}'
-    xml = project.docinfo_xml
-    assert_includes xml, "<latex-image-preamble>"
-    assert_includes xml, '\usepackage{tikz}'
-  end
-
-  test "docinfo_xml includes both fields when present" do
-    project = projects(:one)
-    project.docinfo_macros = '\newcommand{\R}{\mathbb{R}}'
-    project.docinfo_latex_image_preamble = '\usepackage{pgfplots}'
-    xml = project.docinfo_xml
-    assert_includes xml, "<macros>"
-    assert_includes xml, "<latex-image-preamble>"
-  end
-
-  test "full_pretext_source wraps content with docinfo" do
-    project = projects(:one)
-    project.docinfo_macros = '\newcommand{\N}{\mathbb{N}}'
+    project.docinfo = "<docinfo><macros>\\newcommand{\\N}{\\mathbb{N}}</macros></docinfo>"
     project.source = "<section><p>Hello</p></section>"
     xml = project.full_pretext_source
     assert xml.start_with?("<pretext>")
@@ -121,9 +90,9 @@ class ProjectTest < ActiveSupport::TestCase
     assert_includes xml, "<article>"
   end
 
-  test "set_html_source sends full_pretext_source for pretext projects" do
+  test "set_html_source sends full_pretext_source with docinfo for pretext projects" do
     project = projects(:one)
-    project.docinfo_macros = '\newcommand{\N}{\mathbb{N}}'
+    project.docinfo = "<docinfo><macros>\\newcommand{\\N}{\\mathbb{N}}</macros></docinfo>"
     captured_params = nil
     fake_response = Struct.new(:body).new("<html>built</html>")
 

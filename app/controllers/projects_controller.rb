@@ -1,9 +1,9 @@
 class ProjectsController < ApplicationController
   allow_unauthenticated_access only: %i[ share preview ]
   require_unauthenticated_access only: %i[ tryit ]
-  before_action :set_project, only: %i[ show edit update destroy docinfo ]
+  before_action :set_project, only: %i[ show edit update destroy ]
   before_action :limit_projects, only: %i[ new create copy ]
-  before_action :require_ownership, only: %i[ show edit update destroy docinfo ]
+  before_action :require_ownership, only: %i[ show edit update destroy ]
   after_action :allow_iframe, only: :share
   rate_limit to: 25, within: 10.minutes, only: :preview,
              with: -> { render plain: "Preview limit reached. Please wait a few minutes and try again, or create an account to continue writing and save your work!", status: :too_many_requests },
@@ -62,10 +62,6 @@ class ProjectsController < ApplicationController
 
   # GET /projects/1/edit
   def edit
-  end
-
-  # GET /projects/1/docinfo
-  def docinfo
   end
 
   # POST /projects or /projects.json
@@ -168,7 +164,7 @@ class ProjectsController < ApplicationController
 
     # Only allow a list of trusted parameters through.
     def project_params
-      params.expect(project: [ :title, :source, :pretext_source, :source_format, :document_type, :docinfo_macros, :docinfo_latex_image_preamble ])
+      params.expect(project: [ :title, :source, :pretext_source, :source_format, :document_type, :docinfo ])
     end
 
     # Strips enum fields to known values before mass-assignment so invalid

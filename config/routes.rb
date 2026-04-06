@@ -7,7 +7,6 @@ Rails.application.routes.draw do
   post "invitations/redeem" => "invitations#redeem", as: :redeem_invitation
   resources :projects do
     get "share" => "projects#share", as: "share"
-    get "docinfo" => "projects#docinfo", as: "docinfo", on: :member
     # copy should use post action so that turbo doesn't execute on link hover and cause a copy of the project to be created by accident
     post "share/copy" => "projects#copy", as: "copy"
   end

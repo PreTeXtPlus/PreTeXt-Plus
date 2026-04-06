@@ -5,12 +5,13 @@ import '@pretextbook/web-editor/dist/web-editor.css';
 
 let root = null;
 
-function EditorWrapper({ onContentChange, onTitleChange, ...rest }) {
+function EditorWrapper({ onContentChange, onTitleChange, onDocinfoChange, ...rest }) {
   const {
     source: sourceProp,
     title: titleProp,
     sourceFormat: sourceFormatProp,
     pretextSource: pretextSourceProp,
+    docinfo: docinfoProp,
     ...editorProps
   } = rest;
 
@@ -18,6 +19,7 @@ function EditorWrapper({ onContentChange, onTitleChange, ...rest }) {
   const [title, setTitle] = useState(titleProp);
   const [sourceFormat, setSourceFormat] = useState(sourceFormatProp);
   const [pretextSource, setPretextSource] = useState(pretextSourceProp);
+  const [docinfo, setDocinfo] = useState(docinfoProp);
 
   const handleContentChange = useCallback((v, meta) => {
     const nextSource = v ?? meta?.sourceContent ?? "";
@@ -32,6 +34,12 @@ function EditorWrapper({ onContentChange, onTitleChange, ...rest }) {
     onTitleChange?.(v);
   }, [onTitleChange]);
 
+  const handleDocinfoChange = useCallback((v) => {
+    const next = v ?? "";
+    setDocinfo(next);
+    onDocinfoChange?.(next);
+  }, [onDocinfoChange]);
+
   return (
     <Editors
       {...editorProps}
@@ -39,8 +47,10 @@ function EditorWrapper({ onContentChange, onTitleChange, ...rest }) {
       title={title}
       sourceFormat={sourceFormat}
       pretextSource={pretextSource}
+      docinfo={docinfo}
       onContentChange={handleContentChange}
       onTitleChange={handleTitleChange}
+      onDocinfoChange={handleDocinfoChange}
     />
   );
 }

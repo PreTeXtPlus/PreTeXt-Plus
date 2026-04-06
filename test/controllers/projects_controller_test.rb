@@ -216,30 +216,17 @@ class ProjectsControllerTest < ActionDispatch::IntegrationTest
 
   # --- Docinfo ---
 
-  test "should get docinfo page" do
-    get docinfo_project_url(@project)
-    assert_response :success
-  end
-
-  test "should update docinfo fields" do
+  test "should update docinfo" do
     stub_build_server do
       patch project_url(@project), params: {
         project: {
-          docinfo_macros: '\newcommand{\N}{\mathbb{N}}',
-          docinfo_latex_image_preamble: '\usepackage{tikz}'
+          docinfo: "<docinfo><macros>\\newcommand{\\N}{\\mathbb{N}}</macros></docinfo>"
         }
       }
     end
     assert_redirected_to @project
 
     @project.reload
-    assert_equal '\newcommand{\N}{\mathbb{N}}', @project.docinfo_macros
-    assert_equal '\usepackage{tikz}', @project.docinfo_latex_image_preamble
-  end
-
-  test "docinfo page requires ownership" do
-    other_project = projects(:two)
-    get docinfo_project_url(other_project)
-    assert_redirected_to projects_path
+    assert_includes @project.docinfo, "<macros>"
   end
 end

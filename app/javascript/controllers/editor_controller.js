@@ -15,6 +15,9 @@ export default class extends Controller {
     const railsForm = this.targets.find("form");
     const sourceFormatField = this.targets.find("sourceFormatField")
     const pretextSourceField = this.targets.find("pretextSourceField")
+    const docinfoField = this.targets.find("docinfoField")
+    const tokenField = this.targets.find("tokenField")
+    const hostField = this.targets.find("hostField")
 
     const onCancelButton = () => {
       if (confirm("Cancel without saving?")) {
@@ -29,11 +32,13 @@ export default class extends Controller {
     let lastSavedContent = contentField.value;
     let lastSavedTitle = titleField.value;
     let lastSavedPretextSource = pretextSourceField.value;
+    let lastSavedDocinfo = docinfoField.value;
 
     const isDirty = () =>
       contentField.value !== lastSavedContent ||
       titleField.value !== lastSavedTitle ||
-      pretextSourceField.value !== lastSavedPretextSource;
+      pretextSourceField.value !== lastSavedPretextSource ||
+      docinfoField.value !== lastSavedDocinfo;
 
     const onSave = async () => {
       if (!isDirty()) return;
@@ -52,6 +57,7 @@ export default class extends Controller {
         lastSavedContent = contentField.value;
         lastSavedTitle = titleField.value;
         lastSavedPretextSource = pretextSourceField.value;
+        lastSavedDocinfo = docinfoField.value;
         console.log("Success saving document!");
 
       } catch (error) {
@@ -64,21 +70,23 @@ export default class extends Controller {
     this.saveInterval = setInterval(onSave, 10000);
 
     const onPreviewRebuild = async (content, title, postToIframe) => {
-      const buildHost = "/projects/preview";
-      const authenticityToken = document.querySelector("meta[name='csrf-token']").getAttribute("content");
-      const postData = { source: content, title: title, authenticity_token: authenticityToken };
-      postToIframe(buildHost, postData);
+      const buildToken = tokenField.value;
+      const buildHost = hostField.value;
+      const postData = { source: content, title: title, token: buildToken, docinfo: docinfoField.value };
+      postToIframe(`https://${buildHost}`, postData);
     }
 
     const props = {
       source: contentField.value,
       sourceFormat: sourceFormatField.value,
       pretextSource: pretextSourceField.value || undefined,
+      docinfo: docinfoField.value || undefined,
       onContentChange: (v, meta) => {
         contentField.value = v;
         if (meta?.sourceFormat) sourceFormatField.value = meta.sourceFormat;
         if (meta?.pretextSource) pretextSourceField.value = meta.pretextSource;
       },
+      onDocinfoChange: (v) => docinfoField.value = v ?? "",
       title: titleField.value,
       onTitleChange: (v) => titleField.value = v,
       onSaveButton: onSaveButton,

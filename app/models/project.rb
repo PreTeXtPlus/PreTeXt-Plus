@@ -8,24 +8,13 @@ class Project < ApplicationRecord
 
   default_scope { order(updated_at: :desc) }
 
-  # Assembles <docinfo>...</docinfo> XML from the project's docinfo fields.
-  # Returns nil if no docinfo fields are set.
-  def docinfo_xml
-    parts = []
-    parts << "<macros>#{docinfo_macros}</macros>" if docinfo_macros.present?
-    parts << "<latex-image-preamble>#{docinfo_latex_image_preamble}</latex-image-preamble>" if docinfo_latex_image_preamble.present?
-    return nil if parts.empty?
-
-    "<docinfo>#{parts.join}</docinfo>"
-  end
-
   # Wraps the project source in a full PreTeXt document, including docinfo.
   def full_pretext_source(content = nil)
     content ||= source
     doc_tag = document_type || "article"
 
     xml = +"<pretext>"
-    xml << docinfo_xml.to_s
+    xml << docinfo.to_s if docinfo.present?
     xml << "<#{doc_tag}>"
     xml << "<title>#{title}</title>" if title.present?
     xml << content.to_s
