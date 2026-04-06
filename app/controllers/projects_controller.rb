@@ -18,39 +18,7 @@ class ProjectsController < ApplicationController
 
   # GET /projects/new
   def new
-    @project = Project.new user: @current_user, title: "New Project"
-    @project.content = <<-eos
-<section>
-  <title> Welcome to PreTeXt.Plus! </title>
-
-  <p>
-    This is a sample project to get you started. You can edit this content using the PreTeXt markup language.
-    <me>
-      \\left|\\sum_{i=0}^n a_i\\right|\\leq\\sum_{i=0}^n|a_i|
-    </me>
-  </p>
-
-  <fact>
-    <statement>
-      <p>
-        For more information on how to use PreTeXt, please visit <c>https://pretextbook.org/doc/guide/html/</c>.
-      </p>
-    </statement>
-  </fact>
-
-  <note>
-    <p>
-      Note: currently, PreTeXt.Plus only supports a subset of PreTeXt features, and only allows authoring the content of an <c>article</c>. We look forward to expanding this in the future!
-    </p>
-  </note>
-
-  <p>
-    Feel free to delete this sample content and start creating your own project. Happy writing!
-  </p>
-</section>
-    eos
-    @project.save!
-    redirect_to edit_project_path(@project)
+    @project = Project.new(user: @current_user, source_format: :pretext)
   end
 
   # GET /tryit
@@ -95,12 +63,15 @@ class ProjectsController < ApplicationController
 
   # POST /projects or /projects.json
   def create
-    @project = Project.new(project_params)
+    @project = Project.new(safe_project_params)
     @project.user = @current_user
+    @project.source_format ||= :pretext
+    @project.title = "New Project" if @project.title.blank?
+    @project.source = Project.default_content_for(@project.source_format)
 
     respond_to do |format|
       if @project.save
-        format.html { redirect_to @project, notice: "Project was successfully created." }
+        format.html { redirect_to edit_project_path(@project) }
         format.json { render :show, status: :created, location: @project }
       else
         format.html { render :new, status: :unprocessable_entity }
@@ -112,7 +83,7 @@ class ProjectsController < ApplicationController
   # PATCH/PUT /projects/1 or /projects/1.json
   def update
     respond_to do |format|
-      if @project.update(project_params)
+      if @project.update(safe_project_params)
         format.html { redirect_to @project, notice: "Project was successfully updated.", status: :see_other }
         format.json { render :show, status: :ok, location: @project }
       else
@@ -134,13 +105,13 @@ class ProjectsController < ApplicationController
 
   def share
     @project = Project.find(params.expect(:project_id))
-    render html: @project.html_source.html_safe
+    render html: (@project.html_source || "").html_safe
   end
 
   # GET /projects/:project_id/share/copy
   def copy
     @project = Project.find(params.expect(:project_id)).dup
-    unless @project.user.has_copiable_projects? or @current_user.admin?
+    unless @current_user.has_copiable_projects? or @current_user.admin?
       flash[:alert] = "Only sustaining subscribers can share copiable projects. Consider subscribing for this feature and to support PreTeXt.Plus!"
       redirect_to projects_path and return
     end
@@ -181,7 +152,22 @@ class ProjectsController < ApplicationController
 
     # Only allow a list of trusted parameters through.
     def project_params
-      params.expect(project: [ :title, :content ])
+      params.expect(project: [ :title, :source, :pretext_source, :source_format, :document_type ])
+    end
+
+    # Strips enum fields to known values before mass-assignment so invalid
+    # inputs produce nil (handled by validations) rather than ArgumentError.
+    def safe_project_params
+      p = project_params
+      p[:source] = p.delete(:content) if p.key?(:content) && !p.key?(:source)
+      p[:pretext_source] = p.delete(:pretext_content) if p.key?(:pretext_content) && !p.key?(:pretext_source)
+      if p.key?(:source_format)
+        p[:source_format] = p[:source_format].presence_in(Project.source_formats.keys)
+      end
+      if p.key?(:document_type)
+        p[:document_type] = p[:document_type].presence_in(Project.document_types.keys)
+      end
+      p
     end
 
     # redirect if user has too many projects

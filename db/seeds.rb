@@ -7,3 +7,14 @@
 #   ["Action", "Comedy", "Drama", "Horror"].each do |genre_name|
 #     MovieGenre.find_or_create_by!(name: genre_name)
 #   end
+
+# Development admin user — run `bin/rails db:seed` to (re)create
+if Rails.env.development?
+  user = User.find_or_initialize_by(email: "admin@example.com")
+  user.password = "password123"
+  user.password_confirmation = "password123"
+  user.admin = true
+  user.subscription = :sustaining
+  user.save!
+  puts "Dev admin: admin@example.com / password123"
+end

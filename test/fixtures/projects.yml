@@ -1,11 +1,11 @@
 # Read about fixtures at https://api.rubyonrails.org/classes/ActiveRecord/FixtureSet.html
 
 one:
-  user: :one
-  title: MyString
-  content: MyText
+  user: one
+  title: My First Project
+  source: <section><title>Hello</title><p>World</p></section>
 
 two:
   user: two
-  title: MyString
-  content: MyText
+  title: My Second Project
+  source: <section><title>Other</title><p>Content</p></section>

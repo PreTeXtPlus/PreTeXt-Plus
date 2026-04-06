@@ -29,7 +29,7 @@ export default class extends Controller {
     }
 
     const props = {
-      content: contentField.value,
+      source: contentField.value,
       onContentChange: (v) => contentField.value = v,
       title: titleField.value,
       onTitleChange: (v) => titleField.value = v,
