@@ -65,4 +65,76 @@ class ProjectTest < ActiveSupport::TestCase
     project = projects(:one)
     assert_equal users(:one), project.user
   end
+
+  # --- Docinfo ---
+
+  test "docinfo_xml returns nil when no docinfo fields are set" do
+    project = projects(:one)
+    assert_nil project.docinfo_xml
+  end
+
+  test "docinfo_xml includes macros when present" do
+    project = projects(:one)
+    project.docinfo_macros = '\newcommand{\N}{\mathbb{N}}'
+    xml = project.docinfo_xml
+    assert_includes xml, "<docinfo>"
+    assert_includes xml, "<macros>"
+    assert_includes xml, '\newcommand{\N}{\mathbb{N}}'
+  end
+
+  test "docinfo_xml includes latex-image-preamble when present" do
+    project = projects(:one)
+    project.docinfo_latex_image_preamble = '\usepackage{tikz}'
+    xml = project.docinfo_xml
+    assert_includes xml, "<latex-image-preamble>"
+    assert_includes xml, '\usepackage{tikz}'
+  end
+
+  test "docinfo_xml includes both fields when present" do
+    project = projects(:one)
+    project.docinfo_macros = '\newcommand{\R}{\mathbb{R}}'
+    project.docinfo_latex_image_preamble = '\usepackage{pgfplots}'
+    xml = project.docinfo_xml
+    assert_includes xml, "<macros>"
+    assert_includes xml, "<latex-image-preamble>"
+  end
+
+  test "full_pretext_source wraps content with docinfo" do
+    project = projects(:one)
+    project.docinfo_macros = '\newcommand{\N}{\mathbb{N}}'
+    project.source = "<section><p>Hello</p></section>"
+    xml = project.full_pretext_source
+    assert xml.start_with?("<pretext>")
+    assert xml.end_with?("</pretext>")
+    assert_includes xml, "<docinfo>"
+    assert_includes xml, "<macros>"
+    assert_includes xml, "<article>"
+    assert_includes xml, "<section><p>Hello</p></section>"
+  end
+
+  test "full_pretext_source works without docinfo" do
+    project = projects(:one)
+    project.source = "<section><p>Hello</p></section>"
+    xml = project.full_pretext_source
+    assert xml.start_with?("<pretext>")
+    assert_not_includes xml, "<docinfo>"
+    assert_includes xml, "<article>"
+  end
+
+  test "set_html_source sends full_pretext_source for pretext projects" do
+    project = projects(:one)
+    project.docinfo_macros = '\newcommand{\N}{\mathbb{N}}'
+    captured_params = nil
+    fake_response = Struct.new(:body).new("<html>built</html>")
+
+    Net::HTTP.stub(:post_form, ->(_uri, params) {
+      captured_params = params
+      fake_response
+    }) do
+      project.update!(title: "With Docinfo")
+    end
+
+    assert_includes captured_params[:source], "<docinfo>"
+    assert_includes captured_params[:source], "<macros>"
+  end
 end

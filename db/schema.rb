@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_04_03_130000) do
+ActiveRecord::Schema[8.1].define(version: 2026_04_06_203735) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
   enable_extension "pgcrypto"
@@ -29,6 +29,8 @@ ActiveRecord::Schema[8.1].define(version: 2026_04_03_130000) do
 
   create_table "projects", id: :uuid, default: -> { "gen_random_uuid()" }, force: :cascade do |t|
     t.datetime "created_at", null: false
+    t.text "docinfo_latex_image_preamble"
+    t.text "docinfo_macros"
     t.integer "document_type"
     t.text "html_source"
     t.text "pretext_source"
@@ -56,6 +58,22 @@ ActiveRecord::Schema[8.1].define(version: 2026_04_03_130000) do
     t.index ["user_id"], name: "index_sessions_on_user_id"
   end
 
+  create_table "source_elements", id: :uuid, default: -> { "gen_random_uuid()" }, force: :cascade do |t|
+    t.datetime "created_at", null: false
+    t.string "element_type", null: false
+    t.uuid "parent_id"
+    t.integer "position", default: 0, null: false
+    t.text "pretext_source"
+    t.uuid "project_id", null: false
+    t.text "source"
+    t.integer "source_format", default: 0, null: false
+    t.string "title"
+    t.datetime "updated_at", null: false
+    t.index ["parent_id"], name: "index_source_elements_on_parent_id"
+    t.index ["project_id", "parent_id", "position"], name: "index_source_elements_on_project_id_and_parent_id_and_position"
+    t.index ["project_id"], name: "index_source_elements_on_project_id"
+  end
+
   create_table "users", id: :uuid, default: -> { "gen_random_uuid()" }, force: :cascade do |t|
     t.boolean "admin", default: false
     t.datetime "created_at", null: false
@@ -74,4 +92,6 @@ ActiveRecord::Schema[8.1].define(version: 2026_04_03_130000) do
   add_foreign_key "projects", "users"
   add_foreign_key "requests", "users"
   add_foreign_key "sessions", "users"
+  add_foreign_key "source_elements", "projects"
+  add_foreign_key "source_elements", "source_elements", column: "parent_id"
 end

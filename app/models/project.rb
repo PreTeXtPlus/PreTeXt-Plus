@@ -8,6 +8,32 @@ class Project < ApplicationRecord
 
   default_scope { order(updated_at: :desc) }
 
+  # Assembles <docinfo>...</docinfo> XML from the project's docinfo fields.
+  # Returns nil if no docinfo fields are set.
+  def docinfo_xml
+    parts = []
+    parts << "<macros>#{docinfo_macros}</macros>" if docinfo_macros.present?
+    parts << "<latex-image-preamble>#{docinfo_latex_image_preamble}</latex-image-preamble>" if docinfo_latex_image_preamble.present?
+    return nil if parts.empty?
+
+    "<docinfo>#{parts.join}</docinfo>"
+  end
+
+  # Wraps the project source in a full PreTeXt document, including docinfo.
+  def full_pretext_source(content = nil)
+    content ||= source
+    doc_tag = document_type || "article"
+
+    xml = +"<pretext>"
+    xml << docinfo_xml.to_s
+    xml << "<#{doc_tag}>"
+    xml << "<title>#{title}</title>" if title.present?
+    xml << content.to_s
+    xml << "</#{doc_tag}>"
+    xml << "</pretext>"
+    xml
+  end
+
   def self.default_content_for(source_format)
     case source_format.to_s
     when "latex"
@@ -79,7 +105,13 @@ class Project < ApplicationRecord
     require "net/http"
     # For LaTeX projects, use the editor-converted PreTeXt content for building;
     # fall back to raw content if the conversion hasn't been stored yet.
-    build_source = (latex_source_format? && pretext_source.present?) ? pretext_source : source
+    build_source = if latex_source_format? && pretext_source.present?
+      pretext_source
+    elsif pretext_source_format?
+      full_pretext_source
+    else
+      source
+    end
     params = {
       source: build_source,
       title: self.title,

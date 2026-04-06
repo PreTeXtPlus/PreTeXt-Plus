@@ -11,4 +11,9 @@
     <%= form.hidden_field :source_format, "data-editor-target" => "sourceFormatField" %>
     <%= form.hidden_field :pretext_source, "data-editor-target" => "pretextSourceField" %>
   <% end %>
+  <%= link_to docinfo_project_path(project),
+        class: "fixed bottom-4 right-4 z-50 rounded-full bg-gray-800 text-white px-4 py-2 text-xs shadow-lg hover:bg-gray-700 transition-colors",
+        title: "Document Info (macros, preamble)" do %>
+    ⚙ Document Info
+  <% end %>
 </div>
