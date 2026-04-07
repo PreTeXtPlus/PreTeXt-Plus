@@ -43,7 +43,7 @@ export default class extends Controller {
       current.docinfo !== saved.docinfo;
 
     const onSave = async () => {
-      if (!isDirty()) return;
+      if (!isDirty()) return true;
 
       try {
         const response = await fetch(apiBase, {
@@ -67,20 +67,24 @@ export default class extends Controller {
         if (!response.ok) throw new Error(`Save failed: ${response.status}`);
         Object.assign(saved, current);
         console.log("Saved!");
+        return true;
       } catch (error) {
         console.error("Error saving:", error);
         alert("An error occurred while saving.");
+        return false;
       }
     };
 
     const onSaveButton = async () => {
-      await onSave();
-      window.location.href = "/projects";
+      const savedSuccessfully = await onSave();
+      if (!savedSuccessfully) return;
+
+      window.location.href = `/projects/${this.projectIdValue}`;
     };
 
     const onCancelButton = () => {
       if (confirm("Cancel without saving?")) {
-        window.location.href = "/projects";
+        window.location.href = `/projects/${this.projectIdValue}`;
       }
     };
 
