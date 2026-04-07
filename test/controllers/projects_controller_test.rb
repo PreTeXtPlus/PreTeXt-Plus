@@ -229,4 +229,68 @@ class ProjectsControllerTest < ActionDispatch::IntegrationTest
     @project.reload
     assert_includes @project.docinfo, "<macros>"
   end
+
+  # --- Editor state API ---
+
+  test "should get editor_state as json" do
+    get editor_state_project_url(@project), headers: { "Accept" => "application/json" }
+    assert_response :success
+    json = response.parsed_body
+    assert_includes json.keys, "title"
+    assert_includes json.keys, "source"
+    assert_includes json.keys, "source_format"
+    assert_includes json.keys, "pretext_source"
+    assert_includes json.keys, "docinfo"
+  end
+
+  test "editor_state includes docinfo value" do
+    @project.update_column(:docinfo, "<docinfo><macros>\\newcommand{\\R}{\\mathbb{R}}</macros></docinfo>")
+    get editor_state_project_url(@project), headers: { "Accept" => "application/json" }
+    json = response.parsed_body
+    assert_includes json["docinfo"], "<macros>"
+  end
+
+  test "should update_editor_state via patch" do
+    stub_build_server do
+      patch editor_state_project_url(@project),
+        params: { project: { title: "API Title", source: "new source", docinfo: "<docinfo/>" } },
+        as: :json
+    end
+    assert_response :success
+    json = response.parsed_body
+    assert_equal "API Title", json["title"]
+    assert_equal "API Title", @project.reload.title
+    assert_equal "<docinfo/>", @project.docinfo
+  end
+
+  test "should ignore invalid source_format in editor_state update" do
+    stub_build_server do
+      patch editor_state_project_url(@project),
+        params: { project: { title: "Bad API Format", source_format: "bogus" } },
+        as: :json
+    end
+
+    assert_response :unprocessable_entity
+  end
+
+  test "non-owner cannot get editor_state" do
+    other_project = projects(:two)
+    get editor_state_project_url(other_project), headers: { "Accept" => "application/json" }
+    assert_redirected_to projects_path
+  end
+
+  test "non-owner cannot update_editor_state" do
+    other_project = projects(:two)
+    patch editor_state_project_url(other_project),
+      params: { project: { title: "Stolen" } },
+      as: :json
+    assert_redirected_to projects_path
+    assert_not_equal "Stolen", other_project.reload.title
+  end
+
+  test "unauthenticated user cannot get editor_state" do
+    delete session_path
+    get editor_state_project_url(@project), headers: { "Accept" => "application/json" }
+    assert_response :redirect
+  end
 end

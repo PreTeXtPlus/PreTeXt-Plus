@@ -5,7 +5,7 @@ import '@pretextbook/web-editor/dist/web-editor.css';
 
 let root = null;
 
-function EditorWrapper({ onContentChange, onTitleChange, onDocinfoChange, ...rest }) {
+function EditorWrapper({ onContentChange, onTitleChange, ...rest }) {
   const {
     source: sourceProp,
     title: titleProp,
@@ -26,6 +26,8 @@ function EditorWrapper({ onContentChange, onTitleChange, onDocinfoChange, ...res
     setSource(nextSource);
     if (meta?.sourceFormat) setSourceFormat(meta.sourceFormat);
     if (meta?.pretextSource) setPretextSource(meta.pretextSource);
+    // docinfo changes arrive via meta when DocinfoEditor saves inside Editors
+    if (meta?.docinfo !== undefined) setDocinfo(meta.docinfo);
     onContentChange?.(nextSource, meta);
   }, [onContentChange]);
 
@@ -33,12 +35,6 @@ function EditorWrapper({ onContentChange, onTitleChange, onDocinfoChange, ...res
     setTitle(v);
     onTitleChange?.(v);
   }, [onTitleChange]);
-
-  const handleDocinfoChange = useCallback((v) => {
-    const next = v ?? "";
-    setDocinfo(next);
-    onDocinfoChange?.(next);
-  }, [onDocinfoChange]);
 
   return (
     <Editors
@@ -50,7 +46,6 @@ function EditorWrapper({ onContentChange, onTitleChange, onDocinfoChange, ...res
       docinfo={docinfo}
       onContentChange={handleContentChange}
       onTitleChange={handleTitleChange}
-      onDocinfoChange={handleDocinfoChange}
     />
   );
 }

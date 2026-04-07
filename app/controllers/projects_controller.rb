@@ -1,9 +1,9 @@
 class ProjectsController < ApplicationController
   allow_unauthenticated_access only: %i[ share preview ]
   require_unauthenticated_access only: %i[ tryit ]
-  before_action :set_project, only: %i[ show edit update destroy ]
+  before_action :set_project, only: %i[ show edit update destroy editor_state update_editor_state ]
   before_action :limit_projects, only: %i[ new create copy ]
-  before_action :require_ownership, only: %i[ show edit update destroy ]
+  before_action :require_ownership, only: %i[ show edit update destroy editor_state update_editor_state ]
   after_action :allow_iframe, only: :share
   rate_limit to: 25, within: 10.minutes, only: :preview,
              with: -> { render plain: "Preview limit reached. Please wait a few minutes and try again, or create an account to continue writing and save your work!", status: :too_many_requests },
@@ -106,6 +106,35 @@ class ProjectsController < ApplicationController
     end
   end
 
+  # GET /projects/:id/editor_state
+  def editor_state
+    render json: {
+      title: @project.title,
+      source: @project.source,
+      source_format: @project.source_format,
+      pretext_source: @project.pretext_source,
+      docinfo: @project.docinfo,
+      build_token: ENV["BUILD_TOKEN"],
+      build_host: ENV["BUILD_HOST"],
+    }
+  end
+
+  # PATCH /projects/:id/editor_state
+  def update_editor_state
+    if @project.update(safe_editor_state_params)
+      render json: {
+        title: @project.title,
+        source: @project.source,
+        source_format: @project.source_format,
+        pretext_source: @project.pretext_source,
+        docinfo: @project.docinfo,
+        updated_at: @project.updated_at,
+      }
+    else
+      render json: { errors: @project.errors }, status: :unprocessable_entity
+    end
+  end
+
   def share
     @project = Project.find(params.expect(:project_id))
     render html: (@project.html_source || "").html_safe
@@ -167,10 +196,21 @@ class ProjectsController < ApplicationController
       params.expect(project: [ :title, :source, :pretext_source, :source_format, :document_type, :docinfo ])
     end
 
+    def editor_state_params
+      params.expect(project: [ :title, :source, :pretext_source, :source_format, :docinfo ])
+    end
+
+    def safe_editor_state_params
+      sanitize_project_params(editor_state_params)
+    end
+
     # Strips enum fields to known values before mass-assignment so invalid
     # inputs produce nil (handled by validations) rather than ArgumentError.
     def safe_project_params
-      p = project_params
+      sanitize_project_params(project_params)
+    end
+
+    def sanitize_project_params(p)
       p[:source] = p.delete(:content) if p.key?(:content) && !p.key?(:source)
       p[:pretext_source] = p.delete(:pretext_content) if p.key?(:pretext_content) && !p.key?(:pretext_source)
       if p.key?(:source_format)

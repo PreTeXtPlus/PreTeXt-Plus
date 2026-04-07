@@ -1,6 +1,8 @@
 import { Controller } from "@hotwired/stimulus"
 
 export default class extends Controller {
+  static values = { projectId: String }
+
   //Load the React code when we initialize
   initialize() {
     this.componentPromise = import("./react/editor");
@@ -10,100 +12,118 @@ export default class extends Controller {
     this.component = await this.componentPromise;
 
     const root = this.targets.find("root");
-    const contentField = this.targets.find("contentField");
-    const titleField = this.targets.find("titleField");
-    const railsForm = this.targets.find("form");
-    const sourceFormatField = this.targets.find("sourceFormatField")
-    const pretextSourceField = this.targets.find("pretextSourceField")
-    const docinfoField = this.targets.find("docinfoField")
-    const tokenField = this.targets.find("tokenField")
-    const hostField = this.targets.find("hostField")
+    const apiBase = `/projects/${this.projectIdValue}/editor_state`;
+    const csrfToken = document.querySelector('meta[name="csrf-token"]')?.content;
 
-    const onCancelButton = () => {
-      if (confirm("Cancel without saving?")) {
-        window.location.href = "/projects";
-      }
+    // Load initial editor state from the API
+    let state;
+    try {
+      const response = await fetch(apiBase, { headers: { Accept: "application/json" } });
+      if (!response.ok) throw new Error(`Failed to load editor state: ${response.status}`);
+      state = await response.json();
+    } catch (error) {
+      console.error("Error loading editor state:", error);
+      return;
     }
 
-    const onSaveButton = () => {
-      railsForm.submit();
-    }
-
-    let lastSavedContent = contentField.value;
-    let lastSavedTitle = titleField.value;
-    let lastSavedPretextSource = pretextSourceField.value;
-    let lastSavedDocinfo = docinfoField.value;
+    // Track mutable current state for dirty-checking and autosave
+    const current = {
+      title: state.title ?? "",
+      source: state.source ?? "",
+      sourceFormat: state.source_format ?? "pretext",
+      pretextSource: state.pretext_source ?? "",
+      docinfo: state.docinfo ?? "",
+    };
+    const saved = { ...current };
 
     const isDirty = () =>
-      contentField.value !== lastSavedContent ||
-      titleField.value !== lastSavedTitle ||
-      pretextSourceField.value !== lastSavedPretextSource ||
-      docinfoField.value !== lastSavedDocinfo;
+      current.source !== saved.source ||
+      current.title !== saved.title ||
+      current.pretextSource !== saved.pretextSource ||
+      current.docinfo !== saved.docinfo;
 
     const onSave = async () => {
       if (!isDirty()) return;
 
       try {
-        const response = await fetch(railsForm.getAttribute("action"), {
+        const response = await fetch(apiBase, {
           method: "PATCH",
-          headers: { "Accept": "application/json" },
-          body: new FormData(railsForm),
+          headers: {
+            "Content-Type": "application/json",
+            "Accept": "application/json",
+            "X-CSRF-Token": csrfToken,
+          },
+          body: JSON.stringify({
+            project: {
+              title: current.title,
+              source: current.source,
+              source_format: current.sourceFormat,
+              pretext_source: current.pretextSource,
+              docinfo: current.docinfo,
+            }
+          }),
         });
 
-        if (!response.ok) {
-          throw new Error(`Error saving document! Status: ${response.status}`);
-        }
-
-        lastSavedContent = contentField.value;
-        lastSavedTitle = titleField.value;
-        lastSavedPretextSource = pretextSourceField.value;
-        lastSavedDocinfo = docinfoField.value;
-        console.log("Success saving document!");
-
+        if (!response.ok) throw new Error(`Save failed: ${response.status}`);
+        Object.assign(saved, current);
+        console.log("Saved!");
       } catch (error) {
-        console.error("Error:", error);
-        alert("An error occurred during submission.");
+        console.error("Error saving:", error);
+        alert("An error occurred while saving.");
       }
-    }
+    };
+
+    const onSaveButton = async () => {
+      await onSave();
+      window.location.href = "/projects";
+    };
+
+    const onCancelButton = () => {
+      if (confirm("Cancel without saving?")) {
+        window.location.href = "/projects";
+      }
+    };
 
     // run onSave every 10 seconds; only fires if content has changed since last save
     this.saveInterval = setInterval(onSave, 10000);
 
-    const onPreviewRebuild = async (content, title, postToIframe) => {
-      const buildToken = tokenField.value;
-      const buildHost = hostField.value;
-      const postData = { source: content, title: title, token: buildToken, docinfo: docinfoField.value };
-      postToIframe(`https://${buildHost}`, postData);
-    }
-
-    const props = {
-      source: contentField.value,
-      sourceFormat: sourceFormatField.value,
-      pretextSource: pretextSourceField.value || undefined,
-      docinfo: docinfoField.value || undefined,
-      onContentChange: (v, meta) => {
-        contentField.value = v;
-        if (meta?.sourceFormat) sourceFormatField.value = meta.sourceFormat;
-        if (meta?.pretextSource) pretextSourceField.value = meta.pretextSource;
-      },
-      onDocinfoChange: (v) => docinfoField.value = v ?? "",
-      title: titleField.value,
-      onTitleChange: (v) => titleField.value = v,
-      onSaveButton: onSaveButton,
-      onSave: onSave,
-      saveButtonLabel: "Save and...",
-      onCancelButton: onCancelButton,
-      cancelButtonLabel: "Cancel",
-      onPreviewRebuild: onPreviewRebuild
+    const onPreviewRebuild = (content, title, postToIframe) => {
+      postToIframe(`https://${state.build_host}`, {
+        source: content,
+        title,
+        token: state.build_token,
+        docinfo: current.docinfo,
+      });
     };
 
-    this.component.render(root, props);
+    this.component.render(root, {
+      source: current.source,
+      sourceFormat: current.sourceFormat,
+      pretextSource: current.pretextSource || undefined,
+      docinfo: current.docinfo || undefined,
+      onContentChange: (v, meta) => {
+        current.source = v ?? "";
+        if (meta?.sourceFormat) current.sourceFormat = meta.sourceFormat;
+        if (meta?.pretextSource) current.pretextSource = meta.pretextSource;
+        // docinfo changes are delivered via meta when the DocinfoEditor saves
+        if (meta?.docinfo !== undefined) current.docinfo = meta.docinfo;
+      },
+      title: current.title,
+      onTitleChange: (v) => { current.title = v ?? ""; },
+      onSaveButton,
+      onSave,
+      saveButtonLabel: "Save",
+      onCancelButton,
+      cancelButtonLabel: "Cancel",
+      onPreviewRebuild,
+    });
   }
 
   disconnect() {
     clearInterval(this.saveInterval);
 
     const root = this.targets.find("root");
-    this.component.destroy(root);
+    this.component?.destroy(root);
   }
 }
+
