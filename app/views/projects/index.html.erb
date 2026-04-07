@@ -12,6 +12,54 @@
   </div>
 
   <div id="projects" class="min-w-full space-y-5">
+    <% unless @current_user.sustaining_subscription? %>
+      <div class="rounded-lg border-2 border-blue-500 p-4 text-sky-900 mt-6 mx-auto md:w-3/4">
+      <% if @current_user.invited? %>
+          <p>
+            Thanks for using <span class="font-semibold">PreTeXt.Plus</span>!
+            We created this service so anyone can use the free and open-source PreTeXt project to create high-quality and accessible
+            scholarly documents. If you'd like to support us, please consider becoming a sustaining subscriber, which helps us fund
+            development and keep the service running for everyone. As a sustaining subscriber, you'll also get access to exclusive
+            features and early access to new tools.
+          </p>
+          <div class="mt-4 flex gap-2 items-center">
+            <span class="font-semibold">Support PreTeXt.Plus development:</span>
+            <%= link_to session_path, class: "rounded-md px-3.5 py-2 bg-green-600 hover:bg-green-500 text-white font-medium" do %>
+              Subscribe
+            <% end %>
+          </div>
+      <% else %>
+          <p>
+            Thanks for creating a <span class="font-semibold">PreTeXt.Plus</span> account! While we're
+            in our beta release period, new users need to either use a <code>.edu</code> email address, or be invited by existing users, or
+            <%= link_to session_path, class: "font-semibold text-blue-700 hover:underline" do %>subscribe to our paid Sustainer tier<% end %>
+            in order to create projects.
+          </p>
+          <div class="mt-4">
+            <%= form_with url: redeem_invitation_path, method: :post, local: true, class: "flex gap-2 items-center" do |f| %>
+              <%= f.label :code, "Enter invite code:", class: "font-semibold" %>
+              <%= f.text_field :code, placeholder: "Example: 91cc5d85-f0f8-4ceb-92c0-aaa435648a81", class: "flex-1 rounded-md border border-gray-300 px-3 py-2 text-sm" %>
+              <%= f.submit "Redeem", class: "rounded-md px-3.5 py-2 bg-blue-600 hover:bg-blue-500 text-white font-medium" %>
+            <% end %>
+          </div>
+          <div class="mt-4 flex gap-2 items-center">
+            <span class="font-semibold">Or</span>
+            <%= link_to session_path, class: "rounded-md px-3.5 py-2 bg-green-600 hover:bg-green-500 text-white font-medium" do %>
+              Subscribe
+            <% end %>
+            <% unless @current_user.requested_invitation? %>
+              <%= form_with url: requests_path, method: :post, local: true do |f| %>
+                <%= f.submit "Request invitation", class: "rounded-md px-3.5 py-2 bg-yellow-600 hover:bg-yellow-500 text-white font-medium cursor-pointer" %>
+              <% end %>
+            <% else %>
+              <span class="rounded-md px-3.5 py-2 bg-gray-400 text-white font-medium">
+                (Invitation requested)
+              </span>
+            <% end %>
+          </div>
+        <% end %>
+      </div>
+    <% end %>
     <% if @projects.any? %>
       <% @projects.each do |project| %>
         <%= link_to edit_project_path(project), class: "block rounded-xl bg-white p-4 m-3 ring-2 ring-gray-100 hover:ring-indigo-200 sm:p-6 lg:p-8", data: { turbo: false } do %>
@@ -48,38 +96,6 @@
       <% end %>
     <% else %>
       <p class="text-center my-10">No projects found.</p>
-    <% end %>
-    <% unless @current_user.invited? or @current_user.sustaining_subscription? %>
-      <div class="rounded-lg border-2 border-blue-500 p-4 text-sky-900 mt-6 mx-auto md:w-3/4">
-        <p>
-          Thanks for creating a <span class="font-semibold">PreTeXt.Plus</span> account! While we're
-          in our beta release period, new users need to either use a <code>.edu</code> email address, or be invited by existing users, or
-          <%= link_to session_path, class: "font-semibold text-blue-700 hover:underline" do %>subscribe to our paid Sustainer tier<% end %>
-          in order to create projects.
-        </p>
-        <div class="mt-4">
-          <%= form_with url: redeem_invitation_path, method: :post, local: true, class: "flex gap-2 items-center" do |f| %>
-            <%= f.label :code, "Enter invite code:", class: "font-semibold" %>
-            <%= f.text_field :code, placeholder: "Example: 91cc5d85-f0f8-4ceb-92c0-aaa435648a81", class: "flex-1 rounded-md border border-gray-300 px-3 py-2 text-sm" %>
-            <%= f.submit "Redeem", class: "rounded-md px-3.5 py-2 bg-blue-600 hover:bg-blue-500 text-white font-medium" %>
-          <% end %>
-        </div>
-        <div class="mt-4 flex gap-2 items-center">
-          <span class="font-semibold">Or</span>
-          <%= link_to session_path, class: "rounded-md px-3.5 py-2 bg-green-600 hover:bg-green-500 text-white font-medium" do %>
-            Subscribe
-          <% end %>
-          <% unless @current_user.requested_invitation? %>
-            <%= form_with url: requests_path, method: :post, local: true do |f| %>
-              <%= f.submit "Request invitation", class: "rounded-md px-3.5 py-2 bg-yellow-600 hover:bg-yellow-500 text-white font-medium cursor-pointer" %>
-            <% end %>
-          <% else %>
-            <span class="rounded-md px-3.5 py-2 bg-gray-400 text-white font-medium">
-              (Invitation requested)
-            </span>
-          <% end %>
-        </div>
-      </div>
     <% end %>
     <% if @invitations.present? %>
       <h1 class="font-semibold text-3xl my-2">Invitation codes</h1>
