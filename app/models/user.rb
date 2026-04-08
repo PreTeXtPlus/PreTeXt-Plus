@@ -5,6 +5,7 @@ class User < ApplicationRecord
   has_many :invitations, dependent: :destroy, foreign_key: "owner_user_id"
 
   after_create_commit :claim_intended_invitations
+  after_create_commit :invite_edu_user
 
   enum :subscription, { beta: 0, sustaining: 1 }, suffix: true
 
@@ -45,6 +46,12 @@ class User < ApplicationRecord
   def claim_intended_invitations
     Invitation.where(intended_email: self.email, recipient_user_id: nil).find_each do |invitation|
       invitation.update recipient_user: self
+    end
+  end
+
+  def invite_edu_user
+    if self.email.end_with?(".edu") && !self.invited?
+      Invitation.create! recipient_user: self, owner_user: User.find_by(admin: true)
     end
   end
 end
