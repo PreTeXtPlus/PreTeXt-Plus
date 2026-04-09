@@ -40,7 +40,7 @@ class ProjectTest < ActiveSupport::TestCase
     assert_equal "<html><body>stub</body></html>", project.html_source
   end
 
-  test "before_update uses pretext_source when source_format is latex" do
+  test "before_update wraps pretext_source when source_format is latex" do
     project = projects(:one)
     captured_params = nil
     fake_response = Struct.new(:body).new("<html><body>latex</body></html>")
@@ -57,7 +57,10 @@ class ProjectTest < ActiveSupport::TestCase
       )
     end
 
-    assert_equal "<section><title>Converted</title></section>", captured_params[:source]
+    assert_includes captured_params[:source], "<pretext>"
+    assert_includes captured_params[:source], "<article label=\"article\">"
+    assert_includes captured_params[:source], "<title>Updated LaTeX Project</title>"
+    assert_includes captured_params[:source], "<section><title>Converted</title></section>"
     assert_equal "<html><body>latex</body></html>", project.html_source
   end
 
@@ -77,7 +80,7 @@ class ProjectTest < ActiveSupport::TestCase
     assert xml.end_with?("</pretext>")
     assert_includes xml, "<docinfo>"
     assert_includes xml, "<macros>"
-    assert_includes xml, "<article>"
+    assert_includes xml, "<article label=\"article\">"
     assert_includes xml, "<section><p>Hello</p></section>"
   end
 
@@ -87,10 +90,10 @@ class ProjectTest < ActiveSupport::TestCase
     xml = project.full_pretext_source
     assert xml.start_with?("<pretext>")
     assert_not_includes xml, "<docinfo>"
-    assert_includes xml, "<article>"
+    assert_includes xml, "<article label=\"article\">"
   end
 
-  test "set_html_source sends raw source fragment for pretext projects" do
+  test "set_html_source sends assembled source for pretext projects" do
     project = projects(:one)
     project.source = "<section><title>Hello</title><p>World</p></section>"
     project.docinfo = "<docinfo><macros>\\newcommand{\\N}{\\mathbb{N}}</macros></docinfo>"
@@ -104,7 +107,30 @@ class ProjectTest < ActiveSupport::TestCase
       project.update!(title: "With Docinfo")
     end
 
-    assert_equal project.source, captured_params[:source]
-    assert_not_includes captured_params[:source], "<docinfo>"
+    assert_includes captured_params[:source], "<pretext>"
+    assert_includes captured_params[:source], "<docinfo>"
+    assert_includes captured_params[:source], "<title>With Docinfo</title>"
+    assert_includes captured_params[:source], project.source
+  end
+
+  test "before_update uses raw source for latex when pretext_source is missing" do
+    project = projects(:one)
+    captured_params = nil
+    fake_response = Struct.new(:body).new("<html><body>latex-fallback</body></html>")
+
+    Net::HTTP.stub(:post_form, ->(_uri, params) {
+      captured_params = params
+      fake_response
+    }) do
+      project.update!(
+        title: "LaTeX Fallback",
+        source_format: :latex,
+        source: "\\section{Raw LaTeX}",
+        pretext_source: nil
+      )
+    end
+
+    assert_equal "\\section{Raw LaTeX}", captured_params[:source]
+    assert_equal "<html><body>latex-fallback</body></html>", project.html_source
   end
 end

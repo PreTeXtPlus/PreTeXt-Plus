@@ -1,4 +1,5 @@
 import { Controller } from "@hotwired/stimulus"
+import { assemblePreviewSource } from "./preview_source.js"
 
 export default class extends Controller {
   static values = { projectId: String }
@@ -92,13 +93,12 @@ export default class extends Controller {
     this.saveInterval = setInterval(onSave, 10000);
 
     const onPreviewRebuild = (content, title, postToIframe) => {
-      const previewBody = current.sourceFormat === "latex" && current.pretextSource
-        ? current.pretextSource
-        : content;
-      // Assemble a full PreTeXt document for preview when docinfo is present.
-      const assembledSource = current.docinfo
-        ? `<pretext>\n${current.docinfo}\n<article label="article">\n${previewBody}</article>\n</pretext>`
-        : previewBody;
+      const assembledSource = assemblePreviewSource({
+        content,
+        sourceFormat: current.sourceFormat,
+        pretextSource: current.pretextSource,
+        docinfo: current.docinfo,
+      });
       postToIframe(`https://${state.build_host}`, {
         source: assembledSource,
         title,
