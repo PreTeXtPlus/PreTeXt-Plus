@@ -1,0 +1,28 @@
+<%# Sidebar table of contents for multi-element projects %>
+<nav class="flex flex-col h-full bg-gray-50 border-r border-gray-200 w-64 shrink-0 overflow-y-auto text-sm"
+     data-controller="toc"
+     data-toc-project-id-value="<%= project.id %>"
+     data-toc-current-element-id-value="<%= current_element&.id %>">
+  <div class="px-3 py-2 border-b border-gray-200 flex items-center justify-between">
+    <h2 class="font-semibold text-gray-700 truncate"><%= project.title %></h2>
+    <%= link_to projects_path, class: "text-gray-400 hover:text-gray-600", title: "Back to projects" do %>
+      ←
+    <% end %>
+  </div>
+
+  <ul class="flex-1 py-1" data-toc-target="tree">
+    <%= render partial: "projects/toc_node", collection: tree, as: :node, locals: { project: project, current_element: current_element, depth: 0 } %>
+  </ul>
+
+  <div class="px-3 py-2 border-t border-gray-200 space-y-1">
+    <% SourceElement::ROOT_TYPES.each do |type| %>
+      <%# Skip types that only make sense once (docinfo, frontmatter, backmatter) if they already exist %>
+      <% next if %w[docinfo frontmatter backmatter].include?(type) && project.source_elements.where(parent_id: nil, element_type: type).exists? %>
+      <button data-action="toc#addRootElement"
+              data-element-type="<%= type %>"
+              class="w-full text-left text-xs text-blue-600 hover:text-blue-800 py-1 px-2 rounded hover:bg-blue-50">
+        + Add <%= type.titleize.downcase %>
+      </button>
+    <% end %>
+  </div>
+</nav>

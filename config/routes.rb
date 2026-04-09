@@ -6,6 +6,10 @@ Rails.application.routes.draw do
   resources :invitations, only: [ :new, :create ]
   post "invitations/redeem" => "invitations#redeem", as: :redeem_invitation
   resources :projects do
+    resources :source_elements, only: [ :index, :show, :create, :update, :destroy ] do
+      patch :move, on: :member
+      patch :reorder, on: :collection
+    end
     get "share" => "projects#share", as: "share"
     # copy should use post action so that turbo doesn't execute on link hover and cause a copy of the project to be created by accident
     post "share/copy" => "projects#copy", as: "copy"

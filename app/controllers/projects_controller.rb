@@ -59,6 +59,12 @@ class ProjectsController < ApplicationController
 
   # GET /projects/1/edit
   def edit
+    @source_elements_tree = build_toc_tree(@project)
+    if params[:element].present?
+      @current_element = @project.source_elements.find(params[:element])
+    elsif @project.source_elements.any?
+      @current_element = first_content_element(@project)
+    end
   end
 
   # POST /projects or /projects.json
@@ -71,6 +77,7 @@ class ProjectsController < ApplicationController
 
     respond_to do |format|
       if @project.save
+        @project.scaffold_elements!
         format.html { redirect_to edit_project_path(@project) }
         format.json { render :show, status: :created, location: @project }
       else
@@ -110,14 +117,16 @@ class ProjectsController < ApplicationController
 
   # GET /projects/:project_id/share/copy
   def copy
-    @project = Project.find(params.expect(:project_id)).dup
+    original = Project.find(params.expect(:project_id))
     unless @current_user.has_copiable_projects? or @current_user.admin?
       flash[:alert] = "Only sustaining subscribers can share copiable projects. Consider subscribing for this feature and to support PreTeXt.Plus!"
       redirect_to projects_path and return
     end
+    @project = original.dup
     @project.user = @current_user
     @project.title = "Copy of " + @project.title
     @project.save!
+    deep_copy_elements(original, @project)
     redirect_to edit_project_path(@project)
   end
 
@@ -157,6 +166,59 @@ class ProjectsController < ApplicationController
     def require_ownership
       if @project.user != @current_user and !@current_user.admin?
         redirect_to projects_path, alert: "You do not have permission to access this project"
+      end
+    end
+
+    # Builds a nested array of source elements for the ToC sidebar.
+    def build_toc_tree(project)
+      project.source_elements.where(parent_id: nil).order(:position).map do |element|
+        { element: element, children: build_toc_children(element) }
+      end
+    end
+
+    def build_toc_children(element)
+      element.children.order(:position).map do |child|
+        { element: child, children: build_toc_children(child) }
+      end
+    end
+
+    # Finds the first content (non-container) element via depth-first traversal.
+    def first_content_element(project)
+      roots = project.source_elements.where(parent_id: nil).order(:position)
+      roots.each do |root|
+        found = dfs_first_content(root)
+        return found if found
+      end
+      nil
+    end
+
+    def dfs_first_content(element)
+      return element if element.content?
+      element.children.order(:position).each do |child|
+        found = dfs_first_content(child)
+        return found if found
+      end
+      nil
+    end
+
+    # Deep-copies source elements from one project to another, preserving hierarchy.
+    def deep_copy_elements(from_project, to_project, parent_map: {})
+      from_project.source_elements.where(parent_id: nil).order(:position).each do |element|
+        copy_element_tree(element, to_project, new_parent: nil)
+      end
+    end
+
+    def copy_element_tree(element, to_project, new_parent:)
+      copy = to_project.source_elements.create!(
+        parent: new_parent,
+        element_type: element.element_type,
+        title: element.title,
+        source: element.source,
+        pretext_source: element.pretext_source,
+        position: element.position
+      )
+      element.children.order(:position).each do |child|
+        copy_element_tree(child, to_project, new_parent: copy)
       end
     end
 end

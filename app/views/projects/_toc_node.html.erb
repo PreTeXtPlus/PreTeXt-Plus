@@ -1,0 +1,63 @@
+<%# Recursive tree node for the ToC sidebar %>
+<% element = node[:element] %>
+<% children = node[:children] %>
+<% is_current = current_element&.id == element.id %>
+<% is_container = children.any? %>
+<% allowed_children = element.allowed_child_types %>
+
+<li class="<%= 'ml-3' if depth > 0 %>" data-element-id="<%= element.id %>">
+  <div class="group flex items-center justify-between pr-1">
+    <% if is_container %>
+      <%# Container: show label, not directly editable %>
+      <div class="flex items-center px-3 py-1.5 text-gray-500 flex-1 min-w-0">
+        <span class="mr-1 text-xs">▾</span>
+        <span class="truncate font-medium"><%= element.title.presence || element.element_type.titleize %></span>
+      </div>
+    <% else %>
+      <%# Content element: clickable link to edit %>
+      <%= link_to edit_project_path(project, element: element.id),
+            class: "flex items-center px-3 py-1.5 rounded-md mx-1 flex-1 min-w-0 #{is_current ? 'bg-blue-100 text-blue-800 font-medium' : 'text-gray-700 hover:bg-gray-100'}",
+            data: { turbo: false } do %>
+        <span class="truncate"><%= element.title.presence || element.element_type.titleize %></span>
+      <% end %>
+    <% end %>
+
+    <%# Action buttons — visible on hover %>
+    <span class="hidden group-hover:flex items-center gap-0.5 shrink-0">
+      <% if element.title_bearing? %>
+        <button data-action="toc#renameElement"
+                data-element-id="<%= element.id %>"
+                class="text-gray-400 hover:text-blue-600 p-0.5" title="Rename">
+          ✎
+        </button>
+      <% end %>
+      <button data-action="toc#deleteElement"
+              data-element-id="<%= element.id %>"
+              data-element-title="<%= element.title.presence || element.element_type.titleize %>"
+              data-has-children="<%= children.any? %>"
+              class="text-gray-400 hover:text-red-600 p-0.5" title="Delete">
+        ✕
+      </button>
+    </span>
+  </div>
+
+  <% if is_container %>
+    <ul>
+      <%= render partial: "projects/toc_node", collection: children, as: :node, locals: { project: project, current_element: current_element, depth: depth + 1 } %>
+    </ul>
+  <% end %>
+
+  <%# Add child buttons for containers that accept children %>
+  <% if allowed_children.any? %>
+    <div class="ml-6 mb-1">
+      <% allowed_children.each do |child_type| %>
+        <button data-action="toc#addChildElement"
+                data-parent-id="<%= element.id %>"
+                data-element-type="<%= child_type %>"
+                class="text-xs text-blue-500 hover:text-blue-700 hover:bg-blue-50 rounded px-1.5 py-0.5">
+          + <%= child_type.titleize %>
+        </button>
+      <% end %>
+    </div>
+  <% end %>
+</li>

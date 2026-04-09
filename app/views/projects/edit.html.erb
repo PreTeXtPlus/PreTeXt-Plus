@@ -1,2 +1,12 @@
 <% content_for :title, "Editing project" %>
-<%= render "form", project: @project %>
+
+<% if @source_elements_tree.present? %>
+  <div class="flex h-screen">
+    <%= render "toc_sidebar", project: @project, tree: @source_elements_tree, current_element: @current_element %>
+    <div class="flex-1">
+      <%= render "form", project: @project, current_element: @current_element %>
+    </div>
+  </div>
+<% else %>
+  <%= render "form", project: @project, current_element: nil %>
+<% end %>

@@ -1,0 +1,49 @@
+# Source elements for testing hierarchical document structure
+
+# Standalone section for project one (simple article-style)
+section_one:
+  project: one
+  element_type: section
+  title: Hello
+  source: "<p>World</p>"
+  position: 0
+
+# Book-style hierarchy for project two
+frontmatter_two:
+  project: two
+  element_type: frontmatter
+  position: 0
+
+chapter_two:
+  project: two
+  element_type: chapter
+  title: Chapter One
+  position: 1
+
+intro_two:
+  project: two
+  element_type: introduction
+  source: "<p>Welcome to chapter one.</p>"
+  parent: chapter_two
+  position: 0
+
+section_two_a:
+  project: two
+  element_type: section
+  title: First Section
+  source: "<p>Section content A</p>"
+  parent: chapter_two
+  position: 1
+
+section_two_b:
+  project: two
+  element_type: section
+  title: Second Section
+  source: "<p>Section content B</p>"
+  parent: chapter_two
+  position: 2
+
+backmatter_two:
+  project: two
+  element_type: backmatter
+  position: 2

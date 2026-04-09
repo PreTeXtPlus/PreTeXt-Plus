@@ -1,5 +1,6 @@
 class Project < ApplicationRecord
   belongs_to :user
+  has_many :source_elements, dependent: :destroy
 
   enum :source_format, { pretext: 0, latex: 1, pmd: 2 }, suffix: true
   enum :document_type, { article: 0, book: 1, slideshow: 2 }, suffix: true
@@ -16,6 +17,58 @@ class Project < ApplicationRecord
       DEFAULT_PMD_CONTENT
     else
       DEFAULT_PRETEXT_CONTENT
+    end
+  end
+
+  # Recursively assembles the full PreTeXt XML document from source_elements.
+  # Falls back to the legacy `source` column if no elements exist yet.
+  def assemble_source
+    root_elements = source_elements.where(parent_id: nil).order(:position)
+    return source if root_elements.empty?
+
+    doc_tag = document_type || "article"
+
+    xml = +"<pretext>"
+    docinfo = root_elements.find { |e| e.element_type == "docinfo" }
+    xml << docinfo.to_xml if docinfo
+
+    xml << "<#{doc_tag}>"
+    xml << "<title>#{title}</title>" if title.present?
+
+    root_elements.reject { |e| e.element_type == "docinfo" }.each do |element|
+      xml << element.to_xml
+    end
+
+    xml << "</#{doc_tag}>"
+    xml << "</pretext>"
+    xml
+  end
+
+  # Assembles source from elements into the project's source column and
+  # triggers the build server (via the before_update callback).
+  def reassemble_and_build!
+    assembled = assemble_source
+    update!(source: assembled)
+  end
+
+  # Scaffolds the default source_elements tree for a new project.
+  def scaffold_elements!
+    content = self.class.default_content_for(source_format)
+
+    case document_type.to_s
+    when "book"
+      source_elements.create!(element_type: "frontmatter", position: 0)
+      chapter = source_elements.create!(element_type: "chapter", title: "Chapter 1", position: 1)
+      source_elements.create!(
+        element_type: "section", title: "Welcome", source: content,
+        parent: chapter, position: 0
+      )
+      source_elements.create!(element_type: "backmatter", position: 2)
+    else
+      # article / slideshow / default: single section
+      source_elements.create!(
+        element_type: "section", title: "Welcome", source: content, position: 0
+      )
     end
   end
 
@@ -77,9 +130,15 @@ class Project < ApplicationRecord
   def set_html_source
     require "uri"
     require "net/http"
-    # For LaTeX projects, use the editor-converted PreTeXt content for building;
-    # fall back to raw content if the conversion hasn't been stored yet.
-    build_source = (latex_source_format? && pretext_source.present?) ? pretext_source : source
+    # Use assembled source from elements when available, otherwise fall back
+    # to the legacy source column (for LaTeX, prefer pretext_source if present).
+    build_source = if source_elements.where(parent_id: nil).any?
+      assemble_source
+    elsif latex_source_format? && pretext_source.present?
+      pretext_source
+    else
+      source
+    end
     params = {
       source: build_source,
       title: self.title,
