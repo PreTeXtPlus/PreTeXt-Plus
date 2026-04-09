@@ -214,10 +214,12 @@ class ProjectsController < ApplicationController
       p[:source] = p.delete(:content) if p.key?(:content) && !p.key?(:source)
       p[:pretext_source] = p.delete(:pretext_content) if p.key?(:pretext_content) && !p.key?(:pretext_source)
       if p.key?(:source_format)
-        p[:source_format] = p[:source_format].presence_in(Project.source_formats.keys)
+        valid = p[:source_format].presence_in(Project.source_formats.keys)
+        valid ? p[:source_format] = valid : p.delete(:source_format)
       end
       if p.key?(:document_type)
-        p[:document_type] = p[:document_type].presence_in(Project.document_types.keys)
+        valid = p[:document_type].presence_in(Project.document_types.keys)
+        valid ? p[:document_type] = valid : p.delete(:document_type)
       end
       p
     end

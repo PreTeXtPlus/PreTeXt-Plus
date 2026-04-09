@@ -15,7 +15,7 @@ class Project < ApplicationRecord
 
     xml = +"<pretext>"
     xml << docinfo.to_s if docinfo.present?
-    xml << "<#{doc_tag}>"
+    xml << "<#{doc_tag} label=\"article\">"
     xml << "<title>#{title}</title>" if title.present?
     xml << content.to_s
     xml << "</#{doc_tag}>"

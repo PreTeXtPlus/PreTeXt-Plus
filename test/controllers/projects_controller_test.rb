@@ -264,13 +264,16 @@ class ProjectsControllerTest < ActionDispatch::IntegrationTest
   end
 
   test "should ignore invalid source_format in editor_state update" do
+    original_format = @project.source_format
     stub_build_server do
       patch editor_state_project_url(@project),
         params: { project: { title: "Bad API Format", source_format: "bogus" } },
         as: :json
     end
 
-    assert_response :unprocessable_entity
+    assert_response :success
+    assert_equal "Bad API Format", @project.reload.title
+    assert_equal original_format, @project.source_format
   end
 
   test "non-owner cannot get editor_state" do

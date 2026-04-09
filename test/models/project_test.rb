@@ -90,8 +90,9 @@ class ProjectTest < ActiveSupport::TestCase
     assert_includes xml, "<article>"
   end
 
-  test "set_html_source sends full_pretext_source with docinfo for pretext projects" do
+  test "set_html_source sends raw source fragment for pretext projects" do
     project = projects(:one)
+    project.source = "<section><title>Hello</title><p>World</p></section>"
     project.docinfo = "<docinfo><macros>\\newcommand{\\N}{\\mathbb{N}}</macros></docinfo>"
     captured_params = nil
     fake_response = Struct.new(:body).new("<html>built</html>")
@@ -103,7 +104,7 @@ class ProjectTest < ActiveSupport::TestCase
       project.update!(title: "With Docinfo")
     end
 
-    assert_includes captured_params[:source], "<docinfo>"
-    assert_includes captured_params[:source], "<macros>"
+    assert_equal project.source, captured_params[:source]
+    assert_not_includes captured_params[:source], "<docinfo>"
   end
 end
