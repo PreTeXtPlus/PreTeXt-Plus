@@ -92,11 +92,12 @@ export default class extends Controller {
     this.saveInterval = setInterval(onSave, 10000);
 
     const onPreviewRebuild = (content, title, postToIframe) => {
+      // assemble source with docinfo if present, so the preview iframe gets the full content context for rendering
+      const assembledSource = current.docinfo ? `<pretext>\n${current.docinfo}\n<article label="article">\n${content}</article>\n</pretext>` : content;
       postToIframe(`https://${state.build_host}`, {
-        source: content,
+        source: assembledSource,
         title,
         token: state.build_token,
-        docinfo: current.docinfo,
       });
     };
 
