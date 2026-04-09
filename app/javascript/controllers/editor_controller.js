@@ -92,8 +92,13 @@ export default class extends Controller {
     this.saveInterval = setInterval(onSave, 10000);
 
     const onPreviewRebuild = (content, title, postToIframe) => {
-      // assemble source with docinfo if present, so the preview iframe gets the full content context for rendering
-      const assembledSource = current.docinfo ? `<pretext>\n${current.docinfo}\n<article label="article">\n${content}</article>\n</pretext>` : content;
+      const previewBody = current.sourceFormat === "latex" && current.pretextSource
+        ? current.pretextSource
+        : content;
+      // Assemble a full PreTeXt document for preview when docinfo is present.
+      const assembledSource = current.docinfo
+        ? `<pretext>\n${current.docinfo}\n<article label="article">\n${previewBody}</article>\n</pretext>`
+        : previewBody;
       postToIframe(`https://${state.build_host}`, {
         source: assembledSource,
         title,
@@ -109,7 +114,7 @@ export default class extends Controller {
       onContentChange: (v, meta) => {
         current.source = v ?? "";
         if (meta?.sourceFormat) current.sourceFormat = meta.sourceFormat;
-        if (meta?.pretextSource) current.pretextSource = meta.pretextSource;
+        if (meta?.pretextSource !== undefined) current.pretextSource = meta.pretextSource;
         // docinfo changes are delivered via meta when the DocinfoEditor saves
         if (meta?.docinfo !== undefined) current.docinfo = meta.docinfo;
       },

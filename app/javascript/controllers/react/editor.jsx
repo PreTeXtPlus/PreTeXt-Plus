@@ -25,7 +25,7 @@ function EditorWrapper({ onContentChange, onTitleChange, ...rest }) {
     const nextSource = v ?? meta?.sourceContent ?? "";
     setSource(nextSource);
     if (meta?.sourceFormat) setSourceFormat(meta.sourceFormat);
-    if (meta?.pretextSource) setPretextSource(meta.pretextSource);
+    if (meta?.pretextSource !== undefined) setPretextSource(meta.pretextSource);
     // docinfo changes arrive via meta when DocinfoEditor saves inside Editors
     if (meta?.docinfo !== undefined) setDocinfo(meta.docinfo);
     onContentChange?.(nextSource, meta);

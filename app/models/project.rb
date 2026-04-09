@@ -92,10 +92,10 @@ class Project < ApplicationRecord
   def set_html_source
     require "uri"
     require "net/http"
-    # For LaTeX projects, use the editor-converted PreTeXt content for building;
-    # fall back to raw content if the conversion hasn't been stored yet.
+    # For LaTeX projects, use the editor-converted PreTeXt body and wrap it
+    # into a full document so docinfo/title are included in server builds.
     build_source = if latex_source_format? && pretext_source.present?
-      pretext_source
+      full_pretext_source(pretext_source)
     elsif pretext_source_format?
       full_pretext_source
     else
