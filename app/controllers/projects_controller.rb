@@ -6,7 +6,8 @@ class ProjectsController < ApplicationController
   before_action :require_ownership, only: %i[ show edit update destroy ]
   after_action :allow_iframe, only: :share
   rate_limit to: 25, within: 10.minutes, only: :preview,
-             with: -> { render plain: "Preview rate limit reached. Please wait a few minutes and try again.", status: :too_many_requests }
+             with: -> { render plain: "Preview limit reached. Please wait a few minutes and try again, or create an account to continue writing and save your work!", status: :too_many_requests },
+             if: -> { !authenticated? }
 
   # GET /projects or /projects.json
   def index
