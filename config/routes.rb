@@ -10,6 +10,7 @@ Rails.application.routes.draw do
     # copy should use post action so that turbo doesn't execute on link hover and cause a copy of the project to be created by accident
     post "share/copy" => "projects#copy", as: "copy"
   end
+  post "projects/preview" => "projects#preview", as: "preview"
   post "subscribe" => "subscriptions#subscribe"
   post "stripe/webhooks" => "subscriptions#webhooks"
   get "tryit" => "projects#tryit"

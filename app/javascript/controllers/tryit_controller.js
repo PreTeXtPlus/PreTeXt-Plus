@@ -12,14 +12,12 @@ export default class extends Controller {
     const root = this.targets.find("root");
     const contentField = this.targets.find("contentField");
     const titleField = this.targets.find("titleField");
-    const tokenField = this.targets.find("tokenField");
-    const hostField = this.targets.find("hostField");
 
     const onPreviewRebuild = async (content, title, postToIframe) => {
-      const buildToken = tokenField.value;
-      const buildHost = hostField.value;
-      const postData = { source: content, title: title, token: buildToken };
-      postToIframe(`https://${buildHost}`, postData);
+      const buildHost = "/projects/preview";
+      const authenticityToken = document.querySelector("meta[name='csrf-token']").getAttribute("content");
+      const postData = { source: content, title: title, authenticity_token: authenticityToken };
+      postToIframe(buildHost, postData);
     }
 
     const onSaveButton = () => {

@@ -182,4 +182,35 @@ class ProjectsControllerTest < ActionDispatch::IntegrationTest
     end
     assert_redirected_to projects_path
   end
+
+  test "preview is accessible without authentication" do
+    delete session_path  # sign out
+    stub_preview_server do
+      post preview_url, params: { source: "<section><title>Test</title></section>", title: "Test" }
+    end
+    assert_response :success
+  end
+
+  test "preview returns build server response body" do
+    expected_body = "<html><body><p>Hello World</p></body></html>"
+    stub_preview_server(body: expected_body) do
+      post preview_url, params: { source: "<section/>", title: "Test" }
+    end
+    assert_response :success
+    assert_includes response.body, "Hello World"
+  end
+
+  test "preview returns bad_gateway when build server connection fails" do
+    stub_preview_server(raise_error: Errno::ECONNREFUSED.new) do
+      post preview_url, params: { source: "<section/>", title: "Test" }
+    end
+    assert_response :bad_gateway
+  end
+
+  test "preview returns gateway_timeout when build server times out" do
+    stub_preview_server(raise_error: Net::ReadTimeout.new) do
+      post preview_url, params: { source: "<section/>", title: "Test" }
+    end
+    assert_response :gateway_timeout
+  end
 end

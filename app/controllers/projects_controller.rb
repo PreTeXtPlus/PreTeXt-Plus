@@ -1,10 +1,13 @@
 class ProjectsController < ApplicationController
-  allow_unauthenticated_access only: :share
-  require_unauthenticated_access only: :tryit
+  allow_unauthenticated_access only: %i[ share preview ]
+  require_unauthenticated_access only: %i[ tryit ]
   before_action :set_project, only: %i[ show edit update destroy ]
   before_action :limit_projects, only: %i[ new create copy ]
   before_action :require_ownership, only: %i[ show edit update destroy ]
   after_action :allow_iframe, only: :share
+  rate_limit to: 25, within: 10.minutes, only: :preview,
+             with: -> { render plain: "Preview limit reached. Please wait a few minutes and try again, or create an account to continue writing and save your work!", status: :too_many_requests },
+             if: -> { !authenticated? }
 
   # GET /projects or /projects.json
   def index
@@ -119,6 +122,38 @@ class ProjectsController < ApplicationController
     @project.title = "Copy of " + @project.title
     @project.save!
     redirect_to edit_project_path(@project)
+  end
+
+  def preview
+    require "uri"
+    require "net/http"
+    post_params = {
+      source: params[:source],
+      title: params[:title],
+      token: ENV["BUILD_TOKEN"]
+    }
+    uri = URI.parse("https://#{ENV['BUILD_HOST']}")
+    response = Net::HTTP.start(
+      uri.host,
+      uri.port,
+      use_ssl: uri.scheme == "https",
+      open_timeout: 5,
+      read_timeout: 15
+    ) do |http|
+      request = Net::HTTP::Post.new(uri.request_uri)
+      request["Content-Type"] = "application/x-www-form-urlencoded"
+      request.body = URI.encode_www_form(post_params)
+      http.request(request)
+    end
+    if response.is_a?(Net::HTTPSuccess)
+      render html: response.body.html_safe
+    else
+      render plain: "Preview build failed", status: :bad_gateway
+    end
+  rescue Net::OpenTimeout, Net::ReadTimeout
+    render plain: "Preview build timed out", status: :gateway_timeout
+  rescue SocketError, EOFError, IOError, Errno::ECONNREFUSED, Errno::EHOSTUNREACH, SystemCallError
+    render plain: "Preview build failed", status: :bad_gateway
   end
 
   private
