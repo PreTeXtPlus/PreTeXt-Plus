@@ -95,6 +95,7 @@ export default class extends Controller {
     const onPreviewRebuild = (content, title, postToIframe) => {
       const assembledSource = assemblePreviewSource({
         content,
+        title: current.title,
         sourceFormat: current.sourceFormat,
         pretextSource: current.pretextSource,
         docinfo: current.docinfo,

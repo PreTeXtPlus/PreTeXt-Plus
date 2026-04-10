@@ -1,4 +1,5 @@
 import { Controller } from "@hotwired/stimulus"
+import { assemblePreviewSource } from "./preview_source.js"
 
 export default class extends Controller {
   //Load the React code when we initialize
@@ -13,11 +14,26 @@ export default class extends Controller {
     const contentField = this.targets.find("contentField");
     const titleField = this.targets.find("titleField");
 
+    // Load initial state directly from the hidden fields (no API - tryit has no project)
+    const current = {
+      title: titleField.value ?? "",
+      source: contentField.value ?? "",
+      sourceFormat: "pretext",
+      pretextSource: "",
+      docinfo: "",
+    };
+    console.log("Initial editor state:", current);
+
     const onPreviewRebuild = async (content, title, postToIframe) => {
-      const buildHost = "/projects/preview";
+      const assembledSource = assemblePreviewSource({
+        content,
+        title: current.title,
+        sourceFormat: current.sourceFormat,
+        pretextSource: current.pretextSource,
+        docinfo: current.docinfo,
+      });
       const authenticityToken = document.querySelector("meta[name='csrf-token']").getAttribute("content");
-      const postData = { source: content, title: title, authenticity_token: authenticityToken };
-      postToIframe(buildHost, postData);
+      postToIframe("/projects/preview", { source: assembledSource, title, authenticity_token: authenticityToken });
     }
 
     const onSaveButton = () => {
@@ -29,15 +45,23 @@ export default class extends Controller {
     }
 
     const props = {
-      source: contentField.value,
-      onContentChange: (v) => contentField.value = v,
-      title: titleField.value,
-      onTitleChange: (v) => titleField.value = v,
-      onSaveButton: onSaveButton,
+      source: current.source,
+      sourceFormat: current.sourceFormat,
+      pretextSource: current.pretextSource || undefined,
+      docinfo: current.docinfo || undefined,
+      onContentChange: (v, meta) => {
+        current.source = v ?? "";
+        if (meta?.sourceFormat) current.sourceFormat = meta.sourceFormat;
+        if (meta?.pretextSource !== undefined) current.pretextSource = meta.pretextSource;
+        if (meta?.docinfo !== undefined) current.docinfo = meta.docinfo;
+      },
+      title: current.title,
+      onTitleChange: (v) => { current.title = v ?? ""; },
+      onSaveButton,
       saveButtonLabel: "Create your account!",
-      onCancelButton: onCancelButton,
+      onCancelButton,
       cancelButtonLabel: "Sign in",
-      onPreviewRebuild: onPreviewRebuild
+      onPreviewRebuild,
     };
 
     this.component.render(root, props);

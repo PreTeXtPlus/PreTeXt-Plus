@@ -14,12 +14,12 @@
  * @param {string} [opts.docinfo]     - Optional <docinfo> block string.
  * @returns {string} Assembled source ready to POST to the build server.
  */
-export function assemblePreviewSource({ content, sourceFormat, pretextSource, docinfo }) {
+export function assemblePreviewSource({ content, title, sourceFormat, pretextSource, docinfo }) {
   const previewBody = sourceFormat === "latex" && pretextSource
     ? pretextSource
     : content;
 
   return docinfo
-    ? `<pretext>\n${docinfo}\n<article label="article">\n${previewBody}</article>\n</pretext>`
+    ? `<pretext>\n${docinfo}\n<article label="article">\n<title>${title}</title>${previewBody}</article>\n</pretext>`
     : previewBody;
 }
