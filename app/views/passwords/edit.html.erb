@@ -1,4 +1,6 @@
-<div class="mx-auto md:w-2/3 w-full pt-20">
+<% content_for :title, "Update Password" %>
+
+<div class="mx-auto md:w-2/3 w-full my-4">
   <h1 class="font-bold text-4xl">Update the password for <span class="font-semibold"><%= @user.email %></span></h1>
   <%= form_with url: password_path(params[:token]), method: :put, class: "contents" do |form| %>
     <div class="my-5">
