@@ -62,11 +62,11 @@
     <% end %>
     <% if @projects.any? %>
       <% @projects.each do |project| %>
-        <%= link_to edit_project_path(project), class: "block rounded-xl bg-white p-4 m-3 ring-2 ring-gray-100 hover:ring-indigo-200 sm:p-6 lg:p-8", data: { turbo: false } do %>
+        <%= link_to project, class: "block rounded-xl bg-white p-4 m-3 ring-2 ring-gray-100 hover:ring-indigo-200 sm:p-6 lg:p-8", data: { turbo: false } do %>
           <span class="flex items-start sm:gap-8">
             <span class="hidden sm:grid sm:size-20 sm:shrink-0 sm:place-content-center" aria-hidden="true">
               <% if project.latex_source_format? %>
-                <span class="text-4xl font-serif font-bold text-orange-600 select-none">Λ</span>
+                <%= image_tag "latex-pretext-logo.svg", alt: "PreTeXt logo" %>
               <% else %>
                 <%= image_tag "pretext-logo.svg", alt: "PreTeXt logo" %>
               <% end %>
@@ -75,7 +75,7 @@
             <span>
               <% if project.latex_source_format? %>
                 <strong class="rounded-sm border border-orange-500 bg-orange-500 px-3 py-1.5 text-[10px] font-medium text-white">
-                  Accessible LaTeX
+                  LaTeX-style PreTeXt
                 </strong>
               <% else %>
                 <strong class="rounded-sm border border-indigo-500 bg-indigo-500 px-3 py-1.5 text-[10px] font-medium text-white">
