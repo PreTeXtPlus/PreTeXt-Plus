@@ -16,6 +16,12 @@ module BuildServerHelper
     fake_response = Struct.new(:body).new(body)
     fake_response.define_singleton_method(:is_a?) { |klass| klass == Net::HTTPSuccess }
 
+    if raise_error
+      fake_response.define_singleton_method(:code) { |_| "500" }
+    else
+      fake_response.define_singleton_method(:code) { |_| "200" }
+    end
+
     fake_http = Object.new
     fake_http.define_singleton_method(:request) { |_req| fake_response }
 
