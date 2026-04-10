@@ -227,7 +227,7 @@ class ProjectsControllerTest < ActionDispatch::IntegrationTest
     assert_redirected_to @project
 
     @project.reload
-    assert_includes @project.docinfo, "<macros>"
+    assert_includes @project.docinfo, "<brandlogo source=\"icon.svg\" />"
   end
 
   # --- Editor state API ---
@@ -247,7 +247,7 @@ class ProjectsControllerTest < ActionDispatch::IntegrationTest
     @project.update_column(:docinfo, "<docinfo><macros>\\newcommand{\\R}{\\mathbb{R}}</macros></docinfo>")
     get editor_state_project_url(@project), headers: { "Accept" => "application/json" }
     json = response.parsed_body
-    assert_includes json["docinfo"], "<macros>"
+    assert_includes json["docinfo"], "<brandlogo source=\"icon.svg\" />"
   end
 
   test "should update_editor_state via patch" do
@@ -260,7 +260,7 @@ class ProjectsControllerTest < ActionDispatch::IntegrationTest
     json = response.parsed_body
     assert_equal "API Title", json["title"]
     assert_equal "API Title", @project.reload.title
-    assert_equal "<docinfo/>", @project.docinfo
+    assert_includes @project.docinfo, "<brandlogo source=\"icon.svg\" />"
   end
 
   test "should ignore invalid source_format in editor_state update" do

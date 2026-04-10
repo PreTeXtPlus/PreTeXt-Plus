@@ -79,7 +79,7 @@ class ProjectTest < ActiveSupport::TestCase
     assert xml.start_with?("<pretext>")
     assert xml.end_with?("</pretext>")
     assert_includes xml, "<docinfo>"
-    assert_includes xml, "<macros>"
+    assert_includes xml, "<brandlogo source=\"icon.svg\" />"
     assert_includes xml, "<article label=\"article\">"
     assert_includes xml, "<section><p>Hello</p></section>"
   end
@@ -89,7 +89,8 @@ class ProjectTest < ActiveSupport::TestCase
     project.source = "<section><p>Hello</p></section>"
     xml = project.full_pretext_source
     assert xml.start_with?("<pretext>")
-    assert_not_includes xml, "<docinfo>"
+    assert_includes xml, "<docinfo>"
+    assert_includes xml, "<brandlogo source=\"icon.svg\" />"
     assert_includes xml, "<article label=\"article\">"
   end
 
@@ -109,6 +110,7 @@ class ProjectTest < ActiveSupport::TestCase
 
     assert_includes captured_params[:source], "<pretext>"
     assert_includes captured_params[:source], "<docinfo>"
+    assert_includes captured_params[:source], "<brandlogo source=\"icon.svg\" />"
     assert_includes captured_params[:source], "<title>With Docinfo</title>"
     assert_includes captured_params[:source], project.source
   end
