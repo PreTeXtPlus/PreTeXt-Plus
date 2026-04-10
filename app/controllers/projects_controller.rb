@@ -32,7 +32,7 @@ class ProjectsController < ApplicationController
   <title> Thanks for trying PreTeXt.Plus! </title>
 
   <p>
-    This is a sample project to show you what PreTeXt.Plus can do.
+    This is a very sample project to show you what PreTeXt.Plus can do.
     You can edit its content using the PreTeXt markup language.
     <me>
       \\left|\\sum_{i=0}^n a_i\\right|\\leq\\sum_{i=0}^n|a_i|
@@ -57,6 +57,14 @@ class ProjectsController < ApplicationController
     Click <em>Create your account</em> to be able to write and save your work!
   </p>
 </section>
+    eos
+    @docinfo = <<-eos
+<docinfo>
+<macros>
+\\newcommand{\\N}{\\mathbb N}
+</macros>
+<brandlogo source="icon.svg" />
+</docinfo>
     eos
   end
 
@@ -115,7 +123,7 @@ class ProjectsController < ApplicationController
       pretext_source: @project.pretext_source,
       docinfo: @project.docinfo,
       build_token: ENV["BUILD_TOKEN"],
-      build_host: ENV["BUILD_HOST"],
+      build_host: ENV["BUILD_HOST"]
     }
   end
 
@@ -128,7 +136,7 @@ class ProjectsController < ApplicationController
         source_format: @project.source_format,
         pretext_source: @project.pretext_source,
         docinfo: @project.docinfo,
-        updated_at: @project.updated_at,
+        updated_at: @project.updated_at
       }
     else
       render json: { errors: @project.errors }, status: :unprocessable_entity

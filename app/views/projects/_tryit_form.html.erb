@@ -8,5 +8,6 @@
   <%= form_with(class: "hidden", html: {"data-tryit-target" => "form"}) do |form| %>
     <%= form.hidden_field :content, "data-tryit-target" => "contentField", value: content %>
     <%= form.hidden_field :title, "data-tryit-target" => "titleField", value: title %>
+    <%= form.hidden_field :docinfo, "data-tryit-target" => "docinfoField", value: docinfo %>
   <% end %>
 </div>

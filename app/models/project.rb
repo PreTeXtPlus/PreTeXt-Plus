@@ -23,6 +23,14 @@ class Project < ApplicationRecord
     xml
   end
 
+  def docinfo
+    xml = <<~EOS
+    <docinfo>
+      <brandlogo source="icon.svg" />
+    </docinfo>
+    EOS
+  end
+
   def self.default_content_for(source_format)
     case source_format.to_s
     when "latex"
@@ -62,13 +70,14 @@ class Project < ApplicationRecord
   DEFAULT_LATEX_CONTENT = <<~LATEX
     \\section{Welcome to PreTeXt.Plus!}
 
-    This is a sample project to get you started. You can edit this content using \\latex.
+    This is a sample project to get you started. You can edit this content using markup that should
+    look just like LaTeX. For example, you can write math using LaTeX syntax:
 
     \\[
       \\left|\\sum_{i=0}^n a_i\\right| \\leq \\sum_{i=0}^n |a_i|
     \\]
 
-    For more information, visit \\url{https://pretextbook.org/doc/guide/html/}.
+    Not all LaTeX is supported, but that's a good thing.  Writing in LaTeX-style PreTeXt will ensure your content can be built by PreteXt and will be accessible!
 
     Feel free to delete this sample content and start creating your own project. Happy writing!
   LATEX

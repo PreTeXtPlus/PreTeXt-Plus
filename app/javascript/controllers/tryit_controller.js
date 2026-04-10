@@ -13,6 +13,7 @@ export default class extends Controller {
     const root = this.targets.find("root");
     const contentField = this.targets.find("contentField");
     const titleField = this.targets.find("titleField");
+    const docinfoField = this.targets.find("docinfoField");
 
     // Load initial state directly from the hidden fields (no API - tryit has no project)
     const current = {
@@ -20,7 +21,7 @@ export default class extends Controller {
       source: contentField.value ?? "",
       sourceFormat: "pretext",
       pretextSource: "",
-      docinfo: "",
+      docinfo: docinfoField.value ?? "",
     };
     console.log("Initial editor state:", current);
 
