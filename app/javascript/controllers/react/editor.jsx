@@ -24,7 +24,7 @@ function EditorWrapper({ onContentChange, onTitleChange, ...rest }) {
   const handleContentChange = useCallback((v, meta) => {
     const nextSource = v ?? meta?.sourceContent ?? "";
     setSource(nextSource);
-    if (meta?.sourceFormat) setSourceFormat(meta.sourceFormat);
+    if (meta?.sourceFormat !== undefined) setSourceFormat(meta.sourceFormat);
     if (meta?.pretextSource !== undefined) setPretextSource(meta.pretextSource);
     // docinfo changes arrive via meta when DocinfoEditor saves inside Editors
     if (meta?.docinfo !== undefined) setDocinfo(meta.docinfo);
