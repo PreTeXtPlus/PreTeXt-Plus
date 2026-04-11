@@ -68,15 +68,12 @@ class ProjectsControllerTest < ActionDispatch::IntegrationTest
     assert_redirected_to project_url(@project)
   end
 
-  test "should ignore invalid source_format and not raise 500" do
-    stub_build_server do
-      assert_difference("Project.count") do
-        post projects_url, params: { project: { title: "Bad Format", source_format: "bogus" } }
-      end
+  test "should reject invalid source_format on create" do
+    assert_no_difference("Project.count") do
+      post projects_url, params: { project: { title: "Bad Format", source_format: "bogus" } }
     end
 
-    created = Project.find_by!(title: "Bad Format", user: @user)
-    assert created.pretext_source_format?  # falls back to default (first enum value)
+    assert_response :unprocessable_entity
   end
 
   test "should destroy project" do
@@ -265,7 +262,7 @@ class ProjectsControllerTest < ActionDispatch::IntegrationTest
     assert_equal "<docinfo/>", @project.docinfo
   end
 
-  test "should ignore invalid source_format in editor_state update" do
+  test "should reject invalid source_format in editor_state update" do
     original_format = @project.source_format
     stub_build_server do
       patch editor_state_project_url(@project),
@@ -273,8 +270,8 @@ class ProjectsControllerTest < ActionDispatch::IntegrationTest
         as: :json
     end
 
-    assert_response :success
-    assert_equal "Bad API Format", @project.reload.title
+    assert_response :unprocessable_entity
+    assert_not_equal "Bad API Format", @project.reload.title
     assert_equal original_format, @project.source_format
   end
 
