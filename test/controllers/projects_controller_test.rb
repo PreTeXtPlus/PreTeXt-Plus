@@ -217,17 +217,18 @@ class ProjectsControllerTest < ActionDispatch::IntegrationTest
   # --- Docinfo ---
 
   test "should update docinfo" do
+    custom_docinfo = "<docinfo><macros>\\newcommand{\\N}{\\mathbb{N}}</macros></docinfo>"
     stub_build_server do
       patch project_url(@project), params: {
         project: {
-          docinfo: "<docinfo><macros>\\newcommand{\\N}{\\mathbb{N}}</macros></docinfo>"
+          docinfo: custom_docinfo
         }
       }
     end
     assert_redirected_to @project
 
     @project.reload
-    assert_includes @project.docinfo, "<brandlogo source=\"icon.svg\" />"
+  assert_equal custom_docinfo, @project.docinfo
   end
 
   # --- Editor state API ---
@@ -244,10 +245,11 @@ class ProjectsControllerTest < ActionDispatch::IntegrationTest
   end
 
   test "editor_state includes docinfo value" do
-    @project.update_column(:docinfo, "<docinfo><macros>\\newcommand{\\R}{\\mathbb{R}}</macros></docinfo>")
+    expected_docinfo = "<docinfo><macros>\\newcommand{\\R}{\\mathbb{R}}</macros></docinfo>"
+    @project.update_column(:docinfo, expected_docinfo)
     get editor_state_project_url(@project), headers: { "Accept" => "application/json" }
     json = response.parsed_body
-    assert_includes json["docinfo"], "<brandlogo source=\"icon.svg\" />"
+    assert_equal expected_docinfo, json["docinfo"]
   end
 
   test "should update_editor_state via patch" do
@@ -260,7 +262,7 @@ class ProjectsControllerTest < ActionDispatch::IntegrationTest
     json = response.parsed_body
     assert_equal "API Title", json["title"]
     assert_equal "API Title", @project.reload.title
-    assert_includes @project.docinfo, "<brandlogo source=\"icon.svg\" />"
+    assert_equal "<docinfo/>", @project.docinfo
   end
 
   test "should ignore invalid source_format in editor_state update" do

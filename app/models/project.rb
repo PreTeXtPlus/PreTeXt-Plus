@@ -23,12 +23,8 @@ class Project < ApplicationRecord
     xml
   end
 
-  def docinfo
-    xml = <<~EOS
-    <docinfo>
-      <brandlogo source="icon.svg" />
-    </docinfo>
-    EOS
+  def self.default_docinfo
+    DEFAULT_DOCINFO
   end
 
   def self.default_content_for(source_format)
@@ -41,6 +37,13 @@ class Project < ApplicationRecord
       DEFAULT_PRETEXT_CONTENT
     end
   end
+
+
+  DEFAULT_DOCINFO = <<~XML
+    <docinfo>
+      <brandlogo source="icon.svg" />
+    </docinfo>
+  XML
 
   DEFAULT_PRETEXT_CONTENT = <<~XML
     <section>

@@ -79,6 +79,7 @@ class ProjectsController < ApplicationController
     @project.source_format ||= :pretext
     @project.title = "New Project" if @project.title.blank?
     @project.source = Project.default_content_for(@project.source_format)
+    @project.docinfo = Project.default_docinfo if @project.docinfo.blank?
 
     respond_to do |format|
       if @project.save
@@ -121,9 +122,7 @@ class ProjectsController < ApplicationController
       source: @project.source,
       source_format: @project.source_format,
       pretext_source: @project.pretext_source,
-      docinfo: @project.docinfo,
-      build_token: ENV["BUILD_TOKEN"],
-      build_host: ENV["BUILD_HOST"]
+      docinfo: @project.docinfo
     }
   end
 

@@ -2,7 +2,7 @@ import { Controller } from "@hotwired/stimulus"
 import { assemblePreviewSource } from "./preview_source.js"
 
 export default class extends Controller {
-  static values = { projectId: String }
+  static values = { projectId: String, editorStateUrl: String }
 
   //Load the React code when we initialize
   initialize() {
@@ -13,7 +13,7 @@ export default class extends Controller {
     this.component = await this.componentPromise;
 
     const root = this.targets.find("root");
-    const apiBase = `this.targets.find("api-base")
+    const apiBase = this.editorStateUrlValue;
     const csrfToken = document.querySelector('meta[name="csrf-token"]')?.content;
 
     // Load initial editor state from the API
@@ -100,10 +100,10 @@ export default class extends Controller {
         pretextSource: current.pretextSource,
         docinfo: current.docinfo,
       });
-      postToIframe(`https://${state.build_host}`, {
+      postToIframe("/projects/preview", {
         source: assembledSource,
         title,
-        token: state.build_token,
+        authenticity_token: csrfToken,
       });
     };
 
