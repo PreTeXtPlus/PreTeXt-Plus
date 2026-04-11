@@ -38,7 +38,7 @@ class Project < ApplicationRecord
   end
 
   def set_default_source
-    source = Project.default_source_for source_format
+    self.source = Project.default_source_for source_format
   end
 
   def to_h
