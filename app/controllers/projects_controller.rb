@@ -76,8 +76,8 @@ class ProjectsController < ApplicationController
   def create
     @project = Project.new project_params
     @project.user = @current_user
-    @project.source_format ||= :pretext
-    @project.title ||= "New Project"
+    @project.source_format = :pretext if @project.source_format.blank?
+    @project.title "New Project" if @project.title.blank?
     @project.set_default_source
     @project.set_default_docinfo
 
