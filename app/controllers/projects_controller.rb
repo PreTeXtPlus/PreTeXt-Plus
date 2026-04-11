@@ -32,7 +32,7 @@ class ProjectsController < ApplicationController
   <title> Thanks for trying PreTeXt.Plus! </title>
 
   <p>
-    This is a very sample project to show you what PreTeXt.Plus can do.
+    This is a very simple project to show you what PreTeXt.Plus can do.
     You can edit its content using the PreTeXt markup language.
     <me>
       \\left|\\sum_{i=0}^n a_i\\right|\\leq\\sum_{i=0}^n|a_i|
