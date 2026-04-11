@@ -78,6 +78,7 @@ class ProjectsController < ApplicationController
     @project.user = @current_user
     @project.source_format = :pretext if @project.source_format.blank?
     @project.title = "New Project" if @project.title.blank?
+    @project.document_type = :article if @project.document_type.blank?
     @project.set_default_source
     @project.set_default_docinfo
 
