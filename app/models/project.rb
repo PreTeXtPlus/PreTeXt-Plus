@@ -28,7 +28,7 @@ class Project < ApplicationRecord
 
   def set_default_source
     if pretext_source_format?
-      self.source = DEFAULT_PRETEXT_SOURCEself.
+      self.source = DEFAULT_PRETEXT_SOURCE
     elsif pmd_source_format?
       self.source  = DEFAULT_PMD_SOURCE
     else  # latex
