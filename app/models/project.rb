@@ -11,7 +11,7 @@ class Project < ApplicationRecord
   # Wraps the project source in a full PreTeXt document, including docinfo.
   def full_pretext_source
     if latex_source_format? && pretext_source.blank?
-      return source
+      return source.to_s
     end
     doc_tag = document_type || "article"
 
@@ -19,7 +19,7 @@ class Project < ApplicationRecord
     xml << docinfo.to_s if docinfo.present?
     xml << "<#{doc_tag} label=\"article\">"
     xml << "<title>#{title}</title>" if title.present?
-    xml << latex_source_format? ? pretext_source : source
+    xml << (latex_source_format? ? pretext_source.to_s : source.to_s)
     xml << "</#{doc_tag}>"
     xml << "</pretext>"
     xml
