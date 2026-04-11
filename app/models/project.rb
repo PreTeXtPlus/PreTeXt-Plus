@@ -9,14 +9,18 @@ class Project < ApplicationRecord
   default_scope { order(updated_at: :desc) }
 
   # Wraps the project source in a full PreTeXt document, including docinfo.
-  def full_pretext_source(source = nil)
+  def full_pretext_source
     doc_tag = document_type || "article"
 
     xml = +"<pretext>"
     xml << docinfo.to_s if docinfo.present?
     xml << "<#{doc_tag} label=\"article\">"
     xml << "<title>#{title}</title>" if title.present?
-    xml << source.to_s
+    if latex_source_format? && pretext_source.present?
+      xml << pretext_source
+    else
+      xml << source
+    end
     xml << "</#{doc_tag}>"
     xml << "</pretext>"
     xml
@@ -112,15 +116,8 @@ class Project < ApplicationRecord
     require "net/http"
     # For LaTeX projects, use the editor-converted PreTeXt body and wrap it
     # into a full document so docinfo/title are included in server builds.
-    build_source = if latex_source_format? && pretext_source.present?
-      full_pretext_source(pretext_source)
-    elsif pretext_source_format?
-      full_pretext_source
-    else
-      source
-    end
     params = {
-      source: build_source,
+      source: full_pretext_source,
       title: self.title,
       token: ENV["BUILD_TOKEN"]
     }
