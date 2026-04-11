@@ -2,17 +2,17 @@ require "test_helper"
 
 class ProjectTest < ActiveSupport::TestCase
   test "default_content_for returns pretext template" do
-    content = Project.DEFAULT_PRETEXT_SOURCE
+    content = Project::DEFAULT_PRETEXT_SOURCE
     assert_includes content, "<section>"
   end
 
   test "default_content_for returns latex template" do
-    content = Project.DEFAULT_LATEX_SOURCE
+    content = Project::DEFAULT_LATEX_SOURCE
     assert_includes content, "\\section{"
   end
 
   test "default_content_for returns pmd template" do
-    content = Project.DEFAULT_PMD_SOURCE
+    content = Project::DEFAULT_PMD_SOURCE
     assert_includes content, "# Welcome to PreTeXt.Plus!"
   end
 
