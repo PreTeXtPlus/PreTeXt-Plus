@@ -78,7 +78,6 @@ class ProjectsController < ApplicationController
     @project.user = @current_user
     @project.source_format = :pretext if @project.source_format.blank?
     @project.title = "New Project" if @project.title.blank?
-    @project.document_type = :article if @project.document_type.blank?
     @project.set_default_source
     @project.set_default_docinfo
 
@@ -123,7 +122,7 @@ class ProjectsController < ApplicationController
 
   # PATCH /projects/:id/editor_state
   def update_editor_state
-    if @project.update(editor_state_params)
+    if @project.update(project_params)
       render json: @project.to_h
     else
       render json: { errors: @project.errors }, status: :unprocessable_entity
@@ -188,10 +187,6 @@ class ProjectsController < ApplicationController
 
     # Only allow a list of trusted parameters through.
     def project_params
-      params.expect(project: [ :title, :source, :pretext_source, :source_format, :document_type, :docinfo ])
-    end
-
-    def editor_state_params
       params.expect(project: [ :title, :source, :pretext_source, :source_format, :docinfo ])
     end
 

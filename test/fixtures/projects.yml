@@ -4,8 +4,10 @@ one:
   user: one
   title: My First Project
   source: <section><title>Hello</title><p>World</p></section>
+  document_type: article
 
 two:
   user: two
   title: My Second Project
   source: <section><title>Other</title><p>Content</p></section>
+  document_type: article

@@ -1,8 +1,8 @@
 class Project < ApplicationRecord
   belongs_to :user
 
-  enum :source_format, { pretext: 0, latex: 1, pmd: 2 }, suffix: true, validate: true
-  enum :document_type, { article: 0, book: 1, slideshow: 2 }, suffix: true, validate: true
+  enum :source_format, { pretext: 0, latex: 1, pmd: 2 }, default: :pretext, suffix: true, validate: true
+  enum :document_type, { article: 0, book: 1, slideshow: 2 }, default: :article, suffix: true, validate: true
 
   before_update :set_html_source
 
