@@ -27,7 +27,7 @@ class ProjectsController < ApplicationController
   # GET /tryit
   def tryit
     @title = "Try it!"
-    @source = <<-eos
+    @content = <<-eos
 <section>
   <title> Thanks for trying PreTeXt.Plus! </title>
 
