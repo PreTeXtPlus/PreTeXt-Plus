@@ -9,15 +9,14 @@ class Project < ApplicationRecord
   default_scope { order(updated_at: :desc) }
 
   # Wraps the project source in a full PreTeXt document, including docinfo.
-  def full_pretext_source(content = nil)
-    content ||= source
+  def full_pretext_source(source = nil)
     doc_tag = document_type || "article"
 
     xml = +"<pretext>"
     xml << docinfo.to_s if docinfo.present?
     xml << "<#{doc_tag} label=\"article\">"
     xml << "<title>#{title}</title>" if title.present?
-    xml << content.to_s
+    xml << source.to_s
     xml << "</#{doc_tag}>"
     xml << "</pretext>"
     xml
@@ -27,17 +26,25 @@ class Project < ApplicationRecord
     DEFAULT_DOCINFO
   end
 
-  def self.default_content_for(source_format)
-    case source_format.to_s
+  def self.default_source_for(source_format)
+    case source_format.to_s.lower
     when "latex"
-      DEFAULT_LATEX_CONTENT
+      DEFAULT_LATEX_SOURCE
     when "pmd"
-      DEFAULT_PMD_CONTENT
+      DEFAULT_PMD_SOURCE
     else
-      DEFAULT_PRETEXT_CONTENT
+      DEFAULT_PRETEXT_SOURCE
     end
   end
 
+  def set_default_source
+    source = Project.default_source_for source_format
+  end
+
+  def to_h
+    [:title, :source, :source_format, :pretext_source, :docinfo]
+      .map{ |attr| [attr, self.send(attr)] }.to_h
+  end
 
   DEFAULT_DOCINFO = <<~XML
     <docinfo>
@@ -45,7 +52,7 @@ class Project < ApplicationRecord
     </docinfo>
   XML
 
-  DEFAULT_PRETEXT_CONTENT = <<~XML
+  DEFAULT_PRETEXT_SOURCE = <<~XML
     <section>
       <title> Welcome to PreTeXt.Plus! </title>
 
@@ -70,7 +77,7 @@ class Project < ApplicationRecord
     </section>
   XML
 
-  DEFAULT_LATEX_CONTENT = <<~LATEX
+  DEFAULT_LATEX_SOURCE = <<~LATEX
     \\section{Welcome to PreTeXt.Plus!}
 
     This is a sample project to get you started. You can edit this content using markup that should
@@ -85,7 +92,7 @@ class Project < ApplicationRecord
     Feel free to delete this sample content and start creating your own project. Happy writing!
   LATEX
 
-  DEFAULT_PMD_CONTENT = <<~PMD
+  DEFAULT_PMD_SOURCE = <<~PMD
     # Welcome to PreTeXt.Plus!
 
     This is a sample project to get you started. You can edit this content using PreTeXt Markdown.

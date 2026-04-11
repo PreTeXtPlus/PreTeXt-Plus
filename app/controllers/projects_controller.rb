@@ -27,7 +27,7 @@ class ProjectsController < ApplicationController
   # GET /tryit
   def tryit
     @title = "Try it!"
-    @content = <<-eos
+    @source = <<-eos
 <section>
   <title> Thanks for trying PreTeXt.Plus! </title>
 
@@ -74,19 +74,15 @@ class ProjectsController < ApplicationController
 
   # POST /projects or /projects.json
   def create
-    @project = Project.new
-    @project.assign_attributes(safe_project_params(@project))
+    @project = Project.new project_params
     @project.user = @current_user
     @project.source_format ||= :pretext
-    @project.title = "New Project" if @project.title.blank?
-    @project.source = Project.default_content_for(@project.source_format)
-    @project.docinfo = Project.default_docinfo if @project.docinfo.blank?
+    @project.title ||= "New Project"
+    @project.set_default_source
+    @project.docinfo ||= Project.default_docinfo
 
     respond_to do |format|
-      if @project.errors.any?
-        format.html { render :new, status: :unprocessable_entity }
-        format.json { render json: @project.errors, status: :unprocessable_entity }
-      elsif @project.save
+      if @project.save
         format.html { redirect_to edit_project_path(@project) }
         format.json { render :show, status: :created, location: @project }
       else
@@ -98,13 +94,8 @@ class ProjectsController < ApplicationController
 
   # PATCH/PUT /projects/1 or /projects/1.json
   def update
-    attrs = safe_project_params(@project)
-
     respond_to do |format|
-      if @project.errors.any?
-        format.html { render :edit, status: :unprocessable_entity }
-        format.json { render json: @project.errors, status: :unprocessable_entity }
-      elsif @project.update(attrs)
+      if @project.update(project_params)
         format.html { redirect_to @project, notice: "Project was successfully updated.", status: :see_other }
         format.json { render :show, status: :ok, location: @project }
       else
@@ -126,30 +117,13 @@ class ProjectsController < ApplicationController
 
   # GET /projects/:id/editor_state
   def editor_state
-    render json: {
-      title: @project.title,
-      source: @project.source,
-      source_format: @project.source_format,
-      pretext_source: @project.pretext_source,
-      docinfo: @project.docinfo
-    }
+    render json: @project.to_h
   end
 
   # PATCH /projects/:id/editor_state
   def update_editor_state
-    attrs = safe_editor_state_params(@project)
-
-    if @project.errors.any?
-      render json: { errors: @project.errors }, status: :unprocessable_entity
-    elsif @project.update(attrs)
-      render json: {
-        title: @project.title,
-        source: @project.source,
-        source_format: @project.source_format,
-        pretext_source: @project.pretext_source,
-        docinfo: @project.docinfo,
-        updated_at: @project.updated_at
-      }
+    if @project.update(editor_state_params)
+      render json: @project.to_h
     else
       render json: { errors: @project.errors }, status: :unprocessable_entity
     end
@@ -157,7 +131,7 @@ class ProjectsController < ApplicationController
 
   def share
     @project = Project.find(params.expect(:project_id))
-    render html: (@project.html_source || "").html_safe
+    render html: (@project.html_source || "Document not found.").html_safe
   end
 
   # GET /projects/:project_id/share/copy
@@ -218,41 +192,6 @@ class ProjectsController < ApplicationController
 
     def editor_state_params
       params.expect(project: [ :title, :source, :pretext_source, :source_format, :docinfo ])
-    end
-
-    def safe_editor_state_params(record = nil)
-      sanitize_project_params(editor_state_params, record)
-    end
-
-    # Strips enum fields to known values before mass-assignment so invalid
-    # inputs produce nil (handled by validations) rather than ArgumentError.
-    def safe_project_params(record = nil)
-      sanitize_project_params(project_params, record)
-    end
-
-    def sanitize_project_params(p, record = nil)
-      p[:source] = p.delete(:content) if p.key?(:content) && !p.key?(:source)
-      p[:pretext_source] = p.delete(:pretext_content) if p.key?(:pretext_content) && !p.key?(:pretext_source)
-
-      normalize_enum_param(p, :source_format, Project.source_formats.keys, record)
-      normalize_enum_param(p, :document_type, Project.document_types.keys, record)
-
-      p
-    end
-
-    def normalize_enum_param(p, key, allowed, record)
-      return unless p.key?(key)
-
-      value = p[key]
-      if value.blank?
-        p.delete(key)
-        return
-      end
-
-      return if allowed.include?(value)
-
-      record&.errors&.add(key, "is not included in the list")
-      p.delete(key)
     end
 
     # redirect if user has too many projects
