@@ -79,7 +79,7 @@ class ProjectsController < ApplicationController
     @project.source_format ||= :pretext
     @project.title ||= "New Project"
     @project.set_default_source
-    @project.docinfo ||= Project.default_docinfo
+    @project.set_default_docinfo
 
     respond_to do |format|
       if @project.save

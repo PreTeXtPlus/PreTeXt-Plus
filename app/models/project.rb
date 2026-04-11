@@ -26,19 +26,18 @@ class Project < ApplicationRecord
     DEFAULT_DOCINFO
   end
 
-  def self.default_source_for(source_format)
-    case source_format.to_s.lower
-    when "latex"
-      DEFAULT_LATEX_SOURCE
-    when "pmd"
-      DEFAULT_PMD_SOURCE
-    else
-      DEFAULT_PRETEXT_SOURCE
+  def set_default_source
+    if pretext_source_format?
+      self.source = DEFAULT_PRETEXT_SOURCEself.
+    elsif pmd_source_format?
+      self.source  = DEFAULT_PMD_SOURCE
+    else  # latex
+      self.source = DEFAULT_LATEX_SOURCE
     end
   end
 
-  def set_default_source
-    self.source = Project.default_source_for source_format
+  def set_default_docinfo
+    self.docinfo = DEFAULT_DOCINFO
   end
 
   def to_h

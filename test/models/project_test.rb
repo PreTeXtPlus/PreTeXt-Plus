@@ -2,23 +2,18 @@ require "test_helper"
 
 class ProjectTest < ActiveSupport::TestCase
   test "default_content_for returns pretext template" do
-    content = Project.default_content_for("pretext")
+    content = Project.DEFAULT_PRETEXT_SOURCE
     assert_includes content, "<section>"
   end
 
   test "default_content_for returns latex template" do
-    content = Project.default_content_for("latex")
+    content = Project.DEFAULT_LATEX_SOURCE
     assert_includes content, "\\section{"
   end
 
   test "default_content_for returns pmd template" do
-    content = Project.default_content_for("pmd")
+    content = Project.DEFAULT_PMD_SOURCE
     assert_includes content, "# Welcome to PreTeXt.Plus!"
-  end
-
-  test "default_content_for returns pretext for unknown format" do
-    content = Project.default_content_for("unknown")
-    assert_includes content, "<section>"
   end
 
   test "source_format enum defaults to pretext" do
