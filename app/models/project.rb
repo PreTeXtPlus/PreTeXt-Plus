@@ -42,8 +42,8 @@ class Project < ApplicationRecord
   end
 
   def to_h
-    [:title, :source, :source_format, :pretext_source, :docinfo]
-      .map{ |attr| [attr, self.send(attr)] }.to_h
+    [ :title, :source, :source_format, :pretext_source, :docinfo ]
+      .map { |attr| [ attr, self.send(attr) ] }.to_h
   end
 
   DEFAULT_DOCINFO = <<~XML
