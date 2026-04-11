@@ -114,6 +114,22 @@ class ProjectTest < ActiveSupport::TestCase
     assert_includes captured_params[:source], project.source
   end
 
+  test "docinfo-only update triggers rebuild" do
+    project = projects(:one)
+    captured_params = nil
+    fake_response = Struct.new(:body).new("<html>docinfo rebuild</html>")
+
+    Net::HTTP.stub(:post_form, ->(_uri, params) {
+      captured_params = params
+      fake_response
+    }) do
+      project.update!(docinfo: "<docinfo><macros>\\newcommand{\\A}{\\mathbb{A}}</macros></docinfo>")
+    end
+
+    assert_includes captured_params[:source], "<docinfo><macros>\\newcommand{\\A}{\\mathbb{A}}</macros></docinfo>"
+    assert_equal "<html>docinfo rebuild</html>", project.html_source
+  end
+
   test "before_update uses raw source for latex when pretext_source is missing" do
     project = projects(:one)
     captured_params = nil

@@ -43,8 +43,8 @@ export default class extends Controller {
       current.pretextSource !== saved.pretextSource ||
       current.docinfo !== saved.docinfo;
 
-    const onSave = async () => {
-      if (!isDirty()) return true;
+    const onSave = async (force = false) => {
+      if (!force && !isDirty()) return true;
 
       try {
         const response = await fetch(apiBase, {
@@ -77,7 +77,7 @@ export default class extends Controller {
     };
 
     const onSaveButton = async () => {
-      const savedSuccessfully = await onSave();
+      const savedSuccessfully = await onSave(true);
       if (!savedSuccessfully) return;
 
       window.location.href = `/projects/${this.projectIdValue}`;

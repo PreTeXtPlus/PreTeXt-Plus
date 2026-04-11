@@ -262,6 +262,24 @@ class ProjectsControllerTest < ActionDispatch::IntegrationTest
     assert_equal "<docinfo/>", @project.docinfo
   end
 
+  test "docinfo-only editor_state update triggers rebuild" do
+    captured_params = nil
+    fake_response = Struct.new(:body).new("<html><body>docinfo-only</body></html>")
+
+    Net::HTTP.stub(:post_form, ->(_uri, params) {
+      captured_params = params
+      fake_response
+    }) do
+      patch editor_state_project_url(@project),
+        params: { project: { docinfo: "<docinfo><macros>\\newcommand{\\Q}{\\mathbb{Q}}</macros></docinfo>" } },
+        as: :json
+    end
+
+    assert_response :success
+    assert_includes captured_params[:source], "<docinfo><macros>\\newcommand{\\Q}{\\mathbb{Q}}</macros></docinfo>"
+    assert_equal "<html><body>docinfo-only</body></html>", @project.reload.html_source
+  end
+
   test "should reject invalid source_format in editor_state update" do
     original_format = @project.source_format
     stub_build_server do
