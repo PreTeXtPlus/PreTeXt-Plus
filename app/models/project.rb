@@ -10,7 +10,7 @@ class Project < ApplicationRecord
 
   # Wraps the project source in a full PreTeXt document, including docinfo.
   def full_pretext_source
-    if latex_source_format && pretext_source.blank?
+    if latex_source_format? && pretext_source.blank?
       return source
     end
     doc_tag = document_type || "article"
