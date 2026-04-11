@@ -13,7 +13,7 @@ export default class extends Controller {
     this.component = await this.componentPromise;
 
     const root = this.targets.find("root");
-    const apiBase = `/projects/${this.projectIdValue}/editor_state`;
+    const apiBase = `this.targets.find("api-base")
     const csrfToken = document.querySelector('meta[name="csrf-token"]')?.content;
 
     // Load initial editor state from the API
