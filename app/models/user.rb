@@ -7,7 +7,7 @@ class User < ApplicationRecord
   after_create_commit :claim_intended_invitations
   after_create_commit :invite_edu_user
 
-  enum :subscription, { beta: 0, sustaining: 1 }, suffix: true
+  enum :subscription, { beta: 0, sustaining: 1 }, suffix: true, validate: true
 
   normalizes :email, with: ->(e) { e.strip.downcase }
 
