@@ -90,7 +90,7 @@ class Project < ApplicationRecord
       \\left|\\sum_{i=0}^n a_i\\right| \\leq \\sum_{i=0}^n |a_i|
     \\]
 
-    Not all \\latex is supported, but that's a good thing. Writing in \\latex-style \\pretext
+    Not all \\latex is supported, but that's a good thing. Writing in \\latex-style \\PreTeXt
     will ensure your content can be built by \\pretext and will be accessible!
 
     Feel free to delete this sample content and start creating your own project. Happy writing!
