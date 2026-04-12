@@ -91,7 +91,7 @@ class Project < ApplicationRecord
     \\]
 
     Not all \\latex is supported, but that's a good thing. Writing in \\latex-style \\PreTeXt
-    will ensure your content can be built by \\pretext and will be accessible!
+    will ensure your content can be built by \\PreTeXt and will be accessible!
 
     Feel free to delete this sample content and start creating your own project. Happy writing!
   LATEX
