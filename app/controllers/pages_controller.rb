@@ -5,6 +5,7 @@ class PagesController < ApplicationController
     if @current_user.present?
       @start_writing_path = projects_path
     end
+    @subscription_types = SubscriptionType.order(:order)
     render layout: false
   end
 end
