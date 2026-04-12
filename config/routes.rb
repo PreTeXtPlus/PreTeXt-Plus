@@ -1,4 +1,5 @@
 Rails.application.routes.draw do
+  resources :subscription_types
   resources :requests, only: [ :create ]
   resource :session
   resources :passwords, param: :token

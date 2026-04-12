@@ -1,8 +1,8 @@
 class InvitationsController < ApplicationController
+  before_action :require_admin, only: %i[ new create ]
+  before_action :require_authentication, only: %i[ redeem ]
+
   def new
-    unless @current_user.admin
-      redirect_to projects_path, alert: "You are not authorized" and return
-    end
     @request_count = Request.count
     @requests = Request.order(created_at: :asc).limit(50)
   end

@@ -8,4 +8,10 @@ class ApplicationController < ActionController::Base
   def allow_iframe
     response.headers.except! "X-Frame-Options"
   end
+
+  def require_admin
+    unless @current_user.admin
+      redirect_to projects_path, alert: "You are not authorized" and return
+    end
+  end
 end

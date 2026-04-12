@@ -1,0 +1,30 @@
+<div id="<%= dom_id subscription_type %>" class="w-full sm:w-auto my-5 space-y-5">
+  <div>
+    <strong class="block font-medium mb-1">Name:</strong>
+    <%= subscription_type.name %>
+  </div>
+  <div>
+    <strong class="block font-medium mb-1">Description:</strong>
+    <%= subscription_type.description %>
+  </div>
+  <div>
+    <strong class="block font-medium mb-1">Bulletpoints:</strong>
+    <% if subscription_type.bulletpoints.present? %>
+      <ul class="list-disc list-inside">
+        <% subscription_type.bulletpoints_list.each do |bulletpoint| %>
+          <li><%= bulletpoint %></li>
+        <% end %>
+      </ul>
+    <% else %>
+      <p class="text-gray-500">No bulletpoints available.</p>
+    <% end %>
+  </div>
+  <div>
+    <strong class="block font-medium mb-1">Stripe price:</strong>
+    <%= subscription_type.stripe_price_id %>
+  </div>
+  <div>
+    <strong class="block font-medium mb-1">Order:</strong>
+    <%= subscription_type.order %>
+  </div>
+</div>
