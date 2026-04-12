@@ -27,22 +27,24 @@ class ProjectsController < ApplicationController
   # GET /tryit
   def tryit
     @title = "Try it!"
-    @content = <<-eos
+    @content = <<~XML
 <section>
   <title> Thanks for trying PreTeXt.Plus! </title>
 
   <p>
     This is a very simple project to show you what PreTeXt.Plus can do.
+    <m>0\\in\\N</m>.
     You can edit its content using the PreTeXt markup language.
-    <me>
+    <md>
       \\left|\\sum_{i=0}^n a_i\\right|\\leq\\sum_{i=0}^n|a_i|
-    </me>
+    </md>
   </p>
 
   <fact>
     <statement>
       <p>
-        For more information on how to use PreTeXt, please visit <c>https://pretextbook.org/doc/guide/html/</c>.
+        For more information on how to use PreTeXt, use the <q>Help</q>
+        menu above.
       </p>
     </statement>
   </fact>
@@ -57,15 +59,15 @@ class ProjectsController < ApplicationController
     Click <em>Create your account</em> to be able to write and save your work!
   </p>
 </section>
-    eos
-    @docinfo = <<-eos
+    XML
+    @docinfo = <<-XML
 <docinfo>
 <macros>
 \\newcommand{\\N}{\\mathbb N}
 </macros>
 <brandlogo source="icon.svg" />
 </docinfo>
-    eos
+    XML
   end
 
   # GET /projects/1/edit

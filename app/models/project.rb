@@ -68,7 +68,8 @@ class Project < ApplicationRecord
       <fact>
         <statement>
           <p>
-            For more information on how to use PreTeXt, please visit <c>https://pretextbook.org/doc/guide/html/</c>.
+            For more information on how to use PreTeXt, use the <q>Help</q>
+            menu above.
           </p>
         </statement>
       </fact>
@@ -83,30 +84,30 @@ class Project < ApplicationRecord
     \\section{Welcome to PreTeXt.Plus!}
 
     This is a sample project to get you started. You can edit this content using markup that should
-    look just like LaTeX. For example, you can write math using LaTeX syntax:
+    look just like \\latex. For example, you can write math using \\latex syntax:
 
     \\[
       \\left|\\sum_{i=0}^n a_i\\right| \\leq \\sum_{i=0}^n |a_i|
     \\]
 
-    Not all LaTeX is supported, but that's a good thing.  Writing in LaTeX-style PreTeXt will ensure your content can be built by PreteXt and will be accessible!
+    Not all \\latex is supported, but that's a good thing. Writing in \\latex-style \\PreTeXt
+    will ensure your content can be built by \\PreTeXt and will be accessible!
 
     Feel free to delete this sample content and start creating your own project. Happy writing!
   LATEX
 
-  DEFAULT_PMD_SOURCE = <<~PMD
+  DEFAULT_PMD_SOURCE = <<~MARKDOWN
     # Welcome to PreTeXt.Plus!
 
-    This is a sample project to get you started. You can edit this content using PreTeXt Markdown.
+    This is a sample project to get you started. You can edit this content using
+    Markdown-style PreTeXt.
 
     $$
       \\left|\\sum_{i=0}^n a_i\\right| \\leq \\sum_{i=0}^n |a_i|
     $$
 
-    For more information, visit https://pretextbook.org/doc/guide/html/.
-
     Feel free to delete this sample content and start creating your own project. Happy writing!
-  PMD
+  MARKDOWN
 
   private
 
