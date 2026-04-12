@@ -15,8 +15,8 @@ Rails.application.routes.draw do
     post "share/copy" => "projects#copy", as: "copy"
   end
   post "projects/preview" => "projects#preview", as: "preview"
-  post "subscribe" => "subscriptions#subscribe"
-  post "stripe/webhooks" => "subscriptions#webhooks"
+  post "subscribe" => "subscriptions_old#subscribe"
+  post "stripe/webhooks" => "subscriptions_old#webhooks"
   get "tryit" => "projects#tryit"
   get "projects/:id/article.html", to: redirect("/projects/%{id}/share")
   get "*root/external/icon.svg", to: redirect("/icon-small.svg")

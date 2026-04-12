@@ -1,4 +1,4 @@
-class SubscriptionsController < ApplicationController
+class SubscriptionsOldController < ApplicationController
   before_action :setup_event, only: [ :webhooks ]
   before_action :setup_payload, only: [ :webhooks ]
   before_action :setup_signature_header, only: [ :webhooks ]
