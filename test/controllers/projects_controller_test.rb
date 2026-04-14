@@ -122,7 +122,7 @@ class ProjectsControllerTest < ActionDispatch::IntegrationTest
 
   test "share is publicly accessible without authentication" do
     delete session_path  # sign out
-    get project_share_url(@project)
+    get share_project_url(@project)
     assert_response :success
   end
 

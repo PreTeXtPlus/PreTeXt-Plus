@@ -13,7 +13,7 @@ module Authentication
     end
 
     def require_unauthenticated_access(**options)
-      allow_unauthenticated_access **options
+      allow_unauthenticated_access(**options)
       before_action -> { redirect_to projects_path if authenticated? }, **options
     end
   end

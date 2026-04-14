@@ -9,11 +9,11 @@ Rails.application.routes.draw do
     member do
       get  :editor_state
       patch :editor_state, action: :update_editor_state
+      get "share" => "projects#share", as: "share"
+      get "share/source" => "projects#source", as: "share_source"
+      get "share/copy", to: redirect("projects/%{project_id}/share/source")
+      post "share/copy" => "projects#copy", as: "copy"
     end
-    get "share" => "projects#share", as: "share"
-    get "share/source" => "projects#source", as: "share_source"
-    get "share/copy", to: redirect("projects/%{project_id}/share/source")
-    post "share/copy" => "projects#copy", as: "copy"
   end
   post "projects/preview" => "projects#preview", as: "preview"
   post "subscribe" => "subscriptions#subscribe"
