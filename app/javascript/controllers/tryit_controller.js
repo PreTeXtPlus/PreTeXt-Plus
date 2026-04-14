@@ -55,10 +55,6 @@ export default class extends Controller {
       },
       title: current.title,
       onTitleChange: (v) => { current.title = v ?? ""; },
-      onSaveButton,
-      saveButtonLabel: "Save",
-      onCancelButton,
-      cancelButtonLabel: "Cancel",
       onPreviewRebuild,
     };
 

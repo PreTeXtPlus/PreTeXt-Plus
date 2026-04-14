@@ -33,13 +33,15 @@ class ProjectsController < ApplicationController
       <<~EOS
         \\section{Thanks for trying PreTeXt.Plus!}
 
-        This is a LaTeX-style demo project. You can edit this content using supported LaTeX syntax.
+        This is a LaTeX-style PreTeXt demo project. You can edit this content using supported LaTeX syntax.
 
         \\[
           \\left|\\sum_{i=0}^n a_i\\right|\\leq\\sum_{i=0}^n |a_i|
         \\]
 
-        Changes you make here will not be saved.
+        When you preview the changes, the source is first converted to PreTeXt and then rendered as accessible HTML.#{' '}
+
+        (Changes you make here will not be saved, but feel free to play around to see what PreTeXt.Plus can do!)
       EOS
     else
       <<~EOS
@@ -49,9 +51,9 @@ class ProjectsController < ApplicationController
           <p>
             This is a very simple project to show you what PreTeXt.Plus can do.
             You can edit its content using the PreTeXt markup language.
-            <me>
+            <md>
               \\left|\\sum_{i=0}^n a_i\\right|\\leq\\sum_{i=0}^n|a_i|
-            </me>
+            </md>
           </p>
 
           <fact>
@@ -67,6 +69,14 @@ class ProjectsController < ApplicationController
               Changes you make here will not be saved.
             </p>
           </note>
+        </section>
+
+        <section>
+          <title>New: Try LaTeX-style PreTeXt!</title>
+
+          <p>
+            PreTeXt.Plus now supports writing in LaTeX-style PreTeXt. Most LaTeX commands are supported, and the environments from PreTeXt are what you expect.  Give it a try by switching modes above.
+          </p>
         </section>
       EOS
     end
