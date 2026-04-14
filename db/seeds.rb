@@ -10,6 +10,7 @@
 
 # Development admin user — run `bin/rails db:seed` to (re)create
 if Rails.env.development?
+  Rake::Task["db:fixtures:load"].invoke
   user = User.find_or_initialize_by(email: "admin@example.com")
   user.password = "password123"
   user.password_confirmation = "password123"
