@@ -12,7 +12,8 @@ Rails.application.routes.draw do
       patch :editor_state, action: :update_editor_state
     end
     get "share" => "projects#share", as: "share"
-    # copy should use post action so that turbo doesn't execute on link hover and cause a copy of the project to be created by accident
+    get "share/source" => "projects#source", as: "share_source"
+    get "share/copy", to: redirect("projects/%{project_id}/share/source")
     post "share/copy" => "projects#copy", as: "copy"
   end
   post "projects/preview" => "projects#preview", as: "preview"

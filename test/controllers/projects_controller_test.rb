@@ -164,7 +164,7 @@ class ProjectsControllerTest < ActionDispatch::IntegrationTest
     assert_redirected_to edit_project_path(copied)
   end
 
-  test "copy blocks beta requester even when source owner is sustaining" do
+  test "copy allows beta requester when source owner is sustaining" do
     owner = users(:one)
     owner.update!(subscription: :sustaining, admin: false)
     requester = users(:two)
@@ -174,10 +174,11 @@ class ProjectsControllerTest < ActionDispatch::IntegrationTest
     delete session_path
     sign_in_as(requester)
 
-    assert_no_difference("Project.count") do
+    assert_difference("Project.count", 1) do
       post project_copy_url(other_project)
     end
-    assert_redirected_to projects_path
+    copied = Project.find_by!(title: "Copy of #{other_project.title}", user: requester)
+    assert_redirected_to edit_project_path(copied)
   end
 
   test "preview is accessible without authentication" do

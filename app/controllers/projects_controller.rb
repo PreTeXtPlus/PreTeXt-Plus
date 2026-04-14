@@ -1,9 +1,10 @@
 class ProjectsController < ApplicationController
   allow_unauthenticated_access only: %i[ share preview ]
   require_unauthenticated_access only: %i[ tryit ]
-  before_action :set_project, only: %i[ show edit update destroy editor_state update_editor_state ]
+  before_action :set_project, only: %i[ show edit update destroy editor_state update_editor_state share source copy ]
   before_action :limit_projects, only: %i[ new create copy ]
   before_action :require_ownership, only: %i[ show edit update destroy editor_state update_editor_state ]
+  before_action :require_copy_permission, only: %i[ source copy ]
   after_action :allow_iframe, only: :share
   rate_limit to: 25, within: 10.minutes, only: :preview,
              with: -> { render plain: "Preview limit reached. Please wait a few minutes and try again, or create an account to continue writing and save your work!", status: :too_many_requests },
@@ -130,21 +131,19 @@ class ProjectsController < ApplicationController
   end
 
   def share
-    @project = Project.find(params.expect(:project_id))
-    render html: (@project.html_source || "Document not found.").html_safe
+    render html: (@project.html_source || "Document not found").html_safe
+  end
+
+  def source
   end
 
   # GET /projects/:project_id/share/copy
   def copy
-    @project = Project.find(params.expect(:project_id)).dup
-    unless @current_user.has_copiable_projects? or @current_user.admin?
-      flash[:alert] = "Only sustaining subscribers can share copiable projects. Consider subscribing for this feature and to support PreTeXt.Plus!"
-      redirect_to projects_path and return
-    end
-    @project.user = @current_user
-    @project.title = "Copy of " + @project.title
-    @project.save!
-    redirect_to edit_project_path(@project)
+    project_copy = @project.dup
+    project_copy.user = @current_user
+    project_copy.title = "Copy of " + project_copy.title
+    project_copy.save!
+    redirect_to edit_project_path(project_copy)
   end
 
   def preview
@@ -179,7 +178,11 @@ class ProjectsController < ApplicationController
   private
     # Use callbacks to share common setup or constraints between actions.
     def set_project
-      @project = Project.find(params.expect(:id))
+      if params[:id].present?
+        @project = Project.find(params.expect(:id))
+      else
+        @project = Project.find(params.expect(:project_id))
+      end
     end
 
     # Only allow a list of trusted parameters through.
@@ -197,6 +200,12 @@ class ProjectsController < ApplicationController
     def require_ownership
       if @project.user != @current_user and !@current_user.admin?
         redirect_to projects_path, alert: "You do not have permission to access this project"
+      end
+    end
+
+    def require_copy_permission
+      unless @project.user.has_copiable_projects? or @current_user.has_copiable_projects? or @current_user.admin?
+        redirect_to projects_path, alert: "Only sustaining subscribers can share copiable projects. Consider subscribing for this feature and to support PreTeXt.Plus!"
       end
     end
 end

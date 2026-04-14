@@ -1,0 +1,11 @@
+<% content_for :title, "Source for #{@project.title}" %>
+
+<div class="size-full flex flex-row">
+    <div class="w-1/2 h-full p-5 flex flex-col">
+      <%= button_to "Make a copy", project_copy_path(@project), method: :post, form_class: "w-full h-[10%] sm:w-auto sm:inline-block", class: "w-full text-center rounded-md px-3.5 py-2.5 bg-gray-100 hover:bg-gray-50 font-medium cursor-pointer" %>
+      <textarea class="size-full mt-5 bg-gray-100 font-mono text-gray-800 p-3 resize-none h-[90%]" readonly><%= @project.source %></textarea>
+    </div>
+    <div class="w-1/2 h-full">
+      <%= render @project %>
+    </div>
+</div>
