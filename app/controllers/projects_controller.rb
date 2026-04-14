@@ -1,5 +1,5 @@
 class ProjectsController < ApplicationController
-  allow_unauthenticated_access only: %i[ share preview ]
+  allow_unauthenticated_access only: %i[ share preview source ]
   require_unauthenticated_access only: %i[ tryit ]
   before_action :set_project, only: %i[ show edit update destroy editor_state update_editor_state share source copy ]
   before_action :limit_projects, only: %i[ new create copy ]
