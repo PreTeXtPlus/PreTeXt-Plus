@@ -14,12 +14,13 @@ export default class extends Controller {
     const contentField = this.targets.find("contentField");
     const titleField = this.targets.find("titleField");
     const docinfoField = this.targets.find("docinfoField");
+    const sourceFormatField = this.targets.find("sourceFormatField");
 
     // Load initial state directly from the hidden fields (no API - tryit has no project)
     const current = {
       title: titleField.value ?? "",
       source: contentField.value ?? "",
-      sourceFormat: "pretext",
+      sourceFormat: sourceFormatField.value ?? "pretext",
       pretextSource: "",
       docinfo: docinfoField.value ?? "",
     };
@@ -37,13 +38,9 @@ export default class extends Controller {
       postToIframe("/projects/preview", { source: assembledSource, title, authenticity_token: authenticityToken });
     }
 
-    const onSaveButton = () => {
-      window.location.href = "/users/new";
-    }
+    const onSaveButton = () => {};
 
-    const onCancelButton = () => {
-      window.location.href = "/session/new";
-    }
+    const onCancelButton = () => {};
 
     const props = {
       source: current.source,
@@ -59,9 +56,9 @@ export default class extends Controller {
       title: current.title,
       onTitleChange: (v) => { current.title = v ?? ""; },
       onSaveButton,
-      saveButtonLabel: "Create your account!",
+      saveButtonLabel: "Save",
       onCancelButton,
-      cancelButtonLabel: "Sign in",
+      cancelButtonLabel: "Cancel",
       onPreviewRebuild,
     };
 

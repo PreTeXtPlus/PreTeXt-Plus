@@ -211,6 +211,25 @@ class ProjectsControllerTest < ActionDispatch::IntegrationTest
     assert_response :gateway_timeout
   end
 
+  test "tryit defaults to pretext demo" do
+    delete session_path
+    get tryit_url
+
+    assert_response :success
+    assert_includes response.body, "Working Demo"
+    assert_includes response.body, "data-tryit-target=\"sourceFormatField\""
+    assert_includes response.body, "value=\"pretext\""
+  end
+
+  test "tryit supports latex demo" do
+    delete session_path
+    get tryit_url, params: { demo: "latex" }
+
+    assert_response :success
+    assert_includes response.body, "value=\"latex\""
+    assert_includes response.body, "Try LaTeX-style PreTeXt!"
+  end
+
   # --- Docinfo ---
 
   test "should update docinfo" do

@@ -26,46 +26,60 @@ class ProjectsController < ApplicationController
 
   # GET /tryit
   def tryit
-    @title = "Try it!"
-    @content = <<-eos
-<section>
-  <title> Thanks for trying PreTeXt.Plus! </title>
+    @demo_mode = params[:demo] == "latex" ? "latex" : "pretext"
+    @title = @demo_mode == "latex" ? "Try LaTeX-style PreTeXt!" : "Try it!"
 
-  <p>
-    This is a very simple project to show you what PreTeXt.Plus can do.
-    You can edit its content using the PreTeXt markup language.
-    <me>
-      \\left|\\sum_{i=0}^n a_i\\right|\\leq\\sum_{i=0}^n|a_i|
-    </me>
-  </p>
+    @content = if @demo_mode == "latex"
+      <<~EOS
+        \\section{Thanks for trying PreTeXt.Plus!}
 
-  <fact>
-    <statement>
-      <p>
-        For more information on how to use PreTeXt, please visit <c>https://pretextbook.org/doc/guide/html/</c>.
-      </p>
-    </statement>
-  </fact>
+        This is a LaTeX-style demo project. You can edit this content using supported LaTeX syntax.
 
-  <note>
-    <p>
-      Changes you make here will not be saved.
-    </p>
-  </note>
+        \\[
+          \\left|\\sum_{i=0}^n a_i\\right|\\leq\\sum_{i=0}^n |a_i|
+        \\]
 
-  <p>
-    Click <em>Create your account</em> to be able to write and save your work!
-  </p>
-</section>
-    eos
-    @docinfo = <<-eos
-<docinfo>
-<macros>
-\\newcommand{\\N}{\\mathbb N}
-</macros>
-<brandlogo source="icon.svg" />
-</docinfo>
-    eos
+        Changes you make here will not be saved.
+      EOS
+    else
+      <<~EOS
+        <section>
+          <title> Thanks for trying PreTeXt.Plus! </title>
+
+          <p>
+            This is a very simple project to show you what PreTeXt.Plus can do.
+            You can edit its content using the PreTeXt markup language.
+            <me>
+              \\left|\\sum_{i=0}^n a_i\\right|\\leq\\sum_{i=0}^n|a_i|
+            </me>
+          </p>
+
+          <fact>
+            <statement>
+              <p>
+                For more information on how to use PreTeXt, please visit <c>https://pretextbook.org/doc/guide/html/</c>.
+              </p>
+            </statement>
+          </fact>
+
+          <note>
+            <p>
+              Changes you make here will not be saved.
+            </p>
+          </note>
+        </section>
+      EOS
+    end
+
+    @source_format = @demo_mode
+    @docinfo = <<~EOS
+      <docinfo>
+      <macros>
+      \\newcommand{\\N}{\\mathbb N}
+      </macros>
+      <brandlogo source="icon.svg" />
+      </docinfo>
+    EOS
   end
 
   # GET /projects/1/edit
