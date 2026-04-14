@@ -1,15 +1,19 @@
 # Read about fixtures at https://api.rubyonrails.org/classes/ActiveRecord/FixtureSet.html
 
 one:
-  name: MyString
-  description: MyText
-  bulletpoints: MyText
+  name: Basic
+  description: Free basic status
+  bulletpoints: |
+    MyText
+    Another bullet point
   stripe_price_id: MyString
-  order: 1
+  order: 0
 
 two:
-  name: MyString
-  description: MyText
-  bulletpoints: MyText
+  name: Pro
+  description: Premium features
+  bulletpoints: |
+    MyText
+    Another bullet point again
   stripe_price_id: MyString
   order: 1
