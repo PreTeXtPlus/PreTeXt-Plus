@@ -1,3 +1,16 @@
 <% content_for :title, @project.title %>
-
-<iframe class="size-full" srcdoc="<%= @project.html_source %>"></iframe>
+<div class="size-full flex flex-col">
+    <% if @project.user == @current_user %>
+        <div class="p-3 w-2/3 m-auto text-center text-sm text-gray-500">
+            <span class="mr-3">
+            You are the owner of this project
+            (<%= link_to "Manage", @project, class: "text-blue-500 hover:font-semibold" %>).
+            </span>
+            To share your project without the PreTeXt.Plus navbar above, and support the
+            development of this project, please consider
+            <%= link_to "subscribing", :session, class: "text-blue-500 hover:font-semibold" %>
+            to PreTeXt.Plus.
+        </div>
+    <% end %>
+    <iframe class="w-full h-screen md:h-full" srcdoc="<%= @project.html_source %>"></iframe>
+</div>
