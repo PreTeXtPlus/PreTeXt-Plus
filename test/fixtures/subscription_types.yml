@@ -9,10 +9,19 @@ one:
   order: 0
 
 two:
-  name: Pro
-  description: Premium features
+  name: Sustaining
+  description: Paid individual subscription
   bulletpoints: |
     MyText
     Another bullet point again
-  stripe_price_id: MyString
+  stripe_price_id: price_1TMTEvIprmvrFLasXOkunUVR
   order: 1
+
+three:
+  name: Institutional
+  description: Paid group subsciprtion
+  bulletpoints: |
+    MyText
+    Another bullet point again
+  stripe_price_id: price_1TMTGEIprmvrFLashZcu8wkN
+  order: 2
