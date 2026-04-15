@@ -7,3 +7,7 @@ end
 ActiveSupport.on_load(:pay) do
   Pay::Webhooks.delegator.subscribe "stripe.invoice.payment_succeeded", PaymentSucceededHandler.new
 end
+
+Rails.application.config.to_prepare do
+  Pay::Stripe::Subscription.include SubscriptionExtensions
+end

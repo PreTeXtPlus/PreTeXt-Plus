@@ -47,7 +47,7 @@ class SubscriptionTypesController < ApplicationController
   end
 
   def checkout
-    redirect_to checkout_url("https://#{request.host}/session"), allow_other_host: true, status: :see_other
+    redirect_to checkout_url("https://#{request.host}/subscriptions"), allow_other_host: true, status: :see_other
   end
 
   private

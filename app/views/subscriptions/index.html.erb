@@ -1,9 +1,10 @@
+<div>
 <% @subscriptions.each do |sub| %>
   <div>
     <div class="text-gray-600 mb-4">
       You are currently subscribed to the
       <span class="font-semibold text-pink-600">
-        <%= SubscriptionType.of_subscription(sub).name %>
+        <%= sub.type.name %>
       </span> plan.
     </div>
     <div class="text-left mb-4">
@@ -14,9 +15,23 @@
       <p class="text-gray-600">
         <span class="font-semibold">Price:</span>
         <span class="text-pink-600">
-          <%= SubscriptionType.of_subscription(sub).price %>/<%= SubscriptionType.of_subscription(sub).recurrence %>
+          <%= sub.type.price %>/<%= sub.type.recurrence %>
         </span>
       </p>
     </div>
   </div>
 <% end %>
+
+<%= link_to @current_user.payment_processor.billing_portal.url do %>
+  Manage payment info
+<% end %>
+
+<ul>
+<% SubscriptionType.where.not(stripe_price_id: nil).each do |type| %>
+  <li><%= link_to checkout_subscription_type_path(type) do %>
+    Add subscription for <%= type.name %>
+  <% end %></li>
+<% end %>
+</ul>
+
+</div>

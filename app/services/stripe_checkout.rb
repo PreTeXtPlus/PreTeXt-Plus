@@ -18,7 +18,11 @@ class StripeCheckout
   def checkout
     user.payment_processor.checkout(
       mode: "subscription",
-      line_items: subscription_type.stripe_price_id,
+      line_items: [ {
+        price: subscription_type.stripe_price_id,
+        quantity: 1,
+        adjustable_quantity: { enabled: true }
+      } ],
       success_url: @success_url,
       billing_address_collection: "auto",
       allow_promotion_codes: false
