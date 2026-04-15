@@ -122,7 +122,7 @@ class ProjectsControllerTest < ActionDispatch::IntegrationTest
 
   test "share is publicly accessible without authentication" do
     delete session_path  # sign out
-    get project_share_url(@project)
+    get share_project_url(@project)
     assert_response :success
   end
 
@@ -130,7 +130,7 @@ class ProjectsControllerTest < ActionDispatch::IntegrationTest
     @user.update!(subscription: :sustaining)
     stub_build_server do
       assert_difference("Project.count") do
-        post project_copy_url(@project)
+        post copy_project_url(@project)
       end
     end
     copy = Project.find_by!(title: "Copy of #{@project.title}", user: @user)
@@ -140,7 +140,7 @@ class ProjectsControllerTest < ActionDispatch::IntegrationTest
   test "copy is blocked for beta subscribers" do
     @user.update!(subscription: :beta, admin: false)
     assert_no_difference("Project.count") do
-      post project_copy_url(@project)
+      post copy_project_url(@project)
     end
     assert_redirected_to projects_path
   end
@@ -157,7 +157,7 @@ class ProjectsControllerTest < ActionDispatch::IntegrationTest
 
     stub_build_server do
       assert_difference("Project.count", 1) do
-        post project_copy_url(other_project)
+        post copy_project_url(other_project)
       end
     end
     copied = Project.find_by!(title: "Copy of #{other_project.title}", user: requester)
@@ -175,7 +175,7 @@ class ProjectsControllerTest < ActionDispatch::IntegrationTest
     sign_in_as(requester)
 
     assert_difference("Project.count", 1) do
-      post project_copy_url(other_project)
+      post copy_project_url(other_project)
     end
     copied = Project.find_by!(title: "Copy of #{other_project.title}", user: requester)
     assert_redirected_to edit_project_path(copied)
@@ -210,6 +210,25 @@ class ProjectsControllerTest < ActionDispatch::IntegrationTest
       post preview_url, params: { source: "<section/>", title: "Test" }
     end
     assert_response :gateway_timeout
+  end
+
+  test "tryit defaults to pretext demo" do
+    delete session_path
+    get tryit_url
+
+    assert_response :success
+    assert_includes response.body, "Demo"
+    assert_includes response.body, "data-tryit-target=\"sourceFormatField\""
+    assert_includes response.body, "value=\"pretext\""
+  end
+
+  test "tryit supports latex demo" do
+    delete session_path
+    get tryit_url, params: { demo: "latex" }
+
+    assert_response :success
+    assert_includes response.body, "value=\"latex\""
+    assert_includes response.body, "Try LaTeX-style PreTeXt!"
   end
 
   # --- Docinfo ---

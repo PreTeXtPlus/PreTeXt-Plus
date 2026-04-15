@@ -2,17 +2,17 @@
 
 <div class="size-full md:flex md:flex-row">
     <div class="w-full md:w-1/4 md:h-full p-5 flex flex-col">
-      <h2 class="text-3xl font-semibold my-3">Project: <span class="text-gray-600 font-normal"><%= @project.title %></span></h2>
-      <div class="my-2 flex flex-row md:flex-col gap-2">
-        <%= link_to "Edit", edit_project_path(@project), class: "w-full sm:w-auto text-center rounded-md px-3.5 py-2.5 bg-gray-100 hover:bg-gray-50 inline-block font-medium" %>
-        <%= link_to "Share output", project_share_path(@project), class: "w-full sm:w-auto text-center rounded-md px-3.5 py-2.5 bg-gray-100 hover:bg-gray-50 inline-block font-medium" %>
-        <%= link_to "Back to projects", projects_path, class: "w-full sm:w-auto text-center mt-2 sm:mt-0 rounded-md px-3.5 py-2.5 bg-gray-100 hover:bg-gray-50 inline-block font-medium" %>
-        <%= button_to "Destroy this project", @project, method: :delete, form_class: "sm:inline-block mt-2 sm:mt-0", class: "w-full rounded-md px-3.5 py-2.5 text-white bg-red-600 hover:bg-red-500 font-medium cursor-pointer", data: { turbo_confirm: "Are you sure?" } %>
+      <h2 class="text-3xl font-semibold">Project: <span class="text-gray-600 font-normal text-xl"><%= @project.title %></span></h2>
+      <div class="my-2 flex flex-col gap-2">
+        <%= link_to "Edit", edit_project_path(@project), class: "w-full md:w-auto text-center rounded-md px-3.5 py-2.5 bg-gray-100 hover:bg-gray-50 inline-block font-medium" %>
+        <%= link_to "Share output", share_project_path(@project), class: "w-full md:w-auto text-center rounded-md px-3.5 py-2.5 bg-gray-100 hover:bg-gray-50 inline-block font-medium" %>
+        <%= link_to "Back to projects", projects_path, class: "w-full md:w-auto text-center rounded-md px-3.5 py-2.5 bg-gray-100 hover:bg-gray-50 inline-block font-medium" %>
+        <%= button_to "Destroy this project", @project, method: :delete, form_class: "inline-block", class: "w-full rounded-md px-3.5 py-2.5 text-white bg-red-600 hover:bg-red-500 font-medium cursor-pointer", data: { turbo_confirm: "Are you sure?" } %>
       </div>
-      <div class="my-4">
-        <span>Subscriber features:</span>
-        <%= link_to project_share_source_path(@project), 
-          form_class: "w-full sm:w-auto sm:inline-block", 
+      <div class="my-2 flex flex-col gap-2">
+        <span class="w-full md:w-auto text-center">Subscriber features:</span>
+        <%= link_to share_source_project_path(@project),
+          form_class: "w-full md:w-auto md:inline-block", 
           class: "w-full text-center rounded-md px-3.5 py-2.5 bg-gray-100 hover:bg-gray-50 font-medium cursor-pointer" do %>
           Share&nbsp;source
         <% end %>

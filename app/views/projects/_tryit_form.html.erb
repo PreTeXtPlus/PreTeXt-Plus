@@ -1,4 +1,4 @@
-<div class="md:flex md:size-full" data-controller="tryit">
+<div class="flex-1 min-h-0 md:flex w-full" data-controller="tryit">
   <div data-tryit-target="root" class="h-screen md:size-full">
     <div class="mx-5">
       PreTeXt.Plus (beta) works best in an updated Chromium-based browser such as Google Chrome or Microsoft Edge.
@@ -9,5 +9,6 @@
     <%= form.hidden_field :content, "data-tryit-target" => "contentField", value: content %>
     <%= form.hidden_field :title, "data-tryit-target" => "titleField", value: title %>
     <%= form.hidden_field :docinfo, "data-tryit-target" => "docinfoField", value: docinfo %>
+    <%= form.hidden_field :source_format, "data-tryit-target" => "sourceFormatField", value: source_format %>
   <% end %>
 </div>

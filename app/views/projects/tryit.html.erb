@@ -1,2 +1,27 @@
 <% content_for :title, "Try it!" %>
-<%= render "tryit_form", content: @content, title: @title, docinfo: @docinfo %>
+
+<div class="flex flex-col w-full">
+
+<div class="shrink-0 bg-sky-50/70 ">
+  <div class="mx-auto max-w-6xl p-3 md:p-3">
+    <div class="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+      <div>
+        <h1 class="text-2xl font-bold text-sky-900">
+          <span>Try it Demo</span>
+
+      <span class="text-sm font-medium text-sky-900 ml-3">Mode:</span>
+      <%= link_to "PreTeXt", tryit_path(demo: :pretext), class: ["rounded-md px-3 py-1.5 text-sm font-medium", (@demo_mode == "pretext" ? "bg-sky-700 text-white" : "bg-white text-sky-800 border border-sky-300 hover:bg-sky-100")].join(" ") %>
+      <%= link_to "LaTeX-style PreTeXt", tryit_path(demo: :latex), class: ["rounded-md px-3 py-1.5 text-sm font-medium", (@demo_mode == "latex" ? "bg-sky-700 text-white" : "bg-white text-sky-800 border border-sky-300 hover:bg-sky-100")].join(" ") %>
+      </h1>
+      </div>
+      <div class="flex flex-wrap gap-2">
+        <%= link_to "Create account", new_user_path, class: "rounded-md bg-sky-700 px-4 py-2 text-sm font-semibold text-white hover:bg-sky-600" %>
+        <%= link_to "Sign in", new_session_path, class: "rounded-md border border-sky-400 bg-white px-4 py-2 text-sm font-semibold text-sky-800 hover:bg-sky-100" %>
+      </div>
+    </div>
+  </div>
+</div>
+
+<%= render "tryit_form", content: @content, title: @title, docinfo: @docinfo, source_format: @source_format %>
+
+</div>

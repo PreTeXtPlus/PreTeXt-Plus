@@ -1,11 +1,17 @@
 <% content_for :title, "Source for #{@project.title}" %>
 
-<div class="size-full flex flex-row">
-    <div class="w-1/2 h-full p-5 flex flex-col">
-      <%= button_to "Make a copy", project_copy_path(@project), method: :post, form_class: "w-full h-[10%] sm:w-auto sm:inline-block", class: "w-full text-center rounded-md px-3.5 py-2.5 bg-gray-100 hover:bg-gray-50 font-medium cursor-pointer" %>
+<div class="size-full md:flex md:flex-row">
+    <div class="w-full md:w-1/2 md:h-full p-5 flex flex-col">
+      <% if @project.user == @current_user %>
+        <div class="p-3 w-full m-auto text-center text-sm text-gray-500">
+          You are the owner of this project
+          (<%= link_to "Manage", @project, class: "text-blue-500 hover:font-semibold" %>).
+        </div>
+      <% end %>
+      <%= button_to "Make a copy", copy_project_path(@project), method: :post, form_class: "w-full h-[10%] sm:w-auto sm:inline-block", class: "w-full text-center rounded-md px-3.5 py-2.5 bg-gray-100 hover:bg-gray-50 font-medium cursor-pointer" %>
       <textarea class="size-full mt-5 bg-gray-100 font-mono text-gray-800 p-3 resize-none h-[90%]" readonly><%= @project.source %></textarea>
     </div>
-    <div class="w-1/2 h-full">
+    <div class="w-full md:w-1/2 h-screen md:h-full">
       <%= render @project %>
     </div>
 </div>

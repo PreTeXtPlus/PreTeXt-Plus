@@ -9,10 +9,11 @@ module Authentication
   class_methods do
     def allow_unauthenticated_access(**options)
       skip_before_action :require_authentication, **options
+      before_action -> { resume_session }, **options
     end
 
     def require_unauthenticated_access(**options)
-      allow_unauthenticated_access **options
+      allow_unauthenticated_access(**options)
       before_action -> { redirect_to projects_path if authenticated? }, **options
     end
   end

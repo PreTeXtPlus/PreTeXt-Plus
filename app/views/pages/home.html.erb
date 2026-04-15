@@ -27,7 +27,7 @@
   </head>
 <body>
     <header class="fixed w-full">
-        <nav class="bg-white border-gray-200 py-2.5 dark:bg-gray-900">
+        <nav class="bg-white border-gray-200 py-2.5 dark:bg-black">
             <div class="flex flex-wrap items-center justify-between max-w-screen-xl px-4 mx-auto">
                 <%= link_to @start_writing_path, class: "flex items-center", data: { turbo: false } do %>
                     <img src="/icon.svg" class="h-6 mr-3 sm:h-9" alt="PreTeXtPlus Logo">
@@ -38,7 +38,7 @@
                         <svg width="24px" height="24px" viewBox="0 0 24 24" stroke-width="1.5" fill="none" xmlns="http://www.w3.org/2000/svg" class="inline-block"><path d="M14.3632 5.65156L15.8431 4.17157C16.6242 3.39052 17.8905 3.39052 18.6716 4.17157L20.0858 5.58579C20.8668 6.36683 20.8668 7.63316 20.0858 8.41421L18.6058 9.8942M14.3632 5.65156L4.74749 15.2672C4.41542 15.5993 4.21079 16.0376 4.16947 16.5054L3.92738 19.2459C3.87261 19.8659 4.39148 20.3848 5.0115 20.33L7.75191 20.0879C8.21972 20.0466 8.65806 19.8419 8.99013 19.5099L18.6058 9.8942M14.3632 5.65156L18.6058 9.8942" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"></path></svg>
                         <span class="hidden sm:inline ml-2">Start Writing</span>
                     <% end %>
-                    <button data-collapse-toggle="mobile-menu-2" type="button" class="inline-flex items-center p-2 ml-1 text-sm text-gray-600 rounded-lg lg:hidden hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-gray-200 dark:text-gray-400 dark:hover:bg-gray-700 dark:focus:ring-gray-600" aria-controls="mobile-menu-2" aria-expanded="false">
+                    <button data-collapse-toggle="mobile-menu-2" type="button" class="inline-flex items-center p-2 ml-1 text-sm text-gray-600 rounded-lg lg:hidden hover:bg-gray-150 focus:outline-none focus:ring-2 focus:ring-gray-200 dark:text-gray-400 dark:hover:bg-gray-700 dark:focus:ring-gray-600" aria-controls="mobile-menu-2" aria-expanded="false">
                         <span class="sr-only">Open main menu</span>
                         <svg class="w-6 h-6" fill="currentColor" viewBox="0 0 20 20" xmlns="http://www.w3.org/2000/svg"><path fill-rule="evenodd" d="M3 5a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zM3 10a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zM3 15a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1z" clip-rule="evenodd"></path></svg>
                         <svg class="hidden w-6 h-6" fill="currentColor" viewBox="0 0 20 20" xmlns="http://www.w3.org/2000/svg"><path fill-rule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clip-rule="evenodd"></path></svg>
@@ -50,13 +50,13 @@
                             <a href="#home" class="block py-2 pl-3 pr-4 text-white bg-purple-700 rounded lg:bg-transparent lg:text-purple-700 lg:p-0 dark:text-white" aria-current="page">Home</a>
                         </li>
                         <li>
-                            <a href="#about" class="block py-2 pl-3 pr-4 text-gray-700 border-b border-gray-100 hover:bg-gray-50 lg:hover:bg-transparent lg:border-0 lg:hover:text-purple-700 lg:p-0 dark:text-gray-400 lg:dark:hover:text-white dark:hover:bg-gray-700 dark:hover:text-white lg:dark:hover:bg-transparent dark:border-gray-700">About</a>
+                            <a href="#about" class="block py-2 pl-3 pr-4 text-gray-700 border-b border-gray-100 hover:bg-gray-100 lg:hover:bg-transparent lg:border-0 lg:hover:text-purple-700 lg:p-0 dark:text-gray-400 lg:dark:hover:text-white dark:hover:bg-gray-700 dark:hover:text-white lg:dark:hover:bg-transparent dark:border-gray-700">About</a>
                         </li>
                         <li>
-                            <a href="#accessibility" class="block py-2 pl-3 pr-4 text-gray-700 border-b border-gray-100 hover:bg-gray-50 lg:hover:bg-transparent lg:border-0 lg:hover:text-purple-700 lg:p-0 dark:text-gray-400 lg:dark:hover:text-white dark:hover:bg-gray-700 dark:hover:text-white lg:dark:hover:bg-transparent dark:border-gray-700">Accessibility</a>
+                            <a href="#accessibility" class="block py-2 pl-3 pr-4 text-gray-700 border-b border-gray-100 hover:bg-gray-100 lg:hover:bg-transparent lg:border-0 lg:hover:text-purple-700 lg:p-0 dark:text-gray-400 lg:dark:hover:text-white dark:hover:bg-gray-700 dark:hover:text-white lg:dark:hover:bg-transparent dark:border-gray-700">Accessibility</a>
                         </li>
                         <li>
-                            <a href="#pricing" class="block py-2 pl-3 pr-4 text-gray-700 border-b border-gray-100 hover:bg-gray-50 lg:hover:bg-transparent lg:border-0 lg:hover:text-purple-700 lg:p-0 dark:text-gray-400 lg:dark:hover:text-white dark:hover:bg-gray-700 dark:hover:text-white lg:dark:hover:bg-transparent dark:border-gray-700">Pricing</a>
+                            <a href="#pricing" class="block py-2 pl-3 pr-4 text-gray-700 border-b border-gray-100 hover:bg-gray-100 lg:hover:bg-transparent lg:border-0 lg:hover:text-purple-700 lg:p-0 dark:text-gray-400 lg:dark:hover:text-white dark:hover:bg-gray-700 dark:hover:text-white lg:dark:hover:bg-transparent dark:border-gray-700">Pricing</a>
                         </li>
                     </ul>
                 </div>
@@ -65,7 +65,7 @@
     </header>
 
     <!-- Start block -->
-    <section id="home" class="bg-white dark:bg-gray-900">
+    <section id="home" class="bg-gray-50 dark:bg-gray-900">
         <div class="grid max-w-screen-xl px-4 pt-20 pb-8 mx-auto lg:gap-8 xl:gap-0 lg:py-16 lg:grid-cols-12 lg:pt-28">
             <div class="mr-auto place-self-center lg:col-span-7">
                 <h1 class="max-w-2xl mb-4 text-4xl font-extrabold leading-none tracking-tight md:text-5xl xl:text-6xl dark:text-white">
@@ -78,17 +78,20 @@
                         class="underline hover:no-underline hover:text-gray-400 hover:dark:text-gray-300"
                         target="_blank"
                         >inherently inaccessible LaTeX-produced PDFs</a>
-                    and get quickly started writing with the leading semantic markup language for typesetting mathematical documents:
+                    and get quickly started writing with the leading semantic markup language for typesetting scholarly STEM documents:
                     <a href="https://pretextbook.org" class="underline hover:no-underline hover:text-gray-400 hover:dark:text-gray-300">PreTeXt</a>.
                 </p>
                 <div class="space-y-4 sm:flex sm:space-y-0 sm:space-x-4">
-                    <a href="https://github.com/LatticeSolutions/pretext-plus" class="inline-flex items-center justify-center w-full px-5 py-3 text-sm font-medium text-center text-gray-900 border border-gray-200 rounded-lg sm:w-auto hover:bg-gray-100 focus:ring-4 focus:ring-gray-100 dark:text-white dark:border-gray-700 dark:hover:bg-gray-700 dark:focus:ring-gray-800">
+                    <a href="https://github.com/PreTeXtPlus/" class="inline-flex items-center justify-center w-full px-5 py-3 text-sm font-medium text-center text-gray-900 border border-gray-200 rounded-lg sm:w-auto hover:bg-gray-150 focus:ring-4 focus:ring-gray-100 dark:text-white dark:border-gray-700 dark:hover:bg-gray-700 dark:focus:ring-gray-800">
                         <svg class="w-4 h-4 mr-2 fill-black dark:fill-white" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 496 512"><!-- Font Awesome Pro 5.15.4 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license (Commercial License) --><path d="M165.9 397.4c0 2-2.3 3.6-5.2 3.6-3.3.3-5.6-1.3-5.6-3.6 0-2 2.3-3.6 5.2-3.6 3-.3 5.6 1.3 5.6 3.6zm-31.1-4.5c-.7 2 1.3 4.3 4.3 4.9 2.6 1 5.6 0 6.2-2s-1.3-4.3-4.3-5.2c-2.6-.7-5.5.3-6.2 2.3zm44.2-1.7c-2.9.7-4.9 2.6-4.6 4.9.3 2 2.9 3.3 5.9 2.6 2.9-.7 4.9-2.6 4.6-4.6-.3-1.9-3-3.2-5.9-2.9zM244.8 8C106.1 8 0 113.3 0 252c0 110.9 69.8 205.8 169.5 239.2 12.8 2.3 17.3-5.6 17.3-12.1 0-6.2-.3-40.4-.3-61.4 0 0-70 15-84.7-29.8 0 0-11.4-29.1-27.8-36.6 0 0-22.9-15.7 1.6-15.4 0 0 24.9 2 38.6 25.8 21.9 38.6 58.6 27.5 72.9 20.9 2.3-16 8.8-27.1 16-33.7-55.9-6.2-112.3-14.3-112.3-110.5 0-27.5 7.6-41.3 23.6-58.9-2.6-6.5-11.1-33.3 2.6-67.9 20.9-6.5 69 27 69 27 20-5.6 41.5-8.5 62.8-8.5s42.8 2.9 62.8 8.5c0 0 48.1-33.6 69-27 13.7 34.7 5.2 61.4 2.6 67.9 16 17.7 25.8 31.5 25.8 58.9 0 96.5-58.9 104.2-114.8 110.5 9.2 7.9 17 22.9 17 46.4 0 33.7-.3 75.4-.3 83.6 0 6.5 4.6 14.4 17.3 12.1C428.2 457.8 496 362.9 496 252 496 113.3 383.5 8 244.8 8zM97.2 352.9c-1.3 1-1 3.3.7 5.2 1.6 1.6 3.9 2.3 5.2 1 1.3-1 1-3.3-.7-5.2-1.6-1.6-3.9-2.3-5.2-1zm-10.8-8.1c-.7 1.3.3 2.9 2.3 3.9 1.6 1 3.6.7 4.3-.7.7-1.3-.3-2.9-2.3-3.9-2-.6-3.6-.3-4.3.7zm32.4 35.6c-1.6 1.3-1 4.3 1.3 6.2 2.3 2.3 5.2 2.6 6.5 1 1.3-1.3.7-4.3-1.3-6.2-2.2-2.3-5.2-2.6-6.5-1zm-11.4-14.7c-1.6 1-1.6 3.6 0 5.9 1.6 2.3 4.3 3.3 5.6 2.3 1.6-1.3 1.6-3.9 0-6.2-1.4-2.3-4-3.3-5.6-2z"/></svg> View on GitHub
                     </a>
-                    <%= link_to @start_writing_path, class: "text-white bg-purple-700 hover:bg-purple-800 focus:ring-4 justify-center focus:ring-purple-300 font-medium rounded-lg text-sm px-4 lg:px-5 py-2 lg:py-2.5 sm:mr-2 lg:mr-0 dark:bg-purple-600 dark:hover:bg-purple-700 focus:outline-none dark:focus:ring-purple-800 flex items-center", data: { turbo: false } do %>
+                    <%= link_to @start_writing_path, class: "text-white bg-purple-700 hover:bg-purple-800 focus:ring-4 focus:ring-purple-300 font-medium rounded-lg text-sm px-4 lg:px-5 py-2 lg:py-2.5 sm:mr-4 dark:bg-purple-600 dark:hover:bg-purple-700 focus:outline-none dark:focus:ring-purple-800 flex items-center justify-center", data: { turbo: false } do %>
                         <span><svg width="24px" height="24px" viewBox="0 0 24 24" stroke-width="1.5" fill="none" xmlns="http://www.w3.org/2000/svg" class="inline-block mr-2"><path d="M14.3632 5.65156L15.8431 4.17157C16.6242 3.39052 17.8905 3.39052 18.6716 4.17157L20.0858 5.58579C20.8668 6.36683 20.8668 7.63316 20.0858 8.41421L18.6058 9.8942M14.3632 5.65156L4.74749 15.2672C4.41542 15.5993 4.21079 16.0376 4.16947 16.5054L3.92738 19.2459C3.87261 19.8659 4.39148 20.3848 5.0115 20.33L7.75191 20.0879C8.21972 20.0466 8.65806 19.8419 8.99013 19.5099L18.6058 9.8942M14.3632 5.65156L18.6058 9.8942" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"></path></svg>
                         Start Writing</span>
                     <% end %>
+                    <a href="https://pretext.plus/projects/80f500c1-6c26-40f5-8ab1-e9effaf53547/share/source" class="inline-flex items-center justify-center w-full px-5 py-3 text-sm font-medium text-center text-purple-900 border border-purple-200 rounded-lg sm:w-auto hover:bg-purple-100 focus:ring-4 focus:ring-purple-100 dark:text-purple-100 dark:border-purple-700 dark:hover:bg-purple-900 dark:focus:ring-purple-800">
+                        Why we made PreTeXt.Plus
+                    </a>
                 </div>
             </div>
             <div class="m-2 justify-center lg:mt-0 lg:col-span-5 lg:flex">
@@ -98,8 +101,11 @@
     </section>
     <!-- End block -->
     <!-- Start block -->
-    <section id="asseen" class="bg-white dark:bg-gray-900">
+    <section id="asseen" class="bg-gray-50 dark:bg-gray-900">
         <div class="max-w-screen-xl px-4 pb-8 mx-auto lg:pb-16">
+            <p class="font-light mb-2 text-gray-600 lg:mb-8 md:text-md lg:text-lg dark:text-gray-400">
+                The free and open-source PreTeXt project is used or sponsored by these organizations:
+            </p>
             <div class="grid grid-cols-2 gap-8 text-gray-600 sm:gap-12 sm:grid-cols-3 lg:grid-cols-6 dark:text-gray-400">
                 <a href="https://aimath.org" class="flex items-center lg:justify-center">
                     <%= image_tag "aim-logo-white.svg", class: "hidden dark:inline-block", alt: "American Institute of Mathematics logo" %>
@@ -129,7 +135,7 @@
     </section>
     <!-- End block -->
     <!-- Start block -->
-    <section id="about" class="bg-gray-50 dark:bg-gray-800">
+    <section id="about" class="bg-gray-100 dark:bg-gray-800">
         <div class="max-w-screen-xl px-4 py-8 mx-auto space-y-12 lg:space-y-20 lg:py-24 lg:px-6">
             <!-- Row -->
             <div class="items-center gap-8 lg:grid lg:grid-cols-2 xl:gap-16">
@@ -147,7 +153,7 @@
                         <li class="flex space-x-3">
                             <!-- Icon -->
                             <svg class="flex-shrink-0 w-5 h-5 text-purple-500 dark:text-purple-400" fill="currentColor" viewBox="0 0 20 20" xmlns="http://www.w3.org/2000/svg"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd"></path></svg>
-                            <span class="text-base font-medium leading-tight text-gray-900 dark:text-white">Screenreader-friendly HTML</span>
+                            <span class="text-base font-medium leading-tight text-gray-900 dark:text-white">Screenreader-friendly HTML, even when writing LaTeX-style PreTeXt</span>
                         </li>
                         <li class="flex space-x-3">
                             <!-- Icon -->
@@ -179,7 +185,9 @@
             </div>
             <!-- Row -->
             <div class="items-center gap-8 lg:grid lg:grid-cols-2 xl:gap-16">
+                <%= link_to tryit_path do %>
                 <%= image_tag "editor-screenshot.png", class: "hidden w-full mb-4 rounded-lg lg:mb-0 lg:flex", alt: "PreTeXt.Plus editor screenshot" %>
+                <% end %>
                 <div class="text-gray-600 sm:text-lg dark:text-gray-400">
                     <h2 class="mb-4 text-3xl font-extrabold tracking-tight text-gray-900 dark:text-white">
                         Getting started with PreTeXt has never been easier!
@@ -187,7 +195,7 @@
                     <p class="mb-8 font-light lg:text-xl">
                         With PreTeXt.Plus, there's no installs or GitHub accounts required: simply
                         log in and start writing. Click "Share" when you're done to create a
-                        <a href="https://pretext.plus/projects/80f500c1-6c26-40f5-8ab1-e9effaf53547/share"
+                        <a href="https://pretext.plus/projects/80f500c1-6c26-40f5-8ab1-e9effaf53547/share/source"
                            class="underline hover:no-underline hover:text-gray-400 hover:dark:text-gray-300">
                            public link</a>
                         to your accessible scholarly document!
@@ -199,6 +207,7 @@
                             <svg class="flex-shrink-0 w-5 h-5 text-purple-500 dark:text-purple-400" fill="currentColor" viewBox="0 0 20 20" xmlns="http://www.w3.org/2000/svg"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd"></path></svg>
                             <span class="text-base font-medium leading-tight text-gray-900 dark:text-white">
                                 Write and preview your work in your web browser
+                                using PreTeXt XML or LaTeX-style PreTeXt
                             </span>
                         </li>
                         <li class="flex space-x-3">
@@ -219,7 +228,7 @@
                             <!-- Icon -->
                             <svg class="flex-shrink-0 w-5 h-5 text-purple-500 dark:text-purple-400" fill="currentColor" viewBox="0 0 20 20" xmlns="http://www.w3.org/2000/svg"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd"></path></svg>
                             <span class="text-base font-medium leading-tight text-gray-900 dark:text-white">
-                                Download LaTeX or export to <a href="https://overleaf.com" class="underline hover:no-underline">Overleaf</a> for printing
+                                Download PDF for printing
                                 (coming soon!)
                             </span>
                         </li>
@@ -242,14 +251,14 @@
       </section>
     <!-- End block -->
     <!-- Start block -->
-    <section id="accessibility" class="bg-white dark:bg-gray-900">
+    <section id="accessibility" class="bg-gray-50 dark:bg-gray-900">
         <div class="items-center max-w-screen-xl px-4 py-8 mx-auto lg:grid lg:grid-cols-4 lg:gap-16 xl:gap-24 lg:py-24 lg:px-6">
             <div class="col-span-2 mb-8">
                 <p class="text-lg font-medium text-purple-600 dark:text-purple-500">
                     Meets the legal requirements for
                     <a href="https://www.ada.gov/resources/2024-03-08-web-rule/"
                         class="underline hover:no-underline hover:text-gray-400 hover:dark:text-gray-300">
-                        WCAG 2.1, Level AA
+                        WCAG 2.1
                     </a>
                 </p>
                 <h2 class="mt-3 mb-4 text-3xl font-extrabold tracking-tight text-gray-900 md:text-3xl dark:text-white">
@@ -305,7 +314,7 @@
       </section>
     <!-- End block -->
     <!-- Start block -->
-    <section class="bg-gray-50 dark:bg-gray-800">
+    <section class="bg-gray-100 dark:bg-gray-800">
         <div class="max-w-screen-xl px-4 py-8 mx-auto text-center lg:py-24 lg:px-6">
             <figure class="max-w-screen-md mx-auto">
                 <svg class="h-12 mx-auto mb-3 text-gray-400 dark:text-gray-600" viewBox="0 0 24 27" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -328,7 +337,7 @@
       </section>
     <!-- End block -->
     <!-- Start block -->
-    <section id="pricing" class="bg-white dark:bg-gray-900">
+    <section id="pricing" class="bg-gray-50 dark:bg-gray-900">
         <div class="max-w-screen-xl px-4 py-8 mx-auto lg:py-24 lg:px-6">
             <div class="max-w-screen-md mx-auto mb-8 text-center lg:mb-12">
                 <h2 class="mb-4 text-3xl font-extrabold tracking-tight text-gray-900 dark:text-white">
@@ -336,7 +345,7 @@
                 </h2>
                 <p class="mb-5 font-light text-gray-600 sm:text-xl dark:text-gray-400">
                     We made PreTeXt.Plus because
-                    <a href="https://pretext.plus/projects/80f500c1-6c26-40f5-8ab1-e9effaf53547/share"
+                    <a href="https://pretext.plus/projects/80f500c1-6c26-40f5-8ab1-e9effaf53547/share/source"
                        class="underline hover:no-underline hover:text-gray-400 hover:dark:text-gray-300">
                         we're faculty and authors too.</a>
                 </p>
@@ -349,9 +358,8 @@
         </div>
       </section>
     <!-- End block -->
-
     <!-- Start block -->
-    <section class="bg-gray-50 dark:bg-gray-800">
+    <section class="bg-gray-100 dark:bg-gray-800">
         <div class="max-w-screen-xl px-4 py-8 mx-auto lg:py-16 lg:px-6">
             <div class="max-w-screen-sm mx-auto text-center">
                 <h2 class="mb-4 text-3xl font-extrabold leading-tight tracking-tight text-gray-900 dark:text-white">Start writing accessible documents today!</h2>
@@ -364,7 +372,7 @@
         </div>
     </section>
     <!-- End block -->
-    <footer class="bg-white dark:bg-gray-800">
+    <footer class="bg-gray-50 dark:bg-gray-800">
         <div class="max-w-screen-xl px-4 pb-6 mx-auto lg:pb-10 md:px-8 lg:px-10">
             <% if false %><%# comment out footer links %>
             <div class="grid grid-cols-2 gap-8 md:grid-cols-3 lg:grid-cols-5">
@@ -473,7 +481,7 @@
                         </a>
                     </li>
                     <li>
-                        <a href="https://github.com/LatticeSolutions/pretext-plus" class="text-gray-600 hover:text-gray-900 dark:hover:text-white dark:text-gray-400">
+                        <a href="https://github.com/PreTeXtPlus" class="text-gray-600 hover:text-gray-900 dark:hover:text-white dark:text-gray-400">
                             <svg class="w-5 h-5" fill="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path fill-rule="evenodd" d="M12 2C6.477 2 2 6.484 2 12.017c0 4.425 2.865 8.18 6.839 9.504.5.092.682-.217.682-.483 0-.237-.008-.868-.013-1.703-2.782.605-3.369-1.343-3.369-1.343-.454-1.158-1.11-1.466-1.11-1.466-.908-.62.069-.608.069-.608 1.003.07 1.531 1.032 1.531 1.032.892 1.53 2.341 1.088 2.91.832.092-.647.35-1.088.636-1.338-2.22-.253-4.555-1.113-4.555-4.951 0-1.093.39-1.988 1.029-2.688-.103-.253-.446-1.272.098-2.65 0 0 .84-.27 2.75 1.026A9.564 9.564 0 0112 6.844c.85.004 1.705.115 2.504.337 1.909-1.296 2.747-1.027 2.747-1.027.546 1.379.202 2.398.1 2.651.64.7 1.028 1.595 1.028 2.688 0 3.848-2.339 4.695-4.566 4.943.359.309.678.92.678 1.855 0 1.338-.012 2.419-.012 2.747 0 .268.18.58.688.482A10.019 10.019 0 0022 12.017C22 6.484 17.522 2 12 2z" clip-rule="evenodd" /></svg>
                         </a>
                     </li>

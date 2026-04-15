@@ -1,5 +1,5 @@
 class ProjectsController < ApplicationController
-  allow_unauthenticated_access only: %i[ share preview ]
+  allow_unauthenticated_access only: %i[ share preview source ]
   require_unauthenticated_access only: %i[ tryit ]
   before_action :set_project, only: %i[ show edit update destroy editor_state update_editor_state share source copy ]
   before_action :limit_projects, only: %i[ new create copy ]
@@ -27,46 +27,70 @@ class ProjectsController < ApplicationController
 
   # GET /tryit
   def tryit
-    @title = "Try it!"
-    @content = <<-eos
-<section>
-  <title> Thanks for trying PreTeXt.Plus! </title>
+    @demo_mode = params[:demo] == "latex" ? "latex" : "pretext"
+    @title = @demo_mode == "latex" ? "Try LaTeX-style PreTeXt!" : "Try it!"
 
-  <p>
-    This is a very simple project to show you what PreTeXt.Plus can do.
-    You can edit its content using the PreTeXt markup language.
-    <me>
-      \\left|\\sum_{i=0}^n a_i\\right|\\leq\\sum_{i=0}^n|a_i|
-    </me>
-  </p>
+    @content = if @demo_mode == "latex"
+      <<~EOS
+        \\section{Thanks for trying PreTeXt.Plus!}
 
-  <fact>
-    <statement>
-      <p>
-        For more information on how to use PreTeXt, please visit <c>https://pretextbook.org/doc/guide/html/</c>.
-      </p>
-    </statement>
-  </fact>
+        This is a LaTeX-style PreTeXt demo project. You can edit this content using supported LaTeX syntax.
 
-  <note>
-    <p>
-      Changes you make here will not be saved.
-    </p>
-  </note>
+        \\[
+          \\left|\\sum_{i=0}^n a_i\\right|\\leq\\sum_{i=0}^n |a_i|
+        \\]
 
-  <p>
-    Click <em>Create your account</em> to be able to write and save your work!
-  </p>
-</section>
-    eos
-    @docinfo = <<-eos
-<docinfo>
-<macros>
-\\newcommand{\\N}{\\mathbb N}
-</macros>
-<brandlogo source="icon.svg" />
-</docinfo>
-    eos
+        When you preview the changes, the source is first converted to PreTeXt and then rendered as accessible HTML.#{' '}
+
+        (Changes you make here will not be saved, but feel free to play around to see what PreTeXt.Plus can do!)
+      EOS
+    else
+      <<~EOS
+        <section>
+          <title> Thanks for trying PreTeXt.Plus! </title>
+
+          <p>
+            This is a very simple project to show you what PreTeXt.Plus can do.
+            You can edit its content using the PreTeXt markup language.
+            <md>
+              \\left|\\sum_{i=0}^n a_i\\right|\\leq\\sum_{i=0}^n|a_i|
+            </md>
+          </p>
+
+          <fact>
+            <statement>
+              <p>
+                For more information on how to use PreTeXt, please visit <c>https://pretextbook.org/doc/guide/html/</c>.
+              </p>
+            </statement>
+          </fact>
+
+          <note>
+            <p>
+              Changes you make here will not be saved.
+            </p>
+          </note>
+        </section>
+
+        <section>
+          <title>New: Try LaTeX-style PreTeXt!</title>
+
+          <p>
+            PreTeXt.Plus now supports writing in LaTeX-style PreTeXt. Most LaTeX commands are supported, and the environments from PreTeXt are what you expect.  Give it a try by switching modes above.
+          </p>
+        </section>
+      EOS
+    end
+
+    @source_format = @demo_mode
+    @docinfo = <<~EOS
+      <docinfo>
+      <macros>
+      \\newcommand{\\N}{\\mathbb N}
+      </macros>
+      <brandlogo source="icon.svg" />
+      </docinfo>
+    EOS
   end
 
   # GET /projects/1/edit
@@ -178,11 +202,7 @@ class ProjectsController < ApplicationController
   private
     # Use callbacks to share common setup or constraints between actions.
     def set_project
-      if params[:id].present?
-        @project = Project.find(params.expect(:id))
-      else
-        @project = Project.find(params.expect(:project_id))
-      end
+      @project = Project.find(params.expect(:id))
     end
 
     # Only allow a list of trusted parameters through.

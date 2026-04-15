@@ -10,22 +10,25 @@ Rails.application.routes.draw do
   resources :users, only: [ :new, :create, :update ]
   resources :invitations, only: [ :new, :create ]
   post "invitations/redeem" => "invitations#redeem", as: :redeem_invitation
+  get "projects/lunr-pretext-search-index.js", to: redirect("/ptx-search.js")
+  get "projects/*_/lunr-pretext-search-index.js", to: redirect("/ptx-search.js")
+  get "projects/:id/*_.html", to: redirect("/projects/%{id}/share")
+  get "projects/*_/icon.svg", to: redirect("/icon-small.svg")
   resources :projects do
     member do
       get  :editor_state
       patch :editor_state, action: :update_editor_state
+      get "share" => "projects#share", as: "share"
+      get "share/source" => "projects#source", as: "share_source"
+      get "share/copy", to: redirect("projects/%{project_id}/share/source")
+      post "share/copy" => "projects#copy", as: "copy"
+      get "*/lunr-pretext-search-index.js", to: redirect("/ptx-search.js")
     end
-    get "share" => "projects#share", as: "share"
-    get "share/source" => "projects#source", as: "share_source"
-    get "share/copy", to: redirect("projects/%{project_id}/share/source")
-    post "share/copy" => "projects#copy", as: "copy"
   end
   post "projects/preview" => "projects#preview", as: "preview"
   post "subscribe" => "subscriptions_old#subscribe"
   post "stripe/webhooks" => "subscriptions_old#webhooks"
   get "tryit" => "projects#tryit"
-  get "projects/:id/article.html", to: redirect("/projects/%{id}/share")
-  get "*root/external/icon.svg", to: redirect("/icon-small.svg")
   # Define your application routes per the DSL in https://guides.rubyonrails.org/routing.html
 
   # Reveal health status on /up that returns 200 if the app boots with no exceptions, otherwise 500.
