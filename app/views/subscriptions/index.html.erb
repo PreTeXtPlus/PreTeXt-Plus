@@ -9,3 +9,7 @@
 <% else %>
   <p>Your account has not purchased any subscriptions.</p>
 <% end %>
+
+<h2 class="text-xl mb-2 mt-20">Subscription Status</h2>
+
+<%= render "subscriptions/status", user: @current_user %>

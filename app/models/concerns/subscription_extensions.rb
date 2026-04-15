@@ -1,6 +1,14 @@
 module SubscriptionExtensions
   extend ActiveSupport::Concern
 
+  included do
+    after_create_commit do
+      unless self.user.subscribed?
+        SubscriptionSeat.create!(subscription: self, user: self.user)
+      end
+    end
+  end
+
   def type
     SubscriptionType.find_by stripe_price_id: processor_plan
   end

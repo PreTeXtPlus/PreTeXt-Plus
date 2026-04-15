@@ -77,13 +77,13 @@
                 <% end %>
                 <% if @current_user.present? %>
                   <div class="relative group">
-                    <label for="adminMenu" class="my-1 text-gray-800 cursor-pointer hover:text-blue-500 md:mx-4 md:my-0 select-none">
+                    <label for="accountMenu" class="my-1 text-gray-800 cursor-pointer hover:text-blue-500 md:mx-4 md:my-0 select-none">
                     Account&nbsp;(<%= @current_user.email %>)&nbsp;&#9662;
                     </label>
-                    <input type="checkbox" id="adminMenu" class="navbarMenuToggle sr-only">
+                    <input type="checkbox" id="accountMenu" class="navbarMenuToggle sr-only">
                     <div class="navbarMenu absolute left-0 mt-2 w-48 bg-white rounded-md shadow-lg border border-gray-200 md:left-auto md:right-0">
                       <%= link_to :session, class: "block px-4 py-2 text-gray-800 hover:bg-blue-50 hover:text-blue-500" do %>
-                        Info
+                        Profile
                       <% end %>
                       <%= link_to subscriptions_path, class: "block px-4 py-2 text-gray-800 hover:bg-blue-50 hover:text-blue-500" do %>
                         Manage Subscriptions
@@ -95,10 +95,10 @@
                   </div>
                 <% else %>
                   <div class="relative group">
-                    <label for="adminMenu" class="my-1 text-gray-800 cursor-pointer hover:text-blue-500 md:mx-4 md:my-0 select-none">
+                    <label for="accountMenu" class="my-1 text-gray-800 cursor-pointer hover:text-blue-500 md:mx-4 md:my-0 select-none">
                     Account&nbsp;&#9662;
                     </label>
-                    <input type="checkbox" id="adminMenu" class="navbarMenuToggle sr-only">
+                    <input type="checkbox" id="accountMenu" class="navbarMenuToggle sr-only">
                     <div class="navbarMenu absolute left-0 mt-2 w-48 bg-white rounded-md shadow-lg border border-gray-200 md:left-auto md:right-0">
                       <%= link_to new_user_path, class: "block px-4 py-2 text-gray-800 hover:bg-blue-50 hover:text-blue-500" do %>
                         Create account

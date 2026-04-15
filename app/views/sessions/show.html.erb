@@ -2,9 +2,9 @@
 
 <div class="mx-auto xl:w-3/4 px-12 w-full py-4">
 
-  <h1 class="text-4xl">Account Info (<%= @current_user.email %>)</h1>
+  <h1 class="text-4xl">Account Profile (<%= @current_user.email %>)</h1>
 
-  <%= form_with model: @current_user, class: "contents" do |form| %>
+  <%= form_with model: @current_user, class: "my-4" do |form| %>
     <%= render "users/fields_for", form: form %>
 
     <div class="col-span-6 sm:flex sm:items-center sm:gap-4">
@@ -13,4 +13,10 @@
       </div>
     </div>
   <% end %>
+
+  <h1 class="text-4xl mb-2 mt-20">Subscription Status</h1>
+
+  <%= render "subscriptions/status", user: @current_user %>
+  
+  <%= link_to "Manage plans", subscriptions_path, class: "my-4 w-full sm:w-auto text-center rounded-md px-3.5 py-2.5 bg-blue-500 hover:bg-blue-400 text-white inline-block font-medium cursor-pointer" %>
 </div>

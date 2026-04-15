@@ -12,7 +12,7 @@
   </div>
 
   <div id="projects" class="min-w-full space-y-5">
-    <% unless false && @current_user.sustaining_subscription? %>
+    <% unless @current_user.subscribed? %>
       <div class="rounded-lg border-2 border-blue-500 p-4 text-sky-900 mt-6 mx-auto md:w-3/4">
       <% if @current_user.invited? %>
           <p>
@@ -24,7 +24,7 @@
           </p>
           <div class="mt-4 flex gap-2 items-center">
             <span class="font-semibold">Support PreTeXt.Plus development:</span>
-            <%= link_to session_path, class: "rounded-md px-3.5 py-2 bg-green-600 hover:bg-green-500 text-white font-medium" do %>
+            <%= link_to subscriptions_path, class: "rounded-md px-3.5 py-2 bg-green-600 hover:bg-green-500 text-white font-medium" do %>
               Subscribe
             <% end %>
           </div>
@@ -32,7 +32,7 @@
           <p>
             Thanks for creating a <span class="font-semibold">PreTeXt.Plus</span> account! While we're
             in our beta release period, new users need to use a <code>.edu</code> email address, be invited by existing users, or
-            <%= link_to session_path, class: "font-semibold text-blue-700 hover:underline" do %>subscribe to our paid Sustainer tier<% end %>
+            <%= link_to subscriptions_path, class: "font-semibold text-blue-600 hover:underline" do %>become a paid subscriber<% end %>
             in order to create projects.
           </p>
           <div class="mt-4">
@@ -44,7 +44,7 @@
           </div>
           <div class="mt-4 flex gap-2 items-center">
             <span class="font-semibold">Or</span>
-            <%= link_to session_path, class: "rounded-md px-3.5 py-2 bg-green-600 hover:bg-green-500 text-white font-medium" do %>
+            <%= link_to subscriptions_path, class: "rounded-md px-3.5 py-2 bg-green-600 hover:bg-green-500 text-white font-medium" do %>
               Subscribe
             <% end %>
             <% unless @current_user.requested_invitation? %>

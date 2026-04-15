@@ -62,10 +62,18 @@ class SubscriptionTypesController < ApplicationController
     end
 
     def checkout_url
-      StripeCheckout.new(
-        @current_user,
-        @subscription_type,
-        "https://#{request.host}/subscriptions"
+      return_url = "https://#{request.host}/subscriptions"
+      @current_user.payment_processor.checkout(
+        mode: "subscription",
+        line_items: [ {
+          price: @subscription_type.stripe_price_id,
+          quantity: 1,
+          adjustable_quantity: { enabled: true }
+        } ],
+        success_url: "#{return_url}?sync=true",
+        cancel_url: return_url,
+        billing_address_collection: "auto",
+        allow_promotion_codes: false
       ).url
     end
 end

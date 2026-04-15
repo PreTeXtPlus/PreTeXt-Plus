@@ -19,7 +19,17 @@ class User < ApplicationRecord
   validates :password, length: { minimum: 1 }, allow_nil: true
 
   def invited?
-    Invitation.where(recipient_user: self).exists?
+    Invitation.where(recipient_user: self).exists? || subscribed? || admin
+  end
+
+  def subscribed?
+    self.subscription_seats.any? { |s| s.active? }
+  end
+
+  def subscribed_until
+    active_seats = self.subscription_seats.select { |s| s.active? }
+    return nil if active_seats.empty?
+    active_seats.map { |s| s.subscription.current_period_end }.max
   end
 
   def requested_invitation?
@@ -35,13 +45,14 @@ class User < ApplicationRecord
   end
 
   def project_quota
-    return 10_000 if self.admin
-    return 0 unless self.invited?
+    return 10_000 if admin
+    return 0 unless invited?
+    return 100 if subscribed?
     10
   end
 
   def has_copiable_projects?
-    self.sustaining_subscription? or self.admin?
+    subscribed? || admin
   end
 
   private
