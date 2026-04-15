@@ -1,6 +1,6 @@
 class SubscriptionTypesController < ApplicationController
   before_action :require_admin
-  before_action :set_subscription_type, only: %i[ show edit update destroy ]
+  before_action :set_subscription_type, only: %i[ show edit update destroy checkout ]
 
   # GET /subscription_types or /subscription_types.json
   def index
@@ -46,6 +46,10 @@ class SubscriptionTypesController < ApplicationController
     redirect_to subscription_types_path, notice: "Subscription type was successfully destroyed.", status: :see_other
   end
 
+  def checkout
+    redirect_to checkout_url("https://#{request.host}/session"), allow_other_host: true, status: :see_other
+  end
+
   private
     # Use callbacks to share common setup or constraints between actions.
     def set_subscription_type
@@ -55,5 +59,9 @@ class SubscriptionTypesController < ApplicationController
     # Only allow a list of trusted parameters through.
     def subscription_type_params
       params.expect(subscription_type: [ :name, :description, :bulletpoints, :stripe_price_id, :order ])
+    end
+
+    def checkout_url(success_url)
+      StripeCheckout.new(@current_user, @subscription_type, success_url).url
     end
 end

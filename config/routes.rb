@@ -1,5 +1,9 @@
 Rails.application.routes.draw do
-  resources :subscription_types
+  resources :subscription_types do
+    member do  
+      get "checkout" => "subscription_types#checkout", as: "checkout"
+    end
+  end
   resources :requests, only: [ :create ]
   resource :session
   resources :passwords, param: :token
