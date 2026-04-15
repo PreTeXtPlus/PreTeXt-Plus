@@ -4,22 +4,22 @@
 <% end %>
 
 <div class="my-5">
-    <%= form.label :name, class: "font-semibold" %>
+    <%= form.label :name, class: "text-sm font-semibold" %>
     <%= form.text_field :name, required: true, autofocus: true, autocomplete: "Your Name", placeholder: "Enter your name", class: "block shadow-sm rounded-md border border-gray-400 focus:outline-blue-600 px-3 py-2 mt-2 w-full" %>
 </div>
 
 <% if form.object.new_record? %>
     <div class="my-5">
-        <%= form.label :email, class: "font-semibold" %>
+        <%= form.label :email, class: "text-sm font-semibold" %>
         <%= form.email_field :email, required: true, autofocus: true, autocomplete: "email@example.com", placeholder: "Enter your email address", class: "block shadow-sm rounded-md border border-gray-400 focus:outline-blue-600 px-3 py-2 mt-2 w-full" %>
     </div>
     <div class="my-5">
-        <%= form.label :password, class: "font-semibold" %>
+        <%= form.label :password, class: "text-sm font-semibold" %>
         <%= form.password_field :password, required: true, autocomplete: "current-password", placeholder: "Enter your password", maxlength: 72, class: "block shadow-sm rounded-md border border-gray-400 focus:outline-blue-600 px-3 py-2 mt-2 w-full" %>
     </div>
 <% else %>
     <div class="my-5">
-        <%= form.label :password, class: "font-semibold" do %>Update password<% end %>
-        <%= form.password_field :password, required: true, autocomplete: "current-password", placeholder: "Enter your password", maxlength: 72, class: "block shadow-sm rounded-md border border-gray-400 focus:outline-blue-600 px-3 py-2 mt-2 w-full" %>
+        <%= form.label :password, class: "text-sm font-semibold" do %>Update password (leave blank to keep unchanged)<% end %>
+        <%= form.password_field :password, autocomplete: "current-password", placeholder: "Enter your password", maxlength: 72, class: "block shadow-sm rounded-md border border-gray-400 focus:outline-blue-600 px-3 py-2 mt-2 w-full" %>
     </div>
 <% end %>
