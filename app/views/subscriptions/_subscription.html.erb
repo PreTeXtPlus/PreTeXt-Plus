@@ -1,0 +1,31 @@
+<div class="text-left mb-4">
+    <p class="text-gray-600">
+        <span class="font-semibold">Status:</span>
+        <%= subscription.status.humanize.capitalize %>
+        <% if subscription.active? and subscription.canceled? %>
+            (set to expire)
+        <% end %>
+    </p>
+    <p class="text-gray-600">
+        <span class="font-semibold">Occupied seats:</span>
+        0/<%= subscription.quantity %>
+    </p>
+    <p class="text-gray-600">
+        <span class="font-semibold">Price:</span>
+        <span class="text-violet-800">
+        <%= subscription.type.price %>/seat/<%= subscription.type.recurrence %>
+        </span>
+    </p>
+    <% if subscription.active? %>
+        <p class="text-gray-600">
+            <span class="font-semibold">
+                <% if subscription.cancelled? %>
+                    Plan will expire on:
+                <% else %>
+                    Next scheduled payment:
+                <% end %>
+            </span>
+            <%= subscription.current_period_end.strftime('%B %d, %Y') %>
+        </p>
+    <% end %>
+</div>

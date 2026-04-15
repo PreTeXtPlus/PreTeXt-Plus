@@ -1,12 +1,12 @@
 class StripeCheckout
   # h/t https://github.com/shey/rails-pay-checkout-demo
 
-  attr_reader :user, :subscription_type, :success_url
+  attr_reader :user, :subscription_type, :return_url
 
-  def initialize(user, subscription_type, success_url)
+  def initialize(user, subscription_type, return_url)
     @user = user
     @subscription_type = subscription_type
-    @success_url = success_url
+    @return_url = return_url
   end
 
   def url
@@ -23,7 +23,8 @@ class StripeCheckout
         quantity: 1,
         adjustable_quantity: { enabled: true }
       } ],
-      success_url: @success_url,
+      success_url: @return_url,
+      cancel_url: @return_url,
       billing_address_collection: "auto",
       allow_promotion_codes: false
     )

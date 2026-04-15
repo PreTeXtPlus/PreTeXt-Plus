@@ -47,7 +47,7 @@ class SubscriptionTypesController < ApplicationController
   end
 
   def checkout
-    redirect_to checkout_url("https://#{request.host}/subscriptions"), allow_other_host: true, status: :see_other
+    redirect_to checkout_url, allow_other_host: true, status: :see_other
   end
 
   private
@@ -61,7 +61,11 @@ class SubscriptionTypesController < ApplicationController
       params.expect(subscription_type: [ :name, :description, :bulletpoints, :stripe_price_id, :order ])
     end
 
-    def checkout_url(success_url)
-      StripeCheckout.new(@current_user, @subscription_type, success_url).url
+    def checkout_url
+      StripeCheckout.new(
+        @current_user,
+        @subscription_type,
+        "https://#{request.host}/subscriptions"
+      ).url
     end
 end

@@ -128,7 +128,7 @@
         </div>
       <% end %>
       <main class="w-full flex md:h-screen md:pt-16">
-        <%= yield %>
+        <%= content_for?(:content) ? yield(:content) : yield %>
       </main>
     </div>
   </body>

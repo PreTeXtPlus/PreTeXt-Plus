@@ -1,0 +1,20 @@
+<% content_for :title, "Manage Subscription Plan" %>
+
+<p class="my-3">
+    <%= link_to subscriptions_path, class: "text-blue-500 hover:text-blue-700 hover:font-semibold" do %>
+        ←&nbsp;View all plans
+    <% end %>
+</p>
+
+<h2 class="text-2xl my-3 inline-flex items-center gap-2">
+    <span class="text-violet-800"><%= @subscription.type.name %></span> Plan
+</h2>
+
+<%= render "subscription", subscription: @subscription %>
+
+<h3 class="text-xl my-3 inline-flex items-center gap-2">
+    Seats:
+    <%= link_to @current_user.payment_processor.billing_portal.url, class: "inline-flex select-none items-center gap-2 rounded-md cursor-pointer ml-1 px-2 py-1 my-1 text-sm bg-gray-50 text-gray-700 drop-shadow-md hover:bg-white" do %>
+        Add user
+    <% end %>
+</h3>
