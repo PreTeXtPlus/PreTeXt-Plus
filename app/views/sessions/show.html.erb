@@ -21,7 +21,7 @@
     <%= form_with url: subscribe_path, data: { turbo: false } do |form| %>
       <ul role="list" class="space-y-8 pb-8 md:grid md:grid-cols-3 md:space-y-0">
         <% SubscriptionType.order(:order).each do |type| %>
-          <%= render "subscriptions/card", type: type %>
+          <%= render "subscription_types/card", type: type %>
         <% end %>
       </ul>
     <% end %>
