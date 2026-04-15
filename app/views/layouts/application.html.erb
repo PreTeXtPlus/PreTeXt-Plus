@@ -118,13 +118,13 @@
     <div class="w-full">
       <% if notice.present? or params[:notice].present? %>
         <div class="relative w-full z-10 flex justify-center cursor-pointer -mb-16" onclick="this.remove()">
-          <p class="mt-20 py-2 px-3 bg-blue-100 border-blue-200 border text-blue-500 font-medium rounded-md inline-block">
+          <p class="mt-20 py-2 px-3 bg-blue-50 border-blue-200 border-1 text-blue-500 rounded-md inline-block">
             ℹ <%= notice.present? ? notice : params[:notice] %>
           </p>
         </div>
       <% elsif alert.present? %>
         <div class="relative w-full z-10 flex justify-center cursor-pointer -mb-16" onclick="this.remove()">
-          <p class="mt-20 py-2 px-3 bg-yellow-100 border-yellow-200 border text-yellow-700 font-medium rounded-md inline-block">⚠ <%= alert %></p>
+          <p class="mt-20 py-2 px-3 bg-yellow-100 border-yellow-200 border text-yellow-700 rounded-md inline-block">⚠ <%= alert %></p>
         </div>
       <% end %>
       <main class="w-full flex md:h-screen md:pt-16">

@@ -1,14 +1,20 @@
 <div class="text-left mb-4">
     <p class="text-gray-600">
+        <span class="font-semibold">Subscribed on:</span>
+        <%= subscription.created_at.strftime('%Y-%m-%d') %>
+    </p>
+    <p class="text-gray-600">
         <span class="font-semibold">Status:</span>
-        <%= subscription.status.humanize.capitalize %>
+        <span class="<% if subscription.status != "active" %>text-yellow-600<% end %>">
+            <%= subscription.status.humanize.capitalize %>
+        </span>
         <% if subscription.active? and subscription.canceled? %>
-            (set to expire)
+            <span class="text-yellow-600">(set to expire)</span>
         <% end %>
     </p>
     <p class="text-gray-600">
         <span class="font-semibold">Occupied seats:</span>
-        0/<%= subscription.quantity %>
+        <%= subscription.seated_users.count %>/<%= subscription.quantity %>
     </p>
     <p class="text-gray-600">
         <span class="font-semibold">Price:</span>
@@ -25,7 +31,7 @@
                     Next scheduled payment:
                 <% end %>
             </span>
-            <%= subscription.current_period_end.strftime('%B %d, %Y') %>
+            <%= subscription.current_period_end.strftime('%Y-%m-%d') %>
         </p>
     <% end %>
 </div>

@@ -1,5 +1,9 @@
 Rails.application.routes.draw do
-  resources :subscriptions
+  resources :subscriptions, only: [ :index, :show ] do
+    member do
+      post "seat" => "subscriptions#seat", as: "seat"
+    end
+  end
   resources :subscription_types do
     member do
       get "checkout" => "subscription_types#checkout", as: "checkout"
