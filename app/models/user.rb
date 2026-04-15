@@ -9,7 +9,8 @@ class User < ApplicationRecord
 
   pay_customer stripe_attributes: ->(pay_customer) { { metadata: { user_id: pay_customer.owner_id } } },
     default_payment_processor: :stripe
-  enum :subscription, { beta: 0, sustaining: 1 }, default: :beta, suffix: true, validate: true
+
+  enum :old_subscription, { beta: 0, sustaining: 1 }, default: :beta, suffix: true, validate: true
 
   normalizes :email, with: ->(e) { e.strip.downcase }
 
