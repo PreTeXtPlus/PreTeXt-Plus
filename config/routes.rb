@@ -1,6 +1,7 @@
 Rails.application.routes.draw do
+  resources :subscriptions
   resources :subscription_types do
-    member do  
+    member do
       get "checkout" => "subscription_types#checkout", as: "checkout"
     end
   end
