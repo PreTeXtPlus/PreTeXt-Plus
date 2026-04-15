@@ -6,7 +6,6 @@ one:
   bulletpoints: |
     MyText
     Another bullet point
-  stripe_price_id: nil
   order: 0
 
 two:

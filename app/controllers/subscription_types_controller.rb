@@ -1,5 +1,5 @@
 class SubscriptionTypesController < ApplicationController
-  before_action :require_admin
+  before_action :require_admin, except: :checkout
   before_action :set_subscription_type, only: %i[ show edit update destroy checkout ]
 
   # GET /subscription_types or /subscription_types.json

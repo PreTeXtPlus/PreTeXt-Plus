@@ -4,7 +4,7 @@ class SubscriptionType < ApplicationRecord
   def bulletpoints_list
     bulletpoints.to_s.split("\n").map(&:strip).reject(&:empty?)
   end
-  
+
   def can_be_subscribed?
     stripe_price_id.present?
   end
