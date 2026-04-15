@@ -12,7 +12,7 @@
   </div>
 
   <div id="projects" class="min-w-full space-y-5">
-    <% unless @current_user.sustaining_subscription? %>
+    <% unless false && @current_user.sustaining_subscription? %>
       <div class="rounded-lg border-2 border-blue-500 p-4 text-sky-900 mt-6 mx-auto md:w-3/4">
       <% if @current_user.invited? %>
           <p>

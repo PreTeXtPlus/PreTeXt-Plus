@@ -10,20 +10,7 @@
     <div class="col-span-6 sm:flex sm:items-center sm:gap-4">
       <div class="inline">
         <%= form.submit "Update account", class: "w-full sm:w-auto text-center rounded-md px-3.5 py-2.5 bg-blue-600 hover:bg-blue-500 text-white inline-block font-medium cursor-pointer" %>
-        <%= link_to :session, data: { turbo_method: :delete }, class: "w-full sm:w-auto text-center rounded-md px-3.5 py-2.5 bg-red-600 hover:bg-red-500 text-white inline-block font-medium cursor-pointer" do %>
-          Sign out
-        <% end %>
       </div>
     </div>
   <% end %>
-  <div class="my-4">
-    <h1 class="font-bold text-4xl mb-4">Subscribe to support PreTeXt.Plus development!</h1>
-    <%= form_with url: subscribe_path, data: { turbo: false } do |form| %>
-      <ul role="list" class="space-y-8 pb-8 md:grid md:grid-cols-3 md:space-y-0">
-        <% SubscriptionType.order(:order).each do |type| %>
-          <%= render "subscription_types/card", type: type %>
-        <% end %>
-      </ul>
-    <% end %>
-  </div>
 </div>

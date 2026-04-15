@@ -76,16 +76,38 @@
                   </div>
                 <% end %>
                 <% if @current_user.present? %>
-                  <%= link_to :session, class: "my-1 text-gray-800 hover:text-blue-500 md:mx-4 md:my-0" do %>
-                    Account (<%= @current_user.email %>)
-                  <% end %>
+                  <div class="relative group">
+                    <label for="adminMenu" class="my-1 text-gray-800 cursor-pointer hover:text-blue-500 md:mx-4 md:my-0 select-none">
+                    Account&nbsp;(<%= @current_user.email %>)&nbsp;&#9662;
+                    </label>
+                    <input type="checkbox" id="adminMenu" class="navbarMenuToggle sr-only">
+                    <div class="navbarMenu absolute left-0 mt-2 w-48 bg-white rounded-md shadow-lg border border-gray-200 md:left-auto md:right-0">
+                      <%= link_to :session, class: "block px-4 py-2 text-gray-800 hover:bg-blue-50 hover:text-blue-500" do %>
+                        Info
+                      <% end %>
+                      <%= link_to subscriptions_path, class: "block px-4 py-2 text-gray-800 hover:bg-blue-50 hover:text-blue-500" do %>
+                        Manage Subscriptions
+                      <% end %>
+                      <%= link_to :session, data: { turbo_method: :delete },class: "block px-4 py-2 text-red-700 hover:bg-red-50 hover:text-red-800" do %>
+                        Sign out
+                      <% end %>
+                    </div>
+                  </div>
                 <% else %>
-                  <%= link_to new_user_path, class: "my-1 text-gray-800 hover:text-blue-500 md:mx-4 md:my-0" do %>
-                    Create account
-                  <% end %>
-                  <%= link_to new_session_path, class: "my-1 text-gray-800 hover:text-blue-500 md:mx-4 md:my-0" do %>
-                    Sign in
-                  <% end %>
+                  <div class="relative group">
+                    <label for="adminMenu" class="my-1 text-gray-800 cursor-pointer hover:text-blue-500 md:mx-4 md:my-0 select-none">
+                    Account&nbsp;&#9662;
+                    </label>
+                    <input type="checkbox" id="adminMenu" class="navbarMenuToggle sr-only">
+                    <div class="navbarMenu absolute left-0 mt-2 w-48 bg-white rounded-md shadow-lg border border-gray-200 md:left-auto md:right-0">
+                      <%= link_to new_user_path, class: "block px-4 py-2 text-gray-800 hover:bg-blue-50 hover:text-blue-500" do %>
+                        Create account
+                      <% end %>
+                      <%= link_to new_session_path, class: "block px-4 py-2 text-gray-800 hover:bg-blue-50 hover:text-blue-500" do %>
+                        Sign in
+                      <% end %>
+                    </div>
+                  </div>
                   <%= link_to tryit_path, class: "my-1 text-gray-800 hover:text-blue-500 md:mx-4 md:my-0", data: { turbo: false } do %>
                     Try it!
                   <% end %>
