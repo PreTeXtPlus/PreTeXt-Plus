@@ -150,7 +150,7 @@ class ProjectsControllerTest < ActionDispatch::IntegrationTest
     assert_redirected_to projects_path
   end
 
-  test "copy allows sustaining requester to copy another user's project" do
+  test "copy allows subscribed requester to copy another user's project" do
     requester = users(:subscribed)
     other_project = projects(:one)
 

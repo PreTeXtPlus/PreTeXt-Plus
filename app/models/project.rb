@@ -111,16 +111,18 @@ class Project < ApplicationRecord
   private
 
   def set_html_source
-    require "uri"
-    require "net/http"
-    # For LaTeX projects, use the editor-converted PreTeXt body and wrap it
-    # into a full document so docinfo/title are included in server builds.
-    params = {
-      source: full_pretext_source,
-      title: self.title,
-      token: ENV["BUILD_TOKEN"]
-    }
-    response = Net::HTTP.post_form(URI.parse("https://#{ENV['BUILD_HOST']}"), params)
-    self.html_source = response.body
+    unless Rails.env.test?
+      require "uri"
+      require "net/http"
+      # For LaTeX projects, use the editor-converted PreTeXt body and wrap it
+      # into a full document so docinfo/title are included in server builds.
+      params = {
+        source: full_pretext_source,
+        title: self.title,
+        token: ENV["BUILD_TOKEN"]
+      }
+      response = Net::HTTP.post_form(URI.parse("https://#{ENV['BUILD_HOST']}"), params)
+      self.html_source = response.body
+    end
   end
 end
