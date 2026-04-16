@@ -12,7 +12,9 @@
 
 <%= render "subscription", subscription: @subscription %>
 <div>
-    <%= link_to "Cancel plan", @current_user.payment_processor.billing_portal.url, class: "inline-flex select-none items-center gap-2 rounded-md cursor-pointer ml-1 px-4 py-2 my-1 text-sm bg-gray-50 text-red-900 drop-shadow-md hover:bg-red-50" %>
+    <%= link_to "Manage plan", 
+        @current_user.payment_processor.billing_portal.url, 
+        class: "inline-flex select-none items-center gap-2 rounded-md cursor-pointer ml-1 px-4 py-2 my-1 text-sm bg-gray-50 text-gray-700 drop-shadow-md hover:bg-white" %>
 </div>
 
 <h3 class="text-xl my-3 inline-flex items-center gap-2">
@@ -30,4 +32,3 @@
     <%= text_area_tag :emails, @emails, rows: [@subscription.quantity,10].min, class: "w-full p-2 font-mono rounded-md border-1 bg-white border-gray-300 shadow-sm focus:border-blue-500 focus:ring focus:ring-blue-200 focus:ring-opacity-50" %>
     <%= submit_tag "Update users", class: "inline-flex select-none items-center gap-2 rounded-md cursor-pointer ml-1 px-4 py-2 my-1 text-sm bg-gray-50 text-gray-700 drop-shadow-md hover:bg-white" %>
 <% end %>
-

@@ -17,6 +17,14 @@ module SubscriptionExtensions
     customer.owner
   end
 
+  def grants_privileges?
+    active? or on_trial?
+  end
+
+  def price
+    type.stripe_price.unit_amount / 100.0 * quantity
+  end
+
   def subscription_seats
     SubscriptionSeat.where(pay_subscription_id: id)
   end

@@ -23,11 +23,11 @@ class User < ApplicationRecord
   end
 
   def subscribed?
-    self.subscription_seats.any? { |s| s.active? }
+    self.subscription_seats.any? { |s| s.grants_privileges? }
   end
 
   def subscribed_until
-    active_seats = self.subscription_seats.select { |s| s.active? }
+    active_seats = self.subscription_seats.select { |s| s.grants_privileges? }
     return nil if active_seats.empty?
     active_seats.map { |s| s.subscription.current_period_end }.max
   end

@@ -1,9 +1,9 @@
 require "test_helper"
 
-class ProjectTest < ActiveSupport::TestCase
-  test "active subscription is active" do
+class Pay::SubscriptionTest < ActiveSupport::TestCase
+  test "active subscription grants privileges" do
     subscription = pay_subscriptions(:one)
-    assert subscription.active?
+    assert subscription.grants_privileges?
   end
 
   test "subscribed user is subscribed" do

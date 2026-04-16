@@ -4,9 +4,7 @@ class SubscriptionsController < ApplicationController
   before_action :authorize_subscription, only: %i[ show seat ]
 
   def index
-    if params[:sync] == "true"
-      @current_user.payment_processor.sync_subscriptions(status: "all")
-    end
+    @current_user.payment_processor.sync_subscriptions
     @subscriptions = @current_user.payment_processor.subscriptions
   end
 

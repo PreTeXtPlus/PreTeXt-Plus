@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_04_15_211029) do
+ActiveRecord::Schema[8.1].define(version: 2026_04_16_212159) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
   enable_extension "pgcrypto"
@@ -172,6 +172,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_04_15_211029) do
     t.string "name"
     t.integer "order"
     t.string "stripe_price_id"
+    t.string "trial_date"
     t.datetime "updated_at", null: false
   end
 

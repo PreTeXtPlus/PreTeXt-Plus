@@ -1,9 +1,13 @@
+  <p>
   <% if user.subscribed? %>
-    <p>You are subscribed until <%= user.subscribed_until.strftime("%B %d, %Y") %>.
+    You are subscribed until <%= user.subscribed_until.strftime("%B %d, %Y") %>.
     <% if user.subscription_seats.first.subscription.user != user %>
       Your subscription is managed by <code><%= user.subscription_seats.first.subscription.user.email %></code>.
+    <% else %>
+      View your subscription plan: <%= link_to "Manage", subscription_path(user.subscription_seats.first.subscription), class: "text-blue-500 hover:underline" %>.
     <% end %>
-    </p>
+
   <% else %>
-    <p>You are not currently subscribed.</p>
+    You are not currently subscribed.
   <% end %>
+</p>

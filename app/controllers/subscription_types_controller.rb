@@ -58,7 +58,7 @@ class SubscriptionTypesController < ApplicationController
 
     # Only allow a list of trusted parameters through.
     def subscription_type_params
-      params.expect(subscription_type: [ :name, :description, :bulletpoints, :stripe_price_id, :order ])
+      params.expect(subscription_type: [ :name, :description, :bulletpoints, :stripe_price_id, :order, :trial_date ])
     end
 
     def checkout_url
@@ -70,6 +70,9 @@ class SubscriptionTypesController < ApplicationController
           quantity: 1,
           adjustable_quantity: { enabled: true }
         } ],
+        subscription_data: {
+          trial_period_days: @subscription_type.trial_days > 0 ? @subscription_type.trial_days : nil
+        },
         success_url: "#{return_url}?sync=true",
         cancel_url: return_url,
         billing_address_collection: "auto",
