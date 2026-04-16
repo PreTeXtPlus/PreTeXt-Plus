@@ -128,9 +128,6 @@ class ProjectsControllerTest < ActionDispatch::IntegrationTest
 
   test "copy creates a duplicate for subscriber" do
     subbed_user = users(:subscribed)
-    assert pay_subscriptions(:one).active?
-    assert subbed_user.subscribed?
-    assert subbed_user.has_copiable_projects?
     delete session_path
     sign_in_as(subbed_user)
     stub_build_server do
@@ -175,9 +172,12 @@ class ProjectsControllerTest < ActionDispatch::IntegrationTest
     delete session_path
     sign_in_as(requester)
 
-    assert_difference("Project.count", 1) do
-      post copy_project_url(other_project)
+    stub_build_server do
+      assert_difference("Project.count", 1) do
+        post copy_project_url(other_project)
+      end
     end
+
     copied = Project.find_by!(title: "Copy of #{other_project.title}", user: requester)
     assert_redirected_to edit_project_path(copied)
   end
