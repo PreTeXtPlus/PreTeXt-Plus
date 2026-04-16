@@ -4,7 +4,7 @@ class ProjectsControllerTest < ActionDispatch::IntegrationTest
   setup do
     @project = projects(:one)
     @user = users(:one)
-    post session_path, params: { email: @user.email, password: "password" }
+    post session_path, params: { email: @user.email, password: "password123" }
   end
 
   test "should get index" do
