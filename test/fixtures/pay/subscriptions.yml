@@ -1,0 +1,10 @@
+one:
+  id: 7aa162c4-7a1f-4a7d-ae66-6f6104cecaa7
+  type: Pay::Stripe::Subscription
+  customer: one
+  name: sustaining
+  processor_id: sub_1
+  processor_plan: sustaining
+  quantity: 1
+  status: active
+  payment_method_id: pm_1000

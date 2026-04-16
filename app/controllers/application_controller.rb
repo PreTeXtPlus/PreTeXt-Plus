@@ -10,6 +10,7 @@ class ApplicationController < ActionController::Base
   end
 
   def require_admin
+    require_authentication
     unless @current_user.admin
       redirect_to projects_path, alert: "You are not authorized" and return
     end

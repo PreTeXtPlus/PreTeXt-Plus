@@ -1,0 +1,6 @@
+one:
+  type: Pay::Stripe::Customer
+  owner: subscribed (User)
+  processor: stripe
+  processor_id: cus_1234
+  default: true

@@ -10,16 +10,17 @@ class SubscriptionType < ApplicationRecord
   end
 
   def stripe_price
+    return nil if stripe_price_id.blank? or Rails.env.test?
     Stripe::Price.retrieve(stripe_price_id)
   end
 
   def price
-    return "Free!" if stripe_price_id.blank?
+    return "Free!" if stripe_price.blank?
     ActiveSupport::NumberHelper.number_to_currency(stripe_price.unit_amount / 100.0, unit: "$", precision: 0)
   end
 
   def recurrence
-    return nil if stripe_price_id.blank?
+    return nil if stripe_price.blank?
     stripe_price.recurring.interval
   end
 

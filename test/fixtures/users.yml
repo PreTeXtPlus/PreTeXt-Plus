@@ -7,3 +7,7 @@ one:
 two:
   email: two@example.com
   password_digest: <%= password_digest %>
+
+subscribed:
+  email: subbed@example.com
+  password_digest: <%= password_digest %>

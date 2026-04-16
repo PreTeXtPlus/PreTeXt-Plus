@@ -16,6 +16,7 @@ two:
     Another bullet point again
   stripe_price_id: price_1TMTEvIprmvrFLasXOkunUVR
   order: 1
+  stripe_price_id: sustaining
 
 three:
   name: Institutional
@@ -25,3 +26,4 @@ three:
     Another bullet point again
   stripe_price_id: price_1TMTGEIprmvrFLashZcu8wkN
   order: 2
+  stripe_price_id: institutional

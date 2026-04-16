@@ -126,19 +126,24 @@ class ProjectsControllerTest < ActionDispatch::IntegrationTest
     assert_response :success
   end
 
-  test "copy creates a duplicate for sustaining subscriber" do
-    @user.update!(subscription: :sustaining)
+  test "copy creates a duplicate for subscriber" do
+    subbed_user = users(:subscribed)
+    assert pay_subscriptions(:one).active?
+    assert subbed_user.subscribed?
+    assert subbed_user.has_copiable_projects?
+    delete session_path
+    sign_in_as(subbed_user)
     stub_build_server do
       assert_difference("Project.count") do
         post copy_project_url(@project)
       end
     end
-    copy = Project.find_by!(title: "Copy of #{@project.title}", user: @user)
+    copy = Project.find_by!(title: "Copy of #{@project.title}", user: subbed_user)
     assert_redirected_to edit_project_path(copy)
   end
 
-  test "copy is blocked for beta subscribers" do
-    @user.update!(subscription: :beta, admin: false)
+  test "copy is blocked for basic subscribers" do
+    @user.update!(admin: false)
     assert_no_difference("Project.count") do
       post copy_project_url(@project)
     end
@@ -146,10 +151,7 @@ class ProjectsControllerTest < ActionDispatch::IntegrationTest
   end
 
   test "copy allows sustaining requester to copy another user's project" do
-    owner = users(:one)
-    owner.update!(subscription: :beta, admin: false)
-    requester = users(:two)
-    requester.update!(subscription: :sustaining, admin: false)
+    requester = users(:subscribed)
     other_project = projects(:one)
 
     delete session_path
@@ -164,12 +166,11 @@ class ProjectsControllerTest < ActionDispatch::IntegrationTest
     assert_redirected_to edit_project_path(copied)
   end
 
-  test "copy allows beta requester when source owner is sustaining" do
-    owner = users(:one)
-    owner.update!(subscription: :sustaining, admin: false)
+  test "copy allows basic requester when source owner is subscribed" do
+    owner = users(:subscribed)
     requester = users(:two)
-    requester.update!(subscription: :beta, admin: false)
     other_project = projects(:one)
+    other_project.update!(user: owner)
 
     delete session_path
     sign_in_as(requester)

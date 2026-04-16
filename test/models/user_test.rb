@@ -19,18 +19,16 @@ class UserTest < ActiveSupport::TestCase
     assert_equal 0, user.project_quota
   end
 
-  test "project_quota is 10 for invited beta user" do
+  test "project_quota is 10 for invited unsubscribed user" do
     user = users(:one)
     user.admin = false
     assert user.invited?
-    assert user.beta_subscription?
+    assert_not user.subscribed?
     assert_equal 10, user.project_quota
   end
 
-  test "project_quota is 100 for sustaining user" do
-    user = users(:one)
-    user.admin = false
-    user.subscription = :sustaining
+  test "project_quota is 100 for subscribed user" do
+    user = users(:subscribed)
     assert_equal 100, user.project_quota
   end
 
@@ -40,17 +38,15 @@ class UserTest < ActiveSupport::TestCase
     assert user.has_copiable_projects?
   end
 
-  test "has_copiable_projects? is true for sustaining subscriber" do
-    user = users(:one)
+  test "has_copiable_projects? is true for subscriber" do
+    user = users(:subscribed)
     user.admin = false
-    user.subscription = :sustaining
     assert user.has_copiable_projects?
   end
 
-  test "has_copiable_projects? is false for beta user" do
+  test "has_copiable_projects? is false for unsubscribed user" do
     user = users(:one)
     user.admin = false
-    user.subscription = :beta
     assert_not user.has_copiable_projects?
   end
 
