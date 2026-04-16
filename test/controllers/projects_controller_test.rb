@@ -165,7 +165,7 @@ class ProjectsControllerTest < ActionDispatch::IntegrationTest
     owner = users(:subscribed)
     requester = users(:two)
     other_project = projects(:one)
-    other_project.update_column(user: owner)
+    other_project.update_column(:user_id, owner.id)
 
     delete session_path
     sign_in_as(requester)
