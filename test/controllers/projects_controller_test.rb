@@ -150,10 +150,8 @@ class ProjectsControllerTest < ActionDispatch::IntegrationTest
   test "copy allows subscribed requester to copy another user's project" do
     requester = users(:subscribed)
     other_project = projects(:one)
-
     delete session_path
     sign_in_as(requester)
-
     stub_build_server do
       assert_difference("Project.count", 1) do
         post copy_project_url(other_project)
@@ -167,15 +165,13 @@ class ProjectsControllerTest < ActionDispatch::IntegrationTest
     owner = users(:subscribed)
     requester = users(:two)
     other_project = projects(:one)
-    other_project.update!(user: owner)
+    other_project.update_column(user: owner)
 
     delete session_path
     sign_in_as(requester)
 
-    stub_build_server do
-      assert_difference("Project.count", 1) do
-        post copy_project_url(other_project)
-      end
+    assert_difference("Project.count", 1) do
+      post copy_project_url(other_project)
     end
 
     copied = Project.find_by!(title: "Copy of #{other_project.title}", user: requester)
