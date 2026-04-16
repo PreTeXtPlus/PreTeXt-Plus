@@ -1,4 +1,6 @@
 Rails.application.routes.draw do
+  get "subscriptions/invoice" => "subscriptions#invoice_request", as: "invoice_request"
+  post "subscriptions/invoice" => "subscriptions#submit_invoice_request", as: "submit_invoice_request"
   resources :subscriptions, only: [ :index, :show ] do
     member do
       post "seat" => "subscriptions#seat", as: "seat"

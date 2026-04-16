@@ -35,6 +35,20 @@ class SubscriptionsController < ApplicationController
     redirect_to subscription_path(@subscription, random_password: random_password), notice: "Seats updated."
   end
 
+  def invoice_request
+  end
+
+  def submit_invoice_request
+    # create stripe customer if not exists
+    unless @current_user.pay_customers.any?
+      # ensure customer record exists
+      @current_user.payment_processor.api_record
+    end
+    # send email to support with details of request and user info
+    SubscriptionsMailer.invoice_request(@current_user, params[:details]).deliver_later
+    redirect_to subscriptions_path, notice: "Invoice request submitted successfully. We'll be in touch!"
+  end
+
   private
 
     def set_subscriptions
