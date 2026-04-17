@@ -1,5 +1,6 @@
 class ApplicationMailer < ActionMailer::Base
   default from: "info@mailer.pretext.plus"
+  default reply_to: "support@pretext.plus"
   layout "mailer"
   before_action :attach_logo
 
