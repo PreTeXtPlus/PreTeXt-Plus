@@ -1,3 +1,6 @@
+Hello <%= @user.name %>, we received a request to reset your password for your PreTeXt.Plus account.
+(Didn't request this? You can safely ignore this email.)
+
 You can reset your password on
 <%= edit_password_url(@user.password_reset_token) %>
 

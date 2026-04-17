@@ -1,14 +1,16 @@
 <p>
-  You've been invited to PreTeXt.Plus!
+  You've been invited to PreTeXt.Plus by <span style="color:#808;"><%= @inviter.name %> &lt;<%= @inviter.email %>&gt;</span>!
 </p>
-<% if @user.present? %>
 <p>
-  Log into your account <%= @user.email %> to get started:
-  <%= link_to "Sign in!", new_session_url(email: @user.email) %>
+  <% if @invitee_user.present? %>
+
+    Log into your account <span style="font-family:mono"><%= @invitee_user.email %></span> to get started:
+    <%= link_to "Sign in!", new_session_url(email: @invitee_user.email) %>
+
+  <% else %>
+
+    Use the following link to create an account for <span style="font-family:mono"><%= @email %></span>:
+    <%= link_to "Create account!", new_user_url(email: @email) %>
+
+  <% end %>
 </p>
-<% else %>
-<p>
-  Use the following link to create an account for <%= @email %>:
-  <%= link_to "Create account!", new_user_url(email: @email) %>
-</p>
-<% end %>
