@@ -1,0 +1,93 @@
+<% content_for :title, "Admin users" %>
+
+<div class="w-full mx-auto p-4 md:w-5/6">
+  <div class="flex items-center justify-between gap-4">
+    <div>
+      <h1 class="text-3xl font-semibold">Users</h1>
+      <p class="mt-2 text-gray-600">Search accounts, check subscription/access state, and drill into projects for support.</p>
+    </div>
+    <%= link_to "Back to dashboard", admin_root_path, class: "rounded-md px-3.5 py-2 bg-gray-100 hover:bg-gray-50 text-gray-800 font-medium" %>
+  </div>
+
+  <%= form_with url: admin_users_path, method: :get, local: true, class: "mt-6 rounded-xl border border-gray-200 bg-white p-5 shadow-sm" do |form| %>
+    <div class="grid gap-4 lg:grid-cols-[minmax(0,2fr)_repeat(4,minmax(0,1fr))]">
+      <div>
+        <%= form.label :q, "Search by name or email", class: "block text-sm font-medium text-gray-700" %>
+        <%= form.text_field :q, value: @filters["q"], class: "mt-2 w-full rounded-md border border-gray-300 px-3 py-2 text-sm" %>
+      </div>
+      <label class="flex items-center gap-2 rounded-md border border-gray-200 px-3 py-2 text-sm text-gray-700">
+        <%= form.check_box :admin, { checked: @filters["admin"] == "1" }, "1", "0" %>
+        Admins only
+      </label>
+      <label class="flex items-center gap-2 rounded-md border border-gray-200 px-3 py-2 text-sm text-gray-700">
+        <%= form.check_box :subscribed, { checked: @filters["subscribed"] == "1" }, "1", "0" %>
+        Subscribed only
+      </label>
+      <label class="flex items-center gap-2 rounded-md border border-gray-200 px-3 py-2 text-sm text-gray-700">
+        <%= form.check_box :requested, { checked: @filters["requested"] == "1" }, "1", "0" %>
+        Requested access
+      </label>
+      <label class="flex items-center gap-2 rounded-md border border-gray-200 px-3 py-2 text-sm text-gray-700">
+        <%= form.check_box :invited, { checked: @filters["invited"] == "1" }, "1", "0" %>
+        Has invitation
+      </label>
+    </div>
+
+    <div class="mt-4 flex gap-2">
+      <%= form.submit "Apply filters", class: "rounded-md px-3.5 py-2 bg-blue-600 hover:bg-blue-500 text-white font-medium cursor-pointer" %>
+      <%= link_to "Reset", admin_users_path, class: "rounded-md px-3.5 py-2 bg-gray-100 hover:bg-gray-50 text-gray-800 font-medium" %>
+    </div>
+  <% end %>
+
+  <div class="mt-6 overflow-x-auto rounded-xl border border-gray-200 bg-white shadow-sm">
+    <table class="min-w-full divide-y divide-gray-200 text-sm">
+      <thead class="bg-gray-50">
+        <tr class="text-left text-gray-600">
+          <th class="px-4 py-3 font-medium">User</th>
+          <th class="px-4 py-3 font-medium">Access</th>
+          <th class="px-4 py-3 font-medium">Projects</th>
+          <th class="px-4 py-3 font-medium">Subscription</th>
+          <th class="px-4 py-3 font-medium">Last sign-in</th>
+          <th class="px-4 py-3 font-medium">Created</th>
+        </tr>
+      </thead>
+      <tbody class="divide-y divide-gray-100">
+        <% @users.each do |user| %>
+          <tr>
+            <td class="px-4 py-4 align-top">
+              <p class="font-medium text-gray-900"><%= link_to user.name_with_email, admin_user_path(user), class: "text-blue-600 hover:underline" %></p>
+              <% if @requested_user_lookup[user.id] %>
+                <p class="mt-1 text-xs text-yellow-700">Has an outstanding access request</p>
+              <% end %>
+            </td>
+            <td class="px-4 py-4 align-top">
+              <span class="rounded-full bg-gray-100 px-2.5 py-1 text-xs font-medium text-gray-800"><%= access_label_for(user) %></span>
+            </td>
+            <td class="px-4 py-4 align-top text-gray-700"><%= projects_count_for(user) %></td>
+            <td class="px-4 py-4 align-top text-gray-700">
+              <% if user.subscribed? %>
+                Active
+                <% if user.subscribed_until.present? %>
+                  <div class="text-xs text-gray-500">Until <%= user.subscribed_until.to_date %></div>
+                <% end %>
+              <% else %>
+                None
+              <% end %>
+            </td>
+            <td class="px-4 py-4 align-top text-gray-700">
+              <% if last_session_at_for(user).present? %>
+                <time datetime="<%= last_session_at_for(user).iso8601 %>"><%= time_ago_in_words(last_session_at_for(user)) %> ago</time>
+              <% else %>
+                Never
+              <% end %>
+            </td>
+            <td class="px-4 py-4 align-top text-gray-700"><%= user.created_at.to_date %></td>
+          </tr>
+        <% end %>
+      </tbody>
+    </table>
+    <% if @users.empty? %>
+      <p class="p-6 text-gray-600">No users matched the current filters.</p>
+    <% end %>
+  </div>
+</div>
