@@ -1,7 +1,6 @@
 require "etc"
 require "open3"
 require "socket"
-require "timeout"
 
 module Admin
   class HostHealth
@@ -68,7 +67,11 @@ module Admin
     end
 
     def self.disk
-      output, status = Timeout.timeout(3) { Open3.capture2e("df", "-kP", "/") }
+      timeout_command = self.timeout_command
+      return [ nil, "Disk usage timeout utility is unavailable on this host." ] if timeout_command.nil?
+
+      output, status = Open3.capture2e(timeout_command, "3", "df", "-kP", "/")
+      return [ nil, "Disk usage timed out on this host." ] if status.exitstatus == 124
       return [ nil, "Disk usage is unavailable on this platform." ] unless status.success?
 
       _, data = output.lines.map(&:strip).reject(&:empty?)
@@ -87,8 +90,6 @@ module Admin
         },
         nil
       ]
-    rescue Timeout::Error
-      [ nil, "Disk usage timed out on this host." ]
     rescue SystemCallError, IOError => e
       [ nil, "Failed to read disk usage: #{e.message}" ]
     end
@@ -105,6 +106,14 @@ module Admin
         disk: nil,
         warnings: [ "Host metrics unavailable: #{message}" ]
       }
+    end
+
+    def self.timeout_command
+      ENV.fetch("PATH", "")
+        .split(File::PATH_SEPARATOR)
+        .product(%w[timeout gtimeout])
+        .find { |dir, command| File.executable?(File.join(dir, command)) && !File.directory?(File.join(dir, command)) }
+        &.last
     end
 
     private_class_method :unavailable_snapshot

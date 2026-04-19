@@ -23,11 +23,28 @@ class Admin::HostHealthTest < ActiveSupport::TestCase
   end
 
   test "disk returns a warning when the command times out" do
-    Timeout.stub(:timeout, proc { |_duration, &_block| raise Timeout::Error }) do
+    timed_out_status = Struct.new(:exitstatus) do
+      def success?
+        false
+      end
+    end.new(124)
+
+    Admin::HostHealth.stub(:timeout_command, "timeout") do
+      Open3.stub(:capture2e, [ "", timed_out_status ]) do
+        disk, warning = Admin::HostHealth.disk
+
+        assert_nil disk
+        assert_equal "Disk usage timed out on this host.", warning
+      end
+    end
+  end
+
+  test "disk returns a warning when no timeout utility is available" do
+    Admin::HostHealth.stub(:timeout_command, nil) do
       disk, warning = Admin::HostHealth.disk
 
       assert_nil disk
-      assert_equal "Disk usage timed out on this host.", warning
+      assert_equal "Disk usage timeout utility is unavailable on this host.", warning
     end
   end
 end
