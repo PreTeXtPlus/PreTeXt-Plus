@@ -27,6 +27,16 @@ class Admin::UsersControllerTest < ActionDispatch::IntegrationTest
     assert_includes response.body, "Subscribed"
   end
 
+  test "filters admins without using the admin attribute name in params" do
+    sign_in_as(@admin)
+
+    get admin_users_path, params: { admins_only: "1" }
+
+    assert_response :success
+    assert_includes response.body, @admin.email
+    assert_not_includes response.body, users(:subscribed).email
+  end
+
   test "shows user detail with projects and subscription data" do
     project = Project.create!(user: users(:subscribed), title: "Support Project", source: "<section><title>Help</title></section>")
     sign_in_as(@admin)

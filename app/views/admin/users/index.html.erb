@@ -16,7 +16,7 @@
         <%= form.text_field :q, value: @filters["q"], class: "mt-2 w-full rounded-md border border-gray-300 px-3 py-2 text-sm" %>
       </div>
       <label class="flex items-center gap-2 rounded-md border border-gray-200 px-3 py-2 text-sm text-gray-700">
-        <%= form.check_box :admin, { checked: @filters["admin"] == "1" }, "1", "0" %>
+        <%= form.check_box :admins_only, { checked: @filters["admins_only"] == "1" }, "1", "0" %>
         Admins only
       </label>
       <label class="flex items-center gap-2 rounded-md border border-gray-200 px-3 py-2 text-sm text-gray-700">
