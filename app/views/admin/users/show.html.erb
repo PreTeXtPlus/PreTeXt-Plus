@@ -1,0 +1,174 @@
+<% content_for :title, @user.email %>
+
+<div class="w-full mx-auto p-4 md:w-5/6">
+  <div class="flex items-center justify-between gap-4">
+    <div>
+      <h1 class="text-3xl font-semibold"><%= @user.name_with_email %></h1>
+      <p class="mt-2 text-gray-600">Read-only support view for account activity, access state, and projects.</p>
+    </div>
+    <div class="flex gap-2">
+      <%= link_to "Back to users", admin_users_path, class: "rounded-md px-3.5 py-2 bg-gray-100 hover:bg-gray-50 text-gray-800 font-medium" %>
+      <%= link_to "Dashboard", admin_root_path, class: "rounded-md px-3.5 py-2 bg-blue-600 hover:bg-blue-500 text-white font-medium" %>
+    </div>
+  </div>
+
+  <section class="mt-8 grid gap-4 xl:grid-cols-4">
+    <div class="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
+      <p class="text-sm font-medium uppercase tracking-wide text-gray-500">Access</p>
+      <p class="mt-3 text-2xl font-semibold text-gray-900"><%= access_label_for(@user) %></p>
+    </div>
+    <div class="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
+      <p class="text-sm font-medium uppercase tracking-wide text-gray-500">Projects</p>
+      <p class="mt-3 text-2xl font-semibold text-gray-900"><%= @projects.count %></p>
+    </div>
+    <div class="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
+      <p class="text-sm font-medium uppercase tracking-wide text-gray-500">Last sign-in</p>
+      <p class="mt-3 text-lg font-semibold text-gray-900">
+        <% if last_session_at_for(@user).present? %>
+          <%= time_ago_in_words(last_session_at_for(@user)) %> ago
+        <% else %>
+          Never
+        <% end %>
+      </p>
+    </div>
+    <div class="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
+      <p class="text-sm font-medium uppercase tracking-wide text-gray-500">Created</p>
+      <p class="mt-3 text-lg font-semibold text-gray-900"><%= @user.created_at.to_date %></p>
+    </div>
+  </section>
+
+  <section class="mt-8 grid gap-6 xl:grid-cols-2">
+    <div class="rounded-xl border border-gray-200 bg-white p-6 shadow-sm">
+      <h2 class="text-2xl font-semibold">Account details</h2>
+      <dl class="mt-4 space-y-3 text-sm text-gray-700">
+        <div>
+          <dt class="font-medium text-gray-500">Email</dt>
+          <dd><%= @user.email %></dd>
+        </div>
+        <div>
+          <dt class="font-medium text-gray-500">Name</dt>
+          <dd><%= @user.name.presence || "Not provided" %></dd>
+        </div>
+        <div>
+          <dt class="font-medium text-gray-500">Admin</dt>
+          <dd><%= @user.admin? ? "Yes" : "No" %></dd>
+        </div>
+        <div>
+          <dt class="font-medium text-gray-500">Outstanding requests</dt>
+          <dd><%= @requests.count %></dd>
+        </div>
+        <div>
+          <dt class="font-medium text-gray-500">Invitation records</dt>
+          <dd><%= @received_invitations.count %></dd>
+        </div>
+      </dl>
+    </div>
+
+    <div class="rounded-xl border border-gray-200 bg-white p-6 shadow-sm">
+      <h2 class="text-2xl font-semibold">Subscription access</h2>
+      <% if @user.subscribed? %>
+        <div class="mt-4 space-y-3">
+          <% @subscription_seats.each do |seat| %>
+            <div class="rounded-lg border border-gray-200 p-4">
+              <p class="font-medium text-gray-900"><%= seat.subscription.name.to_s.humanize %></p>
+              <p class="mt-1 text-sm text-gray-600">
+                Owner: <%= seat.subscription.user.email %>
+              </p>
+              <p class="mt-1 text-sm text-gray-600">
+                Status: <%= seat.subscription.status %>
+                <% if seat.subscription.current_period_end.present? %>
+                  · Ends <%= seat.subscription.current_period_end.to_date %>
+                <% end %>
+              </p>
+            </div>
+          <% end %>
+        </div>
+      <% else %>
+        <p class="mt-4 text-gray-600">No active subscription access.</p>
+      <% end %>
+    </div>
+  </section>
+
+  <section class="mt-8 grid gap-6 xl:grid-cols-2">
+    <div class="rounded-xl border border-gray-200 bg-white p-6 shadow-sm">
+      <h2 class="text-2xl font-semibold">Recent sessions</h2>
+      <% if @recent_sessions.any? %>
+        <div class="mt-4 space-y-3">
+          <% @recent_sessions.each do |session| %>
+            <div class="rounded-lg border border-gray-200 p-4">
+              <p class="text-sm text-gray-700">
+                <time datetime="<%= session.created_at.iso8601 %>"><%= time_ago_in_words(session.created_at) %> ago</time>
+              </p>
+              <p class="mt-1 text-sm text-gray-600"><%= session.ip_address.presence || "IP unavailable" %></p>
+              <% if session.user_agent.present? %>
+                <p class="mt-1 text-sm text-gray-600 break-all"><%= session.user_agent %></p>
+              <% end %>
+            </div>
+          <% end %>
+        </div>
+      <% else %>
+        <p class="mt-4 text-gray-600">No session history recorded.</p>
+      <% end %>
+    </div>
+
+    <div class="rounded-xl border border-gray-200 bg-white p-6 shadow-sm">
+      <h2 class="text-2xl font-semibold">Projects</h2>
+      <% if @projects.any? %>
+        <div class="mt-4 space-y-3">
+          <% @projects.each do |project| %>
+            <div class="rounded-lg border border-gray-200 p-4">
+              <div class="flex items-center justify-between gap-4">
+                <div>
+                  <p class="font-medium text-gray-900"><%= link_to project.title, admin_project_path(project), class: "text-blue-600 hover:underline" %></p>
+                  <p class="mt-1 text-sm text-gray-600"><%= project.source_format.to_s.humanize %> · <%= project.document_type.to_s.humanize %></p>
+                </div>
+                <p class="text-sm text-gray-500">
+                  <time datetime="<%= project.updated_at.iso8601 %>"><%= time_ago_in_words(project.updated_at) %> ago</time>
+                </p>
+              </div>
+            </div>
+          <% end %>
+        </div>
+      <% else %>
+        <p class="mt-4 text-gray-600">No projects for this account.</p>
+      <% end %>
+    </div>
+  </section>
+
+  <section class="mt-8 grid gap-6 xl:grid-cols-2">
+    <div class="rounded-xl border border-gray-200 bg-white p-6 shadow-sm">
+      <h2 class="text-2xl font-semibold">Received invitations</h2>
+      <% if @received_invitations.any? %>
+        <div class="mt-4 space-y-3">
+          <% @received_invitations.each do |invitation| %>
+            <div class="rounded-lg border border-gray-200 p-4 text-sm text-gray-700">
+              <p>Code: <code><%= invitation.code %></code></p>
+              <p class="mt-1">Owner: <%= invitation.owner_user.email %></p>
+            </div>
+          <% end %>
+        </div>
+      <% else %>
+        <p class="mt-4 text-gray-600">No invitation records.</p>
+      <% end %>
+    </div>
+
+    <div class="rounded-xl border border-gray-200 bg-white p-6 shadow-sm">
+      <h2 class="text-2xl font-semibold">Invitations owned</h2>
+      <% if @owned_invitations.any? %>
+        <div class="mt-4 space-y-3">
+          <% @owned_invitations.each do |invitation| %>
+            <div class="rounded-lg border border-gray-200 p-4 text-sm text-gray-700">
+              <p>Code: <code><%= invitation.code %></code></p>
+              <p class="mt-1">
+                Recipient:
+                <%= invitation.recipient_user&.email || invitation.intended_email || "Unclaimed" %>
+              </p>
+            </div>
+          <% end %>
+        </div>
+      <% else %>
+        <p class="mt-4 text-gray-600">This user does not own invitation codes.</p>
+      <% end %>
+    </div>
+  </section>
+</div>

@@ -1,0 +1,155 @@
+<% content_for :title, "Admin dashboard" %>
+
+<div class="w-full mx-auto p-4 md:w-5/6">
+  <div class="flex items-center justify-between gap-4">
+    <div>
+      <h1 class="text-3xl font-semibold">Admin dashboard</h1>
+      <p class="mt-2 text-gray-600">
+        Read-only support visibility for users, subscriptions, projects, and the current app host.
+      </p>
+    </div>
+    <div class="flex gap-2">
+      <%= link_to "Users", admin_users_path, class: "rounded-md px-3.5 py-2 bg-blue-600 hover:bg-blue-500 text-white font-medium" %>
+      <%= link_to "Invitations", new_invitation_path, class: "rounded-md px-3.5 py-2 bg-gray-100 hover:bg-gray-50 text-gray-800 font-medium" %>
+    </div>
+  </div>
+
+  <section class="mt-8 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+    <% @metrics.each do |metric| %>
+      <div class="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
+        <p class="text-sm font-medium uppercase tracking-wide text-gray-500"><%= metric[:label] %></p>
+        <p class="mt-3 text-3xl font-semibold text-gray-900"><%= metric[:value] %></p>
+        <p class="mt-2 text-sm text-gray-600"><%= metric[:detail] %></p>
+      </div>
+    <% end %>
+  </section>
+
+  <section class="mt-8 rounded-xl border border-gray-200 bg-white p-6 shadow-sm">
+    <div class="flex items-start justify-between gap-4">
+      <div>
+        <h2 class="text-2xl font-semibold">Host health</h2>
+        <p class="mt-2 text-sm text-gray-600">
+          Local runtime metrics only. These values describe the current app host and are not cluster-wide capacity numbers.
+        </p>
+      </div>
+      <p class="text-sm text-gray-500">
+        <% if @host_health[:generated_at].present? %>
+          Captured <time datetime="<%= @host_health[:generated_at].iso8601 %>"><%= time_ago_in_words(@host_health[:generated_at]) %> ago</time>
+        <% end %>
+      </p>
+    </div>
+
+    <% if @host_health[:available] %>
+      <div class="mt-6 grid gap-4 md:grid-cols-3">
+        <div class="rounded-lg border border-gray-200 bg-gray-50 p-4">
+          <p class="text-sm font-medium text-gray-500">Hostname</p>
+          <p class="mt-2 text-lg font-semibold text-gray-900"><%= @host_health[:hostname] || "Unavailable" %></p>
+          <p class="mt-1 text-sm text-gray-600">CPU cores: <%= @host_health[:cpu_cores] || "Unavailable" %></p>
+        </div>
+
+        <div class="rounded-lg border border-gray-200 bg-gray-50 p-4">
+          <p class="text-sm font-medium text-gray-500">Load average</p>
+          <% if @host_health[:load_average].present? %>
+            <p class="mt-2 text-lg font-semibold text-gray-900"><%= @host_health[:load_average].join(" / ") %></p>
+            <p class="mt-1 text-sm text-gray-600">1, 5, and 15 minute averages</p>
+          <% else %>
+            <p class="mt-2 text-sm text-gray-600">Unavailable</p>
+          <% end %>
+        </div>
+
+        <div class="rounded-lg border border-gray-200 bg-gray-50 p-4">
+          <p class="text-sm font-medium text-gray-500">Memory</p>
+          <% if @host_health[:memory].present? %>
+            <p class="mt-2 text-lg font-semibold text-gray-900"><%= @host_health[:memory][:used_percent] %>% used</p>
+            <p class="mt-1 text-sm text-gray-600">
+              <%= number_to_human_size(@host_health[:memory][:used_bytes]) %> of
+              <%= number_to_human_size(@host_health[:memory][:total_bytes]) %>
+            </p>
+          <% else %>
+            <p class="mt-2 text-sm text-gray-600">Unavailable</p>
+          <% end %>
+        </div>
+      </div>
+
+      <div class="mt-4 rounded-lg border border-gray-200 bg-gray-50 p-4">
+        <p class="text-sm font-medium text-gray-500">Disk</p>
+        <% if @host_health[:disk].present? %>
+          <p class="mt-2 text-lg font-semibold text-gray-900"><%= @host_health[:disk][:used_percent] %>% used on <%= @host_health[:disk][:mount] %></p>
+          <p class="mt-1 text-sm text-gray-600">
+            <%= number_to_human_size(@host_health[:disk][:used_bytes]) %> used,
+            <%= number_to_human_size(@host_health[:disk][:available_bytes]) %> available
+            on <code><%= @host_health[:disk][:filesystem] %></code>
+          </p>
+        <% else %>
+          <p class="mt-2 text-sm text-gray-600">Unavailable</p>
+        <% end %>
+      </div>
+    <% else %>
+      <div class="mt-6 rounded-lg border border-yellow-200 bg-yellow-50 p-4 text-yellow-900">
+        Host metrics are unavailable in this environment.
+      </div>
+    <% end %>
+
+    <% if @host_health[:warnings].present? %>
+      <div class="mt-4 rounded-lg border border-blue-200 bg-blue-50 p-4 text-blue-900">
+        <p class="font-medium">Notes</p>
+        <ul class="mt-2 list-disc pl-5 text-sm">
+          <% @host_health[:warnings].each do |warning| %>
+            <li><%= warning %></li>
+          <% end %>
+        </ul>
+      </div>
+    <% end %>
+  </section>
+
+  <section class="mt-8 grid gap-6 xl:grid-cols-2">
+    <div class="rounded-xl border border-gray-200 bg-white p-6 shadow-sm">
+      <h2 class="text-2xl font-semibold">Recent sign-ins</h2>
+      <% if @recent_sessions.any? %>
+        <div class="mt-4 space-y-3">
+          <% @recent_sessions.each do |session| %>
+            <div class="rounded-lg border border-gray-200 p-4">
+              <div class="flex items-center justify-between gap-4">
+                <div>
+                  <p class="font-medium text-gray-900"><%= link_to session.user.name_with_email, admin_user_path(session.user), class: "text-blue-600 hover:underline" %></p>
+                  <p class="text-sm text-gray-600"><%= session.ip_address.presence || "IP unavailable" %></p>
+                </div>
+                <p class="text-sm text-gray-500">
+                  <time datetime="<%= session.created_at.iso8601 %>"><%= time_ago_in_words(session.created_at) %> ago</time>
+                </p>
+              </div>
+              <% if session.user_agent.present? %>
+                <p class="mt-2 text-sm text-gray-600 break-all"><%= session.user_agent %></p>
+              <% end %>
+            </div>
+          <% end %>
+        </div>
+      <% else %>
+        <p class="mt-4 text-gray-600">No sessions recorded yet.</p>
+      <% end %>
+    </div>
+
+    <div class="rounded-xl border border-gray-200 bg-white p-6 shadow-sm">
+      <h2 class="text-2xl font-semibold">Recently updated projects</h2>
+      <% if @recent_projects.any? %>
+        <div class="mt-4 space-y-3">
+          <% @recent_projects.each do |project| %>
+            <div class="rounded-lg border border-gray-200 p-4">
+              <div class="flex items-center justify-between gap-4">
+                <div>
+                  <p class="font-medium text-gray-900"><%= link_to project.title, admin_project_path(project), class: "text-blue-600 hover:underline" %></p>
+                  <p class="text-sm text-gray-600">Owner: <%= link_to project.user.email, admin_user_path(project.user), class: "text-blue-600 hover:underline" %></p>
+                </div>
+                <p class="text-sm text-gray-500">
+                  <time datetime="<%= project.updated_at.iso8601 %>"><%= time_ago_in_words(project.updated_at) %> ago</time>
+                </p>
+              </div>
+            </div>
+          <% end %>
+        </div>
+      <% else %>
+        <p class="mt-4 text-gray-600">No projects yet.</p>
+      <% end %>
+    </div>
+  </section>
+</div>

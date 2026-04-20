@@ -1,4 +1,10 @@
 Rails.application.routes.draw do
+  namespace :admin do
+    root "dashboard#show"
+    resources :users, only: %i[index show]
+    resources :projects, only: %i[show]
+  end
+
   get "subscriptions/invoice" => "subscriptions#invoice_request", as: "invoice_request"
   post "subscriptions/invoice" => "subscriptions#submit_invoice_request", as: "submit_invoice_request"
   resources :subscriptions, only: [ :index, :show ] do
