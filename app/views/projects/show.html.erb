@@ -7,7 +7,7 @@
         <%= link_to "Edit", edit_project_path(@project), class: "w-full md:w-auto text-center rounded-md px-3.5 py-2.5 bg-gray-100 hover:bg-gray-50 inline-block font-medium" %>
         <%= link_to "Share output", share_project_path(@project), class: "w-full md:w-auto text-center rounded-md px-3.5 py-2.5 bg-gray-100 hover:bg-gray-50 inline-block font-medium" %>
         <%= link_to "Back to projects", projects_path, class: "w-full md:w-auto text-center rounded-md px-3.5 py-2.5 bg-gray-100 hover:bg-gray-50 inline-block font-medium" %>
-        <%= button_to "Destroy this project", @project, method: :delete, form_class: "inline-block", class: "w-full rounded-md px-3.5 py-2.5 text-white bg-red-600 hover:bg-red-500 font-medium cursor-pointer", data: { turbo_confirm: "Are you sure?" } %>
+        <%= button_to "Destroy this project", @project, method: :delete, form_class: "inline-block", class: "w-full md:w-full text-center rounded-md px-2.5 py-1.5 text-sm bg-red-200 hover:bg-red-100 text-black cursor-pointer justify-center", data: { turbo_confirm: "Are you sure?" } %>
       </div>
       <div class="my-2 flex flex-col gap-2">
         <span class="w-full md:w-auto text-center">Subscriber features:</span>

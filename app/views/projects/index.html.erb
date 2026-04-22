@@ -7,7 +7,7 @@
       (<%= @projects.count %>/<%= @current_user.project_quota %>)
     </h1>
     <% if @current_user && @current_user.projects.count < @current_user.project_quota %>
-      <%= link_to "New project", new_project_path, class: "inline-flex select-none items-center gap-2 rounded-md cursor-pointer ml-1 px-4 py-2 my-1 text-sm bg-gray-50 text-gray-700 drop-shadow-md hover:bg-white", data: { turbo: false } %>
+      <%= link_to "+ New project", new_project_path, class: "inline-flex select-none items-center gap-2 rounded-md cursor-pointer ml-1 px-4 py-2 my-1 text-medium bg-green-600 text-white font-bold drop-shadow-md hover:bg-green-500", data: { turbo: false } %>
     <% end %>
   </div>
 
