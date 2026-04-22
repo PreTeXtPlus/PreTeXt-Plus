@@ -35,6 +35,7 @@ Rails.application.routes.draw do
       get "share/source" => "projects#source", as: "share_source"
       get "share/copy", to: redirect("projects/%{project_id}/share/source")
       post "share/copy" => "projects#copy", as: "copy"
+      post "converted_copy" => "projects#converted_copy", as: "converted_copy"
       get "*/lunr-pretext-search-index.js", to: redirect("/ptx-search.js")
     end
   end

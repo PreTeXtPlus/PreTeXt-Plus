@@ -107,6 +107,38 @@ export default class extends Controller {
       });
     };
 
+    const onCreatePretextProjectCopy = async (request) => {
+      try {
+        const response = await fetch(
+          `/projects/${this.projectIdValue}/converted_copy`,
+          {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              "Accept": "application/json",
+              "X-CSRF-Token": csrfToken,
+            },
+            body: JSON.stringify({
+              pretext_source: request.pretextSource,
+              title: request.title,
+            }),
+          }
+        );
+
+        if (!response.ok) {
+          const error = await response.json();
+          throw new Error(error.error || `Failed to create converted copy: ${response.status}`);
+        }
+
+        const result = await response.json();
+        // Redirect to the new project's editor
+        window.location.href = result.project_url;
+      } catch (error) {
+        console.error("Error creating converted copy:", error);
+        alert(`Failed to create converted copy: ${error.message}`);
+      }
+    };
+
     this.component.render(root, {
       source: current.source,
       sourceFormat: current.sourceFormat,
@@ -127,6 +159,7 @@ export default class extends Controller {
       onCancelButton,
       cancelButtonLabel: "Cancel",
       onPreviewRebuild,
+      onCreatePretextProjectCopy,
     });
   }
 
