@@ -135,7 +135,7 @@ export default class extends Controller {
         window.location.href = result.project_url;
       } catch (error) {
         console.error("Error creating converted copy:", error);
-        alert(`Failed to create converted copy: ${error.message}`);
+        alert(`Failed to create converted copy:\n${error.message}`);
       }
     };
 

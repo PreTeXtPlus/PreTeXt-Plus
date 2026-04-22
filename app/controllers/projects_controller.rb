@@ -256,7 +256,15 @@ class ProjectsController < ApplicationController
     # redirect if user has too many projects
     def limit_projects
       if @current_user.projects.count >= @current_user.project_quota
-        redirect_to projects_path, alert: "Project quota (#{@current_user.project_quota}) cannot be exceeded"
+        quota_message = "Project quota (#{@current_user.project_quota}) cannot be exceeded.  Consider upgrading your subscription for more projects and to support PreTeXt.Plus!"
+
+        # For AJAX requests, return JSON
+        if request.format.json?
+          return render json: { error: quota_message }, status: :unprocessable_entity
+        end
+
+        # For regular requests, redirect
+        redirect_to projects_path, alert: quota_message
       end
     end
 
