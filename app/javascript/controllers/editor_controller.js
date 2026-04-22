@@ -139,6 +139,39 @@ export default class extends Controller {
       }
     };
 
+    const onFeedbackSubmit = async (feedback) => {
+      try {
+        const response = await fetch("/projects/feedback", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "Accept": "application/json",
+            "X-CSRF-Token": csrfToken,
+          },
+          body: JSON.stringify({
+            context: feedback.context,
+            message: feedback.message,
+            email: feedback.email,
+            project_url: feedback.projectUrl,
+            current_source: feedback.currentSource,
+            source_format: feedback.sourceFormat,
+            title: feedback.title,
+            submitted_at: feedback.submittedAt,
+          }),
+        });
+
+        if (!response.ok) {
+          const error = await response.json();
+          throw new Error(error.error || `Failed to submit feedback: ${response.status}`);
+        }
+
+        console.log("Feedback submitted successfully");
+      } catch (error) {
+        console.error("Error submitting feedback:", error);
+        alert(`Failed to submit feedback: ${error.message}`);
+      }
+    };
+
     this.component.render(root, {
       source: current.source,
       sourceFormat: current.sourceFormat,
@@ -160,6 +193,7 @@ export default class extends Controller {
       cancelButtonLabel: "Cancel",
       onPreviewRebuild,
       onCreatePretextProjectCopy,
+      onFeedbackSubmit,
     });
   }
 

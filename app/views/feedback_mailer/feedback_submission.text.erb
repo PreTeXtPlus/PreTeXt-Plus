@@ -1,0 +1,30 @@
+New Feedback from PreTeXt.Plus
+=====================================
+
+Message:
+<%= @message %>
+
+Details:
+--------
+Context: <%= @context %>
+<% if @title.present? %>
+Project Title: <%= @title %>
+<% end %>
+<% if @source_format.present? %>
+Source Format: <%= @source_format %>
+<% end %>
+<% if @project_url.present? %>
+Project URL: <%= @project_url %>
+<% end %>
+Submitted At: <%= @submitted_at %>
+<% if @user.present? %>
+User: <%= @user.email %> (ID: <%= @user.id %>)
+<% end %>
+<% if @email.present? %>
+User Email for Response: <%= @email %>
+<% end %>
+
+<% if @current_source.present? %>
+Included Source Code:
+<%= @current_source %>
+<% end %>

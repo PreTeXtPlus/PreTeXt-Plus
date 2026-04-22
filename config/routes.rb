@@ -40,6 +40,7 @@ Rails.application.routes.draw do
     end
   end
   post "projects/preview" => "projects#preview", as: "preview"
+  post "projects/feedback" => "projects#feedback", as: "feedback"
   post "subscribe" => "subscriptions_old#subscribe"
   post "stripe/webhooks" => "subscriptions_old#webhooks"
   get "tryit" => "projects#tryit"

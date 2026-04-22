@@ -220,6 +220,28 @@ class ProjectsController < ApplicationController
     render plain: "Preview build failed", status: :bad_gateway
   end
 
+  # POST /projects/feedback
+  def feedback
+    feedback_data = {
+      context: params[:context],
+      message: params[:message],
+      email: params[:email],
+      project_url: params[:project_url],
+      current_source: params[:current_source],
+      source_format: params[:source_format],
+      title: params[:title],
+      submitted_at: params[:submitted_at],
+      user: @current_user
+    }
+
+    FeedbackMailer.feedback_submission(feedback_data).deliver_later
+
+    render json: { status: "success" }, status: :accepted
+  rescue StandardError => e
+    Rails.logger.error("Feedback submission error: #{e.message}")
+    render json: { error: "Failed to submit feedback" }, status: :internal_server_error
+  end
+
   private
     # Use callbacks to share common setup or constraints between actions.
     def set_project

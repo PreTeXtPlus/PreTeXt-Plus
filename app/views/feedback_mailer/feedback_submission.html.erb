@@ -1,0 +1,47 @@
+<div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; line-height: 1.6; color: #333;">
+  <h2>New Feedback from PreTeXt.Plus</h2>
+
+  <h3>Message</h3>
+  <p style="background-color: #f5f5f5; padding: 12px; border-left: 4px solid #0066cc; white-space: pre-wrap;">
+    <%= @message %>
+  </p>
+
+  <h3>Details</h3>
+  <dl style="margin: 16px 0;">
+    <dt style="font-weight: bold; margin-top: 8px;">Context:</dt>
+    <dd style="margin: 0 0 12px 0;"><%= @context %></dd>
+
+    <% if @title.present? %>
+      <dt style="font-weight: bold; margin-top: 8px;">Project Title:</dt>
+      <dd style="margin: 0 0 12px 0;"><%= @title %></dd>
+    <% end %>
+
+    <% if @source_format.present? %>
+      <dt style="font-weight: bold; margin-top: 8px;">Source Format:</dt>
+      <dd style="margin: 0 0 12px 0;"><%= @source_format %></dd>
+    <% end %>
+
+    <% if @project_url.present? %>
+      <dt style="font-weight: bold; margin-top: 8px;">Project URL:</dt>
+      <dd style="margin: 0 0 12px 0;"><a href="<%= @project_url %>"><%= @project_url %></a></dd>
+    <% end %>
+
+    <dt style="font-weight: bold; margin-top: 8px;">Submitted At:</dt>
+    <dd style="margin: 0 0 12px 0;"><%= @submitted_at %></dd>
+
+    <% if @user.present? %>
+      <dt style="font-weight: bold; margin-top: 8px;">User:</dt>
+      <dd style="margin: 0 0 12px 0;"><%= @user.email %> (ID: <%= @user.id %>)</dd>
+    <% end %>
+
+    <% if @email.present? %>
+      <dt style="font-weight: bold; margin-top: 8px;">User Email for Response:</dt>
+      <dd style="margin: 0 0 12px 0;"><%= @email %></dd>
+    <% end %>
+  </dl>
+
+  <% if @current_source.present? %>
+    <h3>Included Source Code</h3>
+    <pre style="background-color: #f5f5f5; padding: 12px; border-radius: 4px; overflow-x: auto; font-size: 13px;"><code><%= @current_source %></code></pre>
+  <% end %>
+</div>

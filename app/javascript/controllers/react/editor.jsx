@@ -5,7 +5,7 @@ import '@pretextbook/web-editor/dist/web-editor.css';
 
 let root = null;
 
-function EditorWrapper({ onContentChange, onTitleChange, onCreatePretextProjectCopy, ...rest }) {
+function EditorWrapper({ onContentChange, onTitleChange, onCreatePretextProjectCopy, onFeedbackSubmit, ...rest }) {
   const {
     source: sourceProp,
     title: titleProp,
@@ -47,6 +47,7 @@ function EditorWrapper({ onContentChange, onTitleChange, onCreatePretextProjectC
       onContentChange={handleContentChange}
       onTitleChange={handleTitleChange}
       onCreatePretextProjectCopy={onCreatePretextProjectCopy}
+      onFeedbackSubmit={onFeedbackSubmit}
     />
   );
 }
