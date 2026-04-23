@@ -13,7 +13,7 @@ class FeedbackMailer < ApplicationMailer
     mail(
       to: "feedback@pretext.plus",
       subject: "PreTeXt.Plus Feedback: #{@context}",
-      from: "feedbackform@mailer.pretext.plus"
+      from: "feedbackform@mailer.pretext.plus",
       reply_to: @email
     )
   end
