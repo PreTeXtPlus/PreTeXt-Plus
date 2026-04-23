@@ -93,6 +93,11 @@ export default class extends Controller {
     this.saveInterval = setInterval(onSave, 10000);
 
     const onPreviewRebuild = (content, title, postToIframe) => {
+      // For non-pretext projects the editor passes the converted pretextSource as
+      // `content`.  Keep current in sync so onSave has the latest value.
+      if (current.sourceFormat !== "pretext") {
+        current.pretextSource = content ?? "";
+      }
       const assembledSource = assemblePreviewSource({
         content,
         title: current.title,
@@ -109,8 +114,11 @@ export default class extends Controller {
 
     const onCreatePretextProjectCopy = async (request) => {
       try {
+        const savedSuccessfully = await onSave(true);
+        if (!savedSuccessfully) throw new Error("Failed to save current project");
+
         const response = await fetch(
-          `/projects/${this.projectIdValue}/converted_copy`,
+          `/projects/${this.projectIdValue}/copy_conversion`,
           {
             method: "POST",
             headers: {
@@ -118,10 +126,6 @@ export default class extends Controller {
               "Accept": "application/json",
               "X-CSRF-Token": csrfToken,
             },
-            body: JSON.stringify({
-              pretext_source: request.pretextSource,
-              title: request.title,
-            }),
           }
         );
 

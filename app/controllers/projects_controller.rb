@@ -1,8 +1,8 @@
 class ProjectsController < ApplicationController
   allow_unauthenticated_access only: %i[ share preview source ]
   require_unauthenticated_access only: %i[ tryit ]
-  before_action :set_project, only: %i[ show edit update destroy editor_state update_editor_state share source copy converted_copy ]
-  before_action :limit_projects, only: %i[ new create copy converted_copy ]
+  before_action :set_project, only: %i[ show edit update destroy editor_state update_editor_state share source copy copy_conversion ]
+  before_action :limit_projects, only: %i[ new create copy copy_conversion ]
   before_action :require_ownership, only: %i[ show edit update destroy editor_state update_editor_state ]
   before_action :require_copy_permission, only: %i[ source copy ]
   after_action :allow_iframe, only: :share
@@ -170,17 +170,17 @@ class ProjectsController < ApplicationController
     redirect_to edit_project_path(project_copy)
   end
 
-  # POST /projects/:id/converted_copy
-  def converted_copy
-    pretext_source = params[:pretext_source]
-    title = params[:title]
+  # POST /projects/:id/copy_conversion
+  def copy_conversion
+    # pretext_source = params[:pretext_source]
+    # title = params[:title]
 
-    return render json: { error: "Missing pretext_source or title" }, status: :bad_request if pretext_source.blank? || title.blank?
+    # return render json: { error: "Missing pretext_source or title" }, status: :bad_request if pretext_source.blank? || title.blank?
 
     project_copy = @project.dup
     project_copy.user = @current_user
-    project_copy.title = title
-    project_copy.source = pretext_source
+    project_copy.title = @project.title
+    project_copy.source = @project.pretext_source
     project_copy.source_format = :pretext
     project_copy.pretext_source = ""  # Clear pretext_source since source is already in pretext format
 
