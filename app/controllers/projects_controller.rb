@@ -142,15 +142,29 @@ class ProjectsController < ApplicationController
 
   # GET /projects/:id/editor_state
   def editor_state
-    render json: @project.to_h
+    render json: editor_state_payload
   end
 
   # PATCH /projects/:id/editor_state
   def update_editor_state
-    if @project.update(project_params)
-      render json: @project.to_h
+    attrs = editor_state_params.to_h.symbolize_keys
+    common_docinfo = attrs.delete(:common_docinfo)
+
+    updated = ActiveRecord::Base.transaction do
+      if !common_docinfo.nil?
+        @project.user.update(common_docinfo: common_docinfo)
+      else
+        true
+      end
+      @project.update(attrs)
+    end
+
+    if updated
+      render json: editor_state_payload
     else
-      render json: { errors: @project.errors }, status: :unprocessable_entity
+      errors = @project.errors
+      errors = @project.user.errors if errors.empty?
+      render json: { errors: errors }, status: :unprocessable_entity
     end
   end
 
@@ -250,7 +264,15 @@ class ProjectsController < ApplicationController
 
     # Only allow a list of trusted parameters through.
     def project_params
-      params.expect(project: [ :title, :source, :pretext_source, :source_format, :docinfo ])
+      params.expect(project: [ :title, :source, :pretext_source, :source_format, :docinfo, :use_common_docinfo ])
+    end
+
+    def editor_state_params
+      params.expect(project: [ :title, :source, :pretext_source, :source_format, :docinfo, :use_common_docinfo, :common_docinfo ])
+    end
+
+    def editor_state_payload
+      @project.to_h.merge(common_docinfo: @project.user.common_docinfo)
     end
 
     # redirect if user has too many projects

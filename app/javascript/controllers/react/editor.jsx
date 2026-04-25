@@ -12,6 +12,10 @@ function EditorWrapper({ onContentChange, onTitleChange, onCreatePretextProjectC
     sourceFormat: sourceFormatProp,
     pretextSource: pretextSourceProp,
     docinfo: docinfoProp,
+    commonDocinfo: commonDocinfoProp,
+    useCommonDocinfo: useCommonDocinfoProp,
+    onCommonDocinfoChange,
+    onUseCommonDocinfoChange,
     ...editorProps
   } = rest;
 
@@ -20,6 +24,8 @@ function EditorWrapper({ onContentChange, onTitleChange, onCreatePretextProjectC
   const [sourceFormat, setSourceFormat] = useState(sourceFormatProp);
   const [pretextSource, setPretextSource] = useState(pretextSourceProp);
   const [docinfo, setDocinfo] = useState(docinfoProp);
+  const [commonDocinfo, setCommonDocinfo] = useState(commonDocinfoProp ?? "");
+  const [useCommonDocinfo, setUseCommonDocinfo] = useState(useCommonDocinfoProp ?? false);
 
   const handleContentChange = useCallback((v, meta) => {
     const nextSource = v ?? meta?.sourceContent ?? "";
@@ -28,6 +34,8 @@ function EditorWrapper({ onContentChange, onTitleChange, onCreatePretextProjectC
     if (meta?.pretextSource !== undefined) setPretextSource(meta.pretextSource);
     // docinfo changes arrive via meta when DocinfoEditor saves inside Editors
     if (meta?.docinfo !== undefined) setDocinfo(meta.docinfo);
+    if (meta?.commonDocinfo !== undefined) setCommonDocinfo(meta.commonDocinfo);
+    if (meta?.useCommonDocinfo !== undefined) setUseCommonDocinfo(meta.useCommonDocinfo);
     onContentChange?.(nextSource, meta);
   }, [onContentChange]);
 
@@ -35,6 +43,18 @@ function EditorWrapper({ onContentChange, onTitleChange, onCreatePretextProjectC
     setTitle(v);
     onTitleChange?.(v);
   }, [onTitleChange]);
+
+  const handleCommonDocinfoChange = useCallback((value) => {
+    const nextValue = value ?? "";
+    setCommonDocinfo(nextValue);
+    onCommonDocinfoChange?.(nextValue);
+  }, [onCommonDocinfoChange]);
+
+  const handleUseCommonDocinfoChange = useCallback((value) => {
+    const nextValue = value === true;
+    setUseCommonDocinfo(nextValue);
+    onUseCommonDocinfoChange?.(nextValue);
+  }, [onUseCommonDocinfoChange]);
 
   return (
     <Editors
@@ -44,8 +64,12 @@ function EditorWrapper({ onContentChange, onTitleChange, onCreatePretextProjectC
       sourceFormat={sourceFormat}
       pretextSource={pretextSource}
       docinfo={docinfo}
+      commonDocinfo={commonDocinfo}
+      useCommonDocinfo={useCommonDocinfo}
       onContentChange={handleContentChange}
       onTitleChange={handleTitleChange}
+      onCommonDocinfoChange={handleCommonDocinfoChange}
+      onUseCommonDocinfoChange={handleUseCommonDocinfoChange}
       onCreatePretextProjectCopy={onCreatePretextProjectCopy}
       onFeedbackSubmit={onFeedbackSubmit}
     />

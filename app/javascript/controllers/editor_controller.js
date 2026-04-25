@@ -34,6 +34,8 @@ export default class extends Controller {
       sourceFormat: state.source_format ?? "pretext",
       pretextSource: state.pretext_source ?? "",
       docinfo: state.docinfo ?? "",
+      commonDocinfo: state.common_docinfo ?? "",
+      useCommonDocinfo: state.use_common_docinfo ?? false,
     };
     const saved = { ...current };
 
@@ -41,7 +43,9 @@ export default class extends Controller {
       current.source !== saved.source ||
       current.title !== saved.title ||
       current.pretextSource !== saved.pretextSource ||
-      current.docinfo !== saved.docinfo;
+      current.docinfo !== saved.docinfo ||
+      current.commonDocinfo !== saved.commonDocinfo ||
+      current.useCommonDocinfo !== saved.useCommonDocinfo;
 
     const onSave = async (force = false) => {
       if (!force && !isDirty()) return true;
@@ -61,6 +65,8 @@ export default class extends Controller {
               source_format: current.sourceFormat,
               pretext_source: current.pretextSource,
               docinfo: current.docinfo,
+              use_common_docinfo: current.useCommonDocinfo,
+              common_docinfo: current.commonDocinfo,
             }
           }),
         });
@@ -98,12 +104,16 @@ export default class extends Controller {
       if (current.sourceFormat !== "pretext") {
         current.pretextSource = content ?? "";
       }
+      // Use the common docinfo when the project is set to use it.
+      const effectiveDocinfo = current.useCommonDocinfo && current.commonDocinfo
+        ? current.commonDocinfo
+        : current.docinfo;
       const assembledSource = assemblePreviewSource({
         content,
         title: current.title,
         sourceFormat: current.sourceFormat,
         pretextSource: current.pretextSource,
-        docinfo: current.docinfo,
+        docinfo: effectiveDocinfo,
       });
       postToIframe("/projects/preview", {
         source: assembledSource,
@@ -181,13 +191,19 @@ export default class extends Controller {
       sourceFormat: current.sourceFormat,
       pretextSource: current.pretextSource || undefined,
       docinfo: current.docinfo || undefined,
+      commonDocinfo: current.commonDocinfo || undefined,
+      useCommonDocinfo: current.useCommonDocinfo,
       onContentChange: (v, meta) => {
         current.source = v ?? "";
         if (meta?.sourceFormat) current.sourceFormat = meta.sourceFormat;
         if (meta?.pretextSource !== undefined) current.pretextSource = meta.pretextSource;
         // docinfo changes are delivered via meta when the DocinfoEditor saves
         if (meta?.docinfo !== undefined) current.docinfo = meta.docinfo;
+        if (meta?.commonDocinfo !== undefined) current.commonDocinfo = meta.commonDocinfo;
+        if (meta?.useCommonDocinfo !== undefined) current.useCommonDocinfo = meta.useCommonDocinfo;
       },
+      onCommonDocinfoChange: (value) => { current.commonDocinfo = value ?? ""; onSave(); },
+      onUseCommonDocinfoChange: (value) => { current.useCommonDocinfo = value === true; onSave(); },
       title: current.title,
       onTitleChange: (v) => { current.title = v ?? ""; },
       onSaveButton,

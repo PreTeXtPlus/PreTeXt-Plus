@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_04_16_212159) do
+ActiveRecord::Schema[8.1].define(version: 2026_04_25_223500) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
   enable_extension "pgcrypto"
@@ -136,6 +136,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_04_16_212159) do
     t.integer "source_format", default: 0, null: false
     t.string "title"
     t.datetime "updated_at", null: false
+    t.boolean "use_common_docinfo", default: false, null: false
     t.uuid "user_id", null: false
     t.index ["user_id"], name: "index_projects_on_user_id"
   end
@@ -154,6 +155,22 @@ ActiveRecord::Schema[8.1].define(version: 2026_04_16_212159) do
     t.string "user_agent"
     t.uuid "user_id", null: false
     t.index ["user_id"], name: "index_sessions_on_user_id"
+  end
+
+  create_table "source_elements", id: :uuid, default: -> { "gen_random_uuid()" }, force: :cascade do |t|
+    t.datetime "created_at", null: false
+    t.string "element_type", null: false
+    t.uuid "parent_id"
+    t.integer "position", default: 0, null: false
+    t.text "pretext_source"
+    t.uuid "project_id", null: false
+    t.text "source"
+    t.integer "source_format", default: 0, null: false
+    t.string "title"
+    t.datetime "updated_at", null: false
+    t.index ["parent_id"], name: "index_source_elements_on_parent_id"
+    t.index ["project_id", "parent_id", "position"], name: "index_source_elements_on_project_id_and_parent_id_and_position"
+    t.index ["project_id"], name: "index_source_elements_on_project_id"
   end
 
   create_table "subscription_seats", id: :uuid, default: -> { "gen_random_uuid()" }, force: :cascade do |t|
@@ -178,6 +195,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_04_16_212159) do
 
   create_table "users", id: :uuid, default: -> { "gen_random_uuid()" }, force: :cascade do |t|
     t.boolean "admin", default: false
+    t.text "common_docinfo", default: "<docinfo>\n  <brandlogo source=\"icon.svg\" />\n</docinfo>\n"
     t.datetime "created_at", null: false
     t.string "email", null: false
     t.string "name"
@@ -198,6 +216,8 @@ ActiveRecord::Schema[8.1].define(version: 2026_04_16_212159) do
   add_foreign_key "projects", "users"
   add_foreign_key "requests", "users"
   add_foreign_key "sessions", "users"
+  add_foreign_key "source_elements", "projects"
+  add_foreign_key "source_elements", "source_elements", column: "parent_id"
   add_foreign_key "subscription_seats", "pay_subscriptions"
   add_foreign_key "subscription_seats", "users"
 end

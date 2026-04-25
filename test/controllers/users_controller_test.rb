@@ -40,4 +40,14 @@ class UsersControllerTest < ActionDispatch::IntegrationTest
     assert_redirected_to projects_path
     assert_equal "Updated Name", users(:one).reload.name
   end
+
+  test "update changes user common_docinfo" do
+    sign_in_as(users(:one))
+    docinfo = "<docinfo><macros>\\newcommand{\\Q}{\\mathbb{Q}}</macros></docinfo>"
+
+    patch user_path(users(:one)), params: { user: { common_docinfo: docinfo } }
+
+    assert_redirected_to projects_path
+    assert_equal docinfo, users(:one).reload.common_docinfo
+  end
 end
