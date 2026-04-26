@@ -16,13 +16,21 @@ class Project < ApplicationRecord
     doc_tag = document_type || "article"
 
     xml = +"<pretext>"
-    xml << docinfo.to_s if docinfo.present?
+    xml << effective_docinfo.to_s if effective_docinfo.present?
     xml << "<#{doc_tag} label=\"article\">"
     xml << "<title>#{title}</title>" if title.present?
     xml << (latex_source_format? ? pretext_source.to_s : source.to_s)
     xml << "</#{doc_tag}>"
     xml << "</pretext>"
     xml
+  end
+
+  def effective_docinfo
+    if use_common_docinfo? && user&.common_docinfo.present?
+      user.common_docinfo
+    else
+      docinfo
+    end
   end
 
   def self.default_docinfo
@@ -43,8 +51,12 @@ class Project < ApplicationRecord
     self.docinfo = DEFAULT_DOCINFO
   end
 
+  def common_docinfo
+    user.common_docinfo
+  end
+
   def to_h
-    [ :title, :source, :source_format, :pretext_source, :docinfo ]
+    [ :title, :source, :source_format, :pretext_source, :docinfo, :use_common_docinfo, :common_docinfo ]
       .map { |attr| [ attr, self.send(attr) ] }.to_h
   end
 
@@ -60,9 +72,9 @@ class Project < ApplicationRecord
 
       <p>
         This is a sample project to get you started. You can edit this content using the PreTeXt markup language.
-        <me>
+        <md>
           \\left|\\sum_{i=0}^n a_i\\right|\\leq\\sum_{i=0}^n|a_i|
-        </me>
+        </md>
       </p>
 
       <fact>

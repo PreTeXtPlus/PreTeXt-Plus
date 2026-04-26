@@ -256,6 +256,8 @@ class ProjectsControllerTest < ActionDispatch::IntegrationTest
     assert_includes json.keys, "source_format"
     assert_includes json.keys, "pretext_source"
     assert_includes json.keys, "docinfo"
+    assert_includes json.keys, "use_common_docinfo"
+    assert_includes json.keys, "common_docinfo"
   end
 
   test "editor_state includes docinfo value" do
@@ -269,7 +271,15 @@ class ProjectsControllerTest < ActionDispatch::IntegrationTest
   test "should update_editor_state via patch" do
     stub_build_server do
       patch editor_state_project_url(@project),
-        params: { project: { title: "API Title", source: "new source", docinfo: "<docinfo/>" } },
+        params: {
+          project: {
+            title: "API Title",
+            source: "new source",
+            docinfo: "<docinfo/>",
+            use_common_docinfo: true,
+            common_docinfo: "<docinfo><macros>\\newcommand{\\N}{\\mathbb{N}}</macros></docinfo>"
+          }
+        },
         as: :json
     end
     assert_response :success
@@ -277,6 +287,19 @@ class ProjectsControllerTest < ActionDispatch::IntegrationTest
     assert_equal "API Title", json["title"]
     assert_equal "API Title", @project.reload.title
     assert_equal "<docinfo/>", @project.docinfo
+    assert_equal true, @project.use_common_docinfo
+    assert_equal "<docinfo><macros>\\newcommand{\\N}{\\mathbb{N}}</macros></docinfo>", @project.user.reload.common_docinfo
+  end
+
+  test "editor_state includes user common_docinfo and project use_common_docinfo" do
+    @project.user.update_column(:common_docinfo, "<docinfo><macros>\\newcommand{\\R}{\\mathbb{R}}</macros></docinfo>")
+    @project.update_column(:use_common_docinfo, true)
+
+    get editor_state_project_url(@project), headers: { "Accept" => "application/json" }
+    json = response.parsed_body
+
+    assert_equal true, json["use_common_docinfo"]
+    assert_equal "<docinfo><macros>\\newcommand{\\R}{\\mathbb{R}}</macros></docinfo>", json["common_docinfo"]
   end
 
   test "docinfo-only editor_state update triggers rebuild" do

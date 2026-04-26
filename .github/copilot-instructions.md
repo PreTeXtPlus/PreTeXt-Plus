@@ -99,3 +99,10 @@ Authorization is inline (no Pundit/CanCan):
 - **Mailers use `deliver_later`** and go through the Resend API (configured in `config/initializers/mailer.rb`)
 - **Project build** happens in `Project#before_save` — modifying `content` or `title` triggers an HTTP call to the build server
 - **Sharing:** Projects have a public `/projects/:id/share` route (no auth required) and a copy-to-account feature gated to sustaining/admin users
+
+### Transaction Safety Pattern
+
+- In transaction blocks that perform writes, use bang methods (`save!`, `update!`, `create!`) or explicitly raise on failure.
+- Do not rely on non-bang return values for multi-write transaction success.
+- Prefer rescuing `ActiveRecord::RecordInvalid` and returning `e.record.errors` so failures point to the exact model that failed.
+- Keep payload/serialization shape in models when possible (for example, `Project#to_h`) rather than composing payloads in controllers.

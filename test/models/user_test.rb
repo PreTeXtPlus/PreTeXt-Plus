@@ -89,4 +89,13 @@ class UserTest < ActiveSupport::TestCase
 
     assert_equal new_user, invitation.reload.recipient_user
   end
+
+  test "new users get default common_docinfo" do
+    user = User.create!(
+      email: "defaults@example.com",
+      password: "secret123"
+    )
+
+    assert_equal Project.default_docinfo, user.reload.common_docinfo
+  end
 end
