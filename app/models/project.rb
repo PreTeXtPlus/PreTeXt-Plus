@@ -51,8 +51,12 @@ class Project < ApplicationRecord
     self.docinfo = DEFAULT_DOCINFO
   end
 
+  def common_docinfo
+    user.common_docinfo
+  end
+
   def to_h
-    [ :title, :source, :source_format, :pretext_source, :docinfo, :use_common_docinfo ]
+    [ :title, :source, :source_format, :pretext_source, :docinfo, :use_common_docinfo, :common_docinfo ]
       .map { |attr| [ attr, self.send(attr) ] }.to_h
   end
 

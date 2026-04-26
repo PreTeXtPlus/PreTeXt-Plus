@@ -142,7 +142,7 @@ class ProjectsController < ApplicationController
 
   # GET /projects/:id/editor_state
   def editor_state
-    render json: editor_state_payload
+    render json: @project.to_h
   end
 
   # PATCH /projects/:id/editor_state
@@ -150,22 +150,14 @@ class ProjectsController < ApplicationController
     attrs = editor_state_params.to_h.symbolize_keys
     common_docinfo = attrs.delete(:common_docinfo)
 
-    updated = ActiveRecord::Base.transaction do
-      if !common_docinfo.nil?
-        @project.user.update(common_docinfo: common_docinfo)
-      else
-        true
-      end
-      @project.update(attrs)
+    ActiveRecord::Base.transaction do
+      @project.user.update!(common_docinfo: common_docinfo) unless common_docinfo.nil?
+      @project.update!(attrs)
     end
 
-    if updated
-      render json: editor_state_payload
-    else
-      errors = @project.errors
-      errors = @project.user.errors if errors.empty?
-      render json: { errors: errors }, status: :unprocessable_entity
-    end
+    render json: @project.to_h
+  rescue ActiveRecord::RecordInvalid => e
+    render json: { errors: e.record.errors }, status: :unprocessable_entity
   end
 
   def share
@@ -269,10 +261,6 @@ class ProjectsController < ApplicationController
 
     def editor_state_params
       params.expect(project: [ :title, :source, :pretext_source, :source_format, :docinfo, :use_common_docinfo, :common_docinfo ])
-    end
-
-    def editor_state_payload
-      @project.to_h.merge(common_docinfo: @project.user.common_docinfo)
     end
 
     # redirect if user has too many projects
