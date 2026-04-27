@@ -1,11 +1,6 @@
 # Omakase Ruby styling for Rails
 inherit_gem: { rubocop-rails-omakase: rubocop.yml }
 
-require:
-  - ./lib/rubocop/cop/pretext_plus/transaction_requires_bang_writes.rb
-
-PretextPlus/TransactionRequiresBangWrites:
-  Enabled: true
 
 # Overwrite or add rules to create your own house style
 #
