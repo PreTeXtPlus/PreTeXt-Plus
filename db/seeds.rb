@@ -15,7 +15,6 @@ if Rails.env.development?
   user.password = "password123"
   user.password_confirmation = "password123"
   user.admin = true
-  user.subscription = :sustaining
   user.save!
   puts "Dev admin: admin@example.com / password123"
 end
