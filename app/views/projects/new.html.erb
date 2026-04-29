@@ -1,7 +1,6 @@
 <% content_for :title, "New Project" %>
 
-<div class="w-full px-4 pt-24 pb-12 md:px-0">
-  <div class="mx-auto max-w-lg">
+<div class="mx-auto w-full md:w-2/3 lg:w-1/2 px-4 pt-4 pb-12 md:px-0">
     <% if @project.errors.any? %>
       <div class="mb-6 rounded-md bg-red-50 border border-red-200 p-4">
         <h2 class="font-semibold text-red-800 mb-2">Please fix the following errors:</h2>
@@ -29,21 +28,51 @@
 
       <%# ── Source format ────────────────────────────────────────── %>
       <div>
-        <p class="block text-sm font-semibold text-gray-700 mb-3">Source format</p>
-        <div class="grid grid-cols-2 gap-4">
-          <% [["pretext", "PreTeXt", "Semantic markup language designed for academic writing."],
-              ["latex", "LaTeX-style PreTeXt", "A subset of the classic typesetting language focused on semantic markup and accessible output."]]
-             .each do |value, label, description| %>
-            <label class="relative flex cursor-pointer flex-col rounded-xl border-2 p-4 bg-gray-50 text-gray-500 hover:border-indigo-400 has-[:checked]:border-indigo-600 has-[:checked]:bg-indigo-50 has-[:checked]:text-gray-900 transition-colors">
+        <p class="block text-sm font-semibold text-gray-700 mb-3">Markup style</p>
+          <% format_labels = [
+              [ "pretext",
+                "PreTeXt",
+                "Semantic XML markup language designed for academic writing with a focus on accessibility.",
+                "ring-indigo-100 hover:ring-indigo-200 has-[:checked]:border-indigo-600 has-[:checked]:bg-indigo-50",
+                true ],
+              [ "latex",
+                "LaTeX-style PreTeXt",
+                "A subset of the classic typesetting language compatible with PreTeXt.",
+                "ring-orange-100 hover:ring-orange-200 has-[:checked]:border-orange-500 has-[:checked]:bg-orange-50",
+                true ],
+              [ "pmd",
+                "Markdown-style PreTeXt",
+                "Flavor of the popular lightweight markup language compatible with PreTeXt.",
+                "ring-purple-100 hover:ring-purple-200 has-[:checked]:border-purple-500 has-[:checked]:bg-purple-50",
+                false ]
+            ] %>
+          <% format_labels.each do |value, title, description, colors, enabled| %>
+            <%= label_tag nil, 
+                class: enabled ?
+                  "block rounded-xl bg-white p-4 m-3 ring-2 cursor-pointer sm:p-6 lg:p-8 has-[:checked]:text-gray-900 transition-colors #{colors}" :
+                  "block rounded-xl bg-gray-100 text-gray-400 p-4 m-3 ring-2 ring-gray-200 cursor-not-allowed sm:p-6 lg:p-8",
+                disabled: !enabled do %>
               <%= form.radio_button :source_format, value, class: "sr-only" %>
-              <span class="flex items-center gap-2 mb-1">
-                <span class="font-semibold text-sm"><%= label %></span>
-                <span class="hidden has-sibling-checked:inline text-indigo-600 text-xs font-medium">✓ selected</span>
+              <span class="flex items-start sm:gap-8">
+                <span class="hidden sm:grid sm:size-20 sm:shrink-0 sm:place-content-center" aria-hidden="true">
+                  <% if value == "latex" %>
+                    <%= image_tag "latex-pretext-logo.svg", alt: "PreTeXt logo", class: enabled ? nil : "opacity-30" %>
+                  <% elsif value == "pmd" %>
+                    <%= image_tag "markdown-pretext-logo.svg", alt: "PreTeXt logo", class: enabled ? nil : "opacity-30" %>
+                  <% else %>
+                    <%= image_tag "pretext-logo.svg", alt: "PreTeXt logo", class: enabled ? nil : "opacity-30" %>
+                  <% end %>
+                </span>
+                <span>
+                  <span class="flex items-center gap-2 mb-1">
+                    <span class="font-semibold"><%= title %><% unless enabled %> (coming soon!)<% end %></span>
+                    <span class="hidden has-sibling-checked:inline text-indigo-600 text-xs font-medium">✓ selected</span>
+                  </span>
+                  <span class="text-sm"><%= description %></span>
+                </span>
               </span>
-              <span class="text-xs"><%= description %></span>
-            </label>
+            <% end %>
           <% end %>
-        </div>
       </div>
 
       <%# ── Document type (coming soon) ──────────────────────────── %>
@@ -65,12 +94,11 @@
       %>
 
       <%# ── Submit ───────────────────────────────────────────────── %>
-      <div class="flex items-center gap-4 pt-2">
+      <div class="flex items-center gap-4 pb-4">
         <%= form.submit "Create project",
               class: "rounded-md px-5 py-2.5 bg-blue-600 hover:bg-blue-500 text-white font-medium cursor-pointer" %>
         <%= link_to "Cancel", projects_path,
               class: "rounded-md px-5 py-2.5 bg-gray-100 hover:bg-gray-200 font-medium text-gray-700" %>
       </div>
     <% end %>
-  </div>
 </div>

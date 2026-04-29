@@ -67,6 +67,8 @@
             <span class="hidden sm:grid sm:size-20 sm:shrink-0 sm:place-content-center" aria-hidden="true">
               <% if project.latex_source_format? %>
                 <%= image_tag "latex-pretext-logo.svg", alt: "PreTeXt logo" %>
+              <% elsif project.pmd_source_format? %>
+                <%= image_tag "markdown-pretext-logo.svg", alt: "PreTeXt logo" %>
               <% else %>
                 <%= image_tag "pretext-logo.svg", alt: "PreTeXt logo" %>
               <% end %>
@@ -76,6 +78,10 @@
               <% if project.latex_source_format? %>
                 <strong class="rounded-sm border border-orange-500 bg-orange-500 px-3 py-1.5 text-[10px] font-medium text-white">
                   LaTeX-style PreTeXt
+                </strong>
+              <% elsif project.pmd_source_format? %>
+                <strong class="rounded-sm border border-purple-500 bg-purple-500 px-3 py-1.5 text-[10px] font-medium text-white">
+                  Markdown-style PreTeXt
                 </strong>
               <% else %>
                 <strong class="rounded-sm border border-indigo-500 bg-indigo-500 px-3 py-1.5 text-[10px] font-medium text-white">
