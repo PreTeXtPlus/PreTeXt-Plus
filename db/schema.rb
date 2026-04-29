@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_04_25_223500) do
+ActiveRecord::Schema[8.1].define(version: 2026_04_28_175306) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
   enable_extension "pgcrypto"
@@ -186,6 +186,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_04_25_223500) do
     t.text "bulletpoints"
     t.datetime "created_at", null: false
     t.text "description"
+    t.boolean "invoiceable"
     t.string "name"
     t.integer "order"
     t.string "stripe_price_id"
