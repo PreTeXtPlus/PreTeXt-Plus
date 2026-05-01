@@ -1,5 +1,6 @@
 <% content_for :title, "Try it!" %>
 
+<% content_for :full_screen_content do %>
 <div class="flex flex-col w-full">
 
 <div class="shrink-0 bg-sky-50/70 ">
@@ -25,3 +26,4 @@
 <%= render "tryit_form", content: @content, title: @title, docinfo: @docinfo, source_format: @source_format %>
 
 </div>
+<% end %>

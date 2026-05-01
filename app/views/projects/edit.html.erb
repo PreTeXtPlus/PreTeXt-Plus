@@ -1,2 +1,4 @@
 <% content_for :title, "Editing project" %>
-<%= render "form", project: @project %>
+<% content_for :full_screen_content do %>
+    <%= render "form", project: @project %>
+<% end %>
