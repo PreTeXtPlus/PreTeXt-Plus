@@ -136,9 +136,23 @@
           <p class="mt-20 py-2 px-3 bg-yellow-100 border-yellow-200 border text-yellow-700 rounded-md inline-block">⚠ <%= alert %></p>
         </div>
       <% end %>
-      <main class="w-full flex md:h-screen md:pt-16">
-        <%= content_for?(:content) ? yield(:content) : yield %>
-      </main>
+      <div class="md:h-screen md:pt-16 bg-gray-50">
+        <main class="w-full flex min-h-3/4 bg-white">
+          <%= content_for?(:content) ? yield(:content) : yield %>
+        </main>
+        <footer class="w-full mt-3 p-3 text-center bg-gray-50">
+          <p>© 2025-<%= Time.current.year %> PreTeXt Plus LLC</p>
+          <div class="flex gap-3 justify-center">
+            <% if Term.current(:tos).present? %>
+              <%= link_to "Terms of Service", tos_path, class: "text-gray-800 hover:text-gray-900 hover:underline" %>
+            <% end %>
+            <span>|</span>
+            <% if Term.current(:privacy).present? %>
+              <%= link_to "Privacy Policy", privacy_path, class: "text-gray-800 hover:text-gray-900 hover:underline" %>
+            <% end %>
+          </div>
+        </footer>
+      </div>
     </div>
   </body>
 </html>
