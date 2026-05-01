@@ -58,7 +58,7 @@ class SubscriptionTypesController < ApplicationController
 
     # Only allow a list of trusted parameters through.
     def subscription_type_params
-      params.expect(subscription_type: [ :name, :description, :bulletpoints, :stripe_price_id, :order, :trial_date ])
+      params.expect(subscription_type: [ :name, :description, :bulletpoints, :stripe_price_id, :order, :trial_date, :invoiceable ])
     end
 
     def checkout_url

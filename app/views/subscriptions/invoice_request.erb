@@ -3,7 +3,15 @@
     Need an invoice for your subscription? Please provide details on your request and we will get back to you as soon as possible.
 </p>
 <%= form_with url: submit_invoice_request_path, method: :post, class: "mb-4" do |form| %>
-    <%= label_tag :details, "Invoice Request Details", class: "text-sm text-gray-700" %>
-    <%= text_area_tag :details, nil, rows: 5, class: "w-full p-2 font-mono rounded-md border-1 bg-white border-gray-300 shadow-sm focus:border-blue-500 focus:ring focus:ring-blue-200 focus:ring-opacity-50" %>
-    <%= submit_tag "Submit Request", class: "inline-flex select-none items-center gap-2 rounded-md cursor-pointer ml-1 px-4 py-2 my-1 text-sm bg-gray-50 text-gray-700 drop-shadow-md hover:bg-white" %>
+    <div class="my-2">
+        <%= label_tag :seats, "Number of seats requested", class: "text-sm text-gray-700" %>
+        <%= select_tag :seats, options_for_select((0..100).to_a+["Other (see request details)"], 0), class: "w-full p-2 font-mono rounded-md border-1 bg-white border-gray-300 shadow-sm focus:border-blue-500 focus:ring focus:ring-blue-200 focus:ring-opacity-50" %>
+    </div>
+    <div class="my-2">
+        <%= label_tag :details, "Invoice Request Details", class: "text-sm text-gray-700" %>
+        <%= text_area_tag :details, nil, rows: 5, class: "w-full p-2 font-mono rounded-md border-1 bg-white border-gray-300 shadow-sm focus:border-blue-500 focus:ring focus:ring-blue-200 focus:ring-opacity-50" %>
+    </div>
+    <div class="my-2">
+        <%= submit_tag "Submit Request", class: "inline-flex select-none items-center gap-2 rounded-md cursor-pointer ml-1 px-4 py-2 my-1 text-sm bg-gray-50 text-gray-700 drop-shadow-md hover:bg-white" %>
+    </div>
 <% end %>

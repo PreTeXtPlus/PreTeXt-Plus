@@ -45,7 +45,7 @@ class SubscriptionsController < ApplicationController
       @current_user.payment_processor.api_record
     end
     # send email to support with details of request and user info
-    SubscriptionsMailer.invoice_request(@current_user, params[:details]).deliver_later
+    SubscriptionsMailer.invoice_request(@current_user, params[:details], params[:seats]).deliver_later
     redirect_to subscriptions_path, notice: "Invoice request submitted successfully. We'll be in touch!"
   end
 
