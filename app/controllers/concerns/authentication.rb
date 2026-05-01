@@ -51,6 +51,8 @@ module Authentication
         Current.session = session
         cookies.signed.permanent[:session_id] = { value: session.id, httponly: true, same_site: :lax }
       end
+      # update agreement to ToS and Privacy Policy
+      user.update tos: Term.current(:tos), privacy: Term.current(:privacy)
     end
 
     def terminate_session
