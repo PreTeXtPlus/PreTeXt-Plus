@@ -1,0 +1,14 @@
+<% content_for(:title, @term_title) %>
+
+<div class="mx-auto xl:w-3/4 px-12 w-full py-4">
+
+  <h1 class="text-4xl">
+    <%= @term_title %>
+    <span class="text-lg text-gray-700">Last updated on <%= @term.created_at %></span>
+  </h1>
+
+  <div class="mt-4">
+    <%= @term.content %>
+  </div>
+
+</div>
