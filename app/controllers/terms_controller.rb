@@ -1,4 +1,5 @@
 class TermsController < ApplicationController
+  allow_unauthenticated_access
   def tos
     @term = Term.current(:tos)
     @term_title = "Terms of Service"

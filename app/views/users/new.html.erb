@@ -9,4 +9,11 @@
       <%= link_to "Sign into existing account", new_session_path, class: "text-blue-700 underline hover:no-underline" %>
     </div>
   <% end %>
+
+    <div class="my-4 text-sm text-gray-700">
+      By creating an account, you agree to our
+      <%= link_to "Terms of Service", tos_path, class: "text-gray-900 hover:text-black hover:underline" %>
+      and
+      <%= link_to "Privacy Policy", privacy_path, class: "text-gray-900 hover:text-black hover:underline" %>.
+    </div>
 </div>

@@ -1,5 +1,5 @@
 class PagesController < ApplicationController
-  allow_unauthenticated_access only: :home
+  allow_unauthenticated_access
   def home
     @start_writing_path = tryit_path
     if @current_user.present?
