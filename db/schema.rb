@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_04_28_175306) do
+ActiveRecord::Schema[8.1].define(version: 2026_05_01_194109) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
   enable_extension "pgcrypto"
@@ -194,6 +194,13 @@ ActiveRecord::Schema[8.1].define(version: 2026_04_28_175306) do
     t.datetime "updated_at", null: false
   end
 
+  create_table "terms", id: :uuid, default: -> { "gen_random_uuid()" }, force: :cascade do |t|
+    t.text "content"
+    t.datetime "created_at", null: false
+    t.integer "policy_type", default: 0, null: false
+    t.datetime "updated_at", null: false
+  end
+
   create_table "users", id: :uuid, default: -> { "gen_random_uuid()" }, force: :cascade do |t|
     t.boolean "admin", default: false
     t.text "common_docinfo", default: "<docinfo>\n  <brandlogo source=\"icon.svg\" />\n</docinfo>\n"
@@ -202,10 +209,14 @@ ActiveRecord::Schema[8.1].define(version: 2026_04_28_175306) do
     t.string "name"
     t.integer "old_subscription", default: 0, null: false
     t.string "password_digest", null: false
+    t.uuid "privacy_id"
     t.string "stripe_checkout_session_id"
     t.string "stripe_customer_id"
+    t.uuid "tos_id"
     t.datetime "updated_at", null: false
     t.index ["email"], name: "index_users_on_email", unique: true
+    t.index ["privacy_id"], name: "index_users_on_privacy_id"
+    t.index ["tos_id"], name: "index_users_on_tos_id"
   end
 
   add_foreign_key "invitations", "users", column: "owner_user_id"
