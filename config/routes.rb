@@ -3,6 +3,7 @@ Rails.application.routes.draw do
     root "dashboard#show"
     resources :users, only: %i[index show]
     resources :projects, only: %i[show]
+    resources :terms, only: %i[new create]
   end
 
   get "tos" => "terms#tos", as: "tos"

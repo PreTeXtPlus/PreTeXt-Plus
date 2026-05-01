@@ -1,0 +1,16 @@
+
+<% if form.object.errors.any? %>
+    <div class="text-red-600">Error: <%= form.object.errors.full_messages.first %></div>
+<% end %>
+
+<div class="my-5">
+    <%= form.label :policy_type %>
+    <%= form.select :policy_type, Term.policy_types.keys.map { |s| [s.humanize, s] },
+        { required: true },
+        class: "block shadow-sm rounded-md border border-gray-400 focus:outline-blue-600 px-3 py-2 mt-2 w-full" %>
+</div>
+
+<div class="my-5">
+    <%= form.label :content, class: "text-sm font-semibold text-gray-800" %>
+    <%= form.textarea :content, required: true, class: "block shadow-sm rounded-md border border-gray-400 focus:outline-blue-600 px-3 py-2 mt-2 w-full" %>
+</div>

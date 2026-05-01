@@ -1,0 +1,11 @@
+<% content_for :title, "New terms" %>
+
+<div class="w-full mx-auto p-2 md:w-2/3">
+  <h1 class="font-bold text-4xl">New terms</h1>
+  <%= form_with model: @term, url: admin_terms_path do |form| %>
+    <%= render "fields_for", form: form %>
+    <div class="col-span-6 sm:flex sm:items-center sm:gap-4">
+      <%= form.submit "Create terms", class: "w-full sm:w-auto text-center rounded-md px-3.5 py-2.5 bg-green-600 hover:bg-green-500 text-white inline-block font-medium cursor-pointer" %>
+    </div>
+  <% end %>
+</div>
