@@ -1,4 +1,3 @@
-# Privacy Policy
 
 PreTeXt Plus LLC ("PreTeXt.Plus," "we," "us," or "our") provides an online platform for authoring, compiling, and sharing technical and scholarly documents, including mathematical content (the "Service").
 

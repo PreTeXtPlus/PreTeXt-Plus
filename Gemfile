@@ -74,3 +74,5 @@ gem "stripe", "~> 19.0"
 gem "resend", "~> 1.0"
 
 gem "pay", "~> 11.6"
+
+gem "commonmarker", "~> 2.8"

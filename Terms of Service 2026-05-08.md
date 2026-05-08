@@ -1,6 +1,4 @@
-# Terms of Use
-
-These Terms of Use ("Terms") are a binding agreement between you and PreTeXt Plus LLC ("PreTeXt.Plus," "we," "us," or "our") governing your access to and use of our website, applications, and related services (collectively, the "Service").
+These Terms of Service ("Terms") are a binding agreement between you and PreTeXt Plus LLC ("PreTeXt.Plus," "we," "us," or "our") governing your access to and use of our website, applications, and related services (collectively, the "Service").
 
 By creating an account, accessing, or using the Service, you agree to these Terms. If you do not agree, do not use the Service.
 

@@ -4,11 +4,13 @@
 
   <h1 class="text-4xl">
     <%= @term_title %>
-    <span class="text-lg text-gray-700">Last updated on <%= @term.created_at %></span>
+    <br>
+    <span class="text-lg text-gray-700">Last updated on <time datetime="<%= @term.updated_at.iso8601 %>" title="<%= @term.updated_at.localtime.strftime('%B %-d, %Y at %-I:%M %p %Z') %>"><%= @term.updated_at.localtime.strftime('%B %-d, %Y') %>
+    </time></span>
   </h1>
 
-  <pre class="mt-4">
-    <%= @term.content %>
-  </pre>
+  <div class="prose prose-slate mt-4 max-w-none">
+    <%= render_markdown(@term.content) %>
+  </div>
 
 </div>
