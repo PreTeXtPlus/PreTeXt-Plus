@@ -1,12 +1,19 @@
 <% content_for(:title, @term_title) %>
 
 <div class="mx-auto xl:w-3/4 px-12 w-full py-4">
+  <% updated_at_local = @term.updated_at.localtime %>
 
   <h1 class="text-4xl">
     <%= @term_title %>
     <br>
-    <span class="text-lg text-gray-700">Last updated on <time datetime="<%= @term.updated_at.iso8601 %>" title="<%= @term.updated_at.localtime.strftime('%B %-d, %Y at %-I:%M %p %Z') %>"><%= @term.updated_at.localtime.strftime('%B %-d, %Y') %>
-    </time></span>
+    <span class="text-lg text-gray-700">
+      Last updated on
+      <%= tag.time(
+            updated_at_local.strftime('%B %-d, %Y'),
+            datetime: @term.updated_at.iso8601,
+            title: updated_at_local.strftime('%B %-d, %Y at %-I:%M %p %Z')
+          ) %>
+    </span>
   </h1>
 
   <div class="prose prose-slate mt-4 max-w-none">

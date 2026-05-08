@@ -62,6 +62,7 @@
     <% end %>
     <% if @projects.any? %>
       <% @projects.each do |project| %>
+        <% updated_at_local = project.updated_at.localtime %>
         <%= link_to project, class: "block rounded-xl bg-white p-4 m-3 ring-2 ring-gray-100 hover:ring-indigo-200 sm:p-6 lg:p-8", data: { turbo: false } do %>
           <span class="flex items-start sm:gap-8">
             <span class="hidden sm:grid sm:size-20 sm:shrink-0 sm:place-content-center" aria-hidden="true">
@@ -94,7 +95,12 @@
               </h3>
 
               <p class="mt-1 text-sm text-gray-700">
-                Last updated: <time datetime="<%= project.updated_at.iso8601 %>" title="<%= project.updated_at.localtime.strftime('%B %-d, %Y at %-I:%M %p %Z') %>"><%= time_ago_in_words(project.updated_at) %> ago</time>
+                Last updated:
+                <%= tag.time(
+                      "#{time_ago_in_words(project.updated_at)} ago",
+                      datetime: project.updated_at.iso8601,
+                      title: updated_at_local.strftime('%B %-d, %Y at %-I:%M %p %Z')
+                    ) %>
               </p>
             </span>
           </span>
