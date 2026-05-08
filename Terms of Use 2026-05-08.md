@@ -1,7 +1,5 @@
 # Terms of Use
 
-Last updated: April 28, 2026
-
 These Terms of Use ("Terms") are a binding agreement between you and PreTeXt Plus LLC ("PreTeXt.Plus," "we," "us," or "our") governing your access to and use of our website, applications, and related services (collectively, the "Service").
 
 By creating an account, accessing, or using the Service, you agree to these Terms. If you do not agree, do not use the Service.
@@ -97,7 +95,7 @@ We may offer free trials and beta, preview, or early-access features.
 
 - We may enforce plan limits, quotas, fair-use controls, anti-abuse controls, and technical limits.
 - We may access account content when reasonably necessary for support, security, abuse prevention, legal compliance, and service operations.
-- You are responsible for maintaining your own backups of important content.
+- You are responsible for maintaining your own backups of your content.
 
 ## 10. Third-Party Services and Integrations
 

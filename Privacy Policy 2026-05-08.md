@@ -1,7 +1,5 @@
 # Privacy Policy
 
-Last updated: April 28, 2026
-
 PreTeXt Plus LLC ("PreTeXt.Plus," "we," "us," or "our") provides an online platform for authoring, compiling, and sharing technical and scholarly documents, including mathematical content (the "Service").
 
 This Privacy Policy explains how we collect, use, disclose, transfer, retain, and protect personal information when you use our website, applications, and related services.
@@ -43,7 +41,7 @@ We collect the following categories of personal information.
 ### 3.3 Project and content information
 
 - Project titles and source content
-- Generated HTML output and build metadata
+- Generated output and build metadata
 - Sharing state and public share-link visibility
 
 ### 3.4 Invitations, requests, and communications
