@@ -1,0 +1,22 @@
+<section>
+    <title> Welcome to PreTeXt.Plus! </title>
+
+    <p>
+    This is a sample project to get you started. You can edit this content using the PreTeXt markup language.
+        <md>
+            \left|\sum_{i=0}^n a_i\right|\leq\sum_{i=0}^n|a_i|
+        </md>
+    </p>
+
+    <fact>
+        <statement>
+            <p>
+            For more information on how to use PreTeXt, please visit <c>https://pretextbook.org/doc/guide/html/</c>.
+            </p>
+        </statement>
+    </fact>
+
+    <p>
+        Feel free to delete this sample content and start creating your own project. Happy writing!
+    </p>
+</section>

@@ -15,14 +15,15 @@ class Project < ApplicationRecord
     end
     doc_tag = document_type || "article"
 
-    xml = +"<pretext>"
-    xml << effective_docinfo.to_s if effective_docinfo.present?
-    xml << "<#{doc_tag} label=\"article\">"
-    xml << "<title>#{title}</title>" if title.present?
-    xml << (pretext_source.present? ? pretext_source.to_s : source.to_s)
-    xml << "</#{doc_tag}>"
-    xml << "</pretext>"
-    xml
+    <<~XML.squish
+      <pretext>
+        #{effective_docinfo.to_s if effective_docinfo.present?}
+        <#{doc_tag} label="article">
+          #{"<title>"+title+"</title>" if title.present?}
+          #{pretext_source.present? ? pretext_source.to_s : source.to_s}
+        </#{doc_tag}>
+      </pretext>
+    XML
   end
 
   def effective_docinfo
@@ -60,71 +61,10 @@ class Project < ApplicationRecord
       .map { |attr| [ attr, self.send(attr) ] }.to_h
   end
 
-  DEFAULT_DOCINFO = <<~XML
-    <docinfo>
-      <brandlogo source="icon.svg" />
-    </docinfo>
-  XML
-
-  DEFAULT_PRETEXT_SOURCE = <<~XML
-    <section>
-      <title> Welcome to PreTeXt.Plus! </title>
-
-      <p>
-        This is a sample project to get you started. You can edit this content using the PreTeXt markup language.
-        <md>
-          \\left|\\sum_{i=0}^n a_i\\right|\\leq\\sum_{i=0}^n|a_i|
-        </md>
-      </p>
-
-      <fact>
-        <statement>
-          <p>
-            For more information on how to use PreTeXt, please visit <c>https://pretextbook.org/doc/guide/html/</c>.
-          </p>
-        </statement>
-      </fact>
-
-      <p>
-        Feel free to delete this sample content and start creating your own project. Happy writing!
-      </p>
-    </section>
-  XML
-
-  DEFAULT_LATEX_SOURCE = <<~LATEX
-    \\section{Welcome to PreTeXt.Plus!}
-
-    This is a sample project to get you started. You can edit this content using markup that should
-    look just like LaTeX. For example, you can write math using LaTeX syntax:
-
-    \\[
-      \\left|\\sum_{i=0}^n a_i\\right| \\leq \\sum_{i=0}^n |a_i|
-    \\]
-
-    Not all LaTeX is supported, but that's a good thing.  Writing in LaTeX-style PreTeXt will ensure your content can be built by PreteXt and will be accessible!
-
-    Feel free to delete this sample content and start creating your own project. Happy writing!
-  LATEX
-
-  DEFAULT_MARKDOWN_SOURCE = <<~MARKDOWN
-    # Welcome to PreTeXt.Plus!
-
-    This is a sample project to get you started. You can edit this content using _PreTeXt Markdown_.
-
-    $$
-      \\left|\\sum_{i=0}^n a_i\\right| \\leq \\sum_{i=0}^n |a_i|
-    $$
-
-    For more information, visit https://pretextbook.org/doc/guide/html/.
-
-    Feel free to delete this sample content and start creating your own project. Happy writing!
-
-    Theorem:
-      PreTeXt can be used in Markdown mode.
-
-      Proof:
-        See this document.
-  MARKDOWN
+  DEFAULT_DOCINFO = File.read Rails.root.join("app", "default_docs", "docinfo.xml")
+  DEFAULT_PRETEXT_SOURCE = File.read Rails.root.join("app", "default_docs", "pretext.xml")
+  DEFAULT_LATEX_SOURCE = File.read Rails.root.join("app", "default_docs", "latex.tex")
+  DEFAULT_MARKDOWN_SOURCE = File.read Rails.root.join("app", "default_docs", "markdown.md")
 
   private
 
