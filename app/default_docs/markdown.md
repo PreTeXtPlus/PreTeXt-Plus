@@ -6,12 +6,13 @@ $$
     \left|\sum_{i=0}^n a_i\right| \leq \sum_{i=0}^n |a_i|
 $$
 
-For more information, visit https://pretextbook.org/doc/guide/html/.
+For more information on how to use PreTeXt.Plus, use the "Help" menu above.
 
-Feel free to delete this sample content and start creating your own project. Happy writing!
+Feel free to delete this sample content and start creating your own project,
+or paste in your existing Markdown. Happy writing!
 
 Theorem:
     PreTeXt can be used in Markdown mode.
 
     Proof:
-        See this document.
+        See this document!
