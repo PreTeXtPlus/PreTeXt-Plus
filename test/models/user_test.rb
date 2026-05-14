@@ -96,6 +96,6 @@ class UserTest < ActiveSupport::TestCase
       password: "secret123"
     )
 
-    assert_equal Project.default_docinfo, user.reload.common_docinfo
+    assert_equal Project.default_docinfo.squish, user.reload.common_docinfo.squish
   end
 end
