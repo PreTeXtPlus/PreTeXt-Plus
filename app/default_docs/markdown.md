@@ -1,6 +1,6 @@
 # Welcome to PreTeXt.Plus!
 
-This is a sample project to get you started. You can edit this content using _PreTeXt Markdown_.
+This is a sample project to get you started. You can edit this content using _Markdown-style PreTeXt_.
 
 $$
     \left|\sum_{i=0}^n a_i\right| \leq \sum_{i=0}^n |a_i|
