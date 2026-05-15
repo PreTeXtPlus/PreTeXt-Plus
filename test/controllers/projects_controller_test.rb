@@ -4,6 +4,8 @@ class ProjectsControllerTest < ActionDispatch::IntegrationTest
   setup do
     @project = projects(:one)
     @user = users(:one)
+    clear_enqueued_jobs
+    clear_performed_jobs
     post session_path, params: { email: @user.email, password: "password123" }
   end
 
@@ -124,6 +126,64 @@ class ProjectsControllerTest < ActionDispatch::IntegrationTest
     delete session_path  # sign out
     get share_project_url(@project)
     assert_response :success
+  end
+
+  test "share prefers artifact manifest entrypoint html" do
+    @project.build_artifacts.attach(
+      io: StringIO.new("<html><body>manifest</body></html>"),
+      filename: "index.html",
+      content_type: "text/html",
+      metadata: { "artifact_path" => "index.html" }
+    )
+
+    @project.update_columns(
+      html_source: "<html><body>legacy</body></html>",
+      artifact_manifest: {
+        "entrypoint" => "index.html"
+      }
+    )
+
+    get share_project_url(@project)
+
+    assert_response :success
+    assert_includes response.body, "manifest"
+    assert_not_includes response.body, "legacy"
+  end
+
+  test "artifact endpoint serves stored artifact file" do
+    delete session_path
+    @project.build_artifacts.attach(
+      io: StringIO.new("body { color: red; }"),
+      filename: "assets__site.css",
+      content_type: "text/css",
+      metadata: { "artifact_path" => "assets/site.css" }
+    )
+
+    get artifact_project_url(@project, path: "site.css")
+
+    assert_response :success
+    assert_equal "text/css", response.media_type
+    assert_includes response.body, "color: red"
+  end
+
+  test "artifact endpoint returns not_found for missing path" do
+    delete session_path
+
+    get artifact_project_url(@project, path: "assets/missing.css")
+
+    assert_response :not_found
+  end
+
+  test "share falls back to html_source when manifest is missing" do
+    @project.update_columns(
+      html_source: "<html><body>legacy</body></html>",
+      artifact_manifest: {}
+    )
+
+    get share_project_url(@project)
+
+    assert_response :success
+    assert_includes response.body, "legacy"
   end
 
   test "copy creates a duplicate for subscriber" do
@@ -269,7 +329,7 @@ class ProjectsControllerTest < ActionDispatch::IntegrationTest
   end
 
   test "should update_editor_state via patch" do
-    stub_build_server do
+    assert_enqueued_with(job: BuildProjectJob, args: [ @project.id ]) do
       patch editor_state_project_url(@project),
         params: {
           project: {
@@ -286,6 +346,7 @@ class ProjectsControllerTest < ActionDispatch::IntegrationTest
     json = response.parsed_body
     assert_equal "API Title", json["title"]
     assert_equal "API Title", @project.reload.title
+    assert_equal "queued", @project.build_status
     assert_equal "<docinfo/>", @project.docinfo
     assert_equal true, @project.use_common_docinfo
     assert_equal "<docinfo><macros>\\newcommand{\\N}{\\mathbb{N}}</macros></docinfo>", @project.user.reload.common_docinfo
@@ -302,7 +363,18 @@ class ProjectsControllerTest < ActionDispatch::IntegrationTest
     assert_equal "<docinfo><macros>\\newcommand{\\R}{\\mathbb{R}}</macros></docinfo>", json["common_docinfo"]
   end
 
-  test "docinfo-only editor_state update triggers rebuild" do
+  test "docinfo-only editor_state update enqueues rebuild" do
+    assert_enqueued_with(job: BuildProjectJob, args: [ @project.id ]) do
+      patch editor_state_project_url(@project),
+        params: { project: { docinfo: "<docinfo><macros>\\newcommand{\\Q}{\\mathbb{Q}}</macros></docinfo>" } },
+        as: :json
+    end
+
+    assert_response :success
+    assert_equal "queued", @project.reload.build_status
+  end
+
+  test "docinfo-only editor_state update rebuilds when job runs" do
     captured_params = nil
     fake_response = Struct.new(:body).new("<html><body>docinfo-only</body></html>")
 
@@ -310,14 +382,84 @@ class ProjectsControllerTest < ActionDispatch::IntegrationTest
       captured_params = params
       fake_response
     }) do
-      patch editor_state_project_url(@project),
-        params: { project: { docinfo: "<docinfo><macros>\\newcommand{\\Q}{\\mathbb{Q}}</macros></docinfo>" } },
-        as: :json
+      perform_enqueued_jobs do
+        patch editor_state_project_url(@project),
+          params: { project: { docinfo: "<docinfo><macros>\\newcommand{\\Q}{\\mathbb{Q}}</macros></docinfo>" } },
+          as: :json
+      end
     end
 
     assert_response :success
     assert_includes captured_params[:source], "<docinfo><macros>\\newcommand{\\Q}{\\mathbb{Q}}</macros></docinfo>"
+    assert_equal "succeeded", @project.reload.build_status
     assert_equal "<html><body>docinfo-only</body></html>", @project.reload.html_source
+  end
+
+  test "async build serves linked css and js artifacts" do
+    payload = {
+      "manifest" => {
+        "version" => 1,
+        "build_id" => "bld-e2e",
+        "generated_at" => Time.current.iso8601,
+        "entrypoint" => "index.html",
+        "files" => [
+          { "path" => "index.html", "content_type" => "text/html" },
+          { "path" => "assets/site.css", "content_type" => "text/css" },
+          { "path" => "assets/site.js", "content_type" => "application/javascript" }
+        ],
+        "inline_files" => {
+          "index.html" => "<html><head><link rel=\"stylesheet\" href=\"assets/site.css\"></head><body><script src=\"assets/site.js\"></script></body></html>",
+          "assets/site.css" => "body { color: #111827; }",
+          "assets/site.js" => "window.__artifactSmoke = true;"
+        }
+      }
+    }
+
+    fake_response = Struct.new(:body) do
+      def to_hash
+        { "content-type" => [ "application/json" ] }
+      end
+    end.new(payload.to_json)
+
+    Net::HTTP.stub(:post_form, fake_response) do
+      BuildProjectJob.perform_now(@project.id)
+    end
+
+    assert_equal "succeeded", @project.reload.build_status
+
+    delete session_path
+
+    get share_project_url(@project)
+    assert_response :success
+    assert_includes response.body, "assets/site.css"
+    assert_includes response.body, "assets/site.js"
+
+    get artifact_project_url(@project, path: "site.css")
+    assert_response :success
+    assert_equal "text/css", response.media_type
+    assert_includes response.body, "#111827"
+
+    get artifact_project_url(@project, path: "site.js")
+    assert_response :success
+    assert_equal "application/javascript", response.media_type
+    assert_includes response.body, "__artifactSmoke"
+  end
+
+  test "owner can poll build_status" do
+    @project.update_columns(build_status: "running")
+
+    get build_status_project_url(@project), headers: { "Accept" => "application/json" }
+
+    assert_response :success
+    assert_equal "running", response.parsed_body["build_status"]
+  end
+
+  test "non-owner cannot poll build_status" do
+    other_project = projects(:two)
+
+    get build_status_project_url(other_project), headers: { "Accept" => "application/json" }
+
+    assert_redirected_to projects_path
   end
 
   test "should reject invalid source_format in editor_state update" do
@@ -352,5 +494,39 @@ class ProjectsControllerTest < ActionDispatch::IntegrationTest
     delete session_path
     get editor_state_project_url(@project), headers: { "Accept" => "application/json" }
     assert_response :redirect
+  end
+
+  test "owner can upload project image" do
+    file = fixture_file_upload("test-image.png", "image/png")
+
+    assert_difference("ActiveStorage::Attachment.count", 1) do
+      post upload_image_project_url(@project), params: { image: file }, as: :multipart
+    end
+
+    assert_response :created
+    assert_equal "image/png", response.parsed_body["content_type"]
+    assert_equal 1, @project.reload.images.count
+  end
+
+  test "upload image rejects unsupported content type" do
+    file = fixture_file_upload("test-document.txt", "text/plain")
+
+    assert_no_difference("ActiveStorage::Attachment.count") do
+      post upload_image_project_url(@project), params: { image: file }, as: :multipart
+    end
+
+    assert_response :unprocessable_entity
+    assert_equal "unsupported image format", response.parsed_body["error"]
+  end
+
+  test "non-owner cannot upload project image" do
+    other_project = projects(:two)
+    file = fixture_file_upload("test-image.png", "image/png")
+
+    assert_no_difference("ActiveStorage::Attachment.count") do
+      post upload_image_project_url(other_project), params: { image: file }, as: :multipart
+    end
+
+    assert_redirected_to projects_path
   end
 end

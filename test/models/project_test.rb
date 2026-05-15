@@ -145,4 +145,22 @@ class ProjectTest < ActiveSupport::TestCase
     assert_equal "\\section{Raw LaTeX}", captured_params[:source]
     assert_equal "<html><body>latex-fallback</body></html>", project.html_source
   end
+
+  test "image_upload_error accepts supported image" do
+    upload = Struct.new(:content_type, :size).new("image/png", 1024)
+
+    assert_nil Project.image_upload_error(upload)
+  end
+
+  test "image_upload_error rejects unsupported content type" do
+    upload = Struct.new(:content_type, :size).new("application/pdf", 1024)
+
+    assert_equal "unsupported image format", Project.image_upload_error(upload)
+  end
+
+  test "image_upload_error rejects oversized image" do
+    upload = Struct.new(:content_type, :size).new("image/png", 11.megabytes)
+
+    assert_equal "image is too large (max 10 MB)", Project.image_upload_error(upload)
+  end
 end
