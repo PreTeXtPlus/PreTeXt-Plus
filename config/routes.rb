@@ -34,6 +34,9 @@ Rails.application.routes.draw do
     member do
       get  :editor_state
       patch :editor_state, action: :update_editor_state
+      get :build_status
+      post :upload_image
+      get "assets/*path" => "projects#artifact", as: :artifact
       get "share" => "projects#share", as: "share"
       get "share/source" => "projects#source", as: "share_source"
       get "share/copy", to: redirect("projects/%{project_id}/share/source")

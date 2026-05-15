@@ -1,9 +1,10 @@
 class ProjectsController < ApplicationController
-  allow_unauthenticated_access only: %i[ share preview source ]
+  allow_unauthenticated_access only: %i[ share preview source artifact ]
+  skip_forgery_protection only: :artifact
   require_unauthenticated_access only: %i[ tryit ]
-  before_action :set_project, only: %i[ show edit update destroy editor_state update_editor_state share source copy copy_conversion ]
+  before_action :set_project, only: %i[ show edit update destroy editor_state update_editor_state build_status share source copy copy_conversion upload_image artifact ]
   before_action :limit_projects, only: %i[ new create copy copy_conversion ]
-  before_action :require_ownership, only: %i[ show edit update destroy editor_state update_editor_state ]
+  before_action :require_ownership, only: %i[ show edit update destroy editor_state update_editor_state build_status upload_image ]
   before_action :require_copy_permission, only: %i[ source copy ]
   after_action :allow_iframe, only: :share
   rate_limit to: 25, within: 10.minutes, only: :preview,
@@ -170,22 +171,74 @@ class ProjectsController < ApplicationController
   def update_editor_state
     attrs = editor_state_params.to_h.symbolize_keys
     common_docinfo = attrs.delete(:common_docinfo)
+    should_enqueue_build = (attrs.keys & [ :title, :source, :pretext_source, :docinfo, :source_format, :use_common_docinfo ]).any?
 
     ActiveRecord::Base.transaction do
       @project.user.update!(common_docinfo: common_docinfo) unless common_docinfo.nil?
+      @project.skip_sync_build = should_enqueue_build
+      attrs[:build_status] = "queued" if should_enqueue_build
+      attrs[:last_build_error] = nil if should_enqueue_build
       @project.update!(attrs)
     end
+
+    BuildProjectJob.perform_later(@project.id) if should_enqueue_build
 
     render json: @project.to_h
   rescue ActiveRecord::RecordInvalid => e
     render json: { errors: e.record.errors }, status: :unprocessable_entity
   end
 
+  def build_status
+    render json: {
+      build_status: @project.build_status,
+      last_build_started_at: @project.last_build_started_at,
+      last_build_finished_at: @project.last_build_finished_at,
+      last_build_error: @project.last_build_error
+    }
+  end
+
   def share
-    render html: (@project.html_source || "Document not found").html_safe
+    render html: (@project.rendered_html_source || "Document not found").html_safe
   end
 
   def source
+  end
+
+  # GET /projects/:id/assets/*path
+  def artifact
+    path = params[:path].to_s
+    path = "#{path}.#{params[:format]}" if params[:format].present?
+    attachment = @project.artifact_attachment_for(path)
+
+    unless attachment
+      head :not_found
+      return
+    end
+
+    send_data attachment.download,
+              type: attachment.blob.content_type,
+              disposition: "inline",
+              filename: attachment.blob.filename.to_s
+  end
+
+  # POST /projects/:id/upload_image
+  def upload_image
+    image = params[:image]
+    error = Project.image_upload_error(image)
+
+    if error
+      render json: { error: error }, status: :unprocessable_entity
+      return
+    end
+
+    @project.images.attach(image)
+    blob = @project.images.last.blob
+
+    render json: {
+      filename: blob.filename.to_s,
+      content_type: blob.content_type,
+      byte_size: blob.byte_size
+    }, status: :created
   end
 
   # GET /projects/:project_id/share/copy
@@ -219,26 +272,7 @@ class ProjectsController < ApplicationController
   end
 
   def preview
-    require "uri"
-    require "net/http"
-    post_params = {
-      source: params[:source],
-      title: params[:title],
-      token: ENV["BUILD_TOKEN"]
-    }
-    uri = URI.parse("https://#{ENV['BUILD_HOST']}")
-    response = Net::HTTP.start(
-      uri.host,
-      uri.port,
-      use_ssl: uri.scheme == "https",
-      open_timeout: 5,
-      read_timeout: 15
-    ) do |http|
-      request = Net::HTTP::Post.new(uri.request_uri)
-      request["Content-Type"] = "application/x-www-form-urlencoded"
-      request.body = URI.encode_www_form(post_params)
-      http.request(request)
-    end
+    response = BuildServerClient.new.preview_html(source: params[:source], title: params[:title])
     # return html along with the status returned by build server
     render html: response.body.html_safe, status: response.code
   rescue Net::OpenTimeout, Net::ReadTimeout
