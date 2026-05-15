@@ -5,6 +5,7 @@ COMPOSE_FILE="docker-compose.local.yml"
 PORT="${SMOKE_PORT:-3300}"
 BUILD_HOST_URL="${BUILD_HOST_URL:-http://localhost:4010}"
 BUILD_TOKEN_VALUE="${BUILD_TOKEN_VALUE:-local-build-token}"
+BUILDER_HEALTH_URL="${BUILDER_HEALTH_URL:-${BUILD_HOST_URL%/}/health}"
 RAILS_LOG="tmp/local_full_e2e_smoke_rails.log"
 BUILDER_LOG="tmp/local_full_e2e_smoke_builder.log"
 BUILDER_AVAILABLE="yes"
@@ -29,7 +30,7 @@ trap cleanup EXIT
 echo "Waiting for local builder"
 builder_ready=""
 for _ in {1..15}; do
-  if curl -fsS "http://localhost:4010/health" >/dev/null; then
+  if curl -fsS "$BUILDER_HEALTH_URL" >/dev/null; then
     builder_ready="yes"
     break
   fi
@@ -90,7 +91,7 @@ if [[ "$BUILDER_AVAILABLE" == "yes" ]]; then
       break
     fi
 
-    curl -fsS "http://localhost:4010/health" >/dev/null || true
+    curl -fsS "$BUILDER_HEALTH_URL" >/dev/null || true
     sleep 1
   done
 
