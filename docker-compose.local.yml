@@ -6,7 +6,7 @@ services:
     environment:
       BUILD_TOKEN: local-build-token
     ports:
-      - "4010:4010"
+      - "${LOCAL_BUILDER_HOST_PORT:-4010}:4010"
 
   local-s3:
     image: minio/minio:latest

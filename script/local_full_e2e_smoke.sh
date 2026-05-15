@@ -6,11 +6,30 @@ PORT="${SMOKE_PORT:-3300}"
 BUILD_HOST_URL="${BUILD_HOST_URL:-http://localhost:4010}"
 BUILD_TOKEN_VALUE="${BUILD_TOKEN_VALUE:-local-build-token}"
 BUILDER_HEALTH_URL="${BUILDER_HEALTH_URL:-${BUILD_HOST_URL%/}/health}"
+SMOKE_REQUIRE_BUILDER="${SMOKE_REQUIRE_BUILDER:-0}"
 RAILS_LOG="tmp/local_full_e2e_smoke_rails.log"
 BUILDER_LOG="tmp/local_full_e2e_smoke_builder.log"
 BUILDER_AVAILABLE="yes"
 
 mkdir -p tmp
+
+print_builder_diagnostics() {
+  echo "--- builder diagnostics start ---"
+  echo "Health URL: $BUILDER_HEALTH_URL"
+
+  echo "[diag] docker compose ps local-builder"
+  docker compose -f "$COMPOSE_FILE" ps local-builder || true
+
+  echo "[diag] local-builder logs (tail 80)"
+  docker compose -f "$COMPOSE_FILE" logs --tail 80 local-builder || true
+
+  echo "[diag] listeners on :4010"
+  ss -ltnp | grep ':4010' || echo "none"
+
+  echo "[diag] docker containers publishing 4010"
+  docker ps --format '{{.Names}} {{.Ports}}' | grep '4010' || echo "none"
+  echo "--- builder diagnostics end ---"
+}
 
 echo "Starting local dependency stack"
 docker compose -f "$COMPOSE_FILE" up -d --build
@@ -38,6 +57,12 @@ for _ in {1..15}; do
 done
 
 if [[ "$builder_ready" != "yes" ]]; then
+  if [[ "$SMOKE_REQUIRE_BUILDER" == "1" ]]; then
+    echo "Local builder unreachable and SMOKE_REQUIRE_BUILDER=1; failing smoke run"
+    print_builder_diagnostics
+    exit 1
+  fi
+
   echo "Local builder unreachable; proceeding with synthetic artifact fallback mode"
   BUILDER_AVAILABLE="no"
 fi
