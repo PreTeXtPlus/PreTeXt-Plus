@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_06_02_004745) do
+ActiveRecord::Schema[8.1].define(version: 2026_06_02_014705) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
   enable_extension "pgcrypto"
@@ -53,6 +53,14 @@ ActiveRecord::Schema[8.1].define(version: 2026_06_02_004745) do
     t.index ["code"], name: "index_invitations_on_code", unique: true
     t.index ["owner_user_id"], name: "index_invitations_on_owner_user_id"
     t.index ["recipient_user_id"], name: "index_invitations_on_recipient_user_id"
+  end
+
+  create_table "library_assets", id: :uuid, default: -> { "gen_random_uuid()" }, force: :cascade do |t|
+    t.datetime "created_at", null: false
+    t.string "filename"
+    t.datetime "updated_at", null: false
+    t.uuid "user_id", null: false
+    t.index ["user_id"], name: "index_library_assets_on_user_id"
   end
 
   create_table "pay_charges", id: :uuid, default: -> { "gen_random_uuid()" }, force: :cascade do |t|
@@ -251,6 +259,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_06_02_004745) do
   add_foreign_key "active_storage_variant_records", "active_storage_blobs", column: "blob_id"
   add_foreign_key "invitations", "users", column: "owner_user_id"
   add_foreign_key "invitations", "users", column: "recipient_user_id"
+  add_foreign_key "library_assets", "users"
   add_foreign_key "pay_charges", "pay_customers", column: "customer_id"
   add_foreign_key "pay_charges", "pay_subscriptions", column: "subscription_id"
   add_foreign_key "pay_payment_methods", "pay_customers", column: "customer_id"

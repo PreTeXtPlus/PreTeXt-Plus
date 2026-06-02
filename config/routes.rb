@@ -1,4 +1,5 @@
 Rails.application.routes.draw do
+  resources :library_assets, path: "library"
   namespace :admin do
     root "dashboard#show"
     resources :users, only: %i[index show]

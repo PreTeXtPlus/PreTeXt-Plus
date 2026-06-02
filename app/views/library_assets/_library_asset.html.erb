@@ -1,0 +1,14 @@
+<div id="<%= dom_id library_asset %>" class="w-full sm:w-auto my-5 space-y-5">
+  <div>
+    <strong class="block font-medium mb-1">File:</strong>
+    <%= link_to library_asset.file.filename, library_asset.file, class: "text-gray-700 underline hover:no-underline" if library_asset.file.attached? %>
+  </div>
+  <div>
+    <strong class="block font-medium mb-1">Filename:</strong>
+    <%= library_asset.filename %>
+  </div>
+  <div>
+    <strong class="block font-medium mb-1">User:</strong>
+    <%= library_asset.user_id %>
+  </div>
+</div>
