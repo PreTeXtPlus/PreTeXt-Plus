@@ -32,6 +32,7 @@ Rails.application.routes.draw do
   get "projects/:id/*_.html", to: redirect("/projects/%{id}/share")
   get "projects/*_/icon.svg", to: redirect("/icon-small.svg")
   resources :projects do
+    resources :project_assets, path: "library", as: "assets"
     member do
       get  :editor_state
       patch :editor_state, action: :update_editor_state

@@ -1,4 +1,4 @@
 class ProjectAsset < ApplicationRecord
-  belongs_to :asset
+  belongs_to :library_asset
   belongs_to :project
 end

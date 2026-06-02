@@ -1,6 +1,9 @@
 class Project < ApplicationRecord
   belongs_to :user
 
+  has_many :project_assets
+  has_many :library_assets, through: :project_assets
+
   enum :source_format, { pretext: 0, latex: 1, markdown: 2 }, default: :pretext, suffix: true, validate: true
   enum :document_type, { article: 0, book: 1, slideshow: 2 }, default: :article, suffix: true, validate: true
 

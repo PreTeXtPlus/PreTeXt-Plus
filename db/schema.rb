@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_06_02_014705) do
+ActiveRecord::Schema[8.1].define(version: 2026_06_02_021536) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
   enable_extension "pgcrypto"
@@ -162,6 +162,15 @@ ActiveRecord::Schema[8.1].define(version: 2026_06_02_014705) do
     t.datetime "updated_at", null: false
   end
 
+  create_table "project_assets", id: :uuid, default: -> { "gen_random_uuid()" }, force: :cascade do |t|
+    t.datetime "created_at", null: false
+    t.uuid "library_asset_id", null: false
+    t.uuid "project_id", null: false
+    t.datetime "updated_at", null: false
+    t.index ["library_asset_id"], name: "index_project_assets_on_library_asset_id"
+    t.index ["project_id"], name: "index_project_assets_on_project_id"
+  end
+
   create_table "projects", id: :uuid, default: -> { "gen_random_uuid()" }, force: :cascade do |t|
     t.datetime "created_at", null: false
     t.text "docinfo"
@@ -264,6 +273,8 @@ ActiveRecord::Schema[8.1].define(version: 2026_06_02_014705) do
   add_foreign_key "pay_charges", "pay_subscriptions", column: "subscription_id"
   add_foreign_key "pay_payment_methods", "pay_customers", column: "customer_id"
   add_foreign_key "pay_subscriptions", "pay_customers", column: "customer_id"
+  add_foreign_key "project_assets", "library_assets"
+  add_foreign_key "project_assets", "projects"
   add_foreign_key "projects", "users"
   add_foreign_key "requests", "users"
   add_foreign_key "sessions", "users"
