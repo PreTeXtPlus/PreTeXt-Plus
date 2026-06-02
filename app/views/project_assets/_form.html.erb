@@ -13,7 +13,7 @@
 
   <div class="my-5">
     <%= form.label :library_asset_id %>
-    <%= form.select :library_asset_id, project.user.library_assets.collect { |p| [ p.filename, p.id ] } %>
+    <%= form.select :library_asset_id, project.user.library_assets.reject { |a| project.library_assets.include? a }.map { |p| [ p.filename, p.id ] } %>
   </div>
 
   <div class="inline">
