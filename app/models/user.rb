@@ -2,6 +2,7 @@ class User < ApplicationRecord
   has_secure_password
   has_many :sessions, dependent: :destroy
   has_many :projects, dependent: :destroy
+  has_many :assets, dependent: :destroy
   has_many :invitations, dependent: :destroy, foreign_key: "owner_user_id"
 
   belongs_to :tos, class_name: "Term", required: false
