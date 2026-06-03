@@ -55,6 +55,13 @@ class User < ApplicationRecord
     10
   end
 
+  def upload_mb_quota
+    return 1_000 if admin
+    return 0 unless invited?
+    return 100 if subscribed?
+    20
+  end
+
   def has_copiable_projects?
     subscribed? || admin
   end
