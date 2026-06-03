@@ -1,7 +1,7 @@
 class ProjectsController < ApplicationController
   allow_unauthenticated_access only: %i[ share preview source ]
   require_unauthenticated_access only: %i[ tryit ]
-  before_action :set_project, only: %i[ show edit update destroy editor_state update_editor_state share source copy copy_conversion ]
+  before_action :set_project, only: %i[ show edit update destroy editor_state update_editor_state share show_asset_file source copy copy_conversion ]
   before_action :limit_projects, only: %i[ new create copy copy_conversion ]
   before_action :require_ownership, only: %i[ show edit update destroy editor_state update_editor_state ]
   before_action :require_copy_permission, only: %i[ source copy ]
@@ -183,6 +183,14 @@ class ProjectsController < ApplicationController
 
   def share
     render html: (@project.html_source || "Document not found").html_safe
+  end
+
+  def show_asset_file
+    asset = @project.project_assets.find_by ref: params[:ref]
+    if asset.present?
+      return redirect_to asset.url
+    end
+    redirect_to LibraryAsset.new.url  # default image not found
   end
 
   def source

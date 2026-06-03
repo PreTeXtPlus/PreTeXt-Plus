@@ -5,4 +5,11 @@ class LibraryAsset < ApplicationRecord
     file: 0,
     doenet: 1
   }, suffix: true
+
+  def url
+    if file.present?
+      return file.url
+    end
+    "/image-not-found.svg"
+  end
 end

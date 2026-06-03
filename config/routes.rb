@@ -38,6 +38,7 @@ Rails.application.routes.draw do
       get  :editor_state
       patch :editor_state, action: :update_editor_state
       get "share" => "projects#share", as: "share"
+      get "share/external/:ref" => "projects#show_asset_file", as: "show_asset_file"
       get "share/source" => "projects#source", as: "share_source"
       get "share/copy", to: redirect("projects/%{project_id}/share/source")
       post "share/copy" => "projects#copy", as: "copy"
