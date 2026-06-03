@@ -59,8 +59,8 @@ ActiveRecord::Schema[8.1].define(version: 2026_06_03_171118) do
     t.text "content"
     t.datetime "created_at", null: false
     t.text "description"
+    t.integer "kind", default: 0, null: false
     t.string "short_description"
-    t.integer "type", default: 0, null: false
     t.datetime "updated_at", null: false
     t.uuid "user_id", null: false
     t.index ["user_id"], name: "index_library_assets_on_user_id"

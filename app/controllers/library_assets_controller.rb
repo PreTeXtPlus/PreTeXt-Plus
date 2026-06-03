@@ -57,6 +57,6 @@ class LibraryAssetsController < ApplicationController
 
     # Only allow a list of trusted parameters through.
     def library_asset_params
-      params.expect(library_asset: [ :type, :file, :content, :description, :short_description ])
+      params.expect(library_asset: [ :kind, :file, :content, :description, :short_description ])
     end
 end
