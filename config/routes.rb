@@ -1,5 +1,4 @@
 Rails.application.routes.draw do
-  resources :library_assets, path: "library"
   namespace :admin do
     root "dashboard#show"
     resources :users, only: %i[index show]
@@ -32,7 +31,9 @@ Rails.application.routes.draw do
   get "projects/:id/*_.html", to: redirect("/projects/%{id}/share")
   get "projects/*_/icon.svg", to: redirect("/icon-small.svg")
   resources :projects do
-    resources :project_assets, path: "library", as: "assets"
+    scope format: true, constraints: { format: "json" } do
+      resources :library_assets, path: "library"
+    end
     member do
       get  :editor_state
       patch :editor_state, action: :update_editor_state
@@ -46,6 +47,9 @@ Rails.application.routes.draw do
   end
   post "projects/preview" => "projects#preview", as: "preview"
   post "projects/feedback" => "projects#feedback", as: "feedback"
+  scope format: true, constraints: { format: "json" } do
+    resources :project_assets, path: "library", as: "assets"
+  end
   post "subscribe" => "subscriptions_old#subscribe"
   post "stripe/webhooks" => "subscriptions_old#webhooks"
   get "tryit" => "projects#tryit"
