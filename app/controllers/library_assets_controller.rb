@@ -8,13 +8,6 @@ class LibraryAssetsController < ApplicationController
   def show
   end
 
-  def new
-    @library_asset = LibraryAsset.new user: @current_user
-  end
-
-  def edit
-  end
-
   def create
     @library_asset = LibraryAsset.new(library_asset_params)
     @library_asset.user = @current_user

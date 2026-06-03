@@ -12,15 +12,6 @@ class ProjectAssetsController < ApplicationController
   end
 
 
-  def new
-    @project_asset = ProjectAsset.new
-  end
-
-
-  def edit
-  end
-
-
   def create
     @project_asset = ProjectAsset.new(project_asset_params)
     @project_asset.project = @project

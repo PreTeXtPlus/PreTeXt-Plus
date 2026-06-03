@@ -32,7 +32,7 @@ Rails.application.routes.draw do
   get "projects/*_/icon.svg", to: redirect("/icon-small.svg")
   resources :projects do
     scope format: true, constraints: { format: "json" } do
-      resources :project_assets, path: "library", as: "assets"
+      resources :project_assets, path: "library", as: "assets", only: [ :index, :show, :create, :update, :destroy ]
     end
     member do
       get  :editor_state
@@ -48,7 +48,7 @@ Rails.application.routes.draw do
   post "projects/preview" => "projects#preview", as: "preview"
   post "projects/feedback" => "projects#feedback", as: "feedback"
   scope format: true, constraints: { format: "json" } do
-    resources :library_assets, path: "library"
+    resources :library_assets, path: "library", only: [ :index, :show, :create, :update, :destroy ]
   end
   post "subscribe" => "subscriptions_old#subscribe"
   post "stripe/webhooks" => "subscriptions_old#webhooks"
