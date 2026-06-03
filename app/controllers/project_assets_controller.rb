@@ -4,7 +4,7 @@ class ProjectAssetsController < ApplicationController
   before_action :authorize_user
 
   def index
-    @project_assets = @project.project_assets
+    @project_assets = @project.project_assets.joins(:library_asset)
   end
 
 
