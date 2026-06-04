@@ -76,3 +76,5 @@ gem "resend", "~> 1.0"
 gem "pay", "~> 11.6"
 
 gem "commonmarker", "~> 2.8"
+
+gem "aws-sdk-s3", "~> 1.225"
