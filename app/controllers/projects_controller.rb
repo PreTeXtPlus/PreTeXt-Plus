@@ -53,7 +53,7 @@ class ProjectsController < ApplicationController
         This is a Markdown-style PreTeXt demo project. You can edit this content using supported Markdown syntax.
 
         $$
-          \left|\sum_{i=0}^n a_i\right| \leq \sum_{i=0}^n |a_i|
+          \\left|\\sum_{i=0}^n a_i\\right|\\leq\\sum_{i=0}^n |a_i|
         $$
 
         When you preview the changes, the source is first converted to PreTeXt and then rendered as accessible HTML.#{' '}
