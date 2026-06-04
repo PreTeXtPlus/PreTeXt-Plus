@@ -31,10 +31,14 @@ Rails.application.routes.draw do
   get "projects/:id/*_.html", to: redirect("/projects/%{id}/share")
   get "projects/*_/icon.svg", to: redirect("/icon-small.svg")
   resources :projects do
+    scope format: true, constraints: { format: "json" } do
+      resources :project_assets, path: "library", as: "assets", only: [ :index, :show, :create, :update, :destroy ]
+    end
     member do
       get  :editor_state
       patch :editor_state, action: :update_editor_state
       get "share" => "projects#share", as: "share"
+      get "share/external/:ref" => "projects#show_asset_file", as: "show_asset_file"
       get "share/source" => "projects#source", as: "share_source"
       get "share/copy", to: redirect("projects/%{project_id}/share/source")
       post "share/copy" => "projects#copy", as: "copy"
@@ -44,6 +48,9 @@ Rails.application.routes.draw do
   end
   post "projects/preview" => "projects#preview", as: "preview"
   post "projects/feedback" => "projects#feedback", as: "feedback"
+  scope format: true, constraints: { format: "json" } do
+    resources :library_assets, path: "library", only: [ :index, :show, :create, :update, :destroy ]
+  end
   post "subscribe" => "subscriptions_old#subscribe"
   post "stripe/webhooks" => "subscriptions_old#webhooks"
   get "tryit" => "projects#tryit"

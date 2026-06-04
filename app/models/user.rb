@@ -2,6 +2,7 @@ class User < ApplicationRecord
   has_secure_password
   has_many :sessions, dependent: :destroy
   has_many :projects, dependent: :destroy
+  has_many :library_assets, dependent: :destroy
   has_many :invitations, dependent: :destroy, foreign_key: "owner_user_id"
 
   belongs_to :tos, class_name: "Term", required: false
@@ -52,6 +53,13 @@ class User < ApplicationRecord
     return 0 unless invited?
     return 100 if subscribed?
     10
+  end
+
+  def upload_mb_quota
+    return 1_000 if admin
+    return 0 unless invited?
+    return 100 if subscribed?
+    20
   end
 
   def has_copiable_projects?

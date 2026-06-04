@@ -10,10 +10,38 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_05_01_194109) do
+ActiveRecord::Schema[8.1].define(version: 2026_06_03_171118) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
   enable_extension "pgcrypto"
+
+  create_table "active_storage_attachments", id: :uuid, default: -> { "gen_random_uuid()" }, force: :cascade do |t|
+    t.uuid "blob_id", null: false
+    t.datetime "created_at", null: false
+    t.string "name", null: false
+    t.uuid "record_id", null: false
+    t.string "record_type", null: false
+    t.index ["blob_id"], name: "index_active_storage_attachments_on_blob_id"
+    t.index ["record_type", "record_id", "name", "blob_id"], name: "index_active_storage_attachments_uniqueness", unique: true
+  end
+
+  create_table "active_storage_blobs", id: :uuid, default: -> { "gen_random_uuid()" }, force: :cascade do |t|
+    t.bigint "byte_size", null: false
+    t.string "checksum"
+    t.string "content_type"
+    t.datetime "created_at", null: false
+    t.string "filename", null: false
+    t.string "key", null: false
+    t.text "metadata"
+    t.string "service_name", null: false
+    t.index ["key"], name: "index_active_storage_blobs_on_key", unique: true
+  end
+
+  create_table "active_storage_variant_records", id: :uuid, default: -> { "gen_random_uuid()" }, force: :cascade do |t|
+    t.uuid "blob_id", null: false
+    t.string "variation_digest", null: false
+    t.index ["blob_id", "variation_digest"], name: "index_active_storage_variant_records_uniqueness", unique: true
+  end
 
   create_table "invitations", id: :uuid, default: -> { "gen_random_uuid()" }, force: :cascade do |t|
     t.uuid "code", default: -> { "gen_random_uuid()" }, null: false
@@ -25,6 +53,17 @@ ActiveRecord::Schema[8.1].define(version: 2026_05_01_194109) do
     t.index ["code"], name: "index_invitations_on_code", unique: true
     t.index ["owner_user_id"], name: "index_invitations_on_owner_user_id"
     t.index ["recipient_user_id"], name: "index_invitations_on_recipient_user_id"
+  end
+
+  create_table "library_assets", id: :uuid, default: -> { "gen_random_uuid()" }, force: :cascade do |t|
+    t.text "content"
+    t.datetime "created_at", null: false
+    t.text "description"
+    t.integer "kind", default: 0, null: false
+    t.string "short_description"
+    t.datetime "updated_at", null: false
+    t.uuid "user_id", null: false
+    t.index ["user_id"], name: "index_library_assets_on_user_id"
   end
 
   create_table "pay_charges", id: :uuid, default: -> { "gen_random_uuid()" }, force: :cascade do |t|
@@ -126,6 +165,16 @@ ActiveRecord::Schema[8.1].define(version: 2026_05_01_194109) do
     t.datetime "updated_at", null: false
   end
 
+  create_table "project_assets", id: :uuid, default: -> { "gen_random_uuid()" }, force: :cascade do |t|
+    t.datetime "created_at", null: false
+    t.uuid "library_asset_id", null: false
+    t.uuid "project_id", null: false
+    t.string "ref"
+    t.datetime "updated_at", null: false
+    t.index ["library_asset_id"], name: "index_project_assets_on_library_asset_id"
+    t.index ["project_id"], name: "index_project_assets_on_project_id"
+  end
+
   create_table "projects", id: :uuid, default: -> { "gen_random_uuid()" }, force: :cascade do |t|
     t.datetime "created_at", null: false
     t.text "docinfo"
@@ -219,12 +268,17 @@ ActiveRecord::Schema[8.1].define(version: 2026_05_01_194109) do
     t.index ["tos_id"], name: "index_users_on_tos_id"
   end
 
+  add_foreign_key "active_storage_attachments", "active_storage_blobs", column: "blob_id"
+  add_foreign_key "active_storage_variant_records", "active_storage_blobs", column: "blob_id"
   add_foreign_key "invitations", "users", column: "owner_user_id"
   add_foreign_key "invitations", "users", column: "recipient_user_id"
+  add_foreign_key "library_assets", "users"
   add_foreign_key "pay_charges", "pay_customers", column: "customer_id"
   add_foreign_key "pay_charges", "pay_subscriptions", column: "subscription_id"
   add_foreign_key "pay_payment_methods", "pay_customers", column: "customer_id"
   add_foreign_key "pay_subscriptions", "pay_customers", column: "customer_id"
+  add_foreign_key "project_assets", "library_assets"
+  add_foreign_key "project_assets", "projects"
   add_foreign_key "projects", "users"
   add_foreign_key "requests", "users"
   add_foreign_key "sessions", "users"
