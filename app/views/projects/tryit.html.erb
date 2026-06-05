@@ -11,9 +11,9 @@
           <span>Try it Demo</span>
 
       <span class="text-sm font-medium text-sky-900 ml-3">Mode:</span>
-      <%= link_to "PreTeXt", tryit_path(demo: :pretext), class: ["rounded-md px-3 py-1.5 text-sm font-medium", (@demo_mode == "pretext" ? "bg-sky-700 text-white" : "bg-white text-sky-800 border border-sky-300 hover:bg-sky-100")].join(" ") %>
       <%= link_to "LaTeX-style PreTeXt", tryit_path(demo: :latex), class: ["rounded-md px-3 py-1.5 text-sm font-medium", (@demo_mode == "latex" ? "bg-sky-700 text-white" : "bg-white text-sky-800 border border-sky-300 hover:bg-sky-100")].join(" ") %>
       <%= link_to "Markdown-style PreTeXt", tryit_path(demo: :markdown), class: ["rounded-md px-3 py-1.5 text-sm font-medium", (@demo_mode == "markdown" ? "bg-sky-700 text-white" : "bg-white text-sky-800 border border-sky-300 hover:bg-sky-100")].join(" ") %>
+      <%= link_to "Classic PreTeXt", tryit_path(demo: :pretext), class: ["rounded-md px-3 py-1.5 text-sm font-medium", (@demo_mode == "pretext" ? "bg-sky-700 text-white" : "bg-white text-sky-800 border border-sky-300 hover:bg-sky-100")].join(" ") %>
       </h1>
       </div>
       <div class="flex flex-wrap gap-2">

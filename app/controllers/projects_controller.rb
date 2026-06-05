@@ -27,10 +27,10 @@ class ProjectsController < ApplicationController
 
   # GET /tryit
   def tryit
-    @demo_mode = params[:demo] == "latex" ? "latex" :
-      params[:demo] == "markdown" ? "markdown" : "pretext"
+    @demo_mode = params[:demo] == "pretext" ? "pretext" :
+      params[:demo] == "markdown" ? "markdown" : "latex"
     @title = @demo_mode == "latex" ? "Try LaTeX-style PreTeXt!" :
-      @demo_mode == "markdown" ? "Try Markdown-style PreTeXt!" : "Try it!"
+      @demo_mode == "markdown" ? "Try Markdown-style PreTeXt!" : "Try Classic PreTeXt!"
 
     @content = if @demo_mode == "latex"
       <<~EOS
