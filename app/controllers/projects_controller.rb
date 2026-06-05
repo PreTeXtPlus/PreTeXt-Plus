@@ -27,10 +27,10 @@ class ProjectsController < ApplicationController
 
   # GET /tryit
   def tryit
-    @demo_mode = params[:demo] == "latex" ? "latex" :
-      params[:demo] == "markdown" ? "markdown" : "pretext"
+    @demo_mode = params[:demo] == "pretext" ? "pretext" :
+      params[:demo] == "markdown" ? "markdown" : "latex"
     @title = @demo_mode == "latex" ? "Try LaTeX-style PreTeXt!" :
-      @demo_mode == "markdown" ? "Try Markdown-style PreTeXt!" : "Try it!"
+      @demo_mode == "markdown" ? "Try Markdown-style PreTeXt!" : "Try Classic PreTeXt!"
 
     @content = if @demo_mode == "latex"
       <<~EOS
@@ -53,7 +53,7 @@ class ProjectsController < ApplicationController
         This is a Markdown-style PreTeXt demo project. You can edit this content using supported Markdown syntax.
 
         $$
-          \left|\sum_{i=0}^n a_i\right| \leq \sum_{i=0}^n |a_i|
+          \\left|\\sum_{i=0}^n a_i\\right|\\leq\\sum_{i=0}^n |a_i|
         $$
 
         When you preview the changes, the source is first converted to PreTeXt and then rendered as accessible HTML.#{' '}
