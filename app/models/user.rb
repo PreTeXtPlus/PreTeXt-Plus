@@ -64,6 +64,10 @@ class User < ApplicationRecord
     subscribed? || admin
   end
 
+  def update_terms
+    update(tos: Term.current(:tos), privacy: Term.current(:privacy))
+  end
+
   private
 
   def claim_intended_invitations
