@@ -7,17 +7,16 @@ class UsersControllerTest < ActionDispatch::IntegrationTest
   end
 
   test "new redirects authenticated users away" do
-    sign_in_as(users(:one))
+    sign_in users(:one)
     get new_user_path
     assert_redirected_to projects_path
   end
 
-  test "create with valid params signs in and redirects" do
+  test "create with valid params creates user and redirects to sign in" do
     assert_difference("User.count") do
       post users_path, params: { user: { email: "new@example.com", password: "secret123", name: "New User" } }
     end
-    assert_redirected_to projects_path
-    assert cookies[:session_id]
+    assert_redirected_to new_user_session_path
   end
 
   test "create with invalid params re-renders form" do
@@ -35,19 +34,19 @@ class UsersControllerTest < ActionDispatch::IntegrationTest
   end
 
   test "update changes user name" do
-    sign_in_as(users(:one))
+    sign_in users(:one)
     patch user_path(users(:one)), params: { user: { name: "Updated Name" } }
-    assert_redirected_to projects_path
+    assert_redirected_to edit_user_path(users(:one))
     assert_equal "Updated Name", users(:one).reload.name
   end
 
   test "update changes user common_docinfo" do
-    sign_in_as(users(:one))
+    sign_in users(:one)
     docinfo = "<docinfo><macros>\\newcommand{\\Q}{\\mathbb{Q}}</macros></docinfo>"
 
     patch user_path(users(:one)), params: { user: { common_docinfo: docinfo } }
 
-    assert_redirected_to projects_path
+    assert_redirected_to edit_user_path(users(:one))
     assert_equal docinfo, users(:one).reload.common_docinfo
   end
 end

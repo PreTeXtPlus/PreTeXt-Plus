@@ -5,7 +5,7 @@
   <% if @invitee_user.present? %>
 
     Log into your account <span style="font-family:mono"><%= @invitee_user.email %></span> to get started:
-    <%= link_to "Sign in!", new_session_url(email: @invitee_user.email) %>
+    <%= link_to "Sign in!", new_user_session_url %>
 
   <% else %>
 

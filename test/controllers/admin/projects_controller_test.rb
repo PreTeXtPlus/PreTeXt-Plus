@@ -9,7 +9,7 @@ class Admin::ProjectsControllerTest < ActionDispatch::IntegrationTest
   end
 
   test "redirects non-admin users" do
-    sign_in_as(@non_admin)
+    sign_in @non_admin
 
     get admin_project_path(@project)
 
@@ -17,7 +17,7 @@ class Admin::ProjectsControllerTest < ActionDispatch::IntegrationTest
   end
 
   test "shows read-only project view for admins" do
-    sign_in_as(@admin)
+    sign_in @admin
 
     get admin_project_path(@project)
 

@@ -2,7 +2,7 @@ You've been invited to PreTeXt.Plus by <%= @inviter.name %> (<%= @inviter.email 
 
 <% if @invitee_user.present? %>
 Log into your account <%= @invitee_user.email %> to get started:
-<%= new_session_url(email: @invitee_user.email) %>
+<%= new_user_session_url %>
 <% else %>
 Use the following link to create an account for <%= @email %>:
 <%= new_user_url(email: @email) %>

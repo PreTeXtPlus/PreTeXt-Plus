@@ -10,22 +10,22 @@ class SubscriptionsOldController < ApplicationController
     require "stripe"
     Stripe.api_key = ENV["STRIPE_SECRET_KEY"]
     success_url = "https://#{request.host}/session"
-    if @current_user.stripe_checkout_session_id.blank?
+    if current_user.stripe_checkout_session_id.blank?
       notice = CGI.escape "Your subscription has successfully been created!"
       session = Stripe::Checkout::Session.create({
         line_items: [ {
           price: ENV["STRIPE_SUSTAINING_PRICE"],
           quantity: 1
         } ],
-        customer_email: @current_user.email,
+        customer_email: current_user.email,
         mode: "subscription",
         success_url: "#{success_url}?notice=#{notice}"
       })
-      @current_user.update stripe_checkout_session_id: session.id
+      current_user.update stripe_checkout_session_id: session.id
     else
       notice = CGI.escape "Your subscription has been successfully managed!"
       checkout_session = Stripe::Checkout::Session.retrieve(
-        @current_user.stripe_checkout_session_id
+        current_user.stripe_checkout_session_id
       )
       session = Stripe::BillingPortal::Session.create({
         customer: checkout_session.customer,

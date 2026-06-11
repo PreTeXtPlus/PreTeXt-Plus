@@ -4,7 +4,7 @@ class ProjectsControllerTest < ActionDispatch::IntegrationTest
   setup do
     @project = projects(:one)
     @user = users(:one)
-    post session_path, params: { email: @user.email, password: "password123" }
+    sign_in @user
   end
 
   test "should get index" do
@@ -121,15 +121,15 @@ class ProjectsControllerTest < ActionDispatch::IntegrationTest
   end
 
   test "share is publicly accessible without authentication" do
-    delete session_path  # sign out
+    sign_out :user  # sign out
     get share_project_url(@project)
     assert_response :success
   end
 
   test "copy creates a duplicate for subscriber" do
     subbed_user = users(:subscribed)
-    delete session_path
-    sign_in_as(subbed_user)
+    sign_out :user
+    sign_in subbed_user
     stub_build_server do
       assert_difference("Project.count") do
         post copy_project_url(@project)
@@ -150,8 +150,8 @@ class ProjectsControllerTest < ActionDispatch::IntegrationTest
   test "copy allows subscribed requester to copy another user's project" do
     requester = users(:subscribed)
     other_project = projects(:one)
-    delete session_path
-    sign_in_as(requester)
+    sign_out :user
+    sign_in requester
     stub_build_server do
       assert_difference("Project.count", 1) do
         post copy_project_url(other_project)
@@ -167,8 +167,8 @@ class ProjectsControllerTest < ActionDispatch::IntegrationTest
     other_project = projects(:one)
     other_project.update_column(:user_id, owner.id)
 
-    delete session_path
-    sign_in_as(requester)
+    sign_out :user
+    sign_in requester
 
     assert_difference("Project.count", 1) do
       post copy_project_url(other_project)
@@ -179,7 +179,7 @@ class ProjectsControllerTest < ActionDispatch::IntegrationTest
   end
 
   test "preview is accessible without authentication" do
-    delete session_path  # sign out
+    sign_out :user  # sign out
     stub_preview_server do
       post preview_url, params: { source: "<section><title>Test</title></section>", title: "Test" }
     end
@@ -210,7 +210,7 @@ class ProjectsControllerTest < ActionDispatch::IntegrationTest
   end
 
   test "tryit defaults to latex-style pretext demo" do
-    delete session_path
+    sign_out :user
     get tryit_url
 
     assert_response :success
@@ -220,7 +220,7 @@ class ProjectsControllerTest < ActionDispatch::IntegrationTest
   end
 
   test "tryit supports markdown demo" do
-    delete session_path
+    sign_out :user
     get tryit_url, params: { demo: "markdown" }
 
     assert_response :success
@@ -349,8 +349,8 @@ class ProjectsControllerTest < ActionDispatch::IntegrationTest
   end
 
   test "unauthenticated user cannot get editor_state" do
-    delete session_path
+    sign_out :user
     get editor_state_project_url(@project), headers: { "Accept" => "application/json" }
-    assert_response :redirect
+    assert_response :unauthorized
   end
 end

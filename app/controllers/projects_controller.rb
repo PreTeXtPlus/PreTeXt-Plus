@@ -12,8 +12,8 @@ class ProjectsController < ApplicationController
 
   # GET /projects or /projects.json
   def index
-    @projects = Project.where user: @current_user
-    @invitations = Invitation.where owner_user: @current_user
+    @projects = Project.where user: current_user
+    @invitations = Invitation.where owner_user: current_user
   end
 
   # GET /projects/1 or /projects/1.json
@@ -22,7 +22,7 @@ class ProjectsController < ApplicationController
 
   # GET /projects/new
   def new
-    @project = Project.new(user: @current_user, source_format: :pretext)
+    @project = Project.new(user: current_user, source_format: :pretext)
   end
 
   # GET /tryit
@@ -121,7 +121,7 @@ class ProjectsController < ApplicationController
   # POST /projects or /projects.json
   def create
     @project = Project.new project_params
-    @project.user = @current_user
+    @project.user = current_user
     @project.source_format = :pretext if @project.source_format.blank?
     @project.title = "New Project" if @project.title.blank?
     @project.set_default_source
@@ -199,7 +199,7 @@ class ProjectsController < ApplicationController
   # GET /projects/:project_id/share/copy
   def copy
     project_copy = @project.dup
-    project_copy.user = @current_user
+    project_copy.user = current_user
     project_copy.title = "Copy of " + project_copy.title
     project_copy.save!
     redirect_to edit_project_path(project_copy)
@@ -213,7 +213,7 @@ class ProjectsController < ApplicationController
     # return render json: { error: "Missing pretext_source or title" }, status: :bad_request if pretext_source.blank? || title.blank?
 
     project_copy = @project.dup
-    project_copy.user = @current_user
+    project_copy.user = current_user
     project_copy.title = @project.title
     project_copy.source = @project.pretext_source
     project_copy.source_format = :pretext
@@ -266,7 +266,7 @@ class ProjectsController < ApplicationController
       source_format: params[:source_format],
       title: params[:title],
       submitted_at: params[:submitted_at],
-      user: @current_user
+      user: current_user
     }
 
     FeedbackMailer.feedback_submission(feedback_data).deliver_later
@@ -294,8 +294,8 @@ class ProjectsController < ApplicationController
 
     # redirect if user has too many projects
     def limit_projects
-      if @current_user.projects.count >= @current_user.project_quota
-        quota_message = "Project quota (#{@current_user.project_quota}) cannot be exceeded.  Consider upgrading your subscription for more projects and to support PreTeXt.Plus!"
+      if current_user.projects.count >= current_user.project_quota
+        quota_message = "Project quota (#{current_user.project_quota}) cannot be exceeded.  Consider upgrading your subscription for more projects and to support PreTeXt.Plus!"
 
         # For AJAX requests, return JSON
         if request.format.json?
@@ -308,13 +308,13 @@ class ProjectsController < ApplicationController
     end
 
     def require_ownership
-      if @project.user != @current_user and !@current_user.admin?
+      if @project.user != current_user and !current_user.admin?
         redirect_to projects_path, alert: "You do not have permission to access this project"
       end
     end
 
     def require_copy_permission
-      unless @project.user.has_copiable_projects? or @current_user.has_copiable_projects? or @current_user.admin?
+      unless @project.user.has_copiable_projects? or current_user.has_copiable_projects? or current_user.admin?
         redirect_to projects_path, alert: "Only sustaining subscribers can share copiable projects. Consider subscribing for this feature and to support PreTeXt.Plus!"
       end
     end

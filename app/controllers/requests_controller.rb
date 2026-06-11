@@ -1,7 +1,7 @@
 class RequestsController < ApplicationController
   # POST /requests or /requests.json
   def create
-    @request = Request.new(user: @current_user)
+    @request = Request.new(user: current_user)
 
     respond_to do |format|
       if @request.save

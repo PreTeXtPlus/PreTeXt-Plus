@@ -69,7 +69,7 @@ class ProjectAssetsController < ApplicationController
     end
 
     def authorize_user
-      if @project.user != @current_user
+      if @project.user != current_user
         redirect_to projects_path, alert: "Not authorized"
       end
     end

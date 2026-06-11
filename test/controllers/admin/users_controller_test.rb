@@ -8,7 +8,7 @@ class Admin::UsersControllerTest < ActionDispatch::IntegrationTest
   end
 
   test "redirects non-admin users from index" do
-    sign_in_as(@non_admin)
+    sign_in @non_admin
 
     get admin_users_path
 
@@ -16,8 +16,7 @@ class Admin::UsersControllerTest < ActionDispatch::IntegrationTest
   end
 
   test "renders filtered users index for admins" do
-    sign_in_as(@admin)
-    users(:subscribed).sessions.create!(ip_address: "127.0.0.1", user_agent: "Support Browser")
+    sign_in @admin
 
     get admin_users_path, params: { q: "subbed", subscribed: "1" }
 
@@ -28,7 +27,7 @@ class Admin::UsersControllerTest < ActionDispatch::IntegrationTest
   end
 
   test "filters admins without using the admin attribute name in params" do
-    sign_in_as(@admin)
+    sign_in @admin
 
     get admin_users_path, params: { admins_only: "1" }
 
@@ -39,8 +38,7 @@ class Admin::UsersControllerTest < ActionDispatch::IntegrationTest
 
   test "shows user detail with projects and subscription data" do
     project = Project.create!(user: users(:subscribed), title: "Support Project", source: "<section><title>Help</title></section>")
-    sign_in_as(@admin)
-    users(:subscribed).sessions.create!(ip_address: "127.0.0.1", user_agent: "Support Browser")
+    sign_in @admin
 
     get admin_user_path(users(:subscribed))
 
@@ -52,9 +50,9 @@ class Admin::UsersControllerTest < ActionDispatch::IntegrationTest
   end
 
   test "search escapes sql like wildcards" do
-    User.create!(email: "test_user@example.com", name: "Exact User", password: "password123")
-    User.create!(email: "testxuser@example.com", name: "Wildcard User", password: "password123")
-    sign_in_as(@admin)
+    User.create!(email: "test_user@example.com", name: "Exact User", password: "password123", confirmed_at: Time.current)
+    User.create!(email: "testxuser@example.com", name: "Wildcard User", password: "password123", confirmed_at: Time.current)
+    sign_in @admin
 
     get admin_users_path, params: { q: "test_user" }
 

@@ -6,7 +6,7 @@
     <%= render "fields_for", form: form %>
     <div class="col-span-6 sm:flex sm:items-center sm:gap-4">
       <%= form.submit "Register and sign in", class: "w-full sm:w-auto text-center rounded-md px-3.5 py-2.5 bg-green-600 hover:bg-green-500 text-white inline-block font-medium cursor-pointer" %>
-      <%= link_to "Sign into existing account", new_session_path, class: "text-blue-700 underline hover:no-underline" %>
+      <%= link_to "Sign into existing account", new_user_session_path, class: "text-blue-700 underline hover:no-underline" %>
     </div>
   <% end %>
 

@@ -4,8 +4,8 @@ class SubscriptionsController < ApplicationController
   before_action :authorize_subscription, only: %i[ show seat ]
 
   def index
-    @current_user.payment_processor.sync_subscriptions
-    @subscriptions = @current_user.payment_processor.subscriptions
+    current_user.payment_processor.sync_subscriptions
+    @subscriptions = current_user.payment_processor.subscriptions
   end
 
   def show
@@ -40,25 +40,25 @@ class SubscriptionsController < ApplicationController
 
   def submit_invoice_request
     # create stripe customer if not exists
-    unless @current_user.pay_customers.any?
+    unless current_user.pay_customers.any?
       # ensure customer record exists
-      @current_user.payment_processor.api_record
+      current_user.payment_processor.api_record
     end
     # send email to support with details of request and user info
-    SubscriptionsMailer.invoice_request(@current_user, params[:details], params[:seats]).deliver_later
+    SubscriptionsMailer.invoice_request(current_user, params[:details], params[:seats]).deliver_later
     redirect_to subscriptions_path, notice: "Invoice request submitted successfully. We'll be in touch!"
   end
 
   private
 
     def set_subscriptions
-      @subscriptions = @current_user.payment_processor.subscriptions
+      @subscriptions = current_user.payment_processor.subscriptions
     end
     def set_subscription
       @subscription = Pay::Stripe::Subscription.find(params.expect(:id))
     end
     def authorize_subscription
-      unless @subscription.user == @current_user
+      unless @subscription.user == current_user
         redirect_to subscriptions_path, alert: "You are not authorized to view that subscription."
       end
     end

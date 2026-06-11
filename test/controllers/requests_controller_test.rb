@@ -4,7 +4,7 @@ class RequestsControllerTest < ActionDispatch::IntegrationTest
   test "create submits an invitation request and redirects" do
     user = users(:two)
     Request.where(user: user).destroy_all
-    sign_in_as(user)
+    sign_in user
 
     assert_difference("Request.count") do
       post requests_path
@@ -14,6 +14,6 @@ class RequestsControllerTest < ActionDispatch::IntegrationTest
 
   test "create redirects to login when unauthenticated" do
     post requests_path
-    assert_redirected_to new_session_path
+    assert_redirected_to new_user_session_path
   end
 end

@@ -2,7 +2,7 @@ class LibraryAssetsController < ApplicationController
   before_action :set_library_asset_and_authorize, only: %i[ show edit update destroy ]
 
   def index
-    @library_assets = LibraryAsset.where user: @current_user
+    @library_assets = LibraryAsset.where user: current_user
   end
 
   def show
@@ -10,7 +10,7 @@ class LibraryAssetsController < ApplicationController
 
   def create
     @library_asset = LibraryAsset.new(library_asset_params)
-    @library_asset.user = @current_user
+    @library_asset.user = current_user
 
     respond_to do |format|
       if @library_asset.save
@@ -43,7 +43,7 @@ class LibraryAssetsController < ApplicationController
     # Use callbacks to share common setup or constraints between actions.
     def set_library_asset_and_authorize
       @library_asset = LibraryAsset.find(params.expect(:id))
-      if @library_asset.user != @current_user
+      if @library_asset.user != current_user
         render json: { errors: [ "Not authorized" ] }, status: :unprocessable_entity
       end
     end

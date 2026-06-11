@@ -3,9 +3,9 @@
 <div class="mx-auto md:w-2/3 w-full my-4">
   <h1 class="font-bold text-4xl">Forgot your password?</h1>
 
-  <%= form_with url: passwords_path, class: "contents" do |form| %>
+  <%= form_with(model: resource, as: resource_name, url: password_path(resource_name), html: { method: :post }, data: { turbo: false }) do |form| %>
     <div class="my-5">
-      <%= form.email_field :email, required: true, autofocus: true, autocomplete: "username", placeholder: "Enter your email address", value: params[:email], class: "block shadow-sm rounded-md border border-gray-400 focus:outline-solid focus:outline-blue-600 px-3 py-2 mt-2 w-full" %>
+      <%= form.email_field :email, required: true, autofocus: true, autocomplete: "username", placeholder: "Enter your email address", class: "block shadow-sm rounded-md border border-gray-400 focus:outline-solid focus:outline-blue-600 px-3 py-2 mt-2 w-full" %>
     </div>
 
     <div class="inline">

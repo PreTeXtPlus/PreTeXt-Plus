@@ -1,6 +1,6 @@
 class Admin::BaseController < ApplicationController
   before_action :require_admin
-  helper_method :projects_count_for, :last_session_at_for, :access_label_for
+  helper_method :projects_count_for, :last_sign_in_for, :access_label_for
 
   private
 
@@ -8,8 +8,8 @@ class Admin::BaseController < ApplicationController
     user.attributes["projects_count"]&.to_i || user.projects.size
   end
 
-  def last_session_at_for(user)
-    user.attributes["last_session_at"] || user.sessions.maximum(:created_at)
+  def last_sign_in_for(user)
+    user.attributes["last_sign_in_at"] || user.last_sign_in_at
   end
 
   def access_label_for(user)

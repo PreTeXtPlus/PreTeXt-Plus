@@ -2,7 +2,7 @@
 <% content_for :full_screen_content do %>
 <div class="size-full md:flex md:flex-row">
     <div class="w-full md:w-1/2 md:h-full p-5 flex flex-col">
-      <% if @project.user == @current_user %>
+      <% if @project.user == current_user %>
         <div class="p-3 w-full m-auto text-center text-sm text-gray-500">
           You are the owner of this project
           (<%= link_to "Manage", @project, class: "text-blue-500 hover:font-semibold" %>).

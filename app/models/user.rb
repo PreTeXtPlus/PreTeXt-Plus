@@ -1,6 +1,7 @@
 class User < ApplicationRecord
-  has_secure_password
-  has_many :sessions, dependent: :destroy
+  devise :database_authenticatable, :recoverable, :rememberable, :validatable,
+         :confirmable, :trackable
+
   has_many :projects, dependent: :destroy
   has_many :library_assets, dependent: :destroy
   has_many :invitations, dependent: :destroy, foreign_key: "owner_user_id"
@@ -18,9 +19,6 @@ class User < ApplicationRecord
   enum :old_subscription, { beta: 0, sustaining: 1 }, default: :beta, suffix: true, validate: true
 
   normalizes :email, with: ->(e) { e.strip.downcase }
-
-  validates_uniqueness_of :email
-  validates :password, length: { minimum: 1 }, allow_nil: true
 
   def invited?
     Invitation.where(recipient_user: self).exists? || subscribed? || admin

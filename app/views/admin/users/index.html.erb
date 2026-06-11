@@ -75,8 +75,8 @@
               <% end %>
             </td>
             <td class="px-4 py-4 align-top text-gray-700">
-              <% if last_session_at_for(user).present? %>
-                <time datetime="<%= last_session_at_for(user).iso8601 %>"><%= time_ago_in_words(last_session_at_for(user)) %> ago</time>
+              <% if last_sign_in_for(user).present? %>
+                <time datetime="<%= last_sign_in_for(user).iso8601 %>"><%= time_ago_in_words(last_sign_in_for(user)) %> ago</time>
               <% else %>
                 Never
               <% end %>
