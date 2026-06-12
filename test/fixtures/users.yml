@@ -1,16 +1,19 @@
-<% password_digest = BCrypt::Password.create("password123") %>
+<% encrypted_password = BCrypt::Password.create("password123") %>
 
 one:
   name: User One
   email: one@example.com
-  password_digest: <%= password_digest %>
+  encrypted_password: <%= encrypted_password %>
+  confirmed_at: <%= 1.year.ago %>
 
 two:
   name: User Two
   email: two@example.com
-  password_digest: <%= password_digest %>
+  encrypted_password: <%= encrypted_password %>
+  confirmed_at: <%= 1.year.ago %>
 
 subscribed:
   name: Subscribed User
   email: subbed@example.com
-  password_digest: <%= password_digest %>
+  encrypted_password: <%= encrypted_password %>
+  confirmed_at: <%= 1.year.ago %>

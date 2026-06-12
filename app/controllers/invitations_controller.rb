@@ -1,6 +1,5 @@
 class InvitationsController < ApplicationController
   before_action :require_admin, only: %i[ new create ]
-  before_action :require_authentication, only: %i[ redeem ]
 
   def new
     @request_count = Request.count
@@ -47,9 +46,9 @@ class InvitationsController < ApplicationController
       emails.split(",").map(&:strip).uniq.each do |email|
         u = User.find_by email: email
         if u.present?
-          Invitation.create! owner_user: @current_user, recipient_user: u
+          Invitation.create! owner_user: current_user, recipient_user: u
         else
-          Invitation.create! owner_user: @current_user, intended_email: email
+          Invitation.create! owner_user: current_user, intended_email: email
         end
         InvitationsMailer.invite(email, u).deliver_later
       end
@@ -61,7 +60,7 @@ class InvitationsController < ApplicationController
         render :new, status: :unprocessable_entity and return
       end
       users.each do |user|
-        Invitation.create! owner_user: @current_user, recipient_user: user
+        Invitation.create! owner_user: current_user, recipient_user: user
         InvitationsMailer.invite(user.email, user).deliver_later
       end
       redirect_to projects_path, notice: "Invited requesting users"
@@ -81,7 +80,7 @@ class InvitationsController < ApplicationController
       redirect_to projects_path, alert: "Invitation code has already been redeemed"
       return
     end
-    inv.update! recipient_user: @current_user
+    inv.update! recipient_user: current_user
     redirect_to projects_path, notice: "Invitation code successfully redeemed!"
   end
 end

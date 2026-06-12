@@ -105,27 +105,24 @@
   <section class="mt-8 grid gap-6 xl:grid-cols-2">
     <div class="rounded-xl border border-gray-200 bg-white p-6 shadow-sm">
       <h2 class="text-2xl font-semibold">Recent sign-ins</h2>
-      <% if @recent_sessions.any? %>
+      <% if @recent_users.any? %>
         <div class="mt-4 space-y-3">
-          <% @recent_sessions.each do |session| %>
+          <% @recent_users.each do |user| %>
             <div class="rounded-lg border border-gray-200 p-4">
               <div class="flex items-center justify-between gap-4">
                 <div>
-                  <p class="font-medium text-gray-900"><%= link_to session.user.name_with_email, admin_user_path(session.user), class: "text-blue-600 hover:underline" %></p>
-                  <p class="text-sm text-gray-600"><%= session.ip_address.presence || "IP unavailable" %></p>
+                  <p class="font-medium text-gray-900"><%= link_to user.name_with_email, admin_user_path(user), class: "text-blue-600 hover:underline" %></p>
+                  <p class="text-sm text-gray-600"><%= user.last_sign_in_ip.presence || "IP unavailable" %></p>
                 </div>
                 <p class="text-sm text-gray-500">
-                  <time datetime="<%= session.created_at.iso8601 %>"><%= time_ago_in_words(session.created_at) %> ago</time>
+                  <time datetime="<%= user.last_sign_in_at.iso8601 %>"><%= time_ago_in_words(user.last_sign_in_at) %> ago</time>
                 </p>
               </div>
-              <% if session.user_agent.present? %>
-                <p class="mt-2 text-sm text-gray-600 break-all"><%= session.user_agent %></p>
-              <% end %>
             </div>
           <% end %>
         </div>
       <% else %>
-        <p class="mt-4 text-gray-600">No sessions recorded yet.</p>
+        <p class="mt-4 text-gray-600">No sign-ins recorded yet.</p>
       <% end %>
     </div>
 

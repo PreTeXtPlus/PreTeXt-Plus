@@ -8,18 +8,22 @@ class UsersController < ApplicationController
   def create
     @user = User.new(sign_up_params)
     if @user.save
-      start_new_session_for(@user)
-      redirect_to projects_path, notice: "Welcome to PreTeXt.Plus!"
+      redirect_to new_user_session_path, notice: "Please check your email to confirm your account before signing in."
     else
       render :new, status: :unprocessable_entity
     end
   end
 
+  def edit
+    @user = current_user
+  end
+
   def update
-    if @current_user.update(update_params)
-      redirect_to projects_path, notice: "Profile successfully updated!"
+    @user = current_user
+    if @user.update(update_params)
+      redirect_to edit_user_path(@user), notice: "Profile successfully updated!"
     else
-      render :new, status: :unprocessable_entity
+      render :edit, status: :unprocessable_entity
     end
   end
 
@@ -31,9 +35,6 @@ class UsersController < ApplicationController
 
   def update_params
     ps = params.expect(user: [ :name, :password, :common_docinfo ])
-    if ps[:password].blank?
-      return ps.except(:password)
-    end
-    ps
+    ps[:password].blank? ? ps.except(:password) : ps
   end
 end

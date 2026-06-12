@@ -63,7 +63,7 @@ class SubscriptionTypesController < ApplicationController
 
     def checkout_url
       return_url = "https://#{request.host}/subscriptions"
-      @current_user.payment_processor.checkout(
+      current_user.payment_processor.checkout(
         mode: "subscription",
         line_items: [ {
           price: @subscription_type.stripe_price_id,

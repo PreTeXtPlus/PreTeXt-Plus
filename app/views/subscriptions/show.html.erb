@@ -13,7 +13,7 @@
 <%= render "subscription", subscription: @subscription %>
 <div>
     <%= link_to "Manage plan", 
-        @current_user.payment_processor.billing_portal.url, 
+        current_user.payment_processor.billing_portal.url, 
         class: "inline-flex select-none items-center gap-2 rounded-md cursor-pointer ml-1 px-4 py-2 my-1 text-sm bg-gray-50 text-gray-700 drop-shadow-md hover:bg-white" %>
 </div>
 

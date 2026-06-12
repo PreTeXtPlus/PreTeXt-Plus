@@ -35,7 +35,7 @@
                 </div>
             </div>
             <div class="flex flex-col md:flex-row md:-mx-4">
-                <% if @current_user.present? %>
+                <% if current_user.present? %>
                   <%= link_to :projects, class: "my-1 text-gray-800 hover:text-blue-500 md:mx-4 md:my-0" do %>
                     Projects
                   <% end %>
@@ -43,7 +43,7 @@
                 <%= link_to :root, class: "my-1 text-gray-800 hover:text-blue-500 md:mx-4 md:my-0" do %>
                   About
                 <% end %>
-                <% if @current_user.present? %>
+                <% if current_user.present? %>
                   <div class="relative group">
                     <label for="helpMenuToggle" class="my-1 text-gray-800 cursor-pointer hover:text-blue-500 md:mx-4 md:my-0 select-none">
                       Help&nbsp;&#9662;
@@ -62,7 +62,7 @@
                     </div>
                   </div>
                 <% end %>
-                <% if @current_user&.admin? %>
+                <% if current_user&.admin? %>
                   <div class="relative group">
                     <label for="adminMenu" class="my-1 text-gray-800 cursor-pointer hover:text-blue-500 md:mx-4 md:my-0 select-none">
                       Admin&nbsp;&#9662;
@@ -87,20 +87,20 @@
                     </div>
                   </div>
                 <% end %>
-                <% if @current_user.present? %>
+                <% if current_user.present? %>
                   <div class="relative group">
                     <label for="accountMenu" class="my-1 text-gray-800 cursor-pointer hover:text-blue-500 md:mx-4 md:my-0 select-none">
-                    Account&nbsp;(<%= @current_user.email %>)&nbsp;&#9662;
+                    Account&nbsp;(<%= current_user.email %>)&nbsp;&#9662;
                     </label>
                     <input type="checkbox" id="accountMenu" class="navbarMenuToggle sr-only">
                     <div class="navbarMenu absolute left-0 mt-2 w-48 bg-white rounded-md shadow-lg border border-gray-200 md:left-auto md:right-0">
-                      <%= link_to :session, class: "block px-4 py-2 text-gray-800 hover:bg-blue-50 hover:text-blue-500" do %>
+                      <%= link_to edit_user_path(current_user), class: "block px-4 py-2 text-gray-800 hover:bg-blue-50 hover:text-blue-500" do %>
                         Profile
                       <% end %>
                       <%= link_to subscriptions_path, class: "block px-4 py-2 text-gray-800 hover:bg-blue-50 hover:text-blue-500" do %>
                         Manage Subscriptions
                       <% end %>
-                      <%= link_to :session, data: { turbo_method: :delete },class: "block px-4 py-2 text-red-700 hover:bg-red-50 hover:text-red-800" do %>
+                      <%= link_to destroy_user_session_path, data: { turbo_method: :delete }, class: "block px-4 py-2 text-red-700 hover:bg-red-50 hover:text-red-800" do %>
                         Sign out
                       <% end %>
                     </div>
@@ -115,7 +115,7 @@
                       <%= link_to new_user_path, class: "block px-4 py-2 text-gray-800 hover:bg-blue-50 hover:text-blue-500" do %>
                         Create account
                       <% end %>
-                      <%= link_to new_session_path, class: "block px-4 py-2 text-gray-800 hover:bg-blue-50 hover:text-blue-500" do %>
+                      <%= link_to new_user_session_path, class: "block px-4 py-2 text-gray-800 hover:bg-blue-50 hover:text-blue-500" do %>
                         Sign in
                       <% end %>
                     </div>
@@ -129,13 +129,13 @@
     </nav>
       <% if notice.present? or params[:notice].present? %>
         <div class="relative w-full z-10 flex justify-center cursor-pointer -mb-16" onclick="this.remove()">
-          <p class="mt-20 py-2 px-3 bg-blue-50 border-blue-200 border-1 text-blue-500 rounded-md inline-block">
+          <p class="mt-18 mb-2 py-2 px-3 bg-blue-50 border-blue-200 border-1 text-blue-500 rounded-md inline-block">
             ℹ <%= notice.present? ? notice : params[:notice] %>
           </p>
         </div>
       <% elsif alert.present? %>
         <div class="relative w-full z-10 flex justify-center cursor-pointer -mb-16" onclick="this.remove()">
-          <p class="mt-20 py-2 px-3 bg-yellow-100 border-yellow-200 border text-yellow-700 rounded-md inline-block">⚠ <%= alert %></p>
+          <p class="mt-18 mb-2 py-2 px-3 bg-yellow-100 border-yellow-200 border text-yellow-700 rounded-md inline-block">⚠ <%= alert %></p>
         </div>
       <% end %>
         <% if content_for?(:full_screen_content) %>

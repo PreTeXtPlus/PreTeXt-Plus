@@ -8,7 +8,7 @@ class Admin::DashboardControllerTest < ActionDispatch::IntegrationTest
   end
 
   test "redirects non-admin users" do
-    sign_in_as(@non_admin)
+    sign_in @non_admin
 
     get admin_root_path
 
@@ -16,8 +16,7 @@ class Admin::DashboardControllerTest < ActionDispatch::IntegrationTest
   end
 
   test "renders dashboard for admins" do
-    sign_in_as(@admin)
-    @admin.sessions.create!(ip_address: "127.0.0.1", user_agent: "Admin Browser")
+    sign_in @admin
 
     host_health = {
       available: true,
