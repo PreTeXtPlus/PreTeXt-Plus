@@ -336,7 +336,7 @@ class ProjectsControllerTest < ActionDispatch::IntegrationTest
   test "non-owner cannot get editor_state" do
     other_project = projects(:two)
     get editor_state_project_url(other_project), headers: { "Accept" => "application/json" }
-    assert_redirected_to projects_path
+    assert_response 403
   end
 
   test "non-owner cannot update_editor_state" do
@@ -344,7 +344,7 @@ class ProjectsControllerTest < ActionDispatch::IntegrationTest
     patch editor_state_project_url(other_project),
       params: { project: { title: "Stolen" } },
       as: :json
-    assert_redirected_to projects_path
+    assert_response 403
     assert_not_equal "Stolen", other_project.reload.title
   end
 
