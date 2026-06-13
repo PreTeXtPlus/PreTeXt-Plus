@@ -1,6 +1,5 @@
 class LibraryAssetsController < ApplicationController
-  before_action :set_library_asset, only: %i[ show edit update destroy ]
-  before_action :authorize_library_asset, only: %i[ show edit update destroy ]
+  load_and_authorize_resource
 
   def index
     @library_assets = LibraryAsset.where user: current_user
@@ -10,7 +9,6 @@ class LibraryAssetsController < ApplicationController
   end
 
   def create
-    @library_asset = LibraryAsset.new(library_asset_params)
     @library_asset.user = current_user
 
     respond_to do |format|
@@ -41,14 +39,6 @@ class LibraryAssetsController < ApplicationController
   end
 
   private
-    def set_library_asset
-      @library_asset = LibraryAsset.find(params.expect(:id))
-    end
-
-    def authorize_library_asset
-      authorize! :manage, @library_asset
-    end
-
     # Only allow a list of trusted parameters through.
     def library_asset_params
       params.expect(library_asset: [ :kind, :file, :content, :description, :short_description ])

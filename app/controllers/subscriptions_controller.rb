@@ -1,7 +1,6 @@
 class SubscriptionsController < ApplicationController
   before_action :set_subscriptions
-  before_action :set_subscription, only: %i[ show seat ]
-  before_action :authorize_subscription, only: %i[ show seat ]
+  load_and_authorize_resource :subscription, class: Pay::Stripe::Subscription, only: %i[ show seat ]
 
   def index
     current_user.payment_processor.sync_subscriptions
@@ -53,11 +52,5 @@ class SubscriptionsController < ApplicationController
 
     def set_subscriptions
       @subscriptions = current_user.payment_processor.subscriptions
-    end
-    def set_subscription
-      @subscription = Pay::Stripe::Subscription.find(params.expect(:id))
-    end
-    def authorize_subscription
-      authorize! action_name.to_sym, @subscription
     end
 end

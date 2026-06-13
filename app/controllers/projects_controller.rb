@@ -1,10 +1,9 @@
 class ProjectsController < ApplicationController
   allow_unauthenticated_access only: %i[ share preview source ]
   require_unauthenticated_access only: %i[ tryit ]
-  before_action :set_project, only: %i[ show edit update destroy editor_state update_editor_state share show_asset_file source copy copy_conversion ]
   before_action :limit_projects, only: %i[ new create copy copy_conversion ]
-  before_action :authorize_project, only: %i[ show edit update destroy editor_state update_editor_state ]
-  before_action :authorize_copy_or_source, only: %i[ source copy ]
+  load_and_authorize_resource except: %i[ index new tryit preview feedback ]
+  skip_authorize_resource only: %i[ share show_asset_file copy_conversion ]
   after_action :allow_iframe, only: :share
   rate_limit to: 25, within: 10.minutes, only: :preview,
              with: -> { render plain: "Preview limit reached. Please wait a few minutes and try again, or create an account to continue writing and save your work!", status: :too_many_requests },
@@ -120,7 +119,6 @@ class ProjectsController < ApplicationController
 
   # POST /projects or /projects.json
   def create
-    @project = Project.new project_params
     @project.user = current_user
     @project.source_format = :pretext if @project.source_format.blank?
     @project.title = "New Project" if @project.title.blank?
@@ -278,11 +276,6 @@ class ProjectsController < ApplicationController
   end
 
   private
-    # Use callbacks to share common setup or constraints between actions.
-    def set_project
-      @project = Project.find(params.expect(:id))
-    end
-
     # Only allow a list of trusted parameters through.
     def project_params
       params.expect(project: [ :title, :source, :pretext_source, :source_format, :docinfo, :use_common_docinfo ])
@@ -304,11 +297,4 @@ class ProjectsController < ApplicationController
       end
     end
 
-    def authorize_project
-      authorize! :manage, @project
-    end
-
-    def authorize_copy_or_source
-      authorize! action_name.to_sym, @project
-    end
 end

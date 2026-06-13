@@ -1,7 +1,5 @@
 class ProjectAssetsController < ApplicationController
-  before_action :set_project_asset, only: %i[ show edit update destroy ]
-  before_action :set_project
-  before_action :authorize_project_access
+  load_and_authorize_resource :project_asset, through: :project
 
   def index
     @project_assets = @project.project_assets.joins(:library_asset)
@@ -13,9 +11,6 @@ class ProjectAssetsController < ApplicationController
 
 
   def create
-    @project_asset = ProjectAsset.new(project_asset_params)
-    @project_asset.project = @project
-
     respond_to do |format|
       if @project_asset.save
         format.html { redirect_to project_asset_path(@project_asset.project, @project_asset), notice: "Project asset was successfully created." }
@@ -51,24 +46,8 @@ class ProjectAssetsController < ApplicationController
   end
 
   private
-    # Use callbacks to share common setup or constraints between actions.
-    def set_project_asset
-      @project_asset = ProjectAsset.find(params.expect(:id))
-    end
-
-    def set_project
-      if @project_asset.present?
-        return @project = @project_asset.project
-      end
-      @project = Project.find(params.expect(:project_id))
-    end
-
     # Only allow a list of trusted parameters through.
     def project_asset_params
       params.expect(project_asset: [ :library_asset_id ])
-    end
-
-    def authorize_project_access
-      authorize! :manage, @project
     end
 end
