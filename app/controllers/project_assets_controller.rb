@@ -1,7 +1,7 @@
 class ProjectAssetsController < ApplicationController
   before_action :set_project_asset, only: %i[ show edit update destroy ]
   before_action :set_project
-  before_action :authorize_user
+  before_action :authorize_project_access
 
   def index
     @project_assets = @project.project_assets.joins(:library_asset)
@@ -68,9 +68,7 @@ class ProjectAssetsController < ApplicationController
       params.expect(project_asset: [ :library_asset_id ])
     end
 
-    def authorize_user
-      if @project.user != current_user
-        redirect_to projects_path, alert: "Not authorized"
-      end
+    def authorize_project_access
+      authorize! :manage, @project
     end
 end

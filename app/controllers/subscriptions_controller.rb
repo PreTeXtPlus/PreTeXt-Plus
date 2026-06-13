@@ -58,8 +58,6 @@ class SubscriptionsController < ApplicationController
       @subscription = Pay::Stripe::Subscription.find(params.expect(:id))
     end
     def authorize_subscription
-      unless @subscription.user == current_user
-        redirect_to subscriptions_path, alert: "You are not authorized to view that subscription."
-      end
+      authorize! action_name.to_sym, @subscription
     end
 end

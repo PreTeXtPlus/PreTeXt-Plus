@@ -1,5 +1,6 @@
 class LibraryAssetsController < ApplicationController
-  before_action :set_library_asset_and_authorize, only: %i[ show edit update destroy ]
+  before_action :set_library_asset, only: %i[ show edit update destroy ]
+  before_action :authorize_library_asset, only: %i[ show edit update destroy ]
 
   def index
     @library_assets = LibraryAsset.where user: current_user
@@ -40,12 +41,12 @@ class LibraryAssetsController < ApplicationController
   end
 
   private
-    # Use callbacks to share common setup or constraints between actions.
-    def set_library_asset_and_authorize
+    def set_library_asset
       @library_asset = LibraryAsset.find(params.expect(:id))
-      if @library_asset.user != current_user
-        render json: { errors: [ "Not authorized" ] }, status: :unprocessable_entity
-      end
+    end
+
+    def authorize_library_asset
+      authorize! :manage, @library_asset
     end
 
     # Only allow a list of trusted parameters through.

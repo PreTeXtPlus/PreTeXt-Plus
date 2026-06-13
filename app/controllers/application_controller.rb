@@ -2,6 +2,14 @@ class ApplicationController < ActionController::Base
   include ActiveStorage::SetCurrent
   before_action :authenticate_user!
 
+  rescue_from CanCan::AccessDenied do |exception|
+    if request.format.json?
+      render json: { errors: [ exception.message ] }, status: :forbidden
+    else
+      redirect_to projects_path, alert: exception.message
+    end
+  end
+
   # Only allow modern browsers supporting webp images, web push, badges, import maps, CSS nesting, and CSS :has.
   allow_browser versions: :modern
 
@@ -37,8 +45,6 @@ class ApplicationController < ActionController::Base
   end
 
   def require_admin
-    unless current_user&.admin
-      redirect_to projects_path, alert: "You are not authorized" and return
-    end
+    authorize! :manage, :admin
   end
 end

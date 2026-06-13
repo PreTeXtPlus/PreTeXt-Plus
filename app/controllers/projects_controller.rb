@@ -3,8 +3,8 @@ class ProjectsController < ApplicationController
   require_unauthenticated_access only: %i[ tryit ]
   before_action :set_project, only: %i[ show edit update destroy editor_state update_editor_state share show_asset_file source copy copy_conversion ]
   before_action :limit_projects, only: %i[ new create copy copy_conversion ]
-  before_action :require_ownership, only: %i[ show edit update destroy editor_state update_editor_state ]
-  before_action :require_copy_permission, only: %i[ source copy ]
+  before_action :authorize_project, only: %i[ show edit update destroy editor_state update_editor_state ]
+  before_action :authorize_copy_or_source, only: %i[ source copy ]
   after_action :allow_iframe, only: :share
   rate_limit to: 25, within: 10.minutes, only: :preview,
              with: -> { render plain: "Preview limit reached. Please wait a few minutes and try again, or create an account to continue writing and save your work!", status: :too_many_requests },
@@ -292,30 +292,23 @@ class ProjectsController < ApplicationController
       params.expect(project: [ :title, :source, :pretext_source, :source_format, :docinfo, :use_common_docinfo, :common_docinfo ])
     end
 
-    # redirect if user has too many projects
     def limit_projects
-      if current_user.projects.count >= current_user.project_quota
-        quota_message = "Project quota (#{current_user.project_quota}) cannot be exceeded.  Consider upgrading your subscription for more projects and to support PreTeXt.Plus!"
+      return unless cannot?(:create, Project)
 
-        # For AJAX requests, return JSON
-        if request.format.json?
-          return render json: { error: quota_message }, status: :unprocessable_entity
-        end
+      quota_message = "Project quota (#{current_user.project_quota}) cannot be exceeded.  Consider upgrading your subscription for more projects and to support PreTeXt.Plus!"
 
-        # For regular requests, redirect
+      if request.format.json?
+        render json: { error: quota_message }, status: :unprocessable_entity
+      else
         redirect_to projects_path, alert: quota_message
       end
     end
 
-    def require_ownership
-      if @project.user != current_user and !current_user.admin?
-        redirect_to projects_path, alert: "You do not have permission to access this project"
-      end
+    def authorize_project
+      authorize! :manage, @project
     end
 
-    def require_copy_permission
-      unless @project.user.has_copiable_projects? or current_user.has_copiable_projects? or current_user.admin?
-        redirect_to projects_path, alert: "Only sustaining subscribers can share copiable projects. Consider subscribing for this feature and to support PreTeXt.Plus!"
-      end
+    def authorize_copy_or_source
+      authorize! action_name.to_sym, @project
     end
 end
