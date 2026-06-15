@@ -206,7 +206,6 @@ class ProjectsController < ApplicationController
     require "net/http"
     post_params = {
       source: params[:source],
-      title: params[:title],
       token: ENV["BUILD_TOKEN"]
     }
     uri = URI.parse("https://#{ENV['BUILD_HOST']}")
