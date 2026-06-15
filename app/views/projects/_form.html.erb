@@ -1,7 +1,7 @@
 <div class="flex size-full flex-1"
     data-controller="editor"
     data-editor-project-id-value="<%= project.id %>"
-    data-editor-editor-state-url-value="<%= editor_state_project_path(project) %>"
+    data-editor-editor-state-url-value="<%= project_path(project, format: :json) %>"
     data-turbo="false">
   <div data-editor-target="root" class="w-full flex-1 min-h-0">
     <div class="mx-5">

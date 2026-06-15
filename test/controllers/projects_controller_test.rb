@@ -20,7 +20,7 @@ class ProjectsControllerTest < ActionDispatch::IntegrationTest
   test "should create project and redirect to editor" do
     stub_build_server do
       assert_difference("Project.count") do
-        post projects_url, params: { project: { title: "My New Project", source_format: "pretext" } }
+        post projects_url, params: { project: { title: "My New Project" } }
       end
     end
 
@@ -28,22 +28,10 @@ class ProjectsControllerTest < ActionDispatch::IntegrationTest
     assert_redirected_to edit_project_url(created)
   end
 
-  test "should create project with latex source format" do
-    stub_build_server do
-      assert_difference("Project.count") do
-        post projects_url, params: { project: { title: "LaTeX Project", source_format: "latex" } }
-      end
-    end
-
-    created = Project.find_by!(title: "LaTeX Project", user: @user)
-    assert created.latex_source_format?
-    assert_redirected_to edit_project_url(created)
-  end
-
   test "should default title when blank on create" do
     stub_build_server do
       assert_difference("Project.count") do
-        post projects_url, params: { project: { title: "", source_format: "pretext" } }
+        post projects_url, params: { project: { title: "" } }
       end
     end
 
@@ -63,17 +51,9 @@ class ProjectsControllerTest < ActionDispatch::IntegrationTest
 
   test "should update project" do
     stub_build_server do
-      patch project_url(@project), params: { project: { source: @project.source, title: @project.title } }
+      patch project_url(@project), params: { project: { title: @project.title } }
     end
     assert_redirected_to project_url(@project)
-  end
-
-  test "should reject invalid source_format on create" do
-    assert_no_difference("Project.count") do
-      post projects_url, params: { project: { title: "Bad Format", source_format: "bogus" } }
-    end
-
-    assert_response :unprocessable_entity
   end
 
   test "should destroy project" do
@@ -245,39 +225,36 @@ class ProjectsControllerTest < ActionDispatch::IntegrationTest
   assert_equal custom_docinfo, @project.docinfo
   end
 
-  # --- Editor state API ---
+  # --- JSON API (used by the javascript editor) ---
 
-  test "should get editor_state as json" do
-    get editor_state_project_url(@project), headers: { "Accept" => "application/json" }
+  test "should get project as json" do
+    get project_url(@project, format: :json)
     assert_response :success
     json = response.parsed_body
     assert_includes json.keys, "title"
-    assert_includes json.keys, "source"
-    assert_includes json.keys, "source_format"
     assert_includes json.keys, "pretext_source"
     assert_includes json.keys, "docinfo"
     assert_includes json.keys, "use_common_docinfo"
     assert_includes json.keys, "common_docinfo"
   end
 
-  test "editor_state includes docinfo value" do
+  test "json includes docinfo value" do
     expected_docinfo = "<docinfo><macros>\\newcommand{\\R}{\\mathbb{R}}</macros></docinfo>"
     @project.update_column(:docinfo, expected_docinfo)
-    get editor_state_project_url(@project), headers: { "Accept" => "application/json" }
+    get project_url(@project, format: :json)
     json = response.parsed_body
     assert_equal expected_docinfo, json["docinfo"]
   end
 
-  test "should update_editor_state via patch" do
+  test "should update project via json" do
     stub_build_server do
-      patch editor_state_project_url(@project),
+      patch project_url(@project),
         params: {
           project: {
             title: "API Title",
-            source: "new source",
+            pretext_source: "<pretext><article><section><title>API Title</title></section></article></pretext>",
             docinfo: "<docinfo/>",
-            use_common_docinfo: true,
-            common_docinfo: "<docinfo><macros>\\newcommand{\\N}{\\mathbb{N}}</macros></docinfo>"
+            use_common_docinfo: true
           }
         },
         as: :json
@@ -288,21 +265,20 @@ class ProjectsControllerTest < ActionDispatch::IntegrationTest
     assert_equal "API Title", @project.reload.title
     assert_equal "<docinfo/>", @project.docinfo
     assert_equal true, @project.use_common_docinfo
-    assert_equal "<docinfo><macros>\\newcommand{\\N}{\\mathbb{N}}</macros></docinfo>", @project.user.reload.common_docinfo
   end
 
-  test "editor_state includes user common_docinfo and project use_common_docinfo" do
+  test "json includes user common_docinfo and project use_common_docinfo" do
     @project.user.update_column(:common_docinfo, "<docinfo><macros>\\newcommand{\\R}{\\mathbb{R}}</macros></docinfo>")
     @project.update_column(:use_common_docinfo, true)
 
-    get editor_state_project_url(@project), headers: { "Accept" => "application/json" }
+    get project_url(@project, format: :json)
     json = response.parsed_body
 
     assert_equal true, json["use_common_docinfo"]
     assert_equal "<docinfo><macros>\\newcommand{\\R}{\\mathbb{R}}</macros></docinfo>", json["common_docinfo"]
   end
 
-  test "docinfo-only editor_state update triggers rebuild" do
+  test "docinfo update via json triggers rebuild" do
     captured_params = nil
     fake_response = Struct.new(:body).new("<html><body>docinfo-only</body></html>")
 
@@ -310,47 +286,34 @@ class ProjectsControllerTest < ActionDispatch::IntegrationTest
       captured_params = params
       fake_response
     }) do
-      patch editor_state_project_url(@project),
+      patch project_url(@project),
         params: { project: { docinfo: "<docinfo><macros>\\newcommand{\\Q}{\\mathbb{Q}}</macros></docinfo>" } },
         as: :json
     end
 
     assert_response :success
-    assert_includes captured_params[:source], "<docinfo><macros>\\newcommand{\\Q}{\\mathbb{Q}}</macros></docinfo>"
+    assert_equal @project.reload.pretext_source, captured_params[:source]
     assert_equal "<html><body>docinfo-only</body></html>", @project.reload.html_source
   end
 
-  test "should reject invalid source_format in editor_state update" do
-    original_format = @project.source_format
-    stub_build_server do
-      patch editor_state_project_url(@project),
-        params: { project: { title: "Bad API Format", source_format: "bogus" } },
-        as: :json
-    end
-
-    assert_response :unprocessable_entity
-    assert_not_equal "Bad API Format", @project.reload.title
-    assert_equal original_format, @project.source_format
-  end
-
-  test "non-owner cannot get editor_state" do
+  test "non-owner cannot get project json" do
     other_project = projects(:two)
-    get editor_state_project_url(other_project), headers: { "Accept" => "application/json" }
+    get project_url(other_project, format: :json)
     assert_response 403
   end
 
-  test "non-owner cannot update_editor_state" do
+  test "non-owner cannot update project via json" do
     other_project = projects(:two)
-    patch editor_state_project_url(other_project),
+    patch project_url(other_project),
       params: { project: { title: "Stolen" } },
       as: :json
     assert_response 403
     assert_not_equal "Stolen", other_project.reload.title
   end
 
-  test "unauthenticated user cannot get editor_state" do
+  test "unauthenticated user cannot get project json" do
     sign_out :user
-    get editor_state_project_url(@project), headers: { "Accept" => "application/json" }
+    get project_url(@project, format: :json)
     assert_response :unauthorized
   end
 end

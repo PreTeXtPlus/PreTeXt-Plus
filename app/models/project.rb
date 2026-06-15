@@ -4,11 +4,12 @@ class Project < ApplicationRecord
   has_many :project_assets
   has_many :library_assets, through: :project_assets
 
-  has_many :divisions
   belongs_to :root_division, class_name: "Division", optional: true
 
   enum :document_type, { article: 0, book: 1, slideshow: 2 }, default: :article, suffix: true, validate: true
 
+  before_destroy -> { update_column(:root_division_id, nil) }
+  has_many :divisions, dependent: :destroy
   before_update :set_html_source
 
   default_scope { order(updated_at: :desc) }

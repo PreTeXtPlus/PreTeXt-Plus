@@ -37,7 +37,7 @@ class Admin::UsersControllerTest < ActionDispatch::IntegrationTest
   end
 
   test "shows user detail with projects and subscription data" do
-    project = Project.create!(user: users(:subscribed), title: "Support Project", source: "<section><title>Help</title></section>")
+    project = Project.create!(user: users(:subscribed), title: "Support Project")
     sign_in @admin
 
     get admin_user_path(users(:subscribed))
