@@ -5,13 +5,23 @@ class Project < ApplicationRecord
   has_many :library_assets, through: :project_assets
 
   has_many :divisions
-  belongs_to :root_division, class_name: "Division"
+  belongs_to :root_division, class_name: "Division", optional: true
 
   enum :document_type, { article: 0, book: 1, slideshow: 2 }, default: :article, suffix: true, validate: true
 
   before_update :set_html_source
 
   default_scope { order(updated_at: :desc) }
+
+  def root_division
+    super || begin
+      division = divisions.build
+      division.set_default_source
+      division.save!
+      update_column(:root_division_id, division.id)
+      division
+    end
+  end
 
   def effective_docinfo
     if use_common_docinfo? && user&.common_docinfo.present?

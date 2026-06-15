@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_06_15_190523) do
+ActiveRecord::Schema[8.1].define(version: 2026_06_15_200000) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
   enable_extension "pgcrypto"
@@ -190,7 +190,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_06_15_190523) do
     t.integer "document_type", default: 0, null: false
     t.text "html_source"
     t.text "pretext_source"
-    t.uuid "root_division_id", null: false
+    t.uuid "root_division_id"
     t.string "title"
     t.datetime "updated_at", null: false
     t.boolean "use_common_docinfo", default: false, null: false
