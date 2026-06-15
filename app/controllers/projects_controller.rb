@@ -296,5 +296,4 @@ class ProjectsController < ApplicationController
         redirect_to projects_path, alert: quota_message
       end
     end
-
 end
