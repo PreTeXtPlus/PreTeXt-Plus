@@ -270,8 +270,6 @@ ActiveRecord::Schema[8.1].define(version: 2026_06_11_000001) do
   add_foreign_key "project_assets", "projects"
   add_foreign_key "projects", "users"
   add_foreign_key "requests", "users"
-  add_foreign_key "source_elements", "projects"
-  add_foreign_key "source_elements", "source_elements", column: "parent_id"
   add_foreign_key "subscription_seats", "pay_subscriptions"
   add_foreign_key "subscription_seats", "users"
 end
