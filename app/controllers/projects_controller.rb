@@ -1,9 +1,9 @@
 class ProjectsController < ApplicationController
   allow_unauthenticated_access only: %i[ share preview source ]
   require_unauthenticated_access only: %i[ tryit ]
-  before_action :limit_projects, only: %i[ new create copy copy_conversion ]
+  before_action :limit_projects, only: %i[ new create copy ]
   load_and_authorize_resource except: %i[ index new tryit preview feedback ]
-  skip_authorize_resource only: %i[ share show_asset_file copy_conversion ]
+  skip_authorize_resource only: %i[ share show_asset_file ]
   after_action :allow_iframe, only: :share
   rate_limit to: 25, within: 10.minutes, only: :preview,
              with: -> { render plain: "Preview limit reached. Please wait a few minutes and try again, or create an account to continue writing and save your work!", status: :too_many_requests },
@@ -21,7 +21,7 @@ class ProjectsController < ApplicationController
 
   # GET /projects/new
   def new
-    @project = Project.new(user: current_user, source_format: :pretext)
+    @project = Project.new(user: current_user)
   end
 
   # GET /tryit
@@ -120,9 +120,7 @@ class ProjectsController < ApplicationController
   # POST /projects or /projects.json
   def create
     @project.user = current_user
-    @project.source_format = :pretext if @project.source_format.blank?
     @project.title = "New Project" if @project.title.blank?
-    @project.set_default_source
     @project.set_default_docinfo
 
     respond_to do |format|
@@ -203,27 +201,6 @@ class ProjectsController < ApplicationController
     redirect_to edit_project_path(project_copy)
   end
 
-  # POST /projects/:id/copy_conversion
-  def copy_conversion
-    # pretext_source = params[:pretext_source]
-    # title = params[:title]
-
-    # return render json: { error: "Missing pretext_source or title" }, status: :bad_request if pretext_source.blank? || title.blank?
-
-    project_copy = @project.dup
-    project_copy.user = current_user
-    project_copy.title = @project.title
-    project_copy.source = @project.pretext_source
-    project_copy.source_format = :pretext
-    project_copy.pretext_source = ""  # Clear pretext_source since source is already in pretext format
-
-    if project_copy.save
-      render json: { project_id: project_copy.id, project_url: edit_project_path(project_copy) }, status: :created
-    else
-      render json: { error: project_copy.errors.full_messages }, status: :unprocessable_entity
-    end
-  end
-
   def preview
     require "uri"
     require "net/http"
@@ -260,9 +237,6 @@ class ProjectsController < ApplicationController
       message: params[:message],
       email: params[:email],
       project_url: params[:project_url],
-      current_source: params[:current_source],
-      source_format: params[:source_format],
-      title: params[:title],
       submitted_at: params[:submitted_at],
       user: current_user
     }
@@ -278,11 +252,11 @@ class ProjectsController < ApplicationController
   private
     # Only allow a list of trusted parameters through.
     def project_params
-      params.expect(project: [ :title, :source, :pretext_source, :source_format, :docinfo, :use_common_docinfo ])
+      params.expect(project: [ :title, :pretext_source, :docinfo, :use_common_docinfo ])
     end
 
     def editor_state_params
-      params.expect(project: [ :title, :source, :pretext_source, :source_format, :docinfo, :use_common_docinfo, :common_docinfo ])
+      params.expect(project: [ :title, :pretext_source, :docinfo, :use_common_docinfo, :common_docinfo ])
     end
 
     def limit_projects
