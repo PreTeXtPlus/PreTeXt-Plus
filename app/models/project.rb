@@ -43,11 +43,6 @@ class Project < ApplicationRecord
     user.common_docinfo
   end
 
-  def to_h
-    [ :title, :pretext_source, :docinfo, :use_common_docinfo, :common_docinfo ]
-      .map { |attr| [ attr, self.send(attr) ] }.to_h
-  end
-
   DEFAULT_DOCINFO = File.read Rails.root.join("app", "default_docs", "docinfo.xml")
 
   private

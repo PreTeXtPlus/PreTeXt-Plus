@@ -38,8 +38,6 @@ Rails.application.routes.draw do
       resources :project_assets, path: "library", as: "assets", only: [ :index, :show, :create, :update, :destroy ]
     end
     member do
-      get  :editor_state
-      patch :editor_state, action: :update_editor_state
       get "share" => "projects#share", as: "share"
       get "share/external/:ref" => "projects#show_asset_file", as: "show_asset_file"
       get "share/source" => "projects#source", as: "share_source"

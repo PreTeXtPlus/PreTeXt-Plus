@@ -157,26 +157,6 @@ class ProjectsController < ApplicationController
     end
   end
 
-  # GET /projects/:id/editor_state
-  def editor_state
-    render json: @project.to_h
-  end
-
-  # PATCH /projects/:id/editor_state
-  def update_editor_state
-    attrs = editor_state_params.to_h.symbolize_keys
-    common_docinfo = attrs.delete(:common_docinfo)
-
-    ActiveRecord::Base.transaction do
-      @project.user.update!(common_docinfo: common_docinfo) unless common_docinfo.nil?
-      @project.update!(attrs)
-    end
-
-    render json: @project.to_h
-  rescue ActiveRecord::RecordInvalid => e
-    render json: { errors: e.record.errors }, status: :unprocessable_entity
-  end
-
   def share
     render html: (@project.html_source || "Document not found").html_safe
   end
@@ -252,10 +232,6 @@ class ProjectsController < ApplicationController
     # Only allow a list of trusted parameters through.
     def project_params
       params.expect(project: [ :title, :pretext_source, :docinfo, :use_common_docinfo ])
-    end
-
-    def editor_state_params
-      params.expect(project: [ :title, :pretext_source, :docinfo, :use_common_docinfo, :common_docinfo ])
     end
 
     def limit_projects
