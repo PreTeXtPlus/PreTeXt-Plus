@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_06_15_200000) do
+ActiveRecord::Schema[8.1].define(version: 2026_06_15_210000) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
   enable_extension "pgcrypto"
@@ -45,6 +45,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_06_15_200000) do
 
   create_table "divisions", id: :uuid, default: -> { "gen_random_uuid()" }, force: :cascade do |t|
     t.datetime "created_at", null: false
+    t.boolean "is_root", default: false, null: false
     t.uuid "project_id", null: false
     t.text "source"
     t.integer "source_format", default: 0, null: false
@@ -190,12 +191,10 @@ ActiveRecord::Schema[8.1].define(version: 2026_06_15_200000) do
     t.integer "document_type", default: 0, null: false
     t.text "html_source"
     t.text "pretext_source"
-    t.uuid "root_division_id"
     t.string "title"
     t.datetime "updated_at", null: false
     t.boolean "use_common_docinfo", default: false, null: false
     t.uuid "user_id", null: false
-    t.index ["root_division_id"], name: "index_projects_on_root_division_id"
     t.index ["user_id"], name: "index_projects_on_user_id"
   end
 
@@ -278,7 +277,6 @@ ActiveRecord::Schema[8.1].define(version: 2026_06_15_200000) do
   add_foreign_key "pay_subscriptions", "pay_customers", column: "customer_id"
   add_foreign_key "project_assets", "library_assets"
   add_foreign_key "project_assets", "projects"
-  add_foreign_key "projects", "divisions", column: "root_division_id"
   add_foreign_key "projects", "users"
   add_foreign_key "requests", "users"
   add_foreign_key "subscription_seats", "pay_subscriptions"

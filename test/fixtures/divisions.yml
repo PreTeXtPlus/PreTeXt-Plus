@@ -3,9 +3,11 @@
 one:
   source: <section><title>Hello</title><p>World</p></section>
   source_format: 0
+  is_root: true
   project: one
 
 two:
   source: \begin{section}Hello world!\end{section}
   source_format: 1
+  is_root: true
   project: two

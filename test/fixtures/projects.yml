@@ -5,11 +5,9 @@ one:
   title: My First Project
   pretext_source: <pretext><article><section><title>First</title><p>Content</p></section></article></pretext>
   document_type: article
-  root_division: one
 
 two:
   user: two
   title: My Second Project
   pretext_source: <pretext><article><section><title>Other</title><p>Content</p></section></article></pretext>
   document_type: article
-  root_division: two

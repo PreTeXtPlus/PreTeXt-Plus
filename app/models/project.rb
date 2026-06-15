@@ -4,16 +4,18 @@ class Project < ApplicationRecord
   has_many :project_assets
   has_many :library_assets, through: :project_assets
 
-  belongs_to :root_division, class_name: "Division", optional: true
-  accepts_nested_attributes_for :root_division
+  has_many :divisions, dependent: :destroy
+  accepts_nested_attributes_for :divisions
 
   enum :document_type, { article: 0, book: 1, slideshow: 2 }, default: :article, suffix: true, validate: true
 
-  before_destroy -> { update_column(:root_division_id, nil) }
-  has_many :divisions, dependent: :destroy
   before_update :set_html_source
 
   default_scope { order(updated_at: :desc) }
+
+  def root_division
+    divisions.find_by(is_root: true)
+  end
 
   def effective_docinfo
     if use_common_docinfo? && user&.common_docinfo.present?

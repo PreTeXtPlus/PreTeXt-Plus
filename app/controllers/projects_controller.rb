@@ -22,7 +22,7 @@ class ProjectsController < ApplicationController
   # GET /projects/new
   def new
     @project = Project.new(user: current_user)
-    @project.root_division = @project.divisions.build
+    @project.divisions.build(is_root: true)
   end
 
   # GET /tryit
@@ -123,14 +123,8 @@ class ProjectsController < ApplicationController
     @project.user = current_user
     @project.title = "New Project" if @project.title.blank?
     @project.set_default_docinfo
-    puts @project.inspect
-    puts @project.divisions.inspect
-    puts @project.root_division.inspect
     respond_to do |format|
       if @project.save
-        puts @project.inspect
-        puts @project.divisions.inspect
-        puts @project.root_division.inspect
         format.html { redirect_to edit_project_path(@project) }
         format.json { render :show, status: :created, location: @project }
       else
@@ -237,7 +231,10 @@ class ProjectsController < ApplicationController
   private
     # Only allow a list of trusted parameters through.
     def project_params
-      params.expect(project: [ :title, :pretext_source, :docinfo, :use_common_docinfo, root_division: [ :id, :source_format ] ])
+      params.expect(project: [
+        :title, :pretext_source, :docinfo, :use_common_docinfo,
+        divisions_attributes: [ [ :id, :source, :source_format, :is_root ] ]
+      ])
     end
 
     def limit_projects
