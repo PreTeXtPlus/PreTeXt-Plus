@@ -4,12 +4,22 @@ class Project < ApplicationRecord
   has_many :project_assets
   has_many :library_assets, through: :project_assets
 
-  enum :source_format, { pretext: 0, latex: 1, markdown: 2 }, default: :pretext, suffix: true, validate: true
+  has_many :divisions
+  belongs_to :root_division, class_name: "Division"
+
   enum :document_type, { article: 0, book: 1, slideshow: 2 }, default: :article, suffix: true, validate: true
 
   before_update :set_html_source
 
   default_scope { order(updated_at: :desc) }
+
+  def source
+    root_division.source
+  end
+
+  def source_format
+    root_division.source_format
+  end
 
   # Wraps the project source in a full PreTeXt document, including docinfo.
   def full_pretext_source
