@@ -5,6 +5,7 @@ class Project < ApplicationRecord
   has_many :library_assets, through: :project_assets
 
   belongs_to :root_division, class_name: "Division", optional: true
+  accepts_nested_attributes_for :root_division
 
   enum :document_type, { article: 0, book: 1, slideshow: 2 }, default: :article, suffix: true, validate: true
 
@@ -13,16 +14,6 @@ class Project < ApplicationRecord
   before_update :set_html_source
 
   default_scope { order(updated_at: :desc) }
-
-  def root_division
-    super || begin
-      division = divisions.build
-      division.set_default_source
-      division.save!
-      update_column(:root_division_id, division.id)
-      division
-    end
-  end
 
   def effective_docinfo
     if use_common_docinfo? && user&.common_docinfo.present?
