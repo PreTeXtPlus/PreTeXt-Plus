@@ -1,11 +1,11 @@
 # Read about fixtures at https://api.rubyonrails.org/classes/ActiveRecord/FixtureSet.html
 
 one:
-  source: MyText
-  source_format: 1
+  source: <section><title>Hello</title><p>World</p></section>
+  source_format: 0
   project: one
 
 two:
-  source: MyText
+  source: \begin{section}Hello world!\end{section}
   source_format: 1
   project: two
