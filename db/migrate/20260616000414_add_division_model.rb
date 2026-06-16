@@ -2,6 +2,7 @@ class AddDivisionModel < ActiveRecord::Migration[8.1]
   def change
     create_table :divisions, id: :uuid do |t|
       t.text :source
+      t.string :ref
       t.integer :source_format, null: false, default: 0
       t.boolean :is_root, null: false, default: false
       t.references :project, null: false, foreign_key: true, type: :uuid

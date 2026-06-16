@@ -47,6 +47,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_06_16_000414) do
     t.datetime "created_at", null: false
     t.boolean "is_root", default: false, null: false
     t.uuid "project_id", null: false
+    t.string "ref"
     t.text "source"
     t.integer "source_format", default: 0, null: false
     t.datetime "updated_at", null: false
