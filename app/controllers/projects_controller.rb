@@ -165,7 +165,8 @@ class ProjectsController < ApplicationController
     def project_params
       params.expect(project: [
         :title, :pretext_source, :docinfo, :use_common_docinfo,
-        divisions_attributes: [ [ :id, :source, :source_format, :is_root, :ref ] ]
+        divisions_attributes: [ [ :id, :source, :source_format, :is_root, :ref ] ],
+        project_assets_attributes: [ [ :id, :file, :source, :kind ] ]
       ])
     end
 
