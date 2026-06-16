@@ -25,95 +25,6 @@ class ProjectsController < ApplicationController
     @project.divisions.build(is_root: true)
   end
 
-  # GET /tryit
-  def tryit
-    @demo_mode = params[:demo] == "pretext" ? "pretext" :
-      params[:demo] == "markdown" ? "markdown" : "latex"
-    @title = @demo_mode == "latex" ? "Try LaTeX-style PreTeXt!" :
-      @demo_mode == "markdown" ? "Try Markdown-style PreTeXt!" : "Try Classic PreTeXt!"
-
-    @content = if @demo_mode == "latex"
-      <<~EOS
-        \\section{Thanks for trying PreTeXt.Plus!}
-
-        This is a LaTeX-style PreTeXt demo project. You can edit this content using supported LaTeX syntax.
-
-        \\[
-          \\left|\\sum_{i=0}^n a_i\\right|\\leq\\sum_{i=0}^n |a_i|
-        \\]
-
-        When you preview the changes, the source is first converted to PreTeXt and then rendered as accessible HTML.#{' '}
-
-        (Changes you make here will not be saved, but feel free to play around to see what PreTeXt.Plus can do!)
-      EOS
-    elsif @demo_mode == "markdown"
-      <<~EOS
-        # Thanks for trying PreTeXt.Plus!
-
-        This is a Markdown-style PreTeXt demo project. You can edit this content using supported Markdown syntax.
-
-        $$
-          \\left|\\sum_{i=0}^n a_i\\right|\\leq\\sum_{i=0}^n |a_i|
-        $$
-
-        When you preview the changes, the source is first converted to PreTeXt and then rendered as accessible HTML.#{' '}
-
-        Theorem:
-          PreTeXt can be used in markdown mode.
-          Proof:
-            See this document.
-
-        (Changes you make here will not be saved, but feel free to play around to see what PreTeXt.Plus can do!)
-      EOS
-    else
-      <<~EOS
-        <section>
-          <title> Thanks for trying PreTeXt.Plus! </title>
-
-          <p>
-            This is a very simple project to show you what PreTeXt.Plus can do.
-            You can edit its content using the PreTeXt markup language.
-            <md>
-              \\left|\\sum_{i=0}^n a_i\\right|\\leq\\sum_{i=0}^n|a_i|
-            </md>
-          </p>
-
-          <fact>
-            <statement>
-              <p>
-                For more information on how to use PreTeXt, please visit <c>https://pretextbook.org/doc/guide/html/</c>.
-              </p>
-            </statement>
-          </fact>
-
-          <note>
-            <p>
-              Changes you make here will not be saved.
-            </p>
-          </note>
-        </section>
-
-        <section>
-          <title>New: Try LaTeX-style PreTeXt or Markdown-style PreTeXt!</title>
-
-          <p>
-            PreTeXt.Plus now supports writing in LaTeX-style and Markdown-style PreTeXt. Most commands are supported, and the environments from PreTeXt are what you expect.  Give it a try by switching modes above.
-          </p>
-        </section>
-      EOS
-    end
-
-    @source_format = @demo_mode
-    @docinfo = <<~EOS
-      <docinfo>
-      <macros>
-      \\newcommand{\\N}{\\mathbb N}
-      </macros>
-      <brandlogo source="icon.svg" />
-      </docinfo>
-    EOS
-  end
-
   # GET /projects/1/edit
   def edit
   end
@@ -207,6 +118,27 @@ class ProjectsController < ApplicationController
     render plain: "Preview build timed out", status: :gateway_timeout
   rescue SocketError, EOFError, IOError, Errno::ECONNREFUSED, Errno::EHOSTUNREACH, SystemCallError
     render plain: "Preview build failed", status: :bad_gateway
+  end
+
+  # GET /tryit
+  def tryit
+    @demo_mode = params[:demo] == "pretext" ? "pretext" :
+      params[:demo] == "markdown" ? "markdown" : "latex"
+
+    @title = @demo_mode == "latex" ? "Try LaTeX-style PreTeXt!" :
+      @demo_mode == "markdown" ? "Try Markdown-style PreTeXt!" : "Try Classic PreTeXt!"
+
+    @content = if @demo_mode == "latex"
+      File.read Rails.root.join("app", "default_docs", "tryit", "latex.tex")
+    elsif @demo_mode == "markdown"
+      File.read Rails.root.join("app", "default_docs", "tryit", "markdown.md")
+    else
+      File.read Rails.root.join("app", "default_docs", "tryit", "pretext.xml")
+    end
+
+    @docinfo = File.read Rails.root.join("app", "default_docs", "tryit", "docinfo.xml")
+
+    @source_format = @demo_mode
   end
 
   # POST /projects/feedback
