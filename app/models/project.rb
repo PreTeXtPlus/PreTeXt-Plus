@@ -2,6 +2,7 @@ class Project < ApplicationRecord
   belongs_to :user
 
   has_many :project_assets
+  accepts_nested_attributes_for :project_assets
   has_many :library_assets, through: :project_assets
 
   has_many :divisions, dependent: :destroy
