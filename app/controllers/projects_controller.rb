@@ -9,7 +9,7 @@ class ProjectsController < ApplicationController
              with: -> { render plain: "Preview limit reached. Please wait a few minutes and try again, or create an account to continue writing and save your work!", status: :too_many_requests },
              if: -> { !authenticated? }
 
-  # GET /projects or /projects.json
+  # GET /projects
   def index
     @projects = Project.where user: current_user
     @invitations = Invitation.where owner_user: current_user
@@ -29,7 +29,7 @@ class ProjectsController < ApplicationController
   def edit
   end
 
-  # POST /projects or /projects.json
+  # POST /projects
   def create
     @project.user = current_user
     @project.title = "New Project" if @project.title.blank?
@@ -45,7 +45,7 @@ class ProjectsController < ApplicationController
     end
   end
 
-  # PATCH/PUT /projects/1 or /projects/1.json
+  # PATCH/PUT /projects/1.json
   def update
     respond_to do |format|
       if @project.update(project_params)
@@ -58,7 +58,7 @@ class ProjectsController < ApplicationController
     end
   end
 
-  # DELETE /projects/1 or /projects/1.json
+  # DELETE /projects/1
   def destroy
     @project.destroy!
 

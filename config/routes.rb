@@ -29,13 +29,14 @@ Rails.application.routes.draw do
   resources :requests, only: [ :create ]
   resources :invitations, only: [ :new, :create ]
   post "invitations/redeem" => "invitations#redeem", as: :redeem_invitation
-  get "projects/lunr-pretext-search-index.js", to: redirect("/ptx-search.js")
-  get "projects/*_/lunr-pretext-search-index.js", to: redirect("/ptx-search.js")
-  get "projects/:id/*_.html", to: redirect("/projects/%{id}/share")
-  get "projects/*_/icon.svg", to: redirect("/icon-small.svg")
   resources :projects do
-    scope format: true, constraints: { format: "json" } do
-      resources :project_assets, path: "library", as: "assets", only: [ :index, :show, :create, :update, :destroy ]
+    collection do
+      post "preview" => "projects#preview", as: "preview"
+      post "feedback" => "projects#feedback", as: "feedback"
+      get "lunr-pretext-search-index.js", to: redirect("/ptx-search.js")
+      get "*_/lunr-pretext-search-index.js", to: redirect("/ptx-search.js")
+      get ":id/*_.html", to: redirect("/projects/%{id}/share")
+      get "*_/icon.svg", to: redirect("/icon-small.svg")
     end
     member do
       get "share" => "projects#share", as: "share"
@@ -46,8 +47,6 @@ Rails.application.routes.draw do
       get "*/lunr-pretext-search-index.js", to: redirect("/ptx-search.js")
     end
   end
-  post "projects/preview" => "projects#preview", as: "preview"
-  post "projects/feedback" => "projects#feedback", as: "feedback"
   scope format: true, constraints: { format: "json" } do
     resources :library_assets, path: "library", only: [ :index, :show, :create, :update, :destroy ]
   end
