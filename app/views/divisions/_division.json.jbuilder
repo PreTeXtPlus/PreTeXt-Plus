@@ -1,1 +1,1 @@
-json.extract! division, :id, :ref, :source, :source_format
+json.extract! division, :id, :ref, :source, :source_format, :is_root

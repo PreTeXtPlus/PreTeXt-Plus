@@ -27,6 +27,7 @@
 
       <%= form.fields_for :divisions do |fields| %>
         <%= fields.hidden_field :is_root %>
+        <%= fields.hidden_field :ref %>
         <div>
           <p class="block text-sm font-semibold text-gray-700 mb-3">Markup style</p>
           <% format_labels = [

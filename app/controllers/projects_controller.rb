@@ -22,7 +22,7 @@ class ProjectsController < ApplicationController
   # GET /projects/new
   def new
     @project = Project.new(user: current_user)
-    @project.divisions.build(is_root: true)
+    @project.divisions.build(is_root: true, ref: "document")
   end
 
   # GET /projects/1/edit
@@ -165,7 +165,7 @@ class ProjectsController < ApplicationController
     def project_params
       params.expect(project: [
         :title, :pretext_source, :docinfo, :use_common_docinfo,
-        divisions_attributes: [ [ :id, :source, :source_format, :is_root ] ]
+        divisions_attributes: [ [ :id, :source, :source_format, :is_root, :ref ] ]
       ])
     end
 
