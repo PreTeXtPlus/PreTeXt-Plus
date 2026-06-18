@@ -12,6 +12,15 @@
   </div>
 
   <div id="projects" class="min-w-full space-y-5">
+    <% if current_user.present? and !current_user.confirmed? %>
+      <div class="flex justify-center">
+        <p class="my-2 py-2 px-3 bg-blue-50 border-blue-200 border-1 text-blue-500 rounded-md inline-block">
+          ℹ Your email address has not yet been confirmed. Please
+          <%= link_to "confirm your address", new_user_confirmation_path, class: "font-semibold hover:underline" %>
+          within three days to maintain access.
+        </p>
+      </div>
+    <% end %>
     <% unless current_user.subscribed? %>
       <div class="rounded-lg border-2 border-blue-500 p-4 text-sky-900 mt-6 mx-auto md:w-3/4">
       <% if current_user.invited? %>
