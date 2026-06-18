@@ -49,6 +49,17 @@ class Admin::UsersControllerTest < ActionDispatch::IntegrationTest
     assert_includes response.body, "Subscription access"
   end
 
+  test "shows confirmation status and filters unconfirmed users" do
+    sign_in @admin
+
+    get admin_users_path, params: { unconfirmed: "1" }
+
+    assert_response :success
+    assert_includes response.body, users(:unconfirmed).email
+    assert_not_includes response.body, users(:subscribed).email
+    assert_includes response.body, "Unconfirmed"
+  end
+
   test "search escapes sql like wildcards" do
     User.create!(email: "test_user@example.com", name: "Exact User", password: "password123", confirmed_at: Time.current)
     User.create!(email: "testxuser@example.com", name: "Wildcard User", password: "password123", confirmed_at: Time.current)
