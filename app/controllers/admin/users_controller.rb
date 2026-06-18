@@ -1,5 +1,5 @@
 class Admin::UsersController < Admin::BaseController
-  before_action :set_user, only: :show
+  before_action :set_user, only: %i[show confirm]
 
   def index
     @filters = filter_params.to_h
@@ -17,6 +17,11 @@ class Admin::UsersController < Admin::BaseController
     @requests = Request.where(user: @user).order(created_at: :desc)
     @received_invitations = Invitation.where(recipient_user: @user).order(created_at: :desc)
     @owned_invitations = Invitation.where(owner_user: @user).order(created_at: :desc)
+  end
+
+  def confirm
+    @user.confirm
+    redirect_to admin_user_path(@user), notice: "Confirmed #{@user.email}."
   end
 
   private

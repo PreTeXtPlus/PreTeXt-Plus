@@ -60,6 +60,42 @@ class Admin::UsersControllerTest < ActionDispatch::IntegrationTest
     assert_includes response.body, "Unconfirmed"
   end
 
+  test "shows a confirm button for unconfirmed users" do
+    sign_in @admin
+
+    get admin_user_path(users(:unconfirmed))
+
+    assert_response :success
+    assert_includes response.body, "Confirm email"
+  end
+
+  test "does not show a confirm button for confirmed users" do
+    sign_in @admin
+
+    get admin_user_path(users(:subscribed))
+
+    assert_response :success
+    assert_not_includes response.body, "Confirm email"
+  end
+
+  test "confirms an unconfirmed user" do
+    sign_in @admin
+
+    post confirm_admin_user_path(users(:unconfirmed))
+
+    assert_redirected_to admin_user_path(users(:unconfirmed))
+    assert users(:unconfirmed).reload.confirmed?
+  end
+
+  test "redirects non-admin users from confirm" do
+    sign_in @non_admin
+
+    post confirm_admin_user_path(users(:unconfirmed))
+
+    assert_redirected_to projects_path
+    assert_not users(:unconfirmed).reload.confirmed?
+  end
+
   test "search escapes sql like wildcards" do
     User.create!(email: "test_user@example.com", name: "Exact User", password: "password123", confirmed_at: Time.current)
     User.create!(email: "testxuser@example.com", name: "Wildcard User", password: "password123", confirmed_at: Time.current)

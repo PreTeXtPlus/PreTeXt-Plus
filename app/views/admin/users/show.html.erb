@@ -107,7 +107,14 @@
         </div>
         <div>
           <dt class="font-medium text-gray-500">Email confirmed</dt>
-          <dd><%= @user.confirmed? ? @user.confirmed_at.to_date : "Not confirmed" %></dd>
+          <dd>
+            <% if @user.confirmed? %>
+              <%= @user.confirmed_at.to_date %>
+            <% else %>
+              Not confirmed
+              <%= button_to "Confirm email", confirm_admin_user_path(@user), method: :post, class: "ml-2 rounded-md px-2.5 py-1 bg-blue-600 hover:bg-blue-500 text-white text-xs font-medium cursor-pointer", form_class: "inline-block" %>
+            <% end %>
+          </dd>
         </div>
       </dl>
     </div>

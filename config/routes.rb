@@ -1,7 +1,11 @@
 Rails.application.routes.draw do
   namespace :admin do
     root "dashboard#show"
-    resources :users, only: %i[index show]
+    resources :users, only: %i[index show] do
+      member do
+        post :confirm
+      end
+    end
     resources :projects, only: %i[show]
     resources :terms, only: %i[new create]
   end
