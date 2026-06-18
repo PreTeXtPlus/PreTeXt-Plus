@@ -39,5 +39,6 @@ class Admin::DashboardControllerTest < ActionDispatch::IntegrationTest
     assert_includes response.body, "Host health"
     assert_includes response.body, "Local runtime metrics only"
     assert_includes response.body, "Recent sign-ins"
+    assert_includes response.body, "Unconfirmed emails"
   end
 end

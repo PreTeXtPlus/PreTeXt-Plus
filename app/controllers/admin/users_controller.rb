@@ -1,5 +1,5 @@
 class Admin::UsersController < Admin::BaseController
-  before_action :set_user, only: :show
+  before_action :set_user, only: %i[show confirm]
 
   def index
     @filters = filter_params.to_h
@@ -17,6 +17,11 @@ class Admin::UsersController < Admin::BaseController
     @requests = Request.where(user: @user).order(created_at: :desc)
     @received_invitations = Invitation.where(recipient_user: @user).order(created_at: :desc)
     @owned_invitations = Invitation.where(owner_user: @user).order(created_at: :desc)
+  end
+
+  def confirm
+    @user.confirm
+    redirect_to admin_user_path(@user), notice: "Confirmed #{@user.email}."
   end
 
   private
@@ -43,6 +48,7 @@ class Admin::UsersController < Admin::BaseController
     scope = scope.where(id: subscribed_user_ids) if filter_params[:subscribed] == "1"
     scope = scope.where(id: Request.select(:user_id)) if filter_params[:requested] == "1"
     scope = scope.where(id: Invitation.where.not(recipient_user_id: nil).select(:recipient_user_id)) if filter_params[:invited] == "1"
+    scope = scope.where(confirmed_at: nil) if filter_params[:unconfirmed] == "1"
 
     scope.order(Arel.sql("users.last_sign_in_at DESC NULLS LAST, users.created_at DESC"))
   end
@@ -55,6 +61,6 @@ class Admin::UsersController < Admin::BaseController
   end
 
   def filter_params
-    params.permit(:q, :admins_only, :subscribed, :requested, :invited)
+    params.permit(:q, :admins_only, :subscribed, :requested, :invited, :unconfirmed)
   end
 end

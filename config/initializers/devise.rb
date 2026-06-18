@@ -1,5 +1,5 @@
 Devise.setup do |config|
-  config.mailer_sender = "support@pretext.plus"
+  config.mailer_sender = "signin@mailer.pretext.plus"
 
   require "devise/orm/active_record"
 
@@ -20,4 +20,6 @@ Devise.setup do |config|
   # Inherit our ApplicationMailer for Devise emails so they use the same
   # delivery method (Resend) and layout as other transactional emails.
   config.parent_mailer = "ApplicationMailer"
+
+  config.allow_unconfirmed_access_for = 3.days
 end

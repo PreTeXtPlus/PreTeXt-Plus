@@ -8,7 +8,8 @@ class Admin::DashboardController < Admin::BaseController
       { label: "Recent sign-ins", value: User.where("last_sign_in_at >= ?", 7.days.ago).count, detail: "Unique users who signed in within the last 7 days" },
       { label: "Access requests", value: Request.count, detail: "Outstanding invitation requests" },
       { label: "Claimed invitations", value: Invitation.where.not(recipient_user_id: nil).distinct.count(:recipient_user_id), detail: "Users with invitation records" },
-      { label: "Open invitation codes", value: Invitation.where(recipient_user_id: nil).count, detail: "Invite codes not yet claimed" }
+      { label: "Open invitation codes", value: Invitation.where(recipient_user_id: nil).count, detail: "Invite codes not yet claimed" },
+      { label: "Unconfirmed emails", value: User.where(confirmed_at: nil).count, detail: "Accounts that have not confirmed their email" }
     ]
 
     @recent_users = User.where.not(last_sign_in_at: nil).order(last_sign_in_at: :desc).limit(5)

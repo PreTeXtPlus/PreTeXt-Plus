@@ -4,13 +4,28 @@
   <h1 class="font-bold text-4xl">Resend confirmation email</h1>
   <p class="my-4 text-gray-600">Enter the email address you used to register and we'll send you a new confirmation link.</p>
 
-  <%= form_with(model: resource, as: resource_name, url: confirmation_path(resource_name), html: { method: :post }, data: { turbo: false }) do |form| %>
+  <%= form_with(model: current_user || resource, as: resource_name, url: confirmation_path(resource_name), html: { method: :post }, data: { turbo: false }) do |form| %>
     <div class="my-5">
       <%= form.email_field :email, required: true, autofocus: true, autocomplete: "username", placeholder: "Enter your email address", class: "block shadow-sm rounded-md border border-gray-400 focus:outline-solid focus:outline-blue-600 px-3 py-2 mt-2 w-full" %>
     </div>
 
-    <div class="inline">
-      <%= form.submit "Resend confirmation", class: "w-full sm:w-auto text-center rounded-lg px-3.5 py-2.5 bg-blue-600 hover:bg-blue-500 text-white inline-block font-medium cursor-pointer" %>
+    <div class="col-span-6 sm:flex sm:items-center sm:gap-4">
+      <div class="inline">
+        <%= form.submit "Resend confirmation", class: "w-full sm:w-auto text-center rounded-lg px-3.5 py-2.5 bg-blue-600 hover:bg-blue-500 text-white inline-block font-medium cursor-pointer" %>
+      </div>
+
+      <div class="mt-4 text-sm sm:mt-0">
+        <%= link_to "Register a new account", new_user_path, class: "text-green-700 underline hover:no-underline" %>
+      </div>
+
+      <div class="mt-4 text-sm sm:mt-0">
+        <%= link_to "Sign in", new_user_session_path, class: "text-blue-700 underline hover:no-underline" %>
+      </div>
     </div>
   <% end %>
+  <p class="text-sm my-4 text-gray-500 mx-4">
+    Having trouble finding your confirmation email? Contact your IT team to see if it was blocked by your
+    firewall, or email <a href="mailto:support@pretext.plus" class="text-blue-700 hover:underline">support@pretext.plus</a>
+    to get confirmed manually.
+  </p>
 </div>

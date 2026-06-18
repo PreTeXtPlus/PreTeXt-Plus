@@ -17,3 +17,9 @@ subscribed:
   email: subbed@example.com
   encrypted_password: <%= encrypted_password %>
   confirmed_at: <%= 1.year.ago %>
+
+unconfirmed:
+  name: Unconfirmed User
+  email: unconfirmed@example.com
+  encrypted_password: <%= encrypted_password %>
+  confirmed_at:
