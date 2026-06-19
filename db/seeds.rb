@@ -15,6 +15,7 @@ if Rails.env.development?
   user.password = "password123"
   user.password_confirmation = "password123"
   user.admin = true
+  user.skip_confirmation!
   user.save!
   puts "Dev admin: admin@example.com / password123"
 end
