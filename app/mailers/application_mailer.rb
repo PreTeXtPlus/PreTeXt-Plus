@@ -7,6 +7,6 @@ class ApplicationMailer < ActionMailer::Base
   private
 
   def attach_logo
-    attachments.inline["logo.svg"] = File.read(Rails.root.join("app/assets/images/logo.svg"))
+    attachments.inline["logo.png"] = File.binread(Rails.root.join("app/assets/images/logo.png"))
   end
 end
