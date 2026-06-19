@@ -8,7 +8,8 @@ class UsersController < ApplicationController
   def create
     @user = User.new(sign_up_params)
     if @user.save
-      redirect_to new_user_session_path, notice: "Please check your email to confirm your account before signing in."
+      sign_in(:user, @user)
+      redirect_to projects_path, notice: "Please check your email to confirm your account."
     else
       render :new, status: :unprocessable_entity
     end
