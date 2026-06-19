@@ -6,7 +6,15 @@
 
   <%= form_with(model: current_user || resource, as: resource_name, url: confirmation_path(resource_name), html: { method: :post }, data: { turbo: false }) do |form| %>
     <div class="my-5">
-      <%= form.email_field :email, required: true, autofocus: true, autocomplete: "username", placeholder: "Enter your email address", class: "block shadow-sm rounded-md border border-gray-400 focus:outline-solid focus:outline-blue-600 px-3 py-2 mt-2 w-full" %>
+    <% if user_signed_in? %>
+      <%= form.hidden_field :email %>
+      <%= email_field_tag :dummy_email, current_user.email, disabled: true, 
+        class: "block shadow-sm rounded-md border bg-gray-200 text-gray-600 cursor-not-allowed border-gray-400 focus:outline-solid focus:outline-blue-600 px-3 py-2 mt-2 w-full" %>
+    <% else %>
+      <%= form.email_field :email, required: true, autofocus: true, autocomplete: "username", 
+        placeholder: "Enter your email address", 
+        class: "block shadow-sm rounded-md border border-gray-400 focus:outline-solid focus:outline-blue-600 px-3 py-2 mt-2 w-full" %>
+    <% end %>
     </div>
 
     <div class="col-span-6 sm:flex sm:items-center sm:gap-4">
@@ -14,13 +22,16 @@
         <%= form.submit "Resend confirmation", class: "w-full sm:w-auto text-center rounded-lg px-3.5 py-2.5 bg-blue-600 hover:bg-blue-500 text-white inline-block font-medium cursor-pointer" %>
       </div>
 
-      <div class="mt-4 text-sm sm:mt-0">
-        <%= link_to "Register a new account", new_user_path, class: "text-green-700 underline hover:no-underline" %>
-      </div>
+      <% unless user_signed_in? %>
+        <div class="mt-4 text-sm sm:mt-0">
+          <%= link_to "Register a new account", new_user_path, class: "text-green-700 underline hover:no-underline" %>
+        </div>
 
-      <div class="mt-4 text-sm sm:mt-0">
-        <%= link_to "Sign in", new_user_session_path, class: "text-blue-700 underline hover:no-underline" %>
-      </div>
+        <div class="mt-4 text-sm sm:mt-0">
+          <%= link_to "Sign in", new_user_session_path, class: "text-blue-700 underline hover:no-underline" %>
+        </div>
+      <% end %>
+
     </div>
   <% end %>
   <p class="text-sm my-4 text-gray-500 mx-4">
