@@ -1,4 +1,4 @@
-json.extract! project, :id, :title, :pretext_source, :docinfo, :use_common_docinfo, :common_docinfo
+json.extract! project, :id, :title, :pretext_source, :docinfo, :document_type, :use_common_docinfo, :common_docinfo
 json.url project_url(project, format: :json)
 json.divisions project.divisions do |division|
   json.partial! "divisions/division", division: division

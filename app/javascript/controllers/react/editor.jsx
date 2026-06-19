@@ -1,88 +1,390 @@
-import React, { useState, useCallback } from 'react';
+import React, { useCallback, useEffect, useRef } from "react";
 import ReactDOM from "react-dom/client";
-import { Editors } from '@pretextbook/web-editor';
-import '@pretextbook/web-editor/dist/web-editor.css';
+import {
+  QueryClient,
+  QueryClientProvider,
+  useMutation,
+  useQuery,
+} from "@tanstack/react-query";
+import { Editors, assembleProjectSource } from "@pretextbook/web-editor";
+import "@pretextbook/web-editor/dist/web-editor.css";
 
-let root = null;
+// ---------------------------------------------------------------------------
+// Architecture
+// ---------------------------------------------------------------------------
+// React (not the Stimulus controller) now owns the editor's data layer, and
+// TanStack Query manages *server state* for us:
+//
+//   * useQuery   -> the READ.  Loads the project JSON once, exposes
+//                   loading/error state, and caches the result.
+//   * useMutation -> the WRITE. Wraps the PATCH save, exposing isPending /
+//                   error and an awaitable mutateAsync().
+//
+// What TanStack deliberately does NOT manage is the *live editing buffer* —
+// the characters the user is currently typing.  That is client state, and it
+// already lives inside the web-editor's own Zustand store.  The host's job is
+// only to (a) feed the initial data in, (b) collect changes as they stream out
+// via onContentChange, and (c) push the accumulated result back to the server.
+//
+// So we keep a small mutable "working copy" in a ref, seeded once from the
+// query result and updated by the editor callbacks.  The query cache holds the
+// last-known *server* snapshot; diffing the working copy against it is our
+// dirty check.  Rails remains the source of truth for the data model — we map
+// its `divisions` / `project_assets` JSON into the shapes the web-editor wants.
+// ---------------------------------------------------------------------------
 
-function EditorWrapper({ onContentChange, onTitleChange, onCreatePretextProjectCopy, onFeedbackSubmit, ...rest }) {
-  const {
-    source: sourceProp,
-    title: titleProp,
-    sourceFormat: sourceFormatProp,
-    pretextSource: pretextSourceProp,
-    docinfo: docinfoProp,
-    commonDocinfo: commonDocinfoProp,
-    useCommonDocinfo: useCommonDocinfoProp,
-    onCommonDocinfoChange,
-    onUseCommonDocinfoChange,
-    ...editorProps
-  } = rest;
+const AUTOSAVE_MS = 10000;
 
-  const [source, setSource] = useState(sourceProp ?? "");
-  const [title, setTitle] = useState(titleProp);
-  const [sourceFormat, setSourceFormat] = useState(sourceFormatProp);
-  const [pretextSource, setPretextSource] = useState(pretextSourceProp);
-  const [docinfo, setDocinfo] = useState(docinfoProp);
-  const [commonDocinfo, setCommonDocinfo] = useState(commonDocinfoProp ?? "");
-  const [useCommonDocinfo, setUseCommonDocinfo] = useState(useCommonDocinfoProp ?? false);
+// --- Rails JSON  <->  web-editor shapes ------------------------------------
 
-  const handleContentChange = useCallback((v, meta) => {
-    const nextSource = v ?? meta?.sourceContent ?? "";
-    setSource(nextSource);
-    if (meta?.sourceFormat !== undefined) setSourceFormat(meta.sourceFormat);
-    if (meta?.pretextSource !== undefined) setPretextSource(meta.pretextSource);
-    // docinfo changes arrive via meta when DocinfoEditor saves inside Editors
-    if (meta?.docinfo !== undefined) setDocinfo(meta.docinfo);
-    if (meta?.commonDocinfo !== undefined) setCommonDocinfo(meta.commonDocinfo);
-    if (meta?.useCommonDocinfo !== undefined) setUseCommonDocinfo(meta.useCommonDocinfo);
-    onContentChange?.(nextSource, meta);
-  }, [onContentChange]);
+// Map one Rails division record to the web-editor's Division shape.
+// `title` and `type` are intentionally omitted: per the data model, the
+// web-editor derives those from the source content itself.  We pass through
+// only what the Rails model defines as canonical.
+function railsDivisionToEditor(d) {
+  return {
+    id: String(d.id),
+    xmlId: d.ref ?? "",
+    content: d.source ?? "",
+    sourceFormat: d.source_format ?? "pretext",
+  };
+}
 
-  const handleTitleChange = useCallback((v) => {
-    setTitle(v);
-    onTitleChange?.(v);
-  }, [onTitleChange]);
+// Map one Rails project_asset (+ its library_asset) to the web-editor Asset.
+function railsAssetToEditor(a) {
+  const lib = a.library_asset ?? {};
+  return {
+    id: String(a.id),
+    ref: a.ref ?? "",
+    name: lib.short_description || lib.description || a.ref || "",
+    kind: lib.kind === "doenet" ? "doenet" : "image",
+    source: lib.content ?? undefined,
+    url: lib.file ?? undefined,
+  };
+}
 
-  const handleCommonDocinfoChange = useCallback((value) => {
-    const nextValue = value ?? "";
-    setCommonDocinfo(nextValue);
-    onCommonDocinfoChange?.(nextValue);
-  }, [onCommonDocinfoChange]);
+// Transform the full project JSON into the state the editor renders from.
+function railsToEditorState(json) {
+  const root = (json.divisions ?? []).find((d) => d.is_root);
+  return {
+    title: json.title ?? "",
+    docinfo: json.docinfo ?? "",
+    commonDocinfo: json.common_docinfo ?? "",
+    useCommonDocinfo: json.use_common_docinfo ?? false,
+    projectType: json.document_type === "book" ? "book" : "article",
+    divisions: (json.divisions ?? []).map(railsDivisionToEditor),
+    projectAssets: (json.project_assets ?? []).map(railsAssetToEditor),
+    // rootDivisionId is the root division's *xmlId* (its ref), which is how the
+    // web-editor identifies divisions, not the database id.
+    rootDivisionId: root ? (root.ref ?? "") : undefined,
+  };
+}
 
-  const handleUseCommonDocinfoChange = useCallback((value) => {
-    const nextValue = value === true;
-    setUseCommonDocinfo(nextValue);
-    onUseCommonDocinfoChange?.(nextValue);
-  }, [onUseCommonDocinfoChange]);
+// Build the PATCH body Rails expects.  Only the fields permitted by
+// project_params are sent.  We omit is_root so updates never toggle the root.
+//
+// project.pretext_source is the *whole* document: the web-editor assembles it
+// from the division pool by expanding every <plus:* ref="..."/> placeholder and
+// converting any LaTeX/Markdown divisions to PreTeXt.  Assembling here (once per
+// save) keeps the build/preview pipeline fed without the server needing to know
+// how to stitch divisions together.
+function editorStateToRailsPayload(state) {
+  return {
+    project: {
+      title: state.title,
+      docinfo: state.docinfo,
+      use_common_docinfo: state.useCommonDocinfo,
+      pretext_source: state.rootDivisionId
+        ? assembleProjectSource(state.divisions, state.rootDivisionId)
+        : "",
+      divisions_attributes: state.divisions.map((d) => ({
+        id: d.id,
+        ref: d.xmlId,
+        source: d.content,
+        source_format: d.sourceFormat,
+      })),
+    },
+  };
+}
 
+// The subset of working state that actually persists — used for dirty checks so
+// we don't autosave on changes the server doesn't store.
+function persistableShape(state) {
+  return JSON.stringify({
+    title: state.title,
+    docinfo: state.docinfo,
+    useCommonDocinfo: state.useCommonDocinfo,
+    divisions: state.divisions.map((d) => ({
+      id: d.id,
+      xmlId: d.xmlId,
+      content: d.content,
+      sourceFormat: d.sourceFormat,
+    })),
+  });
+}
+
+// --- The editor app --------------------------------------------------------
+
+function EditorApp({ config }) {
+  const { projectId, apiBase, csrfToken } = config;
+
+  // Rails routes the React side needs.  Kept here (rather than in many data
+  // attributes) since they're derivable from the project id.
+  const projectUrl = `/projects/${projectId}`;
+  const previewUrl = "/projects/preview";
+  const copyUrl = `/projects/${projectId}/copy_conversion`;
+  const feedbackUrl = "/projects/feedback";
+
+  // ----- READ: load the project JSON via TanStack Query --------------------
+  // queryKey uniquely identifies this cache entry; queryFn does the fetch and
+  // returns the already-transformed editor state.
+  const projectQuery = useQuery({
+    queryKey: ["project", projectId],
+    queryFn: async () => {
+      const res = await fetch(apiBase, { headers: { Accept: "application/json" } });
+      if (!res.ok) throw new Error(`Failed to load editor state: ${res.status}`);
+      return railsToEditorState(await res.json());
+    },
+  });
+
+  // ----- The live working copy + last-saved server snapshot ----------------
+  // `working` is the buffer we mutate as edits stream in.  `serverSnapshot` is
+  // what we last successfully saved (or first loaded); diffing the two is the
+  // dirty check.  Both are refs because edits should not trigger React re-renders
+  // here — the web-editor re-renders itself from its own store.
+  const working = useRef(null);
+  const serverSnapshot = useRef(null);
+  // The initial data handed to <Editors>.  Captured exactly once so the props
+  // stay stable for the whole session; pushing fresh `divisions` mid-edit would
+  // fight the user's cursor.  Subsequent edits flow out via onContentChange.
+  const initial = useRef(null);
+
+  if (projectQuery.data && !initial.current) {
+    initial.current = projectQuery.data;
+    working.current = structuredClone(projectQuery.data);
+    serverSnapshot.current = structuredClone(projectQuery.data);
+  }
+
+  // ----- WRITE: save via TanStack mutation ---------------------------------
+  const saveMutation = useMutation({
+    mutationFn: async (state) => {
+      const res = await fetch(apiBase, {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+          Accept: "application/json",
+          "X-CSRF-Token": csrfToken,
+        },
+        body: JSON.stringify(editorStateToRailsPayload(state)),
+      });
+      if (!res.ok) throw new Error(`Save failed: ${res.status}`);
+      return state;
+    },
+  });
+
+  const isDirty = useCallback(() => {
+    if (!working.current || !serverSnapshot.current) return false;
+    return persistableShape(working.current) !== persistableShape(serverSnapshot.current);
+  }, []);
+
+  // Save the current working copy.  `force` saves even when not dirty (used by
+  // the Save button and before copy-conversion).  Snapshots the buffer up front
+  // so edits made *during* the in-flight save aren't mistakenly marked saved.
+  const save = useCallback(
+    async (force = false) => {
+      if (!working.current) return false;
+      if (!force && !isDirty()) return true;
+      const snapshot = structuredClone(working.current);
+      try {
+        await saveMutation.mutateAsync(snapshot);
+        serverSnapshot.current = snapshot;
+        return true;
+      } catch (error) {
+        console.error("Error saving:", error);
+        alert("An error occurred while saving.");
+        return false;
+      }
+    },
+    [isDirty, saveMutation],
+  );
+
+  // ----- Autosave: fire `save` every AUTOSAVE_MS, only when dirty ----------
+  // We hold `save` in a ref so the interval (set up once) always calls the
+  // latest closure without resetting the timer.
+  const saveRef = useRef(save);
+  saveRef.current = save;
+  useEffect(() => {
+    const id = setInterval(() => {
+      if (!saveMutation.isPending) saveRef.current(false);
+    }, AUTOSAVE_MS);
+    return () => clearInterval(id);
+  }, [saveMutation.isPending]);
+
+  // ----- Editor callbacks: update the working copy in place ----------------
+  const onContentChange = useCallback((change) => {
+    const w = working.current;
+    if (!w) return;
+    const division = w.divisions.find((d) => d.xmlId === change.xmlId);
+    if (division) {
+      if (change.sourceContent !== undefined) division.content = change.sourceContent;
+      if (change.sourceFormat !== undefined) division.sourceFormat = change.sourceFormat;
+    }
+    // Document-wide docinfo edits arrive against the root division.
+    if (change.docinfo !== undefined) w.docinfo = change.docinfo;
+  }, []);
+
+  const onTitleChange = useCallback((value) => {
+    if (working.current) working.current.title = value ?? "";
+  }, []);
+
+  const onUseCommonDocinfoChange = useCallback(
+    (value) => {
+      if (working.current) working.current.useCommonDocinfo = value === true;
+      save();
+    },
+    [save],
+  );
+
+  const onCommonDocinfoChange = useCallback((value) => {
+    // NOTE: common_docinfo is a user-level field and is not yet persisted by the
+    // project PATCH (it isn't in project_params).  Tracked here for the editor's
+    // UI; persisting it will need a dedicated user endpoint (future work).
+    if (working.current) working.current.commonDocinfo = value ?? "";
+  }, []);
+
+  const onSaveButton = useCallback(async () => {
+    if (await save(true)) window.location.href = projectUrl;
+  }, [save, projectUrl]);
+
+  const onCancelButton = useCallback(() => {
+    if (confirm("Cancel without saving?")) window.location.href = projectUrl;
+  }, [projectUrl]);
+
+  // The web-editor hands us a fully-assembled standalone PreTeXt source plus a
+  // helper to post into the preview iframe; we just forward it to the server.
+  const onPreviewRebuild = useCallback(
+    (source, title, postToIframe) => {
+      postToIframe(previewUrl, { source, title, authenticity_token: csrfToken });
+    },
+    [previewUrl, csrfToken],
+  );
+
+  const onCreatePretextProjectCopy = useCallback(async () => {
+    try {
+      if (!(await save(true))) throw new Error("Failed to save current project");
+      const res = await fetch(copyUrl, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Accept: "application/json",
+          "X-CSRF-Token": csrfToken,
+        },
+      });
+      if (!res.ok) {
+        const error = await res.json();
+        throw new Error(error.error || `Failed to create converted copy: ${res.status}`);
+      }
+      const result = await res.json();
+      window.location.href = result.project_url;
+    } catch (error) {
+      console.error("Error creating converted copy:", error);
+      alert(`Failed to create converted copy:\n${error.message}`);
+    }
+  }, [save, copyUrl, csrfToken]);
+
+  const onFeedbackSubmit = useCallback(
+    async (feedback) => {
+      try {
+        const res = await fetch(feedbackUrl, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Accept: "application/json",
+            "X-CSRF-Token": csrfToken,
+          },
+          body: JSON.stringify({
+            context: feedback.context,
+            message: feedback.message,
+            email: feedback.email,
+            project_url: feedback.projectUrl,
+            current_source: feedback.currentSource,
+            source_format: feedback.sourceFormat,
+            title: feedback.title,
+            submitted_at: feedback.submittedAt,
+          }),
+        });
+        if (!res.ok) {
+          const error = await res.json();
+          throw new Error(error.error || `Failed to submit feedback: ${res.status}`);
+        }
+      } catch (error) {
+        console.error("Error submitting feedback:", error);
+        alert(`Failed to submit feedback: ${error.message}`);
+      }
+    },
+    [feedbackUrl, csrfToken],
+  );
+
+  // ----- Render ------------------------------------------------------------
+  if (projectQuery.isPending) {
+    return <div className="mx-5">Loading editor…</div>;
+  }
+  if (projectQuery.isError) {
+    return <div className="mx-5">Error loading editor state. Please reload the page.</div>;
+  }
+
+  const state = initial.current;
   return (
     <Editors
-      {...editorProps}
-      source={source}
-      title={title}
-      sourceFormat={sourceFormat}
-      pretextSource={pretextSource}
-      docinfo={docinfo}
-      commonDocinfo={commonDocinfo}
-      useCommonDocinfo={useCommonDocinfo}
-      onContentChange={handleContentChange}
-      onTitleChange={handleTitleChange}
-      onCommonDocinfoChange={handleCommonDocinfoChange}
-      onUseCommonDocinfoChange={handleUseCommonDocinfoChange}
+      title={state.title}
+      docinfo={state.docinfo}
+      commonDocinfo={state.commonDocinfo}
+      useCommonDocinfo={state.useCommonDocinfo}
+      projectType={state.projectType}
+      divisions={state.divisions}
+      rootDivisionId={state.rootDivisionId}
+      projectAssets={state.projectAssets}
+      projectUrl={projectUrl}
+      saveButtonLabel="Save"
+      cancelButtonLabel="Cancel"
+      onContentChange={onContentChange}
+      onTitleChange={onTitleChange}
+      onUseCommonDocinfoChange={onUseCommonDocinfoChange}
+      onCommonDocinfoChange={onCommonDocinfoChange}
+      onSave={() => save()}
+      onSaveButton={onSaveButton}
+      onCancelButton={onCancelButton}
+      onPreviewRebuild={onPreviewRebuild}
       onCreatePretextProjectCopy={onCreatePretextProjectCopy}
       onFeedbackSubmit={onFeedbackSubmit}
     />
   );
 }
 
-function render(node, props) {
+// --- Imperative mount/unmount interface used by the Stimulus controller ----
+
+let root = null;
+
+function render(node, config) {
+  // One QueryClient per mounted editor.  refetchOnWindowFocus is disabled: the
+  // working copy is the live buffer, so we don't want a background refetch to
+  // overwrite in-progress edits.
+  const queryClient = new QueryClient({
+    defaultOptions: {
+      queries: { refetchOnWindowFocus: false, retry: 1 },
+    },
+  });
   root = ReactDOM.createRoot(node);
-  root.render(<EditorWrapper {...props} />);
+  root.render(
+    <QueryClientProvider client={queryClient}>
+      <EditorApp config={config} />
+    </QueryClientProvider>,
+  );
 }
 
 function destroy() {
-  root.unmount();
+  root?.unmount();
+  root = null;
 }
 
 export { destroy, render };
