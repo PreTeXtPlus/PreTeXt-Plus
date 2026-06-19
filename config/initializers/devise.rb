@@ -18,7 +18,7 @@ Devise.setup do |config|
   config.responder.redirect_status = :see_other
 
   # Inherit our ApplicationMailer for Devise emails so they use the same
-  # delivery method (Resend) and layout as other transactional emails.
+  # delivery method (Postmark) and layout as other transactional emails.
   config.parent_mailer = "ApplicationMailer"
 
   config.allow_unconfirmed_access_for = 3.days
