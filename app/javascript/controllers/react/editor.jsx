@@ -38,15 +38,26 @@ const AUTOSAVE_MS = 10000;
 // --- Rails JSON  <->  web-editor shapes ------------------------------------
 
 // Map one Rails division record to the web-editor's Division shape.
-// `title` and `type` are intentionally omitted: per the data model, the
-// web-editor derives those from the source content itself.  We pass through
-// only what the Rails model defines as canonical.
-function railsDivisionToEditor(d) {
+// `title` and `type` are omitted for PreTeXt-format divisions: the web-editor
+// reads them straight out of the XML (the <section>'s own tag name and
+// <title>), and -- confirmed by feeding assembleProjectSource a pretext-format
+// root with type/title set -- it ignores those fields entirely for pretext
+// content, while the live editor's content-rewrapping logic *does* use
+// `type` to rebuild the division's outer tag on every edit.  Setting `type`
+// on a pretext root whose content is actually <section>...</section> caused
+// the editor to strip that tag and re-wrap it as <article>, corrupting it.
+//
+// A latex/markdown ROOT is the one real exception: there's no XML there for
+// the web-editor to read a document type or title out of, so the assembler
+// needs `type`/`title` passed in explicitly or it renders literal
+// "undefined" in their place.
+function railsDivisionToEditor(d, rootMeta) {
   return {
     id: String(d.id),
     xmlId: d.ref ?? "",
     content: d.source ?? "",
     sourceFormat: d.source_format ?? "pretext",
+    ...(d.is_root && d.source_format !== "pretext" ? rootMeta : {}),
   };
 }
 
@@ -66,13 +77,16 @@ function railsAssetToEditor(a) {
 // Transform the full project JSON into the state the editor renders from.
 function railsToEditorState(json) {
   const root = (json.divisions ?? []).find((d) => d.is_root);
+  const title = json.title ?? "";
+  const projectType = json.document_type === "book" ? "book" : "article";
+  const rootMeta = { type: projectType, title };
   return {
-    title: json.title ?? "",
+    title,
     docinfo: json.docinfo ?? "",
     commonDocinfo: json.common_docinfo ?? "",
     useCommonDocinfo: json.use_common_docinfo ?? false,
-    projectType: json.document_type === "book" ? "book" : "article",
-    divisions: (json.divisions ?? []).map(railsDivisionToEditor),
+    projectType,
+    divisions: (json.divisions ?? []).map((d) => railsDivisionToEditor(d, rootMeta)),
     projectAssets: (json.project_assets ?? []).map(railsAssetToEditor),
     // rootDivisionId is the root division's *xmlId* (its ref), which is how the
     // web-editor identifies divisions, not the database id.
@@ -80,23 +94,48 @@ function railsToEditorState(json) {
   };
 }
 
+// The docinfo actually in effect: the user's common docinfo when the project
+// is opted in to it (and one is set), otherwise the project's own docinfo.
+function effectiveDocinfo(state) {
+  return state.useCommonDocinfo && state.commonDocinfo ? state.commonDocinfo : state.docinfo;
+}
+
+// Assemble the full, standalone PreTeXt document that gets sent to the build
+// server.  `assembleProjectSource` only does ref-expansion -- it stitches the
+// division pool together by resolving every <plus:* ref="..."/> placeholder --
+// and what it hands back depends on the root's sourceFormat:
+//
+//   * pretext format: the root's own <section>-style content, unwrapped.  We
+//     still need to add the <article>/<book> + <title> shell ourselves.
+//   * latex/markdown format: the package already wraps the converted content
+//     in `<${root.type} xml:id="...">\n<title>${root.title}</title>...` using
+//     the type/title we attached in railsDivisionToEditor, so the shell is
+//     already there -- wrapping it again would nest a second <article>/<book>.
+//
+// Either way we still need the outer <pretext> + docinfo, which only Rails
+// knows about (document_type, docinfo), so we add that here.
+function assembleFullPretextSource(state) {
+  if (!state.rootDivisionId) return "";
+  const root = state.divisions.find((d) => d.xmlId === state.rootDivisionId);
+  const body = assembleProjectSource(state.divisions, state.rootDivisionId);
+  const docinfo = effectiveDocinfo(state);
+  const tag = state.projectType === "book" ? "book" : "article";
+  const documentBody =
+    root?.sourceFormat === "pretext"
+      ? `<${tag}>\n<title>${state.title}</title>\n\n${body}\n</${tag}>`
+      : body;
+  return `<pretext>\n${docinfo ? `${docinfo.trim()}\n` : ""}${documentBody}\n</pretext>`;
+}
+
 // Build the PATCH body Rails expects.  Only the fields permitted by
 // project_params are sent.  We omit is_root so updates never toggle the root.
-//
-// project.pretext_source is the *whole* document: the web-editor assembles it
-// from the division pool by expanding every <plus:* ref="..."/> placeholder and
-// converting any LaTeX/Markdown divisions to PreTeXt.  Assembling here (once per
-// save) keeps the build/preview pipeline fed without the server needing to know
-// how to stitch divisions together.
 function editorStateToRailsPayload(state) {
   return {
     project: {
       title: state.title,
       docinfo: state.docinfo,
       use_common_docinfo: state.useCommonDocinfo,
-      pretext_source: state.rootDivisionId
-        ? assembleProjectSource(state.divisions, state.rootDivisionId)
-        : "",
+      pretext_source: assembleFullPretextSource(state),
       divisions_attributes: state.divisions.map((d) => ({
         id: d.id,
         ref: d.xmlId,
@@ -234,7 +273,14 @@ function EditorApp({ config }) {
   }, []);
 
   const onTitleChange = useCallback((value) => {
-    if (working.current) working.current.title = value ?? "";
+    const w = working.current;
+    if (!w) return;
+    w.title = value ?? "";
+    // Keep a latex/markdown root's own `title` field in sync: that's the one
+    // case where assembleProjectSource reads the title off the division
+    // itself rather than off the (nonexistent) XML.
+    const root = w.divisions.find((d) => d.xmlId === w.rootDivisionId);
+    if (root && root.sourceFormat !== "pretext") root.title = w.title;
   }, []);
 
   const onUseCommonDocinfoChange = useCallback(
