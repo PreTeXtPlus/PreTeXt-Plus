@@ -14,7 +14,7 @@ class UsersControllerTest < ActionDispatch::IntegrationTest
 
   test "create with valid params creates user and redirects to projects path" do
     assert_difference("User.count") do
-      post users_path, params: { user: { email: "new@example.com", password: "secret123", password_confirmation: "secret123", name: "New User" } }
+      post users_path, params: { user: { email: "new@example.com", password: "secret123", name: "New User" } }
     end
     assert_redirected_to projects_path
   end
