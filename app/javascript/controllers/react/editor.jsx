@@ -76,17 +76,65 @@ function railsDivisionToEditor(d, rootMeta) {
   return type ? { ...base, type } : base;
 }
 
-// Map one Rails project_asset (+ its library_asset) to the web-editor Asset.
+// An Asset's identity (the `id` the web-editor keys on) is the *library_asset*
+// id, not the project_asset id: the Asset Manager decides whether a library
+// asset is "in this project" by testing `projectAssetIds.has(libraryAsset.id)`,
+// so both the project pool and the library pool must agree on that id.  The
+// project_asset (join) id is carried separately as `projectAssetId` -- it's the
+// stable PK we send/destroy through nested project_assets_attributes, exactly
+// like a division's UUID.
+//
+// Map one Rails project_asset (+ its library_asset) to the host's richer record.
 function railsAssetToEditor(a) {
   const lib = a.library_asset ?? {};
   return {
-    id: String(a.id),
+    id: String(lib.id ?? ""),
+    projectAssetId: String(a.id),
     ref: a.ref ?? "",
     name: lib.short_description || lib.description || a.ref || "",
     kind: lib.kind === "doenet" ? "doenet" : "image",
     source: lib.content ?? undefined,
     url: lib.file ?? undefined,
   };
+}
+
+// Map one Rails library_asset JSON to a library-pool Asset.  Library assets have
+// no project `ref` of their own, so we derive a default slug; once the asset is
+// in the current project we override it with the real project ref (see
+// reconcileLibraryRefs) so inserting from the library uses the right tag.
+function railsLibraryAssetToEditor(lib) {
+  const name = lib.short_description || lib.description || "";
+  return {
+    id: String(lib.id),
+    ref: slugifyRef(name),
+    name,
+    kind: lib.kind === "doenet" ? "doenet" : "image",
+    source: lib.content ?? undefined,
+    url: lib.file ?? undefined,
+  };
+}
+
+// Strip a host project-asset record down to the bare web-editor Asset shape.
+function toEditorAsset(rec) {
+  return {
+    id: rec.id,
+    ref: rec.ref,
+    name: rec.name,
+    kind: rec.kind,
+    source: rec.source,
+    url: rec.url,
+  };
+}
+
+// Slugify arbitrary text into a valid PreTeXt ref (REF_REGEX: a leading letter
+// or underscore, then letters/digits/hyphens/underscores).
+function slugifyRef(value) {
+  const slug = (value ?? "")
+    .toLowerCase()
+    .trim()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+  return /^[a-z_]/.test(slug) ? slug : `asset-${slug}`.replace(/-+$/, "");
 }
 
 // Transform the full project JSON into the state the editor renders from.
@@ -142,7 +190,13 @@ function assembleFullPretextSource(state) {
 // sent with the client-minted UUID the host assigned in onDivisionAdd, which
 // Rails inserts under that id -- so the id the host holds is stable from
 // creation and survives later xml:id (ref) renames.
-function editorStateToRailsPayload(state, deletes = []) {
+//
+// Assets follow the same pattern: project_assets_attributes is the deferred
+// "which library assets are in this project" set.  Each carries the join row's
+// PK (`projectAssetId`, client-minted for new), the project `ref`, and the
+// `library_asset_id` (the Asset's `id`).  `assetDeletes` are join-row PKs to
+// destroy -- only the membership row is removed; the library asset persists.
+function editorStateToRailsPayload(state, deletes = [], assetDeletes = []) {
   return {
     project: {
       title: state.title,
@@ -157,6 +211,14 @@ function editorStateToRailsPayload(state, deletes = []) {
           source_format: d.sourceFormat,
         })),
         ...deletes.map((id) => ({ id, _destroy: true })),
+      ],
+      project_assets_attributes: [
+        ...state.projectAssets.map((p) => ({
+          id: p.projectAssetId,
+          ref: p.ref,
+          library_asset_id: p.id,
+        })),
+        ...assetDeletes.map((id) => ({ id, _destroy: true })),
       ],
     },
   };
@@ -175,6 +237,11 @@ function persistableShape(state) {
       content: d.content,
       sourceFormat: d.sourceFormat,
     })),
+    projectAssets: state.projectAssets.map((p) => ({
+      projectAssetId: p.projectAssetId,
+      ref: p.ref,
+      libraryAssetId: p.id,
+    })),
   });
 }
 
@@ -189,6 +256,8 @@ function EditorApp({ config }) {
   const previewUrl = "/projects/preview";
   const copyUrl = `/projects/${projectId}/copy_conversion`;
   const feedbackUrl = "/projects/feedback";
+  // The user's cross-project asset library (JSON CRUD lives under /library).
+  const libraryUrl = "/library.json";
 
   // ----- READ: load the project JSON via TanStack Query --------------------
   // queryKey uniquely identifies this cache entry; queryFn does the fetch and
@@ -199,6 +268,19 @@ function EditorApp({ config }) {
       const res = await fetch(apiBase, { headers: { Accept: "application/json" } });
       if (!res.ok) throw new Error(`Failed to load editor state: ${res.status}`);
       return railsToEditorState(await res.json());
+    },
+  });
+
+  // ----- READ: load the user's asset library --------------------------------
+  // Separate from the project: it spans every project, and the Asset Manager
+  // re-fetches it (via onLoadLibraryAssets) each time it opens, so uploads made
+  // this session show up without a page reload.
+  const libraryQuery = useQuery({
+    queryKey: ["libraryAssets"],
+    queryFn: async () => {
+      const res = await fetch(libraryUrl, { headers: { Accept: "application/json" } });
+      if (!res.ok) throw new Error(`Failed to load asset library: ${res.status}`);
+      return (await res.json()).map(railsLibraryAssetToEditor);
     },
   });
 
@@ -213,6 +295,10 @@ function EditorApp({ config }) {
   // Held separately because a removed division is gone from `working`, so its
   // _destroy marker has to be tracked outside the pool until the next save.
   const pendingDeletes = useRef([]);
+  // Project-asset (join row) PKs removed but not yet saved -- same role as
+  // pendingDeletes, for assets.  Removing only drops project membership; the
+  // library asset itself is never destroyed.
+  const pendingAssetDeletes = useRef([]);
   // The initial data handed to <Editors>.  Captured exactly once so the props
   // stay stable for the whole session; pushing fresh `divisions` mid-edit would
   // fight the user's cursor.  Subsequent edits flow out via onContentChange.
@@ -226,7 +312,7 @@ function EditorApp({ config }) {
 
   // ----- WRITE: save via TanStack mutation ---------------------------------
   const saveMutation = useMutation({
-    mutationFn: async ({ state, deletes }) => {
+    mutationFn: async ({ state, deletes, assetDeletes }) => {
       const res = await fetch(apiBase, {
         method: "PATCH",
         headers: {
@@ -234,7 +320,7 @@ function EditorApp({ config }) {
           Accept: "application/json",
           "X-CSRF-Token": csrfToken,
         },
-        body: JSON.stringify(editorStateToRailsPayload(state, deletes)),
+        body: JSON.stringify(editorStateToRailsPayload(state, deletes, assetDeletes)),
       });
       if (!res.ok) throw new Error(`Save failed: ${res.status}`);
       return state;
@@ -244,6 +330,7 @@ function EditorApp({ config }) {
   const isDirty = useCallback(() => {
     if (!working.current || !serverSnapshot.current) return false;
     if (pendingDeletes.current.length > 0) return true;
+    if (pendingAssetDeletes.current.length > 0) return true;
     return persistableShape(working.current) !== persistableShape(serverSnapshot.current);
   }, []);
 
@@ -256,11 +343,13 @@ function EditorApp({ config }) {
       if (!force && !isDirty()) return true;
       const snapshot = structuredClone(working.current);
       const deletes = pendingDeletes.current.slice();
+      const assetDeletes = pendingAssetDeletes.current.slice();
       try {
-        await saveMutation.mutateAsync({ state: snapshot, deletes });
+        await saveMutation.mutateAsync({ state: snapshot, deletes, assetDeletes });
         serverSnapshot.current = snapshot;
         // Drop the deletes we just persisted, keeping any queued mid-save.
         pendingDeletes.current = pendingDeletes.current.filter((id) => !deletes.includes(id));
+        pendingAssetDeletes.current = pendingAssetDeletes.current.filter((id) => !assetDeletes.includes(id));
         return true;
       } catch (error) {
         console.error("Error saving:", error);
@@ -339,6 +428,151 @@ function EditorApp({ config }) {
       division.xmlId = newXmlId;
     }
   }, []);
+
+  // ----- Assets ------------------------------------------------------------
+  // Two pools: project membership (working.current.projectAssets, deferred to
+  // the project PATCH like divisions) and the user's library (created
+  // immediately via /library, since uploads must round-trip to return a saved
+  // Asset with a server id).  Both pools key on the *library_asset* id.
+
+  // Add a library asset to this project's membership.  Idempotent on the
+  // library_asset id, so re-inserting an asset already in the project is a no-op.
+  const addAssetMembership = useCallback((asset) => {
+    const w = working.current;
+    if (!w) return;
+    if (w.projectAssets.some((p) => p.id === asset.id)) return;
+    w.projectAssets.push({
+      id: asset.id,
+      projectAssetId: crypto.randomUUID(),
+      ref: asset.ref ?? "",
+      name: asset.name ?? "",
+      kind: asset.kind ?? "image",
+      source: asset.source,
+      url: asset.url,
+    });
+  }, []);
+
+  // POST a new library asset and return it mapped to an Asset.  `body` is either
+  // FormData (file upload) or a plain object sent as JSON.
+  const createLibraryAsset = useCallback(
+    async (body) => {
+      const isForm = body instanceof FormData;
+      const res = await fetch(libraryUrl, {
+        method: "POST",
+        headers: {
+          Accept: "application/json",
+          "X-CSRF-Token": csrfToken,
+          // Let the browser set the multipart boundary for FormData.
+          ...(isForm ? {} : { "Content-Type": "application/json" }),
+        },
+        body: isForm ? body : JSON.stringify(body),
+      });
+      if (!res.ok) {
+        let message = `Request failed: ${res.status}`;
+        try {
+          const err = await res.json();
+          message = err.error || Object.values(err).flat().join(", ") || message;
+        } catch {
+          /* non-JSON error body */
+        }
+        throw new Error(message);
+      }
+      // Refresh the library so the new asset appears next time the modal opens.
+      libraryQuery.refetch();
+      return railsLibraryAssetToEditor(await res.json());
+    },
+    [libraryUrl, csrfToken, libraryQuery],
+  );
+
+  // The tag is inserted into the active division by the editor itself; the text
+  // reaches us through onContentChange, so there's nothing to record here.
+  const onAssetInsert = useCallback(() => {}, []);
+
+  // User picked a library asset not yet in this project: add membership using
+  // the (already reconciled) project ref the library row carries.
+  const onAssetAddFromLibrary = useCallback(
+    (asset) => {
+      addAssetMembership(asset);
+    },
+    [addAssetMembership],
+  );
+
+  const onAssetUpload = useCallback(
+    async (file) => {
+      const form = new FormData();
+      form.append("library_asset[file]", file);
+      form.append("library_asset[kind]", "file");
+      form.append("library_asset[short_description]", file.name);
+      const asset = await createLibraryAsset(form);
+      // Prefer a ref derived from the file name over the slug of the whole name.
+      asset.ref = slugifyRef(file.name.replace(/\.[^.]+$/, "")) || asset.ref;
+      addAssetMembership(asset);
+      return asset;
+    },
+    [createLibraryAsset, addAssetMembership],
+  );
+
+  const onAssetAddUrl = useCallback(
+    async (url, name) => {
+      const asset = await createLibraryAsset({
+        library_asset: { kind: "file", url, short_description: name },
+      });
+      asset.ref = slugifyRef(name) || asset.ref;
+      addAssetMembership(asset);
+      return asset;
+    },
+    [createLibraryAsset, addAssetMembership],
+  );
+
+  const onCreateDoenet = useCallback(
+    async (name, ref) => {
+      const asset = await createLibraryAsset({
+        library_asset: { kind: "doenet", short_description: name, content: "" },
+      });
+      asset.ref = ref;
+      addAssetMembership(asset);
+      return asset;
+    },
+    [createLibraryAsset, addAssetMembership],
+  );
+
+  const onAssetRemove = useCallback((asset) => {
+    const w = working.current;
+    if (!w) return;
+    const index = w.projectAssets.findIndex((p) => p.id === asset.id);
+    if (index === -1) return;
+    const [removed] = w.projectAssets.splice(index, 1);
+    // Only destroy a membership row that actually reached the server; the
+    // library asset is left untouched either way.
+    const persisted = serverSnapshot.current?.projectAssets.some(
+      (p) => p.projectAssetId === removed.projectAssetId,
+    );
+    if (persisted) pendingAssetDeletes.current.push(removed.projectAssetId);
+  }, []);
+
+  // Library rows carry a derived ref by default; when an asset is already in the
+  // current project, show/insert its real project ref instead so the inserted
+  // <plus:* ref="..."/> matches the stored membership.
+  const reconcileLibraryRefs = useCallback((list) => {
+    const members = working.current?.projectAssets ?? [];
+    return list.map((a) => {
+      const member = members.find((p) => p.id === a.id);
+      return member ? { ...a, ref: member.ref } : a;
+    });
+  }, []);
+
+  // The Asset Manager calls these when it opens.  onLoadAssets returns the live
+  // (possibly unsaved) membership so "in project" badges are correct; the
+  // library loader re-fetches so freshly uploaded assets appear.
+  const onLoadAssets = useCallback(
+    async () => (working.current?.projectAssets ?? []).map(toEditorAsset),
+    [],
+  );
+
+  const onLoadLibraryAssets = useCallback(async () => {
+    const { data } = await libraryQuery.refetch();
+    return reconcileLibraryRefs(data ?? []);
+  }, [libraryQuery, reconcileLibraryRefs]);
 
   const onTitleChange = useCallback((value) => {
     const w = working.current;
@@ -457,7 +691,8 @@ function EditorApp({ config }) {
       projectType={state.projectType}
       divisions={state.divisions}
       rootDivisionId={state.rootDivisionId}
-      projectAssets={state.projectAssets}
+      projectAssets={state.projectAssets.map(toEditorAsset)}
+      libraryAssets={reconcileLibraryRefs(libraryQuery.data ?? [])}
       projectUrl={projectUrl}
       saveButtonLabel="Save"
       cancelButtonLabel="Cancel"
@@ -465,6 +700,14 @@ function EditorApp({ config }) {
       onDivisionAdd={onDivisionAdd}
       onDivisionRemove={onDivisionRemove}
       onDivisionUpdate={onDivisionUpdate}
+      onAssetInsert={onAssetInsert}
+      onAssetAddFromLibrary={onAssetAddFromLibrary}
+      onAssetUpload={onAssetUpload}
+      onAssetAddUrl={onAssetAddUrl}
+      onCreateDoenet={onCreateDoenet}
+      onAssetRemove={onAssetRemove}
+      onLoadAssets={onLoadAssets}
+      onLoadLibraryAssets={onLoadLibraryAssets}
       onTitleChange={onTitleChange}
       onUseCommonDocinfoChange={onUseCommonDocinfoChange}
       onCommonDocinfoChange={onCommonDocinfoChange}

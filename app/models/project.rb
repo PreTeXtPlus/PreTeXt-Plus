@@ -2,7 +2,9 @@ class Project < ApplicationRecord
   belongs_to :user
 
   has_many :project_assets
-  accepts_nested_attributes_for :project_assets
+  # allow_destroy lets the editor drop a project's membership of a library asset
+  # by sending `_destroy: true`; the library_asset itself is never destroyed.
+  accepts_nested_attributes_for :project_assets, allow_destroy: true
   has_many :library_assets, through: :project_assets
 
   has_many :divisions, dependent: :destroy
@@ -30,6 +32,24 @@ class Project < ApplicationRecord
       id = entry[:id] || entry["id"]
       next if id.blank? || known_ids.include?(id.to_s)
       divisions.build(id: id)
+      known_ids << id.to_s
+    end
+    super
+  end
+
+  # Project assets follow the same client-minted-UUID pattern as divisions: the
+  # editor sends a fresh join-row id for each newly added library asset, so we
+  # pre-build a project_asset with that id and let `super`'s nested assignment
+  # update it into an INSERT.  Existing ids update in place; `_destroy` removes
+  # only the membership row, leaving the library asset intact.
+  def project_assets_attributes=(attributes)
+    entries = attributes.respond_to?(:values) ? attributes.values : attributes
+    project_assets.load
+    known_ids = project_assets.map { |a| a.id.to_s }
+    entries.each do |entry|
+      id = entry[:id] || entry["id"]
+      next if id.blank? || known_ids.include?(id.to_s)
+      project_assets.build(id: id)
       known_ids << id.to_s
     end
     super
