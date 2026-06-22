@@ -1,4 +1,4 @@
-<section>
+<article xml:id="document">
     <title> Welcome to PreTeXt.Plus! </title>
 
     <p>
@@ -19,4 +19,4 @@
     <p>
         Feel free to delete this sample content and start creating your own project. Happy writing!
     </p>
-</section>
+</article>

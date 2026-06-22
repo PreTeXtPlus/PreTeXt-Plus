@@ -28,4 +28,47 @@ class ProjectTest < ActiveSupport::TestCase
     project = projects(:one)
     assert_equal users(:one), project.user
   end
+
+  test "divisions_attributes creates a division with a client-supplied UUID" do
+    project = projects(:one)
+    new_id = SecureRandom.uuid
+    stub_build_server do
+      project.update!(divisions_attributes: [
+        { id: new_id, ref: "sec-new", source: "<section xml:id=\"sec-new\"/>", source_format: 0 }
+      ])
+    end
+    division = project.divisions.find(new_id)
+    assert_equal "sec-new", division.ref
+    assert_not division.is_root
+  end
+
+  test "divisions_attributes updates an existing division in place" do
+    project = projects(:one)
+    division = project.root_division
+    stub_build_server do
+      project.update!(divisions_attributes: [ { id: division.id, ref: "renamed" } ])
+    end
+    assert_equal "renamed", division.reload.ref
+  end
+
+  test "renaming a division's ref keeps its UUID stable" do
+    project = projects(:one)
+    division = project.root_division
+    original_id = division.id
+    stub_build_server do
+      project.update!(divisions_attributes: [ { id: original_id, ref: "new-xml-id" } ])
+    end
+    assert_equal original_id, division.reload.id
+    assert_equal "new-xml-id", division.ref
+  end
+
+  test "divisions_attributes destroys a division with _destroy" do
+    project = projects(:one)
+    division = project.divisions.create!(ref: "doomed", source: "<section/>", source_format: 0)
+    stub_build_server do
+      assert_difference -> { project.divisions.count }, -1 do
+        project.update!(divisions_attributes: [ { id: division.id, _destroy: true } ])
+      end
+    end
+  end
 end

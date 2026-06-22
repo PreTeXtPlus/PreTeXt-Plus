@@ -6,7 +6,7 @@ import {
   useMutation,
   useQuery,
 } from "@tanstack/react-query";
-import { Editors, assembleProjectSource } from "@pretextbook/web-editor";
+import { Editors, assembleFullProjectSource } from "@pretextbook/web-editor";
 import "@pretextbook/web-editor/dist/web-editor.css";
 
 // ---------------------------------------------------------------------------
@@ -37,28 +37,43 @@ const AUTOSAVE_MS = 10000;
 
 // --- Rails JSON  <->  web-editor shapes ------------------------------------
 
+// The root element tags a pretext document can open with.  A well-formed
+// pretext root division's content *is* one of these; a malformed pre-migration
+// one still holds a bare <section>.
+const PRETEXT_ROOT_TAG = /^\s*<(article|book|slideshow)[\s>]/;
+
+// The `type` of a pretext root, read from its own XML (the root element's tag
+// name) -- undefined when the content isn't a root element yet.
+function pretextRootType(content) {
+  const match = PRETEXT_ROOT_TAG.exec(content ?? "");
+  return match ? match[1] : undefined;
+}
+
 // Map one Rails division record to the web-editor's Division shape.
-// `title` and `type` are omitted for PreTeXt-format divisions: the web-editor
-// reads them straight out of the XML (the <section>'s own tag name and
-// <title>), and -- confirmed by feeding assembleProjectSource a pretext-format
-// root with type/title set -- it ignores those fields entirely for pretext
-// content, while the live editor's content-rewrapping logic *does* use
-// `type` to rebuild the division's outer tag on every edit.  Setting `type`
-// on a pretext root whose content is actually <section>...</section> caused
-// the editor to strip that tag and re-wrap it as <article>, corrupting it.
 //
-// A latex/markdown ROOT is the one real exception: there's no XML there for
-// the web-editor to read a document type or title out of, so the assembler
-// needs `type`/`title` passed in explicitly or it renders literal
-// "undefined" in their place.
+// A latex/markdown ROOT needs `type`/`title` passed in explicitly (rootMeta):
+// there's no PreTeXt XML there for the web-editor to read a document type or
+// title out of, so the assembler would otherwise render literal "undefined".
+//
+// A pretext division instead carries its type *in its own XML* -- the root
+// element's tag name -- so we derive `type` from the content rather than from
+// Rails metadata.  We only attach it once the content is actually a root
+// element (<article>/<book>/<slideshow>): a malformed pretext root still
+// holding a bare <section> (pre-migration data) gets no `type`, matching the
+// old behavior, so the live editor won't try to rewrap that <section> into an
+// <article>.  Once migrated to a real root element, it picks up the right type
+// automatically and preview/TOC wrapping work without further changes here.
 function railsDivisionToEditor(d, rootMeta) {
-  return {
+  const base = {
     id: String(d.id),
     xmlId: d.ref ?? "",
     content: d.source ?? "",
     sourceFormat: d.source_format ?? "pretext",
-    ...(d.is_root && d.source_format !== "pretext" ? rootMeta : {}),
   };
+  if (!d.is_root) return base;
+  if (d.source_format !== "pretext") return { ...base, ...rootMeta };
+  const type = pretextRootType(base.content);
+  return type ? { ...base, type } : base;
 }
 
 // Map one Rails project_asset (+ its library_asset) to the web-editor Asset.
@@ -101,47 +116,48 @@ function effectiveDocinfo(state) {
 }
 
 // Assemble the full, standalone PreTeXt document that gets sent to the build
-// server.  `assembleProjectSource` only does ref-expansion -- it stitches the
-// division pool together by resolving every <plus:* ref="..."/> placeholder --
-// and what it hands back depends on the root's sourceFormat:
+// server.  The web-editor owns this entirely: `assembleFullProjectSource`
+// resolves every <plus:* ref="..."/> placeholder, converts any latex/markdown
+// divisions to PreTeXt, wraps the result in the outer <pretext> with the
+// docinfo we pass inserted as a sibling, and guarantees the root element
+// carries a label/xml:id so the build server knows which file to return.
 //
-//   * pretext format: the root's own <section>-style content, unwrapped.  We
-//     still need to add the <article>/<book> + <title> shell ourselves.
-//   * latex/markdown format: the package already wraps the converted content
-//     in `<${root.type} xml:id="...">\n<title>${root.title}</title>...` using
-//     the type/title we attached in railsDivisionToEditor, so the shell is
-//     already there -- wrapping it again would nest a second <article>/<book>.
-//
-// Either way we still need the outer <pretext> + docinfo, which only Rails
-// knows about (document_type, docinfo), so we add that here.
+// The only thing Rails contributes is *which* docinfo is in effect (the user's
+// common preamble vs. the project's own) -- the rest of the document shape is
+// no longer reshaped here.
 function assembleFullPretextSource(state) {
   if (!state.rootDivisionId) return "";
-  const root = state.divisions.find((d) => d.xmlId === state.rootDivisionId);
-  const body = assembleProjectSource(state.divisions, state.rootDivisionId);
-  const docinfo = effectiveDocinfo(state);
-  const tag = state.projectType === "book" ? "book" : "article";
-  const documentBody =
-    root?.sourceFormat === "pretext"
-      ? `<${tag}>\n<title>${state.title}</title>\n\n${body}\n</${tag}>`
-      : body;
-  return `<pretext>\n${docinfo ? `${docinfo.trim()}\n` : ""}${documentBody}\n</pretext>`;
+  return assembleFullProjectSource(
+    state.divisions,
+    state.rootDivisionId,
+    effectiveDocinfo(state),
+  );
 }
 
 // Build the PATCH body Rails expects.  Only the fields permitted by
 // project_params are sent.  We omit is_root so updates never toggle the root.
-function editorStateToRailsPayload(state) {
+//
+// `deletes` is a list of division ids (Rails UUID PKs) the user removed; each
+// is sent as a `_destroy` marker so Rails drops that row.  New divisions are
+// sent with the client-minted UUID the host assigned in onDivisionAdd, which
+// Rails inserts under that id -- so the id the host holds is stable from
+// creation and survives later xml:id (ref) renames.
+function editorStateToRailsPayload(state, deletes = []) {
   return {
     project: {
       title: state.title,
       docinfo: state.docinfo,
       use_common_docinfo: state.useCommonDocinfo,
       pretext_source: assembleFullPretextSource(state),
-      divisions_attributes: state.divisions.map((d) => ({
-        id: d.id,
-        ref: d.xmlId,
-        source: d.content,
-        source_format: d.sourceFormat,
-      })),
+      divisions_attributes: [
+        ...state.divisions.map((d) => ({
+          id: d.id,
+          ref: d.xmlId,
+          source: d.content,
+          source_format: d.sourceFormat,
+        })),
+        ...deletes.map((id) => ({ id, _destroy: true })),
+      ],
     },
   };
 }
@@ -193,6 +209,10 @@ function EditorApp({ config }) {
   // here — the web-editor re-renders itself from its own store.
   const working = useRef(null);
   const serverSnapshot = useRef(null);
+  // Division ids (Rails UUID PKs) the user removed but we haven't saved yet.
+  // Held separately because a removed division is gone from `working`, so its
+  // _destroy marker has to be tracked outside the pool until the next save.
+  const pendingDeletes = useRef([]);
   // The initial data handed to <Editors>.  Captured exactly once so the props
   // stay stable for the whole session; pushing fresh `divisions` mid-edit would
   // fight the user's cursor.  Subsequent edits flow out via onContentChange.
@@ -206,7 +226,7 @@ function EditorApp({ config }) {
 
   // ----- WRITE: save via TanStack mutation ---------------------------------
   const saveMutation = useMutation({
-    mutationFn: async (state) => {
+    mutationFn: async ({ state, deletes }) => {
       const res = await fetch(apiBase, {
         method: "PATCH",
         headers: {
@@ -214,7 +234,7 @@ function EditorApp({ config }) {
           Accept: "application/json",
           "X-CSRF-Token": csrfToken,
         },
-        body: JSON.stringify(editorStateToRailsPayload(state)),
+        body: JSON.stringify(editorStateToRailsPayload(state, deletes)),
       });
       if (!res.ok) throw new Error(`Save failed: ${res.status}`);
       return state;
@@ -223,6 +243,7 @@ function EditorApp({ config }) {
 
   const isDirty = useCallback(() => {
     if (!working.current || !serverSnapshot.current) return false;
+    if (pendingDeletes.current.length > 0) return true;
     return persistableShape(working.current) !== persistableShape(serverSnapshot.current);
   }, []);
 
@@ -234,9 +255,12 @@ function EditorApp({ config }) {
       if (!working.current) return false;
       if (!force && !isDirty()) return true;
       const snapshot = structuredClone(working.current);
+      const deletes = pendingDeletes.current.slice();
       try {
-        await saveMutation.mutateAsync(snapshot);
+        await saveMutation.mutateAsync({ state: snapshot, deletes });
         serverSnapshot.current = snapshot;
+        // Drop the deletes we just persisted, keeping any queued mid-save.
+        pendingDeletes.current = pendingDeletes.current.filter((id) => !deletes.includes(id));
         return true;
       } catch (error) {
         console.error("Error saving:", error);
@@ -270,6 +294,50 @@ function EditorApp({ config }) {
     }
     // Document-wide docinfo edits arrive against the root division.
     if (change.docinfo !== undefined) w.docinfo = change.docinfo;
+  }, []);
+
+  // ----- Structural division changes: keep the working pool in sync --------
+  // These fire for create/remove/rename of whole division records (vs.
+  // onContentChange, which only edits an existing one).  All three are keyed by
+  // the division's xmlId; the Rails UUID PK is the host's stable identity, so a
+  // new division gets a freshly minted UUID and a rename is just a ref change.
+  const onDivisionAdd = useCallback((division) => {
+    const w = working.current;
+    if (!w) return;
+    if (w.divisions.some((d) => d.xmlId === division.xmlId)) return;
+    w.divisions.push({
+      id: crypto.randomUUID(),
+      xmlId: division.xmlId,
+      content: division.content ?? "",
+      sourceFormat: division.sourceFormat ?? "pretext",
+    });
+  }, []);
+
+  const onDivisionRemove = useCallback((xmlId) => {
+    const w = working.current;
+    if (!w) return;
+    const index = w.divisions.findIndex((d) => d.xmlId === xmlId);
+    if (index === -1) return;
+    const [removed] = w.divisions.splice(index, 1);
+    // Only ask Rails to destroy a row that was actually persisted; a division
+    // added and removed before any save never reached the server.
+    const persisted = serverSnapshot.current?.divisions.some((d) => d.id === removed.id);
+    if (persisted) pendingDeletes.current.push(removed.id);
+  }, []);
+
+  const onDivisionUpdate = useCallback((xmlId, changes) => {
+    const w = working.current;
+    if (!w) return;
+    const division = w.divisions.find((d) => d.xmlId === xmlId);
+    if (!division) return;
+    if (changes.sourceFormat !== undefined) division.sourceFormat = changes.sourceFormat;
+    // An xml:id rename: update the ref, and if this is the root division keep
+    // rootDivisionId (used to assemble/preview the doc) pointing at it.
+    if (changes.xmlId !== undefined) {
+      const newXmlId = changes.xmlId ?? "";
+      if (w.rootDivisionId === division.xmlId) w.rootDivisionId = newXmlId;
+      division.xmlId = newXmlId;
+    }
   }, []);
 
   const onTitleChange = useCallback((value) => {
@@ -394,6 +462,9 @@ function EditorApp({ config }) {
       saveButtonLabel="Save"
       cancelButtonLabel="Cancel"
       onContentChange={onContentChange}
+      onDivisionAdd={onDivisionAdd}
+      onDivisionRemove={onDivisionRemove}
+      onDivisionUpdate={onDivisionUpdate}
       onTitleChange={onTitleChange}
       onUseCommonDocinfoChange={onUseCommonDocinfoChange}
       onCommonDocinfoChange={onCommonDocinfoChange}
