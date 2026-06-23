@@ -30,6 +30,7 @@ Rails.application.routes.draw do
   resources :invitations, only: [ :new, :create ]
   post "invitations/redeem" => "invitations#redeem", as: :redeem_invitation
   resources :projects do
+    resources :divisions, only: [ :create ]
     collection do
       post "preview" => "projects#preview", as: "preview"
       post "feedback" => "projects#feedback", as: "feedback"

@@ -261,6 +261,9 @@ function EditorApp({ config }) {
   // Fetches the bytes of a remote image server-side (CORS workaround only --
   // does not persist anything; see onAssetFetchUrl below).
   const assetFetchUrl = "/asset_fetches";
+  // Persists a single new division immediately (see onDivisionAdd below),
+  // unlike the rest of the divisions pool which only round-trips on save.
+  const divisionsUrl = `/projects/${projectId}/divisions`;
 
   // ----- READ: load the project JSON via TanStack Query --------------------
   // queryKey uniquely identifies this cache entry; queryFn does the fetch and
@@ -391,19 +394,61 @@ function EditorApp({ config }) {
   // ----- Structural division changes: keep the working pool in sync --------
   // These fire for create/remove/rename of whole division records (vs.
   // onContentChange, which only edits an existing one).  All three are keyed by
-  // the division's xmlId; the Rails UUID PK is the host's stable identity, so a
-  // new division gets a freshly minted UUID and a rename is just a ref change.
-  const onDivisionAdd = useCallback((division) => {
-    const w = working.current;
-    if (!w) return;
-    if (w.divisions.some((d) => d.xmlId === division.xmlId)) return;
-    w.divisions.push({
-      id: crypto.randomUUID(),
-      xmlId: division.xmlId,
-      content: division.content ?? "",
-      sourceFormat: division.sourceFormat ?? "pretext",
-    });
-  }, []);
+  // the division's xmlId; the Rails UUID PK is the host's stable identity.
+  //
+  // onDivisionAdd fires for every new division -- manually added via the TOC,
+  // converted from latex/markdown, or auto-created from a typed
+  // <plus:TYPE ref="..."/> placeholder -- and the web-editor has already added
+  // it to its own pool under a throwaway local id before calling us. Unlike the
+  // rest of the pool (which only reaches Rails on the next save), we persist
+  // this one immediately: the web-editor awaits our return value to learn the
+  // real backend id, so creation can't wait for the next autosave.
+  //
+  // On failure we log and rethrow rather than add anything to `working` --  the
+  // web-editor swallows the rejection and keeps the division in its own pool
+  // under the local id, with no backing Rails record and no retry. Acceptable
+  // for a first pass, but means a failed create here is currently invisible to
+  // the user.
+  const onDivisionAdd = useCallback(
+    async (division) => {
+      const w = working.current;
+      if (!w) return;
+      if (w.divisions.some((d) => d.xmlId === division.xmlId)) return;
+      try {
+        // division.title/type aren't sent: like the root division, they're
+        // derivable from `source` itself (the wrapping tag + <title>) rather
+        // than stored separately, so there's nothing here that could go stale.
+        const res = await fetch(divisionsUrl, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Accept: "application/json",
+            "X-CSRF-Token": csrfToken,
+          },
+          body: JSON.stringify({
+            division: {
+              ref: division.xmlId,
+              source_format: division.sourceFormat,
+              source: division.content,
+            },
+          }),
+        });
+        if (!res.ok) throw new Error(`Failed to create division: ${res.status}`);
+        const { id } = await res.json();
+        w.divisions.push({
+          id,
+          xmlId: division.xmlId,
+          content: division.content ?? "",
+          sourceFormat: division.sourceFormat ?? "pretext",
+        });
+        return id;
+      } catch (error) {
+        console.error("Error creating division:", error);
+        throw error;
+      }
+    },
+    [divisionsUrl, csrfToken],
+  );
 
   const onDivisionRemove = useCallback((xmlId) => {
     const w = working.current;
