@@ -116,6 +116,15 @@
             <% end %>
           </dd>
         </div>
+        <div>
+          <dt class="font-medium text-gray-500">Password reset</dt>
+          <dd>
+            <%= button_to "Send password reset email", 
+              reset_password_admin_user_path(@user), method: :post, 
+              class: "rounded-md px-2.5 py-1 bg-yellow-600 hover:bg-yellow-500 text-white text-xs font-medium cursor-pointer",
+              form_class: "inline-block" %>
+          </dd>
+        </div>
       </dl>
     </div>
 
