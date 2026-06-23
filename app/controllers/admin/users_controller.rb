@@ -1,5 +1,5 @@
 class Admin::UsersController < Admin::BaseController
-  before_action :set_user, only: %i[show confirm]
+  before_action :set_user, only: %i[show confirm reset_password]
 
   def index
     @filters = filter_params.to_h
@@ -22,6 +22,11 @@ class Admin::UsersController < Admin::BaseController
   def confirm
     @user.confirm
     redirect_to admin_user_path(@user), notice: "Confirmed #{@user.email}."
+  end
+
+  def reset_password
+    @user.send_reset_password_instructions
+    redirect_to admin_user_path(@user), notice: "Sent password reset email to #{@user.email}."
   end
 
   private

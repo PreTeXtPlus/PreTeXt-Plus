@@ -4,6 +4,7 @@ Rails.application.routes.draw do
     resources :users, only: %i[index show] do
       member do
         post :confirm
+        post :reset_password
       end
     end
     resources :projects, only: %i[show]
