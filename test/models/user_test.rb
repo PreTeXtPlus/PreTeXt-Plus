@@ -12,17 +12,9 @@ class UserTest < ActiveSupport::TestCase
     assert_equal 10_000, user.project_quota
   end
 
-  test "project_quota is 0 for uninvited user" do
+  test "project_quota is 10 for unsubscribed user" do
     user = users(:one)
     user.admin = false
-    Invitation.where(recipient_user: user).destroy_all
-    assert_equal 0, user.project_quota
-  end
-
-  test "project_quota is 10 for invited unsubscribed user" do
-    user = users(:one)
-    user.admin = false
-    assert user.invited?
     assert_not user.subscribed?
     assert_equal 10, user.project_quota
   end
@@ -50,17 +42,6 @@ class UserTest < ActiveSupport::TestCase
     assert_not user.has_copiable_projects?
   end
 
-  test "invited? returns true when an invitation exists for the user" do
-    user = users(:one)
-    assert user.invited?
-  end
-
-  test "invited? returns false when no invitation exists" do
-    user = users(:one)
-    Invitation.where(recipient_user: user).destroy_all
-    assert_not user.invited?
-  end
-
   test "name_with_email returns formatted string when name present" do
     user = users(:one)
     user.name = "Alice"
@@ -72,22 +53,6 @@ class UserTest < ActiveSupport::TestCase
     user = users(:one)
     user.name = nil
     assert_equal user.email, user.name_with_email
-  end
-
-  test "claim_intended_invitations links open invitations on create" do
-    invitation = Invitation.create!(
-      owner_user: users(:two),
-      intended_email: "newuser@example.com"
-    )
-    assert_nil invitation.recipient_user
-
-    new_user = User.create!(
-      email: "newuser@example.com",
-      password: "secret123"
-    )
-    new_user.send(:claim_intended_invitations)
-
-    assert_equal new_user, invitation.reload.recipient_user
   end
 
   test "new users get default common_docinfo" do

@@ -32,9 +32,6 @@ Rails.application.routes.draw do
       get "checkout" => "subscription_types#checkout", as: "checkout"
     end
   end
-  resources :requests, only: [ :create ]
-  resources :invitations, only: [ :new, :create ]
-  post "invitations/redeem" => "invitations#redeem", as: :redeem_invitation
   get "projects/lunr-pretext-search-index.js", to: redirect("/ptx-search.js")
   get "projects/*_/lunr-pretext-search-index.js", to: redirect("/ptx-search.js")
   get "projects/:id/*_.html", to: redirect("/projects/%{id}/share")
@@ -60,8 +57,6 @@ Rails.application.routes.draw do
   scope format: true, constraints: { format: "json" } do
     resources :library_assets, path: "library", only: [ :index, :show, :create, :update, :destroy ]
   end
-  post "subscribe" => "subscriptions_old#subscribe"
-  post "stripe/webhooks" => "subscriptions_old#webhooks"
   get "tryit" => "projects#tryit"
 
   get "up" => "rails/health#show", as: :rails_health_check

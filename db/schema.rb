@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_06_11_000001) do
+ActiveRecord::Schema[8.1].define(version: 2026_06_23_180046) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
   enable_extension "pgcrypto"
@@ -41,18 +41,6 @@ ActiveRecord::Schema[8.1].define(version: 2026_06_11_000001) do
     t.uuid "blob_id", null: false
     t.string "variation_digest", null: false
     t.index ["blob_id", "variation_digest"], name: "index_active_storage_variant_records_uniqueness", unique: true
-  end
-
-  create_table "invitations", id: :uuid, default: -> { "gen_random_uuid()" }, force: :cascade do |t|
-    t.uuid "code", default: -> { "gen_random_uuid()" }, null: false
-    t.datetime "created_at", null: false
-    t.string "intended_email"
-    t.uuid "owner_user_id", null: false
-    t.uuid "recipient_user_id"
-    t.datetime "updated_at", null: false
-    t.index ["code"], name: "index_invitations_on_code", unique: true
-    t.index ["owner_user_id"], name: "index_invitations_on_owner_user_id"
-    t.index ["recipient_user_id"], name: "index_invitations_on_recipient_user_id"
   end
 
   create_table "library_assets", id: :uuid, default: -> { "gen_random_uuid()" }, force: :cascade do |t|
@@ -190,13 +178,6 @@ ActiveRecord::Schema[8.1].define(version: 2026_06_11_000001) do
     t.index ["user_id"], name: "index_projects_on_user_id"
   end
 
-  create_table "requests", id: :uuid, default: -> { "gen_random_uuid()" }, force: :cascade do |t|
-    t.datetime "created_at", null: false
-    t.datetime "updated_at", null: false
-    t.uuid "user_id", null: false
-    t.index ["user_id"], name: "index_requests_on_user_id"
-  end
-
   create_table "subscription_seats", id: :uuid, default: -> { "gen_random_uuid()" }, force: :cascade do |t|
     t.datetime "created_at", null: false
     t.uuid "pay_subscription_id", null: false
@@ -239,14 +220,11 @@ ActiveRecord::Schema[8.1].define(version: 2026_06_11_000001) do
     t.datetime "last_sign_in_at"
     t.string "last_sign_in_ip"
     t.string "name"
-    t.integer "old_subscription", default: 0, null: false
     t.uuid "privacy_id"
     t.datetime "remember_created_at"
     t.datetime "reset_password_sent_at"
     t.string "reset_password_token"
     t.integer "sign_in_count", default: 0, null: false
-    t.string "stripe_checkout_session_id"
-    t.string "stripe_customer_id"
     t.uuid "tos_id"
     t.string "unconfirmed_email"
     t.datetime "updated_at", null: false
@@ -259,8 +237,6 @@ ActiveRecord::Schema[8.1].define(version: 2026_06_11_000001) do
 
   add_foreign_key "active_storage_attachments", "active_storage_blobs", column: "blob_id"
   add_foreign_key "active_storage_variant_records", "active_storage_blobs", column: "blob_id"
-  add_foreign_key "invitations", "users", column: "owner_user_id"
-  add_foreign_key "invitations", "users", column: "recipient_user_id"
   add_foreign_key "library_assets", "users"
   add_foreign_key "pay_charges", "pay_customers", column: "customer_id"
   add_foreign_key "pay_charges", "pay_subscriptions", column: "subscription_id"
@@ -269,7 +245,6 @@ ActiveRecord::Schema[8.1].define(version: 2026_06_11_000001) do
   add_foreign_key "project_assets", "library_assets"
   add_foreign_key "project_assets", "projects"
   add_foreign_key "projects", "users"
-  add_foreign_key "requests", "users"
   add_foreign_key "subscription_seats", "pay_subscriptions"
   add_foreign_key "subscription_seats", "users"
 end
