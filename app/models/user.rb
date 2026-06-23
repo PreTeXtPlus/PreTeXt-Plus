@@ -12,8 +12,6 @@ class User < ApplicationRecord
     default_payment_processor: :stripe
   has_many :subscription_seats
 
-  enum :old_subscription, { beta: 0, sustaining: 1 }, default: :beta, suffix: true, validate: true
-
   normalizes :email, with: ->(e) { e.strip.downcase }
 
   def subscribed?
