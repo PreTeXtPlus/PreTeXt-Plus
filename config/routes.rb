@@ -32,9 +32,6 @@ Rails.application.routes.draw do
       get "checkout" => "subscription_types#checkout", as: "checkout"
     end
   end
-  resources :requests, only: [ :create ]
-  resources :invitations, only: [ :new, :create ]
-  post "invitations/redeem" => "invitations#redeem", as: :redeem_invitation
   get "projects/lunr-pretext-search-index.js", to: redirect("/ptx-search.js")
   get "projects/*_/lunr-pretext-search-index.js", to: redirect("/ptx-search.js")
   get "projects/:id/*_.html", to: redirect("/projects/%{id}/share")

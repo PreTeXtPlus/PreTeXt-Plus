@@ -15,9 +15,7 @@ class Admin::BaseController < ApplicationController
   def access_label_for(user)
     result = "Admin" if user.admin?
     result = "Subscribed" if result.blank? && user.subscribed?
-    result = "Invited" if result.blank? && @invited_user_lookup&.[](user.id)
-    result = "Requested access" if result.blank? if @requested_user_lookup&.[](user.id)
-    result = "Not invited" if result.blank?
+    result = "Standard" if result.blank?
     result += " (Unconfirmed)" unless user.confirmed?
     result
   end
