@@ -12,14 +12,17 @@ class AddDivisionModel < ActiveRecord::Migration[8.1]
     reversible do |dir|
       dir.up do
         execute <<~SQL
-          INSERT INTO divisions (id, source, source_format, is_root, project_id, created_at, updated_at)
-          SELECT gen_random_uuid(), source, source_format, TRUE, id, NOW(), NOW()
+          INSERT INTO divisions (id, source, source_format, is_root, ref, project_id, created_at, updated_at)
+          SELECT gen_random_uuid(), source, source_format, TRUE, 'document', id, NOW(), NOW()
           FROM projects
         SQL
       end
       dir.down do
         Division.where(is_root: true).each do |d|
-          d.project.update(source: d.source, source_format: d.source_format)
+          # Division#source_format is enum-cast to a string ("latex"); Project's
+          # source_format is a plain integer column with no enum, so it must be
+          # mapped back through Division.source_formats or it silently casts to 0.
+          d.project.update(source: d.source, source_format: Division.source_formats[d.source_format])
         end
       end
     end

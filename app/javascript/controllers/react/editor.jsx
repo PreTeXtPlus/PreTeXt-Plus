@@ -258,6 +258,9 @@ function EditorApp({ config }) {
   const feedbackUrl = "/projects/feedback";
   // The user's cross-project asset library (JSON CRUD lives under /library).
   const libraryUrl = "/library.json";
+  // Fetches the bytes of a remote image server-side (CORS workaround only --
+  // does not persist anything; see onAssetFetchUrl below).
+  const assetFetchUrl = "/asset_fetches";
 
   // ----- READ: load the project JSON via TanStack Query --------------------
   // queryKey uniquely identifies this cache entry; queryFn does the fetch and
@@ -512,16 +515,36 @@ function EditorApp({ config }) {
     [createLibraryAsset, addAssetMembership],
   );
 
-  const onAssetAddUrl = useCallback(
-    async (url, name) => {
-      const asset = await createLibraryAsset({
-        library_asset: { kind: "file", url, short_description: name },
+  // Fetches the image bytes server-side and hands back a File -- it does not
+  // create a library asset or project membership. The editor commits the
+  // file (possibly after letting the user edit it) through onAssetUpload,
+  // the same path used for local file picks.
+  const onAssetFetchUrl = useCallback(
+    async (url) => {
+      const res = await fetch(assetFetchUrl, {
+        method: "POST",
+        headers: {
+          Accept: "application/json",
+          "Content-Type": "application/json",
+          "X-CSRF-Token": csrfToken,
+        },
+        body: JSON.stringify({ url }),
       });
-      asset.ref = slugifyRef(name) || asset.ref;
-      addAssetMembership(asset);
-      return asset;
+      if (!res.ok) {
+        let message = `Could not fetch image: ${res.status}`;
+        try {
+          const err = await res.json();
+          message = err.error || message;
+        } catch {
+          /* non-JSON error body */
+        }
+        throw new Error(message);
+      }
+      const blob = await res.blob();
+      const filename = url.split("/").pop()?.split("?")[0] || "image";
+      return new File([ blob ], filename, { type: blob.type });
     },
-    [createLibraryAsset, addAssetMembership],
+    [assetFetchUrl, csrfToken],
   );
 
   const onCreateDoenet = useCallback(
@@ -703,7 +726,7 @@ function EditorApp({ config }) {
       onAssetInsert={onAssetInsert}
       onAssetAddFromLibrary={onAssetAddFromLibrary}
       onAssetUpload={onAssetUpload}
-      onAssetAddUrl={onAssetAddUrl}
+      onAssetFetchUrl={onAssetFetchUrl}
       onCreateDoenet={onCreateDoenet}
       onAssetRemove={onAssetRemove}
       onLoadAssets={onLoadAssets}

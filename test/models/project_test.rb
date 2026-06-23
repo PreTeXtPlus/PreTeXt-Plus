@@ -51,6 +51,15 @@ class ProjectTest < ActiveSupport::TestCase
     assert_equal "renamed", division.reload.ref
   end
 
+  test "an existing root division's source can be updated without resending its ref" do
+    project = projects(:one)
+    division = project.root_division
+    stub_build_server do
+      project.update!(divisions_attributes: [ { id: division.id, source: "<section><title>Edited</title></section>" } ])
+    end
+    assert_equal "<section><title>Edited</title></section>", division.reload.source
+  end
+
   test "renaming a division's ref keeps its UUID stable" do
     project = projects(:one)
     division = project.root_division
