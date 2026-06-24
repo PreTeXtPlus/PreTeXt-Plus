@@ -12,7 +12,7 @@
     </p>
 
     <div class="mt-6 prose prose-gray max-w-none text-gray-800">
-      <%= CommonMarker.render_html(@announcement.body, :DEFAULT).html_safe %>
+      <%= sanitize CommonMarker.render_html(@announcement.body, :DEFAULT) %>
     </div>
   </div>
 
