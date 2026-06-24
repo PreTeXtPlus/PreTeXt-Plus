@@ -1,0 +1,26 @@
+<% content_for :title, @announcement.title %>
+
+<div class="w-full mx-auto p-4 md:w-3/4 lg:w-1/2">
+  <div class="mb-6">
+    <%= link_to "All announcements", announcements_path, class: "text-sm text-blue-600 hover:underline" %>
+  </div>
+
+  <div class="rounded-xl border border-gray-200 bg-white p-8 shadow-sm">
+    <h1 class="text-3xl font-semibold text-gray-900"><%= @announcement.title %></h1>
+    <p class="mt-2 text-sm text-gray-500">
+      <time datetime="<%= @announcement.published_at.iso8601 %>"><%= @announcement.published_at.to_date %></time>
+    </p>
+
+    <div class="mt-6 prose prose-gray max-w-none text-gray-800">
+      <%= CommonMarker.render_html(@announcement.body, :DEFAULT).html_safe %>
+    </div>
+  </div>
+
+  <% if user_signed_in? && !current_user.announcement_emails? %>
+    <div class="mt-6 rounded-xl border border-blue-100 bg-blue-50 p-5 flex items-center justify-between gap-4">
+      <p class="text-sm text-blue-800">You are not subscribed to announcement emails.</p>
+      <%= button_to "Subscribe", subscribe_announcements_path, method: :post,
+            class: "rounded-md px-3.5 py-2 bg-blue-600 hover:bg-blue-500 text-white text-sm font-medium" %>
+    </div>
+  <% end %>
+</div>

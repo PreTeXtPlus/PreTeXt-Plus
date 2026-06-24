@@ -51,4 +51,13 @@ class User < ApplicationRecord
   def update_terms
     update(tos: Term.current(:tos), privacy: Term.current(:privacy))
   end
+
+  def announcement_unsubscribe_token
+    token = super
+    if token.blank?
+      token = SecureRandom.urlsafe_base64(32)
+      update_column(:announcement_unsubscribe_token, token)
+    end
+    token
+  end
 end
