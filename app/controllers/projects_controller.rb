@@ -3,7 +3,7 @@ class ProjectsController < ApplicationController
   require_unauthenticated_access only: %i[ tryit ]
   before_action :limit_projects, only: %i[ new create copy ]
   load_and_authorize_resource except: %i[ index new tryit preview feedback ]
-  skip_authorize_resource only: %i[ share show_asset_file ]
+  skip_authorize_resource only: %i[ share ]
   after_action :allow_iframe, only: :share
   rate_limit to: 25, within: 10.minutes, only: :preview,
              with: -> { render plain: "Preview limit reached. Please wait a few minutes and try again, or create an account to continue writing and save your work!", status: :too_many_requests },
@@ -72,14 +72,6 @@ class ProjectsController < ApplicationController
     render html: (@project.html_source || "Document not found").html_safe
   end
 
-  def show_asset_file
-    asset = @project.project_assets.find_by ref: params[:ref]
-    if asset.present?
-      return redirect_to asset.url
-    end
-    redirect_to LibraryAsset.new.url  # default image not found
-  end
-
   def source
   end
 
@@ -112,8 +104,15 @@ class ProjectsController < ApplicationController
       request.body = URI.encode_www_form(post_params)
       http.request(request)
     end
-    # return html along with the status returned by build server
-    render html: response.body.html_safe, status: response.code
+    # The assembled source only ever carries a bare `external/<id>.<ext>`
+    # reference for an image (see editor.jsx's assetsForBuild) -- the build
+    # server treats `source` as a plain PreTeXt external-asset filename and
+    # writes `external/<that value>` into the output `<img src>` itself. A
+    # root-relative <base> pins that relative path at the owner-scoped
+    # redirect (library_assets#preview_file) regardless of where this HTML
+    # ends up displayed (this response is always shown in an iframe, so the
+    # base resolves against our own origin either way).
+    render html: "<base href=\"/preview_assets/\">#{response.body}".html_safe, status: response.code
   rescue Net::OpenTimeout, Net::ReadTimeout
     render plain: "Preview build timed out", status: :gateway_timeout
   rescue SocketError, EOFError, IOError, Errno::ECONNREFUSED, Errno::EHOSTUNREACH, SystemCallError

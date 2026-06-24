@@ -175,6 +175,23 @@ class ProjectsControllerTest < ActionDispatch::IntegrationTest
     assert_includes response.body, "Hello World"
   end
 
+  test "preview prepends a base tag pointing at the owner-only asset redirect" do
+    stub_preview_server(body: "<html><body>stub</body></html>") do
+      post preview_projects_url, params: { source: "<section/>", title: "Test" }
+    end
+    assert_response :success
+    assert_equal "<base href=\"/preview_assets/\"><html><body>stub</body></html>", response.body
+  end
+
+  test "PreTeXt's built-in logo redirects under both the preview and share asset prefixes" do
+    sign_out @user
+    get "/preview_assets/external/icon.svg"
+    assert_redirected_to "/icon-small.svg"
+
+    get "/share_assets/external/icon.svg"
+    assert_redirected_to "/icon-small.svg"
+  end
+
   test "preview returns bad_gateway when build server connection fails" do
     stub_preview_server(raise_error: Errno::ECONNREFUSED.new) do
       post preview_projects_url, params: { source: "<section/>", title: "Test" }
@@ -293,7 +310,7 @@ class ProjectsControllerTest < ActionDispatch::IntegrationTest
 
     assert_response :success
     assert_equal @project.reload.pretext_source, captured_params[:source]
-    assert_equal "<html><body>docinfo-only</body></html>", @project.reload.html_source
+    assert_equal "<base href=\"/share_assets/\"><html><body>docinfo-only</body></html>", @project.reload.html_source
   end
 
   test "non-owner cannot get project json" do

@@ -1,7 +1,9 @@
 class Project < ApplicationRecord
   belongs_to :user
 
-  has_many :project_assets
+  # dependent: :destroy so deleting a project drops its membership rows; the
+  # library assets themselves persist (they're owned by the user, not the project).
+  has_many :project_assets, dependent: :destroy
   # allow_destroy lets the editor drop a project's membership of a library asset
   # by sending `_destroy: true`; the library_asset itself is never destroyed.
   accepts_nested_attributes_for :project_assets, allow_destroy: true
@@ -92,6 +94,11 @@ class Project < ApplicationRecord
       token: ENV["BUILD_TOKEN"]
     }
     response = Net::HTTP.post_form(URI.parse("https://#{ENV['BUILD_HOST']}"), params)
-    self.html_source = response.body
+    # See the matching comment in ProjectsController#preview -- the build
+    # server writes a bare `external/<id>.<ext>` image reference into its
+    # output, and this <base> pins that at the *public* redirect
+    # (library_assets#share_file), since html_source renders on the public
+    # /share page. Root-relative, so it needs no host config here.
+    self.html_source = "<base href=\"/share_assets/\">#{response.body}"
   end
 end

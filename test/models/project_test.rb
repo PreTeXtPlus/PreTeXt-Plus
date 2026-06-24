@@ -6,7 +6,7 @@ class ProjectTest < ActiveSupport::TestCase
     stub_build_server do
       project.update!(title: "Updated Title")
     end
-    assert_equal "<html><body>stub</body></html>", project.html_source
+    assert_equal "<base href=\"/share_assets/\"><html><body>stub</body></html>", project.html_source
   end
 
   test "before_update sends pretext_source to build server" do

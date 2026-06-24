@@ -1,0 +1,24 @@
+# Read about fixtures at https://api.rubyonrails.org/classes/ActiveRecord/FixtureSet.html
+
+# A doenet asset (no attached file) owned by user one. File-backed assets are
+# created through the upload path in tests, since they need an attachment.
+doenet_one:
+  user: one
+  kind: doenet
+  short_description: My Activity
+  content: ""
+
+# A second library asset owned by user one, already a member of project one
+# (see project_assets.yml) -- used to test removing an existing membership.
+image_one:
+  user: one
+  kind: file
+  short_description: A Diagram
+  content: ""
+
+# Owned by user two, used for cross-user authorization checks.
+other_user_asset:
+  user: two
+  kind: doenet
+  short_description: Someone Else's Activity
+  content: ""
