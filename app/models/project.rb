@@ -83,6 +83,18 @@ class Project < ApplicationRecord
 
   DEFAULT_DOCINFO = File.read Rails.root.join("app", "default_docs", "docinfo.xml")
 
+  def dup_with_divisions
+    duplicate = Project.build(self.dup.attributes)
+    duplicate.update(title: "Copy of #{title}")
+    divisions.each do |division|
+      duplicate.divisions.build(division.dup.attributes)
+    end
+    project_assets.each do |asset|
+      duplicate.project_assets.build(asset.dup.attributes)
+    end
+    duplicate.save ? duplicate : nil
+  end
+
   private
 
   def set_html_source

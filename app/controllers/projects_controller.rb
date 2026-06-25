@@ -76,9 +76,8 @@ class ProjectsController < ApplicationController
 
   # GET /projects/:project_id/share/copy
   def copy
-    project_copy = @project.dup
+    project_copy = @project.dup_with_divisions
     project_copy.user = current_user
-    project_copy.title = "Copy of " + project_copy.title
     project_copy.save!
     redirect_to edit_project_path(project_copy)
   end
