@@ -141,6 +141,17 @@ class ProjectsControllerTest < ActionDispatch::IntegrationTest
     assert_redirected_to edit_project_path(copied)
   end
 
+  test "copy duplicates divisions from the source project" do
+    subbed_user = users(:subscribed)
+    sign_out :user
+    sign_in subbed_user
+    stub_build_server do
+      post copy_project_url(@project)
+    end
+    copy = Project.find_by!(title: "Copy of #{@project.title}", user: subbed_user)
+    assert_equal @project.divisions.count, copy.divisions.count
+  end
+
   test "copy allows basic requester when source owner is subscribed" do
     owner = users(:subscribed)
     requester = users(:two)
