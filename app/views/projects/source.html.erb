@@ -9,7 +9,7 @@
         </div>
       <% end %>
       <%= button_to "Make a copy", copy_project_path(@project), method: :post, form_class: "w-full h-[10%] sm:w-auto sm:inline-block", class: "w-full text-center rounded-md px-3.5 py-2.5 bg-gray-100 hover:bg-gray-50 font-medium cursor-pointer" %>
-      <textarea class="size-full mt-5 bg-gray-100 font-mono text-gray-800 p-3 resize-none h-[90%]" readonly><%= @project.source %></textarea>
+      <textarea class="size-full mt-5 bg-gray-100 font-mono text-gray-800 p-3 resize-none h-[90%]" readonly><%= @project.pretext_source %></textarea>
     </div>
     <div class="w-full md:w-1/2 h-screen md:h-full">
       <%= render @project %>
