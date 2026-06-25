@@ -18,12 +18,12 @@ class AddDivisionModel < ActiveRecord::Migration[8.1]
         SQL
       end
       dir.down do
-        Division.where(is_root: true).each do |d|
-          # Division#source_format is enum-cast to a string ("latex"); Project's
-          # source_format is a plain integer column with no enum, so it must be
-          # mapped back through Division.source_formats or it silently casts to 0.
-          d.project.update(source: d.source, source_format: Division.source_formats[d.source_format])
-        end
+        execute <<~SQL
+          UPDATE projects
+          SET source = divisions.source, source_format = divisions.source_format
+          FROM divisions
+          WHERE divisions.project_id = projects.id AND divisions.is_root = TRUE
+        SQL
       end
     end
     remove_column :projects, :source, :text
