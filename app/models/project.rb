@@ -83,7 +83,7 @@ class Project < ApplicationRecord
 
   DEFAULT_DOCINFO = File.read Rails.root.join("app", "default_docs", "docinfo.xml")
 
-  def dup_with_divisions
+  def full_dup
     duplicate = Project.build(self.dup.attributes)
     duplicate.update(title: "Copy of #{title}")
     divisions.each do |division|
