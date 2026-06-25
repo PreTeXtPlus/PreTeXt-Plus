@@ -1,14 +1,20 @@
 Rails.application.routes.draw do
   namespace :admin do
     root "dashboard#show"
-    resources :users, only: %i[index show]
+    resources :users, only: %i[index show] do
+      member do
+        post :confirm
+        post :reset_password
+      end
+    end
     resources :projects, only: %i[show]
     resources :terms, only: %i[new create]
   end
 
   devise_for :users, skip: [ :registrations ], controllers: {
     sessions: "users/sessions",
-    passwords: "users/passwords"
+    passwords: "users/passwords",
+    confirmations: "users/confirmations"
   }
   resources :users, only: [ :new, :create, :edit, :update ]
 
@@ -26,9 +32,6 @@ Rails.application.routes.draw do
       get "checkout" => "subscription_types#checkout", as: "checkout"
     end
   end
-  resources :requests, only: [ :create ]
-  resources :invitations, only: [ :new, :create ]
-  post "invitations/redeem" => "invitations#redeem", as: :redeem_invitation
   resources :projects do
     resources :divisions, only: [ :create ]
     # Immediate-persist membership endpoint (mirrors divisions): the editor adds
@@ -76,8 +79,6 @@ Rails.application.routes.draw do
   # project_asset join row has been saved yet.
   get "share_assets/external/:id" => "library_assets#share_file", as: "share_asset_file"
   resources :asset_fetches, only: :create
-  post "subscribe" => "subscriptions_old#subscribe"
-  post "stripe/webhooks" => "subscriptions_old#webhooks"
   get "tryit" => "projects#tryit"
 
   get "up" => "rails/health#show", as: :rails_health_check

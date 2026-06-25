@@ -88,7 +88,7 @@ Authorization is inline (no Pundit/CanCan):
 |---|---|---|
 | Build server | `BUILD_HOST`, `BUILD_TOKEN` | Compiles PreTeXt XML → HTML on project save |
 | Stripe | `STRIPE_SECRET_KEY`, `STRIPE_SUSTAINING_PRICE`, `STRIPE_WEBHOOK_SECRET` | Subscriptions & billing portal |
-| Resend | `RESEND_API_KEY` | Transactional email (invitations, password reset) |
+| Postmark | `POSTMARK_API_TOKEN` | Transactional email (invitations, password reset) |
 
 ---
 
@@ -96,7 +96,7 @@ Authorization is inline (no Pundit/CanCan):
 
 - **Email normalization:** `normalizes :email, with: ->(e) { e.strip.downcase }` — always stored lowercase/stripped
 - **Rate limiting:** Native Rails rate limiting on `SessionsController#create` and `PasswordsController#create` (10 requests / 3 min)
-- **Mailers use `deliver_later`** and go through the Resend API (configured in `config/initializers/mailer.rb`)
+- **Mailers use `deliver_later`** and go through the Postmark API (configured in `config/environments/production.rb`)
 - **Project build** happens in `Project#before_save` — modifying `content` or `title` triggers an HTTP call to the build server
 - **Sharing:** Projects have a public `/projects/:id/share` route (no auth required) and a copy-to-account feature gated to sustaining/admin users
 

@@ -74,7 +74,7 @@ gem "jsbundling-rails", "~> 1.3"
 
 gem "stripe", "~> 19.0"
 
-gem "resend", "~> 1.0"
+gem "postmark-rails", "~> 0.22"
 
 gem "pay", "~> 11.6"
 

@@ -43,8 +43,5 @@ class Ability
     can [ :show, :seat ], Pay::Stripe::Subscription do |subscription|
       subscription.user == user
     end
-
-    # Invitations
-    can :redeem, Invitation
   end
 end
