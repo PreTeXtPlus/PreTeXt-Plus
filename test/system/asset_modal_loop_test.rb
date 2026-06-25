@@ -8,7 +8,7 @@ class AssetModalLoopTest < ApplicationSystemTestCase
     request_log = []
     subscriber = ActiveSupport::Notifications.subscribe("process_action.action_controller") do |*args|
       event = ActiveSupport::Notifications::Event.new(*args)
-      request_log << [event.time, event.payload[:method], event.payload[:path]]
+      request_log << [ event.time, event.payload[:method], event.payload[:path] ]
     end
 
     visit new_user_session_path
