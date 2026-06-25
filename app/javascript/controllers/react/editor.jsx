@@ -765,15 +765,22 @@ function EditorApp({ config }) {
   // with the result, so both must return *server-fresh* data -- onLoadAssets
   // re-fetches the project query so assets associated earlier this session are
   // included, and the library loader re-fetches so freshly uploaded ones appear.
+  // Depend on `.refetch` itself, not the query result object: TanStack Query
+  // returns a new result object every render, so depending on the whole object
+  // (as this used to) gave these callbacks a new identity every render too.
+  // The web-editor's asset modal re-runs its load-on-open effect whenever
+  // onLoadAssets/onLoadLibraryAssets change identity, so that churn turned into
+  // an infinite refetch loop the instant the modal opened. `.refetch` is stable
+  // across renders for a given query key, so this keeps the callbacks stable.
   const onLoadAssets = useCallback(async () => {
     const { data } = await projectQuery.refetch();
     return (data?.projectAssets ?? []).map(toEditorAsset);
-  }, [projectQuery]);
+  }, [projectQuery.refetch]);
 
   const onLoadLibraryAssets = useCallback(async () => {
     const { data } = await libraryQuery.refetch();
     return reconcileLibraryRefs(data ?? []);
-  }, [libraryQuery, reconcileLibraryRefs]);
+  }, [libraryQuery.refetch, reconcileLibraryRefs]);
 
   const onTitleChange = useCallback((value) => {
     const w = working.current;
@@ -888,6 +895,14 @@ function EditorApp({ config }) {
     [projectQuery.data],
   );
 
+  // Same reasoning as `projectAssets` above: memoize on the query data so this
+  // only gets a new identity when the library actually refetches, not on every
+  // unrelated re-render.
+  const libraryAssets = useMemo(
+    () => reconcileLibraryRefs(libraryQuery.data ?? []),
+    [libraryQuery.data, reconcileLibraryRefs],
+  );
+
   // ----- Render ------------------------------------------------------------
   if (projectQuery.isPending) {
     return <div className="mx-5">Loading editor…</div>;
@@ -907,7 +922,7 @@ function EditorApp({ config }) {
       divisions={state.divisions}
       rootDivisionId={state.rootDivisionId}
       projectAssets={projectAssets}
-      libraryAssets={reconcileLibraryRefs(libraryQuery.data ?? [])}
+      libraryAssets={libraryAssets}
       projectUrl={projectUrl}
       saveButtonLabel="Save"
       cancelButtonLabel="Cancel"
