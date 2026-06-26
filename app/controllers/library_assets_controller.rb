@@ -46,14 +46,14 @@ class LibraryAssetsController < ApplicationController
   # preview build -- unlike baking in a signed storage URL directly, it never
   # goes stale, and it works before the owning project_asset is ever saved.
   def preview_file
-    redirect_to @library_asset.url
+    redirect_to @library_asset.url, allow_other_host: true
   end
 
   # Same redirect, but public: this is the target baked into a project's
   # *saved* pretext_source, which renders on the public /share page -- so it
   # has to work for anyone, signed in or not, just like `share` itself.
   def share_file
-    redirect_to @library_asset.url
+    redirect_to @library_asset.url, allow_other_host: true
   end
 
   private
