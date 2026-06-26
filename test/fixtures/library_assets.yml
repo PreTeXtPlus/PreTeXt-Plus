@@ -1,10 +1,10 @@
 # Read about fixtures at https://api.rubyonrails.org/classes/ActiveRecord/FixtureSet.html
 
-# A doenet asset (no attached file) owned by user one. File-backed assets are
+# An authored asset owned by user one. File-backed assets are
 # created through the upload path in tests, since they need an attachment.
 doenet_one:
   user: one
-  kind: doenet
+  kind: authored
   short_description: My Activity
   content: ""
 
@@ -19,6 +19,6 @@ image_one:
 # Owned by user two, used for cross-user authorization checks.
 other_user_asset:
   user: two
-  kind: doenet
+  kind: authored
   short_description: Someone Else's Activity
   content: ""
