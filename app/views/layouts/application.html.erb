@@ -43,6 +43,9 @@
                 <%= link_to :root, class: "my-1 text-gray-800 hover:text-blue-500 md:mx-4 md:my-0" do %>
                   About
                 <% end %>
+                <%= link_to announcements_path, class: "my-1 text-gray-800 hover:text-blue-500 md:mx-4 md:my-0" do %>
+                  Announcements
+                <% end %>
                 <% if current_user.present? %>
                   <div class="relative group">
                     <label for="helpMenuToggle" class="my-1 text-gray-800 cursor-pointer hover:text-blue-500 md:mx-4 md:my-0 select-none">
@@ -74,6 +77,9 @@
                       <% end %>
                       <%= link_to admin_users_path, class: "block px-4 py-2 text-gray-800 hover:bg-blue-50 hover:text-blue-500" do %>
                         Users
+                      <% end %>
+                      <%= link_to admin_announcements_path, class: "block px-4 py-2 text-gray-800 hover:bg-blue-50 hover:text-blue-500" do %>
+                        Announcements
                       <% end %>
                       <%= link_to subscription_types_path, class: "block px-4 py-2 text-gray-800 hover:bg-blue-50 hover:text-blue-500" do %>
                         Subscription Types

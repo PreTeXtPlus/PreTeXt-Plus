@@ -7,6 +7,10 @@ class Ability
       project.user.has_copiable_projects?
     end
 
+    can :read, Announcement do |announcement|
+      announcement.published?
+    end
+
     return if user.nil?
 
     if user.admin?

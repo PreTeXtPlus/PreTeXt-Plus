@@ -1,5 +1,5 @@
 class Admin::AnnouncementsController < Admin::BaseController
-  before_action :set_announcement, only: %i[show edit update destroy publish]
+  load_and_authorize_resource
 
   def index
     @announcements = Announcement.order(created_at: :desc)
@@ -9,11 +9,9 @@ class Admin::AnnouncementsController < Admin::BaseController
   end
 
   def new
-    @announcement = Announcement.new
   end
 
   def create
-    @announcement = Announcement.new(announcement_params)
     if @announcement.save
       redirect_to admin_announcement_path(@announcement), notice: "Announcement created."
     else
@@ -48,10 +46,6 @@ class Admin::AnnouncementsController < Admin::BaseController
   end
 
   private
-
-  def set_announcement
-    @announcement = Announcement.find(params[:id])
-  end
 
   def announcement_params
     params.require(:announcement).permit(:title, :body)

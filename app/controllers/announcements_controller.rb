@@ -1,4 +1,5 @@
 class AnnouncementsController < ApplicationController
+  load_and_authorize_resource
   allow_unauthenticated_access only: %i[index show unsubscribe]
 
   def index
@@ -6,7 +7,6 @@ class AnnouncementsController < ApplicationController
   end
 
   def show
-    @announcement = Announcement.published.find(params[:id])
   end
 
   def unsubscribe
