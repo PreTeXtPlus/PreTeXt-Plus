@@ -8,7 +8,8 @@ class LibraryAsset < ApplicationRecord
 
   def url
     if file.present?
-      return file.url
+      # use 1.hour to avoid clock skew
+      return file.url(expires_in: 1.hour)
     end
     "/image-not-found.svg"
   end
