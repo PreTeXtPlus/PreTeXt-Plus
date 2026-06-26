@@ -31,7 +31,7 @@ class UsersController < ApplicationController
   private
 
   def sign_up_params
-    params.expect(user: [ :email, :password, :name ])
+    params.expect(user: [ :email, :password, :name, :announcement_emails ])
   end
 
   def update_params
