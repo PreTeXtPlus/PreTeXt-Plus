@@ -1,0 +1,24 @@
+# Read about fixtures at https://api.rubyonrails.org/classes/ActiveRecord/FixtureSet.html
+
+# An authored asset owned by user one. File-backed assets are
+# created through the upload path in tests, since they need an attachment.
+authored_one:
+  user: one
+  kind: authored
+  short_description: My Activity
+  content: ""
+
+# A second library asset owned by user one, already a member of project one
+# (see project_assets.yml) -- used to test removing an existing membership.
+image_one:
+  user: one
+  kind: file
+  short_description: A Diagram
+  content: ""
+
+# Owned by user two, used for cross-user authorization checks.
+other_user_asset:
+  user: two
+  kind: authored
+  short_description: Someone Else's Activity
+  content: ""

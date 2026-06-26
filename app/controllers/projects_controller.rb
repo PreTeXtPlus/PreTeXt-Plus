@@ -1,15 +1,15 @@
 class ProjectsController < ApplicationController
   allow_unauthenticated_access only: %i[ share preview source ]
   require_unauthenticated_access only: %i[ tryit ]
-  before_action :limit_projects, only: %i[ new create copy copy_conversion ]
+  before_action :limit_projects, only: %i[ new create copy ]
   load_and_authorize_resource except: %i[ index new tryit preview feedback ]
-  skip_authorize_resource only: %i[ share show_asset_file copy_conversion ]
+  skip_authorize_resource only: %i[ share ]
   after_action :allow_iframe, only: :share
   rate_limit to: 25, within: 10.minutes, only: :preview,
              with: -> { render plain: "Preview limit reached. Please wait a few minutes and try again, or create an account to continue writing and save your work!", status: :too_many_requests },
              if: -> { !authenticated? }
 
-  # GET /projects or /projects.json
+  # GET /projects
   def index
     @projects = Project.where user: current_user
   end
@@ -20,110 +20,19 @@ class ProjectsController < ApplicationController
 
   # GET /projects/new
   def new
-    @project = Project.new(user: current_user, source_format: :pretext)
-  end
-
-  # GET /tryit
-  def tryit
-    @demo_mode = params[:demo] == "pretext" ? "pretext" :
-      params[:demo] == "markdown" ? "markdown" : "latex"
-    @title = @demo_mode == "latex" ? "Try LaTeX-style PreTeXt!" :
-      @demo_mode == "markdown" ? "Try Markdown-style PreTeXt!" : "Try Classic PreTeXt!"
-
-    @content = if @demo_mode == "latex"
-      <<~EOS
-        \\section{Thanks for trying PreTeXt.Plus!}
-
-        This is a LaTeX-style PreTeXt demo project. You can edit this content using supported LaTeX syntax.
-
-        \\[
-          \\left|\\sum_{i=0}^n a_i\\right|\\leq\\sum_{i=0}^n |a_i|
-        \\]
-
-        When you preview the changes, the source is first converted to PreTeXt and then rendered as accessible HTML.#{' '}
-
-        (Changes you make here will not be saved, but feel free to play around to see what PreTeXt.Plus can do!)
-      EOS
-    elsif @demo_mode == "markdown"
-      <<~EOS
-        # Thanks for trying PreTeXt.Plus!
-
-        This is a Markdown-style PreTeXt demo project. You can edit this content using supported Markdown syntax.
-
-        $$
-          \\left|\\sum_{i=0}^n a_i\\right|\\leq\\sum_{i=0}^n |a_i|
-        $$
-
-        When you preview the changes, the source is first converted to PreTeXt and then rendered as accessible HTML.#{' '}
-
-        Theorem:
-          PreTeXt can be used in markdown mode.
-          Proof:
-            See this document.
-
-        (Changes you make here will not be saved, but feel free to play around to see what PreTeXt.Plus can do!)
-      EOS
-    else
-      <<~EOS
-        <section>
-          <title> Thanks for trying PreTeXt.Plus! </title>
-
-          <p>
-            This is a very simple project to show you what PreTeXt.Plus can do.
-            You can edit its content using the PreTeXt markup language.
-            <md>
-              \\left|\\sum_{i=0}^n a_i\\right|\\leq\\sum_{i=0}^n|a_i|
-            </md>
-          </p>
-
-          <fact>
-            <statement>
-              <p>
-                For more information on how to use PreTeXt, please visit <c>https://pretextbook.org/doc/guide/html/</c>.
-              </p>
-            </statement>
-          </fact>
-
-          <note>
-            <p>
-              Changes you make here will not be saved.
-            </p>
-          </note>
-        </section>
-
-        <section>
-          <title>New: Try LaTeX-style PreTeXt or Markdown-style PreTeXt!</title>
-
-          <p>
-            PreTeXt.Plus now supports writing in LaTeX-style and Markdown-style PreTeXt. Most commands are supported, and the environments from PreTeXt are what you expect.  Give it a try by switching modes above.
-          </p>
-        </section>
-      EOS
-    end
-
-    @source_format = @demo_mode
-    @docinfo = <<~EOS
-      <docinfo>
-      <macros>
-      \\newcommand{\\N}{\\mathbb N}
-      </macros>
-      <brandlogo source="icon.svg" />
-      </docinfo>
-    EOS
+    @project = Project.new(user: current_user)
+    @project.divisions.build(is_root: true, ref: "document")
   end
 
   # GET /projects/1/edit
   def edit
   end
 
-  # POST /projects or /projects.json
+  # POST /projects
   def create
     @project.user = current_user
-    @project.source_format = :pretext if @project.source_format.blank?
     @project.title = "New Project" if @project.title.blank?
-    @project.set_default_source
     @project.set_default_docinfo
-
     respond_to do |format|
       if @project.save
         format.html { redirect_to edit_project_path(@project) }
@@ -135,7 +44,7 @@ class ProjectsController < ApplicationController
     end
   end
 
-  # PATCH/PUT /projects/1 or /projects/1.json
+  # PATCH/PUT /projects/1.json
   def update
     respond_to do |format|
       if @project.update(project_params)
@@ -148,7 +57,7 @@ class ProjectsController < ApplicationController
     end
   end
 
-  # DELETE /projects/1 or /projects/1.json
+  # DELETE /projects/1
   def destroy
     @project.destroy!
 
@@ -158,36 +67,8 @@ class ProjectsController < ApplicationController
     end
   end
 
-  # GET /projects/:id/editor_state
-  def editor_state
-    render json: @project.to_h
-  end
-
-  # PATCH /projects/:id/editor_state
-  def update_editor_state
-    attrs = editor_state_params.to_h.symbolize_keys
-    common_docinfo = attrs.delete(:common_docinfo)
-
-    ActiveRecord::Base.transaction do
-      @project.user.update!(common_docinfo: common_docinfo) unless common_docinfo.nil?
-      @project.update!(attrs)
-    end
-
-    render json: @project.to_h
-  rescue ActiveRecord::RecordInvalid => e
-    render json: { errors: e.record.errors }, status: :unprocessable_entity
-  end
-
   def share
     render html: (@project.html_source || "Document not found").html_safe
-  end
-
-  def show_asset_file
-    asset = @project.project_assets.find_by ref: params[:ref]
-    if asset.present?
-      return redirect_to asset.url
-    end
-    redirect_to LibraryAsset.new.url  # default image not found
   end
 
   def source
@@ -195,31 +76,11 @@ class ProjectsController < ApplicationController
 
   # GET /projects/:project_id/share/copy
   def copy
-    project_copy = @project.dup
-    project_copy.user = current_user
-    project_copy.title = "Copy of " + project_copy.title
-    project_copy.save!
-    redirect_to edit_project_path(project_copy)
-  end
-
-  # POST /projects/:id/copy_conversion
-  def copy_conversion
-    # pretext_source = params[:pretext_source]
-    # title = params[:title]
-
-    # return render json: { error: "Missing pretext_source or title" }, status: :bad_request if pretext_source.blank? || title.blank?
-
-    project_copy = @project.dup
-    project_copy.user = current_user
-    project_copy.title = @project.title
-    project_copy.source = @project.pretext_source
-    project_copy.source_format = :pretext
-    project_copy.pretext_source = ""  # Clear pretext_source since source is already in pretext format
-
+    project_copy = @project.full_dup(current_user)
     if project_copy.save
-      render json: { project_id: project_copy.id, project_url: edit_project_path(project_copy) }, status: :created
+      redirect_to edit_project_path(project_copy)
     else
-      render json: { error: project_copy.errors.full_messages }, status: :unprocessable_entity
+      redirect_to copy_project_path(@project), alert: "Copy failed."
     end
   end
 
@@ -228,7 +89,6 @@ class ProjectsController < ApplicationController
     require "net/http"
     post_params = {
       source: params[:source],
-      title: params[:title],
       token: ENV["BUILD_TOKEN"]
     }
     uri = URI.parse("https://#{ENV['BUILD_HOST']}")
@@ -244,12 +104,40 @@ class ProjectsController < ApplicationController
       request.body = URI.encode_www_form(post_params)
       http.request(request)
     end
-    # return html along with the status returned by build server
-    render html: response.body.html_safe, status: response.code
+    # The assembled source only ever carries a bare `external/<id>.<ext>`
+    # reference for an image (see editor.jsx's assetsForBuild) -- the build
+    # server treats `source` as a plain PreTeXt external-asset filename and
+    # writes `external/<that value>` into the output `<img src>` itself. A
+    # root-relative <base> pins that relative path at the owner-scoped
+    # redirect (library_assets#preview_file) regardless of where this HTML
+    # ends up displayed (this response is always shown in an iframe, so the
+    # base resolves against our own origin either way).
+    render html: "<base href=\"/preview_assets/\">#{response.body}".html_safe, status: response.code
   rescue Net::OpenTimeout, Net::ReadTimeout
     render plain: "Preview build timed out", status: :gateway_timeout
   rescue SocketError, EOFError, IOError, Errno::ECONNREFUSED, Errno::EHOSTUNREACH, SystemCallError
     render plain: "Preview build failed", status: :bad_gateway
+  end
+
+  # GET /tryit
+  def tryit
+    @demo_mode = params[:demo] == "pretext" ? "pretext" :
+      params[:demo] == "markdown" ? "markdown" : "latex"
+
+    @title = @demo_mode == "latex" ? "Try LaTeX-style PreTeXt!" :
+      @demo_mode == "markdown" ? "Try Markdown-style PreTeXt!" : "Try Classic PreTeXt!"
+
+    @content = if @demo_mode == "latex"
+      File.read Rails.root.join("app", "default_docs", "tryit", "latex.tex")
+    elsif @demo_mode == "markdown"
+      File.read Rails.root.join("app", "default_docs", "tryit", "markdown.md")
+    else
+      File.read Rails.root.join("app", "default_docs", "tryit", "pretext.xml")
+    end
+
+    @docinfo = File.read Rails.root.join("app", "default_docs", "tryit", "docinfo.xml")
+
+    @source_format = @demo_mode
   end
 
   # POST /projects/feedback
@@ -259,9 +147,6 @@ class ProjectsController < ApplicationController
       message: params[:message],
       email: params[:email],
       project_url: params[:project_url],
-      current_source: params[:current_source],
-      source_format: params[:source_format],
-      title: params[:title],
       submitted_at: params[:submitted_at],
       user: current_user
     }
@@ -277,11 +162,11 @@ class ProjectsController < ApplicationController
   private
     # Only allow a list of trusted parameters through.
     def project_params
-      params.expect(project: [ :title, :source, :pretext_source, :source_format, :docinfo, :use_common_docinfo ])
-    end
-
-    def editor_state_params
-      params.expect(project: [ :title, :source, :pretext_source, :source_format, :docinfo, :use_common_docinfo, :common_docinfo ])
+      params.expect(project: [
+        :title, :pretext_source, :docinfo, :use_common_docinfo,
+        divisions_attributes: [ [ :id, :source, :source_format, :is_root, :ref, :_destroy ] ],
+        project_assets_attributes: [ [ :id, :ref, :library_asset_id, :_destroy ] ]
+      ])
     end
 
     def limit_projects

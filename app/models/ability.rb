@@ -32,9 +32,12 @@ class Ability
     # Project assets belonging to own projects (hash condition enables accessible_by scoping)
     can :manage, ProjectAsset, project: { user_id: user.id }
 
+    # Divisions belonging to own projects
+    can :manage, Division, project: { user_id: user.id }
+
     # Library assets — :create has no user_id yet at authorization time, so it's a separate rule
     can :create, LibraryAsset
-    can [ :read, :update, :destroy ], LibraryAsset, user_id: user.id
+    can [ :read, :update, :destroy, :preview_file ], LibraryAsset, user_id: user.id
 
     # Subscriptions
     can [ :show, :seat ], Pay::Stripe::Subscription do |subscription|
