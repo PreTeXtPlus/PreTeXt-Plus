@@ -53,7 +53,7 @@ class LibraryAssetsController < ApplicationController
   # *saved* pretext_source, which renders on the public /share page -- so it
   # has to work for anyone, signed in or not, just like `share` itself.
   def share_file
-    redirect_to @library_asset.url
+    redirect_to @library_asset.url, allow_other_host: true
   end
 
   private
