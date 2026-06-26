@@ -1,0 +1,20 @@
+PreTeXt.Plus Subscription Digest
+New subscriptions since <%= @since.strftime("%B %-d, %Y at %-I:%M %p UTC") %>
+
+<% if @subscriptions.any? %>
+<% @subscriptions.each do |sub| %>
+<% user = sub.user rescue nil %>
+<% sub_type = sub.type rescue nil %>
+---
+User:    <%= user ? "#{user.name} <#{user.email}>" : "(unknown)" %>
+Plan:    <%= sub_type&.name || sub.processor_plan %>
+Status:  <%= sub.status %>
+Seats:   <%= sub.quantity %>
+Created: <%= sub.created_at.strftime("%-m/%-d/%Y %-I:%M %p UTC") %>
+<% end %>
+---
+
+Total: <%= @subscriptions.count %> new <%= "subscription".pluralize(@subscriptions.count) %>
+<% else %>
+No new subscriptions in this period.
+<% end %>

@@ -11,16 +11,6 @@
     <dt style="font-weight: bold; margin-top: 8px;">Context:</dt>
     <dd style="margin: 0 0 12px 0;"><%= @context %></dd>
 
-    <% if @title.present? %>
-      <dt style="font-weight: bold; margin-top: 8px;">Project Title:</dt>
-      <dd style="margin: 0 0 12px 0;"><%= @title %></dd>
-    <% end %>
-
-    <% if @source_format.present? %>
-      <dt style="font-weight: bold; margin-top: 8px;">Source Format:</dt>
-      <dd style="margin: 0 0 12px 0;"><%= @source_format %></dd>
-    <% end %>
-
     <% if @project_url.present? %>
       <dt style="font-weight: bold; margin-top: 8px;">Project URL:</dt>
       <dd style="margin: 0 0 12px 0;"><a href="<%= @project_url %>"><%= @project_url %></a></dd>

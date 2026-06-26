@@ -37,28 +37,27 @@ Rails.application.routes.draw do
       get "checkout" => "subscription_types#checkout", as: "checkout"
     end
   end
-  get "projects/lunr-pretext-search-index.js", to: redirect("/ptx-search.js")
-  get "projects/*_/lunr-pretext-search-index.js", to: redirect("/ptx-search.js")
-  get "projects/:id/*_.html", to: redirect("/projects/%{id}/share")
-  get "projects/*_/icon.svg", to: redirect("/icon-small.svg")
   resources :projects do
-    scope format: true, constraints: { format: "json" } do
-      resources :project_assets, path: "library", as: "assets", only: [ :index, :show, :create, :update, :destroy ]
+    resources :divisions, only: [ :create ]
+    # Immediate-persist membership endpoint (mirrors divisions): the editor adds
+    # an asset to its own pool optimistically, then we write the join row here.
+    # `destroy` keys on the library_asset id -- see ProjectAssetsController.
+    resources :project_assets, only: [ :create, :destroy ]
+    collection do
+      post "preview" => "projects#preview", as: "preview"
+      post "feedback" => "projects#feedback", as: "feedback"
+      get "lunr-pretext-search-index.js", to: redirect("/ptx-search.js")
+      get "*_/lunr-pretext-search-index.js", to: redirect("/ptx-search.js")
+      get ":id/*_.html", to: redirect("/projects/%{id}/share")
     end
     member do
-      get  :editor_state
-      patch :editor_state, action: :update_editor_state
       get "share" => "projects#share", as: "share"
-      get "share/external/:ref" => "projects#show_asset_file", as: "show_asset_file"
       get "share/source" => "projects#source", as: "share_source"
       get "share/copy", to: redirect("projects/%{project_id}/share/source")
       post "share/copy" => "projects#copy", as: "copy"
-      post "copy_conversion" => "projects#copy_conversion", as: "copy_conversion"
       get "*/lunr-pretext-search-index.js", to: redirect("/ptx-search.js")
     end
   end
-  post "projects/preview" => "projects#preview", as: "preview"
-  post "projects/feedback" => "projects#feedback", as: "feedback"
   scope format: true, constraints: { format: "json" } do
     resources :library_assets, path: "library", only: [ :index, :show, :create, :update, :destroy ]
   end
@@ -69,6 +68,29 @@ Rails.application.routes.draw do
     end
   end
 
+  # PreTeXt's own built-in logo, referenced by every document's docinfo as a
+  # plain `external/icon.svg` -- not a library asset at all, so it must be
+  # caught and redirected to the static file *before* the asset routes below
+  # (declaration order matters: this has to win the match first). Global
+  # rather than scoped under /projects/, since the <base> tags injected for
+  # preview/share resolve that relative reference to different, non-/projects
+  # prefixes depending on context.
+  get "*_/icon.svg", to: redirect("/icon-small.svg")
+  # A stable, asset-id-scoped redirect to the asset's current file location.
+  # Used as the `source` target for live preview builds (which need a real,
+  # fetchable URL right now, not a project-scoped ref that may not be saved
+  # yet) and for the editor's own asset-manager thumbnails. Owner-only --
+  # only the authenticated author ever sees a live preview or the asset
+  # manager. Kept outside the json-only scope above since this redirects
+  # rather than rendering JSON.
+  get "preview_assets/external/:id" => "library_assets#preview_file", as: "preview_asset_file"
+  # Same idea, but fully public (no login required) -- this is the target
+  # baked into a project's *saved* pretext_source, which is what renders on
+  # the public /share page. Supersedes the old ref-based, project-scoped
+  # show_asset_file: id-based lookup works regardless of whether the
+  # project_asset join row has been saved yet.
+  get "share_assets/external/:id" => "library_assets#share_file", as: "share_asset_file"
+  resources :asset_fetches, only: :create
   get "tryit" => "projects#tryit"
 
   get "up" => "rails/health#show", as: :rails_health_check
