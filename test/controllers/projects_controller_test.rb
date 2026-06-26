@@ -152,6 +152,19 @@ class ProjectsControllerTest < ActionDispatch::IntegrationTest
     assert_equal @project.divisions.count, copy.divisions.count
   end
 
+  test "copy does not create project_assets pointing to another user's library assets" do
+    subbed_user = users(:subscribed)
+    sign_out :user
+    sign_in subbed_user
+    stub_build_server do
+      post copy_project_url(@project)
+    end
+    copy = Project.find_by!(title: "Copy of #{@project.title}", user: subbed_user)
+    copy.project_assets.each do |a|
+      assert_equal a.library_asset.user_id, copy.user_id
+    end
+  end
+
   test "copy allows basic requester when source owner is subscribed" do
     owner = users(:subscribed)
     requester = users(:two)

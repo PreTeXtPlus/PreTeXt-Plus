@@ -76,10 +76,12 @@ class ProjectsController < ApplicationController
 
   # GET /projects/:project_id/share/copy
   def copy
-    project_copy = @project.full_dup
-    project_copy.user = current_user
-    project_copy.save!
-    redirect_to edit_project_path(project_copy)
+    project_copy = @project.full_dup(current_user)
+    if project_copy.save
+      redirect_to edit_project_path(project_copy)
+    else
+      redirect_to copy_project_path(@project), alert: "Copy failed."
+    end
   end
 
   def preview

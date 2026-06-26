@@ -6,6 +6,8 @@ class ProjectAsset < ApplicationRecord
   validates :ref, format: REF_REGEX, presence: true, uniqueness: { scope: :project }
   validate :ref_unique_among_divisions
 
+  before_save :set_to_correct_user
+
   def url
     library_asset.url
   end
@@ -17,6 +19,17 @@ class ProjectAsset < ApplicationRecord
 
     if Division.where(project_id: project_id, ref: ref).exists?
       errors.add(:ref, "has already been taken")
+    end
+  end
+
+  def set_to_correct_user
+    unless project.user == library_asset.user
+      new_la = LibraryAsset.new(library_asset.dup.attributes)
+      new_la.user = project.user
+      unless new_la.save
+        errors.add(:library_asset, "could not be created")
+      end
+      self.library_asset=new_la
     end
   end
 end

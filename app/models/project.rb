@@ -83,16 +83,21 @@ class Project < ApplicationRecord
 
   DEFAULT_DOCINFO = File.read Rails.root.join("app", "default_docs", "docinfo.xml")
 
-  def full_dup
+  def full_dup(new_owner = nil)
     duplicate = Project.build(self.dup.attributes)
-    duplicate.update(title: "Copy of #{title}")
+    if new_owner.present?
+      duplicate.user = new_owner
+    end
+    duplicate.title = "Copy of #{title}"
     divisions.each do |division|
       duplicate.divisions.build(division.dup.attributes)
     end
     project_assets.each do |asset|
+      # library_asset may be wrong here for changed user,
+      # but a before_commit callback will fix this before save
       duplicate.project_assets.build(asset.dup.attributes)
     end
-    duplicate.save ? duplicate : nil
+    duplicate
   end
 
   private
