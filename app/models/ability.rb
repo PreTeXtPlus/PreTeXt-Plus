@@ -10,6 +10,7 @@ class Ability
     can :read, Announcement do |announcement|
       announcement.published?
     end
+    can :unsubscribe, Announcement
 
     return if user.nil?
 
@@ -38,6 +39,8 @@ class Ability
 
     # Divisions belonging to own projects
     can :manage, Division, project: { user_id: user.id }
+
+    can :subscribe, Announcement
 
     # Library assets — :create has no user_id yet at authorization time, so it's a separate rule
     can :create, LibraryAsset

@@ -10,7 +10,7 @@ class AnnouncementsMailer < ApplicationMailer
     mail(
       to: user.email,
       subject: announcement.title,
-      message_stream: 'broadcast'
+      message_stream: "broadcast"
     )
   end
 end
