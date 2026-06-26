@@ -8,7 +8,7 @@ class ProjectAssetsControllerTest < ActionDispatch::IntegrationTest
   end
 
   test "create persists a library asset's membership in the project" do
-    asset = library_assets(:doenet_one)
+    asset = library_assets(:authored_one)
 
     assert_difference -> { ProjectAsset.count }, 1 do
       post project_project_assets_url(@project, format: :json), params: {
@@ -28,7 +28,7 @@ class ProjectAssetsControllerTest < ActionDispatch::IntegrationTest
   end
 
   test "create rejects a ref already used by another asset in the project" do
-    asset = library_assets(:doenet_one)
+    asset = library_assets(:authored_one)
 
     assert_no_difference -> { ProjectAsset.count } do
       post project_project_assets_url(@project, format: :json), params: {
@@ -40,7 +40,7 @@ class ProjectAssetsControllerTest < ActionDispatch::IntegrationTest
   end
 
   test "create rejects a ref already used by a division in the project" do
-    asset = library_assets(:doenet_one)
+    asset = library_assets(:authored_one)
 
     assert_no_difference -> { ProjectAsset.count } do
       post project_project_assets_url(@project, format: :json), params: {
@@ -56,7 +56,7 @@ class ProjectAssetsControllerTest < ActionDispatch::IntegrationTest
 
     assert_no_difference -> { ProjectAsset.count } do
       post project_project_assets_url(other_project, format: :json), params: {
-        project_asset: { library_asset_id: library_assets(:doenet_one).id, ref: "intro" }
+        project_asset: { library_asset_id: library_assets(:authored_one).id, ref: "intro" }
       }
     end
 
@@ -77,7 +77,7 @@ class ProjectAssetsControllerTest < ActionDispatch::IntegrationTest
   end
 
   test "destroy returns not found when the asset is not in the project" do
-    delete project_project_asset_url(@project, library_assets(:doenet_one).id, format: :json)
+    delete project_project_asset_url(@project, library_assets(:authored_one).id, format: :json)
     assert_response :not_found
   end
 

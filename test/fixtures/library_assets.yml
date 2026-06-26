@@ -2,7 +2,7 @@
 
 # An authored asset owned by user one. File-backed assets are
 # created through the upload path in tests, since they need an attachment.
-doenet_one:
+authored_one:
   user: one
   kind: authored
   short_description: My Activity

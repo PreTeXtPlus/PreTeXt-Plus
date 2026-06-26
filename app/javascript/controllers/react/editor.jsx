@@ -111,7 +111,7 @@ function railsDivisionToEditor(d, rootMeta) {
 //
 // `isFile` distinguishes a file-backed asset from one defined purely by its
 // authored `source` (e.g. a future "defined in source" image); derived from the
-// attachment's presence, not from `kind` (which only splits image vs. doenet).
+// attachment's presence, not from `kind` (which only splits image vs. authored).
 //
 // The bare `<id>.<ext>` source filename for a file-backed asset, or undefined
 // for a non-file asset (which relies entirely on its authored `source`).
@@ -128,7 +128,7 @@ function railsAssetToEditor(a) {
     projectAssetId: String(a.id),
     ref: a.ref ?? "",
     name: lib.short_description || lib.description || a.ref || "",
-    kind: lib.kind === "doenet" ? "doenet" : "image",
+    kind: lib.kind === "authored" ? "authored" : "image",
     source: lib.content ?? undefined,
     url: lib.file ?? undefined,
     isFile: Boolean(lib.file),
@@ -146,7 +146,7 @@ function railsLibraryAssetToEditor(lib) {
     id: String(lib.id),
     ref: slugifyRef(name),
     name,
-    kind: lib.kind === "doenet" ? "doenet" : "image",
+    kind: lib.kind === "authored" ? "authored" : "image",
     source: lib.content ?? undefined,
     url: lib.file ?? undefined,
     isFile: Boolean(lib.file),
@@ -683,12 +683,12 @@ function EditorApp({ config }) {
     [assetFetchUrl, csrfToken],
   );
 
-  const onCreateDoenet = useCallback(
+  const onCreateAuthored = useCallback(
     async (name, ref) => {
-      // Create the doenet library asset, then associate it; only resolve once
+      // Create the authored library asset, then associate it; only resolve once
       // both are persisted, returning the canonical Asset.
       const created = await createLibraryAsset({
-        library_asset: { kind: "doenet", short_description: name, content: "" },
+        library_asset: { kind: "authored", short_description: name, content: "" },
       });
       const member = await associateAsset(created.id, uniqueRef(ref));
       invalidateAssetQueries();
@@ -698,7 +698,7 @@ function EditorApp({ config }) {
   );
 
   // Persists an edit to an asset's authored `source` (e.g. an image's
-  // <shortdescription>/<description> XML, or a doenet activity body) made via
+  // <shortdescription>/<description> XML, or an authored activity body) made via
   // the web-editor's "Edit source" dialog.  The edit lives on the library asset,
   // so we PATCH /library and invalidate -- the project query refetch then carries
   // the new source into the project pool.
@@ -934,7 +934,7 @@ function EditorApp({ config }) {
       onAssetAddFromLibrary={onAssetAddFromLibrary}
       onAssetUpload={onAssetUpload}
       onAssetFetchUrl={onAssetFetchUrl}
-      onCreateDoenet={onCreateDoenet}
+      onCreateAuthored={onCreateAuthored}
       onAssetUpdate={onAssetUpdate}
       onAssetRemove={onAssetRemove}
       onLoadAssets={onLoadAssets}

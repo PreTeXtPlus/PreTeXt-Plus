@@ -25,12 +25,12 @@ class LibraryAssetsControllerTest < ActionDispatch::IntegrationTest
   test "create without a url saves a plain library asset" do
     assert_difference -> { LibraryAsset.count }, 1 do
       post library_assets_url(format: :json), params: {
-        library_asset: { kind: "doenet", short_description: "My Activity", content: "" }
+        library_asset: { kind: "authored", short_description: "My Activity", content: "" }
       }
     end
 
     assert_response :created
-    assert_equal "doenet", LibraryAsset.where(user: @user).order(:created_at).last.kind
+    assert_equal "authored", LibraryAsset.where(user: @user).order(:created_at).last.kind
   end
 
   test "show exposes the owner-only preview path and the file's extension" do
