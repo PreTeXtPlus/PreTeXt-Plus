@@ -3,7 +3,7 @@ class LibraryAsset < ApplicationRecord
   has_one_attached :file
   enum :kind, {
     file: 0,
-    doenet: 1
+    authored: 1
   }, suffix: true
 
   def url

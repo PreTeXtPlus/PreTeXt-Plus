@@ -1,5 +1,7 @@
 class LibraryAssetsController < ApplicationController
+  allow_unauthenticated_access only: :share_file
   load_and_authorize_resource
+  skip_authorize_resource only: :share_file
 
   def index
     @library_assets = LibraryAsset.where user: current_user
@@ -36,6 +38,22 @@ class LibraryAssetsController < ApplicationController
     respond_to do |format|
       format.json { head :no_content }
     end
+  end
+
+  # Redirects to the asset's current file URL, generated fresh on every hit.
+  # Root-relative and recomputed per-request, so it works as both the editor's
+  # live thumbnail `<img src>` and the `source` PreTeXt resolves for a live
+  # preview build -- unlike baking in a signed storage URL directly, it never
+  # goes stale, and it works before the owning project_asset is ever saved.
+  def preview_file
+    redirect_to @library_asset.url
+  end
+
+  # Same redirect, but public: this is the target baked into a project's
+  # *saved* pretext_source, which renders on the public /share page -- so it
+  # has to work for anyone, signed in or not, just like `share` itself.
+  def share_file
+    redirect_to @library_asset.url
   end
 
   private

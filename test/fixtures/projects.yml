@@ -3,11 +3,11 @@
 one:
   user: one
   title: My First Project
-  source: <section><title>Hello</title><p>World</p></section>
+  pretext_source: <pretext><article><section><title>First</title><p>Content</p></section></article></pretext>
   document_type: article
 
 two:
   user: two
   title: My Second Project
-  source: <section><title>Other</title><p>Content</p></section>
+  pretext_source: <pretext><article><section><title>Other</title><p>Content</p></section></article></pretext>
   document_type: article

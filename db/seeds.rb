@@ -14,6 +14,7 @@ if Rails.env.development?
   user = User.find_or_initialize_by(email: "admin@example.com")
   user.password = "password123"
   user.admin = true
+  user.skip_confirmation!
   user.save!
   puts "Dev admin: admin@example.com / password123"
 end
