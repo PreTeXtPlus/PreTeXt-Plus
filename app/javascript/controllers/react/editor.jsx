@@ -657,26 +657,43 @@ function EditorApp({ config }) {
   // the same path used for local file picks.
   const onAssetFetchUrl = useCallback(
     async (url) => {
-      const res = await fetch(assetFetchUrl, {
-        method: "POST",
-        headers: {
-          Accept: "application/json",
-          "Content-Type": "application/json",
-          "X-CSRF-Token": csrfToken,
-        },
-        body: JSON.stringify({ url }),
-      });
-      if (!res.ok) {
-        let message = `Could not fetch image: ${res.status}`;
-        try {
-          const err = await res.json();
-          message = err.error || message;
-        } catch {
-          /* non-JSON error body */
+      // Same-origin/relative URLs -- e.g. our own asset thumbnails, which the
+      // Duplicate flow re-fetches -- must NOT go through the server-side proxy:
+      // they have no scheme (SsrfFilter::InvalidUriScheme) and, once resolved,
+      // point back at this app, which the SSRF filter also rejects (a private
+      // IP in development). Fetch them directly in the browser instead; the
+      // session cookie authorizes the owner-only redirect. The proxy exists
+      // only to fetch arbitrary cross-origin URLs without hitting CORS.
+      const absolute = new URL(url, window.location.origin);
+      const sameOrigin = absolute.origin === window.location.origin;
+
+      let blob;
+      if (sameOrigin) {
+        const res = await fetch(absolute, { credentials: "same-origin" });
+        if (!res.ok) throw new Error(`Could not fetch image: ${res.status}`);
+        blob = await res.blob();
+      } else {
+        const res = await fetch(assetFetchUrl, {
+          method: "POST",
+          headers: {
+            Accept: "application/json",
+            "Content-Type": "application/json",
+            "X-CSRF-Token": csrfToken,
+          },
+          body: JSON.stringify({ url }),
+        });
+        if (!res.ok) {
+          let message = `Could not fetch image: ${res.status}`;
+          try {
+            const err = await res.json();
+            message = err.error || message;
+          } catch {
+            /* non-JSON error body */
+          }
+          throw new Error(message);
         }
-        throw new Error(message);
+        blob = await res.blob();
       }
-      const blob = await res.blob();
       const filename = url.split("/").pop()?.split("?")[0] || "image";
       return new File([ blob ], filename, { type: blob.type });
     },
