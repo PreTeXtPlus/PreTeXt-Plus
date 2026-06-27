@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_06_25_173504) do
+ActiveRecord::Schema[8.1].define(version: 2026_06_27_132437) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
   enable_extension "pgcrypto"
@@ -41,6 +41,15 @@ ActiveRecord::Schema[8.1].define(version: 2026_06_25_173504) do
     t.uuid "blob_id", null: false
     t.string "variation_digest", null: false
     t.index ["blob_id", "variation_digest"], name: "index_active_storage_variant_records_uniqueness", unique: true
+  end
+
+  create_table "announcements", id: :uuid, default: -> { "gen_random_uuid()" }, force: :cascade do |t|
+    t.text "body", null: false
+    t.datetime "created_at", null: false
+    t.boolean "paid_subscribers_only", default: false, null: false
+    t.datetime "published_at"
+    t.string "title", null: false
+    t.datetime "updated_at", null: false
   end
 
   create_table "divisions", id: :uuid, default: -> { "gen_random_uuid()" }, force: :cascade do |t|
@@ -217,6 +226,8 @@ ActiveRecord::Schema[8.1].define(version: 2026_06_25_173504) do
 
   create_table "users", id: :uuid, default: -> { "gen_random_uuid()" }, force: :cascade do |t|
     t.boolean "admin", default: false
+    t.boolean "announcement_emails", default: true, null: false
+    t.string "announcement_unsubscribe_token"
     t.text "common_docinfo", default: "<docinfo>\n  <brandlogo source=\"icon.svg\" />\n</docinfo>\n"
     t.datetime "confirmation_sent_at"
     t.string "confirmation_token"
@@ -237,6 +248,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_06_25_173504) do
     t.uuid "tos_id"
     t.string "unconfirmed_email"
     t.datetime "updated_at", null: false
+    t.index ["announcement_unsubscribe_token"], name: "index_users_on_announcement_unsubscribe_token", unique: true
     t.index ["confirmation_token"], name: "index_users_on_confirmation_token", unique: true
     t.index ["email"], name: "index_users_on_email", unique: true
     t.index ["privacy_id"], name: "index_users_on_privacy_id"

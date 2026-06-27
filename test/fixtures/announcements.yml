@@ -1,0 +1,20 @@
+published:
+  title: "Published Announcement"
+  body: "This announcement has been published."
+  published_at: <%= 1.day.ago %>
+
+recent:
+  title: "Recent Announcement"
+  body: "This is the most recent announcement."
+  published_at: <%= 1.hour.ago %>
+
+paid_only:
+  title: "Paid Subscribers Announcement"
+  body: "This announcement is for paid subscribers only."
+  published_at: <%= 2.hours.ago %>
+  paid_subscribers_only: true
+
+draft:
+  title: "Draft Announcement"
+  body: "This announcement has not been published yet."
+  published_at:

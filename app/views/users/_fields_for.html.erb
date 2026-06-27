@@ -19,4 +19,10 @@
         <% end %>
         <%= form.password_field :password, required: true, placeholder: "Enter a password", maxlength: 72, class: "block shadow-sm rounded-md border border-gray-400 focus:outline-blue-600 px-3 py-2 mt-2 w-full" %>
     </div>
+    <div class="my-5 flex items-start gap-3">
+        <%= form.check_box :announcement_emails, checked: false, class: "mt-0.5 h-4 w-4 rounded border-gray-400 text-blue-600 focus:ring-blue-500" %>
+        <%= form.label :announcement_emails, class: "text-sm text-gray-700" do %>
+            Check this to subscribe to PreTeXt.Plus email updates and announcements!
+        <% end %>
+    </div>
 <% end %>

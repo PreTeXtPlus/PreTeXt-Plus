@@ -24,7 +24,7 @@
   </head>
 
   <body>
-    <nav class="bg-white px-6 py-4 w-full shadow border-b border-gray-200 md:fixed md:z-10 md:top-0 md:left-0 md:h-16">
+    <nav class="bg-white px-6 py-4 w-full shadow border-b border-gray-200 md:fixed md:z-10 md:top-0 md:left-0 md:h-16 z-10">
         <div class="flex flex-col container mx-auto md:flex-row md:items-center md:justify-between">
             <div class="flex justify-between items-center">
                 <div>
@@ -42,6 +42,9 @@
                 <% end %>
                 <%= link_to :root, class: "my-1 text-gray-800 hover:text-blue-500 md:mx-4 md:my-0" do %>
                   About
+                <% end %>
+                <%= link_to announcements_path, class: "my-1 text-gray-800 hover:text-blue-500 md:mx-4 md:my-0" do %>
+                  Announcements
                 <% end %>
                 <% if current_user.present? %>
                   <div class="relative group">
@@ -74,6 +77,9 @@
                       <% end %>
                       <%= link_to admin_users_path, class: "block px-4 py-2 text-gray-800 hover:bg-blue-50 hover:text-blue-500" do %>
                         Users
+                      <% end %>
+                      <%= link_to admin_announcements_path, class: "block px-4 py-2 text-gray-800 hover:bg-blue-50 hover:text-blue-500" do %>
+                        Announcements
                       <% end %>
                       <%= link_to subscription_types_path, class: "block px-4 py-2 text-gray-800 hover:bg-blue-50 hover:text-blue-500" do %>
                         Subscription Types
@@ -124,15 +130,29 @@
             </div>
         </div>
     </nav>
-      <% if notice.present? or params[:notice].present? %>
-        <div class="relative w-full z-10 flex justify-center cursor-pointer -mb-16" onclick="this.remove()">
-          <p class="mt-18 mb-2 py-2 px-3 bg-blue-50 border-blue-200 border-1 text-blue-500 rounded-md inline-block">
-            ℹ <%= notice.present? ? notice : params[:notice] %>
-          </p>
-        </div>
-      <% elsif alert.present? %>
-        <div class="relative w-full z-10 flex justify-center cursor-pointer -mb-16" onclick="this.remove()">
-          <p class="mt-18 mb-2 py-2 px-3 bg-yellow-100 border-yellow-200 border text-yellow-700 rounded-md inline-block">⚠ <%= alert %></p>
+      <% if notice.present? or params[:notice].present? or alert.present? %>
+        <div class="relative flex justify-center w-full cursor-pointer -mb-20 bg-white" onclick="this.remove()">
+          <% if notice.present? or params[:notice].present? %>
+            <div class="mt-20 mb-2 rounded-lg border border-blue-200 bg-blue-50 px-4 py-2 text-blue-800 text-sm w-full md:w-2/3 flex justify-between">
+              <span>
+                <span>
+                  <svg class="inline mr-2" width="24px" height="24px" stroke-width="1" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" color="currentColor"><path d="M14 14V6M14 14L20.1023 17.487C20.5023 17.7156 21 17.4268 21 16.9661V3.03391C21 2.57321 20.5023 2.28439 20.1023 2.51296L14 6M14 14H7C4.79086 14 3 12.2091 3 10V10C3 7.79086 4.79086 6 7 6H14" stroke="currentColor" stroke-width="1"></path><path d="M7.75716 19.3001L7 14H11L11.6772 18.7401C11.8476 19.9329 10.922 21 9.71716 21C8.73186 21 7.8965 20.2755 7.75716 19.3001Z" stroke="currentColor" stroke-width="1"></path></svg>
+                </span>
+                <%= notice or params[:notice] %>
+              </span>
+              <span><svg width="24px" height="24px" stroke-width="1" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M6.75827 17.2426L12.0009 12M17.2435 6.75736L12.0009 12M12.0009 12L6.75827 6.75736M12.0009 12L17.2435 17.2426" stroke="currentColor" stroke-width="1" stroke-linecap="round" stroke-linejoin="round"></path></svg></span>
+            </div>
+          <% else %>
+            <div class="mt-20 mb-2 rounded-lg border border-yellow-200 bg-yellow-50 px-4 py-2 text-yellow-800 text-sm w-full md:w-2/3 flex justify-between">
+              <span>
+                <span>
+                  <svg class="inline mr-2" width="24px" height="24px" stroke-width="1" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" color="currentColor"><path d="M20.0429 21H3.95705C2.41902 21 1.45658 19.3364 2.22324 18.0031L10.2662 4.01533C11.0352 2.67792 12.9648 2.67791 13.7338 4.01532L21.7768 18.0031C22.5434 19.3364 21.581 21 20.0429 21Z" stroke="currentColor" stroke-width="1" stroke-linecap="round"></path><path d="M12 9V13" stroke="currentColor" stroke-width="1" stroke-linecap="round"></path><path d="M12 17.01L12.01 16.9989" stroke="currentColor" stroke-width="1" stroke-linecap="round" stroke-linejoin="round"></path></svg>
+                </span>
+                <%= alert %>
+              </span>
+              <span><svg width="24px" height="24px" stroke-width="1" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M6.75827 17.2426L12.0009 12M17.2435 6.75736L12.0009 12M12.0009 12L6.75827 6.75736M12.0009 12L17.2435 17.2426" stroke="currentColor" stroke-width="1" stroke-linecap="round" stroke-linejoin="round"></path></svg></span>
+            </div>
+          <% end %>
         </div>
       <% end %>
         <% if content_for?(:full_screen_content) %>

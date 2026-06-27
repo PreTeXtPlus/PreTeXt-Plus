@@ -9,6 +9,11 @@ Rails.application.routes.draw do
     end
     resources :projects, only: %i[show]
     resources :terms, only: %i[new create]
+    resources :announcements do
+      member do
+        post :publish
+      end
+    end
   end
 
   devise_for :users, skip: [ :registrations ], controllers: {
@@ -56,6 +61,13 @@ Rails.application.routes.draw do
   scope format: true, constraints: { format: "json" } do
     resources :library_assets, path: "library", only: [ :index, :show, :create, :update, :destroy ]
   end
+  resources :announcements, only: %i[index show] do
+    collection do
+      get :unsubscribe
+      post :subscribe
+    end
+  end
+
   # PreTeXt's own built-in logo, referenced by every document's docinfo as a
   # plain `external/icon.svg` -- not a library asset at all, so it must be
   # caught and redirected to the static file *before* the asset routes below
