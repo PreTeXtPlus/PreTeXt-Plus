@@ -40,14 +40,15 @@ class Admin::AnnouncementsController < Admin::BaseController
       redirect_to admin_announcement_path(@announcement), alert: "This announcement has already been published."
     else
       @announcement.publish!
+      audience = @announcement.paid_subscribers_only? ? "paid subscribers" : "all subscribed users"
       redirect_to admin_announcement_path(@announcement),
-        notice: "Announcement published and email broadcast queued for all subscribed users."
+        notice: "Announcement published and email broadcast queued for #{audience}."
     end
   end
 
   private
 
   def announcement_params
-    params.require(:announcement).permit(:title, :body)
+    params.require(:announcement).permit(:title, :body, :paid_subscribers_only)
   end
 end
