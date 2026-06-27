@@ -24,19 +24,32 @@
   </head>
 
   <body>
-    <nav class="bg-white px-6 py-4 w-full shadow border-b border-gray-200 md:fixed md:z-10 md:top-0 md:left-0 md:h-16">
+    <nav class="relative bg-white px-6 py-4 w-full shadow border-b border-gray-200 md:fixed md:z-10 md:top-0 md:left-0 md:h-16">
         <div class="flex flex-col container mx-auto md:flex-row md:items-center md:justify-between">
             <div class="flex justify-between items-center">
-                <div>
+                <div class="flex items-center">
                   <%= link_to :root, class: "flex items-center" do %>
                       <img src="/icon.svg" class="h-6 mr-3 sm:h-9" alt="PreTeXtPlus Logo">
-                      <span class="self-center text-xl font-semibold whitespace-nowrap">PreTeXt.Plus (beta)</span>
+                      <span class="hidden min-[400px]:inline-block self-center text-xl font-semibold whitespace-nowrap">PreTeXt.Plus (beta)</span>
                   <% end %>
                 </div>
+                <div class="flex items-center gap-4 md:hidden">
+                  <% if current_user.present? %>
+                    <%= link_to :projects, class: "text-gray-800 hover:text-blue-500" do %>
+                      Projects
+                    <% end %>
+                  <% end %>
+                  <label for="mobileNavToggle" class="cursor-pointer p-2 text-gray-800 hover:text-blue-500 select-none" aria-label="Toggle menu">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16" />
+                    </svg>
+                  </label>
+                </div>
             </div>
-            <div class="flex flex-col md:flex-row md:-mx-4">
+            <input type="checkbox" id="mobileNavToggle" class="mobileNavToggle sr-only">
+            <div class="mobileNavMenu absolute inset-x-0 top-full z-20 flex-col bg-white shadow-lg border-t border-gray-200 px-6 py-4 md:static md:inset-auto md:z-auto md:flex md:flex-row md:-mx-4 md:bg-transparent md:shadow-none md:border-0 md:px-0 md:py-0">
                 <% if current_user.present? %>
-                  <%= link_to :projects, class: "my-1 text-gray-800 hover:text-blue-500 md:mx-4 md:my-0" do %>
+                  <%= link_to :projects, class: "hidden md:inline-block text-gray-800 hover:text-blue-500 md:mx-4" do %>
                     Projects
                   <% end %>
                 <% end %>
@@ -44,79 +57,55 @@
                   About
                 <% end %>
                 <% if current_user.present? %>
-                  <div class="relative group">
-                    <label for="helpMenuToggle" class="my-1 text-gray-800 cursor-pointer hover:text-blue-500 md:mx-4 md:my-0 select-none">
-                      Help&nbsp;&#9662;
-                    </label>
-                    <input type="checkbox" id="helpMenuToggle" class="navbarMenuToggle sr-only">
-                    <div class="navbarMenu absolute left-0 mt-2 w-48 bg-white rounded-md shadow-lg border border-gray-200 md:left-auto md:right-0">
-                      <a href="https://pretextbook.org/examples/sample-article/annotated/" target="_blank" class="block px-4 py-2 text-gray-800 hover:bg-blue-50 hover:text-blue-500 rounded-t-md">
-                        PreTeXt Sample Article
-                      </a>
-                      <a href="https://pretextbook.org/doc/guide/html/" target="_blank" class="block px-4 py-2 text-gray-800 hover:bg-blue-50 hover:text-blue-500">
-                        PreTeXt Guide
-                      </a>
-                      <a href="mailto:support@pretext.plus" target="_blank" class="block px-4 py-2 text-gray-800 hover:bg-blue-50 hover:text-blue-500">
-                        Email Support
-                      </a>
-                    </div>
-                  </div>
+                  <%= render layout: "layouts/nav_dropdown", locals: { toggle_id: "helpMenuToggle", label: "Help ▾".html_safe } do %>
+                    <a href="https://pretextbook.org/examples/sample-article/annotated/" target="_blank" class="block px-4 py-2 text-gray-800 hover:bg-blue-50 hover:text-blue-500 rounded-t-md">
+                      PreTeXt Sample Article
+                    </a>
+                    <a href="https://pretextbook.org/doc/guide/html/" target="_blank" class="block px-4 py-2 text-gray-800 hover:bg-blue-50 hover:text-blue-500">
+                      PreTeXt Guide
+                    </a>
+                    <a href="mailto:support@pretext.plus" target="_blank" class="block px-4 py-2 text-gray-800 hover:bg-blue-50 hover:text-blue-500">
+                      Email Support
+                    </a>
+                  <% end %>
                 <% end %>
                 <% if current_user&.admin? %>
-                  <div class="relative group">
-                    <label for="adminMenu" class="my-1 text-gray-800 cursor-pointer hover:text-blue-500 md:mx-4 md:my-0 select-none">
-                      Admin&nbsp;&#9662;
-                    </label>
-                    <input type="checkbox" id="adminMenu" class="navbarMenuToggle sr-only">
-                    <div class="navbarMenu absolute left-0 mt-2 w-48 bg-white rounded-md shadow-lg border border-gray-200 md:left-auto md:right-0">
-                      <%= link_to admin_root_path, class: "block px-4 py-2 text-gray-800 hover:bg-blue-50 hover:text-blue-500" do %>
-                        Dashboard
-                      <% end %>
-                      <%= link_to admin_users_path, class: "block px-4 py-2 text-gray-800 hover:bg-blue-50 hover:text-blue-500" do %>
-                        Users
-                      <% end %>
-                      <%= link_to subscription_types_path, class: "block px-4 py-2 text-gray-800 hover:bg-blue-50 hover:text-blue-500" do %>
-                        Subscription Types
-                      <% end %>
-                      <%= link_to new_admin_term_path, class: "block px-4 py-2 text-gray-800 hover:bg-blue-50 hover:text-blue-500" do %>
-                        Update Terms
-                      <% end %>
-                    </div>
-                  </div>
+                  <%= render layout: "layouts/nav_dropdown", locals: { toggle_id: "adminMenu", label: "Admin ▾".html_safe } do %>
+                    <%= link_to admin_root_path, class: "block px-4 py-2 text-gray-800 hover:bg-blue-50 hover:text-blue-500" do %>
+                      Dashboard
+                    <% end %>
+                    <%= link_to admin_users_path, class: "block px-4 py-2 text-gray-800 hover:bg-blue-50 hover:text-blue-500" do %>
+                      Users
+                    <% end %>
+                    <%= link_to subscription_types_path, class: "block px-4 py-2 text-gray-800 hover:bg-blue-50 hover:text-blue-500" do %>
+                      Subscription Types
+                    <% end %>
+                    <%= link_to new_admin_term_path, class: "block px-4 py-2 text-gray-800 hover:bg-blue-50 hover:text-blue-500" do %>
+                      Update Terms
+                    <% end %>
+                  <% end %>
                 <% end %>
                 <% if current_user.present? %>
-                  <div class="relative group">
-                    <label for="accountMenu" class="my-1 text-gray-800 cursor-pointer hover:text-blue-500 md:mx-4 md:my-0 select-none">
-                    Account&nbsp;(<%= current_user.email %>)&nbsp;&#9662;
-                    </label>
-                    <input type="checkbox" id="accountMenu" class="navbarMenuToggle sr-only">
-                    <div class="navbarMenu absolute left-0 mt-2 w-48 bg-white rounded-md shadow-lg border border-gray-200 md:left-auto md:right-0">
-                      <%= link_to edit_user_path(current_user), class: "block px-4 py-2 text-gray-800 hover:bg-blue-50 hover:text-blue-500" do %>
-                        Profile
-                      <% end %>
-                      <%= link_to subscriptions_path, class: "block px-4 py-2 text-gray-800 hover:bg-blue-50 hover:text-blue-500" do %>
-                        Manage Subscriptions
-                      <% end %>
-                      <%= link_to destroy_user_session_path, data: { turbo_method: :delete }, class: "block px-4 py-2 text-red-700 hover:bg-red-50 hover:text-red-800" do %>
-                        Sign out
-                      <% end %>
-                    </div>
-                  </div>
+                  <%= render layout: "layouts/nav_dropdown", locals: { toggle_id: "accountMenu", label: safe_join(["Account (", current_user.email, ") ▾"]) } do %>
+                    <%= link_to edit_user_path(current_user), class: "block px-4 py-2 text-gray-800 hover:bg-blue-50 hover:text-blue-500" do %>
+                      Profile
+                    <% end %>
+                    <%= link_to subscriptions_path, class: "block px-4 py-2 text-gray-800 hover:bg-blue-50 hover:text-blue-500" do %>
+                      Manage Subscriptions
+                    <% end %>
+                    <%= link_to destroy_user_session_path, data: { turbo_method: :delete }, class: "block px-4 py-2 text-red-700 hover:bg-red-50 hover:text-red-800" do %>
+                      Sign out
+                    <% end %>
+                  <% end %>
                 <% else %>
-                  <div class="relative group">
-                    <label for="accountMenu" class="my-1 text-gray-800 cursor-pointer hover:text-blue-500 md:mx-4 md:my-0 select-none">
-                    Account&nbsp;&#9662;
-                    </label>
-                    <input type="checkbox" id="accountMenu" class="navbarMenuToggle sr-only">
-                    <div class="navbarMenu absolute left-0 mt-2 w-48 bg-white rounded-md shadow-lg border border-gray-200 md:left-auto md:right-0">
-                      <%= link_to new_user_path, class: "block px-4 py-2 text-gray-800 hover:bg-blue-50 hover:text-blue-500" do %>
-                        Create account
-                      <% end %>
-                      <%= link_to new_user_session_path, class: "block px-4 py-2 text-gray-800 hover:bg-blue-50 hover:text-blue-500" do %>
-                        Sign in
-                      <% end %>
-                    </div>
-                  </div>
+                  <%= render layout: "layouts/nav_dropdown", locals: { toggle_id: "accountMenu", label: "Account ▾".html_safe } do %>
+                    <%= link_to new_user_path, class: "block px-4 py-2 text-gray-800 hover:bg-blue-50 hover:text-blue-500" do %>
+                      Create account
+                    <% end %>
+                    <%= link_to new_user_session_path, class: "block px-4 py-2 text-gray-800 hover:bg-blue-50 hover:text-blue-500" do %>
+                      Sign in
+                    <% end %>
+                  <% end %>
                   <%= link_to tryit_path, class: "my-1 text-gray-800 hover:text-blue-500 md:mx-4 md:my-0", data: { turbo: false } do %>
                     Try it!
                   <% end %>
