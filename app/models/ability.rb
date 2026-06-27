@@ -7,6 +7,17 @@ class Ability
       project.user.has_copiable_projects?
     end
 
+    can :read, Announcement do |announcement|
+      if !announcement.published?
+        false
+      elsif announcement.paid_subscribers_only? && !user&.subscribed?
+        false
+      else
+        true
+      end
+    end
+    can :unsubscribe, Announcement
+
     return if user.nil?
 
     if user.admin?
@@ -34,6 +45,8 @@ class Ability
 
     # Divisions belonging to own projects
     can :manage, Division, project: { user_id: user.id }
+
+    can :subscribe, Announcement
 
     # Library assets — :create has no user_id yet at authorization time, so it's a separate rule
     can :create, LibraryAsset

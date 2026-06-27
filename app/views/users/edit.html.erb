@@ -18,4 +18,31 @@
 
   <%= render "subscriptions/status", user: @user %>
 
+  <h1 class="text-4xl mb-2 mt-20">Announcements</h1>
+
+  <div class="my-4 rounded-xl border border-gray-200 bg-white p-6 shadow-sm">
+    <p class="text-gray-700">
+      <% if @user.announcement_emails? %>
+        You are currently <strong>subscribed</strong> to announcement emails from PreTeXt.Plus.
+      <% else %>
+        You are currently <strong>unsubscribed</strong> from announcement emails.
+      <% end %>
+    </p>
+    <div class="mt-4">
+      <% if @user.announcement_emails? %>
+        <%= button_to "Unsubscribe from announcements",
+              unsubscribe_announcements_path,
+              method: :get,
+              params: { token: @user.announcement_unsubscribe_token },
+              class: "rounded-md px-3.5 py-2 bg-gray-100 hover:bg-gray-50 text-gray-800 font-medium cursor-pointer" %>
+      <% else %>
+        <%= button_to "Subscribe to announcements", subscribe_announcements_path, method: :post,
+              class: "rounded-md px-3.5 py-2 bg-blue-600 hover:bg-blue-500 text-white font-medium cursor-pointer" %>
+      <% end %>
+    </div>
+    <p class="mt-4 text-sm text-gray-500">
+      <%= link_to "View all announcements", announcements_path, class: "text-blue-600 hover:underline" %>
+    </p>
+  </div>
+
 </div>
