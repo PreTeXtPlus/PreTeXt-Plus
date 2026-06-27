@@ -8,7 +8,13 @@ class Ability
     end
 
     can :read, Announcement do |announcement|
-      announcement.published?
+      if !announcement.published?
+        false
+      elsif announcement.paid_subscribers_only? && !user&.subscribed?
+        false
+      else
+        true
+      end
     end
     can :unsubscribe, Announcement
 

@@ -4,6 +4,7 @@ class AnnouncementsController < ApplicationController
 
   def index
     @announcements = Announcement.published
+    @announcements = @announcements.where(paid_subscribers_only: false) unless current_user&.subscribed? || current_user&.admin?
   end
 
   def show

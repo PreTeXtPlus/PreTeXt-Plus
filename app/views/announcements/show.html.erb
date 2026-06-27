@@ -9,6 +9,9 @@
     <h1 class="text-3xl font-semibold text-gray-900"><%= @announcement.title %></h1>
     <p class="mt-2 text-sm text-gray-500">
       <time datetime="<%= @announcement.published_at&.iso8601 %>"><%= @announcement.published_at&.to_date %></time>
+      <% if @announcement.paid_subscribers_only? %>
+        &middot; <span class="text-amber-600 font-medium">Subscribers only</span>
+      <% end %>
     </p>
 
     <div class="mt-6 prose prose-gray max-w-none text-gray-800">
