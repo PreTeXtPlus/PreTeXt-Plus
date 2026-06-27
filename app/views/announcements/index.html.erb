@@ -10,6 +10,10 @@
       <%= button_to "Subscribe to emails", subscribe_announcements_path, method: :post,
             class: "rounded-md px-3.5 py-2 bg-blue-600 hover:bg-blue-500 text-white font-medium" %>
     <% end %>
+    <% if can? :manage, Announcement %>
+      <%= link_to "Admin", admin_announcements_path,
+            class: "rounded-md px-3.5 py-2 bg-sky-600 hover:bg-sky-500 text-white font-medium" %>
+    <% end %>
   </div>
 
   <% if @announcements.any? %>
