@@ -6,14 +6,16 @@
       <h1 class="text-3xl font-semibold">Announcements</h1>
       <p class="mt-2 text-gray-600">News and updates from the PreTeXt.Plus team.</p>
     </div>
+    <div class="flex gap-1">
     <% if user_signed_in? && !current_user.announcement_emails? %>
       <%= button_to "Subscribe to emails", subscribe_announcements_path, method: :post,
-            class: "rounded-md px-3.5 py-2 bg-blue-600 hover:bg-blue-500 text-white font-medium" %>
+            class: "rounded-md px-3.5 py-2 bg-blue-600 hover:bg-blue-500 text-white font-medium cursor-pointer" %>
     <% end %>
     <% if can? :manage, Announcement %>
       <%= link_to "Admin", admin_announcements_path,
             class: "rounded-md px-3.5 py-2 bg-sky-600 hover:bg-sky-500 text-white font-medium" %>
     <% end %>
+    </div>
   </div>
 
   <% if @announcements.any? %>

@@ -31,12 +31,13 @@
     <div class="mt-4">
       <% if @user.announcement_emails? %>
         <%= button_to "Unsubscribe from announcements",
-              unsubscribe_announcements_path(token: @user.announcement_unsubscribe_token),
+              unsubscribe_announcements_path,
               method: :get,
-              class: "rounded-md px-3.5 py-2 bg-gray-100 hover:bg-gray-50 text-gray-800 font-medium" %>
+              params: { token: @user.announcement_unsubscribe_token },
+              class: "rounded-md px-3.5 py-2 bg-gray-100 hover:bg-gray-50 text-gray-800 font-medium cursor-pointer" %>
       <% else %>
         <%= button_to "Subscribe to announcements", subscribe_announcements_path, method: :post,
-              class: "rounded-md px-3.5 py-2 bg-blue-600 hover:bg-blue-500 text-white font-medium" %>
+              class: "rounded-md px-3.5 py-2 bg-blue-600 hover:bg-blue-500 text-white font-medium cursor-pointer" %>
       <% end %>
     </div>
     <p class="mt-4 text-sm text-gray-500">
