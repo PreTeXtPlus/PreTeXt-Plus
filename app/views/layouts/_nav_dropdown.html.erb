@@ -1,0 +1,10 @@
+<div class="relative group">
+  <label for="<%= toggle_id %>" class="my-1 text-gray-800 cursor-pointer hover:text-blue-500 md:mx-4 md:my-0 select-none">
+    <%= label %>
+  </label>
+  <input type="checkbox" id="<%= toggle_id %>" class="navbarMenuToggle sr-only">
+  <label for="<%= toggle_id %>" class="navbarMenuOverlay fixed inset-0 z-20 hidden" aria-hidden="true" tabindex="-1"></label>
+  <div class="navbarMenu absolute left-0 mt-2 w-48 z-30 bg-white rounded-md shadow-lg border border-gray-200 md:left-auto md:right-0">
+    <%= yield %>
+  </div>
+</div>

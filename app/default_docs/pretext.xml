@@ -8,10 +8,19 @@
         </md>
     </p>
 
+    <insight>
+        <statement>
+            <p>
+                You can now upload images to use in your documents.  Check out the <q
+                >Assets</q> menu in the table of contents panel on the left.
+            </p>
+        </statement>
+    </insight>
+
     <fact>
         <statement>
             <p>
-            For more information on how to use PreTeXt, please use the <q>Help</q> menu above.
+                For more information on how to use PreTeXt, please use the <q>Help</q> menu above.
             </p>
         </statement>
     </fact>
@@ -19,4 +28,5 @@
     <p>
         Feel free to delete this sample content and start creating your own project. Happy writing!
     </p>
+
 </article>

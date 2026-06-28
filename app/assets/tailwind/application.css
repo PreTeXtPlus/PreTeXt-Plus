@@ -1,10 +1,28 @@
 @import "tailwindcss";
 @plugin "@tailwindcss/typography";
 
-.navbarMenuToggle + .navbarMenu {
+.navbarMenuToggle ~ .navbarMenu {
   display: none;
 }
 
-.navbarMenuToggle:checked + .navbarMenu {
+.navbarMenuToggle:checked ~ .navbarMenu {
   display: block;
+}
+
+.navbarMenuToggle:checked + .navbarMenuOverlay {
+  display: block;
+}
+
+.mobileNavToggle + .mobileNavMenu {
+  display: none;
+}
+
+.mobileNavToggle:checked + .mobileNavMenu {
+  display: flex;
+}
+
+@media (min-width: 768px) {
+  .mobileNavToggle + .mobileNavMenu {
+    display: flex;
+  }
 }
