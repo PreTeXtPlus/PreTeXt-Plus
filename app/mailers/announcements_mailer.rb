@@ -5,7 +5,6 @@ class AnnouncementsMailer < ApplicationMailer
   def announcement(user, announcement)
     @user = user
     @announcement = announcement
-    @unsubscribe_url = unsubscribe_announcements_url(token: user.announcement_unsubscribe_token)
 
     mail(
       to: user.email,

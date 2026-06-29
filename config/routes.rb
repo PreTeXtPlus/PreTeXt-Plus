@@ -61,12 +61,7 @@ Rails.application.routes.draw do
   scope format: true, constraints: { format: "json" } do
     resources :library_assets, path: "library", only: [ :index, :show, :create, :update, :destroy ]
   end
-  resources :announcements, only: %i[index show] do
-    collection do
-      get :unsubscribe
-      post :subscribe
-    end
-  end
+  resources :announcements, only: %i[index show]
 
   # PreTeXt's own built-in logo, referenced by every document's docinfo as a
   # plain `external/icon.svg` -- not a library asset at all, so it must be
