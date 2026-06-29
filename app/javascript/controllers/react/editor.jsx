@@ -399,14 +399,14 @@ function EditorApp({ config }) {
   // Snapshots the buffer up front so edits made *during* the in-flight save
   // aren't mistakenly marked saved.
   const save = useCallback(
-    async (force = false, enqueue = false) => {
+    async (hard = false) => {
       if (!working.current) return false;
-      if (!force && !isDirty()) return true;
+      if (!hard && !isDirty()) return true;
       const snapshot = structuredClone(working.current);
       const assets = serverAssets.current;
       const deletes = pendingDeletes.current.slice();
       try {
-        await saveMutation.mutateAsync({ state: snapshot, assets, deletes, enqueue });
+        await saveMutation.mutateAsync({ state: snapshot, assets, deletes, enqueue: hard });
         serverSnapshot.current = snapshot;
         // Drop the deletes we just persisted, keeping any queued mid-save.
         pendingDeletes.current = pendingDeletes.current.filter((id) => !deletes.includes(id));
@@ -830,7 +830,7 @@ function EditorApp({ config }) {
   }, []);
 
   const onSaveButton = useCallback(async () => {
-    if (await save(true, true)) window.location.href = projectUrl;
+    if (await save(true)) window.location.href = projectUrl;
   }, [save, projectUrl]);
 
   const onCancelButton = useCallback(() => {
