@@ -9,6 +9,7 @@ class Project < ApplicationRecord
   accepts_nested_attributes_for :project_assets, allow_destroy: true
   has_many :library_assets, through: :project_assets
 
+  has_many :builds, dependent: :destroy
   has_many :divisions, dependent: :destroy
   # allow_destroy lets the editor remove a division by sending `_destroy: true`.
   accepts_nested_attributes_for :divisions, allow_destroy: true

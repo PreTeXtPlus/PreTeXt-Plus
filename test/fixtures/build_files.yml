@@ -1,0 +1,15 @@
+index:
+  build: one
+  relative_path: index.html
+
+chapter:
+  build: one
+  relative_path: chapter-one.html
+
+nested_index:
+  build: one
+  relative_path: appendix/index.html
+
+other_build_index:
+  build: two
+  relative_path: index.html

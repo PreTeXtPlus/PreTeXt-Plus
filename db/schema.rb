@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_06_29_000000) do
+ActiveRecord::Schema[8.1].define(version: 2026_06_29_183612) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
   enable_extension "pgcrypto"
@@ -50,6 +50,21 @@ ActiveRecord::Schema[8.1].define(version: 2026_06_29_000000) do
     t.datetime "published_at"
     t.string "title", null: false
     t.datetime "updated_at", null: false
+  end
+
+  create_table "build_files", id: :uuid, default: -> { "gen_random_uuid()" }, force: :cascade do |t|
+    t.uuid "build_id", null: false
+    t.datetime "created_at", null: false
+    t.string "relative_path"
+    t.datetime "updated_at", null: false
+    t.index ["build_id"], name: "index_build_files_on_build_id"
+  end
+
+  create_table "builds", id: :uuid, default: -> { "gen_random_uuid()" }, force: :cascade do |t|
+    t.datetime "created_at", null: false
+    t.uuid "project_id", null: false
+    t.datetime "updated_at", null: false
+    t.index ["project_id"], name: "index_builds_on_project_id"
   end
 
   create_table "divisions", id: :uuid, default: -> { "gen_random_uuid()" }, force: :cascade do |t|
@@ -255,6 +270,8 @@ ActiveRecord::Schema[8.1].define(version: 2026_06_29_000000) do
 
   add_foreign_key "active_storage_attachments", "active_storage_blobs", column: "blob_id"
   add_foreign_key "active_storage_variant_records", "active_storage_blobs", column: "blob_id"
+  add_foreign_key "build_files", "builds"
+  add_foreign_key "builds", "projects"
   add_foreign_key "divisions", "projects"
   add_foreign_key "library_assets", "users"
   add_foreign_key "pay_charges", "pay_customers", column: "customer_id"
