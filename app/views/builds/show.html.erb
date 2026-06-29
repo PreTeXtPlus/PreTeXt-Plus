@@ -26,5 +26,11 @@
       <span class="text-sm font-semibold text-gray-700">Files</span>
       <p class="mt-1 text-gray-600"><%= @build.build_files.count %></p>
     </div>
+    <% if @build.zip.attached? %>
+      <div>
+        <span class="text-sm font-semibold text-gray-700">Download</span>
+        <p class="mt-1"><%= link_to "Download ZIP", rails_blob_path(@build.zip, disposition: "attachment"), class: "text-blue-600 hover:underline" %></p>
+      </div>
+    <% end %>
   </div>
 </div>

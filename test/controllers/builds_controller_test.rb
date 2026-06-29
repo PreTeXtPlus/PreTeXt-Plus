@@ -36,6 +36,22 @@ class BuildsControllerTest < ActionDispatch::IntegrationTest
     assert_select "span", text: "Pending"
   end
 
+  test "show does not include download link when zip is not attached" do
+    get project_build_url(@project, builds(:one))
+    assert_select "a", text: "Download ZIP", count: 0
+  end
+
+  test "show includes download link when zip is attached" do
+    build = builds(:one)
+    build.zip.attach(
+      io: StringIO.new("PK\x03\x04"),
+      filename: "build.zip",
+      content_type: "application/zip"
+    )
+    get project_build_url(@project, build)
+    assert_select "a", text: "Download ZIP"
+  end
+
   test "show returns not found for a build that belongs to a different project" do
     get project_build_url(@project, builds(:two))
     assert_response :not_found
@@ -47,6 +63,12 @@ class BuildsControllerTest < ActionDispatch::IntegrationTest
   end
 
   # create
+
+  test "create enqueues FetchBuildZipJob" do
+    assert_enqueued_with(job: FetchBuildZipJob) do
+      post project_builds_url(@project)
+    end
+  end
 
   test "create persists a new build and redirects to it" do
     assert_difference -> { Build.count }, 1 do
