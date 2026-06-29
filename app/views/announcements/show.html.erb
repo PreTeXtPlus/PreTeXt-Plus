@@ -19,11 +19,4 @@
     </div>
   </div>
 
-  <% if user_signed_in? && !current_user.announcement_emails? %>
-    <div class="mt-6 rounded-xl border border-blue-100 bg-blue-50 p-5 flex items-center justify-between gap-4">
-      <p class="text-sm text-blue-800">You are not subscribed to announcement emails.</p>
-      <%= button_to "Subscribe", subscribe_announcements_path, method: :post,
-            class: "rounded-md px-3.5 py-2 bg-blue-600 hover:bg-blue-500 text-white text-sm font-medium" %>
-    </div>
-  <% end %>
 </div>

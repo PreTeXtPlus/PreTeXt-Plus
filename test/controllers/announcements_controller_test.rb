@@ -67,45 +67,4 @@ class AnnouncementsControllerTest < ActionDispatch::IntegrationTest
     assert_includes response.body, announcements(:paid_only).title
   end
 
-  # unsubscribe
-
-  test "unsubscribe with valid token unsubscribes user" do
-    user = users(:one)
-    token = user.announcement_unsubscribe_token
-    user.update!(announcement_emails: true)
-
-    get unsubscribe_announcements_path(token: token)
-
-    assert_response :success
-    assert_not user.reload.announcement_emails
-  end
-
-  test "unsubscribe with invalid token shows failure" do
-    get unsubscribe_announcements_path(token: "invalid-token")
-    assert_response :success
-  end
-
-  test "unsubscribe does not require authentication" do
-    user = users(:two)
-    get unsubscribe_announcements_path(token: user.announcement_unsubscribe_token)
-    assert_response :success
-  end
-
-  # subscribe
-
-  test "subscribe requires authentication" do
-    post subscribe_announcements_path
-    assert_redirected_to new_user_session_path
-  end
-
-  test "subscribe enables announcement emails for current user" do
-    user = users(:one)
-    user.update!(announcement_emails: false)
-    sign_in user
-
-    post subscribe_announcements_path
-
-    assert_redirected_to edit_user_path(user)
-    assert user.reload.announcement_emails
-  end
 end

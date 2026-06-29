@@ -3,7 +3,7 @@ require "test_helper"
 class BroadcastAnnouncementJobTest < ActiveJob::TestCase
   include ActionMailer::TestHelper
 
-  test "sends to all confirmed opted-in users for regular announcement" do
+  test "sends to all confirmed users for regular announcement" do
     announcement = announcements(:published)
     assert_not announcement.paid_subscribers_only?
 
@@ -26,18 +26,8 @@ class BroadcastAnnouncementJobTest < ActiveJob::TestCase
 
   test "does not send to unconfirmed users" do
     announcement = announcements(:published)
-    users(:unconfirmed).update!(announcement_emails: true)
 
     assert_emails 3 do
-      BroadcastAnnouncementJob.perform_now(announcement)
-    end
-  end
-
-  test "does not send to opted-out users" do
-    announcement = announcements(:published)
-    users(:one).update!(announcement_emails: false)
-
-    assert_emails 2 do
       BroadcastAnnouncementJob.perform_now(announcement)
     end
   end
