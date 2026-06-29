@@ -51,5 +51,4 @@ class User < ApplicationRecord
   def update_terms
     update(tos: Term.current(:tos), privacy: Term.current(:privacy))
   end
-
 end

@@ -66,5 +66,4 @@ class AnnouncementsControllerTest < ActionDispatch::IntegrationTest
     assert_response :success
     assert_includes response.body, announcements(:paid_only).title
   end
-
 end
