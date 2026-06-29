@@ -370,7 +370,9 @@ function EditorApp({ config }) {
 
   // ----- WRITE: save via TanStack mutation ---------------------------------
   const saveMutation = useMutation({
-    mutationFn: async ({ state, assets, deletes }) => {
+    mutationFn: async ({ state, assets, deletes, enqueue }) => {
+      const payload = editorStateToRailsPayload(state, assets, deletes);
+      if (enqueue) payload.enqueue_html_source_job = true;
       const res = await fetch(apiBase, {
         method: "PATCH",
         headers: {
@@ -378,7 +380,7 @@ function EditorApp({ config }) {
           Accept: "application/json",
           "X-CSRF-Token": csrfToken,
         },
-        body: JSON.stringify(editorStateToRailsPayload(state, assets, deletes)),
+        body: JSON.stringify(payload),
       });
       if (!res.ok) throw new Error(`Save failed: ${res.status}`);
       return state;
@@ -392,17 +394,19 @@ function EditorApp({ config }) {
   }, []);
 
   // Save the current working copy.  `force` saves even when not dirty (used by
-  // the Save button and before copy-conversion).  Snapshots the buffer up front
-  // so edits made *during* the in-flight save aren't mistakenly marked saved.
+  // the Save button and before copy-conversion).  `enqueue` triggers the server
+  // to kick off an html_source background build (Save button only, not autosave).
+  // Snapshots the buffer up front so edits made *during* the in-flight save
+  // aren't mistakenly marked saved.
   const save = useCallback(
-    async (force = false) => {
+    async (force = false, enqueue = false) => {
       if (!working.current) return false;
       if (!force && !isDirty()) return true;
       const snapshot = structuredClone(working.current);
       const assets = serverAssets.current;
       const deletes = pendingDeletes.current.slice();
       try {
-        await saveMutation.mutateAsync({ state: snapshot, assets, deletes });
+        await saveMutation.mutateAsync({ state: snapshot, assets, deletes, enqueue });
         serverSnapshot.current = snapshot;
         // Drop the deletes we just persisted, keeping any queued mid-save.
         pendingDeletes.current = pendingDeletes.current.filter((id) => !deletes.includes(id));
@@ -826,7 +830,7 @@ function EditorApp({ config }) {
   }, []);
 
   const onSaveButton = useCallback(async () => {
-    if (await save(true)) window.location.href = projectUrl;
+    if (await save(true, true)) window.location.href = projectUrl;
   }, [save, projectUrl]);
 
   const onCancelButton = useCallback(() => {

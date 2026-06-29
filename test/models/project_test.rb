@@ -1,27 +1,18 @@
 require "test_helper"
 
 class ProjectTest < ActiveSupport::TestCase
-  test "before_update calls build server and sets html_source" do
+  include ActiveJob::TestHelper
+  test "enqueue_html_source_job writes placeholder to html_source immediately" do
     project = projects(:one)
-    stub_build_server do
-      project.update!(title: "Updated Title")
-    end
-    assert_equal "<base href=\"/share_assets/\"><html><body>stub</body></html>", project.html_source
+    project.enqueue_html_source_job
+    assert_equal "<p>Generating new quick build... (Refresh to update.)</p>", project.reload.html_source
   end
 
-  test "before_update sends pretext_source to build server" do
+  test "enqueue_html_source_job enqueues SetHtmlSourceJob" do
     project = projects(:one)
-    captured_params = nil
-    fake_response = Struct.new(:body).new("<html>built</html>")
-
-    Net::HTTP.stub(:post_form, ->(_uri, params) {
-      captured_params = params
-      fake_response
-    }) do
-      project.update!(title: "Updated")
+    assert_enqueued_with(job: SetHtmlSourceJob, args: [ project ]) do
+      project.enqueue_html_source_job
     end
-
-    assert_equal project.pretext_source, captured_params[:source]
   end
 
   test "belongs to user" do
