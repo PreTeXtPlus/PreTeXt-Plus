@@ -5,6 +5,33 @@ class BuildTest < ActiveSupport::TestCase
     assert_equal projects(:one), builds(:one).project
   end
 
+  test "default status is pending" do
+    build = Build.new(project: projects(:one))
+    assert build.pending?
+  end
+
+  test "all status values round-trip" do
+    assert builds(:one).pending?
+    assert builds(:in_progress).in_progress?
+    assert builds(:two).success?
+    assert builds(:failed).failed?
+  end
+
+  test "status transitions via bang methods" do
+    build = builds(:one)
+    build.in_progress!
+    assert build.in_progress?
+    build.success!
+    assert build.success?
+    build.failed!
+    assert build.failed?
+  end
+
+  test "invalid status is rejected" do
+    build = Build.new(project: projects(:one), status: 99)
+    assert_not build.valid?
+  end
+
   test "has many build_files" do
     build = builds(:one)
     assert_includes build.build_files, build_files(:index)
