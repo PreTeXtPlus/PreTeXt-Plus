@@ -38,6 +38,7 @@ Rails.application.routes.draw do
     end
   end
   resources :projects do
+    resources :builds, only: [ :index, :show, :create ]
     resources :divisions, only: [ :create ]
     # Immediate-persist membership endpoint (mirrors divisions): the editor adds
     # an asset to its own pool optimistically, then we write the join row here.
