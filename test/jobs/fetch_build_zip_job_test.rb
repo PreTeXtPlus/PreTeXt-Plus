@@ -74,6 +74,37 @@ class FetchBuildZipJobTest < ActiveJob::TestCase
     assert_equal "<html>hello</html>", content
   end
 
+  test "creates a BuildFile for each project_asset with a file" do
+    library_asset = library_assets(:image_one)
+    library_asset.file.attach(
+      io: File.open(Rails.root.join("test/fixtures/files/test_image.png")),
+      filename: "test_image.png",
+      content_type: "image/png"
+    )
+    zip_body = fake_zip("index.html" => "<html></html>")
+    fake_response = Struct.new(:body).new(zip_body)
+
+    Net::HTTP.stub(:post_form, fake_response) do
+      FetchBuildZipJob.perform_now(build)
+    end
+
+    build_file = build.build_files.find_by(relative_path: "external/#{library_asset.external_filename}")
+    assert build_file
+    assert build_file.blob.attached?
+    assert_equal library_asset.file.blob, build_file.blob.blob
+  end
+
+  test "skips project_assets whose library_asset has no file" do
+    zip_body = fake_zip("index.html" => "<html></html>")
+    fake_response = Struct.new(:body).new(zip_body)
+
+    Net::HTTP.stub(:post_form, fake_response) do
+      FetchBuildZipJob.perform_now(build)
+    end
+
+    assert build.build_files.none? { |bf| bf.relative_path.start_with?("external/") }
+  end
+
   test "marks build failed and re-raises on error" do
     Net::HTTP.stub(:post_form, ->(_uri, _params) { raise "network error" }) do
       assert_raises(RuntimeError) { FetchBuildZipJob.perform_now(build) }

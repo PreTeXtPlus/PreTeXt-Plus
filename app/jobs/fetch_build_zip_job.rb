@@ -33,6 +33,14 @@ class FetchBuildZipJob < ApplicationJob
       end
     end
 
+    build.project.project_assets.each do |project_asset|
+      library_asset = project_asset.library_asset
+      next unless library_asset.file.attached?
+
+      build_file = build.build_files.create!(relative_path: "external/#{library_asset.id}")
+      build_file.blob.attach(library_asset.file.blob)
+    end
+
     build.update_column(:status, Build.statuses[:success])
   rescue => e
     build.update_column(:status, Build.statuses[:failed])

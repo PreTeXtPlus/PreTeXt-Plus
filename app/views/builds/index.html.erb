@@ -22,6 +22,7 @@
             <th class="px-4 py-3 text-left text-sm font-semibold text-gray-700">Created</th>
             <th class="px-4 py-3"></th>
             <th class="px-4 py-3"></th>
+            <th class="px-4 py-3"></th>
           </tr>
         </thead>
         <tbody class="divide-y divide-gray-100">
@@ -38,7 +39,13 @@
                 <% end %>
               </td>
               <td class="px-4 py-3 text-right text-sm">
-                <%= link_to "View Build", project_build_path(@project, build),
+                <% if build.success? %>
+                  <%= link_to "Download ZIP", rails_blob_path(build.zip, disposition: "attachment"),
+                        class: "text-sky-600 hover:underline", data: {turbo: false} %>
+                <% end %>
+              </td>
+              <td class="px-4 py-3 text-right text-sm">
+                <%= link_to "Review Build", project_build_path(@project, build),
                       class: "text-indigo-600 hover:underline", data: {turbo: false} %>
               </td>
             </tr>
