@@ -12,7 +12,7 @@
       <div class="my-2 flex flex-col gap-2">
         <span class="w-full md:w-auto text-center">Subscriber features:</span>
         <% if can? :manage, Build %>
-          <%= link_to "View full builds", project_builds_path(@project), class: "w-full md:w-auto text-center rounded-md px-3.5 py-2.5 bg-gray-100 hover:bg-gray-50 inline-block font-medium" %>
+          <%= link_to "View full builds (Admin only)", project_builds_path(@project), class: "w-full md:w-auto text-center rounded-md px-3.5 py-2.5 bg-gray-100 hover:bg-gray-50 inline-block font-medium" %>
         <% end %>
         <%= link_to "View/share copiable PreTeXt XML source", share_source_project_path(@project),
           form_class: "w-full md:w-auto md:inline-block", 

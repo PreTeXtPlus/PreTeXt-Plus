@@ -15,13 +15,9 @@ class FetchBuildZipJob < ApplicationJob
     }
     response = Net::HTTP.post_form(URI.parse("https://#{ENV['BUILD_HOST']}"), params)
 
-    build.zip.attach(
-      io: StringIO.new(response.body),
-      filename: "build-#{build.id}.zip",
-      content_type: "application/zip"
-    )
+    zip_buffer = StringIO.new(response.body)
 
-    Zip::File.open_buffer(StringIO.new(response.body)) do |zip|
+    Zip::File.open_buffer(zip_buffer) do |zip|
       zip.each do |entry|
         next unless entry.file?
         content = entry.get_input_stream.read
@@ -32,15 +28,25 @@ class FetchBuildZipJob < ApplicationJob
           content_type: Marcel::MimeType.for(name: entry.name)
         )
       end
+
+      build.project.project_assets.each do |project_asset|
+        library_asset = project_asset.library_asset
+        next unless library_asset.file.attached?
+
+        relative_path = "external/#{library_asset.id}"
+        zip.get_output_stream(relative_path) { |os| os.write(library_asset.file.download) }
+
+        build_file = build.build_files.create!(relative_path: relative_path)
+        build_file.blob.attach(library_asset.file.blob)
+      end
     end
 
-    build.project.project_assets.each do |project_asset|
-      library_asset = project_asset.library_asset
-      next unless library_asset.file.attached?
-
-      build_file = build.build_files.create!(relative_path: "external/#{library_asset.id}")
-      build_file.blob.attach(library_asset.file.blob)
-    end
+    zip_buffer.rewind
+    build.zip.attach(
+      io: zip_buffer,
+      filename: "build-#{build.id}.zip",
+      content_type: "application/zip"
+    )
 
     build.update_column(:status, Build.statuses[:success])
   rescue => e

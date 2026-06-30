@@ -94,6 +94,27 @@ class FetchBuildZipJobTest < ActiveJob::TestCase
     assert_equal library_asset.file.blob, build_file.blob.blob
   end
 
+  test "includes project_asset content inside the attached zip itself" do
+    library_asset = library_assets(:image_one)
+    library_asset.file.attach(
+      io: File.open(Rails.root.join("test/fixtures/files/test_image.png")),
+      filename: "test_image.png",
+      content_type: "image/png"
+    )
+    zip_body = fake_zip("index.html" => "<html></html>")
+    fake_response = Struct.new(:body).new(zip_body)
+
+    Net::HTTP.stub(:post_form, fake_response) do
+      FetchBuildZipJob.perform_now(build)
+    end
+
+    Zip::File.open_buffer(build.reload.zip.download) do |zip|
+      entry = zip.find_entry("external/#{library_asset.id}")
+      assert entry, "expected attached zip to contain the project_asset entry"
+      assert_equal library_asset.file.download, entry.get_input_stream.read
+    end
+  end
+
   test "skips project_assets whose library_asset has no file" do
     zip_body = fake_zip("index.html" => "<html></html>")
     fake_response = Struct.new(:body).new(zip_body)
