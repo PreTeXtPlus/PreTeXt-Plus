@@ -88,7 +88,7 @@ class FetchBuildZipJobTest < ActiveJob::TestCase
       FetchBuildZipJob.perform_now(build)
     end
 
-    build_file = build.build_files.find_by(relative_path: "external/#{library_asset.external_filename}")
+    build_file = build.build_files.find_by(relative_path: "external/#{library_asset.id}")
     assert build_file
     assert build_file.blob.attached?
     assert_equal library_asset.file.blob, build_file.blob.blob
