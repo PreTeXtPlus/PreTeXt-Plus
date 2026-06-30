@@ -45,6 +45,4 @@ class BuildTest < ActiveSupport::TestCase
     build.destroy!
     assert_empty BuildFile.where(id: file_ids)
   end
-
-
 end
