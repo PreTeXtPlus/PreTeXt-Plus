@@ -8,7 +8,7 @@ class Build < ApplicationRecord
   def file_at(path)
     path.blank? ?
       paths = [ "index.html" ] :
-      paths = [ path, "#{path}.html", "#{path}/index.html" ]
+      paths = [ path, path.sub(/\.[^.]+\z/, ""), "#{path}.html", "#{path}/index.html" ]
     build_files.find_by(relative_path: paths)
   end
 end
