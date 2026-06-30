@@ -1,14 +1,13 @@
-<div class="flex size-full flex-1" data-controller="tryit">
+<div class="flex size-full flex-1"
+     data-controller="tryit"
+     data-tryit-content-value="<%= content %>"
+     data-tryit-title-value="<%= title %>"
+     data-tryit-docinfo-value="<%= docinfo %>"
+     data-tryit-source-format-value="<%= source_format %>">
   <div data-tryit-target="root" class="w-full flex-1 min-h-0">
     <div class="mx-5">
       PreTeXt.Plus (beta) works best in an updated Chromium-based browser such as Google Chrome or Microsoft Edge.
       If you're seeing this message, please update your browser or switch to Chrome/Edge.
     </div>
   </div>
-  <%= form_with(class: "hidden", html: {"data-tryit-target" => "form"}) do |form| %>
-    <%= form.hidden_field :content, "data-tryit-target" => "contentField", value: content %>
-    <%= form.hidden_field :title, "data-tryit-target" => "titleField", value: title %>
-    <%= form.hidden_field :docinfo, "data-tryit-target" => "docinfoField", value: docinfo %>
-    <%= form.hidden_field :source_format, "data-tryit-target" => "sourceFormatField", value: source_format %>
-  <% end %>
 </div>
