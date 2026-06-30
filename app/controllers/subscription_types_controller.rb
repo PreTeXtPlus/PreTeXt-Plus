@@ -62,6 +62,7 @@ class SubscriptionTypesController < ApplicationController
     end
 
     def checkout_url
+      return subscriptions_url if Rails.env.development?
       return_url = "https://#{request.host}/subscriptions"
       current_user.payment_processor.checkout(
         mode: "subscription",
