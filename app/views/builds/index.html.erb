@@ -19,6 +19,7 @@
         <thead class="bg-gray-50">
           <tr>
             <th class="px-4 py-3 text-left text-sm font-semibold text-gray-700">Status</th>
+            <th class="px-4 py-3 text-left text-sm font-semibold text-gray-700">Format</th>
             <th class="px-4 py-3 text-left text-sm font-semibold text-gray-700">Created</th>
             <th class="px-4 py-3"></th>
             <th class="px-4 py-3"></th>
@@ -29,6 +30,9 @@
           <% @builds.each do |build| %>
             <tr>
               <td class="px-4 py-3 text-sm"><%= build_status_badge(build) %></td>
+              <td class="px-4 py-3 text-sm text-gray-600">
+                HTML
+              </td>
               <td class="px-4 py-3 text-sm text-gray-600">
                 <%= time_ago_in_words(build.created_at) %> ago
               </td>

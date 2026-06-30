@@ -17,6 +17,10 @@
       <p class="mt-1"><%= build_status_badge(@build) %></p>
     </div>
     <div>
+      <span class="text-sm font-semibold text-gray-700">Format</span>
+      <p class="mt-1 text-gray-600">HTML</p>
+    </div>
+    <div>
       <span class="text-sm font-semibold text-gray-700">Created</span>
       <p class="mt-1 text-gray-600">
         <time datetime="<%= @build.created_at.iso8601 %>"><%= @build.created_at.strftime("%B %-d, %Y at %-I:%M %p") %></time>
