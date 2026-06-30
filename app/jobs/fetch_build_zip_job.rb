@@ -4,6 +4,7 @@ class FetchBuildZipJob < ApplicationJob
   queue_as :default
 
   def perform(build)
+    build.update_column(:status, Build.statuses[:in_progress])
     require "uri"
     require "net/http"
 
