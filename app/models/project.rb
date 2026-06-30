@@ -9,13 +9,12 @@ class Project < ApplicationRecord
   accepts_nested_attributes_for :project_assets, allow_destroy: true
   has_many :library_assets, through: :project_assets
 
+  has_many :builds, dependent: :destroy
   has_many :divisions, dependent: :destroy
   # allow_destroy lets the editor remove a division by sending `_destroy: true`.
   accepts_nested_attributes_for :divisions, allow_destroy: true
 
   enum :document_type, { article: 0, book: 1, slideshow: 2 }, default: :article, suffix: true, validate: true
-
-  before_update :set_html_source
 
   default_scope { order(updated_at: :desc) }
 
@@ -100,22 +99,8 @@ class Project < ApplicationRecord
     duplicate
   end
 
-  private
-
-  def set_html_source
-    require "uri"
-    require "net/http"
-    # For LaTeX projects, use the editor-converted PreTeXt body.
-    params = {
-      source: pretext_source,
-      token: ENV["BUILD_TOKEN"]
-    }
-    response = Net::HTTP.post_form(URI.parse("https://#{ENV['BUILD_HOST']}"), params)
-    # See the matching comment in ProjectsController#preview -- the build
-    # server writes a bare `external/<id>.<ext>` image reference into its
-    # output, and this <base> pins that at the *public* redirect
-    # (library_assets#share_file), since html_source renders on the public
-    # /share page. Root-relative, so it needs no host config here.
-    self.html_source = "<base href=\"/share_assets/\">#{response.body}"
+  def enqueue_html_source_job
+    self.update_column(:html_source, "<p>Generating new quick build... (Refresh to update.)</p>")
+    SetHtmlSourceJob.perform_later(self)
   end
 end

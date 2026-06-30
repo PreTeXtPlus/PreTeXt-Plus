@@ -46,6 +46,10 @@ class Ability
     # Divisions belonging to own projects
     can :manage, Division, project: { user_id: user.id }
 
+    # For now, only admins can work with builds.
+    # # Builds belonging to own projects
+    # can :manage, Build, project: { user_id: user.id }
+
     can :subscribe, Announcement
 
     # Library assets — :create has no user_id yet at authorization time, so it's a separate rule

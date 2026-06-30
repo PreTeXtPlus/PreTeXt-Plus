@@ -36,10 +36,8 @@ class ProjectsController < ApplicationController
     respond_to do |format|
       if @project.save
         format.html { redirect_to edit_project_path(@project) }
-        format.json { render :show, status: :created, location: @project }
       else
         format.html { render :new, status: :unprocessable_entity }
-        format.json { render json: @project.errors, status: :unprocessable_entity }
       end
     end
   end
@@ -48,10 +46,9 @@ class ProjectsController < ApplicationController
   def update
     respond_to do |format|
       if @project.update(project_params)
-        format.html { redirect_to @project, notice: "Project was successfully updated.", status: :see_other }
+        @project.enqueue_html_source_job if params[:enqueue_html_source_job]
         format.json { render :show, status: :ok, location: @project }
       else
-        format.html { render :edit, status: :unprocessable_entity }
         format.json { render json: @project.errors, status: :unprocessable_entity }
       end
     end
@@ -63,7 +60,6 @@ class ProjectsController < ApplicationController
 
     respond_to do |format|
       format.html { redirect_to projects_path, notice: "Project was successfully destroyed.", status: :see_other }
-      format.json { head :no_content }
     end
   end
 
