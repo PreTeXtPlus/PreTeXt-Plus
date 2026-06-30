@@ -21,6 +21,7 @@
             <th class="px-4 py-3 text-left text-sm font-semibold text-gray-700">Status</th>
             <th class="px-4 py-3 text-left text-sm font-semibold text-gray-700">Created</th>
             <th class="px-4 py-3"></th>
+            <th class="px-4 py-3"></th>
           </tr>
         </thead>
         <tbody class="divide-y divide-gray-100">
@@ -31,8 +32,14 @@
                 <%= time_ago_in_words(build.created_at) %> ago
               </td>
               <td class="px-4 py-3 text-right text-sm">
-                <%= link_to "View", project_build_path(@project, build),
-                      class: "text-indigo-600 hover:underline" %>
+                <% if build.success? %>
+                  <%= link_to "Visit Site", build_file_path(build, "index.html"),
+                        class: "text-blue-600 hover:underline" %>
+                <% end %>
+              </td>
+              <td class="px-4 py-3 text-right text-sm">
+                <%= link_to "View Build", project_build_path(@project, build),
+                      class: "text-indigo-600 hover:underline", data: {turbo: false} %>
               </td>
             </tr>
           <% end %>

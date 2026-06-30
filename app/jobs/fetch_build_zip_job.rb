@@ -1,3 +1,5 @@
+require "zip"
+
 class FetchBuildZipJob < ApplicationJob
   queue_as :default
 
@@ -17,6 +19,20 @@ class FetchBuildZipJob < ApplicationJob
       filename: "build-#{build.id}.zip",
       content_type: "application/zip"
     )
+
+    Zip::File.open_buffer(StringIO.new(response.body)) do |zip|
+      zip.each do |entry|
+        next unless entry.file?
+        content = entry.get_input_stream.read
+        build_file = build.build_files.create!(relative_path: entry.name)
+        build_file.blob.attach(
+          io: StringIO.new(content),
+          filename: File.basename(entry.name),
+          content_type: Marcel::MimeType.for(name: entry.name)
+        )
+      end
+    end
+
     build.update_column(:status, Build.statuses[:success])
   rescue => e
     build.update_column(:status, Build.statuses[:failed])

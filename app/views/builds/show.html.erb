@@ -32,5 +32,15 @@
         <p class="mt-1"><%= link_to "Download ZIP", rails_blob_path(@build.zip, disposition: "attachment"), class: "text-blue-600 hover:underline" %></p>
       </div>
     <% end %>
+    <% if @build.success? %>
+      <div>
+        <span class="text-sm font-semibold text-gray-700">Site</span>
+        <p class="mt-1"><%= link_to "View site", build_file_path(@build, "index.html"), class: "text-blue-600 hover:underline" %></p>
+      </div>
+    <% end %>
+  </div>
+
+  <div class="mt-4">
+    <%= button_to "Delete Build", project_build_path(@project, @build), method: :delete, data: { turbo_confirm: "Delete this build?" }, class: "text-red-600 hover:underline text-sm" %>
   </div>
 </div>

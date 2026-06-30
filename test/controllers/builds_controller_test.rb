@@ -95,4 +95,21 @@ class BuildsControllerTest < ActionDispatch::IntegrationTest
     end
     assert_redirected_to projects_path
   end
+
+  # destroy
+
+  test "destroy deletes the build and redirects to index" do
+    build = builds(:one)
+    assert_difference -> { Build.count }, -1 do
+      delete project_build_url(@project, build)
+    end
+    assert_redirected_to project_builds_url(@project)
+  end
+
+  test "destroy redirects when the user does not own the project" do
+    assert_no_difference -> { Build.count } do
+      delete project_build_url(projects(:two), builds(:two))
+    end
+    assert_redirected_to projects_path
+  end
 end

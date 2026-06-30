@@ -38,7 +38,7 @@ Rails.application.routes.draw do
     end
   end
   resources :projects do
-    resources :builds, only: [ :index, :show, :create ]
+    resources :builds, only: [ :index, :show, :create, :destroy ]
     resources :divisions, only: [ :create ]
     # Immediate-persist membership endpoint (mirrors divisions): the editor adds
     # an asset to its own pool optimistically, then we write the join row here.
@@ -86,6 +86,7 @@ Rails.application.routes.draw do
   # show_asset_file: id-based lookup works regardless of whether the
   # project_asset join row has been saved yet.
   get "share_assets/external/:id" => "library_assets#share_file", as: "share_asset_file"
+  get "builds/:build_id/files(/*relative_path)", to: "build_files#show", as: "build_file", format: false
   resources :asset_fetches, only: :create
   get "tryit" => "projects#tryit"
 

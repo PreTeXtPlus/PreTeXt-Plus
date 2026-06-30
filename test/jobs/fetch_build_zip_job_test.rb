@@ -1,10 +1,26 @@
 require "test_helper"
+require "zip"
 
 class FetchBuildZipJobTest < ActiveJob::TestCase
+  def fake_zip(entries)
+    buffer = Zip::OutputStream.write_buffer do |zos|
+      entries.each do |path, content|
+        zos.put_next_entry(path)
+        zos.write(content)
+      end
+    end
+    buffer.string
+  end
+
+  # builds(:in_progress) has no pre-existing build_files, avoiding unique-path conflicts.
+  def build
+    builds(:in_progress)
+  end
+
   test "posts pretext_source, BUILD_TOKEN, and format=zip to build server" do
-    build = builds(:one)
     captured_params = nil
-    fake_response = Struct.new(:body).new("PK\x03\x04fake zip content")
+    zip_body = fake_zip("index.html" => "<html></html>")
+    fake_response = Struct.new(:body).new(zip_body)
 
     Net::HTTP.stub(:post_form, ->(_uri, params) { captured_params = params; fake_response }) do
       FetchBuildZipJob.perform_now(build)
@@ -16,9 +32,8 @@ class FetchBuildZipJobTest < ActiveJob::TestCase
   end
 
   test "attaches response body as zip and marks build success" do
-    build = builds(:one)
-    zip_content = "PK\x03\x04fake zip content"
-    fake_response = Struct.new(:body).new(zip_content)
+    zip_body = fake_zip("index.html" => "<html></html>")
+    fake_response = Struct.new(:body).new(zip_body)
 
     Net::HTTP.stub(:post_form, fake_response) do
       FetchBuildZipJob.perform_now(build)
@@ -28,9 +43,38 @@ class FetchBuildZipJobTest < ActiveJob::TestCase
     assert build.success?
   end
 
-  test "marks build failed and re-raises on error" do
-    build = builds(:one)
+  test "creates a BuildFile for each entry in the ZIP" do
+    zip_body = fake_zip(
+      "index.html" => "<html>home</html>",
+      "chapter-one.html" => "<html>chapter</html>",
+      "images/fig.png" => "PNG\x89"
+    )
+    fake_response = Struct.new(:body).new(zip_body)
 
+    assert_difference -> { build.build_files.count }, 3 do
+      Net::HTTP.stub(:post_form, fake_response) do
+        FetchBuildZipJob.perform_now(build)
+      end
+    end
+
+    assert build.build_files.find_by(relative_path: "index.html").blob.attached?
+    assert build.build_files.find_by(relative_path: "chapter-one.html").blob.attached?
+    assert build.build_files.find_by(relative_path: "images/fig.png").blob.attached?
+  end
+
+  test "stores correct content in each BuildFile blob" do
+    zip_body = fake_zip("index.html" => "<html>hello</html>")
+    fake_response = Struct.new(:body).new(zip_body)
+
+    Net::HTTP.stub(:post_form, fake_response) do
+      FetchBuildZipJob.perform_now(build)
+    end
+
+    content = build.build_files.find_by!(relative_path: "index.html").blob.download
+    assert_equal "<html>hello</html>", content
+  end
+
+  test "marks build failed and re-raises on error" do
     Net::HTTP.stub(:post_form, ->(_uri, _params) { raise "network error" }) do
       assert_raises(RuntimeError) { FetchBuildZipJob.perform_now(build) }
     end

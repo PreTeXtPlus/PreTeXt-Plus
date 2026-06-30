@@ -17,6 +17,11 @@ class BuildsController < ApplicationController
     end
   end
 
+  def destroy
+    @build.destroy!
+    redirect_to project_builds_path(@project), notice: "Build was successfully deleted.", status: :see_other
+  end
+
   private
 
     def build_params
