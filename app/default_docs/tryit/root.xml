@@ -1,0 +1,14 @@
+<article xml:id="document">
+  <title>Try PreTeXt.Plus!</title>
+  <introduction>
+    <p>
+      Browse to any of the below sections to try out writing in
+      classic PreTeXt XML, LaTeX-style PreTeXt, or Markdown-style
+      PreTeXt!
+    </p>
+    <p><alert>Note:</alert> Changes you make here will not be saved.</p>
+  </introduction>
+  <plus:section ref="tryit-pretext"/>
+  <plus:section ref="tryit-latex"/>
+  <plus:section ref="tryit-markdown"/>
+</article>

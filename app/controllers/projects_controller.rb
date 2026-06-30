@@ -121,23 +121,7 @@ class ProjectsController < ApplicationController
 
   # GET /tryit
   def tryit
-    @demo_mode = params[:demo] == "pretext" ? "pretext" :
-      params[:demo] == "markdown" ? "markdown" : "latex"
-
-    @title = @demo_mode == "latex" ? "Try LaTeX-style PreTeXt!" :
-      @demo_mode == "markdown" ? "Try Markdown-style PreTeXt!" : "Try Classic PreTeXt!"
-
-    @content = if @demo_mode == "latex"
-      File.read Rails.root.join("app", "default_docs", "tryit", "latex.tex")
-    elsif @demo_mode == "markdown"
-      File.read Rails.root.join("app", "default_docs", "tryit", "markdown.md")
-    else
-      File.read Rails.root.join("app", "default_docs", "tryit", "pretext.xml")
-    end
-
-    @docinfo = File.read Rails.root.join("app", "default_docs", "tryit", "docinfo.xml")
-
-    @source_format = @demo_mode
+    @project = Project.tryit
   end
 
   # POST /projects/feedback
