@@ -10,58 +10,39 @@ function pretextRootType(content) {
   return match ? match[1] : undefined;
 }
 
-function TryItApp({ config }) {
-  const { content, title, docinfo, sourceFormat, csrfToken } = config;
-
-  const TRYIT_XML_ID = "tryit";
-
-  const rootDivision = {
-    id: "tryit-root",
-    xmlId: TRYIT_XML_ID,
-    content: content ?? "",
-    sourceFormat: sourceFormat ?? "pretext",
+function railsDivisionToEditor(d) {
+  const base = {
+    id: String(d.id ?? d.ref),
+    xmlId: d.ref ?? "",
+    content: d.source ?? "",
+    sourceFormat: d.source_format ?? "pretext",
   };
-  if (sourceFormat !== "pretext") {
-    rootDivision.type = "article";
-    rootDivision.title = title;
-  } else {
-    const type = pretextRootType(content);
-    if (type) rootDivision.type = type;
-  }
+  if (!d.is_root) return base;
+  if (d.source_format !== "pretext") return { ...base, type: "article" };
+  const type = pretextRootType(base.content);
+  return type ? { ...base, type } : base;
+}
+
+function TryItApp({ config }) {
+  const { project, csrfToken } = config;
+
+  const editorDivisions = (project.divisions ?? []).map(railsDivisionToEditor);
+  const rootRef = (project.divisions ?? []).find((d) => d.is_root)?.ref ?? editorDivisions[0]?.xmlId ?? "";
 
   const initial = useRef({
-    title: title ?? "",
-    docinfo: docinfo ?? "",
+    title: project.title ?? "",
+    docinfo: project.docinfo ?? "",
     commonDocinfo: "",
     useCommonDocinfo: false,
     projectType: "article",
-    divisions: [rootDivision],
-    rootDivisionId: TRYIT_XML_ID,
+    divisions: editorDivisions,
+    rootDivisionId: rootRef,
   });
-
-  const working = useRef({
-    title: title ?? "",
-    content: content ?? "",
-    sourceFormat: sourceFormat ?? "pretext",
-    docinfo: docinfo ?? "",
-  });
-
-  const onContentChange = useCallback((change) => {
-    const w = working.current;
-    if (change.sourceContent !== undefined) w.content = change.sourceContent;
-    if (change.sourceFormat !== undefined) w.sourceFormat = change.sourceFormat;
-    if (change.docinfo !== undefined) w.docinfo = change.docinfo;
-  }, []);
-
-  const onTitleChange = useCallback((value) => {
-    working.current.title = value ?? "";
-  }, []);
 
   const onPreviewRebuild = useCallback((source, title, postToIframe) => {
     postToIframe("/projects/preview", { source, title, authenticity_token: csrfToken });
   }, [csrfToken]);
 
-  // Division add must return an id; use a local uuid since there's no backend.
   const onDivisionAdd = useCallback(async () => crypto.randomUUID(), []);
 
   const noop = useCallback(() => {}, []);
@@ -79,7 +60,7 @@ function TryItApp({ config }) {
       rootDivisionId={state.rootDivisionId}
       projectAssets={[]}
       libraryAssets={[]}
-      onContentChange={onContentChange}
+      onContentChange={noop}
       onDivisionAdd={onDivisionAdd}
       onDivisionRemove={noop}
       onDivisionUpdate={noop}
@@ -92,7 +73,7 @@ function TryItApp({ config }) {
       onAssetRemove={noop}
       onLoadAssets={async () => []}
       onLoadLibraryAssets={async () => []}
-      onTitleChange={onTitleChange}
+      onTitleChange={noop}
       onUseCommonDocinfoChange={noop}
       onCommonDocinfoChange={noop}
       onSave={noop}

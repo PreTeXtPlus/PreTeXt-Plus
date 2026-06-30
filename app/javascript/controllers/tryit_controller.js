@@ -2,10 +2,7 @@ import { Controller } from "@hotwired/stimulus"
 
 export default class extends Controller {
   static values = {
-    content: String,
-    title: String,
-    docinfo: String,
-    sourceFormat: String,
+    project: Object,
   }
 
   initialize() {
@@ -26,10 +23,7 @@ export default class extends Controller {
 
     const root = this.targets.find("root")
     this.component.render(root, {
-      content: this.contentValue,
-      title: this.titleValue,
-      docinfo: this.docinfoValue,
-      sourceFormat: this.sourceFormatValue,
+      project: this.projectValue,
       csrfToken: document.querySelector('meta[name="csrf-token"]')?.content,
     })
 

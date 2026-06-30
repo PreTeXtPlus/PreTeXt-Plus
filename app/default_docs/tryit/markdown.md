@@ -1,16 +1,18 @@
-# Thanks for trying PreTeXt.Plus!
+---
+division: section
+xmlid: tryit-markdown
+---
+# Markdown-style PreTeXt
 
-This is a Markdown-style PreTeXt demo project. You can edit this content using supported Markdown syntax.
+This section is written in Markdown-style PreTeXt markup. You can edit this content using supported Markdown syntax.
 
 $$
     \left|\sum_{i=0}^n a_i\right|\leq\sum_{i=0}^n |a_i|
 $$
 
-When you preview the changes, the source is first converted to PreTeXt and then rendered as accessible HTML.
+When you preview, the source is converted to PreTeXt and rendered as accessible HTML.
 
 Theorem:
-    PreTeXt can be used in markdown mode.
+    PreTeXt can be used in Markdown-style mode.
     Proof:
-    See this document.
-
-(Changes you make here will not be saved, but feel free to play around to see what PreTeXt.Plus can do!)
+        See this section.

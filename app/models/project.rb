@@ -83,6 +83,12 @@ class Project < ApplicationRecord
 
   DEFAULT_DOCINFO = File.read Rails.root.join("app", "default_docs", "docinfo.xml")
 
+  TRYIT_DOCINFO = File.read Rails.root.join("app", "default_docs", "tryit", "docinfo.xml")
+  TRYIT_ROOT_SOURCE = File.read Rails.root.join("app", "default_docs", "tryit", "root.xml")
+  TRYIT_PRETEXT_SOURCE = File.read Rails.root.join("app", "default_docs", "tryit", "pretext.xml")
+  TRYIT_LATEX_SOURCE = File.read Rails.root.join("app", "default_docs", "tryit", "latex.tex")
+  TRYIT_MARKDOWN_SOURCE = File.read Rails.root.join("app", "default_docs", "tryit", "markdown.md")
+
   def full_dup(new_owner = nil)
     duplicate = Project.build(self.dup.attributes)
     if new_owner.present?
@@ -98,6 +104,16 @@ class Project < ApplicationRecord
       duplicate.project_assets.build(asset.dup.attributes)
     end
     duplicate
+  end
+
+  def self.tryit
+    project = self.new(title: "Try it!")
+    project.docinfo = TRYIT_DOCINFO
+    project.divisions.build(ref: "document", is_root: true, source_format: :pretext, source: TRYIT_ROOT_SOURCE)
+    project.divisions.build(ref: "tryit-pretext", source_format: :pretext, source: TRYIT_PRETEXT_SOURCE)
+    project.divisions.build(ref: "tryit-latex", source_format: :latex, source: TRYIT_LATEX_SOURCE)
+    project.divisions.build(ref: "tryit-markdown", source_format: :markdown, source: TRYIT_MARKDOWN_SOURCE)
+    project
   end
 
   private
