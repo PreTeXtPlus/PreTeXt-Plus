@@ -11,7 +11,8 @@ class SubscriptionType < ApplicationRecord
   end
 
   def stripe_price
-    return nil if stripe_price_id.blank? or Rails.env.test?
+    return nil if stripe_price_id.blank? || Rails.env.test?
+    return mock_stripe_price if Rails.env.development?
     Stripe::Price.retrieve(stripe_price_id)
   end
 
@@ -37,6 +38,11 @@ class SubscriptionType < ApplicationRecord
   end
 
   private
+    def mock_stripe_price
+      recurring = Struct.new(:interval).new("month")
+      Struct.new(:unit_amount, :recurring).new(999, recurring)
+    end
+
     def normalize_orders
       if order.present?
         SubscriptionType.all.order(order: :asc).each.with_index do |subscription_type, index|
