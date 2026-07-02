@@ -103,7 +103,7 @@ class Project < ApplicationRecord
     self.update_column(:html_source, <<~HTML)
       <html>
         <head>
-          <meta http-equiv='refresh' content='2; url=#{Rails.application.routes.url_helpers.share_project_path(self)}' />
+          <meta http-equiv='refresh' content='2' />
         </head>
         <body>
           <p>New quick build generation in progress...</p>
