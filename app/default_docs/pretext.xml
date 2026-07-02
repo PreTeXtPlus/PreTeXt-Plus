@@ -1,8 +1,7 @@
 <article xml:id="document">
-    <title> Welcome to PreTeXt.Plus! </title>
-
+    <title>Welcome to PreTeXt.Plus!</title>
     <p>
-    This is a sample project to get you started. You can edit this content using the PreTeXt markup language.
+        This is a sample project to get you started. You can edit this content using the PreTeXt markup language.
         <md>
             \left|\sum_{i=0}^n a_i\right|\leq\sum_{i=0}^n|a_i|
         </md>
