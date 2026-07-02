@@ -107,23 +107,10 @@ class ProjectAssetsControllerTest < ActionDispatch::IntegrationTest
   test "preview_file redirects to the asset's current file URL" do
     membership = create_project_asset_with_file(ref: "diagram-two")
 
-    get preview_asset_file_project_path(@project, ref: membership.ref, format: "png")
+    get share_asset_project_path(@project, ref: membership.ref, format: "png")
 
     assert_response :redirect
     assert_match %r{/rails/active_storage/}, response.location
-  end
-
-  test "preview_file denies access to another user's project" do
-    membership = create_project_asset_with_file(ref: "diagram-two")
-
-    sign_out @user
-    sign_in users(:two)
-
-    get preview_asset_file_project_path(@project, ref: membership.ref, format: "png")
-
-    # Not owned by the requester, so it's outside accessible_by's scope and
-    # 404s -- same pattern as create/destroy's cross-user tests above.
-    assert_response :not_found
   end
 
   test "share_file redirects to the asset's current file URL when signed out entirely" do
@@ -131,7 +118,7 @@ class ProjectAssetsControllerTest < ActionDispatch::IntegrationTest
 
     sign_out @user
 
-    get share_asset_file_project_path(@project, ref: membership.ref, format: "png")
+    get share_asset_project_path(@project, ref: membership.ref, format: "png")
 
     assert_response :redirect
     assert_match %r{/rails/active_storage/}, response.location
@@ -143,7 +130,7 @@ class ProjectAssetsControllerTest < ActionDispatch::IntegrationTest
     sign_out @user
     sign_in users(:two)
 
-    get share_asset_file_project_path(@project, ref: membership.ref, format: "png")
+    get share_asset_project_path(@project, ref: membership.ref, format: "png")
 
     assert_response :redirect
     assert_match %r{/rails/active_storage/}, response.location

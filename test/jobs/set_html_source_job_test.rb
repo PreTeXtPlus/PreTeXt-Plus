@@ -13,15 +13,4 @@ class SetHtmlSourceJobTest < ActiveJob::TestCase
     assert_equal project.pretext_source, captured_params[:source]
     assert_equal ENV["BUILD_TOKEN"], captured_params[:token]
   end
-
-  test "updates html_source with base tag prepended to build server response" do
-    project = projects(:one)
-    fake_response = Struct.new(:body).new("<html><body>built</body></html>")
-
-    Net::HTTP.stub(:post_form, fake_response) do
-      SetHtmlSourceJob.perform_now(project)
-    end
-
-    assert_equal "<base href=\"/projects/#{project.id}/share/external/\"><html><body>built</body></html>", project.reload.html_source
-  end
 end

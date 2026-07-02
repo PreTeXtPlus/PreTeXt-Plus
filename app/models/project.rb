@@ -88,6 +88,8 @@ class Project < ApplicationRecord
   TRYIT_LATEX_SOURCE = File.read Rails.root.join("app", "default_docs", "tryit", "latex.tex")
   TRYIT_MARKDOWN_SOURCE = File.read Rails.root.join("app", "default_docs", "tryit", "markdown.md")
 
+  ENQUEUE_SOURCE_PLACEHOLDER = File.read Rails.root.join("app", "default_docs", "enqueue_placeholder.html")
+
   def full_dup(new_owner = nil)
     duplicate = Project.build(self.dup.attributes)
     if new_owner.present?
@@ -106,16 +108,7 @@ class Project < ApplicationRecord
   end
 
   def enqueue_html_source_job
-    self.update_column(:html_source, <<~HTML)
-      <html>
-        <head>
-          <meta http-equiv='refresh' content='2' />
-        </head>
-        <body>
-          <p>New quick build generation in progress...</p>
-        </body>
-      </html>
-    HTML
+    self.update_column(:html_source, ENQUEUE_SOURCE_PLACEHOLDER)
     SetHtmlSourceJob.perform_later(self)
   end
 

@@ -5,7 +5,7 @@ class ProjectTest < ActiveSupport::TestCase
   test "enqueue_html_source_job writes placeholder to html_source immediately" do
     project = projects(:one)
     project.enqueue_html_source_job
-    assert_equal "<p>Generating new quick build... (Refresh to update.)</p>", project.reload.html_source
+    assert_equal Project::ENQUEUE_SOURCE_PLACEHOLDER, project.reload.html_source
   end
 
   test "enqueue_html_source_job enqueues SetHtmlSourceJob" do

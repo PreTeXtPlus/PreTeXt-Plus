@@ -88,7 +88,7 @@ class FetchBuildZipJobTest < ActiveJob::TestCase
       FetchBuildZipJob.perform_now(build)
     end
 
-    build_file = build.build_files.find_by(relative_path: "external/#{project_assets(:one).ref}")
+    build_file = build.build_files.find_by(relative_path: "external/#{project_assets(:one).ref}.png")
     assert build_file
     assert build_file.blob.attached?
     assert_equal library_asset.file.blob, build_file.blob.blob
@@ -109,7 +109,7 @@ class FetchBuildZipJobTest < ActiveJob::TestCase
     end
 
     Zip::File.open_buffer(build.reload.zip.download) do |zip|
-      entry = zip.find_entry("external/#{project_assets(:one).ref}")
+      entry = zip.find_entry("external/#{project_assets(:one).ref}.png")
       assert entry, "expected attached zip to contain the project_asset entry"
       assert_equal library_asset.file.download, entry.get_input_stream.read
     end
