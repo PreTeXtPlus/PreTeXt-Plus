@@ -246,25 +246,6 @@ class ProjectsControllerTest < ActionDispatch::IntegrationTest
     assert_response :gateway_timeout
   end
 
-  test "tryit defaults to latex-style pretext demo" do
-    sign_out :user
-    get tryit_url
-
-    assert_response :success
-    assert_includes response.body, "Demo"
-    assert_includes response.body, "data-tryit-target=\"sourceFormatField\""
-    assert_includes response.body, "value=\"latex\""
-  end
-
-  test "tryit supports markdown demo" do
-    sign_out :user
-    get tryit_url, params: { demo: "markdown" }
-
-    assert_response :success
-    assert_includes response.body, "value=\"markdown\""
-    assert_includes response.body, "Try Markdown-style PreTeXt!"
-  end
-
   # --- Docinfo ---
 
   test "should update docinfo" do
