@@ -33,7 +33,7 @@ class FetchBuildZipJob < ApplicationJob
         library_asset = project_asset.library_asset
         next unless library_asset.file.attached?
 
-        relative_path = "external/#{library_asset.id}"
+        relative_path = "external/#{project_asset.ref}#{library_asset.file.filename.extension_with_delimiter}"
         zip.get_output_stream(relative_path) { |os| os.write(library_asset.file.download) }
 
         build_file = build.build_files.create!(relative_path: relative_path)

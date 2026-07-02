@@ -97,27 +97,30 @@ function railsDivisionToEditor(d, rootMeta) {
 //
 // An asset carries two distinct file references, and they must not be confused:
 //
-//  * `url` -- `lib.file`, Rails' `preview_asset_file_path` redirect (owner-only).
+//  * `url` -- `lib.file`, Rails' `library_asset_file_path` redirect (owner-only).
 //    A real, fetchable URL. Used ONLY for the editor's own UI: the live
 //    thumbnail `<img src>` in the Asset Manager / "Edit asset" dialog.
 //
-//  * `fileRef` -- a bare `<id>.<ext>` external-asset filename. This is what the
+//  * `fileRef` -- a bare `<ref>.<ext>` external-asset filename. This is what the
 //    web-editor emits as the `<image source="...">` attribute in any assembled
 //    PreTeXt (live preview or save). The build server treats that value as a
 //    plain external-asset filename and prepends `external/` itself, so a real
 //    URL there would double-prefix. See the `<base>` tags in
 //    projects_controller.rb / project.rb that make the resulting relative path
-//    resolve wherever the build's output is displayed.
+//    resolve wherever the build's output is displayed. `ref` is the
+//    project-scoped ref (project_asset#ref), not the library_asset id, since
+//    that's what project_assets#preview_file / #share_file now key on.
 //
 // `isFile` distinguishes a file-backed asset from one defined purely by its
 // authored `source` (e.g. a future "defined in source" image); derived from the
 // attachment's presence, not from `kind` (which only splits image vs. authored).
 //
-// The bare `<id>.<ext>` source filename for a file-backed asset, or undefined
-// for a non-file asset (which relies entirely on its authored `source`).
-function fileRefFor(lib) {
-  if (!lib.file || lib.id == null) return undefined;
-  return lib.extension ? `${lib.id}.${lib.extension}` : String(lib.id);
+// The bare `<ref>.<ext>` source filename for a file-backed asset, or undefined
+// for a non-file asset (which relies entirely on its authored `source`) or one
+// with no ref yet.
+function fileRefFor(lib, ref) {
+  if (!lib.file || !ref) return undefined;
+  return lib.extension ? `${ref}.${lib.extension}` : ref;
 }
 
 // Map one Rails project_asset (+ its library_asset) to the host's richer record.
@@ -132,31 +135,34 @@ function railsAssetToEditor(a) {
     source: lib.content ?? undefined,
     url: lib.file ?? undefined,
     isFile: Boolean(lib.file),
-    fileRef: fileRefFor(lib),
+    fileRef: fileRefFor(lib, a.ref),
   };
 }
 
 // Map one Rails library_asset JSON to a library-pool Asset.  Library assets have
 // no project `ref` of their own, so we derive a default slug; once the asset is
 // in the current project we override it with the real project ref (see
-// reconcileLibraryRefs) so inserting from the library uses the right tag.
+// reconcileLibraryRefs) so inserting from the library uses the right tag. The
+// derived slug is provisional -- it only resolves once the asset is actually
+// associated with the project under that exact ref (see onAssetAddFromLibrary).
 function railsLibraryAssetToEditor(lib) {
   const name = lib.short_description || lib.description || "";
+  const ref = slugifyRef(name);
   return {
     id: String(lib.id),
-    ref: slugifyRef(name),
+    ref,
     name,
     kind: lib.kind === "authored" ? "authored" : "image",
     source: lib.content ?? undefined,
     url: lib.file ?? undefined,
     isFile: Boolean(lib.file),
-    fileRef: fileRefFor(lib),
+    fileRef: fileRefFor(lib, ref),
   };
 }
 
 // Strip a host project-asset record down to the bare web-editor Asset shape.
 // `url` is the real thumbnail URL (asset-manager UI); `fileRef` is the bare
-// `<id>.<ext>` filename the web-editor emits as `<image source>` -- see
+// `<ref>.<ext>` filename the web-editor emits as `<image source>` -- see
 // railsAssetToEditor for why the two must stay distinct.
 function toEditorAsset(rec) {
   return {
@@ -294,9 +300,9 @@ function EditorApp({ config }) {
   // Rails routes the React side needs.  Kept here (rather than in many data
   // attributes) since they're derivable from the project id.
   const projectUrl = `/projects/${projectId}`;
-  const previewUrl = "/projects/preview";
+  const previewUrl = `/projects/${projectId}/preview`;
   const copyUrl = `/projects/${projectId}/copy_conversion`;
-  const feedbackUrl = "/projects/feedback";
+  const feedbackUrl = `/projects/${projectId}/feedback`;
   // The user's cross-project asset library (JSON CRUD lives under /library).
   const libraryUrl = "/library.json";
   const libraryAssetUrl = (id) => `/library/${id}.json`;
@@ -841,12 +847,16 @@ function EditorApp({ config }) {
   // division is currently open (the whole document only when that's the root)
   // plus a helper to post into the preview iframe. The fragment is already
   // build-ready -- the web-editor emits `<image source>` from each asset's
-  // `fileRef` (the bare `<id>.<ext>` filename), so nothing here needs fixing.
+  // `fileRef` (the bare `<ref>.<ext>` filename), so nothing here needs fixing.
+  // `project_id` lets ProjectsController#preview scope the `<base>` tag it
+  // prepends to this project's own preview/external/:ref route (see
+  // routes.rb) -- unlike the anonymous /tryit demo, which posts no
+  // project_id and never has external assets to resolve.
   const onPreviewRebuild = useCallback(
     (source, title, postToIframe) => {
-      postToIframe(previewUrl, { source, title, authenticity_token: csrfToken });
+      postToIframe(previewUrl, { source, title, project_id: projectId, authenticity_token: csrfToken });
     },
-    [previewUrl, csrfToken],
+    [previewUrl, projectId, csrfToken],
   );
 
   const onCreatePretextProjectCopy = useCallback(async () => {

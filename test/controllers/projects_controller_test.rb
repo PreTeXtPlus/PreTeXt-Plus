@@ -198,20 +198,37 @@ class ProjectsControllerTest < ActionDispatch::IntegrationTest
     assert_includes response.body, "Hello World"
   end
 
-  test "preview prepends a base tag pointing at the owner-only asset redirect" do
+  test "preview with no project_id renders the build server response with no base tag" do
     stub_preview_server(body: "<html><body>stub</body></html>") do
       post preview_projects_url, params: { source: "<section/>", title: "Test" }
     end
     assert_response :success
-    assert_equal "<base href=\"/preview_assets/\"><html><body>stub</body></html>", response.body
+    assert_equal "<html><body>stub</body></html>", response.body
+  end
+
+  test "preview with a project_id prepends a base tag pointing at that project's owner-only asset redirect" do
+    stub_preview_server(body: "<html><body>stub</body></html>") do
+      post preview_projects_url, params: { source: "<section/>", title: "Test", project_id: @project.id }
+    end
+    assert_response :success
+    assert_equal "<base href=\"/projects/#{@project.id}/preview/external/\"><html><body>stub</body></html>", response.body
+  end
+
+  test "preview ignores a project_id the current user does not own" do
+    other_project = projects(:two)
+    stub_preview_server(body: "<html><body>stub</body></html>") do
+      post preview_projects_url, params: { source: "<section/>", title: "Test", project_id: other_project.id }
+    end
+    assert_response :success
+    assert_equal "<html><body>stub</body></html>", response.body
   end
 
   test "PreTeXt's built-in logo redirects under both the preview and share asset prefixes" do
-    sign_out @user
-    get "/preview_assets/external/icon.svg"
+    get "/projects/#{@project.id}/preview/external/icon.svg"
     assert_redirected_to "/icon-small.svg"
 
-    get "/share_assets/external/icon.svg"
+    sign_out @user
+    get "/projects/#{@project.id}/share/external/icon.svg"
     assert_redirected_to "/icon-small.svg"
   end
 

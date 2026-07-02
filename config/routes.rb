@@ -37,6 +37,15 @@ Rails.application.routes.draw do
       get "checkout" => "subscription_types#checkout", as: "checkout"
     end
   end
+  # PreTeXt's own built-in logo, referenced by every document's docinfo as a
+  # plain `external/icon.svg` -- not a library asset at all, so it must be
+  # caught and redirected to the static file *before* the project_assets
+  # preview/share routes below (declaration order matters: this has to win the
+  # match first, since `/projects/:id/preview|share/external/icon.svg` would
+  # otherwise match those routes' `:ref` segment instead). Declared ahead of
+  # `resources :projects` for that reason, even though it's otherwise
+  # unrelated to the resource.
+  get "*_/icon.svg", to: redirect("/icon-small.svg")
   resources :projects do
     resources :builds, only: [ :index, :show, :create, :destroy ]
     resources :divisions, only: [ :create ]
@@ -45,7 +54,6 @@ Rails.application.routes.draw do
     # `destroy` keys on the library_asset id -- see ProjectAssetsController.
     resources :project_assets, only: [ :create, :destroy ]
     collection do
-      post "preview" => "projects#preview", as: "preview"
       post "feedback" => "projects#feedback", as: "feedback"
       get "lunr-pretext-search-index.js", to: redirect("/ptx-search.js")
       get "*_/lunr-pretext-search-index.js", to: redirect("/ptx-search.js")
@@ -56,6 +64,8 @@ Rails.application.routes.draw do
       get "share/source" => "projects#source", as: "share_source"
       get "share/copy", to: redirect("projects/%{project_id}/share/source")
       post "share/copy" => "projects#copy", as: "copy"
+      get "(*_)/external/:ref" => "project_assets#share", as: "share_asset"
+      post "preview" => "projects#preview", as: "preview"
       get "*/lunr-pretext-search-index.js", to: redirect("/ptx-search.js")
     end
   end
@@ -64,27 +74,14 @@ Rails.application.routes.draw do
   end
   resources :announcements, only: %i[index show]
 
-  # PreTeXt's own built-in logo, referenced by every document's docinfo as a
-  # plain `external/icon.svg` -- not a library asset at all, so it must be
-  # caught and redirected to the static file *before* the asset routes below
-  # (declaration order matters: this has to win the match first). Global
-  # rather than scoped under /projects/, since the <base> tags injected for
-  # preview/share resolve that relative reference to different, non-/projects
-  # prefixes depending on context.
-  get "*_/icon.svg", to: redirect("/icon-small.svg")
   # A stable, asset-id-scoped redirect to the asset's current file location.
-  # Used as the `source` target for live preview builds (which need a real,
-  # fetchable URL right now, not a project-scoped ref that may not be saved
-  # yet) and for the editor's own asset-manager thumbnails. Owner-only --
-  # only the authenticated author ever sees a live preview or the asset
-  # manager. Kept outside the json-only scope above since this redirects
-  # rather than rendering JSON.
-  get "preview_assets/external/:id" => "library_assets#preview_file", as: "preview_asset_file"
-  # Same idea, but fully public (no login required) -- this is the target
-  # baked into a project's *saved* pretext_source, which is what renders on
-  # the public /share page. Supersedes the old ref-based, project-scoped
-  # show_asset_file: id-based lookup works regardless of whether the
-  # project_asset join row has been saved yet.
+  # Used purely for the editor's own asset-manager thumbnails when browsing the
+  # full cross-project library, where an asset may not yet belong to any
+  # project (and so has no project-scoped ref to redirect through). Owner-only
+  # -- only the authenticated author ever sees the asset manager. Kept outside
+  # the json-only scope above since this redirects rather than rendering JSON.
+  get "library/:id/file" => "library_assets#file", as: "library_asset_file"
+  # Deprecated asset share link (used by old builds to serve up assets).
   get "share_assets/external/:id" => "library_assets#share_file", as: "share_asset_file"
   get "builds/:build_id/files(/*relative_path)", to: "build_files#show", as: "build_file", format: false
   resources :asset_fetches, only: :create

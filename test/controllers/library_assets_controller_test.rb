@@ -33,7 +33,7 @@ class LibraryAssetsControllerTest < ActionDispatch::IntegrationTest
     assert_equal "authored", LibraryAsset.where(user: @user).order(:created_at).last.kind
   end
 
-  test "show exposes the owner-only preview path and the file's extension" do
+  test "show exposes the owner-only thumbnail path and the file's extension" do
     upload = fixture_file_upload("test_image.png", "image/png")
     post library_assets_url(format: :json), params: {
       library_asset: { kind: "file", short_description: "test_image.png", file: upload }
@@ -43,24 +43,24 @@ class LibraryAssetsControllerTest < ActionDispatch::IntegrationTest
     get library_asset_url(asset, format: :json)
 
     body = JSON.parse(response.body)
-    assert_equal preview_asset_file_path(asset, format: "png"), body["file"]
+    assert_equal library_asset_file_path(asset, format: "png"), body["file"]
     assert_equal "png", body["extension"]
   end
 
-  test "preview_file redirects to the asset's current file URL" do
+  test "file redirects to the asset's current file URL" do
     upload = fixture_file_upload("test_image.png", "image/png")
     post library_assets_url(format: :json), params: {
       library_asset: { kind: "file", short_description: "test_image.png", file: upload }
     }
     asset = LibraryAsset.where(user: @user).order(:created_at).last
 
-    get preview_asset_file_path(asset, format: "png")
+    get library_asset_file_path(asset, format: "png")
 
     assert_response :redirect
     assert_match %r{/rails/active_storage/}, response.location
   end
 
-  test "preview_file denies access to another user's asset" do
+  test "file denies access to another user's asset" do
     upload = fixture_file_upload("test_image.png", "image/png")
     post library_assets_url(format: :json), params: {
       library_asset: { kind: "file", short_description: "test_image.png", file: upload }
@@ -70,41 +70,10 @@ class LibraryAssetsControllerTest < ActionDispatch::IntegrationTest
     sign_out @user
     sign_in users(:two)
 
-    get preview_asset_file_path(asset, format: "png")
+    get library_asset_file_path(asset, format: "png")
 
     # CanCan::AccessDenied is rescued globally (application_controller.rb) into
     # a redirect for non-JSON requests, rather than propagating as an exception.
     assert_redirected_to projects_path
-  end
-
-  test "share_file redirects to the asset's current file URL for a signed-in non-owner" do
-    upload = fixture_file_upload("test_image.png", "image/png")
-    post library_assets_url(format: :json), params: {
-      library_asset: { kind: "file", short_description: "test_image.png", file: upload }
-    }
-    asset = LibraryAsset.where(user: @user).order(:created_at).last
-
-    sign_out @user
-    sign_in users(:two)
-
-    get share_asset_file_path(asset, format: "png")
-
-    assert_response :redirect
-    assert_match %r{/rails/active_storage/}, response.location
-  end
-
-  test "share_file redirects to the asset's current file URL when signed out entirely" do
-    upload = fixture_file_upload("test_image.png", "image/png")
-    post library_assets_url(format: :json), params: {
-      library_asset: { kind: "file", short_description: "test_image.png", file: upload }
-    }
-    asset = LibraryAsset.where(user: @user).order(:created_at).last
-
-    sign_out @user
-
-    get share_asset_file_path(asset, format: "png")
-
-    assert_response :redirect
-    assert_match %r{/rails/active_storage/}, response.location
   end
 end

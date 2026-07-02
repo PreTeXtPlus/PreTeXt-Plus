@@ -22,6 +22,6 @@ class SetHtmlSourceJobTest < ActiveJob::TestCase
       SetHtmlSourceJob.perform_now(project)
     end
 
-    assert_equal "<base href=\"/share_assets/\"><html><body>built</body></html>", project.reload.html_source
+    assert_equal "<base href=\"/projects/#{project.id}/share/external/\"><html><body>built</body></html>", project.reload.html_source
   end
 end

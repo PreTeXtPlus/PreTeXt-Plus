@@ -90,4 +90,62 @@ class ProjectAssetsControllerTest < ActionDispatch::IntegrationTest
 
     assert_response :not_found
   end
+
+  def create_project_asset_with_file(ref:)
+    upload = fixture_file_upload("test_image.png", "image/png")
+    post library_assets_url(format: :json), params: {
+      library_asset: { kind: "file", short_description: "test_image.png", file: upload }
+    }
+    library_asset = LibraryAsset.where(user: @user).order(:created_at).last
+
+    post project_project_assets_url(@project, format: :json), params: {
+      project_asset: { library_asset_id: library_asset.id, ref: ref }
+    }
+    @project.project_assets.find_by!(ref: ref)
+  end
+
+  test "preview_file redirects to the asset's current file URL" do
+    membership = create_project_asset_with_file(ref: "diagram-two")
+
+    get preview_asset_file_project_path(@project, ref: membership.ref, format: "png")
+
+    assert_response :redirect
+    assert_match %r{/rails/active_storage/}, response.location
+  end
+
+  test "preview_file denies access to another user's project" do
+    membership = create_project_asset_with_file(ref: "diagram-two")
+
+    sign_out @user
+    sign_in users(:two)
+
+    get preview_asset_file_project_path(@project, ref: membership.ref, format: "png")
+
+    # Not owned by the requester, so it's outside accessible_by's scope and
+    # 404s -- same pattern as create/destroy's cross-user tests above.
+    assert_response :not_found
+  end
+
+  test "share_file redirects to the asset's current file URL when signed out entirely" do
+    membership = create_project_asset_with_file(ref: "diagram-two")
+
+    sign_out @user
+
+    get share_asset_file_project_path(@project, ref: membership.ref, format: "png")
+
+    assert_response :redirect
+    assert_match %r{/rails/active_storage/}, response.location
+  end
+
+  test "share_file redirects to the asset's current file URL for a signed-in non-owner" do
+    membership = create_project_asset_with_file(ref: "diagram-two")
+
+    sign_out @user
+    sign_in users(:two)
+
+    get share_asset_file_project_path(@project, ref: membership.ref, format: "png")
+
+    assert_response :redirect
+    assert_match %r{/rails/active_storage/}, response.location
+  end
 end

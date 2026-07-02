@@ -100,15 +100,7 @@ class ProjectsController < ApplicationController
       request.body = URI.encode_www_form(post_params)
       http.request(request)
     end
-    # The assembled source only ever carries a bare `external/<id>.<ext>`
-    # reference for an image (see editor.jsx's assetsForBuild) -- the build
-    # server treats `source` as a plain PreTeXt external-asset filename and
-    # writes `external/<that value>` into the output `<img src>` itself. A
-    # root-relative <base> pins that relative path at the owner-scoped
-    # redirect (library_assets#preview_file) regardless of where this HTML
-    # ends up displayed (this response is always shown in an iframe, so the
-    # base resolves against our own origin either way).
-    render html: "<base href=\"/preview_assets/\">#{response.body}".html_safe, status: response.code
+    render html: response.body.html_safe, status: response.code
   rescue Net::OpenTimeout, Net::ReadTimeout
     render plain: "Preview build timed out", status: :gateway_timeout
   rescue SocketError, EOFError, IOError, Errno::ECONNREFUSED, Errno::EHOSTUNREACH, SystemCallError
