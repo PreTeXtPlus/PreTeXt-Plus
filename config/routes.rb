@@ -82,7 +82,7 @@ Rails.application.routes.draw do
   # the json-only scope above since this redirects rather than rendering JSON.
   get "library/:id/file" => "library_assets#file", as: "library_asset_file"
   # Deprecated asset share link (used by old builds to serve up assets).
-  get "share_assets/external/:id" => "library_assets#share_file", as: "share_asset_file"
+  get "share_assets/external/:id" => "library_assets#file", as: "share_asset_file"
   get "builds/:build_id/files(/*relative_path)", to: "build_files#show", as: "build_file", format: false
   resources :asset_fetches, only: :create
   get "tryit" => "projects#tryit"
