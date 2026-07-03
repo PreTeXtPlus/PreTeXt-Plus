@@ -1,4 +1,4 @@
-json.extract! library_asset, :id, :user_id, :kind, :content, :description, :short_description, :created_at, :updated_at
+json.extract! library_asset, :id, :user_id, :kind, :source, :description, :short_description, :title, :created_at, :updated_at
 if library_asset.file.attached?
   extension = library_asset.file.filename.extension_without_delimiter.presence
   # `file`: owner-only redirect, used for the editor's own thumbnails when

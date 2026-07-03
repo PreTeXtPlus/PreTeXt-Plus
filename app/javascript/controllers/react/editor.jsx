@@ -49,14 +49,14 @@ const AUTOSAVE_MS = 10000;
 // --- Rails JSON  <->  web-editor shapes ------------------------------------
 
 // The root element tags a pretext document can open with.  A well-formed
-// pretext root division's content *is* one of these; a malformed pre-migration
+// pretext root division's source *is* one of these; a malformed pre-migration
 // one still holds a bare <section>.
 const PRETEXT_ROOT_TAG = /^\s*<(article|book|slideshow)[\s>]/;
 
 // The `type` of a pretext root, read from its own XML (the root element's tag
-// name) -- undefined when the content isn't a root element yet.
-function pretextRootType(content) {
-  const match = PRETEXT_ROOT_TAG.exec(content ?? "");
+// name) -- undefined when the source isn't a root element yet.
+function pretextRootType(source) {
+  const match = PRETEXT_ROOT_TAG.exec(source ?? "");
   return match ? match[1] : undefined;
 }
 
@@ -67,8 +67,8 @@ function pretextRootType(content) {
 // title out of, so the assembler would otherwise render literal "undefined".
 //
 // A pretext division instead carries its type *in its own XML* -- the root
-// element's tag name -- so we derive `type` from the content rather than from
-// Rails metadata.  We only attach it once the content is actually a root
+// element's tag name -- so we derive `type` from the source rather than from
+// Rails metadata.  We only attach it once the source is actually a root
 // element (<article>/<book>/<slideshow>): a malformed pretext root still
 // holding a bare <section> (pre-migration data) gets no `type`, matching the
 // old behavior, so the live editor won't try to rewrap that <section> into an
@@ -78,12 +78,12 @@ function railsDivisionToEditor(d, rootMeta) {
   const base = {
     id: String(d.id),
     xmlId: d.ref ?? "",
-    content: d.source ?? "",
+    source: d.source ?? "",
     sourceFormat: d.source_format ?? "pretext",
   };
   if (!d.is_root) return base;
   if (d.source_format !== "pretext") return { ...base, ...rootMeta };
-  const type = pretextRootType(base.content);
+  const type = pretextRootType(base.source);
   return type ? { ...base, type } : base;
 }
 
@@ -130,9 +130,9 @@ function railsAssetToEditor(a) {
     id: String(lib.id ?? ""),
     projectAssetId: String(a.id),
     ref: a.ref ?? "",
-    name: lib.short_description || lib.description || a.ref || "",
+    title: lib.title,
     kind: lib.kind === "authored" ? "authored" : "image",
-    source: lib.content ?? undefined,
+    source: lib.source ?? undefined,
     url: lib.file ?? undefined,
     isFile: Boolean(lib.file),
     fileRef: fileRefFor(lib, a.ref),
@@ -146,14 +146,14 @@ function railsAssetToEditor(a) {
 // derived slug is provisional -- it only resolves once the asset is actually
 // associated with the project under that exact ref (see onAssetAddFromLibrary).
 function railsLibraryAssetToEditor(lib) {
-  const name = lib.short_description || lib.description || "";
-  const ref = slugifyRef(name);
+  const title = lib.title;
+  const ref = slugifyRef(title);
   return {
     id: String(lib.id),
     ref,
-    name,
+    title,
     kind: lib.kind === "authored" ? "authored" : "image",
-    source: lib.content ?? undefined,
+    source: lib.source ?? undefined,
     url: lib.file ?? undefined,
     isFile: Boolean(lib.file),
     fileRef: fileRefFor(lib, ref),
@@ -168,7 +168,7 @@ function toEditorAsset(rec) {
   return {
     id: rec.id,
     ref: rec.ref,
-    name: rec.name,
+    title: rec.title,
     kind: rec.kind,
     source: rec.source,
     url: rec.url,
@@ -265,7 +265,7 @@ function editorStateToRailsPayload(state, projectAssets, deletes = []) {
         ...state.divisions.map((d) => ({
           id: d.id,
           ref: d.xmlId,
-          source: d.content,
+          source: d.source,
           source_format: d.sourceFormat,
         })),
         ...deletes.map((id) => ({ id, _destroy: true })),
@@ -284,7 +284,7 @@ function persistableShape(state) {
     divisions: state.divisions.map((d) => ({
       id: d.id,
       xmlId: d.xmlId,
-      content: d.content,
+      source: d.source,
       sourceFormat: d.sourceFormat,
     })),
     // Asset membership is deliberately excluded: it's persisted immediately via
@@ -444,7 +444,7 @@ function EditorApp({ config }) {
     if (!w) return;
     const division = w.divisions.find((d) => d.xmlId === change.xmlId);
     if (division) {
-      if (change.sourceContent !== undefined) division.content = change.sourceContent;
+      if (change.source !== undefined) division.source = change.source;
       if (change.sourceFormat !== undefined) division.sourceFormat = change.sourceFormat;
     }
     // Document-wide docinfo edits arrive against the root division.
@@ -489,7 +489,7 @@ function EditorApp({ config }) {
             division: {
               ref: division.xmlId,
               source_format: division.sourceFormat,
-              source: division.content,
+              source: division.source,
             },
           }),
         });
@@ -498,7 +498,7 @@ function EditorApp({ config }) {
         w.divisions.push({
           id,
           xmlId: division.xmlId,
-          content: division.content ?? "",
+          source: division.source ?? "",
           sourceFormat: division.sourceFormat ?? "pretext",
         });
         return id;
@@ -636,7 +636,7 @@ function EditorApp({ config }) {
   // under a project-unique ref (the editor has already shown it optimistically).
   const onAssetAddFromLibrary = useCallback(
     async (asset) => {
-      await associateAsset(asset.id, uniqueRef(asset.ref || slugifyRef(asset.name)));
+      await associateAsset(asset.id, uniqueRef(asset.ref || slugifyRef(asset.title)));
       invalidateAssetQueries();
     },
     [associateAsset, uniqueRef, invalidateAssetQueries],
@@ -647,12 +647,13 @@ function EditorApp({ config }) {
       const form = new FormData();
       form.append("library_asset[file]", file);
       form.append("library_asset[kind]", "file");
-      form.append("library_asset[short_description]", file.name);
+      form.append("library_asset[short_description]", file.title);
+      form.append("library_asset[title]", file.title);
       // Create the library asset (upload bytes), then associate it with the
       // project; only resolve once both are persisted, returning the canonical
       // Asset the editor keys its optimistic entry against.
       const created = await createLibraryAsset(form);
-      const ref = uniqueRef(slugifyRef(file.name.replace(/\.[^.]+$/, "")) || created.ref);
+      const ref = uniqueRef(slugifyRef(file.title.replace(/\.[^.]+$/, "")) || created.ref);
       const member = await associateAsset(created.id, ref);
       invalidateAssetQueries();
       // contentType comes off the File itself -- a UI hint the server doesn't echo.
@@ -711,11 +712,11 @@ function EditorApp({ config }) {
   );
 
   const onCreateAuthored = useCallback(
-    async (name, ref) => {
+    async (title, ref) => {
       // Create the authored library asset, then associate it; only resolve once
       // both are persisted, returning the canonical Asset.
       const created = await createLibraryAsset({
-        library_asset: { kind: "authored", short_description: name, content: "" },
+        library_asset: { kind: "authored", title: title, source: "" },
       });
       const member = await associateAsset(created.id, uniqueRef(ref));
       invalidateAssetQueries();
@@ -738,7 +739,7 @@ function EditorApp({ config }) {
           Accept: "application/json",
           "X-CSRF-Token": csrfToken,
         },
-        body: JSON.stringify({ library_asset: { content: asset.source ?? "" } }),
+        body: JSON.stringify({ library_asset: { source: asset.source ?? "" } }),
       });
       if (!res.ok) {
         let message = `Failed to save asset: ${res.status}`;

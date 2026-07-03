@@ -25,7 +25,7 @@ class LibraryAssetsControllerTest < ActionDispatch::IntegrationTest
   test "create without a url saves a plain library asset" do
     assert_difference -> { LibraryAsset.count }, 1 do
       post library_assets_url(format: :json), params: {
-        library_asset: { kind: "authored", short_description: "My Activity", content: "" }
+        library_asset: { kind: "authored", short_description: "My Activity", source: "" }
       }
     end
 
