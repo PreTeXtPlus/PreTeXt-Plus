@@ -1,8 +1,8 @@
 ---
 division: section
-xmlid: tryit-markdown
+id: tryit-markdown
+title: Markdown-style PreTeXt
 ---
-# Markdown-style PreTeXt
 
 This section is written in Markdown-style PreTeXt markup. You can edit this content using supported Markdown syntax.
 

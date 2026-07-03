@@ -1,4 +1,8 @@
-# Welcome to PreTeXt.Plus!
+---
+division: article
+id: document
+title: Welcome to PreTeXt.Plus!
+---
 
 This is a sample project to get you started. You can edit this content using _Markdown-style PreTeXt_.
 

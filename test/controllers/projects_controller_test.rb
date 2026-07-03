@@ -1,6 +1,7 @@
 require "test_helper"
 
 class ProjectsControllerTest < ActionDispatch::IntegrationTest
+  include ActiveJob::TestHelper
   setup do
     @project = projects(:one)
     @user = users(:one)
@@ -50,10 +51,8 @@ class ProjectsControllerTest < ActionDispatch::IntegrationTest
   end
 
   test "should update project" do
-    stub_build_server do
-      patch project_url(@project), params: { project: { title: @project.title } }
-    end
-    assert_redirected_to project_url(@project)
+    patch project_url(@project), params: { project: { title: @project.title } }, as: :json
+    assert_response :ok
   end
 
   test "should destroy project" do
@@ -185,7 +184,7 @@ class ProjectsControllerTest < ActionDispatch::IntegrationTest
   test "preview is accessible without authentication" do
     sign_out :user  # sign out
     stub_preview_server do
-      post preview_projects_url, params: { source: "<section><title>Test</title></section>", title: "Test" }
+      post preview_project_url(@project), params: { source: "<section><title>Test</title></section>", title: "Test" }
     end
     assert_response :success
   end
@@ -193,39 +192,39 @@ class ProjectsControllerTest < ActionDispatch::IntegrationTest
   test "preview returns build server response body" do
     expected_body = "<html><body><p>Hello World</p></body></html>"
     stub_preview_server(body: expected_body) do
-      post preview_projects_url, params: { source: "<section/>", title: "Test" }
+      post preview_project_url(@project), params: { source: "<section/>", title: "Test" }
     end
     assert_response :success
     assert_includes response.body, "Hello World"
   end
 
-  test "preview prepends a base tag pointing at the owner-only asset redirect" do
+  test "preview with no project_id renders the build server response with no base tag" do
     stub_preview_server(body: "<html><body>stub</body></html>") do
-      post preview_projects_url, params: { source: "<section/>", title: "Test" }
+      post preview_project_url(@project), params: { source: "<section/>", title: "Test" }
     end
     assert_response :success
-    assert_equal "<base href=\"/preview_assets/\"><html><body>stub</body></html>", response.body
+    assert_equal "<html><body>stub</body></html>", response.body
   end
 
   test "PreTeXt's built-in logo redirects under both the preview and share asset prefixes" do
-    sign_out @user
-    get "/preview_assets/external/icon.svg"
+    get "/projects/#{@project.id}/preview/external/icon.svg"
     assert_redirected_to "/icon-small.svg"
 
-    get "/share_assets/external/icon.svg"
+    sign_out @user
+    get "/projects/#{@project.id}/share/external/icon.svg"
     assert_redirected_to "/icon-small.svg"
   end
 
   test "preview returns bad_gateway when build server connection fails" do
     stub_preview_server(raise_error: Errno::ECONNREFUSED.new) do
-      post preview_projects_url, params: { source: "<section/>", title: "Test" }
+      post preview_project_url(@project), params: { source: "<section/>", title: "Test" }
     end
     assert_response :bad_gateway
   end
 
   test "preview returns gateway_timeout when build server times out" do
     stub_preview_server(raise_error: Net::ReadTimeout.new) do
-      post preview_projects_url, params: { source: "<section/>", title: "Test" }
+      post preview_project_url(@project), params: { source: "<section/>", title: "Test" }
     end
     assert_response :gateway_timeout
   end
@@ -234,17 +233,9 @@ class ProjectsControllerTest < ActionDispatch::IntegrationTest
 
   test "should update docinfo" do
     custom_docinfo = "<docinfo><macros>\\newcommand{\\N}{\\mathbb{N}}</macros></docinfo>"
-    stub_build_server do
-      patch project_url(@project), params: {
-        project: {
-          docinfo: custom_docinfo
-        }
-      }
-    end
-    assert_redirected_to @project
-
-    @project.reload
-  assert_equal custom_docinfo, @project.docinfo
+    patch project_url(@project), params: { project: { docinfo: custom_docinfo } }, as: :json
+    assert_response :ok
+    assert_equal custom_docinfo, @project.reload.docinfo
   end
 
   # --- JSON API (used by the javascript editor) ---
@@ -300,22 +291,27 @@ class ProjectsControllerTest < ActionDispatch::IntegrationTest
     assert_equal "<docinfo><macros>\\newcommand{\\R}{\\mathbb{R}}</macros></docinfo>", json["common_docinfo"]
   end
 
-  test "docinfo update via json triggers rebuild" do
-    captured_params = nil
-    fake_response = Struct.new(:body).new("<html><body>docinfo-only</body></html>")
-
-    Net::HTTP.stub(:post_form, ->(_uri, params) {
-      captured_params = params
-      fake_response
-    }) do
+  test "JSON update with enqueue_html_source_job param enqueues SetHtmlSourceJob" do
+    assert_enqueued_with(job: SetHtmlSourceJob) do
       patch project_url(@project),
-        params: { project: { docinfo: "<docinfo><macros>\\newcommand{\\Q}{\\mathbb{Q}}</macros></docinfo>" } },
+        params: { project: { title: @project.title }, enqueue_html_source_job: true },
         as: :json
     end
+  end
 
-    assert_response :success
-    assert_equal @project.reload.pretext_source, captured_params[:source]
-    assert_equal "<base href=\"/share_assets/\"><html><body>docinfo-only</body></html>", @project.reload.html_source
+  test "JSON update with enqueue_html_source_job param sets generating placeholder immediately" do
+    patch project_url(@project),
+      params: { project: { title: @project.title }, enqueue_html_source_job: true },
+      as: :json
+    assert_equal Project::ENQUEUE_SOURCE_PLACEHOLDER, @project.reload.html_source
+  end
+
+  test "JSON update without enqueue_html_source_job param does not enqueue SetHtmlSourceJob" do
+    assert_no_enqueued_jobs(only: SetHtmlSourceJob) do
+      patch project_url(@project),
+        params: { project: { title: "API Title" } },
+        as: :json
+    end
   end
 
   test "non-owner cannot get project json" do

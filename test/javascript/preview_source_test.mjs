@@ -8,9 +8,9 @@ const LATEX_RAW = "\\section{Hello}\n\nWorld";
 
 describe("assemblePreviewSource", () => {
   describe("pretext format", () => {
-    it("returns content as-is when no docinfo", () => {
+    it("returns source as-is when no docinfo", () => {
       const result = assemblePreviewSource({
-        content: PRETEXT_FRAGMENT,
+        source: PRETEXT_FRAGMENT,
         sourceFormat: "pretext",
         pretextSource: "",
         docinfo: "",
@@ -18,9 +18,9 @@ describe("assemblePreviewSource", () => {
       assert.equal(result, PRETEXT_FRAGMENT);
     });
 
-    it("wraps content in full pretext document when docinfo is present", () => {
+    it("wraps source in full pretext document when docinfo is present", () => {
       const result = assemblePreviewSource({
-        content: PRETEXT_FRAGMENT,
+        source: PRETEXT_FRAGMENT,
         sourceFormat: "pretext",
         pretextSource: "",
         docinfo: DOCINFO,
@@ -29,14 +29,14 @@ describe("assemblePreviewSource", () => {
       assert.match(result, /<\/pretext>$/);
       assert.ok(result.includes(DOCINFO), "should include docinfo block");
       assert.ok(result.includes('<article label="article">'), "should include article wrapper");
-      assert.ok(result.includes(PRETEXT_FRAGMENT), "should include content");
+      assert.ok(result.includes(PRETEXT_FRAGMENT), "should include source");
     });
   });
 
   describe("latex format", () => {
-    it("uses pretextSource instead of raw latex content when pretextSource is present", () => {
+    it("uses pretextSource instead of raw latex source when pretextSource is present", () => {
       const result = assemblePreviewSource({
-        content: LATEX_RAW,
+        source: LATEX_RAW,
         sourceFormat: "latex",
         pretextSource: PRETEXT_FRAGMENT,
         docinfo: "",
@@ -45,9 +45,9 @@ describe("assemblePreviewSource", () => {
       assert.ok(!result.includes(LATEX_RAW), "should not include raw latex");
     });
 
-    it("falls back to raw content when pretextSource is absent", () => {
+    it("falls back to raw source when pretextSource is absent", () => {
       const result = assemblePreviewSource({
-        content: LATEX_RAW,
+        source: LATEX_RAW,
         sourceFormat: "latex",
         pretextSource: "",
         docinfo: "",
@@ -55,9 +55,9 @@ describe("assemblePreviewSource", () => {
       assert.equal(result, LATEX_RAW);
     });
 
-    it("falls back to raw content when pretextSource is undefined", () => {
+    it("falls back to raw source when pretextSource is undefined", () => {
       const result = assemblePreviewSource({
-        content: LATEX_RAW,
+        source: LATEX_RAW,
         sourceFormat: "latex",
         pretextSource: undefined,
         docinfo: "",
@@ -67,7 +67,7 @@ describe("assemblePreviewSource", () => {
 
     it("wraps pretextSource in full document when docinfo is present", () => {
       const result = assemblePreviewSource({
-        content: LATEX_RAW,
+        source: LATEX_RAW,
         sourceFormat: "latex",
         pretextSource: PRETEXT_FRAGMENT,
         docinfo: DOCINFO,
@@ -80,9 +80,9 @@ describe("assemblePreviewSource", () => {
       assert.ok(!result.includes(LATEX_RAW), "should not include raw latex");
     });
 
-    it("wraps fallback content in full document when docinfo is present but pretextSource is absent", () => {
+    it("wraps fallback source in full document when docinfo is present but pretextSource is absent", () => {
       const result = assemblePreviewSource({
-        content: LATEX_RAW,
+        source: LATEX_RAW,
         sourceFormat: "latex",
         pretextSource: "",
         docinfo: DOCINFO,
@@ -94,9 +94,9 @@ describe("assemblePreviewSource", () => {
   });
 
   describe("other formats (markdown)", () => {
-    it("returns content as-is when no docinfo", () => {
+    it("returns source as-is when no docinfo", () => {
       const result = assemblePreviewSource({
-        content: "# Hello\n\nWorld",
+        source: "# Hello\n\nWorld",
         sourceFormat: "markdown",
         pretextSource: "",
         docinfo: "",

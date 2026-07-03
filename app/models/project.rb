@@ -9,13 +9,12 @@ class Project < ApplicationRecord
   accepts_nested_attributes_for :project_assets, allow_destroy: true
   has_many :library_assets, through: :project_assets
 
+  has_many :builds, dependent: :destroy
   has_many :divisions, dependent: :destroy
   # allow_destroy lets the editor remove a division by sending `_destroy: true`.
   accepts_nested_attributes_for :divisions, allow_destroy: true
 
   enum :document_type, { article: 0, book: 1, slideshow: 2 }, default: :article, suffix: true, validate: true
-
-  before_update :set_html_source
 
   default_scope { order(updated_at: :desc) }
 
@@ -84,10 +83,12 @@ class Project < ApplicationRecord
   DEFAULT_DOCINFO = File.read Rails.root.join("app", "default_docs", "docinfo.xml")
 
   TRYIT_DOCINFO = File.read Rails.root.join("app", "default_docs", "tryit", "docinfo.xml")
-  TRYIT_ROOT_SOURCE = File.read Rails.root.join("app", "default_docs", "tryit", "root.xml")
+  TRYIT_ROOT_SOURCE = File.read Rails.root.join("app", "default_docs", "tryit", "root.tex")
   TRYIT_PRETEXT_SOURCE = File.read Rails.root.join("app", "default_docs", "tryit", "pretext.xml")
   TRYIT_LATEX_SOURCE = File.read Rails.root.join("app", "default_docs", "tryit", "latex.tex")
   TRYIT_MARKDOWN_SOURCE = File.read Rails.root.join("app", "default_docs", "tryit", "markdown.md")
+
+  ENQUEUE_SOURCE_PLACEHOLDER = File.read Rails.root.join("app", "default_docs", "enqueue_placeholder.html")
 
   def full_dup(new_owner = nil)
     duplicate = Project.build(self.dup.attributes)
@@ -106,32 +107,18 @@ class Project < ApplicationRecord
     duplicate
   end
 
+  def enqueue_html_source_job
+    self.update_column(:html_source, ENQUEUE_SOURCE_PLACEHOLDER)
+    SetHtmlSourceJob.perform_later(self)
+  end
+
   def self.tryit
     project = self.new(title: "Try it!")
     project.docinfo = TRYIT_DOCINFO
-    project.divisions.build(ref: "document", is_root: true, source_format: :pretext, source: TRYIT_ROOT_SOURCE)
+    project.divisions.build(ref: "tryit", is_root: true, source_format: :latex, source: TRYIT_ROOT_SOURCE)
     project.divisions.build(ref: "tryit-pretext", source_format: :pretext, source: TRYIT_PRETEXT_SOURCE)
     project.divisions.build(ref: "tryit-latex", source_format: :latex, source: TRYIT_LATEX_SOURCE)
     project.divisions.build(ref: "tryit-markdown", source_format: :markdown, source: TRYIT_MARKDOWN_SOURCE)
     project
-  end
-
-  private
-
-  def set_html_source
-    require "uri"
-    require "net/http"
-    # For LaTeX projects, use the editor-converted PreTeXt body.
-    params = {
-      source: pretext_source,
-      token: ENV["BUILD_TOKEN"]
-    }
-    response = Net::HTTP.post_form(URI.parse("https://#{ENV['BUILD_HOST']}"), params)
-    # See the matching comment in ProjectsController#preview -- the build
-    # server writes a bare `external/<id>.<ext>` image reference into its
-    # output, and this <base> pins that at the *public* redirect
-    # (library_assets#share_file), since html_source renders on the public
-    # /share page. Root-relative, so it needs no host config here.
-    self.html_source = "<base href=\"/share_assets/\">#{response.body}"
   end
 end

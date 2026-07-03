@@ -5,20 +5,23 @@
 authored_one:
   user: one
   kind: authored
+  title: My Activity
   short_description: My Activity
-  content: ""
+  source: ""
 
 # A second library asset owned by user one, already a member of project one
 # (see project_assets.yml) -- used to test removing an existing membership.
 image_one:
   user: one
   kind: file
+  title: A Diagram
   short_description: A Diagram
-  content: ""
+  source: ""
 
 # Owned by user two, used for cross-user authorization checks.
 other_user_asset:
   user: two
   kind: authored
+  title: Someone Else's Activity
   short_description: Someone Else's Activity
-  content: ""
+  source: ""

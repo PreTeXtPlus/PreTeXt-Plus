@@ -6,6 +6,8 @@ class ProjectAssetsController < ApplicationController
   # it as server truth. The library asset itself is created separately via
   # LibraryAssetsController.
 
+  allow_unauthenticated_access only: :share
+
   # POST /projects/:project_id/project_assets
   def create
     @project = Project.accessible_by(current_ability).find(params[:project_id])
@@ -38,6 +40,12 @@ class ProjectAssetsController < ApplicationController
     respond_to do |format|
       format.json { head :no_content }
     end
+  end
+
+  def share
+    @project = Project.find(params[:id])
+    @project_asset = @project.project_assets.find_by!(ref: params[:ref])
+    redirect_to_cdn_url @project_asset.url
   end
 
   private

@@ -30,6 +30,11 @@ class ApplicationController < ActionController::Base
     new_user_session_path
   end
 
+  def redirect_to_cdn_url(url)
+    response.headers["Cache-Control"] = "no-store, private"
+    redirect_to url, allow_other_host: true
+  end
+
   private
 
   def authenticated?

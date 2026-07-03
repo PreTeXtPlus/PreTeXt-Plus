@@ -49,14 +49,14 @@ const AUTOSAVE_MS = 10000;
 // --- Rails JSON  <->  web-editor shapes ------------------------------------
 
 // The root element tags a pretext document can open with.  A well-formed
-// pretext root division's content *is* one of these; a malformed pre-migration
+// pretext root division's source *is* one of these; a malformed pre-migration
 // one still holds a bare <section>.
 const PRETEXT_ROOT_TAG = /^\s*<(article|book|slideshow)[\s>]/;
 
 // The `type` of a pretext root, read from its own XML (the root element's tag
-// name) -- undefined when the content isn't a root element yet.
-function pretextRootType(content) {
-  const match = PRETEXT_ROOT_TAG.exec(content ?? "");
+// name) -- undefined when the source isn't a root element yet.
+function pretextRootType(source) {
+  const match = PRETEXT_ROOT_TAG.exec(source ?? "");
   return match ? match[1] : undefined;
 }
 
@@ -67,8 +67,8 @@ function pretextRootType(content) {
 // title out of, so the assembler would otherwise render literal "undefined".
 //
 // A pretext division instead carries its type *in its own XML* -- the root
-// element's tag name -- so we derive `type` from the content rather than from
-// Rails metadata.  We only attach it once the content is actually a root
+// element's tag name -- so we derive `type` from the source rather than from
+// Rails metadata.  We only attach it once the source is actually a root
 // element (<article>/<book>/<slideshow>): a malformed pretext root still
 // holding a bare <section> (pre-migration data) gets no `type`, matching the
 // old behavior, so the live editor won't try to rewrap that <section> into an
@@ -78,12 +78,12 @@ function railsDivisionToEditor(d, rootMeta) {
   const base = {
     id: String(d.id),
     xmlId: d.ref ?? "",
-    content: d.source ?? "",
+    source: d.source ?? "",
     sourceFormat: d.source_format ?? "pretext",
   };
   if (!d.is_root) return base;
   if (d.source_format !== "pretext") return { ...base, ...rootMeta };
-  const type = pretextRootType(base.content);
+  const type = pretextRootType(base.source);
   return type ? { ...base, type } : base;
 }
 
@@ -97,27 +97,30 @@ function railsDivisionToEditor(d, rootMeta) {
 //
 // An asset carries two distinct file references, and they must not be confused:
 //
-//  * `url` -- `lib.file`, Rails' `preview_asset_file_path` redirect (owner-only).
+//  * `url` -- `lib.file`, Rails' `library_asset_file_path` redirect (owner-only).
 //    A real, fetchable URL. Used ONLY for the editor's own UI: the live
 //    thumbnail `<img src>` in the Asset Manager / "Edit asset" dialog.
 //
-//  * `fileRef` -- a bare `<id>.<ext>` external-asset filename. This is what the
+//  * `fileRef` -- a bare `<ref>.<ext>` external-asset filename. This is what the
 //    web-editor emits as the `<image source="...">` attribute in any assembled
 //    PreTeXt (live preview or save). The build server treats that value as a
 //    plain external-asset filename and prepends `external/` itself, so a real
 //    URL there would double-prefix. See the `<base>` tags in
 //    projects_controller.rb / project.rb that make the resulting relative path
-//    resolve wherever the build's output is displayed.
+//    resolve wherever the build's output is displayed. `ref` is the
+//    project-scoped ref (project_asset#ref), not the library_asset id, since
+//    that's what project_assets#preview_file / #share_file now key on.
 //
 // `isFile` distinguishes a file-backed asset from one defined purely by its
 // authored `source` (e.g. a future "defined in source" image); derived from the
 // attachment's presence, not from `kind` (which only splits image vs. authored).
 //
-// The bare `<id>.<ext>` source filename for a file-backed asset, or undefined
-// for a non-file asset (which relies entirely on its authored `source`).
-function fileRefFor(lib) {
-  if (!lib.file || lib.id == null) return undefined;
-  return lib.extension ? `${lib.id}.${lib.extension}` : String(lib.id);
+// The bare `<ref>.<ext>` source filename for a file-backed asset, or undefined
+// for a non-file asset (which relies entirely on its authored `source`) or one
+// with no ref yet.
+function fileRefFor(lib, ref) {
+  if (!lib.file || !ref) return undefined;
+  return lib.extension ? `${ref}.${lib.extension}` : ref;
 }
 
 // Map one Rails project_asset (+ its library_asset) to the host's richer record.
@@ -127,42 +130,45 @@ function railsAssetToEditor(a) {
     id: String(lib.id ?? ""),
     projectAssetId: String(a.id),
     ref: a.ref ?? "",
-    name: lib.short_description || lib.description || a.ref || "",
+    title: lib.title,
     kind: lib.kind === "authored" ? "authored" : "image",
-    source: lib.content ?? undefined,
+    source: lib.source ?? undefined,
     url: lib.file ?? undefined,
     isFile: Boolean(lib.file),
-    fileRef: fileRefFor(lib),
+    fileRef: fileRefFor(lib, a.ref),
   };
 }
 
 // Map one Rails library_asset JSON to a library-pool Asset.  Library assets have
 // no project `ref` of their own, so we derive a default slug; once the asset is
 // in the current project we override it with the real project ref (see
-// reconcileLibraryRefs) so inserting from the library uses the right tag.
+// reconcileLibraryRefs) so inserting from the library uses the right tag. The
+// derived slug is provisional -- it only resolves once the asset is actually
+// associated with the project under that exact ref (see onAssetAddFromLibrary).
 function railsLibraryAssetToEditor(lib) {
-  const name = lib.short_description || lib.description || "";
+  const title = lib.title;
+  const ref = slugifyRef(title);
   return {
     id: String(lib.id),
-    ref: slugifyRef(name),
-    name,
+    ref,
+    title,
     kind: lib.kind === "authored" ? "authored" : "image",
-    source: lib.content ?? undefined,
+    source: lib.source ?? undefined,
     url: lib.file ?? undefined,
     isFile: Boolean(lib.file),
-    fileRef: fileRefFor(lib),
+    fileRef: fileRefFor(lib, ref),
   };
 }
 
 // Strip a host project-asset record down to the bare web-editor Asset shape.
 // `url` is the real thumbnail URL (asset-manager UI); `fileRef` is the bare
-// `<id>.<ext>` filename the web-editor emits as `<image source>` -- see
+// `<ref>.<ext>` filename the web-editor emits as `<image source>` -- see
 // railsAssetToEditor for why the two must stay distinct.
 function toEditorAsset(rec) {
   return {
     id: rec.id,
     ref: rec.ref,
-    name: rec.name,
+    title: rec.title,
     kind: rec.kind,
     source: rec.source,
     url: rec.url,
@@ -259,7 +265,7 @@ function editorStateToRailsPayload(state, projectAssets, deletes = []) {
         ...state.divisions.map((d) => ({
           id: d.id,
           ref: d.xmlId,
-          source: d.content,
+          source: d.source,
           source_format: d.sourceFormat,
         })),
         ...deletes.map((id) => ({ id, _destroy: true })),
@@ -278,7 +284,7 @@ function persistableShape(state) {
     divisions: state.divisions.map((d) => ({
       id: d.id,
       xmlId: d.xmlId,
-      content: d.content,
+      source: d.source,
       sourceFormat: d.sourceFormat,
     })),
     // Asset membership is deliberately excluded: it's persisted immediately via
@@ -294,9 +300,9 @@ function EditorApp({ config }) {
   // Rails routes the React side needs.  Kept here (rather than in many data
   // attributes) since they're derivable from the project id.
   const projectUrl = `/projects/${projectId}`;
-  const previewUrl = "/projects/preview";
+  const previewUrl = `/projects/${projectId}/preview`;
   const copyUrl = `/projects/${projectId}/copy_conversion`;
-  const feedbackUrl = "/projects/feedback";
+  const feedbackUrl = `/projects/${projectId}/feedback`;
   // The user's cross-project asset library (JSON CRUD lives under /library).
   const libraryUrl = "/library.json";
   const libraryAssetUrl = (id) => `/library/${id}.json`;
@@ -370,7 +376,9 @@ function EditorApp({ config }) {
 
   // ----- WRITE: save via TanStack mutation ---------------------------------
   const saveMutation = useMutation({
-    mutationFn: async ({ state, assets, deletes }) => {
+    mutationFn: async ({ state, assets, deletes, enqueue }) => {
+      const payload = editorStateToRailsPayload(state, assets, deletes);
+      if (enqueue) payload.enqueue_html_source_job = true;
       const res = await fetch(apiBase, {
         method: "PATCH",
         headers: {
@@ -378,7 +386,7 @@ function EditorApp({ config }) {
           Accept: "application/json",
           "X-CSRF-Token": csrfToken,
         },
-        body: JSON.stringify(editorStateToRailsPayload(state, assets, deletes)),
+        body: JSON.stringify(payload),
       });
       if (!res.ok) throw new Error(`Save failed: ${res.status}`);
       return state;
@@ -392,17 +400,19 @@ function EditorApp({ config }) {
   }, []);
 
   // Save the current working copy.  `force` saves even when not dirty (used by
-  // the Save button and before copy-conversion).  Snapshots the buffer up front
-  // so edits made *during* the in-flight save aren't mistakenly marked saved.
+  // the Save button and before copy-conversion).  `enqueue` triggers the server
+  // to kick off an html_source background build (Save button only, not autosave).
+  // Snapshots the buffer up front so edits made *during* the in-flight save
+  // aren't mistakenly marked saved.
   const save = useCallback(
-    async (force = false) => {
+    async (hard = false) => {
       if (!working.current) return false;
-      if (!force && !isDirty()) return true;
+      if (!hard && !isDirty()) return true;
       const snapshot = structuredClone(working.current);
       const assets = serverAssets.current;
       const deletes = pendingDeletes.current.slice();
       try {
-        await saveMutation.mutateAsync({ state: snapshot, assets, deletes });
+        await saveMutation.mutateAsync({ state: snapshot, assets, deletes, enqueue: hard });
         serverSnapshot.current = snapshot;
         // Drop the deletes we just persisted, keeping any queued mid-save.
         pendingDeletes.current = pendingDeletes.current.filter((id) => !deletes.includes(id));
@@ -434,7 +444,7 @@ function EditorApp({ config }) {
     if (!w) return;
     const division = w.divisions.find((d) => d.xmlId === change.xmlId);
     if (division) {
-      if (change.sourceContent !== undefined) division.content = change.sourceContent;
+      if (change.source !== undefined) division.source = change.source;
       if (change.sourceFormat !== undefined) division.sourceFormat = change.sourceFormat;
     }
     // Document-wide docinfo edits arrive against the root division.
@@ -479,7 +489,7 @@ function EditorApp({ config }) {
             division: {
               ref: division.xmlId,
               source_format: division.sourceFormat,
-              source: division.content,
+              source: division.source,
             },
           }),
         });
@@ -488,7 +498,7 @@ function EditorApp({ config }) {
         w.divisions.push({
           id,
           xmlId: division.xmlId,
-          content: division.content ?? "",
+          source: division.source ?? "",
           sourceFormat: division.sourceFormat ?? "pretext",
         });
         return id;
@@ -626,23 +636,24 @@ function EditorApp({ config }) {
   // under a project-unique ref (the editor has already shown it optimistically).
   const onAssetAddFromLibrary = useCallback(
     async (asset) => {
-      await associateAsset(asset.id, uniqueRef(asset.ref || slugifyRef(asset.name)));
+      await associateAsset(asset.id, uniqueRef(asset.ref || slugifyRef(asset.title)));
       invalidateAssetQueries();
     },
     [associateAsset, uniqueRef, invalidateAssetQueries],
   );
 
   const onAssetUpload = useCallback(
-    async (file) => {
+    async (file, title) => {
+      title = title || "New Asset";
       const form = new FormData();
       form.append("library_asset[file]", file);
       form.append("library_asset[kind]", "file");
-      form.append("library_asset[short_description]", file.name);
+      form.append("library_asset[title]", title);
       // Create the library asset (upload bytes), then associate it with the
       // project; only resolve once both are persisted, returning the canonical
       // Asset the editor keys its optimistic entry against.
       const created = await createLibraryAsset(form);
-      const ref = uniqueRef(slugifyRef(file.name.replace(/\.[^.]+$/, "")) || created.ref);
+      const ref = uniqueRef(slugifyRef(title.replace(/\.[^.]+$/, "")));
       const member = await associateAsset(created.id, ref);
       invalidateAssetQueries();
       // contentType comes off the File itself -- a UI hint the server doesn't echo.
@@ -701,11 +712,11 @@ function EditorApp({ config }) {
   );
 
   const onCreateAuthored = useCallback(
-    async (name, ref) => {
+    async (title, ref) => {
       // Create the authored library asset, then associate it; only resolve once
       // both are persisted, returning the canonical Asset.
       const created = await createLibraryAsset({
-        library_asset: { kind: "authored", short_description: name, content: "" },
+        library_asset: { kind: "authored", title: title, source: "" },
       });
       const member = await associateAsset(created.id, uniqueRef(ref));
       invalidateAssetQueries();
@@ -728,7 +739,7 @@ function EditorApp({ config }) {
           Accept: "application/json",
           "X-CSRF-Token": csrfToken,
         },
-        body: JSON.stringify({ library_asset: { content: asset.source ?? "" } }),
+        body: JSON.stringify({ library_asset: { source: asset.source ?? "" } }),
       });
       if (!res.ok) {
         let message = `Failed to save asset: ${res.status}`;
@@ -837,12 +848,16 @@ function EditorApp({ config }) {
   // division is currently open (the whole document only when that's the root)
   // plus a helper to post into the preview iframe. The fragment is already
   // build-ready -- the web-editor emits `<image source>` from each asset's
-  // `fileRef` (the bare `<id>.<ext>` filename), so nothing here needs fixing.
+  // `fileRef` (the bare `<ref>.<ext>` filename), so nothing here needs fixing.
+  // `project_id` lets ProjectsController#preview scope the `<base>` tag it
+  // prepends to this project's own preview/external/:ref route (see
+  // routes.rb) -- unlike the anonymous /tryit demo, which posts no
+  // project_id and never has external assets to resolve.
   const onPreviewRebuild = useCallback(
     (source, title, postToIframe) => {
-      postToIframe(previewUrl, { source, title, authenticity_token: csrfToken });
+      postToIframe(previewUrl, { source, title, project_id: projectId, authenticity_token: csrfToken });
     },
-    [previewUrl, csrfToken],
+    [previewUrl, projectId, csrfToken],
   );
 
   const onCreatePretextProjectCopy = useCallback(async () => {

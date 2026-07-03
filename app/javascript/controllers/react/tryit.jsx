@@ -5,8 +5,8 @@ import "@pretextbook/web-editor/dist/web-editor.css";
 
 const PRETEXT_ROOT_TAG = /^\s*<(article|book|slideshow)[\s>]/;
 
-function pretextRootType(content) {
-  const match = PRETEXT_ROOT_TAG.exec(content ?? "");
+function pretextRootType(source) {
+  const match = PRETEXT_ROOT_TAG.exec(source ?? "");
   return match ? match[1] : undefined;
 }
 
@@ -14,12 +14,12 @@ function railsDivisionToEditor(d) {
   const base = {
     id: String(d.id ?? d.ref),
     xmlId: d.ref ?? "",
-    content: d.source ?? "",
+    source: d.source ?? "",
     sourceFormat: d.source_format ?? "pretext",
   };
   if (!d.is_root) return base;
   if (d.source_format !== "pretext") return { ...base, type: "article" };
-  const type = pretextRootType(base.content);
+  const type = pretextRootType(base.source);
   return type ? { ...base, type } : base;
 }
 
@@ -40,7 +40,7 @@ function TryItApp({ config }) {
   });
 
   const onPreviewRebuild = useCallback((source, title, postToIframe) => {
-    postToIframe("/projects/preview", { source, title, authenticity_token: csrfToken });
+    postToIframe("/tryit/preview", { source, title, authenticity_token: csrfToken });
   }, [csrfToken]);
 
   const onDivisionAdd = useCallback(async () => crypto.randomUUID(), []);
@@ -82,6 +82,7 @@ function TryItApp({ config }) {
       onPreviewRebuild={onPreviewRebuild}
       onCreatePretextProjectCopy={noopAsync}
       onFeedbackSubmit={noopAsync}
+      hideAssets={true}
     />
   );
 }

@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_06_29_000000) do
+ActiveRecord::Schema[8.1].define(version: 2026_07_03_162435) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
   enable_extension "pgcrypto"
@@ -52,6 +52,22 @@ ActiveRecord::Schema[8.1].define(version: 2026_06_29_000000) do
     t.datetime "updated_at", null: false
   end
 
+  create_table "build_files", id: :uuid, default: -> { "gen_random_uuid()" }, force: :cascade do |t|
+    t.uuid "build_id", null: false
+    t.datetime "created_at", null: false
+    t.string "relative_path"
+    t.datetime "updated_at", null: false
+    t.index ["build_id"], name: "index_build_files_on_build_id"
+  end
+
+  create_table "builds", id: :uuid, default: -> { "gen_random_uuid()" }, force: :cascade do |t|
+    t.datetime "created_at", null: false
+    t.uuid "project_id", null: false
+    t.integer "status", default: 0, null: false
+    t.datetime "updated_at", null: false
+    t.index ["project_id"], name: "index_builds_on_project_id"
+  end
+
   create_table "divisions", id: :uuid, default: -> { "gen_random_uuid()" }, force: :cascade do |t|
     t.datetime "created_at", null: false
     t.boolean "is_root", default: false, null: false
@@ -64,11 +80,12 @@ ActiveRecord::Schema[8.1].define(version: 2026_06_29_000000) do
   end
 
   create_table "library_assets", id: :uuid, default: -> { "gen_random_uuid()" }, force: :cascade do |t|
-    t.text "content"
     t.datetime "created_at", null: false
     t.text "description"
     t.integer "kind", default: 0, null: false
     t.string "short_description"
+    t.text "source"
+    t.string "title"
     t.datetime "updated_at", null: false
     t.uuid "user_id", null: false
     t.index ["user_id"], name: "index_library_assets_on_user_id"
@@ -255,6 +272,8 @@ ActiveRecord::Schema[8.1].define(version: 2026_06_29_000000) do
 
   add_foreign_key "active_storage_attachments", "active_storage_blobs", column: "blob_id"
   add_foreign_key "active_storage_variant_records", "active_storage_blobs", column: "blob_id"
+  add_foreign_key "build_files", "builds"
+  add_foreign_key "builds", "projects"
   add_foreign_key "divisions", "projects"
   add_foreign_key "library_assets", "users"
   add_foreign_key "pay_charges", "pay_customers", column: "customer_id"

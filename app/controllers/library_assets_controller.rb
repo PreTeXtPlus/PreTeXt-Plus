@@ -1,7 +1,5 @@
 class LibraryAssetsController < ApplicationController
-  allow_unauthenticated_access only: :share_file
   load_and_authorize_resource
-  skip_authorize_resource only: :share_file
 
   def index
     @library_assets = LibraryAsset.where user: current_user
@@ -41,26 +39,19 @@ class LibraryAssetsController < ApplicationController
   end
 
   # Redirects to the asset's current file URL, generated fresh on every hit.
-  # Root-relative and recomputed per-request, so it works as both the editor's
-  # live thumbnail `<img src>` and the `source` PreTeXt resolves for a live
-  # preview build -- unlike baking in a signed storage URL directly, it never
-  # goes stale, and it works before the owning project_asset is ever saved.
-  def preview_file
-    response.headers["Cache-Control"] = "no-store, private"
-    redirect_to @library_asset.url, allow_other_host: true
-  end
-
-  # Same redirect, but public: this is the target baked into a project's
-  # *saved* pretext_source, which renders on the public /share page -- so it
-  # has to work for anyone, signed in or not, just like `share` itself.
-  def share_file
-    response.headers["Cache-Control"] = "no-store, private"
-    redirect_to @library_asset.url, allow_other_host: true
+  # Owner-only, and id-scoped rather than ref-scoped: this only backs the Asset
+  # Manager's thumbnail `<img src>` when browsing the full cross-project
+  # library, where an asset may not belong to any project yet (and so has no
+  # project-scoped ref). Live preview/share builds resolve their `<image
+  # source>` references through ProjectAssetsController#preview_file /
+  # #share_file instead, since those are ref + project scoped.
+  def file
+    redirect_to_cdn_url @library_asset.url
   end
 
   private
     # Only allow a list of trusted parameters through.
     def library_asset_params
-      params.expect(library_asset: [ :kind, :file, :content, :description, :short_description ])
+      params.expect(library_asset: [ :kind, :file, :source, :description, :short_description, :title ])
     end
 end

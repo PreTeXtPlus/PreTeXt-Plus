@@ -1,0 +1,15 @@
+one:
+  project: one
+  status: pending
+
+two:
+  project: two
+  status: success
+
+in_progress:
+  project: one
+  status: in_progress
+
+failed:
+  project: two
+  status: failed
