@@ -40,7 +40,7 @@ function TryItApp({ config }) {
   });
 
   const onPreviewRebuild = useCallback((source, title, postToIframe) => {
-    postToIframe("/projects/preview", { source, title, authenticity_token: csrfToken });
+    postToIframe("/tryit/preview", { source, title, authenticity_token: csrfToken });
   }, [csrfToken]);
 
   const onDivisionAdd = useCallback(async () => crypto.randomUUID(), []);

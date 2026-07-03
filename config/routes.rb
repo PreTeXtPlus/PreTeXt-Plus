@@ -86,6 +86,7 @@ Rails.application.routes.draw do
   get "builds/:build_id/files(/*relative_path)", to: "build_files#show", as: "build_file", format: false
   resources :asset_fetches, only: :create
   get "tryit" => "projects#tryit"
+  post "tryit/preview" => "projects#preview", as: "tryit_preview"
 
   get "up" => "rails/health#show", as: :rails_health_check
 
