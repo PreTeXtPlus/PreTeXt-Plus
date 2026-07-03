@@ -11,38 +11,51 @@
     </div>
   </div>
 
-  <div class="mt-6 rounded-xl border border-gray-200 bg-white p-6 shadow-sm space-y-3">
-    <div>
-      <span class="text-sm font-semibold text-gray-700">Status</span>
-      <p class="mt-1"><%= build_status_badge(@build) %></p>
-    </div>
-    <div>
-      <span class="text-sm font-semibold text-gray-700">Format</span>
-      <p class="mt-1 text-gray-600">HTML</p>
-    </div>
-    <div>
-      <span class="text-sm font-semibold text-gray-700">Created</span>
-      <p class="mt-1 text-gray-600">
-        <time datetime="<%= @build.created_at.iso8601 %>"><%= @build.created_at.strftime("%B %-d, %Y at %-I:%M %p") %></time>
-      </p>
-    </div>
-    <div>
-      <span class="text-sm font-semibold text-gray-700">Files</span>
-      <p class="mt-1 text-gray-600"><%= @build.build_files.count %></p>
-    </div>
-    <% if @build.zip.attached? %>
+  <%= turbo_frame_tag dom_id(@build, :status) do %>
+    <div class="mt-6 rounded-xl border border-gray-200 bg-white p-6 shadow-sm space-y-3">
+      <% unless @build.success? || @build.failed? %>
+        <meta http-equiv="refresh" content="5">
+      <% end %>
       <div>
-        <span class="text-sm font-semibold text-gray-700">Download</span>
-        <p class="mt-1"><%= link_to "Download ZIP", rails_blob_path(@build.zip, disposition: "attachment"), class: "text-blue-600 hover:underline" %></p>
+        <span class="text-sm font-semibold text-gray-700">Status</span>
+        <p class="mt-1 flex items-center gap-2">
+          <%= build_status_badge(@build) %>
+          <% unless @build.success? || @build.failed? %>
+            <svg class="size-4 animate-spin text-gray-400" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+              <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+              <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path>
+            </svg>
+          <% end %>
+        </p>
       </div>
-    <% end %>
-    <% if @build.success? %>
       <div>
-        <span class="text-sm font-semibold text-gray-700">Site</span>
-        <p class="mt-1"><%= link_to "View site", build_file_path(@build, "index.html"), class: "text-blue-600 hover:underline" %></p>
+        <span class="text-sm font-semibold text-gray-700">Format</span>
+        <p class="mt-1 text-gray-600">HTML</p>
       </div>
-    <% end %>
-  </div>
+      <div>
+        <span class="text-sm font-semibold text-gray-700">Created</span>
+        <p class="mt-1 text-gray-600">
+          <time datetime="<%= @build.created_at.iso8601 %>"><%= @build.created_at.strftime("%B %-d, %Y at %-I:%M %p") %></time>
+        </p>
+      </div>
+      <div>
+        <span class="text-sm font-semibold text-gray-700">Files</span>
+        <p class="mt-1 text-gray-600"><%= @build.build_files.count %></p>
+      </div>
+      <% if @build.zip.attached? %>
+        <div>
+          <span class="text-sm font-semibold text-gray-700">Download</span>
+          <p class="mt-1"><%= link_to "Download ZIP", rails_blob_path(@build.zip, disposition: "attachment"), class: "text-blue-600 hover:underline" %></p>
+        </div>
+      <% end %>
+      <% if @build.success? %>
+        <div>
+          <span class="text-sm font-semibold text-gray-700">Site</span>
+          <p class="mt-1"><%= link_to "View site", build_file_path(@build, "index.html"), class: "text-blue-600 hover:underline" %></p>
+        </div>
+      <% end %>
+    </div>
+  <% end %>
 
   <div class="mt-4">
     <%= button_to "Delete Build", project_build_path(@project, @build), method: :delete, data: { turbo_confirm: "Delete this build?" }, class: "text-red-600 hover:underline text-sm" %>
