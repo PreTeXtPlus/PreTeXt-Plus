@@ -82,6 +82,7 @@ function TryItApp({ config }) {
       onPreviewRebuild={onPreviewRebuild}
       onCreatePretextProjectCopy={noopAsync}
       onFeedbackSubmit={noopAsync}
+      hideAssets={true}
     />
   );
 }
