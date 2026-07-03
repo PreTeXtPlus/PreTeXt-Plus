@@ -1,8 +1,8 @@
 ---
 division: article
-xmlid: document
+id: document
+title: Welcome to PreTeXt.Plus!
 ---
-# Welcome to PreTeXt.Plus!
 
 This is a sample project to get you started. You can edit this content using _Markdown-style PreTeXt_.
 
