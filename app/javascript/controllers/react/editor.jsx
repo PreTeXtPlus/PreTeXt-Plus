@@ -643,17 +643,16 @@ function EditorApp({ config }) {
   );
 
   const onAssetUpload = useCallback(
-    async (file) => {
+    async (file, title) => {
       const form = new FormData();
       form.append("library_asset[file]", file);
       form.append("library_asset[kind]", "file");
-      form.append("library_asset[short_description]", file.title);
-      form.append("library_asset[title]", file.title);
+      form.append("library_asset[title]", title || "Untitled");
       // Create the library asset (upload bytes), then associate it with the
       // project; only resolve once both are persisted, returning the canonical
       // Asset the editor keys its optimistic entry against.
       const created = await createLibraryAsset(form);
-      const ref = uniqueRef(slugifyRef(file.title.replace(/\.[^.]+$/, "")) || created.ref);
+      const ref = uniqueRef(slugifyRef(title.replace(/\.[^.]+$/, "") || "untitled"));
       const member = await associateAsset(created.id, ref);
       invalidateAssetQueries();
       // contentType comes off the File itself -- a UI hint the server doesn't echo.
