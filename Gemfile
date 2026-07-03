@@ -72,7 +72,7 @@ gem "tailwindcss-rails", "~> 4.4"
 
 gem "jsbundling-rails", "~> 1.3"
 
-gem "stripe", "~> 19.0"
+gem "stripe", "~> 19.3"
 
 gem "postmark-rails", "~> 0.22"
 
