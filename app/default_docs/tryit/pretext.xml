@@ -1,7 +1,10 @@
-<section xml:id="tryit-pretext">
-    <title>Classic PreTeXt</title>
+<section xml:id="tryit-xml">
+    <title>Classic PreTeXt XML</title>
 
-    <p> This section is written in classic PreTeXt XML markup. You can edit its content directly.
+    <p>
+        This section is written in classic PreTeXt XML markup. While
+        LaTeX-style PreTeXt is easier to read and write, classic
+        PreTeXt XML gives you access to the full power of PreTeXt!
         <md>
             \left|\sum_{i=0}^n a_i\right|\leq\sum_{i=0}^n|a_i|
         </md>
@@ -9,7 +12,10 @@
 
     <fact>
         <statement>
-            <p> For more information on PreTeXt, visit <url href="https://pretextbook.org/doc/guide/html/"/>.</p>
+            <p> 
+                For more information on PreTeXt, visit
+                <url href="https://pretextbook.org/doc/guide/html/"/>.
+            </p>
         </statement>
     </fact>
 </section>
