@@ -85,7 +85,6 @@ class Project < ApplicationRecord
   TRYIT_DOCINFO = File.read Rails.root.join("app", "default_docs", "tryit", "docinfo.xml")
   TRYIT_ROOT_SOURCE = File.read Rails.root.join("app", "default_docs", "tryit", "root.tex")
   TRYIT_PRETEXT_SOURCE = File.read Rails.root.join("app", "default_docs", "tryit", "pretext.xml")
-  TRYIT_LATEX_SOURCE = File.read Rails.root.join("app", "default_docs", "tryit", "latex.tex")
   TRYIT_MARKDOWN_SOURCE = File.read Rails.root.join("app", "default_docs", "tryit", "markdown.md")
 
   ENQUEUE_SOURCE_PLACEHOLDER = File.read Rails.root.join("app", "default_docs", "enqueue_placeholder.html")
@@ -116,8 +115,7 @@ class Project < ApplicationRecord
     project = self.new(title: "Try it!")
     project.docinfo = TRYIT_DOCINFO
     project.divisions.build(ref: "tryit", is_root: true, source_format: :latex, source: TRYIT_ROOT_SOURCE)
-    project.divisions.build(ref: "tryit-pretext", source_format: :pretext, source: TRYIT_PRETEXT_SOURCE)
-    project.divisions.build(ref: "tryit-latex", source_format: :latex, source: TRYIT_LATEX_SOURCE)
+    project.divisions.build(ref: "tryit-xml", source_format: :pretext, source: TRYIT_PRETEXT_SOURCE)
     project.divisions.build(ref: "tryit-markdown", source_format: :markdown, source: TRYIT_MARKDOWN_SOURCE)
     project
   end
