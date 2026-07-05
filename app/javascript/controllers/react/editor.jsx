@@ -10,6 +10,76 @@ import {
 import { Editors, assembleFullProjectSource } from "@pretextbook/web-editor";
 import "@pretextbook/web-editor/dist/web-editor.css";
 
+/** @typedef {import("@pretextbook/web-editor").Asset} Asset */
+/** @typedef {import("@pretextbook/web-editor").Division} Division */
+
+/**
+ * A division record as returned by the Rails `divisions` JSON array.
+ * @typedef {Object} RailsDivision
+ * @property {string|number} id
+ * @property {string} [ref]
+ * @property {string} [source]
+ * @property {string} [source_format]
+ * @property {boolean} [is_root]
+ */
+
+/**
+ * A project_asset record (+ nested library_asset) as returned by Rails.
+ * @typedef {Object} RailsProjectAsset
+ * @property {string|number} id
+ * @property {string} [ref]
+ * @property {Object} [library_asset]
+ */
+
+/** A library_asset record as returned by Rails' `/library.json`.
+ * @typedef {Object} RailsLibraryAsset
+ * @property {string|number} id
+ * @property {string} [title]
+ * @property {string} [kind]
+ * @property {string} [source]
+ * @property {string} [file]
+ * @property {string} [extension]
+ */
+
+/**
+ * The full project JSON returned by the editor-state endpoint.
+ * @typedef {Object} RailsProjectJson
+ * @property {string} [title]
+ * @property {string} [docinfo]
+ * @property {string} [common_docinfo]
+ * @property {boolean} [use_common_docinfo]
+ * @property {string} [document_type]
+ * @property {RailsDivision[]} [divisions]
+ * @property {RailsProjectAsset[]} [project_assets]
+ */
+
+/**
+ * The editor's own working representation of a division: a subset of
+ * {@link Division}, missing `title`/`type` until derivable (see
+ * railsDivisionToEditor).
+ * @typedef {Object} EditorDivision
+ * @property {string} id
+ * @property {string} xmlId
+ * @property {string} source
+ * @property {string} sourceFormat
+ * @property {string} [title]
+ * @property {string} [type]
+ */
+
+/**
+ * The client-side working/server-snapshot state mirrored from Rails and fed
+ * to (or read back from) the `<Editors>` component.
+ * @typedef {Object} EditorState
+ * @property {string} title
+ * @property {string} docinfo
+ * @property {string} commonDocinfo
+ * @property {boolean} useCommonDocinfo
+ * @property {"article"|"book"} projectType
+ * @property {EditorDivision[]} divisions
+ * @property {RailsProjectAsset[]} [projectAssets]
+ * @property {string} [rootDivisionId]
+ */
+
 // ---------------------------------------------------------------------------
 // Architecture
 // ---------------------------------------------------------------------------
@@ -55,6 +125,10 @@ const PRETEXT_ROOT_TAG = /^\s*<(article|book|slideshow)[\s>]/;
 
 // The `type` of a pretext root, read from its own XML (the root element's tag
 // name) -- undefined when the source isn't a root element yet.
+/**
+ * @param {string|undefined} source
+ * @returns {string|undefined} "article" | "book" | "slideshow" | undefined
+ */
 function pretextRootType(source) {
   const match = PRETEXT_ROOT_TAG.exec(source ?? "");
   return match ? match[1] : undefined;
@@ -74,6 +148,11 @@ function pretextRootType(source) {
 // old behavior, so the live editor won't try to rewrap that <section> into an
 // <article>.  Once migrated to a real root element, it picks up the right type
 // automatically and preview/TOC wrapping work without further changes here.
+/**
+ * @param {RailsDivision} d
+ * @param {{type: "article"|"book", title: string}} rootMeta
+ * @returns {EditorDivision}
+ */
 function railsDivisionToEditor(d, rootMeta) {
   const base = {
     id: String(d.id),
@@ -118,12 +197,21 @@ function railsDivisionToEditor(d, rootMeta) {
 // The bare `<ref>.<ext>` source filename for a file-backed asset, or undefined
 // for a non-file asset (which relies entirely on its authored `source`) or one
 // with no ref yet.
+/**
+ * @param {RailsLibraryAsset} lib
+ * @param {string|undefined} ref
+ * @returns {string|undefined}
+ */
 function fileRefFor(lib, ref) {
   if (!lib.file || !ref) return undefined;
   return lib.extension ? `${ref}.${lib.extension}` : ref;
 }
 
 // Map one Rails project_asset (+ its library_asset) to the host's richer record.
+/**
+ * @param {RailsProjectAsset} a
+ * @returns {Asset & {projectAssetId: string}}
+ */
 function railsAssetToEditor(a) {
   const lib = a.library_asset ?? {};
   return {
@@ -145,6 +233,10 @@ function railsAssetToEditor(a) {
 // reconcileLibraryRefs) so inserting from the library uses the right tag. The
 // derived slug is provisional -- it only resolves once the asset is actually
 // associated with the project under that exact ref (see onAssetAddFromLibrary).
+/**
+ * @param {RailsLibraryAsset} lib
+ * @returns {Asset}
+ */
 function railsLibraryAssetToEditor(lib) {
   const title = lib.title;
   const ref = slugifyRef(title);
@@ -164,6 +256,10 @@ function railsLibraryAssetToEditor(lib) {
 // `url` is the real thumbnail URL (asset-manager UI); `fileRef` is the bare
 // `<ref>.<ext>` filename the web-editor emits as `<image source>` -- see
 // railsAssetToEditor for why the two must stay distinct.
+/**
+ * @param {Asset & {projectAssetId?: string}} rec
+ * @returns {Asset}
+ */
 function toEditorAsset(rec) {
   return {
     id: rec.id,
@@ -182,6 +278,10 @@ function toEditorAsset(rec) {
 
 // Slugify arbitrary text into a valid PreTeXt ref (REF_REGEX: a leading letter
 // or underscore, then letters/digits/hyphens/underscores).
+/**
+ * @param {string|undefined} value
+ * @returns {string}
+ */
 function slugifyRef(value) {
   const slug = (value ?? "")
     .toLowerCase()
@@ -192,6 +292,10 @@ function slugifyRef(value) {
 }
 
 // Transform the full project JSON into the state the editor renders from.
+/**
+ * @param {RailsProjectJson} json
+ * @returns {EditorState}
+ */
 function railsToEditorState(json) {
   const root = (json.divisions ?? []).find((d) => d.is_root);
   const title = json.title ?? "";
@@ -213,6 +317,10 @@ function railsToEditorState(json) {
 
 // The docinfo actually in effect: the user's common docinfo when the project
 // is opted in to it (and one is set), otherwise the project's own docinfo.
+/**
+ * @param {EditorState} state
+ * @returns {string}
+ */
 function effectiveDocinfo(state) {
   return state.useCommonDocinfo && state.commonDocinfo ? state.commonDocinfo : state.docinfo;
 }
@@ -231,6 +339,11 @@ function effectiveDocinfo(state) {
 // read off `state`: the editor owns the live asset pool, so we no longer keep an
 // asset working copy here -- the document only needs the assets to resolve each
 // <plus:* ref="..."/> placeholder it emits.
+/**
+ * @param {EditorState} state
+ * @param {Asset[]} projectAssets
+ * @returns {string}
+ */
 function assembleFullPretextSource(state, projectAssets) {
   if (!state.rootDivisionId) return "";
   return assembleFullProjectSource(
@@ -254,6 +367,12 @@ function assembleFullPretextSource(state, projectAssets) {
 // adds/removes an asset, through the dedicated /project_assets endpoint (see the
 // asset callbacks), not deferred to this PATCH.  We still pass `projectAssets`
 // (server truth) so the assembled `pretext_source` can resolve image refs.
+/**
+ * @param {EditorState} state
+ * @param {Asset[]} projectAssets
+ * @param {string[]} [deletes] - Division ids (Rails UUID PKs) to destroy.
+ * @returns {{project: Object}}
+ */
 function editorStateToRailsPayload(state, projectAssets, deletes = []) {
   return {
     project: {
@@ -276,6 +395,10 @@ function editorStateToRailsPayload(state, projectAssets, deletes = []) {
 
 // The subset of working state that actually persists — used for dirty checks so
 // we don't autosave on changes the server doesn't store.
+/**
+ * @param {EditorState} state
+ * @returns {string} A JSON string suitable for equality comparison.
+ */
 function persistableShape(state) {
   return JSON.stringify({
     title: state.title,
@@ -294,6 +417,17 @@ function persistableShape(state) {
 
 // --- The editor app --------------------------------------------------------
 
+/**
+ * @typedef {Object} EditorConfig
+ * @property {string} projectId
+ * @property {string} apiBase - The editor-state endpoint URL (`editorStateUrl`).
+ * @property {string} [csrfToken]
+ */
+
+/**
+ * @param {{ config: EditorConfig }} props
+ * @returns {JSX.Element}
+ */
 function EditorApp({ config }) {
   const { projectId, apiBase, csrfToken } = config;
 
@@ -986,8 +1120,14 @@ function EditorApp({ config }) {
 
 // --- Imperative mount/unmount interface used by the Stimulus controller ----
 
+/** @type {import("react-dom/client").Root|null} */
 let root = null;
 
+/**
+ * @param {Element} node - Mount point provided by the Stimulus controller.
+ * @param {EditorConfig} config
+ * @returns {void}
+ */
 function render(node, config) {
   // One QueryClient per mounted editor.  refetchOnWindowFocus is disabled: the
   // working copy is the live buffer, so we don't want a background refetch to
@@ -1005,6 +1145,7 @@ function render(node, config) {
   );
 }
 
+/** @returns {void} */
 function destroy() {
   root?.unmount();
   root = null;
