@@ -3,13 +3,39 @@ import ReactDOM from "react-dom/client";
 import { Editors } from "@pretextbook/web-editor";
 import "@pretextbook/web-editor/dist/web-editor.css";
 
+/**
+ * @typedef {Object} RailsDivision
+ * @property {string|number} [id]
+ * @property {string} [ref]
+ * @property {string} [source]
+ * @property {string} [source_format]
+ * @property {boolean} [is_root]
+ */
+
+/**
+ * @typedef {Object} EditorDivision
+ * @property {string} id
+ * @property {string} xmlId
+ * @property {string} source
+ * @property {string} sourceFormat
+ * @property {string} [type]
+ */
+
 const PRETEXT_ROOT_TAG = /^\s*<(article|book|slideshow)[\s>]/;
 
+/**
+ * @param {string|undefined} source
+ * @returns {string|undefined} The root element tag name ("article"|"book"|"slideshow"), or undefined.
+ */
 function pretextRootType(source) {
   const match = PRETEXT_ROOT_TAG.exec(source ?? "");
   return match ? match[1] : undefined;
 }
 
+/**
+ * @param {RailsDivision} d
+ * @returns {EditorDivision}
+ */
 function railsDivisionToEditor(d) {
   const base = {
     id: String(d.id ?? d.ref),
@@ -23,6 +49,16 @@ function railsDivisionToEditor(d) {
   return type ? { ...base, type } : base;
 }
 
+/**
+ * @typedef {Object} TryItConfig
+ * @property {{title?: string, docinfo?: string, divisions?: RailsDivision[]}} project
+ * @property {string} [csrfToken]
+ */
+
+/**
+ * @param {{ config: TryItConfig }} props
+ * @returns {JSX.Element}
+ */
 function TryItApp({ config }) {
   const { project, csrfToken } = config;
 
@@ -87,13 +123,20 @@ function TryItApp({ config }) {
   );
 }
 
+/** @type {import("react-dom/client").Root|null} */
 let root = null;
 
+/**
+ * @param {Element} node - Mount point provided by the Stimulus controller.
+ * @param {TryItConfig} config
+ * @returns {void}
+ */
 function render(node, config) {
   root = ReactDOM.createRoot(node);
   root.render(<TryItApp config={config} />);
 }
 
+/** @returns {void} */
 function destroy() {
   root?.unmount();
   root = null;
