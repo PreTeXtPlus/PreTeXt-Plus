@@ -26,6 +26,7 @@ class ProjectAsset < ApplicationRecord
     unless project.user == library_asset.user
       new_la = LibraryAsset.new(library_asset.dup.attributes)
       new_la.user = project.user
+      new_la.file.attach(library_asset.file.blob) if library_asset.file.attached?
       unless new_la.save
         errors.add(:library_asset, "could not be created")
       end
