@@ -39,7 +39,6 @@ Rails.application.routes.draw do
   end
   resources :projects do
     resources :builds, only: [ :index, :show, :create, :destroy ]
-    resources :divisions, only: [ :create ]
     collection do
       post "feedback" => "projects#feedback", as: "feedback"
       get "lunr-pretext-search-index.js", to: redirect("/ptx-search.js")
