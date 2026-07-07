@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_07_07_120002) do
+ActiveRecord::Schema[8.1].define(version: 2026_07_07_194812) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
   enable_extension "pgcrypto"
@@ -234,7 +234,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_07_07_120002) do
 
   create_table "users", id: :uuid, default: -> { "gen_random_uuid()" }, force: :cascade do |t|
     t.boolean "admin", default: false
-    t.text "common_docinfo", default: "<docinfo>\n  <brandlogo source=\"icon.svg\" />\n</docinfo>\n"
+    t.text "common_docinfo"
     t.datetime "confirmation_sent_at"
     t.string "confirmation_token"
     t.datetime "confirmed_at"
