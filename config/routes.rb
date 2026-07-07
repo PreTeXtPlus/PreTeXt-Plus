@@ -37,15 +37,6 @@ Rails.application.routes.draw do
       get "checkout" => "subscription_types#checkout", as: "checkout"
     end
   end
-  # PreTeXt's own built-in logo, referenced by every document's docinfo as a
-  # plain `external/icon.svg` -- not an asset at all, so it must be caught and
-  # redirected to the static file *before* the assets#share route below
-  # (declaration order matters: this has to win the match first, since
-  # `/projects/:id/preview|share/external/icon.svg` would otherwise match
-  # that route's `:ref` segment instead). Declared ahead of `resources
-  # :projects` for that reason, even though it's otherwise unrelated to the
-  # resource.
-  get "*_/icon.svg", to: redirect("/icon-small.svg")
   resources :projects do
     resources :builds, only: [ :index, :show, :create, :destroy ]
     resources :divisions, only: [ :create ]
@@ -73,6 +64,7 @@ Rails.application.routes.draw do
   resources :asset_fetches, only: :create
   get "tryit" => "projects#tryit"
   post "tryit/preview" => "projects#preview", as: "tryit_preview"
+  get "tryit/external/icon" => redirect("/icon-small.png")  # only allowed "asset" in tryit
 
   get "up" => "rails/health#show", as: :rails_health_check
 

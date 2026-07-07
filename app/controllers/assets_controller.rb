@@ -9,7 +9,17 @@ class AssetsController < ApplicationController
   # covers every live use.
   def share
     @project = Project.find(params[:id])
-    @asset = @project.assets.find_by!(ref: params[:ref])
+    begin
+      @asset = @project.assets.find_by!(ref: params[:ref])
+    rescue ActiveRecord::RecordNotFound
+      # If the ref is "icon", it's a special case: PreTeXtPlus's own built-in logo,
+      # referenced by default docinfo as `icon.*` Previously used `.svg` but we now
+      # always point to the png.
+      if params[:ref] == "icon"
+        return redirect("/icon-small.png")
+      end
+      raise ActiveRecord::RecordNotFound
+    end
     redirect_to_cdn_url @asset.url
   end
 
