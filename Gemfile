@@ -85,3 +85,5 @@ gem "aws-sdk-s3", "~> 1.225"
 gem "cancancan", "~> 3.6"
 
 gem "rubyzip", "~> 3.4"
+
+gem "honeybadger", "~> 6.9"

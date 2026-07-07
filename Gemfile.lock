@@ -156,6 +156,9 @@ GEM
       raabro (~> 1.4)
     globalid (1.4.0)
       activesupport (>= 6.1)
+    honeybadger (6.9.0)
+      logger
+      ostruct
     i18n (1.15.2)
       concurrent-ruby (~> 1.0)
     image_processing (1.14.0)
@@ -447,6 +450,7 @@ DEPENDENCIES
   commonmarker (~> 2.8)
   debug
   devise (~> 5.0.4)
+  honeybadger (~> 6.9)
   image_processing (~> 1.2)
   jbuilder
   jsbundling-rails (~> 1.3)
