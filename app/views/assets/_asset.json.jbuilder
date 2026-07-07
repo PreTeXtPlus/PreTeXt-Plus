@@ -10,6 +10,6 @@ if asset.file.attached?
   # server treats that as a plain external-asset filename and prepends
   # `external/` itself, so embedding a full URL there double-prefixes (see
   # the comments in projects_controller.rb / project.rb).
-  json.file share_asset_project_path(asset.project, ref: asset.ref, format: extension)
+  json.path share_asset_project_path(asset.project, ref: asset.ref, format: extension)
   json.extension extension
 end
