@@ -3,7 +3,7 @@ class User < ApplicationRecord
          :confirmable, :trackable
 
   has_many :projects, dependent: :destroy
-  has_many :library_assets, dependent: :destroy
+  has_many :assets, through: :projects
 
   belongs_to :tos, class_name: "Term", required: false
   belongs_to :privacy, class_name: "Term", required: false

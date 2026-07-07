@@ -1,13 +1,12 @@
 class Project < ApplicationRecord
   belongs_to :user
 
-  # dependent: :destroy so deleting a project drops its membership rows; the
-  # library assets themselves persist (they're owned by the user, not the project).
-  has_many :project_assets, dependent: :destroy
-  # allow_destroy lets the editor drop a project's membership of a library asset
-  # by sending `_destroy: true`; the library_asset itself is never destroyed.
-  accepts_nested_attributes_for :project_assets, allow_destroy: true
-  has_many :library_assets, through: :project_assets
+  # dependent: :destroy so deleting a project drops its assets (and their
+  # attached files) too -- unlike divisions, an asset has no life outside its
+  # project, so there's nothing to preserve.
+  has_many :assets, dependent: :destroy
+  # allow_destroy lets the editor delete an asset by sending `_destroy: true`.
+  accepts_nested_attributes_for :assets, allow_destroy: true
 
   has_many :builds, dependent: :destroy
   has_many :divisions, dependent: :destroy
@@ -38,19 +37,24 @@ class Project < ApplicationRecord
     super
   end
 
-  # Project assets follow the same client-minted-UUID pattern as divisions: the
-  # editor sends a fresh join-row id for each newly added library asset, so we
-  # pre-build a project_asset with that id and let `super`'s nested assignment
-  # update it into an INSERT.  Existing ids update in place; `_destroy` removes
-  # only the membership row, leaving the library asset intact.
-  def project_assets_attributes=(attributes)
+  # Assets follow the same client-minted-UUID pattern as divisions: unlike a
+  # division (which gets its id from a dedicated create endpoint before ever
+  # reaching this payload), an asset's FIRST creation happens right here --
+  # there is no separate AssetsController#create. The editor mints the id
+  # itself and sends it as part of the same assets_attributes entry that
+  # carries the ref/kind/file/etc, so we pre-build an asset with that id and
+  # let `super`'s nested assignment update it into an INSERT under the
+  # client-supplied id. Existing ids update in place (ref renames, authored-
+  # source edits); `_destroy` deletes the asset (and its attached file)
+  # outright.
+  def assets_attributes=(attributes)
     entries = attributes.respond_to?(:values) ? attributes.values : attributes
-    project_assets.load
-    known_ids = project_assets.map { |a| a.id.to_s }
+    assets.load
+    known_ids = assets.map { |a| a.id.to_s }
     entries.each do |entry|
       id = entry[:id] || entry["id"]
       next if id.blank? || known_ids.include?(id.to_s)
-      project_assets.build(id: id)
+      assets.build(id: id)
       known_ids << id.to_s
     end
     super
@@ -98,10 +102,14 @@ class Project < ApplicationRecord
     divisions.each do |division|
       duplicate.divisions.build(division.dup.attributes)
     end
-    project_assets.each do |asset|
-      # library_asset may be wrong here for changed user,
-      # but a before_commit callback will fix this before save
-      duplicate.project_assets.build(asset.dup.attributes)
+    assets.each do |asset|
+      # Each asset is owned directly by its project, so a duplicate needs a
+      # genuinely independent Asset row: copy its attributes (dup clears
+      # `id`, so this gets a fresh one) and re-attach the SAME file blob --
+      # no bytes are re-uploaded, only a new active_storage_attachments row
+      # is created once `duplicate` saves.
+      new_asset = duplicate.assets.build(asset.dup.attributes)
+      new_asset.file.attach(asset.file.blob) if asset.file.attached?
     end
     duplicate
   end

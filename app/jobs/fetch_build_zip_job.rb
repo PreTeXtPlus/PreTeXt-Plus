@@ -29,15 +29,14 @@ class FetchBuildZipJob < ApplicationJob
         )
       end
 
-      build.project.project_assets.each do |project_asset|
-        library_asset = project_asset.library_asset
-        next unless library_asset.file.attached?
+      build.project.assets.each do |asset|
+        next unless asset.file.attached?
 
-        relative_path = "external/#{project_asset.ref}#{library_asset.file.filename.extension_with_delimiter}"
-        zip.get_output_stream(relative_path) { |os| os.write(library_asset.file.download) }
+        relative_path = "external/#{asset.ref}#{asset.file.filename.extension_with_delimiter}"
+        zip.get_output_stream(relative_path) { |os| os.write(asset.file.download) }
 
         build_file = build.build_files.create!(relative_path: relative_path)
-        build_file.blob.attach(library_asset.file.blob)
+        build_file.blob.attach(asset.file.blob)
       end
     end
 

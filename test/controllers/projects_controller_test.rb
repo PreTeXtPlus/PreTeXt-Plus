@@ -55,6 +55,25 @@ class ProjectsControllerTest < ActionDispatch::IntegrationTest
     assert_response :ok
   end
 
+  test "update creates a file-backed asset via a multipart assets_attributes upload" do
+    upload = fixture_file_upload("test_image.png", "image/png")
+    new_id = SecureRandom.uuid
+
+    patch project_url(@project, format: :json), params: {
+      project: { assets_attributes: [ { id: new_id, ref: "diagram-two", kind: "file", file: upload } ] }
+    }
+
+    assert_response :success
+    asset = @project.assets.find(new_id)
+    assert asset.file.attached?
+    assert_equal "test_image.png", asset.file.filename.to_s
+
+    body = JSON.parse(response.body)
+    asset_json = body["assets"].find { |a| a["id"] == new_id }
+    assert_equal share_asset_project_path(@project, ref: "diagram-two", format: "png"), asset_json["file"]
+    assert_equal "png", asset_json["extension"]
+  end
+
   test "should destroy project" do
     assert_difference("Project.count", -1) do
       delete project_url(@project)
@@ -151,7 +170,7 @@ class ProjectsControllerTest < ActionDispatch::IntegrationTest
     assert_equal @project.divisions.count, copy.divisions.count
   end
 
-  test "copy does not create project_assets pointing to another user's library assets" do
+  test "copy gives the duplicated project its own independent assets" do
     subbed_user = users(:subscribed)
     sign_out :user
     sign_in subbed_user
@@ -159,8 +178,10 @@ class ProjectsControllerTest < ActionDispatch::IntegrationTest
       post copy_project_url(@project)
     end
     copy = Project.find_by!(title: "Copy of #{@project.title}", user: subbed_user)
-    copy.project_assets.each do |a|
-      assert_equal a.library_asset.user_id, copy.user_id
+    assert_equal @project.assets.count, copy.assets.count
+    copy.assets.each do |copied_asset|
+      original_asset = @project.assets.find_by!(ref: copied_asset.ref)
+      assert_not_equal original_asset.id, copied_asset.id
     end
   end
 

@@ -1,7 +1,0 @@
-# Read about fixtures at https://api.rubyonrails.org/classes/ActiveRecord/FixtureSet.html
-
-# image_one is a member of project one under the ref "diagram".
-one:
-  project: one
-  library_asset: image_one
-  ref: diagram

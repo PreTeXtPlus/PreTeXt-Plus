@@ -74,9 +74,9 @@ class FetchBuildZipJobTest < ActiveJob::TestCase
     assert_equal "<html>hello</html>", content
   end
 
-  test "creates a BuildFile for each project_asset with a file" do
-    library_asset = library_assets(:image_one)
-    library_asset.file.attach(
+  test "creates a BuildFile for each asset with a file" do
+    asset = assets(:image_one)
+    asset.file.attach(
       io: File.open(Rails.root.join("test/fixtures/files/test_image.png")),
       filename: "test_image.png",
       content_type: "image/png"
@@ -88,15 +88,15 @@ class FetchBuildZipJobTest < ActiveJob::TestCase
       FetchBuildZipJob.perform_now(build)
     end
 
-    build_file = build.build_files.find_by(relative_path: "external/#{project_assets(:one).ref}.png")
+    build_file = build.build_files.find_by(relative_path: "external/#{asset.ref}.png")
     assert build_file
     assert build_file.blob.attached?
-    assert_equal library_asset.file.blob, build_file.blob.blob
+    assert_equal asset.file.blob, build_file.blob.blob
   end
 
-  test "includes project_asset content inside the attached zip itself" do
-    library_asset = library_assets(:image_one)
-    library_asset.file.attach(
+  test "includes asset content inside the attached zip itself" do
+    asset = assets(:image_one)
+    asset.file.attach(
       io: File.open(Rails.root.join("test/fixtures/files/test_image.png")),
       filename: "test_image.png",
       content_type: "image/png"
@@ -109,13 +109,13 @@ class FetchBuildZipJobTest < ActiveJob::TestCase
     end
 
     Zip::File.open_buffer(build.reload.zip.download) do |zip|
-      entry = zip.find_entry("external/#{project_assets(:one).ref}.png")
-      assert entry, "expected attached zip to contain the project_asset entry"
-      assert_equal library_asset.file.download, entry.get_input_stream.read
+      entry = zip.find_entry("external/#{asset.ref}.png")
+      assert entry, "expected attached zip to contain the asset entry"
+      assert_equal asset.file.download, entry.get_input_stream.read
     end
   end
 
-  test "skips project_assets whose library_asset has no file" do
+  test "skips assets whose file is not attached" do
     zip_body = fake_zip("index.html" => "<html></html>")
     fake_response = Struct.new(:body).new(zip_body)
 

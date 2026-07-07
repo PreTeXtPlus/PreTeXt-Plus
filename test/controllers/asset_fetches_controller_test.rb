@@ -8,7 +8,7 @@ class AssetFetchesControllerTest < ActionDispatch::IntegrationTest
 
   test "create streams back the fetched bytes without persisting anything" do
     SafeUrlFetcher.stub(:call, [ "fake-png-bytes", "image/png" ]) do
-      assert_no_difference -> { LibraryAsset.count } do
+      assert_no_difference -> { Asset.count } do
         post asset_fetches_url, params: { url: "https://example.com/pic.png" }
       end
     end
@@ -21,7 +21,7 @@ class AssetFetchesControllerTest < ActionDispatch::IntegrationTest
   test "create reports an error when the fetch is rejected" do
     fetcher = ->(_url) { raise SafeUrlFetcher::UnsafeUrlError, "URL points to a disallowed address" }
     SafeUrlFetcher.stub(:call, fetcher) do
-      assert_no_difference -> { LibraryAsset.count } do
+      assert_no_difference -> { Asset.count } do
         post asset_fetches_url, params: { url: "http://localhost/pic.png" }
       end
     end

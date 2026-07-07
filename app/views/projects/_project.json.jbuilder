@@ -3,6 +3,6 @@ json.url project_url(project, format: :json)
 json.divisions project.divisions do |division|
   json.partial! "divisions/division", division: division
 end
-json.project_assets project.project_assets do |asset|
-  json.partial! "project_assets/project_asset", project_asset: asset
+json.assets project.assets do |asset|
+  json.partial! "assets/asset", asset: asset
 end

@@ -1,10 +1,14 @@
-class LibraryAsset < ApplicationRecord
-  belongs_to :user
+class Asset < ApplicationRecord
+  belongs_to :project
   has_one_attached :file
+
   enum :kind, {
     file: 0,
     authored: 1
   }, suffix: true
+
+  validates :ref, format: REF_REGEX, presence: true, uniqueness: { scope: :project }
+  validate :ref_unique_among_divisions
 
   # Rails forces SVGs to download rather than display inline by default,
   # since an SVG can carry a <script> (a stored-XSS precaution). This asset's
@@ -25,6 +29,16 @@ class LibraryAsset < ApplicationRecord
         content_type: blob.content_type, disposition: :inline)
     else
       file.url(expires_in: 1.hour)
+    end
+  end
+
+  private
+
+  def ref_unique_among_divisions
+    return unless project_id && ref
+
+    if Division.where(project_id: project_id, ref: ref).exists?
+      errors.add(:ref, "has already been taken")
     end
   end
 end

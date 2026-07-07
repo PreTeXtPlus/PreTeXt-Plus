@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_07_03_162435) do
+ActiveRecord::Schema[8.1].define(version: 2026_07_07_120002) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
   enable_extension "pgcrypto"
@@ -52,6 +52,19 @@ ActiveRecord::Schema[8.1].define(version: 2026_07_03_162435) do
     t.datetime "updated_at", null: false
   end
 
+  create_table "assets", id: :uuid, default: -> { "gen_random_uuid()" }, force: :cascade do |t|
+    t.datetime "created_at", null: false
+    t.text "description"
+    t.integer "kind", default: 0, null: false
+    t.uuid "project_id", null: false
+    t.string "ref"
+    t.string "short_description"
+    t.text "source"
+    t.string "title"
+    t.datetime "updated_at", null: false
+    t.index ["project_id"], name: "index_assets_on_project_id"
+  end
+
   create_table "build_files", id: :uuid, default: -> { "gen_random_uuid()" }, force: :cascade do |t|
     t.uuid "build_id", null: false
     t.datetime "created_at", null: false
@@ -77,18 +90,6 @@ ActiveRecord::Schema[8.1].define(version: 2026_07_03_162435) do
     t.integer "source_format", default: 0, null: false
     t.datetime "updated_at", null: false
     t.index ["project_id"], name: "index_divisions_on_project_id"
-  end
-
-  create_table "library_assets", id: :uuid, default: -> { "gen_random_uuid()" }, force: :cascade do |t|
-    t.datetime "created_at", null: false
-    t.text "description"
-    t.integer "kind", default: 0, null: false
-    t.string "short_description"
-    t.text "source"
-    t.string "title"
-    t.datetime "updated_at", null: false
-    t.uuid "user_id", null: false
-    t.index ["user_id"], name: "index_library_assets_on_user_id"
   end
 
   create_table "pay_charges", id: :uuid, default: -> { "gen_random_uuid()" }, force: :cascade do |t|
@@ -190,16 +191,6 @@ ActiveRecord::Schema[8.1].define(version: 2026_07_03_162435) do
     t.datetime "updated_at", null: false
   end
 
-  create_table "project_assets", id: :uuid, default: -> { "gen_random_uuid()" }, force: :cascade do |t|
-    t.datetime "created_at", null: false
-    t.uuid "library_asset_id", null: false
-    t.uuid "project_id", null: false
-    t.string "ref"
-    t.datetime "updated_at", null: false
-    t.index ["library_asset_id"], name: "index_project_assets_on_library_asset_id"
-    t.index ["project_id"], name: "index_project_assets_on_project_id"
-  end
-
   create_table "projects", id: :uuid, default: -> { "gen_random_uuid()" }, force: :cascade do |t|
     t.datetime "created_at", null: false
     t.text "docinfo"
@@ -272,16 +263,14 @@ ActiveRecord::Schema[8.1].define(version: 2026_07_03_162435) do
 
   add_foreign_key "active_storage_attachments", "active_storage_blobs", column: "blob_id"
   add_foreign_key "active_storage_variant_records", "active_storage_blobs", column: "blob_id"
+  add_foreign_key "assets", "projects"
   add_foreign_key "build_files", "builds"
   add_foreign_key "builds", "projects"
   add_foreign_key "divisions", "projects"
-  add_foreign_key "library_assets", "users"
   add_foreign_key "pay_charges", "pay_customers", column: "customer_id"
   add_foreign_key "pay_charges", "pay_subscriptions", column: "subscription_id"
   add_foreign_key "pay_payment_methods", "pay_customers", column: "customer_id"
   add_foreign_key "pay_subscriptions", "pay_customers", column: "customer_id"
-  add_foreign_key "project_assets", "library_assets"
-  add_foreign_key "project_assets", "projects"
   add_foreign_key "projects", "users"
   add_foreign_key "subscription_seats", "pay_subscriptions"
   add_foreign_key "subscription_seats", "users"
