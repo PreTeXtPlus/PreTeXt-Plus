@@ -10,7 +10,7 @@ class BuildsController < ApplicationController
 
   def create
     if @build.save
-      FetchBuildZipJob.perform_later(@build)
+      FullBuildJob.perform_later(@build)
       redirect_to project_build_path(@project, @build), notice: "Build was successfully created."
     else
       render :new, status: :unprocessable_entity

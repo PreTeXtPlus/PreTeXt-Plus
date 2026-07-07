@@ -55,8 +55,9 @@ ActiveRecord::Schema[8.1].define(version: 2026_07_03_162435) do
   create_table "build_files", id: :uuid, default: -> { "gen_random_uuid()" }, force: :cascade do |t|
     t.uuid "build_id", null: false
     t.datetime "created_at", null: false
-    t.string "relative_path"
+    t.string "relative_path", null: false
     t.datetime "updated_at", null: false
+    t.index ["build_id", "relative_path"], name: "index_build_files_on_build_id_and_relative_path", unique: true
     t.index ["build_id"], name: "index_build_files_on_build_id"
   end
 
