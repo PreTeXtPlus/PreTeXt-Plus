@@ -62,7 +62,7 @@ Rails.application.routes.draw do
     member do
       get "share" => "projects#share", as: "share"
       get "share/source" => "projects#source", as: "share_source"
-      get "share/copy", to: redirect("projects/%{project_id}/share/source")
+      get "share/copy" => "projects#copy_redirect"
       post "share/copy" => "projects#copy", as: "copy"
       get "(*_)/external/:ref" => "project_assets#share", as: "share_asset"
       post "preview" => "projects#preview", as: "preview"

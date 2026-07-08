@@ -1,8 +1,8 @@
 class ProjectsController < ApplicationController
-  allow_unauthenticated_access only: %i[ share preview source ]
+  allow_unauthenticated_access only: %i[ share preview source copy_redirect ]
   require_unauthenticated_access only: %i[ tryit ]
   before_action :limit_projects, only: %i[ new create copy ]
-  load_and_authorize_resource except: %i[ index new tryit preview feedback ]
+  load_and_authorize_resource except: %i[ index new tryit preview feedback copy_redirect ]
   skip_authorize_resource only: %i[ share ]
   after_action :allow_iframe, only: :share
   rate_limit to: 25, within: 10.minutes, only: :preview,
@@ -78,6 +78,10 @@ class ProjectsController < ApplicationController
     else
       redirect_to copy_project_path(@project), alert: "Copy failed."
     end
+  end
+
+  def copy_redirect
+    redirect_to share_source_project_path(params[:id])
   end
 
   def preview
