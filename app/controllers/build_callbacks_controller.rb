@@ -23,7 +23,7 @@ class BuildCallbacksController < ApplicationController
     when "success"
       FullBuildArtifactJob.perform_later(build, payload["artifact_url"])
     when "failed"
-      build.update_column(:status, Build.statuses[:failed])
+      build.update_columns(status: Build.statuses[:failed], log: payload["log"])
       Rails.logger.error("Build #{build.id} failed on build server: #{payload["log"] || body}")
     end
 

@@ -8,6 +8,11 @@ class BuildsController < ApplicationController
   def show
   end
 
+  def check_status
+    BuildStatusChecker.new(@build).check!
+    redirect_to project_build_path(@project, @build)
+  end
+
   def create
     if @build.save
       FullBuildJob.perform_later(@build)

@@ -8,4 +8,10 @@ fi
 # Default to port 3000 if not specified
 export PORT="${PORT:-3000}"
 
+# In a GitHub Codespace, the full build server needs a public callback URL it can
+# reach; derive it from the auto-injected Codespace env vars unless already set.
+if [ -n "$CODESPACE_NAME" ] && [ -n "$GITHUB_CODESPACES_PORT_FORWARDING_DOMAIN" ]; then
+  export FULL_BUILD_CALLBACK_HOST="${FULL_BUILD_CALLBACK_HOST:-${CODESPACE_NAME}-${PORT}.${GITHUB_CODESPACES_PORT_FORWARDING_DOMAIN}}"
+fi
+
 exec foreman start -f Procfile.dev --env /dev/null "$@"

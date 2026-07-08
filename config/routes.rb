@@ -52,6 +52,7 @@ Rails.application.routes.draw do
       # signature, not login (see BuildCallbacksController).
       member do
         post "full_callback" => "build_callbacks#create", as: "full_callback"
+        post "check_status" => "builds#check_status", as: "check_status"
       end
     end
     resources :divisions, only: [ :create ]
