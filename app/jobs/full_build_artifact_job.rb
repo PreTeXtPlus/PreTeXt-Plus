@@ -10,6 +10,8 @@ class FullBuildArtifactJob < ApplicationJob
   queue_as :default
 
   def perform(build, artifact_url)
+    return if build.success?
+
     uri = URI.parse(artifact_url)
     request = Net::HTTP::Get.new(uri)
     request["Authorization"] = "Bearer #{ENV['BUILD_TOKEN']}"
@@ -28,6 +30,10 @@ class FullBuildArtifactJob < ApplicationJob
     Zip::File.open_buffer(zip_buffer) do |zip|
       zip.each do |entry|
         next unless entry.file?
+        # Skip macOS AppleDouble resource-fork junk (e.g. "._foo.ttf",
+        # "__MACOSX/...") that ends up in the artifact zip -- not real build
+        # output, and importing it roughly doubles the file count.
+        next if entry.name.start_with?("__MACOSX/") || File.basename(entry.name).start_with?("._")
         content = entry.get_input_stream.read
         build_file = build.build_files.create!(relative_path: entry.name)
         build_file.blob.attach(

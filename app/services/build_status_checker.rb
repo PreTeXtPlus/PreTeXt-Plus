@@ -13,6 +13,7 @@ class BuildStatusChecker
   end
 
   def check!
+    return if @build.success? || @build.failed?
     return unless @build.remote_status_url.present?
 
     uri = URI.parse("https://#{ENV['FULL_BUILD_HOST']}#{@build.remote_status_url}")

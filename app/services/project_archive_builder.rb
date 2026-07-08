@@ -25,12 +25,7 @@ class ProjectArchiveBuilder
     <?xml version="1.0" encoding="UTF-8"?>
     <project ptx-version="2">
       <targets>
-        <target name="#{TARGET}">
-          <format>html</format>
-          <source>source/main.ptx</source>
-          <publication>publication/publication.ptx</publication>
-          <output-dir>output/#{TARGET}</output-dir>
-        </target>
+        <target name="#{TARGET}" format="pdf" />
       </targets>
     </project>
   XML
