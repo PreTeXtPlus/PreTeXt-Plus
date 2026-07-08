@@ -2,19 +2,29 @@ published:
   title: "Published Announcement"
   body: "This announcement has been published."
   published_at: <%= 1.day.ago %>
+  draft: false
 
 recent:
   title: "Recent Announcement"
   body: "This is the most recent announcement."
   published_at: <%= 1.hour.ago %>
+  draft: false
 
 paid_only:
   title: "Paid Subscribers Announcement"
   body: "This announcement is for paid subscribers only."
   published_at: <%= 2.hours.ago %>
   paid_subscribers_only: true
+  draft: false
 
 draft:
   title: "Draft Announcement"
   body: "This announcement has not been published yet."
   published_at:
+  draft: false
+
+unready:
+  title: "Unready Announcement"
+  body: "This announcement is still a draft."
+  published_at:
+  draft: true
