@@ -32,8 +32,10 @@
             <td class="px-4 py-4">
               <% if announcement.published? %>
                 <span class="rounded-full bg-green-100 px-2.5 py-1 text-xs font-medium text-green-800">Published</span>
+              <% elsif announcement.draft? %>
+                <span class="rounded-full bg-yellow-100 px-2.5 py-1 text-xs font-medium text-yellow-800">Work-in-progress</span>
               <% else %>
-                <span class="rounded-full bg-yellow-100 px-2.5 py-1 text-xs font-medium text-yellow-800">Draft</span>
+                <span class="rounded-full bg-blue-100 px-2.5 py-1 text-xs font-medium text-blue-800">Ready to publish</span>
               <% end %>
             </td>
             <td class="px-4 py-4 text-gray-700">
