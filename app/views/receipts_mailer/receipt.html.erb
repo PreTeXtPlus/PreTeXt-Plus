@@ -1,0 +1,7 @@
+<p>
+  We received payment for your <%= link_to Pay.application_name, root_url %> subscription. Thanks for your support!
+</p>
+<p>
+  Questions? Please reply to this email.
+</p>
+<pre style="background-color: #ddd; color: #555; font-style: italic; padding: 6px; border-radius: 4px; white-space: pre-wrap;"><%= render partial: "receipt_details", formats: [:text] %></pre>
