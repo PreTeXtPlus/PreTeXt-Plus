@@ -80,6 +80,79 @@ class ProjectsControllerTest < ActionDispatch::IntegrationTest
     assert_equal "png", asset_json["extension"]
   end
 
+  # --- Divisions (nested attributes; the /divisions endpoint was removed) ---
+
+  test "update creates a non-root division via an id-less divisions_attributes entry" do
+    assert_difference("@project.divisions.count", 1) do
+      patch project_url(@project),
+        params: { project: { divisions_attributes: [ { ref: "newly-added", source_format: "pretext", source: "<section><title>New</title></section>" } ] } },
+        as: :json
+    end
+
+    assert_response :success
+    division = @project.divisions.find_by!(ref: "newly-added")
+    # A division added this way must never become a second root.
+    assert_not division.is_root?
+    assert_equal "<section><title>New</title></section>", division.source
+
+    # The client matches the new row back out of the response by its ref, so the
+    # response must carry it with its freshly minted id.
+    division_json = response.parsed_body["divisions"].find { |d| d["ref"] == "newly-added" }
+    assert_equal division.id, division_json["id"]
+  end
+
+  test "creating a division leaves the existing root untouched" do
+    root = @project.root_division
+    patch project_url(@project),
+      params: { project: { divisions_attributes: [ { ref: "sibling", source_format: "pretext", source: "<section/>" } ] } },
+      as: :json
+    assert_response :success
+    assert_equal root.id, @project.reload.root_division.id
+    assert_equal 1, @project.divisions.where(is_root: true).count
+  end
+
+  test "update edits an existing division via its id without creating a row" do
+    division = divisions(:one)
+    assert_no_difference("@project.divisions.count") do
+      patch project_url(@project),
+        params: { project: { divisions_attributes: [ { id: division.id, source: "<section><title>Edited</title></section>" } ] } },
+        as: :json
+    end
+    assert_response :success
+    assert_equal "<section><title>Edited</title></section>", division.reload.source
+  end
+
+  test "update destroys a division via _destroy" do
+    division = @project.divisions.create!(ref: "to-remove", source_format: "pretext", source: "<section/>")
+    assert_difference("@project.divisions.count", -1) do
+      patch project_url(@project),
+        params: { project: { divisions_attributes: [ { id: division.id, _destroy: true } ] } },
+        as: :json
+    end
+    assert_response :success
+    assert_not Division.exists?(division.id)
+  end
+
+  test "update rejects a division whose ref collides with an asset" do
+    asset_ref = assets(:authored_one).ref
+    assert_no_difference("@project.divisions.count") do
+      patch project_url(@project),
+        params: { project: { divisions_attributes: [ { ref: asset_ref, source_format: "pretext", source: "<section/>" } ] } },
+        as: :json
+    end
+    assert_response :unprocessable_entity
+  end
+
+  test "non-owner cannot add a division to another user's project" do
+    other_project = projects(:two)
+    assert_no_difference("other_project.divisions.count") do
+      patch project_url(other_project),
+        params: { project: { divisions_attributes: [ { ref: "sneaky", source_format: "pretext", source: "<section/>" } ] } },
+        as: :json
+    end
+    assert_response 403
+  end
+
   test "update creates an authored asset via a JSON assets_attributes entry" do
     assert_difference("@project.assets.count", 1) do
       patch project_url(@project),

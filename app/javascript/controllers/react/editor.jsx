@@ -649,12 +649,19 @@ function EditorApp({ config }) {
         });
         const created = (json.divisions ?? []).find((d) => d.ref === division.xmlId);
         if (!created) throw new Error("Newly created division missing from response");
-        w.divisions.push({
+        const record = {
           id: created.id,
           xmlId: division.xmlId,
           source: division.source ?? "",
           sourceFormat: division.sourceFormat ?? "pretext",
-        });
+        };
+        w.divisions.push(record);
+        // This division is already persisted (we just PATCHed it), so mirror it
+        // into the server snapshot too: otherwise it looks unsaved, and removing
+        // it before the next bulk save would skip the _destroy (see
+        // onDivisionRemove) and orphan the row on the server. A distinct object
+        // per pool keeps the working copy and snapshot from aliasing.
+        serverSnapshot.current?.divisions.push({ ...record });
         return created.id;
       } catch (error) {
         console.error("Error creating division:", error);
@@ -670,8 +677,11 @@ function EditorApp({ config }) {
     const index = w.divisions.findIndex((d) => d.xmlId === xmlId);
     if (index === -1) return;
     const [removed] = w.divisions.splice(index, 1);
-    // Only ask Rails to destroy a row that was actually persisted; a division
-    // added and removed before any save never reached the server.
+    // Only ask Rails to destroy a row that was actually persisted. onDivisionAdd
+    // records every division it creates into serverSnapshot, so a division that
+    // reached the server -- whether loaded initially or added this session -- is
+    // found here and gets a _destroy; one the editor created and dropped without
+    // ever calling onDivisionAdd (no server row) is correctly skipped.
     const persisted = serverSnapshot.current?.divisions.some((d) => d.id === removed.id);
     if (persisted) pendingDeletes.current.push(removed.id);
   }, []);
