@@ -2,7 +2,7 @@ class Project < ApplicationRecord
   belongs_to :user
 
   # dependent: :destroy so deleting a project drops its assets (and their
-  # attached files) too -- unlike divisions, an asset has no life outside its
+  # attached files) too -- an asset has no life outside its
   # project, so there's nothing to preserve.
   has_many :assets, dependent: :destroy
   # allow_destroy lets the editor delete an asset by sending `_destroy: true`.

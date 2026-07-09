@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_07_07_194812) do
+ActiveRecord::Schema[8.1].define(version: 2026_07_08_171301) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
   enable_extension "pgcrypto"
@@ -68,14 +68,17 @@ ActiveRecord::Schema[8.1].define(version: 2026_07_07_194812) do
   create_table "build_files", id: :uuid, default: -> { "gen_random_uuid()" }, force: :cascade do |t|
     t.uuid "build_id", null: false
     t.datetime "created_at", null: false
-    t.string "relative_path"
+    t.string "relative_path", null: false
     t.datetime "updated_at", null: false
+    t.index ["build_id", "relative_path"], name: "index_build_files_on_build_id_and_relative_path", unique: true
     t.index ["build_id"], name: "index_build_files_on_build_id"
   end
 
   create_table "builds", id: :uuid, default: -> { "gen_random_uuid()" }, force: :cascade do |t|
     t.datetime "created_at", null: false
+    t.text "log"
     t.uuid "project_id", null: false
+    t.string "remote_status_url"
     t.integer "status", default: 0, null: false
     t.datetime "updated_at", null: false
     t.index ["project_id"], name: "index_builds_on_project_id"

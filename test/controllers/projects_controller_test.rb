@@ -56,23 +56,105 @@ class ProjectsControllerTest < ActionDispatch::IntegrationTest
   end
 
   test "update creates a file-backed asset via a multipart assets_attributes upload" do
-    skip "Temporarily disabled pending a fix for new API shape"
     upload = fixture_file_upload("test_image.png", "image/png")
-    new_id = SecureRandom.uuid
 
-    patch project_url(@project, format: :json), params: {
-      project: { assets_attributes: [ { id: new_id, ref: "diagram-two", kind: "file", file: upload } ] }
-    }
+    # A new asset is created by omitting `id` (Rails' nested attributes treat an
+    # id-less entry as a fresh row and mint the UUID); the client matches it back
+    # out of the response by its project-unique `ref`, exactly as onAssetUpload does.
+    assert_difference("@project.assets.count", 1) do
+      patch project_url(@project, format: :json), params: {
+        project: { assets_attributes: [ { ref: "diagram-two", kind: "file", title: "Diagram Two", file: upload } ] }
+      }
+    end
 
     assert_response :success
-    asset = @project.assets.find(new_id)
+    asset = @project.assets.find_by!(ref: "diagram-two")
+    assert asset.file_kind?
     assert asset.file.attached?
     assert_equal "test_image.png", asset.file.filename.to_s
 
-    body = JSON.parse(response.body)
-    asset_json = body["assets"].find { |a| a["id"] == new_id }
-    assert_equal share_asset_project_path(@project, ref: "diagram-two", format: "png"), asset_json["file"]
+    body = response.parsed_body
+    asset_json = body["assets"].find { |a| a["ref"] == "diagram-two" }
+    assert_equal asset.id, asset_json["id"]
+    assert_equal share_asset_project_path(@project, ref: "diagram-two", format: "png"), asset_json["path"]
     assert_equal "png", asset_json["extension"]
+  end
+
+  test "update creates an authored asset via a JSON assets_attributes entry" do
+    assert_difference("@project.assets.count", 1) do
+      patch project_url(@project),
+        params: { project: { assets_attributes: [ { ref: "new-activity", kind: "authored", title: "New Activity", source: "<p>hi</p>" } ] } },
+        as: :json
+    end
+
+    assert_response :success
+    asset = @project.assets.find_by!(ref: "new-activity")
+    assert asset.authored_kind?
+    assert_equal "<p>hi</p>", asset.source
+    assert_not asset.file.attached?
+
+    asset_json = response.parsed_body["assets"].find { |a| a["ref"] == "new-activity" }
+    assert_equal asset.id, asset_json["id"]
+    assert_nil asset_json["path"]
+  end
+
+  test "update edits an existing asset's source via its id" do
+    asset = assets(:authored_one)
+    patch project_url(@project),
+      params: { project: { assets_attributes: [ { id: asset.id, source: "<p>edited</p>" } ] } },
+      as: :json
+
+    assert_response :success
+    assert_equal "<p>edited</p>", asset.reload.source
+    # An id-scoped edit must not create or drop rows.
+    assert_equal 1, @project.assets.where(ref: asset.ref).count
+  end
+
+  test "update destroys an asset via _destroy" do
+    asset = assets(:authored_one)
+    assert_difference("@project.assets.count", -1) do
+      patch project_url(@project),
+        params: { project: { assets_attributes: [ { id: asset.id, _destroy: true } ] } },
+        as: :json
+    end
+
+    assert_response :success
+    assert_not Asset.exists?(asset.id)
+  end
+
+  test "update rejects an asset whose ref collides with a division" do
+    root_ref = @project.root_division.ref
+    assert_no_difference("@project.assets.count") do
+      patch project_url(@project),
+        params: { project: { assets_attributes: [ { ref: root_ref, kind: "authored", title: "Clash" } ] } },
+        as: :json
+    end
+    assert_response :unprocessable_entity
+  end
+
+  test "non-owner cannot add an asset to another user's project" do
+    other_project = projects(:two)
+    assert_no_difference("other_project.assets.count") do
+      patch project_url(other_project),
+        params: { project: { assets_attributes: [ { ref: "sneaky", kind: "authored", title: "Sneaky" } ] } },
+        as: :json
+    end
+    assert_response 403
+  end
+
+  test "project json exposes assets in the shape the editor reads" do
+    get project_url(@project, format: :json)
+    assert_response :success
+
+    assets_json = response.parsed_body["assets"]
+    assert_kind_of Array, assets_json
+
+    authored = assets_json.find { |a| a["ref"] == "my-activity" }
+    assert_equal assets(:authored_one).id, authored["id"]
+    assert_equal "authored", authored["kind"]
+    # A source-only asset carries no file redirect/extension.
+    assert_nil authored["path"]
+    assert_nil authored["extension"]
   end
 
   test "should destroy project" do
