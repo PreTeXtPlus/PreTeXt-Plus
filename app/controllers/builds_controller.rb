@@ -9,8 +9,12 @@ class BuildsController < ApplicationController
   end
 
   def check_status
-    BuildStatusChecker.new(@build).check!
-    redirect_to project_build_path(@project, @build)
+    result = BuildStatusChecker.new(@build).check!
+    if result.ok?
+      redirect_to project_build_path(@project, @build), notice: result.message
+    else
+      redirect_to project_build_path(@project, @build), alert: result.message
+    end
   end
 
   def create

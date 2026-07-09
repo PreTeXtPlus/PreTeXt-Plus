@@ -25,7 +25,7 @@ class ProjectArchiveBuilder
     <?xml version="1.0" encoding="UTF-8"?>
     <project ptx-version="2">
       <targets>
-        <target name="#{TARGET}" format="pdf" />
+        <target name="#{TARGET}" format="html" />
       </targets>
     </project>
   XML
@@ -36,6 +36,9 @@ class ProjectArchiveBuilder
       <source>
         <directories external="external" generated="generated"/>
       </source>
+      <html>
+        <resources host="cdn"/>
+      </html>
     </publication>
   XML
 

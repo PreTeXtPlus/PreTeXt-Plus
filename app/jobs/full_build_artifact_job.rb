@@ -35,7 +35,13 @@ class FullBuildArtifactJob < ApplicationJob
         # output, and importing it roughly doubles the file count.
         next if entry.name.start_with?("__MACOSX/") || File.basename(entry.name).start_with?("._")
         content = entry.get_input_stream.read
-        build_file = build.build_files.create!(relative_path: entry.name)
+        # Zip entries come out as "<target>/..." (e.g. "web/index.html") since
+        # the build server zips its output/ dir, and PreTeXt writes each
+        # target's output to output/<target>/. Strip that prefix so stored
+        # paths are just "index.html", matching what BuildFilesController and
+        # build_file_path expect.
+        relative_path = entry.name.delete_prefix("#{ProjectArchiveBuilder::TARGET}/")
+        build_file = build.build_files.create!(relative_path: relative_path)
         build_file.blob.attach(
           io: StringIO.new(content),
           filename: File.basename(entry.name),

@@ -21,11 +21,13 @@ class FullBuildJob < ApplicationJob
     uri = URI.parse("https://#{ENV['FULL_BUILD_HOST']}/builds")
     request = Net::HTTP::Post.new(uri)
     request["Authorization"] = "Bearer #{ENV['BUILD_TOKEN']}"
+    resolved_callback_url = callback_url(build)
+    Rails.logger.info("FullBuildJob submitting build #{build.id} with callback_url=#{resolved_callback_url}")
     request.set_form(
       [
         [ "archive", archive, { filename: "project.zip", content_type: "application/zip" } ],
         [ "target", ProjectArchiveBuilder::TARGET ],
-        [ "callback_url", callback_url(build) ]
+        [ "callback_url", resolved_callback_url ]
       ],
       "multipart/form-data"
     )
@@ -55,8 +57,12 @@ class FullBuildJob < ApplicationJob
     def callback_url(build)
       host = ENV["FULL_BUILD_CALLBACK_HOST"].presence ||
              Rails.application.config.action_mailer.default_url_options[:host]
+      # Codespaces-forwarded ports and production are HTTPS-only: a plain http
+      # callback gets a 308 redirect that the build server won't follow, so the
+      # webhook never fires. Emit https unless we're on bare localhost dev.
+      protocol = host.to_s.start_with?("localhost") ? "http" : "https"
       Rails.application.routes.url_helpers.full_callback_project_build_url(
-        build.project, build, host: host
+        build.project, build, host: host, protocol: protocol
       )
     end
 end

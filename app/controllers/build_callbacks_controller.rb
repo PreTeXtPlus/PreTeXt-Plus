@@ -1,4 +1,5 @@
 require "openssl"
+require "uri"
 
 # Receives async status callbacks from the full build server
 # (pretext-plus-build-full). The server is not an authenticated user, so this
@@ -14,14 +15,21 @@ class BuildCallbacksController < ApplicationController
   # POST /projects/:project_id/builds/:id/full_callback
   def create
     body = request.raw_post
-    return head(:unauthorized) unless valid_signature?(body)
+    unless valid_signature?(body)
+      Rails.logger.warn("Build callback for build #{params[:id]} rejected: invalid or missing #{SIGNATURE_HEADER} -- check FULL_BUILD_WEBHOOK_SECRET matches the build server's config.")
+      return head(:unauthorized)
+    end
 
     build = Build.find(params[:id])
     payload = JSON.parse(body) rescue {}
 
     case payload["status"]
     when "success"
-      FullBuildArtifactJob.perform_later(build, payload["artifact_url"])
+      # artifact_url from the build server is a path relative to itself (e.g.
+      # "/builds/<id>/artifact"), not an absolute URL -- resolve it against
+      # FULL_BUILD_HOST before handing it to the job, same as BuildStatusChecker does.
+      artifact_url = URI.join("https://#{ENV['FULL_BUILD_HOST']}", payload["artifact_url"]).to_s
+      FullBuildArtifactJob.perform_later(build, artifact_url)
     when "failed"
       build.update_columns(status: Build.statuses[:failed], log: payload["log"])
       Rails.logger.error("Build #{build.id} failed on build server: #{payload["log"] || body}")
@@ -36,7 +44,9 @@ class BuildCallbacksController < ApplicationController
       secret = ENV["FULL_BUILD_WEBHOOK_SECRET"].to_s
       return false if secret.empty?
 
-      provided = request.headers[SIGNATURE_HEADER].to_s
+      # The build server sends "sha256=<hexdigest>" (see notify.py's _sign),
+      # not a bare hexdigest -- strip the algorithm prefix before comparing.
+      provided = request.headers[SIGNATURE_HEADER].to_s.delete_prefix("sha256=")
       expected = OpenSSL::HMAC.hexdigest("SHA256", secret, body)
       ActiveSupport::SecurityUtils.secure_compare(provided, expected)
     end
