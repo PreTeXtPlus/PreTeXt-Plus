@@ -20,8 +20,12 @@ class BuildStatusChecker
   end
 
   def check!
-    if @build.success? || @build.failed?
-      return Result.new(ok: true, message: "Build already #{@build.status}.")
+    if @build.success?
+      return Result.new(ok: true, message: "Build was successful!")
+    end
+
+    if @build.failed?
+      return Result.new(ok: false, message: "The build failed.")
     end
 
     unless @build.remote_status_url.present?
