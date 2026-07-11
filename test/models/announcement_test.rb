@@ -54,4 +54,15 @@ class AnnouncementTest < ActiveSupport::TestCase
       announcement.publish!
     end
   end
+
+  test "new announcements default to draft" do
+    assert Announcement.new(title: "Hello", body: "World").draft?
+  end
+
+  test "publish! raises for draft announcements" do
+    assert_raises(RuntimeError) do
+      announcements(:unready).publish!
+    end
+    assert_not announcements(:unready).reload.published?
+  end
 end

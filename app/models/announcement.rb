@@ -9,6 +9,8 @@ class Announcement < ApplicationRecord
   end
 
   def publish!
+    raise "Cannot publish a draft announcement" if draft?
+
     update!(published_at: Time.current)
     BroadcastAnnouncementJob.perform_later(self)
   end

@@ -114,4 +114,21 @@ class Admin::AnnouncementsControllerTest < ActionDispatch::IntegrationTest
     assert_redirected_to admin_announcement_path(announcements(:published))
     assert_equal "This announcement has already been published.", flash[:alert]
   end
+
+  test "publish on draft announcement redirects with alert and does not publish" do
+    sign_in @admin
+    assert_no_enqueued_jobs(only: BroadcastAnnouncementJob) do
+      post publish_admin_announcement_path(announcements(:unready))
+    end
+    assert_redirected_to admin_announcement_path(announcements(:unready))
+    assert_equal "This announcement is still a draft. Save it as Ready to Publish before publishing.", flash[:alert]
+    assert_not announcements(:unready).reload.published?
+  end
+
+  test "update can mark a draft as ready to publish" do
+    sign_in @admin
+    patch admin_announcement_path(announcements(:unready)),
+      params: { announcement: { title: "Updated", body: "Updated body.", draft: false } }
+    assert_not announcements(:unready).reload.draft?
+  end
 end
