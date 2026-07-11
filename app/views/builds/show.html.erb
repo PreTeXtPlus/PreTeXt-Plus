@@ -18,7 +18,7 @@
         <p class="mt-1 flex items-center gap-2">
           <%= build_status_badge(@build) %>
           <% unless @build.success? || @build.failed? %>
-            <%= button_to "Check status", check_status_project_build_path(@project, @build), class: "text-sm text-blue-600 hover:underline" %>
+            <%= button_to "Check status and reload", check_status_project_build_path(@project, @build), class: "text-sm text-blue-600 hover:underline cursor-pointer", data: { turbo: false } %>
           <% end %>
         </p>
       </div>
@@ -48,12 +48,14 @@
           <p class="mt-1"><%= link_to "View site", build_file_path(@build, "index.html"), class: "text-blue-600 hover:underline", data: { turbo: false } %></p>
         </div>
       <% end %>
-      <% if @build.log.present? %>
-        <div>
-          <span class="text-sm font-semibold text-gray-700">Build log</span>
+      <div>
+        <span class="text-sm font-semibold text-gray-700">
+          <%= @build.log.present? ? "Build log" : "(No build log available.)" %>
+        </span>
+        <% if @build.log.present? %>
           <pre class="mt-1 max-h-96 overflow-y-auto rounded-lg bg-gray-900 p-3 text-xs text-gray-100"><%= @build.log %></pre>
-        </div>
-      <% end %>
+        <% end %>
+      </div>
     </div>
   <% end %>
 
