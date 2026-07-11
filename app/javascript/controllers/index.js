@@ -7,5 +7,8 @@ import { application } from "./application"
 import EditorController from "./editor_controller"
 application.register("editor", EditorController)
 
+import LocalTimeController from "./local_time_controller"
+application.register("local-time", LocalTimeController)
+
 import TryitController from "./tryit_controller"
 application.register("tryit", TryitController)
