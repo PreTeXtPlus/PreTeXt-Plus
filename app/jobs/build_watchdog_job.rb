@@ -9,7 +9,7 @@ class BuildWatchdogJob < ApplicationJob
   STUCK_AFTER = 5.minutes
 
   def perform
-    Build.in_progress.where.not(remote_status_url: nil)
+    Build.sent_to_server.where.not(remote_status_url: nil)
          .where(updated_at: ...STUCK_AFTER.ago).find_each do |build|
       BuildStatusChecker.new(build).check!
     end
