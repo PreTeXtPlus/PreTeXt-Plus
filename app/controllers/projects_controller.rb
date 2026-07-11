@@ -89,9 +89,9 @@ class ProjectsController < ApplicationController
     require "net/http"
     post_params = {
       source: params[:source],
-      token: Rails.app.creds.require(:preview_build, :token)
+      token: Rails.application.credentials.dig(:preview_build, :token)
     }
-    uri = URI.parse("https://#{Rails.app.creds.require(:preview_build, :host)}")
+    uri = URI.parse("https://#{Rails.application.credentials.dig(:preview_build, :host)}")
     response = Net::HTTP.start(
       uri.host,
       uri.port,

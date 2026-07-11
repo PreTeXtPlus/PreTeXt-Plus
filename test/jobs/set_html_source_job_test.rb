@@ -11,6 +11,6 @@ class SetHtmlSourceJobTest < ActiveJob::TestCase
     end
 
     assert_equal project.pretext_source, captured_params[:source]
-    assert_equal Rails.app.creds.require(:preview_build, :token), captured_params[:token]
+    assert_equal Rails.application.credentials.dig(:preview_build, :token), captured_params[:token]
   end
 end

@@ -18,9 +18,9 @@ class FullBuildJob < ApplicationJob
 
     archive = ProjectArchiveBuilder.new(build.project).build
 
-    uri = URI.parse("https://#{Rails.app.creds.require(:full_build, :host)}/builds")
+    uri = URI.parse("https://#{Rails.application.credentials.dig(:full_build, :host)}/builds")
     request = Net::HTTP::Post.new(uri)
-    request["Authorization"] = "Bearer #{Rails.app.creds.require(:full_build, :token)}"
+    request["Authorization"] = "Bearer #{Rails.application.credentials.dig(:full_build, :token)}"
     resolved_callback_url = callback_url(build)
     Rails.logger.info("FullBuildJob submitting build #{build.id} with callback_url=#{resolved_callback_url}")
     request.set_form(

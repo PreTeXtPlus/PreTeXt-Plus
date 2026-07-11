@@ -14,7 +14,7 @@ class FullBuildArtifactJob < ApplicationJob
 
     uri = URI.parse(artifact_url)
     request = Net::HTTP::Get.new(uri)
-    request["Authorization"] = "Bearer #{Rails.app.creds.require(:full_build, :token)}"
+    request["Authorization"] = "Bearer #{Rails.application.credentials.dig(:full_build, :token)}"
 
     response = Net::HTTP.start(uri.host, uri.port, use_ssl: uri.scheme == "https") do |http|
       http.request(request)

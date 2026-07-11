@@ -28,9 +28,9 @@ class BuildStatusChecker
       return Result.new(ok: false, message: "No status URL on record for this build yet -- it may not have finished submitting.")
     end
 
-    uri = URI.parse("https://#{Rails.app.creds.require(:full_build, :host)}#{@build.remote_status_url}")
+    uri = URI.parse("https://#{Rails.application.credentials.dig(:full_build, :host)}#{@build.remote_status_url}")
     request = Net::HTTP::Get.new(uri)
-    request["Authorization"] = "Bearer #{Rails.app.creds.require(:full_build, :token)}"
+    request["Authorization"] = "Bearer #{Rails.application.credentials.dig(:full_build, :token)}"
 
     response = Net::HTTP.start(uri.host, uri.port, use_ssl: uri.scheme == "https") do |http|
       http.request(request)
