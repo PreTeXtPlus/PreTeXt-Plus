@@ -47,7 +47,14 @@ Rails.application.routes.draw do
   # unrelated to the resource.
   get "*_/icon.svg", to: redirect("/icon-small.svg")
   resources :projects do
-    resources :builds, only: [ :index, :show, :create, :destroy ]
+    resources :builds, only: [ :index, :show, :create, :destroy ] do
+      # Async status webhook from the full build server; authenticated by HMAC
+      # signature, not login (see BuildCallbacksController).
+      member do
+        post "full_callback" => "build_callbacks#create", as: "full_callback"
+        post "check_status" => "builds#check_status", as: "check_status"
+      end
+    end
     resources :divisions, only: [ :create ]
     # Immediate-persist membership endpoint (mirrors divisions): the editor adds
     # an asset to its own pool optimistically, then we write the join row here.
