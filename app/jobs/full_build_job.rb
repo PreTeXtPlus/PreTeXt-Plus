@@ -20,7 +20,7 @@ class FullBuildJob < ApplicationJob
 
     uri = URI.parse("https://#{ENV['FULL_BUILD_HOST']}/builds")
     request = Net::HTTP::Post.new(uri)
-    request["Authorization"] = "Bearer #{ENV['BUILD_TOKEN']}"
+    request["Authorization"] = "Bearer #{ENV['FULL_BUILD_TOKEN']}"
     resolved_callback_url = callback_url(build)
     Rails.logger.info("FullBuildJob submitting build #{build.id} with callback_url=#{resolved_callback_url}")
     request.set_form(

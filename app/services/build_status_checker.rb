@@ -30,7 +30,7 @@ class BuildStatusChecker
 
     uri = URI.parse("https://#{ENV['FULL_BUILD_HOST']}#{@build.remote_status_url}")
     request = Net::HTTP::Get.new(uri)
-    request["Authorization"] = "Bearer #{ENV['BUILD_TOKEN']}"
+    request["Authorization"] = "Bearer #{ENV['FULL_BUILD_TOKEN']}"
 
     response = Net::HTTP.start(uri.host, uri.port, use_ssl: uri.scheme == "https") do |http|
       http.request(request)
