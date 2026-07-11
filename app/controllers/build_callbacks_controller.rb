@@ -29,7 +29,7 @@ class BuildCallbacksController < ApplicationController
       # "/builds/<id>/artifact"), not an absolute URL -- resolve it against
       # FULL_BUILD_HOST before handing it to the job, same as BuildStatusChecker does.
       artifact_url = URI.join("https://#{Rails.application.credentials.dig(:full_build, :host)}", payload["artifact_url"]).to_s
-      build.update_column(:log, payload["log"].present? ? payload["log"] : "(No log returned from server.)")
+      build.update_columns(status: Build.statuses[:received_from_server], log: payload["log"].present? ? payload["log"] : "(No log returned from server.)")
       FullBuildArtifactJob.perform_later(build, artifact_url)
     when "failed"
       build.update_columns(status: Build.statuses[:failed], log: payload["log"].present? ? payload["log"] : "(No log returned from server.)")

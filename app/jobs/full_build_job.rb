@@ -38,6 +38,7 @@ class FullBuildJob < ApplicationJob
 
     if response.is_a?(Net::HTTPSuccess)
       status_url = JSON.parse(response.body)["status_url"]
+      build.update_column(:status, Build.statuses[:sent_to_server])
       build.update_column(:remote_status_url, status_url) if status_url.present?
     else
       build.update_column(:status, Build.statuses[:failed])

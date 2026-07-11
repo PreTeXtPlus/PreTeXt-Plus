@@ -2,6 +2,8 @@ module BuildsHelper
   STATUS_BADGE_CLASSES = {
     "pending"     => "border-gray-400 bg-gray-400",
     "in_progress" => "border-sky-500 bg-sky-500",
+    "sent_to_server" => "border-sky-500 bg-sky-500",
+    "received_from_server" => "border-sky-500 bg-sky-500",
     "success"     => "border-green-600 bg-green-600",
     "failed"      => "border-red-500 bg-red-500"
   }.freeze
