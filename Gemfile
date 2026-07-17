@@ -80,7 +80,7 @@ gem "pay", "~> 11.6"
 
 gem "commonmarker", "~> 2.8"
 
-gem "aws-sdk-s3", "~> 1.225"
+gem "aws-sdk-s3", "~> 1.228"
 
 gem "cancancan", "~> 3.6"
 
