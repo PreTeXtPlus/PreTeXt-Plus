@@ -1,6 +1,7 @@
 class ApplicationController < ActionController::Base
   include ActiveStorage::SetCurrent
   before_action :authenticate_user!
+  around_action :set_time_zone
 
   rescue_from CanCan::AccessDenied do |exception|
     if request.format.json?
@@ -51,5 +52,14 @@ class ApplicationController < ActionController::Base
 
   def require_admin
     authorize! :manage, :admin
+  end
+
+  # Reads the "tz" cookie set client-side (see app/javascript/application.js) so
+  # local_time_tag can server-render already-localized times. Time.zone is a
+  # thread-global, not request-scoped, so Time.use_zone sets it for this request
+  # only and restores it afterward (threads are reused across requests).
+  def set_time_zone(&block)
+    zone = ActiveSupport::TimeZone[cookies[:tz]] if cookies[:tz]
+    Time.use_zone(zone || Time.zone, &block)
   end
 end
