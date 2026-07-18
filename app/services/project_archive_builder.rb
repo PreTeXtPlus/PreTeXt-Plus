@@ -58,13 +58,12 @@ class ProjectArchiveBuilder
       zip.put_next_entry("source/main.ptx")
       zip.write(@project.pretext_source.to_s)
 
-      @project.project_assets.each do |project_asset|
-        library_asset = project_asset.library_asset
-        next unless library_asset.file.attached?
+      @project.assets.each do |asset|
+        next unless asset.file.attached?
 
-        ext = library_asset.file.filename.extension_with_delimiter
-        zip.put_next_entry("source/external/#{project_asset.ref}#{ext}")
-        zip.write(library_asset.file.download)
+        ext = asset.file.filename.extension_with_delimiter
+        zip.put_next_entry("source/external/#{asset.ref}#{ext}")
+        zip.write(asset.file.download)
       end
     end
     buffer.rewind
