@@ -73,11 +73,7 @@
 
               <p class="mt-1 text-sm text-gray-700">
                 Last updated:
-                <%= tag.time(
-                      "#{time_ago_in_words(project.updated_at)} ago",
-                      datetime: project.updated_at.utc.iso8601,
-                      title: "#{project.updated_at.utc.strftime('%B %-d, %Y at %-I:%M %p')} UTC"
-                    ) %>
+                <%= local_time_tag(project.updated_at, relative: true) %>
               </p>
             </span>
           </span>

@@ -25,7 +25,7 @@
       <p class="text-sm font-medium uppercase tracking-wide text-gray-500">Last sign-in</p>
       <p class="mt-3 text-lg font-semibold text-gray-900">
         <% if last_sign_in_for(@user).present? %>
-          <%= time_ago_in_words(last_sign_in_for(@user)) %> ago
+          <%= local_time_tag(last_sign_in_for(@user), relative: true) %>
         <% else %>
           Never
         <% end %>
@@ -93,7 +93,7 @@
           <dt class="font-medium text-gray-500">Last sign-in</dt>
           <dd>
             <% if @user.last_sign_in_at %>
-              <%= time_ago_in_words(@user.last_sign_in_at) %> ago (<%= local_time_tag(@user.last_sign_in_at, date_only: true) %>)
+              <%= local_time_tag(@user.last_sign_in_at, relative: true) %>
             <% else %>
               Never
             <% end %>
@@ -138,7 +138,7 @@
                   <p class="mt-1 text-sm text-gray-600"><%= project.document_type.to_s.humanize %></p>
                 </div>
                 <p class="text-sm text-gray-500">
-                  <time datetime="<%= project.updated_at.iso8601 %>"><%= time_ago_in_words(project.updated_at) %> ago</time>
+                  <%= local_time_tag(project.updated_at, relative: true) %>
                 </p>
               </div>
             </div>
