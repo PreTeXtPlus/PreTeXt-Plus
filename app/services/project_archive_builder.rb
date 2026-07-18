@@ -65,6 +65,11 @@ class ProjectArchiveBuilder
         zip.put_next_entry("source/external/#{asset.ref}#{ext}")
         zip.write(asset.file.download)
       end
+
+      unless @project.assets.find_by(ref: "icon").present?
+        zip.put_next_entry("source/external/icon.png")
+        zip.write(File.read Rails.root.join("public", "icon-small.png"))
+      end
     end
     buffer.rewind
     buffer
