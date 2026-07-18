@@ -62,7 +62,7 @@
               <% if user.subscribed? %>
                 Active
                 <% if user.subscribed_until.present? %>
-                  <div class="text-xs text-gray-500">Until <%= user.subscribed_until.to_date %></div>
+                  <div class="text-xs text-gray-500">Until <%= local_time_tag(user.subscribed_until, date_only: true) %></div>
                 <% end %>
               <% else %>
                 None
@@ -82,7 +82,7 @@
                 Never
               <% end %>
             </td>
-            <td class="px-4 py-4 align-top text-gray-700"><%= user.created_at.to_date %></td>
+            <td class="px-4 py-4 align-top text-gray-700"><%= local_time_tag(user.created_at, date_only: true) %></td>
           </tr>
         <% end %>
       </tbody>
