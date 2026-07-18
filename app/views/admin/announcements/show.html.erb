@@ -7,8 +7,10 @@
       <p class="mt-2 text-sm text-gray-500">
         <% if @announcement.published? %>
           Published on <%= @announcement.published_at.to_date %>
+        <% elsif @announcement.draft? %>
+          <span class="font-medium text-yellow-700">Draft</span> &mdash; not ready to publish
         <% else %>
-          Draft &mdash; not yet published
+          <span class="font-medium text-blue-700">Ready to publish</span> &mdash; not yet published
         <% end %>
         <% if @announcement.paid_subscribers_only? %>
           &mdash; <span class="font-medium text-amber-600">Paid subscribers only</span>
@@ -17,9 +19,15 @@
     </div>
     <div class="flex gap-2 flex-wrap justify-end">
       <% unless @announcement.published? %>
-        <%= button_to "Publish & email users", publish_admin_announcement_path(@announcement), method: :post,
-              class: "rounded-md px-3.5 py-2 bg-green-600 hover:bg-green-500 text-white font-medium",
-              data: { turbo_confirm: @announcement.paid_subscribers_only? ? "This will email paid subscribers only. Proceed?" : "This will email all subscribed users. Proceed?" } %>
+        <% if @announcement.draft? %>
+          <span class="rounded-md px-3.5 py-2 bg-gray-100 text-gray-400 font-medium cursor-not-allowed" title="Uncheck &quot;Keep as draft&quot; and save before publishing">
+            Publish & email users
+          </span>
+        <% else %>
+          <%= button_to "Publish & email users", publish_admin_announcement_path(@announcement), method: :post,
+                class: "rounded-md px-3.5 py-2 bg-green-600 hover:bg-green-500 text-white font-medium",
+                data: { turbo_confirm: @announcement.paid_subscribers_only? ? "This will email paid subscribers only. Proceed?" : "This will email all subscribed users. Proceed?" } %>
+        <% end %>
         <%= link_to "Edit", edit_admin_announcement_path(@announcement), class: "rounded-md px-3.5 py-2 bg-blue-600 hover:bg-blue-500 text-white font-medium" %>
       <% end %>
       <%= button_to "Delete", admin_announcement_path(@announcement), method: :delete,

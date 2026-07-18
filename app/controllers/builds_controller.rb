@@ -8,9 +8,18 @@ class BuildsController < ApplicationController
   def show
   end
 
+  def check_status
+    result = BuildStatusChecker.new(@build).check!
+    if result.ok?
+      redirect_to project_build_path(@project, @build), notice: result.message
+    else
+      redirect_to project_build_path(@project, @build), alert: result.message
+    end
+  end
+
   def create
     if @build.save
-      FetchBuildZipJob.perform_later(@build)
+      FullBuildJob.perform_later(@build)
       redirect_to project_build_path(@project, @build), notice: "Build was successfully created."
     else
       render :new, status: :unprocessable_entity

@@ -38,6 +38,9 @@ class Admin::AnnouncementsController < Admin::BaseController
   def publish
     if @announcement.published?
       redirect_to admin_announcement_path(@announcement), alert: "This announcement has already been published."
+    elsif @announcement.draft?
+      redirect_to admin_announcement_path(@announcement),
+        alert: "This announcement is still a draft. Save it as Ready to Publish before publishing."
     else
       @announcement.publish!
       audience = @announcement.paid_subscribers_only? ? "paid subscribers" : "all subscribed users"
@@ -49,6 +52,6 @@ class Admin::AnnouncementsController < Admin::BaseController
   private
 
   def announcement_params
-    params.require(:announcement).permit(:title, :body, :paid_subscribers_only)
+    params.require(:announcement).permit(:title, :body, :paid_subscribers_only, :draft)
   end
 end

@@ -280,6 +280,28 @@ class ProjectsControllerTest < ActionDispatch::IntegrationTest
     assert_response :success
   end
 
+  test "copy_redirect sends GET requests to the share/source page" do
+    sign_out :user
+    get share_copy_project_url(@project)
+    assert_redirected_to share_source_project_url(@project)
+  end
+
+  test "copy_redirect is accessible with and without authentication" do
+    get share_copy_project_url(@project)
+    assert_response :redirect
+    sign_out :user
+    get share_copy_project_url(@project)
+    assert_response :redirect
+  end
+
+  test "copy_redirect does not create a project or require an existing project" do
+    sign_out :user
+    assert_no_difference("Project.count") do
+      get "/projects/does-not-exist/share/copy"
+    end
+    assert_redirected_to "/projects/does-not-exist/share/source"
+  end
+
   test "copy creates a duplicate for subscriber" do
     subbed_user = users(:subscribed)
     sign_out :user

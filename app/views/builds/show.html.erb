@@ -1,4 +1,7 @@
 <% content_for :title, "Build — #{@project.title}" %>
+<% unless @build.success? || @build.failed? %>
+  <meta http-equiv="refresh" content="5">
+<% end %>
 
 <div class="w-full mx-auto p-4 md:w-2/3">
   <div class="flex items-center gap-4">
@@ -13,9 +16,6 @@
 
   <%= turbo_frame_tag dom_id(@build, :status) do %>
     <div class="mt-6 rounded-xl border border-gray-200 bg-white p-6 shadow-sm space-y-3">
-      <% unless @build.success? || @build.failed? %>
-        <meta http-equiv="refresh" content="5">
-      <% end %>
       <div>
         <span class="text-sm font-semibold text-gray-700">Status</span>
         <p class="mt-1 flex items-center gap-2">
@@ -25,6 +25,7 @@
               <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
               <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path>
             </svg>
+            <%= button_to "Request update from server", check_status_project_build_path(@project, @build), class: "mt-2 text-xs rounded-md px-2 py-1 border-1 border-sky-600 hover:border-sky-500 text-sky-800 font-medium cursor-pointer", data: { turbo: false } %>
           <% end %>
         </p>
       </div>
@@ -45,15 +46,23 @@
       <% if @build.zip.attached? %>
         <div>
           <span class="text-sm font-semibold text-gray-700">Download</span>
-          <p class="mt-1"><%= link_to "Download ZIP", rails_blob_path(@build.zip, disposition: "attachment"), class: "text-blue-600 hover:underline" %></p>
+          <p class="mt-1"><%= link_to "build-#{@build.id}.zip", rails_blob_path(@build.zip, disposition: "attachment"), class: "text-blue-600 hover:underline" %></p>
         </div>
       <% end %>
       <% if @build.success? %>
         <div>
           <span class="text-sm font-semibold text-gray-700">Site</span>
-          <p class="mt-1"><%= link_to "View site", build_file_path(@build, "index.html"), class: "text-blue-600 hover:underline" %></p>
+          <p class="mt-1"><%= link_to "View site", build_file_path(@build, "index.html"), class: "text-blue-600 hover:underline", data: { turbo: false } %></p>
         </div>
       <% end %>
+      <div>
+        <span class="text-sm font-semibold text-gray-700">
+          <%= @build.log.present? ? "Build log" : "(No build log available.)" %>
+        </span>
+        <% if @build.log.present? %>
+          <pre class="mt-1 max-h-96 overflow-y-auto rounded-lg bg-gray-900 p-3 text-xs text-gray-100"><%= @build.log %></pre>
+        <% end %>
+      </div>
     </div>
   <% end %>
 

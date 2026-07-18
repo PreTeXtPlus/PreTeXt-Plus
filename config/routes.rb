@@ -38,7 +38,14 @@ Rails.application.routes.draw do
     end
   end
   resources :projects do
-    resources :builds, only: [ :index, :show, :create, :destroy ]
+    resources :builds, only: [ :index, :show, :create, :destroy ] do
+      # Async status webhook from the full build server; authenticated by HMAC
+      # signature, not login (see BuildCallbacksController).
+      member do
+        post "full_callback" => "build_callbacks#create", as: "full_callback"
+        post "check_status" => "builds#check_status", as: "check_status"
+      end
+    end
     collection do
       post "feedback" => "projects#feedback", as: "feedback"
       get "lunr-pretext-search-index.js", to: redirect("/ptx-search.js")
@@ -48,7 +55,7 @@ Rails.application.routes.draw do
     member do
       get "share" => "projects#share", as: "share"
       get "share/source" => "projects#source", as: "share_source"
-      get "share/copy", to: redirect("projects/%{project_id}/share/source")
+      get "share/copy" => "projects#copy_redirect"
       post "share/copy" => "projects#copy", as: "copy"
       get "(*_)/external/:ref" => "assets#share", as: "share_asset"
       post "preview" => "projects#preview", as: "preview"
