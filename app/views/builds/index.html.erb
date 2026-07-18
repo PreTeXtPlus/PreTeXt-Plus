@@ -34,7 +34,7 @@
                 HTML
               </td>
               <td class="px-4 py-3 text-sm text-gray-600">
-                <%= time_ago_in_words(build.created_at) %> ago
+                <%= local_time_tag(build.created_at, relative: true) %>
               </td>
               <td class="px-4 py-3 text-right text-sm">
                 <% if build.success? %>

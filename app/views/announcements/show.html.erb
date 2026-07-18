@@ -8,7 +8,7 @@
   <div class="rounded-xl border border-gray-200 bg-white p-8 shadow-sm">
     <h1 class="text-3xl font-semibold text-gray-900"><%= @announcement.title %></h1>
     <p class="mt-2 text-sm text-gray-500">
-      <time datetime="<%= @announcement.published_at&.iso8601 %>"><%= @announcement.published_at&.to_date %></time>
+      <%= local_time_tag(@announcement.published_at, date_only: true) if @announcement.published_at %>
       <% if @announcement.paid_subscribers_only? %>
         &middot; <span class="text-amber-600 font-medium">Subscribers only</span>
       <% end %>

@@ -25,7 +25,7 @@
       <p class="text-sm font-medium uppercase tracking-wide text-gray-500">Last sign-in</p>
       <p class="mt-3 text-lg font-semibold text-gray-900">
         <% if last_sign_in_for(@user).present? %>
-          <%= time_ago_in_words(last_sign_in_for(@user)) %> ago
+          <%= local_time_tag(last_sign_in_for(@user), relative: true) %>
         <% else %>
           Never
         <% end %>
@@ -33,7 +33,7 @@
     </div>
     <div class="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
       <p class="text-sm font-medium uppercase tracking-wide text-gray-500">Created</p>
-      <p class="mt-3 text-lg font-semibold text-gray-900"><%= @user.created_at.to_date %></p>
+      <p class="mt-3 text-lg font-semibold text-gray-900"><%= local_time_tag(@user.created_at, date_only: true) %></p>
     </div>
   </section>
 
@@ -69,7 +69,7 @@
               <p class="mt-1 text-sm text-gray-600">
                 Status: <%= seat.subscription.status %>
                 <% if seat.subscription.current_period_end.present? %>
-                  · Ends <%= seat.subscription.current_period_end.to_date %>
+                  · Ends <%= local_time_tag(seat.subscription.current_period_end, date_only: true) %>
                 <% end %>
               </p>
             </div>
@@ -91,7 +91,13 @@
         </div>
         <div>
           <dt class="font-medium text-gray-500">Last sign-in</dt>
-          <dd><%= @user.last_sign_in_at ? "#{time_ago_in_words(@user.last_sign_in_at)} ago (#{@user.last_sign_in_at.to_date})" : "Never" %></dd>
+          <dd>
+            <% if @user.last_sign_in_at %>
+              <%= local_time_tag(@user.last_sign_in_at, relative: true) %>
+            <% else %>
+              Never
+            <% end %>
+          </dd>
         </div>
         <div>
           <dt class="font-medium text-gray-500">Last sign-in IP</dt>
@@ -101,7 +107,7 @@
           <dt class="font-medium text-gray-500">Email confirmed</dt>
           <dd>
             <% if @user.confirmed? %>
-              <%= @user.confirmed_at.to_date %>
+              <%= local_time_tag(@user.confirmed_at, date_only: true) %>
             <% else %>
               Not confirmed
               <%= button_to "Confirm email", confirm_admin_user_path(@user), method: :post, class: "ml-2 rounded-md px-2.5 py-1 bg-blue-600 hover:bg-blue-500 text-white text-xs font-medium cursor-pointer", form_class: "inline-block" %>
@@ -132,7 +138,7 @@
                   <p class="mt-1 text-sm text-gray-600"><%= project.document_type.to_s.humanize %></p>
                 </div>
                 <p class="text-sm text-gray-500">
-                  <time datetime="<%= project.updated_at.iso8601 %>"><%= time_ago_in_words(project.updated_at) %> ago</time>
+                  <%= local_time_tag(project.updated_at, relative: true) %>
                 </p>
               </div>
             </div>
