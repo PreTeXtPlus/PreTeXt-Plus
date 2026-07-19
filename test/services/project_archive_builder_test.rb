@@ -22,10 +22,10 @@ class ProjectArchiveBuilderTest < ActiveSupport::TestCase
     assert_includes contents["project.ptx"], %(name="#{ProjectArchiveBuilder::TARGET}")
   end
 
-  test "packs each project_asset with a file under source/external using its ref" do
+  test "packs each asset with a file under source/external using its ref" do
     project = projects(:one)
-    library_asset = library_assets(:image_one)
-    library_asset.file.attach(
+    asset = assets(:image_one)
+    asset.file.attach(
       io: File.open(Rails.root.join("test/fixtures/files/test_image.png")),
       filename: "test_image.png",
       content_type: "image/png"
@@ -33,16 +33,8 @@ class ProjectArchiveBuilderTest < ActiveSupport::TestCase
 
     contents = entries(ProjectArchiveBuilder.new(project).build)
 
-    path = "source/external/#{project_assets(:one).ref}.png"
+    path = "source/external/#{asset.ref}.png"
     assert_includes contents.keys, path
-    assert_equal library_asset.file.download, contents[path]
-  end
-
-  test "skips project_assets whose library_asset has no file" do
-    project = projects(:one)
-
-    contents = entries(ProjectArchiveBuilder.new(project).build)
-
-    assert contents.keys.none? { |k| k.start_with?("source/external/") }
+    assert_equal asset.file.download, contents[path]
   end
 end

@@ -40,8 +40,8 @@ class Ability
       project.user.has_copiable_projects? || user.has_copiable_projects?
     end
 
-    # Project assets belonging to own projects (hash condition enables accessible_by scoping)
-    can :manage, ProjectAsset, project: { user_id: user.id }
+    # Assets belonging to own projects (hash condition enables accessible_by scoping)
+    can :manage, Asset, project: { user_id: user.id }
 
     # Divisions belonging to own projects
     can :manage, Division, project: { user_id: user.id }
@@ -51,10 +51,6 @@ class Ability
     # can :manage, Build, project: { user_id: user.id }
 
     can :subscribe, Announcement
-
-    # Library assets — :create has no user_id yet at authorization time, so it's a separate rule
-    can :create, LibraryAsset
-    can [ :read, :update, :destroy, :file ], LibraryAsset, user_id: user.id
 
     # Subscriptions
     can [ :show, :seat ], Pay::Stripe::Subscription do |subscription|

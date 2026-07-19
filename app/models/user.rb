@@ -3,7 +3,7 @@ class User < ApplicationRecord
          :confirmable, :trackable
 
   has_many :projects, dependent: :destroy
-  has_many :library_assets, dependent: :destroy
+  has_many :assets, through: :projects
 
   belongs_to :tos, class_name: "Term", required: false
   belongs_to :privacy, class_name: "Term", required: false
@@ -13,6 +13,8 @@ class User < ApplicationRecord
   has_many :subscription_seats
 
   normalizes :email, with: ->(e) { e.strip.downcase }
+
+  before_create :set_common_docinfo
 
   def subscribed?
     self.subscription_seats.any? { |s| s.grants_privileges? }
@@ -50,5 +52,11 @@ class User < ApplicationRecord
 
   def update_terms
     update(tos: Term.current(:tos), privacy: Term.current(:privacy))
+  end
+
+  private
+
+  def set_common_docinfo
+    self.common_docinfo = Project.default_docinfo if self.common_docinfo.blank?
   end
 end

@@ -1,10 +1,9 @@
 require "test_helper"
 
 class DivisionTest < ActiveSupport::TestCase
-  test "ref must be unique among project assets in the same project" do
+  test "ref must be unique among assets in the same project" do
     project = projects(:one)
-    library_asset = LibraryAsset.create!(user: users(:one), kind: :file)
-    ProjectAsset.create!(project: project, library_asset: library_asset, ref: "taken_ref")
+    Asset.create!(project: project, ref: "taken_ref", kind: :file)
 
     division = Division.new(project: project, ref: "taken_ref", source_format: :pretext)
 

@@ -5,7 +5,7 @@ class Division < ApplicationRecord
   validates :is_root, uniqueness: { scope: :project_id, message: "root division already exists for this project" }, if: :is_root?
 
   validates :ref, format: REF_REGEX, presence: true, uniqueness: { scope: :project }
-  validate :ref_unique_among_project_assets
+  validate :ref_unique_among_assets
 
   before_create :set_default_source
 
@@ -27,10 +27,10 @@ class Division < ApplicationRecord
 
   private
 
-  def ref_unique_among_project_assets
+  def ref_unique_among_assets
     return unless project_id && ref
 
-    if ProjectAsset.where(project_id: project_id, ref: ref).exists?
+    if Asset.where(project_id: project_id, ref: ref).exists?
       errors.add(:ref, "has already been taken")
     end
   end

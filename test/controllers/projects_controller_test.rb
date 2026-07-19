@@ -55,6 +55,181 @@ class ProjectsControllerTest < ActionDispatch::IntegrationTest
     assert_response :ok
   end
 
+  test "update creates a file-backed asset via a multipart assets_attributes upload" do
+    upload = fixture_file_upload("test_image.png", "image/png")
+
+    # A new asset is created by omitting `id` (Rails' nested attributes treat an
+    # id-less entry as a fresh row and mint the UUID); the client matches it back
+    # out of the response by its project-unique `ref`, exactly as onAssetUpload does.
+    assert_difference("@project.assets.count", 1) do
+      patch project_url(@project, format: :json), params: {
+        project: { assets_attributes: [ { ref: "diagram-two", kind: "file", title: "Diagram Two", file: upload } ] }
+      }
+    end
+
+    assert_response :success
+    asset = @project.assets.find_by!(ref: "diagram-two")
+    assert asset.file_kind?
+    assert asset.file.attached?
+    assert_equal "test_image.png", asset.file.filename.to_s
+
+    body = response.parsed_body
+    asset_json = body["assets"].find { |a| a["ref"] == "diagram-two" }
+    assert_equal asset.id, asset_json["id"]
+    assert_equal share_asset_project_path(@project, ref: "diagram-two", format: "png"), asset_json["path"]
+    assert_equal "png", asset_json["extension"]
+  end
+
+  # --- Divisions (nested attributes; the /divisions endpoint was removed) ---
+
+  test "update creates a non-root division via an id-less divisions_attributes entry" do
+    assert_difference("@project.divisions.count", 1) do
+      patch project_url(@project),
+        params: { project: { divisions_attributes: [ { ref: "newly-added", source_format: "pretext", source: "<section><title>New</title></section>" } ] } },
+        as: :json
+    end
+
+    assert_response :success
+    division = @project.divisions.find_by!(ref: "newly-added")
+    # A division added this way must never become a second root.
+    assert_not division.is_root?
+    assert_equal "<section><title>New</title></section>", division.source
+
+    # The client matches the new row back out of the response by its ref, so the
+    # response must carry it with its freshly minted id.
+    division_json = response.parsed_body["divisions"].find { |d| d["ref"] == "newly-added" }
+    assert_equal division.id, division_json["id"]
+  end
+
+  test "creating a division leaves the existing root untouched" do
+    root = @project.root_division
+    patch project_url(@project),
+      params: { project: { divisions_attributes: [ { ref: "sibling", source_format: "pretext", source: "<section/>" } ] } },
+      as: :json
+    assert_response :success
+    assert_equal root.id, @project.reload.root_division.id
+    assert_equal 1, @project.divisions.where(is_root: true).count
+  end
+
+  test "update edits an existing division via its id without creating a row" do
+    division = divisions(:one)
+    assert_no_difference("@project.divisions.count") do
+      patch project_url(@project),
+        params: { project: { divisions_attributes: [ { id: division.id, source: "<section><title>Edited</title></section>" } ] } },
+        as: :json
+    end
+    assert_response :success
+    assert_equal "<section><title>Edited</title></section>", division.reload.source
+  end
+
+  test "update destroys a division via _destroy" do
+    division = @project.divisions.create!(ref: "to-remove", source_format: "pretext", source: "<section/>")
+    assert_difference("@project.divisions.count", -1) do
+      patch project_url(@project),
+        params: { project: { divisions_attributes: [ { id: division.id, _destroy: true } ] } },
+        as: :json
+    end
+    assert_response :success
+    assert_not Division.exists?(division.id)
+  end
+
+  test "update rejects a division whose ref collides with an asset" do
+    asset_ref = assets(:authored_one).ref
+    assert_no_difference("@project.divisions.count") do
+      patch project_url(@project),
+        params: { project: { divisions_attributes: [ { ref: asset_ref, source_format: "pretext", source: "<section/>" } ] } },
+        as: :json
+    end
+    assert_response :unprocessable_entity
+  end
+
+  test "non-owner cannot add a division to another user's project" do
+    other_project = projects(:two)
+    assert_no_difference("other_project.divisions.count") do
+      patch project_url(other_project),
+        params: { project: { divisions_attributes: [ { ref: "sneaky", source_format: "pretext", source: "<section/>" } ] } },
+        as: :json
+    end
+    assert_response 403
+  end
+
+  test "update creates an authored asset via a JSON assets_attributes entry" do
+    assert_difference("@project.assets.count", 1) do
+      patch project_url(@project),
+        params: { project: { assets_attributes: [ { ref: "new-activity", kind: "authored", title: "New Activity", source: "<p>hi</p>" } ] } },
+        as: :json
+    end
+
+    assert_response :success
+    asset = @project.assets.find_by!(ref: "new-activity")
+    assert asset.authored_kind?
+    assert_equal "<p>hi</p>", asset.source
+    assert_not asset.file.attached?
+
+    asset_json = response.parsed_body["assets"].find { |a| a["ref"] == "new-activity" }
+    assert_equal asset.id, asset_json["id"]
+    assert_nil asset_json["path"]
+  end
+
+  test "update edits an existing asset's source via its id" do
+    asset = assets(:authored_one)
+    patch project_url(@project),
+      params: { project: { assets_attributes: [ { id: asset.id, source: "<p>edited</p>" } ] } },
+      as: :json
+
+    assert_response :success
+    assert_equal "<p>edited</p>", asset.reload.source
+    # An id-scoped edit must not create or drop rows.
+    assert_equal 1, @project.assets.where(ref: asset.ref).count
+  end
+
+  test "update destroys an asset via _destroy" do
+    asset = assets(:authored_one)
+    assert_difference("@project.assets.count", -1) do
+      patch project_url(@project),
+        params: { project: { assets_attributes: [ { id: asset.id, _destroy: true } ] } },
+        as: :json
+    end
+
+    assert_response :success
+    assert_not Asset.exists?(asset.id)
+  end
+
+  test "update rejects an asset whose ref collides with a division" do
+    root_ref = @project.root_division.ref
+    assert_no_difference("@project.assets.count") do
+      patch project_url(@project),
+        params: { project: { assets_attributes: [ { ref: root_ref, kind: "authored", title: "Clash" } ] } },
+        as: :json
+    end
+    assert_response :unprocessable_entity
+  end
+
+  test "non-owner cannot add an asset to another user's project" do
+    other_project = projects(:two)
+    assert_no_difference("other_project.assets.count") do
+      patch project_url(other_project),
+        params: { project: { assets_attributes: [ { ref: "sneaky", kind: "authored", title: "Sneaky" } ] } },
+        as: :json
+    end
+    assert_response 403
+  end
+
+  test "project json exposes assets in the shape the editor reads" do
+    get project_url(@project, format: :json)
+    assert_response :success
+
+    assets_json = response.parsed_body["assets"]
+    assert_kind_of Array, assets_json
+
+    authored = assets_json.find { |a| a["ref"] == "my-activity" }
+    assert_equal assets(:authored_one).id, authored["id"]
+    assert_equal "authored", authored["kind"]
+    # A source-only asset carries no file redirect/extension.
+    assert_nil authored["path"]
+    assert_nil authored["extension"]
+  end
+
   test "should destroy project" do
     assert_difference("Project.count", -1) do
       delete project_url(@project)
@@ -173,7 +348,7 @@ class ProjectsControllerTest < ActionDispatch::IntegrationTest
     assert_equal @project.divisions.count, copy.divisions.count
   end
 
-  test "copy does not create project_assets pointing to another user's library assets" do
+  test "copy gives the duplicated project its own independent assets" do
     subbed_user = users(:subscribed)
     sign_out :user
     sign_in subbed_user
@@ -181,8 +356,10 @@ class ProjectsControllerTest < ActionDispatch::IntegrationTest
       post copy_project_url(@project)
     end
     copy = Project.find_by!(title: "Copy of #{@project.title}", user: subbed_user)
-    copy.project_assets.each do |a|
-      assert_equal a.library_asset.user_id, copy.user_id
+    assert_equal @project.assets.count, copy.assets.count
+    copy.assets.each do |copied_asset|
+      original_asset = @project.assets.find_by!(ref: copied_asset.ref)
+      assert_not_equal original_asset.id, copied_asset.id
     end
   end
 
@@ -230,11 +407,11 @@ class ProjectsControllerTest < ActionDispatch::IntegrationTest
 
   test "PreTeXt's built-in logo redirects under both the preview and share asset prefixes" do
     get "/projects/#{@project.id}/preview/external/icon.svg"
-    assert_redirected_to "/icon-small.svg"
+    assert_redirected_to "/icon-small.png"
 
     sign_out @user
     get "/projects/#{@project.id}/share/external/icon.svg"
-    assert_redirected_to "/icon-small.svg"
+    assert_redirected_to "/icon-small.png"
   end
 
   test "preview returns bad_gateway when build server connection fails" do

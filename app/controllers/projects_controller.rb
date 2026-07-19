@@ -141,7 +141,7 @@ class ProjectsController < ApplicationController
       params.expect(project: [
         :title, :pretext_source, :docinfo, :use_common_docinfo,
         divisions_attributes: [ [ :id, :source, :source_format, :is_root, :ref, :_destroy ] ],
-        project_assets_attributes: [ [ :id, :ref, :library_asset_id, :_destroy ] ]
+        assets_attributes: [ [ :id, :ref, :kind, :file, :source, :short_description, :description, :title, :_destroy ] ]
       ])
     end
 
