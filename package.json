@@ -6,7 +6,7 @@
     "esbuild": "^0.28.1"
   },
   "scripts": {
-    "build": "esbuild app/javascript/*.* --bundle --sourcemap --format=esm --outdir=app/assets/builds --public-path=/assets"
+    "build": "node -e \"const fs=require('fs');fs.mkdirSync('public/assets',{recursive:true});fs.copyFileSync(require.resolve('@pretextbook/libxslt-wasm/output/libxslt.wasm'),'public/assets/libxslt.wasm')\" && esbuild app/javascript/*.* --bundle --sourcemap --format=esm --outdir=app/assets/builds --public-path=/assets --external:module --external:worker_threads"
   },
   "dependencies": {
     "@hotwired/stimulus": "^3.2.2",
@@ -18,5 +18,8 @@
   },
   "overrides": {
     "dompurify": "^3.3.2"
+  },
+  "allowScripts": {
+    "esbuild@0.28.1": true
   }
 }
