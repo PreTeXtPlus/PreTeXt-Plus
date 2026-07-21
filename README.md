@@ -12,6 +12,32 @@ Open in a codespace, run `bin/dev`. Set port `3000` to `public` then preview the
 stripe listen --forward-to 0.0.0.0:3000/pay/stripe/webhooks
 ```
 
+### Database & migrations
+
+```bash
+bin/rails db:migrate          # Apply pending migrations
+bin/rails db:migrate:status   # See which migrations have run
+bin/rails db:reset            # Drop, recreate from schema.rb, and re-seed (wipes dev data)
+```
+
+`db:reset` rebuilds the database by loading `db/schema.rb` rather than replaying every
+migration, so it's the quickest way to recover a broken or out-of-sync development
+database — and much faster than rebuilding the whole Codespace. It re-runs `db/seeds.rb`,
+so you get the dev admin user (`admin@example.com` / `password123`) back automatically.
+
+**Don't duplicate or rename migrations.** Once a migration has been committed and run
+anywhere (your machine, a teammate's, CI, or production), its timestamp is permanent:
+the database records that exact version in `schema_migrations`. Renaming the file or
+changing its timestamp leaves the old version orphaned (`db:migrate:status` shows it as
+`********** NO FILE **********`) and makes the new one look "pending," so the next
+`db:migrate` re-runs the change and crashes on an already-applied column. To change a
+migration that has already run, **add a new migration** instead.
+
+When switching branches, run `bin/rails db:migrate:status` to see if the branches carry
+different migrations. If a branch's migrations left your DB in a mixed state, roll the
+specific one back with `bin/rails db:rollback` before switching, or just run
+`bin/rails db:reset` on the new branch to start clean from its `schema.rb`.
+
 ## Testing
 
 The test suite uses Rails' built-in Minitest framework.
