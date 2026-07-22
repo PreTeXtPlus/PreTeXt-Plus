@@ -533,4 +533,135 @@ class ProjectsControllerTest < ActionDispatch::IntegrationTest
     get project_url(@project, format: :json)
     assert_response :unauthorized
   end
+
+  # --- Templates ---
+
+  test "index lists the current user's template projects, badged as templates" do
+    Project.create!(user: @user, title: "A Uniquely Named Template", is_template: true)
+    get projects_url
+    assert_response :success
+    # A template stays in its owner's list so they can still edit it...
+    assert_includes response.body, "A Uniquely Named Template"
+    # ...but is clearly marked, so they know edits affect what new users start from.
+    assert_includes response.body, "Template"
+    assert_includes response.body, "Edit with care"
+  end
+
+  test "create_from_template duplicates a flagged template into the current user's account" do
+    template = projects(:two)
+    template.update!(is_template: true, title: "Calc Template")
+
+    stub_build_server do
+      assert_difference("Project.count", 1) do
+        post create_from_template_projects_url(template_id: template.id)
+      end
+    end
+
+    copy = Project.find_by!(title: "Calc Template", user: @user)
+    assert_not copy.is_template?
+    assert_equal template.divisions.count, copy.divisions.count
+    assert_redirected_to edit_project_url(copy)
+  end
+
+  test "a failed empty-document create still renders the chooser with its template list" do
+    # An invalid division (blank ref) forces the validation re-render path, which
+    # must still set @templates so the template dialog renders without error.
+    assert_no_difference("Project.count") do
+      post projects_url, params: {
+        project: { title: "X", divisions_attributes: { "0" => { is_root: "true", ref: "", source_format: "pretext" } } }
+      }
+    end
+    assert_response :unprocessable_entity
+    assert_includes response.body, "Start project from template"
+  end
+
+  test "create_from_template refuses a project that is not a template" do
+    non_template = projects(:two)
+    assert_no_difference("Project.count") do
+      post create_from_template_projects_url(template_id: non_template.id)
+    end
+    assert_response :not_found
+  end
+
+  # --- Import ---
+
+  test "create_from_import builds a project from the import payload posted as json" do
+    bytes = file_fixture("test_image.png").binread
+
+    assert_difference("Project.count", 1) do
+      post create_from_import_projects_url,
+        params: {
+          project: {
+            title: "Imported Book",
+            docinfo: "<docinfo/>",
+            document_type: "article",
+            divisions_attributes: [
+              { ref: "document", source_format: "pretext", source: "<article><title>Imported</title></article>", is_root: true }
+            ],
+            assets_attributes: [
+              { ref: "fig-one", kind: "file", title: "fig.png", short_description: "fig.png",
+                file: { filename: "fig.png", content_type: "image/png", data: Base64.strict_encode64(bytes) } }
+            ]
+          }
+        },
+        as: :json
+    end
+
+    assert_response :created
+    project = Project.find_by!(title: "Imported Book", user: @user)
+    assert project.root_division.present?
+    assert_equal "<docinfo/>", project.docinfo
+
+    asset = project.assets.sole
+    assert asset.file.attached?
+    assert_equal "fig.png", asset.file.filename.to_s
+    assert_equal "image/png", asset.file.content_type
+    # The base64 round-trip must reproduce the original bytes exactly.
+    assert_equal bytes, asset.file.download
+
+    assert_equal edit_project_path(project), response.parsed_body["project_url"]
+  end
+
+  test "create_from_import handles a multi-division book payload" do
+    # Shape produced by @pretextbook/import for a LaTeX book: a root division
+    # holding <plus:chapter ref="..."/> placeholders plus one row per chapter.
+    assert_difference("Project.count", 1) do
+      post create_from_import_projects_url,
+        params: {
+          project: {
+            title: "A Real Book",
+            docinfo: "",
+            document_type: "book",
+            divisions_attributes: [
+              { ref: "document", source_format: "pretext", is_root: true,
+                source: %(<book xml:id="document"><title>A Real Book</title><plus:chapter ref="ch-01"/><plus:chapter ref="ch-02"/></book>) },
+              { ref: "ch-01", source_format: "pretext", is_root: false,
+                source: %(<chapter xml:id="ch-01"><title>Alpha</title></chapter>) },
+              { ref: "ch-02", source_format: "pretext", is_root: false,
+                source: %(<chapter xml:id="ch-02"><title>Beta</title></chapter>) }
+            ],
+            assets_attributes: []
+          }
+        },
+        as: :json
+    end
+
+    assert_response :created
+    project = Project.find_by!(title: "A Real Book", user: @user)
+    assert project.book_document_type?
+    assert_equal 3, project.divisions.count
+    assert_equal 1, project.divisions.where(is_root: true).count
+    assert_equal "document", project.root_division.ref
+    assert_equal %w[ch-01 ch-02], project.divisions.where(is_root: false).order(:ref).pluck(:ref)
+    # An empty docinfo from the importer falls back to the app default.
+    assert_equal Project.default_docinfo, project.docinfo
+  end
+
+  test "create_from_import requires authentication" do
+    sign_out :user
+    assert_no_difference("Project.count") do
+      post create_from_import_projects_url, params: { project: { title: "Nope" } }
+    end
+    assert_redirected_to new_user_session_path
+  end
 end

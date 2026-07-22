@@ -1,87 +1,201 @@
 <% content_for :title, "New Project" %>
 
-<div class="mx-auto w-full md:w-2/3 lg:w-1/2 px-4 pt-4 pb-12 md:px-0">
-    <% if @project.errors.any? %>
-      <div class="mb-6 rounded-md bg-red-50 border border-red-200 p-4">
-        <h2 class="font-semibold text-red-800 mb-2">Please fix the following errors:</h2>
-        <ul class="list-disc list-inside text-sm text-red-700">
-          <% @project.errors.full_messages.each do |message| %>
-            <li><%= message %></li>
-          <% end %>
-        </ul>
-      </div>
-    <% end %>
-    <h1 class="font-bold text-3xl mb-2">New Project</h1>
-    <p class="text-gray-500 mb-8">Configure your project, then dive into the editor.</p>
+<%
+  # Small mapping from a division source_format to the badge shown for it, so
+  # both the template picker and the empty-document form read consistently with
+  # the projects index page.
+  format_badge = {
+    "pretext"  => [ "PreTeXt",               "border-indigo-500 bg-indigo-500" ],
+    "latex"    => [ "LaTeX-style PreTeXt",    "border-orange-500 bg-orange-500" ],
+    "markdown" => [ "Markdown-style PreTeXt", "border-purple-500 bg-purple-500" ]
+  }
+%>
 
-    <%= form_with model: @project, class: "space-y-8" do |form| %>
-      <div>
-        <label class="block text-sm font-semibold text-gray-700 mb-1" for="project_title">
-          Project name
-        </label>
-        <%= form.text_field :title,
-              placeholder: "New Project",
-              class: "w-full rounded-md border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500" %>
-        <p class="mt-1 text-xs text-gray-400">You can rename it later from the editor.</p>
+<div class="mx-auto w-full md:w-5/6 lg:w-4/5 px-4 pt-4 pb-12 md:px-0"
+     data-controller="new-project"
+     <%= 'data-open-dialog="empty"'.html_safe if @project.errors.any? %>>
+
+  <h1 class="font-bold text-3xl mb-2">New Project</h1>
+  <p class="text-gray-500 mb-8">Choose how you'd like to get started.</p>
+
+  <div class="grid gap-5 md:grid-cols-3">
+    <%# Card 1: empty document %>
+    <button type="button"
+            class="text-left block rounded-xl bg-white p-6 ring-2 ring-gray-100 hover:ring-indigo-300 transition cursor-pointer"
+            data-action="new-project#open" data-new-project-dialog-param="empty">
+      <div class="text-3xl mb-3" aria-hidden="true">📄</div>
+      <h2 class="font-semibold text-lg mb-1">New empty document</h2>
+      <p class="text-sm text-gray-600">Start from a bare-bones document in the markup style of your choice.</p>
+    </button>
+
+    <%# Card 2: from template %>
+    <button type="button"
+            class="text-left block rounded-xl bg-white p-6 ring-2 ring-gray-100 hover:ring-indigo-300 transition cursor-pointer"
+            data-action="new-project#open" data-new-project-dialog-param="template">
+      <div class="text-3xl mb-3" aria-hidden="true">🧩</div>
+      <h2 class="font-semibold text-lg mb-1">Start project from template</h2>
+      <p class="text-sm text-gray-600">Begin with a ready-made project curated by the PreTeXt.Plus team.</p>
+    </button>
+
+    <%# Card 3: import %>
+    <button type="button"
+            class="text-left block rounded-xl bg-white p-6 ring-2 ring-gray-100 hover:ring-indigo-300 transition cursor-pointer"
+            data-action="new-project#open" data-new-project-dialog-param="import">
+      <div class="text-3xl mb-3" aria-hidden="true">📥</div>
+      <h2 class="font-semibold text-lg mb-1">Import existing documents</h2>
+      <p class="text-sm text-gray-600">Bring in and convert an existing LaTeX, Markdown, or PreTeXt file or archive.</p>
+    </button>
+  </div>
+
+  <div class="mt-8">
+    <%= link_to "Cancel", projects_path,
+          class: "rounded-md px-5 py-2.5 bg-gray-100 hover:bg-gray-200 font-medium text-gray-700" %>
+  </div>
+
+  <%# ---- Dialog: New empty document ---------------------------------------- %>
+  <dialog data-new-project-target="dialog" data-dialog-name="empty"
+          class="rounded-xl p-0 m-auto w-[calc(100%-2rem)] max-w-2xl max-h-[85vh] overflow-y-auto backdrop:bg-black/40">
+    <div class="p-6">
+      <div class="flex items-start justify-between mb-4">
+        <h2 class="font-bold text-2xl">New empty document</h2>
+        <button type="button" class="text-gray-400 hover:text-gray-700 text-2xl leading-none"
+                data-action="new-project#close" aria-label="Close">&times;</button>
       </div>
 
-      <%= form.fields_for :divisions do |fields| %>
-        <%= fields.hidden_field :is_root %>
-        <%= fields.hidden_field :ref %>
-        <div>
-          <p class="block text-sm font-semibold text-gray-700 mb-3">Markup style</p>
-          <% format_labels = [
-              [ "pretext",
-                "PreTeXt",
-                "Semantic XML markup language designed for academic writing with a focus on accessibility.",
-                "ring-indigo-100 hover:ring-indigo-200 has-[:checked]:border-indigo-600 has-[:checked]:bg-indigo-50",
-                true ],
-              [ "latex",
-                "LaTeX-style PreTeXt",
-                "A subset of the classic typesetting language compatible with PreTeXt.",
-                "ring-orange-100 hover:ring-orange-200 has-[:checked]:border-orange-500 has-[:checked]:bg-orange-50",
-                true ],
-              [ "markdown",
-                "Markdown-style PreTeXt",
-                "Flavor of the popular lightweight markup language compatible with PreTeXt.",
-                "ring-purple-100 hover:ring-purple-200 has-[:checked]:border-purple-500 has-[:checked]:bg-purple-50",
-                true ]
-            ] %>
-          <% format_labels.each do |value, title, description, colors, enabled| %>
-            <%= label_tag nil, 
-                class: enabled ?
-                  "block rounded-xl bg-white p-4 m-3 ring-2 cursor-pointer sm:p-6 lg:p-8 has-[:checked]:text-gray-900 transition-colors #{colors}" :
-                  "block rounded-xl bg-gray-100 text-gray-400 p-4 m-3 ring-2 ring-gray-200 cursor-not-allowed sm:p-6 lg:p-8",
-                disabled: !enabled do %>
-              <%= fields.radio_button :source_format, value, class: "sr-only" %>
-              <span class="flex items-start sm:gap-8">
-                <span class="hidden sm:grid sm:size-20 sm:shrink-0 sm:place-content-center" aria-hidden="true">
-                  <% if value == "latex" %>
-                    <%= image_tag "latex-pretext-logo.svg", alt: "PreTeXt logo", class: enabled ? nil : "opacity-30" %>
-                  <% elsif value == "markdown" %>
-                    <%= image_tag "markdown-pretext-logo.svg", alt: "PreTeXt logo", class: enabled ? nil : "opacity-30" %>
-                  <% else %>
-                    <%= image_tag "pretext-logo.svg", alt: "PreTeXt logo", class: enabled ? nil : "opacity-30" %>
-                  <% end %>
-                </span>
-                <span>
-                  <span class="flex items-center gap-2 mb-1">
-                    <span class="font-semibold"><%= title %><% unless enabled %> (coming soon!)<% end %></span>
-                    <span class="hidden has-sibling-checked:inline text-indigo-600 text-xs font-medium">✓ selected</span>
-                  </span>
-                  <span class="text-sm"><%= description %></span>
-                </span>
-              </span>
+      <% if @project.errors.any? %>
+        <div class="mb-6 rounded-md bg-red-50 border border-red-200 p-4">
+          <h3 class="font-semibold text-red-800 mb-2">Please fix the following errors:</h3>
+          <ul class="list-disc list-inside text-sm text-red-700">
+            <% @project.errors.full_messages.each do |message| %>
+              <li><%= message %></li>
             <% end %>
-          <% end %>
+          </ul>
         </div>
       <% end %>
 
-      <div class="flex items-center gap-4 pb-4">
-        <%= form.submit "Create project",
-              class: "rounded-md px-5 py-2.5 bg-blue-600 hover:bg-blue-500 text-white font-medium cursor-pointer" %>
-        <%= link_to "Cancel", projects_path,
-              class: "rounded-md px-5 py-2.5 bg-gray-100 hover:bg-gray-200 font-medium text-gray-700" %>
+      <%= form_with model: @project, class: "space-y-6" do |form| %>
+        <div>
+          <label class="block text-sm font-semibold text-gray-700 mb-1" for="project_title">
+            Project name
+          </label>
+          <%= form.text_field :title,
+                placeholder: "New Project",
+                class: "w-full rounded-md border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500" %>
+          <p class="mt-1 text-xs text-gray-400">You can rename it later from the editor.</p>
+        </div>
+
+        <%= form.fields_for :divisions do |fields| %>
+          <%= fields.hidden_field :is_root %>
+          <%= fields.hidden_field :ref %>
+          <div>
+            <p class="block text-sm font-semibold text-gray-700 mb-3">Markup style</p>
+            <% format_labels = [
+                [ "pretext",
+                  "PreTeXt",
+                  "Semantic XML markup language designed for academic writing with a focus on accessibility.",
+                  "ring-indigo-100 hover:ring-indigo-200 has-[:checked]:border-indigo-600 has-[:checked]:bg-indigo-50",
+                  true ],
+                [ "latex",
+                  "LaTeX-style PreTeXt",
+                  "A subset of the classic typesetting language compatible with PreTeXt.",
+                  "ring-orange-100 hover:ring-orange-200 has-[:checked]:border-orange-500 has-[:checked]:bg-orange-50",
+                  true ],
+                [ "markdown",
+                  "Markdown-style PreTeXt",
+                  "Flavor of the popular lightweight markup language compatible with PreTeXt.",
+                  "ring-purple-100 hover:ring-purple-200 has-[:checked]:border-purple-500 has-[:checked]:bg-purple-50",
+                  true ]
+              ] %>
+            <div class="grid gap-3 sm:grid-cols-3">
+              <% format_labels.each do |value, title, description, colors, enabled| %>
+                <%= label_tag nil,
+                    class: enabled ?
+                      "flex flex-col items-center text-center rounded-xl bg-white p-3 ring-2 cursor-pointer has-[:checked]:text-gray-900 transition-colors #{colors}" :
+                      "flex flex-col items-center text-center rounded-xl bg-gray-100 text-gray-400 p-3 ring-2 ring-gray-200 cursor-not-allowed",
+                    disabled: !enabled do %>
+                  <%= fields.radio_button :source_format, value, class: "sr-only" %>
+                  <span class="grid size-10 shrink-0 place-content-center mb-2" aria-hidden="true">
+                    <% if value == "latex" %>
+                      <%= image_tag "latex-pretext-logo.svg", alt: "PreTeXt logo", class: enabled ? nil : "opacity-30" %>
+                    <% elsif value == "markdown" %>
+                      <%= image_tag "markdown-pretext-logo.svg", alt: "PreTeXt logo", class: enabled ? nil : "opacity-30" %>
+                    <% else %>
+                      <%= image_tag "pretext-logo.svg", alt: "PreTeXt logo", class: enabled ? nil : "opacity-30" %>
+                    <% end %>
+                  </span>
+                  <span class="text-sm font-semibold leading-tight"><%= title %><% unless enabled %> (coming soon!)<% end %></span>
+                  <span class="hidden has-sibling-checked:inline text-indigo-600 text-xs font-medium mt-0.5">✓ selected</span>
+                  <span class="mt-1 text-xs text-gray-500 leading-snug"><%= description %></span>
+                <% end %>
+              <% end %>
+            </div>
+          </div>
+        <% end %>
+
+        <div class="flex items-center gap-4 pt-2">
+          <%= form.submit "Create project",
+                class: "rounded-md px-5 py-2.5 bg-blue-600 hover:bg-blue-500 text-white font-medium cursor-pointer" %>
+          <button type="button" class="rounded-md px-5 py-2.5 bg-gray-100 hover:bg-gray-200 font-medium text-gray-700"
+                  data-action="new-project#close">Cancel</button>
+        </div>
+      <% end %>
+    </div>
+  </dialog>
+
+  <%# ---- Dialog: Start project from template ------------------------------- %>
+  <dialog data-new-project-target="dialog" data-dialog-name="template"
+          class="rounded-xl p-0 m-auto w-[calc(100%-2rem)] max-w-2xl max-h-[85vh] overflow-y-auto backdrop:bg-black/40">
+    <div class="p-6">
+      <div class="flex items-start justify-between mb-4">
+        <h2 class="font-bold text-2xl">Start project from template</h2>
+        <button type="button" class="text-gray-400 hover:text-gray-700 text-2xl leading-none"
+                data-action="new-project#close" aria-label="Close">&times;</button>
       </div>
-    <% end %>
+
+      <% if @templates.any? %>
+        <p class="text-sm text-gray-500 mb-4">Pick a template to copy into your account. You can edit everything afterwards.</p>
+        <ul class="space-y-3">
+          <% @templates.each do |template| %>
+            <% label, badge_classes = format_badge[template.root_division&.source_format || "pretext"] %>
+            <li class="rounded-xl ring-2 ring-gray-100 p-4">
+              <div class="flex items-start justify-between gap-4">
+                <div>
+                  <div class="flex items-center gap-2 mb-1">
+                    <strong class="rounded-sm border <%= badge_classes %> px-2.5 py-1 text-[10px] font-medium text-white">
+                      <%= label %>
+                    </strong>
+                    <h3 class="text-lg font-medium"><%= template.title %></h3>
+                  </div>
+                  <% if template.template_description.present? %>
+                    <p class="text-sm text-gray-600"><%= template.template_description %></p>
+                  <% end %>
+                </div>
+                <%= button_to "Use this template", create_from_template_projects_path(template_id: template.id),
+                      class: "shrink-0 rounded-md px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white text-sm font-medium cursor-pointer" %>
+              </div>
+            </li>
+          <% end %>
+        </ul>
+      <% else %>
+        <p class="text-gray-600 py-6 text-center">No templates are available yet. Check back soon!</p>
+      <% end %>
+    </div>
+  </dialog>
+
+  <%# ---- Dialog: Import existing documents --------------------------------- %>
+  <dialog data-new-project-target="dialog" data-dialog-name="import"
+          class="rounded-xl p-0 m-auto w-[calc(100%-2rem)] max-w-3xl max-h-[85vh] overflow-y-auto backdrop:bg-black/40">
+    <div class="p-6"
+         data-controller="import"
+         data-import-create-url-value="<%= create_from_import_projects_path %>">
+      <div class="flex items-start justify-between mb-4">
+        <h2 class="font-bold text-2xl">Import existing documents</h2>
+        <button type="button" class="text-gray-400 hover:text-gray-700 text-2xl leading-none"
+                data-action="new-project#close" aria-label="Close">&times;</button>
+      </div>
+      <div data-import-target="root">
+        <p class="text-gray-500">Loading importer…</p>
+      </div>
+    </div>
+  </dialog>
 </div>

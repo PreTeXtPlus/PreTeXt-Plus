@@ -41,7 +41,7 @@
     <% if @projects.any? %>
       <% @projects.each do |project| %>
         <% updated_at_local = project.updated_at.localtime %>
-        <%= link_to project, class: "block rounded-xl bg-white p-4 m-3 ring-2 ring-gray-100 hover:ring-indigo-200 sm:p-6 lg:p-8", data: { turbo: false } do %>
+        <%= link_to project, class: "block rounded-xl p-4 m-3 ring-2 sm:p-6 lg:p-8 #{project.is_template? ? 'bg-amber-50 ring-amber-300 hover:ring-amber-400' : 'bg-white ring-gray-100 hover:ring-indigo-200'}", data: { turbo: false } do %>
           <span class="flex items-start sm:gap-8">
             <span class="hidden sm:grid sm:size-20 sm:shrink-0 sm:place-content-center" aria-hidden="true">
               <% if project.root_division&.latex_source_format? %>
@@ -68,9 +68,22 @@
                 </strong>
               <% end %>
 
+              <% if project.is_template? %>
+                <strong class="rounded-sm border border-amber-500 bg-amber-500 px-3 py-1.5 mx-3 text-[10px] font-medium text-white">
+                  Template
+                </strong>
+              <% end %>
+
               <h3 class="mt-4 text-lg font-medium sm:text-xl">
                 <%= project.title %>
               </h3>
+
+              <% if project.is_template? %>
+                <p class="mt-1 text-sm text-amber-800">
+                  ⚠ This project is offered as a template on the new-project page. Edit with care —
+                  your changes affect what new users start from.
+                </p>
+              <% end %>
 
               <p class="mt-1 text-sm text-gray-700">
                 Last updated:
