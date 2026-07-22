@@ -622,6 +622,41 @@ class ProjectsControllerTest < ActionDispatch::IntegrationTest
     assert_equal edit_project_path(project), response.parsed_body["project_url"]
   end
 
+  test "create_from_import handles a multi-division book payload" do
+    # Shape produced by @pretextbook/import for a LaTeX book: a root division
+    # holding <plus:chapter ref="..."/> placeholders plus one row per chapter.
+    assert_difference("Project.count", 1) do
+      post create_from_import_projects_url,
+        params: {
+          project: {
+            title: "A Real Book",
+            docinfo: "",
+            document_type: "book",
+            divisions_attributes: [
+              { ref: "document", source_format: "pretext", is_root: true,
+                source: %(<book xml:id="document"><title>A Real Book</title><plus:chapter ref="ch-01"/><plus:chapter ref="ch-02"/></book>) },
+              { ref: "ch-01", source_format: "pretext", is_root: false,
+                source: %(<chapter xml:id="ch-01"><title>Alpha</title></chapter>) },
+              { ref: "ch-02", source_format: "pretext", is_root: false,
+                source: %(<chapter xml:id="ch-02"><title>Beta</title></chapter>) }
+            ],
+            assets_attributes: []
+          }
+        },
+        as: :json
+    end
+
+    assert_response :created
+    project = Project.find_by!(title: "A Real Book", user: @user)
+    assert project.book_document_type?
+    assert_equal 3, project.divisions.count
+    assert_equal 1, project.divisions.where(is_root: true).count
+    assert_equal "document", project.root_division.ref
+    assert_equal %w[ch-01 ch-02], project.divisions.where(is_root: false).order(:ref).pluck(:ref)
+    # An empty docinfo from the importer falls back to the app default.
+    assert_equal Project.default_docinfo, project.docinfo
+  end
+
   test "create_from_import requires authentication" do
     sign_out :user
     assert_no_difference("Project.count") do

@@ -1,10 +1,11 @@
 import React, { useCallback } from "react";
 import ReactDOM from "react-dom/client";
 import { ImportWizard } from "@pretextbook/import/react";
-import { serializeProjectToPlusPayload } from "@pretextbook/import";
+import { projectForImportMode, serializeProjectToPlusPayload } from "@pretextbook/import";
 import "@pretextbook/import/react.css";
 
 /** @typedef {import("@pretextbook/import").ImportedProjectSuccess} ImportedProjectSuccess */
+/** @typedef {import("@pretextbook/import").ImportMode} ImportMode */
 
 /**
  * @typedef {Object} ImportConfig
@@ -19,14 +20,24 @@ import "@pretextbook/import/react.css";
 function ImportApp({ config }) {
   const { createUrl, csrfToken } = config;
 
-  // serializeProjectToPlusPayload emits the Rails shape directly -- snake_case
-  // keys matching ProjectsController's permitted `divisions_attributes` /
-  // `assets_attributes`, with asset bytes base64-encoded -- so the payload goes
-  // straight over the same JSON API the editor uses, with nothing to map here.
+  // projectForImportMode picks the division pool matching the user's choice at
+  // the review step: the native LaTeX/Markdown pool when they keep the source
+  // format, the converted PreTeXt pool otherwise (and for PreTeXt input, which
+  // has no native projection).
+  //
+  // serializeProjectToPlusPayload then emits the Rails shape directly --
+  // snake_case keys matching ProjectsController's permitted
+  // `divisions_attributes` / `assets_attributes`, with asset bytes
+  // base64-encoded -- so the payload goes straight over the same JSON API the
+  // editor uses, with nothing to map here.
   const onConfirm = useCallback(
-    /** @param {ImportedProjectSuccess} result */
-    async (result) => {
+    /**
+     * @param {ImportedProjectSuccess} result
+     * @param {ImportMode} mode
+     */
+    async (result, mode) => {
       try {
+        const payload = serializeProjectToPlusPayload(projectForImportMode(result, mode));
         const res = await fetch(createUrl, {
           method: "POST",
           headers: {
@@ -34,7 +45,7 @@ function ImportApp({ config }) {
             Accept: "application/json",
             "X-CSRF-Token": csrfToken,
           },
-          body: JSON.stringify({ project: serializeProjectToPlusPayload(result.project) }),
+          body: JSON.stringify({ project: payload }),
         });
         if (!res.ok) {
           let message = `Import failed: ${res.status}`;
