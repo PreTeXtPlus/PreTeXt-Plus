@@ -54,6 +54,7 @@
     "@pretextbook/latex-pretext": "^0.0.12",
     "@pretextbook/latex-style-pretext": "^0.0.1",
     "@pretextbook/markdown-style-pretext": "^0.0.1",
+    "@pretextbook/pretext-html": "^0.3.0",
     "@pretextbook/remark-pretext": "^0.0.10",
     "@pretextbook/visual-editor": "^0.0.6",
     "@tailwindcss/vite": "^4.1.18",
