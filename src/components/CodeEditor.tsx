@@ -9,7 +9,10 @@ import "./CodeEditor.css";
 interface CodeEditorProps {
   /** The current source content to display. */
   content: string;
-  /** Determines the Monaco language mode (`"xml"` for PreTeXt, `"latex"` for LaTeX). */
+  /**
+   * Determines the Monaco language mode — see `editorConfigs`, which maps this
+   * to `"xml"`, `"pretext-latex"`, or `"pretext-markdown"`.
+   */
   sourceFormat: SourceFormat;
   /** Called (debounced 500 ms) whenever the user edits the content. */
   onChange: (value: string | undefined) => void;
@@ -232,7 +235,9 @@ const CodeEditor = forwardRef<CodeEditorHandle, CodeEditorProps>(({
   // would scroll the preview back — a loop between the two panes.
   const suppressCursorReportRef = useRef(false);
   const onRequestWrapperEditRef = useRef(onRequestWrapperEdit);
-  const completionProviderRef = useRef<{ dispose: () => void } | null>(null);
+  // Per-format Monaco language extensions (completions, diagnostics, syntax),
+  // torn down and re-registered whenever the source format changes.
+  const languageExtensionsRef = useRef<{ dispose: () => void } | null>(null);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const isProgrammaticUpdateRef = useRef(false);
   const [canUndo, setCanUndo] = useState(false);
@@ -295,11 +300,17 @@ const CodeEditor = forwardRef<CodeEditorHandle, CodeEditorProps>(({
   // const [isFocused, setIsFocused] = useState(false);
 
   useEffect(() => {
-    completionProviderRef.current?.dispose?.();
+    languageExtensionsRef.current?.dispose?.();
     const config = editorConfigs[sourceFormat];
-    completionProviderRef.current =
-      monacoRef.current
-        ? (config.registerMonacoExtensions?.(monacoRef.current) ?? null)
+    // Diagnostics bind to the editor's model, so both refs must be live; on the
+    // very first pass they aren't yet, and `handleEditorMount` registers
+    // instead.
+    languageExtensionsRef.current =
+      monacoRef.current && editorRef.current
+        ? (config.registerMonacoExtensions?.(
+            monacoRef.current,
+            editorRef.current,
+          ) ?? null)
         : null;
     // Switching format toggles whether the wrapper is locked (PreTeXt only).
     applyConstraints();
@@ -309,7 +320,7 @@ const CodeEditor = forwardRef<CodeEditorHandle, CodeEditorProps>(({
   useEffect(() => {
     return () => {
       contentListenerRef.current?.dispose?.();
-      completionProviderRef.current?.dispose?.();
+      languageExtensionsRef.current?.dispose?.();
       mouseListenerRef.current?.dispose?.();
       cursorListenerRef.current?.dispose?.();
       constrainedRef.current?.disposeConstrainer?.();
@@ -553,9 +564,10 @@ const CodeEditor = forwardRef<CodeEditorHandle, CodeEditorProps>(({
       onSaveRef.current?.();
     });
 
-    completionProviderRef.current?.dispose?.();
+    languageExtensionsRef.current?.dispose?.();
     const config = editorConfigs[sourceFormat];
-    completionProviderRef.current = config.registerMonacoExtensions?.(monaco) ?? null;
+    languageExtensionsRef.current =
+      config.registerMonacoExtensions?.(monaco, editor) ?? null;
 
     applyConstraints();
   };

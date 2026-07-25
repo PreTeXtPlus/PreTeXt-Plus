@@ -680,6 +680,7 @@
   opacity: 0;
   transition: opacity 0.1s;
   pointer-events: none;
+  padding: 0px 3px;
 }
 
 .pretext-plus-editor__toc-asset-item:hover
