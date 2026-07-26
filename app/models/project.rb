@@ -23,7 +23,9 @@ class Project < ApplicationRecord
   # their own `belongs_to ... touch:`.
   SOURCE_ATTRIBUTES = %w[ pretext_source docinfo use_common_docinfo document_type ].freeze
 
-  DEFAULT_TARGET = { name: "web", label: "Website", kind: "website" }.freeze
+  # Slug omitted deliberately: Target derives "website" from this name like it does for
+  # every other output, so there is one rule rather than one rule and an exception.
+  DEFAULT_TARGET = { name: "Website", kind: "website" }.freeze
 
   # The mirror of Target's own check, and the one that is easy to miss: Rails does not
   # re-validate children when the parent changes, so without this, converting a slideshow
@@ -132,6 +134,6 @@ class Project < ApplicationRecord
 
       errors.add(:document_type,
                  "cannot change to #{document_type} while this project has " \
-                 "#{blocked.map(&:display_label).to_sentence} — remove #{blocked.one? ? 'it' : 'them'} first")
+                 "#{blocked.map(&:name).to_sentence} — remove #{blocked.one? ? 'it' : 'them'} first")
     end
 end

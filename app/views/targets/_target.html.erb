@@ -6,8 +6,8 @@
      class="flex flex-col gap-3 rounded-lg border border-gray-200 border-l-4 <%= target_state_stripe(state) %> bg-white p-4 md:flex-row md:items-center md:gap-4">
 
   <div class="min-w-0 md:w-52">
-    <p class="font-semibold text-gray-900"><%= target.display_label %></p>
-    <p class="text-xs text-gray-500"><%= target.kind_label %> · <span class="font-mono"><%= target.name %></span></p>
+    <p class="font-semibold text-gray-900"><%= target.name %></p>
+    <p class="text-xs text-gray-500"><%= target.kind_label %> · <span class="font-mono"><%= target.slug %></span></p>
   </div>
 
   <div class="md:w-32"><%= target_state_pill(state) %></div>
@@ -20,7 +20,7 @@
         <%# _path, never _url: this partial is re-rendered by a background job during a
             broadcast, where there is no request to derive a host from. The full
             copyable URL lives in the drawer, which is always request-scoped. %>
-        <%= link_to "Public link ↗", published_path(target.project, target.name),
+        <%= link_to "Public link ↗", published_path(target.project, target.slug),
               class: "text-xs font-medium text-indigo-700 hover:underline",
               target: "_blank", rel: "noopener", data: { turbo: false } %>
         <%= button_to "Unpublish", publish_project_target_path(target.project, target),
@@ -84,7 +84,7 @@
 
     <%= link_to "⋯", project_target_path(target.project, target),
           class: "rounded-md border border-gray-300 px-2.5 py-1.5 text-sm hover:bg-gray-50",
-          aria: { label: "#{target.display_label} details" },
+          aria: { label: "#{target.name} details" },
           data: { turbo_frame: "drawer" } %>
   </div>
 </div>

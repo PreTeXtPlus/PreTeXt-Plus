@@ -65,9 +65,9 @@
                 <% label, classes = TargetsHelper::STATE_PILL.fetch(state) %>
                 <%= link_to project_target_path(project, target),
                       class: "inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 font-mono text-xs font-semibold #{classes}",
-                      title: "#{target.display_label} — #{label.downcase}", data: { turbo: false } do %>
+                      title: "#{target.name} — #{label.downcase}", data: { turbo: false } do %>
                   <span class="size-1.5 rounded-full bg-current <%= 'animate-pulse' if state == :building %>"></span>
-                  <%= target.display_label %>
+                  <%= target.name %>
                 <% end %>
               <% end %>
             </div>

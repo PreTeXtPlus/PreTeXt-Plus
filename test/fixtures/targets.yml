@@ -1,10 +1,13 @@
-# Every project has a `web` website target, mirroring both Project::DEFAULT_TARGET (what
-# a new project is created with) and the backfill in the CreateTargets migration.
+# Every project has a website target, mirroring both Project::DEFAULT_TARGET (what a new
+# project is created with) and the backfill in the CreateTargets migration.
+#
+# Fixtures are inserted straight into the table, so each row carries the `slug` that
+# Target#assign_slug would have derived from its name.
 
 one_web:
   project: one
-  name: web
-  label: Website
+  name: Website
+  slug: website
   kind: website
   position: 0
   latest_build: in_progress
@@ -12,8 +15,8 @@ one_web:
 # Two builds, both in flight -- exercises the `building` state.
 two_web:
   project: two
-  name: web
-  label: Website
+  name: Website
+  slug: website
   kind: website
   position: 0
   # current_build points at the successful build even though a *later* build failed: a
@@ -23,20 +26,21 @@ two_web:
   latest_build: failed
   last_built_at: <%= 3.days.ago.to_fs(:db) %>
 
-# A second website target on the same project. Names are unique within a project; kinds
+# A second website target on the same project. Slugs are unique within a project; kinds
 # deliberately are not -- this is how a "student"/"instructor" pair works, and how
 # PreTeXt-CLI treats <targets> in project.ptx.
 one_instructor:
   project: one
-  name: instructor
-  label: Instructor edition
+  name: Instructor edition
+  slug: instructor-edition
   kind: website
   position: 1
 
 # Configured but never built -- exercises the `never` state.
 one_print:
   project: one
-  name: print
+  name: Print
+  slug: print
   kind: pdf
   position: 2
 
@@ -44,7 +48,7 @@ one_print:
 # <slideshow> documents, so it has nowhere else to live.
 slides_deck:
   project: slides
-  name: deck
-  label: Slides
+  name: Slides
+  slug: slides
   kind: revealjs
   position: 0

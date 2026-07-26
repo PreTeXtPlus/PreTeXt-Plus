@@ -1,7 +1,12 @@
 # A named output an author manages ("my PDF"), as opposed to a Build, which is one
-# attempt at producing it. Mirrors a <target> in a PreTeXt-CLI project.ptx: `name` is
-# unique within a project and goes into the manifest verbatim, while `kind` is free to
-# repeat -- a project may well have "student" and "instructor" websites.
+# attempt at producing it. Mirrors a <target> in a PreTeXt-CLI project.ptx: every target
+# has its own `slug`, while `kind` is free to repeat -- a project may well have "student"
+# and "instructor" websites.
+#
+# Naming is two columns because it serves two audiences. `name` is the author's ("Print
+# edition"), and it is the only one the interface asks for. `slug` is PreTeXt's: it goes
+# into project.ptx verbatim and addresses the published output, so it is derived from the
+# name rather than typed, and then left alone.
 class Target < ApplicationRecord
   belongs_to :project
   has_many :builds, dependent: :destroy
@@ -29,9 +34,27 @@ class Target < ApplicationRecord
   validates :kind, inclusion: { in: ->(_target) { Catalog.slugs },
                                 message: "is not an output PreTeXt.Plus can build" }
 
-  # `name` is written straight into project.ptx, so it has to be a legal target name.
-  # REF_REGEX (config/initializers/constants.rb) is already exactly that rule.
-  validates :name, presence: true, format: REF_REGEX, uniqueness: { scope: :project_id }
+  # Trailing space is a typo, not a distinct output: without this, "Print " sits next to
+  # "Print" on the dashboard and the uniqueness check below waves it through.
+  normalizes :name, with: ->(name) { name.strip }
+
+  # Free text -- it is a heading on a dashboard, not an identifier. Unique per project
+  # only so that two rows are told apart by the thing an author reads them by; the
+  # constraint that actually matters is on the slug.
+  validates :name, presence: true,
+                   uniqueness: { scope: :project_id, case_sensitive: false }
+
+  # `slug` is written straight into project.ptx, so it has to be a legal target name.
+  # REF_REGEX (config/initializers/constants.rb) is already exactly that rule. Never
+  # assigned from user input: assign_slug derives it, and the uniqueness rule here is a
+  # backstop for the one path that carries a slug in ready-made, Project#full_dup.
+  #
+  # Conditional because these have nothing to say about a target with no name yet: the
+  # author made one mistake, and the flash should not report it three times.
+  validates :slug, presence: true, format: REF_REGEX, uniqueness: { scope: :project_id },
+                   if: -> { name.present? }
+
+  before_validation :assign_slug, on: :create
 
   validate :kind_available_for_document_type
 
@@ -49,10 +72,6 @@ class Target < ApplicationRecord
 
   def kind_label
     kind_config&.label || kind.to_s.humanize
-  end
-
-  def display_label
-    label.presence || name.humanize
   end
 
   # Whole-site output the visitor browses, versus one file they open or download. Drives
@@ -73,12 +92,12 @@ class Target < ApplicationRecord
   end
 
   # The filename we ask PreTeXt to produce, where the manifest lets us name it. Fixing it
-  # to the target name means the entry point is known before the build even runs.
+  # to the slug means the entry point is known before the build even runs.
   def output_filename
     ext = kind_config&.filename_ext
     return nil if ext.nil?
 
-    "#{name}.#{ext}"
+    "#{slug}.#{ext}"
   end
 
   # What a finished build of this kind leaves behind, used to pick the entry file out of
@@ -89,8 +108,9 @@ class Target < ApplicationRecord
 
   # Attributes ProjectArchiveBuilder derives from the row itself. `options` is free-form
   # data an author could eventually edit, and none of these may come from there: `name`
-  # and `output-dir` decide where the build server writes and which prefix the artifact
-  # job strips, and `output-filename` is what makes a single-file artifact findable.
+  # (the slug) and `output-dir` decide where the build server writes and which prefix the
+  # artifact job strips, and `output-filename` is what makes a single-file artifact
+  # findable.
   RESERVED_ATTRIBUTES = %w[ name output-dir output-filename ].freeze
 
   # Everything this target contributes to its <target> element in project.ptx: what the
@@ -164,6 +184,37 @@ class Target < ApplicationRecord
   end
 
   private
+
+    # Assigned once, at creation, and never recomputed: the slug is in a public URL and in
+    # `pretext build <slug>` on a downloaded copy, so renaming an output on the dashboard
+    # must not silently break a link an author has already handed out. It drifting from a
+    # later name is the price, and the drawer says so.
+    #
+    # Skipped when one is already set, which is how Project#full_dup carries a project's
+    # target slugs across to the copy instead of re-deriving (and possibly renumbering)
+    # them.
+    def assign_slug
+      return if slug.present? || name.blank?
+
+      base = slug_base
+      suffix = 2
+      self.slug = base
+      while project&.targets&.exists?(slug: slug)
+        self.slug = "#{base}-#{suffix}"
+        suffix += 1
+      end
+    end
+
+    # `parameterize` gets most of the way there -- lowercase, hyphens, no punctuation --
+    # but a PreTeXt target name must also start with a letter, and "2nd edition" or "★"
+    # leaves nothing legal behind. Falling back to the kind keeps the result meaningful in
+    # project.ptx, which a generated id would not.
+    def slug_base
+      candidate = name.parameterize
+      return candidate if candidate.match?(/\A[a-z]/)
+
+      [ kind.to_s.parameterize.presence || "target", candidate.presence ].compact.join("-")
+    end
 
     # PreTeXt can only build slides from a <slideshow>, so a revealjs target on an article
     # would queue a build that cannot succeed. Project carries the mirror of this rule,

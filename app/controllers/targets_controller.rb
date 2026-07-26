@@ -10,7 +10,7 @@ class TargetsController < ApplicationController
 
   def create
     if @target.save
-      redirect_to project_path(@project), notice: "Added the #{@target.display_label} output."
+      redirect_to project_path(@project), notice: "Added the #{@target.name} output."
     else
       redirect_to project_path(@project), alert: @target.errors.full_messages.to_sentence
     end
@@ -31,7 +31,7 @@ class TargetsController < ApplicationController
 
     if publishing && @target.current_build.nil?
       return redirect_to project_path(@project),
-                         alert: "Build #{@target.display_label} before publishing it."
+                         alert: "Build #{@target.name} before publishing it."
     end
 
     @target.update!(published: publishing)
@@ -59,7 +59,7 @@ class TargetsController < ApplicationController
       end
       format.html do
         redirect_to project_path(@project),
-                    notice: publishing ? "#{@target.display_label} is now public." : "#{@target.display_label} is no longer public."
+                    notice: publishing ? "#{@target.name} is now public." : "#{@target.name} is no longer public."
       end
     end
   end
@@ -67,12 +67,12 @@ class TargetsController < ApplicationController
   def destroy
     @target.destroy!
     redirect_to project_path(@project),
-                notice: "Removed the #{@target.display_label} output.", status: :see_other
+                notice: "Removed the #{@target.name} output.", status: :see_other
   end
 
   private
 
     def target_params
-      params.expect(target: [ :name, :label, :kind ])
+      params.expect(target: [ :name, :kind ])
     end
 end

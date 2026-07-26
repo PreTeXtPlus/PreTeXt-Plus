@@ -67,7 +67,7 @@ class TargetsControllerTest < ActionDispatch::IntegrationTest
 
     assert_response :success
     assert_match(/turbo-stream[^>]*target="drawer"/, response.body)
-    assert_match(/#{Regexp.escape(published_url(projects(:two), target.name))}/, response.body)
+    assert_match(/#{Regexp.escape(published_url(projects(:two), target.slug))}/, response.body)
     assert_match(/data-controller="clipboard"/, response.body)
   end
 
@@ -96,37 +96,53 @@ class TargetsControllerTest < ActionDispatch::IntegrationTest
 
   test "should create a target" do
     assert_difference("Target.count") do
-      post project_targets_url(@project), params: { target: { name: "slides", label: "Slides", kind: "website" } }
+      post project_targets_url(@project), params: { target: { name: "Instructor site", kind: "website" } }
     end
     assert_redirected_to project_url(@project)
   end
 
   test "can add a non-html output" do
     assert_difference("Target.count") do
-      post project_targets_url(@project), params: { target: { name: "handout", label: "Handout PDF", kind: "pdf" } }
+      post project_targets_url(@project), params: { target: { name: "Handout", kind: "pdf" } }
     end
 
-    target = @project.targets.find_by(name: "handout")
+    target = @project.targets.find_by(name: "Handout")
     assert_equal "pdf", target.kind
     assert_not target.site?
     assert_equal "handout.pdf", target.output_filename
+  end
+
+  # The form asks for one name, not two: what goes into project.ptx and the public URL is
+  # derived from what the author typed.
+  test "adding an output derives its project.ptx name from the name given" do
+    post project_targets_url(@project), params: { target: { name: "Instructor PDF", kind: "pdf" } }
+
+    assert_equal "instructor-pdf", @project.targets.find_by(name: "Instructor PDF").slug
+  end
+
+  test "neither form offers to set the slug" do
+    get project_url(@project)
+    assert_select "input[name='target[slug]']", false, "the add-output form should not ask for a slug"
+
+    get project_target_url(@project, @target)
+    assert_select "input[name='target[slug]']", false, "the drawer should not ask for a slug"
   end
 
   # A target is something an author can ask the build server to run, so the count is
   # bounded even though building itself is open to every owner.
   test "outputs are capped by the user's target quota" do
     quota = @user.target_quota
-    (quota - @project.targets.count).times { |i| @project.targets.create!(name: "extra#{i}", kind: "website") }
+    (quota - @project.targets.count).times { |i| @project.targets.create!(name: "Extra #{i}", kind: "website") }
     assert_equal quota, @project.targets.count
 
     assert_no_difference("Target.count") do
-      post project_targets_url(@project), params: { target: { name: "one-too-many", kind: "website" } }
+      post project_targets_url(@project), params: { target: { name: "One too many", kind: "website" } }
     end
     assert_redirected_to projects_path
   end
 
   test "the add-output form disappears at the quota" do
-    (@user.target_quota - @project.targets.count).times { |i| @project.targets.create!(name: "extra#{i}", kind: "website") }
+    (@user.target_quota - @project.targets.count).times { |i| @project.targets.create!(name: "Extra #{i}", kind: "website") }
 
     get project_url(@project)
 
@@ -136,16 +152,17 @@ class TargetsControllerTest < ActionDispatch::IntegrationTest
 
   test "creating a target with a duplicate name is rejected" do
     assert_no_difference("Target.count") do
-      post project_targets_url(@project), params: { target: { name: "web", kind: "website" } }
+      post project_targets_url(@project), params: { target: { name: "Website", kind: "website" } }
     end
     assert_equal "Name has already been taken", flash[:alert]
   end
 
-  test "should rename a target" do
-    patch project_target_url(@project, @target), params: { target: { label: "Public site" } }
+  test "should rename a target without moving its public URL" do
+    patch project_target_url(@project, @target), params: { target: { name: "Public site" } }
 
     assert_redirected_to project_url(@project)
-    assert_equal "Public site", @target.reload.label
+    assert_equal "Public site", @target.reload.name
+    assert_equal "website", @target.slug
   end
 
   test "should destroy a target and its builds" do
@@ -223,8 +240,8 @@ class TargetsControllerTest < ActionDispatch::IntegrationTest
     get projects_url # warm any first-request caching so the baseline is honest
     baseline = count_queries { get projects_url }
 
-    projects(:one).targets.create!(name: "extra-one", kind: "pdf")
-    projects(:one).targets.create!(name: "extra-two", kind: "epub")
+    projects(:one).targets.create!(name: "Extra one", kind: "pdf")
+    projects(:one).targets.create!(name: "Extra two", kind: "epub")
 
     assert_equal baseline, count_queries { get projects_url },
                  "adding targets changed the query count -- the index has gone N+1"

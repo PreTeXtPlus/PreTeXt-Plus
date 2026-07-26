@@ -22,24 +22,25 @@ class ProjectArchiveBuilderTest < ActiveSupport::TestCase
   end
 
   # The manifest lists every target, so one archive serves any build request and a
-  # downloaded project can `pretext build <name>` for all of them.
+  # downloaded project can `pretext build <slug>` for all of them. @name is the slug: the
+  # schema would not take "Instructor edition", and the CLI has to be able to echo it back.
   test "the manifest declares every target the project has" do
     project = projects(:one)
     manifest = ProjectArchiveBuilder.new(project).project_ptx
 
     project.targets.each do |target|
-      assert_includes manifest, %(name="#{target.name}")
+      assert_includes manifest, %(name="#{target.slug}")
     end
     assert_equal project.targets.count, manifest.scan("<target ").length
   end
 
   # output-dir is explicit because FullBuildArtifactJob strips exactly that prefix off
   # the entries the build server returns.
-  test "every target declares an output-dir matching its name" do
+  test "every target declares an output-dir matching its slug" do
     manifest = ProjectArchiveBuilder.new(projects(:one)).project_ptx
 
     projects(:one).targets.each do |target|
-      assert_match(/<target [^>]*name="#{target.name}"[^>]*output-dir="#{target.name}"/, manifest)
+      assert_match(/<target [^>]*name="#{target.slug}"[^>]*output-dir="#{target.slug}"/, manifest)
     end
   end
 
@@ -51,25 +52,25 @@ class ProjectArchiveBuilderTest < ActiveSupport::TestCase
 
     assert_match(/<target [^>]*name="print"[^>]*output-filename="print\.pdf"/, manifest)
     # html is a directory of files, so there is nothing to name.
-    assert_no_match(/<target [^>]*name="web"[^>]*output-filename/, manifest)
+    assert_no_match(/<target [^>]*name="website"[^>]*output-filename/, manifest)
   end
 
   # PreTeXt's schema has no `scorm` format -- it is html plus compression. The author
   # picked one thing; the manifest gets both attributes.
   test "a scorm target emits format and compression together" do
     project = projects(:one)
-    project.targets.create!(name: "lms", kind: "scorm")
+    project.targets.create!(name: "LMS package", kind: "scorm")
 
     manifest = ProjectArchiveBuilder.new(project).project_ptx
 
-    assert_match(/<target [^>]*name="lms"[^>]*format="html"[^>]*compression="scorm"/, manifest)
+    assert_match(/<target [^>]*name="lms-package"[^>]*format="html"[^>]*compression="scorm"/, manifest)
   end
 
   # Per-target tuning reaches the manifest without the catalog needing a variant for
   # every combination, and without a column per PreTeXt attribute.
   test "options are emitted as attributes alongside what the kind emits" do
     project = projects(:one)
-    project.targets.create!(name: "big", kind: "pdf", options: { "asy-method" => "server" })
+    project.targets.create!(name: "Big", kind: "pdf", options: { "asy-method" => "server" })
 
     manifest = ProjectArchiveBuilder.new(project).project_ptx
 
@@ -95,7 +96,7 @@ class ProjectArchiveBuilderTest < ActiveSupport::TestCase
   test "options cannot override the attributes the builder owns" do
     project = projects(:one)
     project.targets.create!(
-      name: "sneaky", kind: "pdf",
+      name: "Sneaky", kind: "pdf",
       options: { "name" => "elsewhere", "output-dir" => "../etc", "output-filename" => "x.pdf" }
     )
 

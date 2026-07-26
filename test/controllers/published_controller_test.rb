@@ -25,7 +25,7 @@ class PublishedControllerTest < ActionDispatch::IntegrationTest
   test "anyone can read a published target" do
     publish!
 
-    get published_file_url(@project, @target.name, "index.html")
+    get published_file_url(@project, @target.slug, "index.html")
 
     assert_response :success
     assert_match "Chapter One", response.body
@@ -37,9 +37,9 @@ class PublishedControllerTest < ActionDispatch::IntegrationTest
   test "both bare forms redirect to the index so relative links resolve" do
     publish!
 
-    [ published_url(@project, @target.name), "/o/#{@project.id}/#{@target.name}/" ].each do |bare|
+    [ published_url(@project, @target.slug), "/o/#{@project.id}/#{@target.slug}/" ].each do |bare|
       get bare
-      assert_redirected_to "/o/#{@project.id}/#{@target.name}/index.html"
+      assert_redirected_to "/o/#{@project.id}/#{@target.slug}/index.html"
       assert_response :found, "a 301 would still be followed after unpublishing"
     end
   end
@@ -47,7 +47,7 @@ class PublishedControllerTest < ActionDispatch::IntegrationTest
   test "the redirect lands on a page that actually renders" do
     publish!
 
-    get published_url(@project, @target.name)
+    get published_url(@project, @target.slug)
     follow_redirect!
 
     assert_response :success
@@ -57,19 +57,40 @@ class PublishedControllerTest < ActionDispatch::IntegrationTest
   test "an unpublished target is not found rather than forbidden" do
     assert_not @target.published?
 
-    get published_file_url(@project, @target.name, "index.html")
+    get published_file_url(@project, @target.slug, "index.html")
 
     assert_response :not_found
   end
 
+  # Whoever follows a link to an unpublished target did nothing wrong, so the answer has to
+  # be an explanation and not a Rails error page.
+  test "a missing target explains itself instead of erroring" do
+    get published_file_url(@project, @target.slug, "index.html")
+
+    assert_response :not_found
+    assert_match "not publicly available", response.body
+    assert_match "noindex", response.body
+  end
+
+  # A published site asks for its own images and stylesheets. Answering a missing one with
+  # a whole rendered page is work the browser throws away.
+  test "a non-navigation request gets a bare 404" do
+    publish!
+
+    get published_file_url(@project, @target.slug, "missing.png"), headers: { "Accept" => "image/png" }
+
+    assert_response :not_found
+    assert_empty response.body
+  end
+
   test "unpublishing breaks the link immediately" do
     publish!
-    get published_file_url(@project, @target.name, "index.html")
+    get published_file_url(@project, @target.slug, "index.html")
     assert_response :success
 
     @target.update!(published: false)
 
-    get published_file_url(@project, @target.name, "index.html")
+    get published_file_url(@project, @target.slug, "index.html")
     assert_response :not_found
   end
 
@@ -79,7 +100,7 @@ class PublishedControllerTest < ActionDispatch::IntegrationTest
     @target.builds.create!.mark!(:failed)
 
     assert_equal :failed, @target.reload.state
-    get published_file_url(@project, @target.name, "index.html")
+    get published_file_url(@project, @target.slug, "index.html")
 
     assert_response :success
     assert_match "Chapter One", response.body
@@ -91,7 +112,7 @@ class PublishedControllerTest < ActionDispatch::IntegrationTest
     attach_page(newer, "index.html", "<h1>Chapter One, revised</h1>")
     newer.mark!(:success)
 
-    get published_file_url(@project, @target.name, "index.html")
+    get published_file_url(@project, @target.slug, "index.html")
 
     assert_response :success
     assert_match "revised", response.body
@@ -113,7 +134,7 @@ class PublishedControllerTest < ActionDispatch::IntegrationTest
 
   # A pdf target has no index.html, so the bare URL has to land on the artifact itself.
   test "a single-file output redirects to its artifact, not to an index" do
-    target = projects(:two).targets.create!(name: "print", kind: "pdf")
+    target = projects(:two).targets.create!(name: "Print", kind: "pdf")
     build = target.builds.create!
     build.build_files.create!(relative_path: "print.pdf")
     build.mark!(:success, entry_path: "print.pdf")
@@ -125,21 +146,21 @@ class PublishedControllerTest < ActionDispatch::IntegrationTest
   end
 
   test "an unbuilt target has nowhere to redirect to" do
-    target = projects(:two).targets.create!(name: "print", kind: "pdf", published: true)
+    target = projects(:two).targets.create!(name: "Print", kind: "pdf", published: true)
 
     get published_url(projects(:two), "print")
 
     assert_response :not_found
   end
 
-  test "an unknown target name is not found" do
+  test "an unknown target slug is not found" do
     get published_file_url(@project, "no-such-target", "index.html")
     assert_response :not_found
   end
 
   test "a path that is not in the build is not found" do
     publish!
-    get published_file_url(@project, @target.name, "secrets.html")
+    get published_file_url(@project, @target.slug, "secrets.html")
     assert_response :not_found
   end
 
@@ -147,7 +168,7 @@ class PublishedControllerTest < ActionDispatch::IntegrationTest
   # it simply fails to match.
   test "path traversal does not escape the build" do
     publish!
-    get "/o/#{@project.id}/#{@target.name}/..%2F..%2Fconfig/database.yml"
+    get "/o/#{@project.id}/#{@target.slug}/..%2F..%2Fconfig/database.yml"
     assert_response :not_found
   end
 
@@ -155,7 +176,7 @@ class PublishedControllerTest < ActionDispatch::IntegrationTest
     sign_in users(:two)
     assert_not @target.published?
 
-    get published_file_url(@project, @target.name, "index.html")
+    get published_file_url(@project, @target.slug, "index.html")
 
     assert_response :success
   end
@@ -163,7 +184,7 @@ class PublishedControllerTest < ActionDispatch::IntegrationTest
   test "a signed-in stranger still cannot see an unpublished output" do
     sign_in users(:one)
 
-    get published_file_url(@project, @target.name, "index.html")
+    get published_file_url(@project, @target.slug, "index.html")
 
     assert_response :not_found
   end

@@ -39,7 +39,7 @@ class FullBuildArtifactJob < ApplicationJob
         # server zips its output/ dir, and ProjectArchiveBuilder sets each target's
         # output-dir to its own name. Strip that prefix so stored paths are just
         # "index.html", matching what BuildFilesController and build_file_path expect.
-        relative_path = entry.name.delete_prefix("#{build.target.name}/")
+        relative_path = entry.name.delete_prefix("#{build.target.slug}/")
         build_file = build.build_files.create!(relative_path: relative_path)
         build_file.blob.attach(
           io: StringIO.new(content),

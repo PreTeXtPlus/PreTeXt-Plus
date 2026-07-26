@@ -103,12 +103,13 @@ class ProjectTest < ActiveSupport::TestCase
 
   # ---- default target ----
 
-  test "a new project is created with a web html target" do
+  test "a new project is created with a website target" do
     project = Project.create!(user: users(:one), title: "Fresh")
 
     assert_equal 1, project.targets.count
     target = project.targets.first
-    assert_equal "web", target.name
+    assert_equal "Website", target.name
+    assert_equal "website", target.slug
     assert_equal "website", target.kind
   end
 

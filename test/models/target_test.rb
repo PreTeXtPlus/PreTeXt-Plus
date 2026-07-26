@@ -9,39 +9,94 @@ class TargetTest < ActiveSupport::TestCase
   end
 
   test "name must be unique within a project but not across projects" do
-    duplicate = Target.new(project: projects(:one), name: "web", kind: "website")
+    duplicate = Target.new(project: projects(:one), name: "Website", kind: "website")
     assert_not duplicate.valid?
+    assert_equal [ "has already been taken" ], duplicate.errors[:name]
 
-    other_project = Target.new(project: projects(:two), name: "instructor", kind: "website")
+    other_project = Target.new(project: projects(:two), name: "Instructor edition", kind: "website")
     assert other_project.valid?
   end
 
-  # The decision that shapes the schema: `name` is the unique key, not `kind`, matching
-  # how PreTeXt-CLI treats <targets> in project.ptx.
+  # Neither of these is a second output, and both used to slip past uniqueness.
+  test "a name differing only by case or surrounding space is the same name" do
+    assert_not Target.new(project: projects(:one), name: "  website ", kind: "website").valid?
+
+    assert_equal "Print run", projects(:one).targets.create!(name: "  Print run  ", kind: "pdf").name
+  end
+
+  # An author who left the name blank made one mistake; the flash used to report it three
+  # times, twice about a field the form does not have.
+  test "a nameless target reports only the missing name" do
+    target = Target.new(project: projects(:one), kind: "pdf")
+
+    assert_not target.valid?
+    assert_equal [ "Name can't be blank" ], target.errors.full_messages
+  end
+
+  # The decision that shapes the schema: the *slug* is the unique key, not `kind`,
+  # matching how PreTeXt-CLI treats <targets> in project.ptx.
   test "two targets in one project may share a kind" do
     assert_equal "website", targets(:one_web).kind
     assert_equal "website", targets(:one_instructor).kind
     assert_equal projects(:one), targets(:one_instructor).project
   end
 
-  test "name must be a legal PreTeXt target name" do
-    assert_not Target.new(project: projects(:one), name: "not a ref", kind: "website").valid?
-    assert_not Target.new(project: projects(:one), name: "", kind: "website").valid?
-    assert Target.new(project: projects(:one), name: "web-2", kind: "website").valid?
+  # ---- naming ----
+
+  # An author names an output the way they talk about it, and the manifest gets something
+  # it can actually take. Nothing asks them to supply both.
+  test "the slug is derived from the name" do
+    target = projects(:one).targets.create!(name: "Instructor PDF", kind: "pdf")
+
+    assert_equal "instructor-pdf", target.slug
+    assert_equal "instructor-pdf.pdf", target.output_filename
+  end
+
+  test "a name is free text, unlike the slug it produces" do
+    target = projects(:one).targets.create!(name: "Marta’s “big” print run!", kind: "pdf")
+
+    assert target.valid?
+    assert_match REF_REGEX, target.slug
+  end
+
+  # A PreTeXt target name has to start with a letter, so a name that parameterizes to
+  # something illegal (or to nothing at all) falls back to the kind rather than to a
+  # meaningless generated id.
+  test "a name with nothing legal in it still yields a usable slug" do
+    assert_equal "pdf-2nd-edition", projects(:one).targets.create!(name: "2nd edition", kind: "pdf").slug
+    assert_equal "pdf", projects(:one).targets.create!(name: "★", kind: "pdf").slug
+  end
+
+  test "two names that slug alike get distinct slugs rather than an error" do
+    first = projects(:one).targets.create!(name: "Print PDF", kind: "pdf")
+    second = projects(:one).targets.create!(name: "Print (PDF)", kind: "pdf")
+
+    assert_equal "print-pdf", first.slug
+    assert_equal "print-pdf-2", second.slug
+  end
+
+  # The slug is in a link the author may already have handed out, and in `pretext build
+  # <slug>` on a downloaded copy, so renaming on the dashboard must leave it alone.
+  test "renaming a target does not move its slug" do
+    target = targets(:one_print)
+
+    target.update!(name: "Classroom handout")
+
+    assert_equal "print", target.reload.slug
   end
 
   # ---- kind and the catalog ----
 
   test "kind must be one the catalog offers" do
-    assert_not Target.new(project: projects(:one), name: "nope", kind: "docx").valid?
+    assert_not Target.new(project: projects(:one), name: "Nope", kind: "docx").valid?
     # Nor a PreTeXt format that is not itself an author-facing choice.
-    assert_not Target.new(project: projects(:one), name: "nope", kind: "custom").valid?
+    assert_not Target.new(project: projects(:one), name: "Nope", kind: "custom").valid?
   end
 
   # The pair the whole re-modelling exists for. An author picks one thing; PreTeXt needs
   # two attributes; neither vocabulary leaks into the other.
   test "a scorm package emits html plus compression without being an html target" do
-    target = projects(:one).targets.create!(name: "lms", kind: "scorm")
+    target = projects(:one).targets.create!(name: "LMS package", kind: "scorm")
 
     assert_equal({ "format" => "html", "compression" => "scorm" }, target.manifest_attributes)
     # Not a site: it is a package you hand to an LMS, not something a reader browses.
@@ -51,7 +106,7 @@ class TargetTest < ActiveSupport::TestCase
 
   test "a website is a site and a zipped website is not, though both emit html" do
     site = targets(:one_web)
-    zipped = projects(:one).targets.create!(name: "offline", kind: "website_zip")
+    zipped = projects(:one).targets.create!(name: "Offline copy", kind: "website_zip")
 
     assert site.site?
     assert_not zipped.site?
@@ -89,7 +144,7 @@ class TargetTest < ActiveSupport::TestCase
 
   test "options are merged into the manifest attributes and win over the kind" do
     target = projects(:one).targets.create!(
-      name: "tuned", kind: "pdf", options: { "stringparam" => "debug.datedfiles yes" }
+      name: "Tuned", kind: "pdf", options: { "stringparam" => "debug.datedfiles yes" }
     )
 
     assert_equal "debug.datedfiles yes", target.manifest_attributes["stringparam"]
@@ -101,26 +156,26 @@ class TargetTest < ActiveSupport::TestCase
     # A website is a directory, so there is nothing to name.
     assert_nil targets(:one_web).output_filename
     # Beamer produces a PDF but is left to discovery -- see Target::Catalog.
-    assert_nil projects(:slides).targets.create!(name: "handout", kind: "beamer").output_filename
+    assert_nil projects(:slides).targets.create!(name: "Handout", kind: "beamer").output_filename
   end
 
   # ---- kind against the project's document type ----
 
   test "slides are rejected on a project that is not a slideshow" do
-    target = Target.new(project: projects(:one), name: "deck", kind: "revealjs")
+    target = Target.new(project: projects(:one), name: "Deck", kind: "revealjs")
 
     assert_not target.valid?
     assert_match(/slideshow/, target.errors[:kind].to_sentence)
   end
 
   test "slides are accepted on a slideshow" do
-    assert Target.new(project: projects(:slides), name: "deck-2", kind: "revealjs").valid?
-    assert Target.new(project: projects(:slides), name: "handout", kind: "beamer").valid?
+    assert Target.new(project: projects(:slides), name: "Second deck", kind: "revealjs").valid?
+    assert Target.new(project: projects(:slides), name: "Handout", kind: "beamer").valid?
   end
 
   test "an unrestricted kind is available to every document type" do
-    assert Target.new(project: projects(:slides), name: "notes", kind: "pdf").valid?
-    assert Target.new(project: projects(:one), name: "notes", kind: "pdf").valid?
+    assert Target.new(project: projects(:slides), name: "Notes", kind: "pdf").valid?
+    assert Target.new(project: projects(:one), name: "Notes", kind: "pdf").valid?
   end
 
   test "the picker offers slides only to a slideshow" do
@@ -131,11 +186,6 @@ class TargetTest < ActiveSupport::TestCase
     assert_not_includes slugs, "beamer"
 
     assert_includes Target::Catalog.for_document_type(:slideshow).map(&:slug), "revealjs"
-  end
-
-  test "display_label falls back to a humanized name" do
-    assert_equal "Website", targets(:one_web).display_label
-    assert_equal "Print", targets(:one_print).display_label
   end
 
   test "latest_build is the newest by created_at, not the newest successful" do

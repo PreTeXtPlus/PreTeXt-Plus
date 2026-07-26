@@ -42,13 +42,13 @@ Rails.application.routes.draw do
   # Built PreTeXt links between its pages relatively ("chapter-1.html"), so the page a
   # visitor lands on must sit one level *inside* the target, or every internal link
   # resolves a directory too high. Rails normalizes trailing slashes away during route
-  # recognition -- "/o/x/web" and "/o/x/web/" are indistinguishable by the time a
+  # recognition -- "/o/x/website" and "/o/x/website/" are indistinguishable by the time a
   # controller sees them -- so rather than depend on the raw path, both bare forms
   # redirect to an explicit index.html and the file route requires a path segment.
   #
   # format: false keeps ".html" in the path instead of being parsed as a response format.
-  get "o/:project_id/:target_name" => "published#redirect_to_index", as: :published
-  get "o/:project_id/:target_name/*relative_path" => "published#show",
+  get "o/:project_id/:target_slug" => "published#redirect_to_index", as: :published
+  get "o/:project_id/:target_slug/*relative_path" => "published#show",
       as: :published_file, format: false
 
   resources :projects do

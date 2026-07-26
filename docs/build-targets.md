@@ -9,6 +9,9 @@ Companion design docs (clickable mockups of the three screens):
 - Interface proposal — <https://claude.ai/code/artifact/89a1520a-a005-49c8-9863-f383c7112358>
 - Implementation plan — <https://claude.ai/code/artifact/846ac33e-f8dd-445a-bc00-2d7f1872ba6f>
 
+See also [public-urls.md](public-urls.md) — the project UUID in `/o/…` is ugly in a link an
+author hands to students, and the shape is only free to change while this is undeployed.
+
 ---
 
 ## Status
@@ -20,7 +23,7 @@ Branch `builds`, based on `fbf2b0d` (`git log fbf2b0d..HEAD` for the commits, on
 |---|---|
 | PRs 1–4, plus 4b | **Done** — see the per-PR sections below, each with what shipped and how it differs from the original plan |
 | PR 5 (retire the quick build) | **Not started.** The only remaining implementation work |
-| Suite | 293 tests / 825 assertions green; rubocop and brakeman clean |
+| Suite | 302 tests / 848 assertions green; rubocop and brakeman clean |
 | Migrations | Four, all applied in dev. See *Deploying* below before running in production |
 
 ### What has never actually run
@@ -31,7 +34,7 @@ should not assume they work:
 1. **Nothing but a website has ever been built.** The generated `project.ptx` is
    schema-valid and the plumbing is unit-tested, but the first real `pdf` / `epub` /
    `braille` / `scorm` build against `pretext-plus-build-full` is the actual proof. Most
-   likely places to break: whether the server writes to `output/<target-name>/` as
+   likely places to break: whether the server writes to `output/<target-slug>/` as
    `ProjectArchiveBuilder` assumes, whether `entry_path` detection picks the right file
    for braille, and whether a SCORM build really leaves a `.zip` where
    `Target::Catalog` expects one.
@@ -77,8 +80,23 @@ answer the interface can give.
 So a **target** is now a first-class, persistent object — name, kind, published flag,
 current state — and builds become its history. This mirrors how PreTeXt-CLI already works:
 `project.ptx` declares a list of named targets, and several targets may be of the same
-kind (a "student" and an "instructor" website, say). Target *names* are unique within a
+kind (a "student" and an "instructor" website, say). Target *slugs* are unique within a
 project; kinds are not.
+
+### Naming: one field, two audiences
+
+An output is named twice, and the form asks once. `name` is the author's — free text,
+"Instructor edition" — and it is all the interface collects. `slug` is PreTeXt's: it is the
+`@name` in `project.ptx`, the `output-dir` the build server writes to, and the segment in
+`/o/…`. `Target#assign_slug` parameterizes the name into it on create, falling back to the
+kind when nothing legal survives ("2nd edition" → `pdf-2nd-edition`, "★" → `pdf`) and
+appending `-2` when two names slug alike.
+
+Assigned on create and never recomputed. The slug is in a link an author may already have
+handed out and in `pretext build <slug>` on a downloaded copy, so renaming an output on the
+dashboard changes the heading and nothing else — which is what the drawer's settings panel
+says under the name field. Drift between a renamed output and its original slug is the
+price, and it is the cheaper half of the trade.
 
 ```
 Project ──< Target ──< Build ──< BuildFile
@@ -178,6 +196,8 @@ replaced the column with `kind`, which sidesteps the collision for the same reas
 | Change | Shape | Purpose |
 |---|---|---|
 | `targets` | new table, uuid pk | The persistent output. |
+| `targets.name` | string, not null | The author's name for it, free text ("Instructor edition"), and the only naming the form asks for. Unique per project so two rows are told apart by what an author reads them by. |
+| `targets.slug` | string, not null, unique per project | PreTeXt's name for it: `@name` in project.ptx, the `output-dir`, and the `/o/…` segment. Derived from `name` on create and never recomputed, so a rename cannot break a link. The unique index is here rather than on `name` because this is the one that addresses something. |
 | `targets.current_build_id` | uuid | Latest successful build — what readers see. |
 | `targets.latest_build_id` | uuid | Most recent attempt — what the state pill reports. Added in PR 2, once it became clear `Target#state` could not be query-free without it. |
 | `targets.kind` | string | What the author picked, at the author's altitude — `website`, `scorm`, `pdf`. `Target::Catalog` translates it into project.ptx attributes. A string, never an integer enum: retiring a value must not be a data migration. |
@@ -202,18 +222,18 @@ why — those divergences are the parts worth reading.
 
 ### PR 1 — Targets exist  *(no visible UI change)* — **done**
 
-Pure plumbing. Every existing project gets one `web` target that adopts its builds. The admin
-builds pages keep working throughout.
+Pure plumbing. Every existing project gets one website target that adopts its builds. The
+admin builds pages keep working throughout.
 
 - `AddSourceUpdatedAtToProjects` — column, backfill from the newest of the project and
   anything it owns, `NOT NULL`.
-- `CreateTargets` — table, one `web` target per existing project, adopt existing builds,
+- `CreateTargets` — table, one website target per existing project, adopt existing builds,
   point `current_build_id` at the newest successful build per target.
 - `Target` model with `state` / `stale?` / `sync_from_builds!`. (Shipped as `adopt!` plus
   `refresh_current_build!`; PR 2 consolidated the pair into one recompute.)
 - `Build#mark!` replacing all eleven `update_column` sites.
 - `Division` / `Asset` touch `source_updated_at`.
-- `Project` gets a default `web` target on create, and copies targets in `full_dup`.
+- `Project` gets a default website target on create, and copies targets in `full_dup`.
 
 ### PR 2 — The dashboard  *(iframe out, target rows in)* — **done**
 
@@ -261,7 +281,7 @@ gives every project a real html build to point at. Retired in PR 5.
 
   The `current_build_id == build.id` clause is what makes unpublishing effective and keeps
   superseded builds private.
-- Public output route `GET /o/:project_id/:target_name(/*relative_path)`, reusing
+- Public output route `GET /o/:project_id/:target_slug(/*relative_path)`, reusing
   `BuildFilesController`'s existing path resolution and blob caching.
 - Per-target output download (already exists as `build.zip`) and a full project zip —
   `ProjectArchiveBuilder` already emits a valid PreTeXt-CLI project, so this is a controller
@@ -273,12 +293,20 @@ The three `lunr-pretext-search-index.js` redirects and the `get ":id/*_.html"` c
 because built PreTeXt HTML uses relative links — replicate them under `/o/…` or published
 sites will 404 on search and cross-chapter navigation.
 
-**Shipped in PR 3:** `/o/:project_id/:target_name/*path` served by `PublishedController`,
+**Shipped in PR 3:** `/o/:project_id/:target_slug/*path` served by `PublishedController`,
 sharing `ServesBuildFiles` with `BuildFilesController`. `BuildFilesController` stays
 login-only on purpose, so published output has exactly one anonymous surface and
 unpublishing cannot be worked around by addressing the build directly. `projects#download`
 returns the CLI zip. `Ability` gained `:download` on Project (the owner list is
 deliberately explicit, so it had to be named).
+
+**Every miss looks the same.** `PublishedController` rescues `RecordNotFound` *and*
+`CanCan::AccessDenied` into one 404 page (`published/not_found`): unpublished, never built,
+unknown target slug and a path that is not in the build are all reached by following a link
+someone was handed, so none of them should produce a Rails error page or bounce a stranger
+to the login form. Only a navigation renders it — a published site requesting an image that
+is not in the build gets a bare `head :not_found`, since a rendered page would be thrown
+away. The page is `noindex`.
 
 **No trailing slash.** Rails normalizes trailing slashes away during route recognition —
 `/o/x/web` and `/o/x/web/` are indistinguishable by the time a controller runs, and only
@@ -294,8 +322,8 @@ so the built page's relative links resolve.
 ### PR 4 — More formats — **done**
 
 - `ProjectArchiveBuilder::TARGET` is gone; `project.ptx` lists every target.
-- `FullBuildJob` submits `build.target.name`; `FullBuildArtifactJob` strips
-  `"#{build.target.name}/"`.
+- `FullBuildJob` submits `build.target.slug`; `FullBuildArtifactJob` strips
+  `"#{build.target.slug}/"`.
 - `builds.entry_path`, detected at import; `Target#entry_path` prefers it.
 - "+ Add output" UI, and `User#target_quota` (4 free / 12 subscribed / 50 admin).
 
@@ -467,6 +495,10 @@ Still live — things future work can break:
 - **`options` is free-form and reaches the manifest.** `Target::RESERVED_ATTRIBUTES` is
   what stops it reaching `name` / `output-dir` / `output-filename`. Anything else added to
   the manifest that the builder derives from the row belongs on that list too.
+- **`targets.slug` is never assigned from user input.** `assign_slug` skips a slug that is
+  already set, which is how `Project#full_dup` carries a copy's slugs over intact. Permitting
+  `:slug` in `TargetsController#target_params` would quietly turn that into an author-editable
+  public URL, and a rename would start breaking links again.
 - **A new kind is never pure data.** `site:`, `filename_ext:` and `extensions:` all have to
   be right or the target builds and then cannot be opened. The catalog makes this one
   edit in one place, but it is still an edit.
@@ -568,11 +600,12 @@ changes. DNS, TLS and Kamal/proxy config are not.
 
 | Question | Blocks | Answer |
 |---|---|---|
-| Can two targets share a format? | PR 1 | **Yes** — consistent with how the CLI uses `project.ptx`. `name` is the unique key, not `kind`. |
+| Can two targets share a format? | PR 1 | **Yes** — consistent with how the CLI uses `project.ptx`. `slug` is the unique key, not `kind`. |
 | Does a published output follow the latest good build, or pin to a chosen one? | PR 3 | Follow the latest. `current_build_id` is already a pointer, so pinning is a later feature that writes to it manually rather than a schema change. |
 | Does publishing cost a subscription? | PR 3 | **Still open.** Shipped free and uncapped. Suggest no, but cap published targets for free accounts. |
 | Are non-html formats a paid feature? | PR 4 | **Still open.** Shipped free, bounded only by `target_quota`. |
 | Store PreTeXt's `format`/`compression`, or the author's choice? | PR 4b | **Answered:** store the author's choice (`kind`) and derive the manifest attributes from `Target::Catalog`. A change on PreTeXt's side becomes an edit to `emits` rather than a data migration. |
-| Should the whole of `project.ptx` be one editable string instead? | PR 4b | **No.** `builds.target_id` is a foreign key and `/o/:project_id/:target_name` is a public URL, so a target needs stable row identity that an XML element cannot provide. The open-ended *configuration* moved to `targets.options` instead, which is the half of the concern that was real. |
+| Should the whole of `project.ptx` be one editable string instead? | PR 4b | **No.** `builds.target_id` is a foreign key and `/o/:project_id/:target_slug` is a public URL, so a target needs stable row identity that an XML element cannot provide. The open-ended *configuration* moved to `targets.options` instead, which is the half of the concern that was real. |
 | What bounds build minutes? | PR 4 | **Answered:** builds are open to every owner, bounded by a 20/hour rate limit, `MAX_CONCURRENT_BUILDS = 3` in flight per user, and `User#target_quota`. |
 | Should published output move to its own origin? | — | **Open, and the most consequential.** PreTeXt embeds author JavaScript by design, so published output can run scripts on our origin. See [Open security decision](#open-security-decision-user-content-on-the-primary-origin). |
+| Does `/o/…` have to carry the project UUID? | — | **Open, and time-boxed.** No: give projects a short public id and keep the UUID as a permanent alternate lookup key. Free to do while `/o/…` is undeployed, expensive after. See [public-urls.md](public-urls.md). |

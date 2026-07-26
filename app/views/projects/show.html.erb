@@ -55,14 +55,9 @@
       <summary class="cursor-pointer text-sm text-gray-600">+ Add an output</summary>
       <%= form_with model: [ @project, Target.new ], class: "mt-4 flex flex-wrap items-end gap-3" do |form| %>
         <div>
-          <%= form.label :label, "Name", class: "block text-xs text-gray-600" %>
-          <%= form.text_field :label, placeholder: "Print PDF",
+          <%= form.label :name, "Name", class: "block text-xs text-gray-600" %>
+          <%= form.text_field :name, placeholder: "Print PDF", required: true,
                 class: "mt-1 rounded-md border border-gray-300 px-2 py-1.5 text-sm" %>
-        </div>
-        <div>
-          <%= form.label :name, "Target name", class: "block text-xs text-gray-600" %>
-          <%= form.text_field :name, placeholder: "print", required: true,
-                class: "mt-1 rounded-md border border-gray-300 px-2 py-1.5 font-mono text-sm" %>
         </div>
         <div>
           <%= form.label :kind, "Output", class: "block text-xs text-gray-600" %>
@@ -73,9 +68,11 @@
               class: "cursor-pointer rounded-md bg-indigo-600 px-3 py-2 text-sm font-medium text-white hover:bg-indigo-500" %>
       <% end %>
       <p class="mt-3 text-xs text-gray-500">
-        The target name is what identifies this output in <code>project.ptx</code>, so it also
-        works with <code>pretext build &lt;name&gt;</code> on a downloaded copy. Several outputs
-        may be of the same kind — a student and an instructor website, say.
+        Name it however you refer to it — “Print PDF”, “Instructor edition”. The short name
+        this output gets in <code>project.ptx</code>, which is also what
+        <code>pretext build &lt;name&gt;</code> takes on a downloaded copy, is derived from
+        that. Several outputs may be of the same kind — a student and an instructor website,
+        say.
       </p>
     </details>
   <% else %>

@@ -1,4 +1,4 @@
-# The public face of a built target: /o/:project_id/:target_name/...
+# The public face of a built target: /o/:project_id/:target_slug/...
 #
 # Resolves a target to the build it currently publishes and serves that build's files to
 # anyone, signed in or not. Publishing points at Target#current_build, so a later failed
@@ -8,6 +8,13 @@ class PublishedController < ApplicationController
 
   allow_unauthenticated_access
   after_action :allow_iframe
+
+  # Everything here is addressed by a link someone was handed, so every way of missing --
+  # unpublished, never built, wrong target slug, a page that is not in the build -- ends at
+  # the same explanation rather than at a Rails error page or a bounce to the login form.
+  # AccessDenied is included for the same reason: on a public URL, 403 is never the answer
+  # we want to give (see load_published_build).
+  rescue_from ActiveRecord::RecordNotFound, CanCan::AccessDenied, with: :render_not_found
 
   before_action :load_published_build
 
@@ -26,14 +33,23 @@ class PublishedController < ApplicationController
     entry = @target.entry_path
     raise ActiveRecord::RecordNotFound if entry.blank?
 
-    redirect_to published_file_path(@project, @target.name, entry), status: :found
+    redirect_to published_file_path(@project, @target.slug, entry), status: :found
   end
 
   private
 
+    # Only a navigation gets the page. A published site requesting an image or stylesheet
+    # that is not in the build asks for those too, and answering a missing sprite with a
+    # rendered HTML page is wasted work the browser throws away.
+    def render_not_found
+      return head :not_found unless request.format.html?
+
+      render "not_found", status: :not_found
+    end
+
     def load_published_build
       @project = Project.find(params[:project_id])
-      @target = @project.targets.find_by!(name: params[:target_name])
+      @target = @project.targets.find_by!(slug: params[:target_slug])
 
       # An owner may preview their own unpublished output at its public URL; to everyone
       # else an unpublished target does not exist. 404 rather than 403 so the response

@@ -7,7 +7,7 @@
   <p class="font-mono text-xs text-gray-500">
     <%= link_to "Projects", projects_path, class: "hover:underline" %> /
     <%= link_to @project.title, @project, class: "hover:underline" %> /
-    <%= link_to @build.target.display_label, project_target_path(@project, @build.target), class: "hover:underline" %> /
+    <%= link_to @build.target.name, project_target_path(@project, @build.target), class: "hover:underline" %> /
   </p>
 
   <div class="mt-2 flex flex-wrap items-center justify-between gap-3">

@@ -41,7 +41,7 @@ class BuildsController < ApplicationController
             partial: "targets/target", locals: { target: @target.reload }
           )
         end
-        format.html { redirect_to project_path(@project), notice: "Building #{@target.display_label}." }
+        format.html { redirect_to project_path(@project), notice: "Building #{@target.name}." }
       end
     else
       reject_build(@build.errors.full_messages.to_sentence)

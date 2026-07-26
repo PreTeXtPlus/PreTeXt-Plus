@@ -3,15 +3,20 @@
 # <targets> list in a PreTeXt-CLI project.ptx: names are unique within a project, and
 # several targets may share a kind (a "student" and an "instructor" website, say).
 #
-# Every existing project gets one `web` target matching the hardcoded
-# ProjectArchiveBuilder::TARGET, and adopts that project's existing builds, so nothing
-# user-facing changes when this runs.
+# Every existing project gets one website target that adopts its existing builds, so
+# nothing user-facing changes when this runs.
 class CreateTargets < ActiveRecord::Migration[8.1]
   def change
     create_table :targets, id: :uuid do |t|
       t.references :project, null: false, foreign_key: true, type: :uuid
-      t.string   :name, null: false                    # goes verbatim into project.ptx
-      t.string   :label                                # human-facing; nil -> derived
+
+      # The two halves of naming an output, and the only one an author types is `name`.
+      # `slug` is derived from it by Target#assign_slug, because project.ptx and the
+      # public URL need something machine-shaped and an author should not have to think
+      # about that twice.
+      t.string   :name, null: false                    # human-facing: "Instructor edition"
+      t.string   :slug, null: false                    # goes verbatim into project.ptx
+
       t.boolean  :published, null: false, default: false
       t.integer  :position, null: false, default: 0
 
@@ -38,7 +43,10 @@ class CreateTargets < ActiveRecord::Migration[8.1]
 
       t.timestamps
 
-      t.index [ :project_id, :name ], unique: true
+      # Only the slug is enforced here. It addresses a public URL and names a <target> in
+      # project.ptx, so a duplicate is a real collision; a duplicate display name is only
+      # confusing, and Target validates that one on its own.
+      t.index [ :project_id, :slug ], unique: true
     end
 
     add_reference :builds, :target, foreign_key: true, type: :uuid
@@ -47,8 +55,8 @@ class CreateTargets < ActiveRecord::Migration[8.1]
       dir.up do
         execute <<~SQL
           INSERT INTO targets
-            (id, project_id, name, label, kind, published, position, created_at, updated_at)
-          SELECT gen_random_uuid(), id, 'web', 'Website', 'website', FALSE, 0, NOW(), NOW()
+            (id, project_id, name, slug, kind, published, position, created_at, updated_at)
+          SELECT gen_random_uuid(), id, 'Website', 'website', 'website', FALSE, 0, NOW(), NOW()
           FROM projects
         SQL
 

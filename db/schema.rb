@@ -237,7 +237,6 @@ ActiveRecord::Schema[8.1].define(version: 2026_07_26_034041) do
     t.datetime "created_at", null: false
     t.uuid "current_build_id"
     t.string "kind", default: "website", null: false
-    t.string "label"
     t.datetime "last_built_at"
     t.uuid "latest_build_id"
     t.string "name", null: false
@@ -245,8 +244,9 @@ ActiveRecord::Schema[8.1].define(version: 2026_07_26_034041) do
     t.integer "position", default: 0, null: false
     t.uuid "project_id", null: false
     t.boolean "published", default: false, null: false
+    t.string "slug", null: false
     t.datetime "updated_at", null: false
-    t.index ["project_id", "name"], name: "index_targets_on_project_id_and_name", unique: true
+    t.index ["project_id", "slug"], name: "index_targets_on_project_id_and_slug", unique: true
     t.index ["project_id"], name: "index_targets_on_project_id"
   end
 

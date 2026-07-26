@@ -1,7 +1,7 @@
 # Serving one file out of a finished build's output.
 #
 # Shared by BuildFilesController (owner-facing, addressed by build id) and
-# PublishedController (public, addressed by project + target name). Both resolve a
+# PublishedController (public, addressed by project + target slug). Both resolve a
 # request path against the same stored BuildFiles and hand back the same bytes; only
 # how they decide *which* build, and who may see it, differs.
 module ServesBuildFiles

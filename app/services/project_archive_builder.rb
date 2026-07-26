@@ -38,7 +38,7 @@ class ProjectArchiveBuilder
 
   # The manifest, listing every target the project has. One archive therefore serves any
   # build request -- the server is told which target to build -- and the same zip is what
-  # a downloaded project contains, so `pretext build <name>` works locally for all of them.
+  # a downloaded project contains, so `pretext build <slug>` works locally for all of them.
   #
   # output-dir is set explicitly rather than relying on the CLI's default, because
   # FullBuildArtifactJob strips exactly that prefix off the returned zip entries.
@@ -93,12 +93,15 @@ class ProjectArchiveBuilder
     # package contributes both format and compression), plus any per-target options. The
     # two attributes named here are ours rather than the kind's: output-dir because
     # FullBuildArtifactJob strips exactly this prefix, and output-filename because fixing
-    # it to the target name is what makes a single-file artifact's path knowable up front.
+    # it to the slug is what makes a single-file artifact's path knowable up front.
+    #
+    # @name is the target's slug, not its display name: this is what `pretext build <x>`
+    # takes on a downloaded copy, and the schema will not accept "Instructor edition".
     def target_element(target)
       attributes = {
-        "name" => target.name
+        "name" => target.slug
       }.merge(target.manifest_attributes).merge(
-        "output-dir" => target.name,
+        "output-dir" => target.slug,
         "output-filename" => target.output_filename
       ).compact
 
