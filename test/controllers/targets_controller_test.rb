@@ -71,6 +71,39 @@ class TargetsControllerTest < ActionDispatch::IntegrationTest
     assert_redirected_to project_url(@project)
   end
 
+  test "can add a non-html output" do
+    assert_difference("Target.count") do
+      post project_targets_url(@project), params: { target: { name: "handout", label: "Handout PDF", output_format: "pdf" } }
+    end
+
+    target = @project.targets.find_by(name: "handout")
+    assert target.pdf_output_format?
+    assert_not target.site?
+    assert_equal "handout.pdf", target.output_filename
+  end
+
+  # A target is something an author can ask the build server to run, so the count is
+  # bounded even though building itself is open to every owner.
+  test "outputs are capped by the user's target quota" do
+    quota = @user.target_quota
+    (quota - @project.targets.count).times { |i| @project.targets.create!(name: "extra#{i}", output_format: :html) }
+    assert_equal quota, @project.targets.count
+
+    assert_no_difference("Target.count") do
+      post project_targets_url(@project), params: { target: { name: "one-too-many", output_format: "html" } }
+    end
+    assert_redirected_to projects_path
+  end
+
+  test "the add-output form disappears at the quota" do
+    (@user.target_quota - @project.targets.count).times { |i| @project.targets.create!(name: "extra#{i}", output_format: :html) }
+
+    get project_url(@project)
+
+    assert_response :success
+    assert_match(/reached the limit/, response.body)
+  end
+
   test "creating a target with a duplicate name is rejected" do
     assert_no_difference("Target.count") do
       post project_targets_url(@project), params: { target: { name: "web", output_format: "html" } }

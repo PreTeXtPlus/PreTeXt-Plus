@@ -35,12 +35,11 @@ class FullBuildArtifactJob < ApplicationJob
         # output, and importing it roughly doubles the file count.
         next if entry.name.start_with?("__MACOSX/") || File.basename(entry.name).start_with?("._")
         content = entry.get_input_stream.read
-        # Zip entries come out as "<target>/..." (e.g. "web/index.html") since
-        # the build server zips its output/ dir, and PreTeXt writes each
-        # target's output to output/<target>/. Strip that prefix so stored
-        # paths are just "index.html", matching what BuildFilesController and
-        # build_file_path expect.
-        relative_path = entry.name.delete_prefix("#{ProjectArchiveBuilder::TARGET}/")
+        # Zip entries come out as "<target>/..." (e.g. "web/index.html") since the build
+        # server zips its output/ dir, and ProjectArchiveBuilder sets each target's
+        # output-dir to its own name. Strip that prefix so stored paths are just
+        # "index.html", matching what BuildFilesController and build_file_path expect.
+        relative_path = entry.name.delete_prefix("#{build.target.name}/")
         build_file = build.build_files.create!(relative_path: relative_path)
         build_file.blob.attach(
           io: StringIO.new(content),
@@ -57,9 +56,31 @@ class FullBuildArtifactJob < ApplicationJob
       content_type: "application/zip"
     )
 
-    build.mark!(:success)
+    build.mark!(:success, entry_path: detect_entry_path(build))
   rescue => e
     build.mark!(:failed)
     raise e
   end
+
+  private
+
+    # What a reader should be sent to. An html site has an index; a pdf or braille build
+    # is one file whose name PreTeXt chose. Recorded now, from the files that actually
+    # arrived, rather than guessed later from the format.
+    def detect_entry_path(build)
+      paths = build.build_files.pluck(:relative_path)
+      return nil if paths.empty?
+
+      # What the manifest asked for, when the schema let us ask (ProjectArchiveBuilder).
+      requested = build.target.output_filename
+      return requested if requested && paths.include?(requested)
+
+      return "index.html" if build.target.site? && paths.include?("index.html")
+
+      # Otherwise the shallowest file with an extension the format is known to produce --
+      # shallowest so a stray asset in a subdirectory never beats the real artifact.
+      extensions = Target::OUTPUT_EXTENSIONS.fetch(build.target.output_format, [])
+      candidates = paths.select { |p| extensions.include?(File.extname(p).downcase) }
+      candidates.min_by { |p| [ p.count("/"), p.length ] } || paths.min_by(&:length)
+    end
 end

@@ -86,8 +86,8 @@
                   <td class="py-2 pr-3 tabular-nums text-gray-600"><%= build.created_at.to_fs(:short) %></td>
                   <td class="py-2 pr-3"><%= build_history_pill(build, @target) %></td>
                   <td class="py-2 text-right">
-                    <% if build.success? %>
-                      <%= link_to "View", build_file_path(build, "index.html"),
+                    <% if build.success? && build.entry_path.present? %>
+                      <%= link_to "View", build_file_path(build, build.entry_path),
                             class: "text-indigo-700 hover:underline", target: "_blank", rel: "noopener",
                             data: { turbo: false } %>
                     <% end %>

@@ -111,6 +111,27 @@ class PublishedControllerTest < ActionDispatch::IntegrationTest
     assert Ability.new(nil).can?(:read, newer)
   end
 
+  # A pdf target has no index.html, so the bare URL has to land on the artifact itself.
+  test "a single-file output redirects to its artifact, not to an index" do
+    target = projects(:two).targets.create!(name: "print", output_format: :pdf)
+    build = target.builds.create!
+    build.build_files.create!(relative_path: "print.pdf")
+    build.mark!(:success, entry_path: "print.pdf")
+    target.update!(published: true)
+
+    get published_url(projects(:two), "print")
+
+    assert_redirected_to "/o/#{projects(:two).id}/print/print.pdf"
+  end
+
+  test "an unbuilt target has nowhere to redirect to" do
+    target = projects(:two).targets.create!(name: "print", output_format: :pdf, published: true)
+
+    get published_url(projects(:two), "print")
+
+    assert_response :not_found
+  end
+
   test "an unknown target name is not found" do
     get published_file_url(@project, "no-such-target", "index.html")
     assert_response :not_found

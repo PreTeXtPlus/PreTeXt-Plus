@@ -15,6 +15,22 @@ module TargetsHelper
     failed: "border-l-red-500", never: "border-l-gray-300"
   }.freeze
 
+  # Formats offered in the add-output form. Every value is one PreTeXt's project.ptx
+  # schema accepts; the wording is what an author would call the thing they want.
+  FORMAT_CHOICES = [
+    [ "Website (HTML)", "html" ],
+    [ "PDF", "pdf" ],
+    [ "EPUB", "epub" ],
+    [ "Kindle", "kindle" ],
+    [ "Braille", "braille" ],
+    [ "Slides (reveal.js)", "revealjs" ],
+    [ "LaTeX source", "latex" ]
+  ].freeze
+
+  def target_format_options
+    options_for_select(FORMAT_CHOICES)
+  end
+
   def target_state_pill(state)
     label, classes = STATE_PILL.fetch(state, STATE_PILL[:never])
     tag.span(class: "inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-semibold #{classes}") do

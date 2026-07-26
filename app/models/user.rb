@@ -40,6 +40,14 @@ class User < ApplicationRecord
     10
   end
 
+  # Outputs per project. Unlike project_quota this is a cost bound rather than a plan
+  # feature: every target is something an author can ask the build server to run.
+  def target_quota
+    return 50 if admin
+    return 12 if subscribed?
+    4
+  end
+
   def upload_mb_quota
     return 1_000 if admin
     return 100 if subscribed?

@@ -26,7 +26,7 @@ class FullBuildJob < ApplicationJob
     request.set_form(
       [
         [ "archive", archive, { filename: "project.zip", content_type: "application/zip" } ],
-        [ "target", ProjectArchiveBuilder::TARGET ],
+        [ "target", build.target.name ],
         [ "callback_url", resolved_callback_url ]
       ],
       "multipart/form-data"

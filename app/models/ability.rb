@@ -58,6 +58,14 @@ class Ability
     # Targets and builds belonging to own projects. Build volume is bounded by the rate
     # limit and concurrency cap in BuildsController rather than by who is signed in.
     can :manage, Target, project: { user_id: user.id }
+    # Creating one more is additionally bounded by quota. The `cannot` is required: a
+    # block that returns false does not *match*, so without it CanCan would fall back to
+    # the broader :manage rule above and allow the create anyway.
+    cannot :create, Target
+    can :create, Target do |target|
+      target.project&.user_id == user.id &&
+        target.project.targets.count < user.target_quota
+    end
     can :manage, Build, project: { user_id: user.id }
 
     can :subscribe, Announcement

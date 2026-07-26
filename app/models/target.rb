@@ -18,8 +18,34 @@ class Target < ApplicationRecord
   belongs_to :current_build, class_name: "Build", optional: true
   belongs_to :latest_build, class_name: "Build", optional: true
 
-  enum :output_format, { html: 0, pdf: 1, epub: 2, braille: 3, scorm: 4 },
-       suffix: true, validate: true
+  # Mirrors the @format attribute in PreTeXt's project.ptx schema
+  # (PreTeXtBook/pretext-cli, schema/project-ptx.rnc). Note there is deliberately no
+  # `scorm`: the schema has no such format, and a SCORM package is an html target with
+  # compression="scorm". Value 4 was briefly `scorm` before any row used it.
+  enum :output_format, {
+    html: 0, pdf: 1, epub: 2, braille: 3, latex: 4, kindle: 5, revealjs: 6
+  }, suffix: true, validate: true
+
+  # The schema allows compression only on html (zip or scorm).
+  COMPRESSIONS = %w[ zip scorm ].freeze
+  validates :compression, inclusion: { in: COMPRESSIONS }, allow_blank: true
+  validate :compression_only_on_html
+
+  # Formats whose output is one file, and which accept @output-filename in the manifest
+  # so we get to choose what it is called. braille is single-file too but the schema
+  # gives it no output-filename attribute, so its name is discovered after the build.
+  NAMEABLE_OUTPUT = {
+    "pdf" => "pdf", "latex" => "tex", "epub" => "epub", "kindle" => "epub",
+    "revealjs" => "html"
+  }.freeze
+
+  # What a finished build of this format leaves behind, used to pick the entry file out
+  # of the imported output when the manifest could not name it for us.
+  OUTPUT_EXTENSIONS = {
+    "pdf" => %w[ .pdf ], "latex" => %w[ .tex ], "epub" => %w[ .epub ],
+    "kindle" => %w[ .epub .mobi ], "braille" => %w[ .brf .txt ],
+    "html" => %w[ .html ], "revealjs" => %w[ .html ]
+  }.freeze
 
   # `name` is written straight into project.ptx, so it has to be a legal target name.
   # REF_REGEX (config/initializers/constants.rb) is already exactly that rule.
@@ -33,6 +59,28 @@ class Target < ApplicationRecord
 
   def display_label
     label.presence || name.humanize
+  end
+
+  # Whole-site output the visitor browses, versus one file they open or download. Drives
+  # whether the UI says "View" or "Download", and whether publishing points at an
+  # index.html or at the artifact itself.
+  def site?
+    html_output_format? && compression.blank?
+  end
+
+  # The filename we ask PreTeXt to produce, where the manifest lets us name it. Fixing it
+  # to the target name means the entry point is known before the build even runs.
+  def output_filename
+    ext = NAMEABLE_OUTPUT[output_format]
+    return nil if ext.nil?
+
+    "#{name}.#{ext}"
+  end
+
+  # Where a reader should be sent. Prefers what the build actually reported, since only
+  # the build knows what braille or a compressed target really produced.
+  def entry_path
+    current_build&.entry_path || (site? ? "index.html" : output_filename)
   end
 
   def building?
@@ -88,4 +136,12 @@ class Target < ApplicationRecord
                    last_built_at: current&.created_at,
                    updated_at: Time.current)
   end
+
+  private
+
+    def compression_only_on_html
+      return if compression.blank? || html_output_format?
+
+      errors.add(:compression, "is only available for html targets")
+    end
 end

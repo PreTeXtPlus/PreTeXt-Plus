@@ -34,8 +34,8 @@
   <% end %>
 
   <div class="mt-6 flex flex-wrap items-center gap-3 border-t border-gray-200 pt-5">
-    <% if @build.success? %>
-      <%= link_to "View output", build_file_path(@build, "index.html"),
+    <% if @build.success? && @build.entry_path.present? %>
+      <%= link_to "View output", build_file_path(@build, @build.entry_path),
             class: "rounded-md border border-gray-300 px-3 py-2 text-sm hover:bg-gray-50",
             target: "_blank", rel: "noopener", data: { turbo: false } %>
     <% end %>

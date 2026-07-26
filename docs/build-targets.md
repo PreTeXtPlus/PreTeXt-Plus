@@ -1,7 +1,7 @@
 # Build targets
 
 Plan of record for turning the single hardcoded `web` build into a set of user-managed
-output targets (html, pdf, epub, braille, scorm, and custom variants).
+output targets (html, pdf, epub, kindle, braille, revealjs, latex, and custom variants).
 
 Companion design docs (clickable mockups of the three screens):
 
@@ -121,7 +121,9 @@ that reads like a typo. Use `output_format`, which also matches `Division#source
 | `targets` | new table, uuid pk | The persistent output. |
 | `targets.current_build_id` | uuid | Latest successful build — what readers see. |
 | `targets.latest_build_id` | uuid | Most recent attempt — what the state pill reports. Added in PR 2, once it became clear `Target#state` could not be query-free without it. |
+| `targets.compression` | string | `zip` or `scorm`, html only. PreTeXt has no `scorm` *format*; packaging is a separate axis. Added in PR 4. |
 | `builds.target_id` | uuid, not null, fk | A build is an attempt at a target. `project_id` stays as a denormalization so existing nested routes keep working. |
+| `builds.entry_path` | string | What to open for this build — `index.html` for a site, the artifact for a pdf. Detected at import. Added in PR 4. |
 | `projects.source_updated_at` | datetime, not null | When the author last changed source, docinfo or assets. |
 
 Both build pointers deliberately have **no** foreign key constraint. One would be circular
@@ -242,16 +244,40 @@ so the built page's relative links resolve.
 > feature touching `localStorage` (Runestone progress, knowl state) would start throwing.
 > That needs testing against a real build before it could ship, so nothing was applied.
 
-### PR 4 — More formats  *(gated on build-server support)*
+### PR 4 — More formats — **done**
 
-- `ProjectArchiveBuilder::TARGET` disappears; `project.ptx` lists every target.
-- `FullBuildJob` submits `build.target.name`.
-- `FullBuildArtifactJob` strips `"#{build.target.name}/"` instead of the constant.
-- `Target#entry_path` — a PDF build produces one file, not a site, and
-  `BuildFilesController` currently defaults a blank path to `index.html`.
-- "+ Add output" UI; gate non-html formats at the ability layer, not just the view.
-- A target quota on `User` mirroring `project_quota`. Build minutes are the real cost centre
-  and nothing bounds them today, because only admins could build.
+- `ProjectArchiveBuilder::TARGET` is gone; `project.ptx` lists every target.
+- `FullBuildJob` submits `build.target.name`; `FullBuildArtifactJob` strips
+  `"#{build.target.name}/"`.
+- `builds.entry_path`, detected at import; `Target#entry_path` prefers it.
+- "+ Add output" UI, and `User#target_quota` (4 free / 12 subscribed / 50 admin).
+
+**The format list is not what PR 1 guessed.** PreTeXt's own
+[`schema/project-ptx.rnc`](https://github.com/PreTeXtBook/pretext-cli/blob/main/schema/project-ptx.rnc)
+is authoritative: `@format` is one of `html`, `pdf`, `latex`, `epub`, `kindle`,
+`braille`, `revealjs`, `beamer`, `webwork`, `custom`.
+
+- **There is no `scorm` format.** A SCORM package is
+  `<target format="html" compression="scorm">`, so packaging is a separate axis and
+  `targets.compression` carries it. The PR 1 enum had `scorm` as a *format*, which would
+  have produced a manifest the CLI rejects. Enum value 4 was reused for `latex`, safe
+  only because no row had ever used it.
+- A test asserts every enum value is one the schema accepts, so a future format cannot
+  silently break every build of that target.
+
+**Entry points are recorded, not guessed.** The schema allows `@output-filename` on
+`pdf`, `latex`, `epub`, `kindle` and `revealjs`, so the manifest names those artifacts
+after the target and their path is known before the build runs. `braille` takes no such
+attribute, so `FullBuildArtifactJob` falls back to the shallowest file with an extension
+the format is known to produce. Either way the answer is stored on the build, so
+publishing a PDF lands on the PDF rather than a nonexistent `index.html`.
+
+`output-dir` is written explicitly for every target rather than relying on the CLI's
+default, because the artifact job strips exactly that prefix off the returned zip.
+
+**Formats are not gated by subscription.** The plan suggested gating non-html formats on
+`subscribed?`; that is a monetization decision that is still open, so what shipped is a
+cost bound (`target_quota`) rather than a paywall. Adding a gate later is one ability rule.
 
 ### PR 5 — Retire the quick build  *(optional, last)*
 
@@ -290,5 +316,7 @@ build.
 |---|---|---|
 | Can two targets share a format? | PR 1 | **Yes** — consistent with how the CLI uses `project.ptx`. `name` is the unique key, not `output_format`. |
 | Does a published output follow the latest good build, or pin to a chosen one? | PR 3 | Follow the latest. `current_build_id` is already a pointer, so pinning is a later feature that writes to it manually rather than a schema change. |
-| Does publishing cost a subscription? | PR 3 | Open. Suggest no, but cap the number of published targets for free accounts. |
-| What bounds build minutes? | PR 4 | Open. Suggest a target quota plus a rate limit on `builds#create`. |
+| Does publishing cost a subscription? | PR 3 | **Still open.** Shipped free and uncapped. Suggest no, but cap published targets for free accounts. |
+| Are non-html formats a paid feature? | PR 4 | **Still open.** Shipped free, bounded only by `target_quota`. |
+| What bounds build minutes? | PR 4 | **Answered:** builds are open to every owner, bounded by a 20/hour rate limit, `MAX_CONCURRENT_BUILDS = 3` in flight per user, and `User#target_quota`. |
+| Should published output move to its own origin? | — | **Open, and the most consequential.** See the warning under PR 3. |
