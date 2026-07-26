@@ -224,25 +224,10 @@ deliberately explicit, so it had to be named).
 to an explicit `/o/x/web/index.html`, which puts the visitor one level inside the target
 so the built page's relative links resolve.
 
-> ### ⚠ Unresolved before publishing is promoted: user content on the primary origin
->
-> Published output is user-authored HTML+JS served from `pretext.plus` itself, now
-> anonymously reachable by design. Any script in a published document runs with the
-> application's origin: it can make credentialed same-origin requests as a logged-in
-> visitor, read a CSRF token out of a fetched page, and phish from a trusted URL. Session
-> cookies are `httponly; samesite=lax`, which blocks cookie theft and cross-site CSRF but
-> not same-origin fetches from a page a victim actually visits. The app currently sets no
-> CSP at all (`config/initializers/content_security_policy.rb` is entirely commented out).
->
-> This is not new — `projects#share` and `/builds/:id/files/...` already served user HTML —
-> but publishing turns it into a promoted, shareable, anonymous surface, and the URL shape
-> is being fixed now, which is the expensive thing to change later.
->
-> **Recommended:** serve published output from a separate origin, the way GitHub uses
-> `githubusercontent.com`. A CSP `sandbox` directive is the cheap alternative and would
-> neutralize same-origin access, but sandboxing forces an opaque origin, so any PreTeXt
-> feature touching `localStorage` (Runestone progress, knowl state) would start throwing.
-> That needs testing against a real build before it could ship, so nothing was applied.
+> ⚠ Published output is user-authored HTML **and JavaScript** served from the
+> application's own origin. This predates PR 3 but publishing widens it, and the URL shape
+> is now fixed. Nothing was applied; see
+> [Open security decision](#open-security-decision-user-content-on-the-primary-origin).
 
 ### PR 4 — More formats — **done**
 
@@ -310,6 +295,88 @@ build.
 
 ---
 
+## Open security decision: user content on the primary origin
+
+Published output is served from `pretext.plus` itself and is anonymously reachable by
+design. The question is whether an author can get JavaScript into it. They can.
+
+### "PreTeXt transforms the XML, so the output is safe" — it isn't
+
+PreTeXt is a document compiler, not a sanitizer, and embedding author JavaScript is a
+documented feature, because interactive mathematics figures (JSXGraph, D3, GeoGebra)
+require it. From PreTeXt's own sample article,
+[Interactive Elements, Authored in Javascript](https://pretextbook.org/examples/sample-article/html/section-interactive-authored.html):
+
+> "add `<script>` elements within an interactive that contain properly escaped JS code.
+> These elements will be placed at the end of the document."
+
+`<interactive>` also takes an `@source` attribute pointing at a JavaScript file, and asset
+uploads have no content-type restriction — `:file` passes straight through in
+`ProjectsController#project_params`.
+
+Nothing in the app sanitizes `pretext_source`. The only `sanitize` calls in `app/` are on
+admin-authored announcement markdown.
+
+### What an attacker gets
+
+Registration is open, so the chain is: sign up → author a document containing a
+`<script>` → publish → share the link. Any **signed-in** PreTeXt.Plus user who opens it
+runs that script on our origin.
+
+Already mitigated by the current cookie settings:
+
+| Attack | Status |
+|---|---|
+| Stealing the session cookie | Blocked — `httponly` |
+| Cross-site CSRF | Blocked — `samesite=lax` |
+| Credentialed **same-origin** `fetch` | **Not blocked** |
+
+That last row is the exposure. A script on a published page can read the visitor's
+`/projects.json`, fetch a page to scrape the CSRF token out of it, and then POST — delete
+their projects, change their account email. Data theft and account takeover against anyone
+who clicks a shared link, in a community whose whole habit is sharing document links.
+
+The app sets no CSP at all: `config/initializers/content_security_policy.rb` is entirely
+commented out.
+
+### Not introduced by this work
+
+`projects#share` is already `allow_unauthenticated_access` and renders `html_source`
+inline to anyone, so the vector exists on `main` today. PR 3 widens it — full PreTeXt
+builds with complete interactive support, at permanent shareable URLs — rather than
+creating it. This is a roadmap item, not a release blocker.
+
+### Options
+
+| Option | Cost | Leaves open |
+|---|---|---|
+| **Separate registrable domain** (`pretextusercontent.com`), as GitHub does | DNS, cert, proxy config | Nothing |
+| **Subdomain** (`content.pretext.plus`) | DNS, cert, a host constraint on `PublishedController` | Same *site*, so cookies still attach on requests to the parent; and a subdomain can shadow a parent-domain cookie |
+| CSP `sandbox` | One header | **Not viable** — forces an opaque origin, so PreTeXt's `localStorage` use (Runestone progress, knowl state) starts throwing |
+
+A subdomain is probably sufficient and much cheaper than a separate domain. There is no
+`session_store` initializer, so Rails defaults to a **host-only** session cookie: from
+`content.pretext.plus`, a `fetch` to `pretext.plus` becomes cross-origin, we send no CORS
+headers, so the response is unreadable and the CSRF token cannot be stolen.
+
+To close the cookie-shadowing caveat, rename the session cookie with the `__Host-` prefix.
+`__Host-` cookies require `Secure` and `Path=/` and forbid a `Domain` attribute, so a
+subdomain cannot overwrite them.
+
+### To decide
+
+1. Subdomain or separate domain?
+2. Whether existing `/o/...` links must keep working after the move (they would need a
+   redirect from the old origin, which reintroduces nothing — the redirect target is what
+   matters).
+3. Whether `projects#share` moves too, or is simply retired with PR 5, which removes the
+   older instance of the same problem.
+
+The Rails side is small — a host constraint on `PublishedController` plus URL helper
+changes. DNS, TLS and Kamal/proxy config are not.
+
+---
+
 ## Decisions
 
 | Question | Blocks | Answer |
@@ -319,4 +386,4 @@ build.
 | Does publishing cost a subscription? | PR 3 | **Still open.** Shipped free and uncapped. Suggest no, but cap published targets for free accounts. |
 | Are non-html formats a paid feature? | PR 4 | **Still open.** Shipped free, bounded only by `target_quota`. |
 | What bounds build minutes? | PR 4 | **Answered:** builds are open to every owner, bounded by a 20/hour rate limit, `MAX_CONCURRENT_BUILDS = 3` in flight per user, and `User#target_quota`. |
-| Should published output move to its own origin? | — | **Open, and the most consequential.** See the warning under PR 3. |
+| Should published output move to its own origin? | — | **Open, and the most consequential.** PreTeXt embeds author JavaScript by design, so published output can run scripts on our origin. See [Open security decision](#open-security-decision-user-content-on-the-primary-origin). |
