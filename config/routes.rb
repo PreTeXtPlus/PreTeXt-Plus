@@ -38,7 +38,14 @@ Rails.application.routes.draw do
     end
   end
   resources :projects do
-    resources :builds, only: [ :index, :show, :create, :destroy ] do
+    resources :targets, only: [ :show, :create, :update, :destroy ] do
+      # Builds are always attempts at a target, so that is where they are created.
+      resources :builds, only: [ :create ]
+    end
+    # Kept nested under project rather than target: full_callback's absolute URL is
+    # baked into in-flight submissions by FullBuildJob, so moving it would drop the
+    # webhook for every build already running at deploy time.
+    resources :builds, only: [ :show, :destroy ] do
       # Async status webhook from the full build server; authenticated by HMAC
       # signature, not login (see BuildCallbacksController).
       member do

@@ -58,6 +58,25 @@ class TargetTest < ActiveSupport::TestCase
     end
   end
 
+  test "both build pointers stay in step with the builds themselves" do
+    target = targets(:one_print)
+    assert_nil target.latest_build_id
+    assert_nil target.current_build_id
+
+    ok = target.builds.create!(created_at: 2.days.ago)
+    ok.mark!(:success)
+    target.reload
+    assert_equal ok, target.latest_build
+    assert_equal ok, target.current_build
+
+    # A later failure moves latest_build but must leave current_build alone.
+    bad = target.builds.create!(created_at: 1.day.ago)
+    bad.mark!(:failed)
+    target.reload
+    assert_equal bad, target.latest_build
+    assert_equal ok, target.current_build
+  end
+
   test "state is failed when the last attempt failed, even though output is still live" do
     target = targets(:two_web)
     assert_equal :failed, target.state
@@ -87,7 +106,7 @@ class TargetTest < ActiveSupport::TestCase
 
   # ---- current_build bookkeeping ----
 
-  test "adopt! promotes a successful build and ignores everything else" do
+  test "only a successful build becomes the current one" do
     target = targets(:one_print)
     assert_nil target.current_build_id
 

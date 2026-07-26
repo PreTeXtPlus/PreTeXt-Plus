@@ -1,0 +1,48 @@
+<%# One output row on the project dashboard, and the unit Target#broadcast_row replaces
+    as a build progresses. Rendered from a background job during a broadcast, so it has
+    no session: no `can?`, no current_user. Authorization lives on the actions. %>
+<% state = target.state %>
+<div id="<%= dom_id target %>"
+     class="flex flex-col gap-3 rounded-lg border border-gray-200 border-l-4 <%= target_state_stripe(state) %> bg-white p-4 md:flex-row md:items-center md:gap-4">
+
+  <div class="min-w-0 md:w-52">
+    <p class="font-semibold text-gray-900"><%= target.display_label %></p>
+    <p class="font-mono text-xs text-gray-500"><%= target.output_format %> · <%= target.name %></p>
+  </div>
+
+  <div class="md:w-32"><%= target_state_pill(state) %></div>
+
+  <p class="flex-1 text-sm text-gray-600"><%= target_timing(target) %></p>
+
+  <div class="flex flex-wrap items-center gap-2">
+    <% if target.current_build.present? %>
+      <%= link_to "View", build_file_path(target.current_build, "index.html"),
+            class: "rounded-md border border-gray-300 px-2.5 py-1.5 text-sm hover:bg-gray-50",
+            target: "_blank", rel: "noopener", data: { turbo: false } %>
+      <% if target.current_build.zip.attached? %>
+        <%= link_to "Download", rails_blob_path(target.current_build.zip, disposition: "attachment"),
+              class: "rounded-md border border-gray-300 px-2.5 py-1.5 text-sm hover:bg-gray-50",
+              data: { turbo: false } %>
+      <% end %>
+    <% end %>
+
+    <% if state == :building %>
+      <span class="rounded-md px-2.5 py-1.5 text-sm text-gray-400">Building…</span>
+    <% else %>
+      <%# Only a row that wants attention gets a filled button. %>
+      <% emphasize = [ :stale, :never ].include?(state) %>
+      <%= button_to (state == :never ? "Build" : "Rebuild"),
+            project_target_builds_path(target.project, target),
+            class: class_names(
+              "cursor-pointer rounded-md px-2.5 py-1.5 text-sm font-medium",
+              "bg-indigo-600 text-white hover:bg-indigo-500" => emphasize,
+              "border border-gray-300 hover:bg-gray-50" => !emphasize
+            ) %>
+    <% end %>
+
+    <%= link_to "⋯", project_target_path(target.project, target),
+          class: "rounded-md border border-gray-300 px-2.5 py-1.5 text-sm hover:bg-gray-50",
+          aria: { label: "#{target.display_label} details" },
+          data: { turbo_frame: "drawer" } %>
+  </div>
+</div>

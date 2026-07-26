@@ -7,6 +7,7 @@ one_web:
   label: Website
   output_format: html
   position: 0
+  latest_build: in_progress
 
 # Two builds, both in flight -- exercises the `building` state.
 two_web:
@@ -15,9 +16,11 @@ two_web:
   label: Website
   output_format: html
   position: 0
-  # Points at the successful build even though a later build failed: a failed rebuild
-  # must not take a published output down. Exercises `failed` alongside a live output.
+  # current_build points at the successful build even though a *later* build failed: a
+  # failed rebuild must not take a published output down. This is the divergence between
+  # the two pointers that the whole design exists to represent.
   current_build: two
+  latest_build: failed
   last_built_at: <%= 3.days.ago.to_fs(:db) %>
 
 # A second html target on the same project. Names are unique within a project;

@@ -46,9 +46,10 @@ class Ability
     # Divisions belonging to own projects
     can :manage, Division, project: { user_id: user.id }
 
-    # For now, only admins can work with builds.
-    # # Builds belonging to own projects
-    # can :manage, Build, project: { user_id: user.id }
+    # Targets and builds belonging to own projects. Build volume is bounded by the rate
+    # limit and concurrency cap in BuildsController rather than by who is signed in.
+    can :manage, Target, project: { user_id: user.id }
+    can :manage, Build, project: { user_id: user.id }
 
     can :subscribe, Announcement
 

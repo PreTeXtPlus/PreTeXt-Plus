@@ -40,49 +40,51 @@
     <% end %>
     <% if @projects.any? %>
       <% @projects.each do |project| %>
-        <% updated_at_local = project.updated_at.localtime %>
-        <%= link_to project, class: "block rounded-xl bg-white p-4 m-3 ring-2 ring-gray-100 hover:ring-indigo-200 sm:p-6 lg:p-8", data: { turbo: false } do %>
-          <span class="flex items-start sm:gap-8">
-            <span class="hidden sm:grid sm:size-20 sm:shrink-0 sm:place-content-center" aria-hidden="true">
-              <% if project.root_division&.latex_source_format? %>
-                <%= image_tag "latex-pretext-logo.svg", alt: "PreTeXt logo" %>
-                <% elsif project.root_division&.markdown_source_format? %>
-                <%= image_tag "markdown-pretext-logo.svg", alt: "PreTeXt logo" %>
-              <% else %>
-                <%= image_tag "pretext-logo.svg", alt: "PreTeXt logo" %>
-              <% end %>
-            </span>
-
-            <span>
-              <% if project.root_division&.latex_source_format? %>
-                <strong class="rounded-sm border border-orange-500 bg-orange-500 px-3 py-1.5 text-[10px] font-medium text-white">
-                  LaTeX-style PreTeXt
-                </strong>
-              <% elsif project.root_division&.markdown_source_format? %>
-                <strong class="rounded-sm border border-purple-500 bg-purple-500 px-3 py-1.5 text-[10px] font-medium text-white">
-                  Markdown-style PreTeXt
-                </strong>
-              <% else %>
-                <strong class="rounded-sm border border-indigo-500 bg-indigo-500 px-3 py-1.5 text-[10px] font-medium text-white">
-                  PreTeXt
-                </strong>
-              <% end %>
-
-              <h3 class="mt-4 text-lg font-medium sm:text-xl">
-                <%= project.title %>
-              </h3>
-
-              <p class="mt-1 text-sm text-gray-700">
-                Last updated:
-                <%= tag.time(
-                      "#{time_ago_in_words(project.updated_at)} ago",
-                      datetime: project.updated_at.iso8601,
-                      title: updated_at_local.strftime('%B %-d, %Y at %-I:%M %p %Z')
-                    ) %>
-              </p>
-            </span>
+        <% edited_local = project.source_updated_at.localtime %>
+        <div class="m-3 flex flex-col gap-4 rounded-xl bg-white p-4 ring-2 ring-gray-100 hover:ring-indigo-200 sm:flex-row sm:items-center sm:p-6">
+          <span class="hidden sm:grid sm:size-14 sm:shrink-0 sm:place-content-center" aria-hidden="true">
+            <% if project.root_division&.latex_source_format? %>
+              <%= image_tag "latex-pretext-logo.svg", alt: "" %>
+            <% elsif project.root_division&.markdown_source_format? %>
+              <%= image_tag "markdown-pretext-logo.svg", alt: "" %>
+            <% else %>
+              <%= image_tag "pretext-logo.svg", alt: "" %>
+            <% end %>
           </span>
-        <% end %>
+
+          <div class="min-w-0 flex-1">
+            <h3 class="text-lg font-medium">
+              <%= link_to project.title, project, class: "hover:underline", data: { turbo: false } %>
+            </h3>
+
+            <%# The whole status report for this project at a glance: one chip per output,
+                so scanning the column answers "what needs rebuilding?" across every project. %>
+            <div class="mt-2 flex flex-wrap items-center gap-1.5">
+              <% project.targets.each do |target| %>
+                <% state = target.state %>
+                <% label, classes = TargetsHelper::STATE_PILL.fetch(state) %>
+                <%= link_to project_target_path(project, target),
+                      class: "inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 font-mono text-xs font-semibold #{classes}",
+                      title: "#{target.display_label} — #{label.downcase}", data: { turbo: false } do %>
+                  <span class="size-1.5 rounded-full bg-current <%= 'animate-pulse' if state == :building %>"></span>
+                  <%= target.display_label %>
+                <% end %>
+              <% end %>
+            </div>
+
+            <p class="mt-2 text-sm text-gray-700">
+              Edited
+              <%= tag.time("#{time_ago_in_words(project.source_updated_at)} ago",
+                    datetime: project.source_updated_at.iso8601,
+                    title: edited_local.strftime('%B %-d, %Y at %-I:%M %p %Z')) %>
+            </p>
+          </div>
+
+          <div class="flex shrink-0 items-center gap-2">
+            <%= link_to "Open", project, class: "rounded-md border border-gray-300 px-3 py-2 text-sm font-medium hover:bg-gray-50", data: { turbo: false } %>
+            <%= link_to "Edit", edit_project_path(project), class: "rounded-md bg-indigo-600 px-3 py-2 text-sm font-medium text-white hover:bg-indigo-500", data: { turbo: false } %>
+          </div>
+        </div>
       <% end %>
     <% else %>
       <p class="text-center my-10">No projects found.</p>

@@ -13,7 +13,8 @@ class Build < ApplicationRecord
   default_scope { order(created_at: :desc) }
 
   before_validation :inherit_project_from_target
-  after_destroy :release_from_target
+  after_create :sync_target
+  after_destroy :sync_target
 
   # The only way a build's status should ever change.
   #
@@ -27,7 +28,8 @@ class Build < ApplicationRecord
   def mark!(status, **attrs)
     update_columns(attrs.merge(status: Build.statuses.fetch(status.to_s),
                                updated_at: Time.current))
-    target.adopt!(self)
+    target.sync_from_builds!
+    target.broadcast_row
     self
   end
 
@@ -37,11 +39,10 @@ class Build < ApplicationRecord
       self.project ||= target&.project
     end
 
-    def release_from_target
-      # When the whole target is going away, its pointer goes with it.
+    def sync_target
+      # When the whole target is going away, its pointers go with it.
       return if destroyed_by_association
-      return unless target&.current_build_id == id
 
-      target.refresh_current_build!
+      target&.sync_from_builds!
     end
 end

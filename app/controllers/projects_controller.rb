@@ -11,7 +11,10 @@ class ProjectsController < ApplicationController
 
   # GET /projects
   def index
-    @projects = Project.where user: current_user
+    # Each row renders a chip per target, and every chip's state reads both build
+    # pointers. Without eager loading that is two queries per target per project; with
+    # it, and because Target#state touches nothing else, the page is a fixed handful.
+    @projects = Project.where(user: current_user).includes(targets: [ :current_build, :latest_build ])
   end
 
   # GET /projects/1 or /projects/1.json

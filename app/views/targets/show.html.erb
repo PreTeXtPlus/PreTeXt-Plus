@@ -1,0 +1,104 @@
+<%# Loaded into the "drawer" turbo frame on the project dashboard. Rendered as a full
+    page too (direct link, no-JS), which is why the frame wraps the panel rather than
+    the layout wrapping the frame. %>
+<%= turbo_frame_tag "drawer" do %>
+  <div data-controller="drawer" class="fixed inset-0 z-30 flex justify-end">
+    <div class="absolute inset-0 bg-gray-900/30" data-action="click->drawer#close"></div>
+
+    <div role="dialog" aria-modal="true" aria-label="<%= @target.display_label %> details"
+         class="relative flex h-full w-full max-w-xl flex-col overflow-y-auto bg-white shadow-xl">
+
+      <div class="flex items-start justify-between gap-4 border-b border-gray-200 p-5">
+        <div>
+          <h2 class="text-lg font-semibold"><%= @target.display_label %></h2>
+          <p class="font-mono text-xs text-gray-500"><%= @target.output_format %> · <%= @target.name %></p>
+        </div>
+        <div class="flex items-center gap-2">
+          <% unless @target.state == :building %>
+            <%= button_to "Rebuild", project_target_builds_path(@project, @target),
+                  class: "cursor-pointer rounded-md border border-gray-300 px-2.5 py-1.5 text-sm hover:bg-gray-50" %>
+          <% end %>
+          <button type="button" data-action="drawer#close" aria-label="Close"
+                  class="cursor-pointer rounded-md px-2.5 py-1.5 text-sm text-gray-500 hover:bg-gray-100">✕</button>
+        </div>
+      </div>
+
+      <div class="space-y-2 border-b border-gray-200 p-5 text-sm">
+        <div class="flex gap-3">
+          <span class="w-28 shrink-0 font-mono text-xs uppercase tracking-wider text-gray-500">State</span>
+          <%= target_state_pill(@target.state) %>
+        </div>
+        <div class="flex gap-3">
+          <span class="w-28 shrink-0 font-mono text-xs uppercase tracking-wider text-gray-500">Live now</span>
+          <span>
+            <% if @target.current_build %>
+              Build from <%= @target.last_built_at.to_fs(:long) %>
+            <% else %>
+              Nothing built yet
+            <% end %>
+          </span>
+        </div>
+        <div class="flex gap-3">
+          <span class="w-28 shrink-0 font-mono text-xs uppercase tracking-wider text-gray-500">Last try</span>
+          <span>
+            <%= @target.latest_build ? "#{@target.latest_build.created_at.to_fs(:long)} — #{@target.latest_build.status.humanize.downcase}" : "—" %>
+          </span>
+        </div>
+      </div>
+
+      <% if (log = @target.latest_build&.log).present? %>
+        <div class="border-b border-gray-200 p-5">
+          <p class="font-mono text-xs uppercase tracking-wider text-gray-500">Build log</p>
+          <pre class="mt-2 max-h-64 overflow-auto rounded-lg bg-gray-900 p-3 text-xs text-gray-100 whitespace-pre-wrap"><%= log %></pre>
+        </div>
+      <% end %>
+
+      <div class="border-b border-gray-200 p-5">
+        <p class="font-mono text-xs uppercase tracking-wider text-gray-500">History</p>
+        <% if @builds.any? %>
+          <table class="mt-2 w-full text-sm">
+            <tbody class="divide-y divide-gray-100">
+              <% @builds.each do |build| %>
+                <tr>
+                  <td class="py-2 pr-3 tabular-nums text-gray-600"><%= build.created_at.to_fs(:short) %></td>
+                  <td class="py-2 pr-3"><%= build_history_pill(build, @target) %></td>
+                  <td class="py-2 text-right">
+                    <% if build.success? %>
+                      <%= link_to "View", build_file_path(build, "index.html"),
+                            class: "text-indigo-700 hover:underline", target: "_blank", rel: "noopener",
+                            data: { turbo: false } %>
+                    <% end %>
+                    <%= link_to "Log", project_build_path(@project, build),
+                          class: "ml-3 text-indigo-700 hover:underline", data: { turbo_frame: "_top" } %>
+                  </td>
+                </tr>
+              <% end %>
+            </tbody>
+          </table>
+        <% else %>
+          <p class="mt-2 text-sm text-gray-600">No builds yet.</p>
+        <% end %>
+      </div>
+
+      <div class="p-5">
+        <p class="font-mono text-xs uppercase tracking-wider text-gray-500">Settings</p>
+        <%= form_with model: [ @project, @target ], class: "mt-2 flex flex-wrap items-end gap-3" do |form| %>
+          <div>
+            <%= form.label :label, "Name", class: "block text-xs text-gray-600" %>
+            <%= form.text_field :label, placeholder: @target.name.humanize,
+                  class: "mt-1 rounded-md border border-gray-300 px-2 py-1.5 text-sm" %>
+          </div>
+          <div>
+            <%= form.label :name, "Target name in project.ptx", class: "block text-xs text-gray-600" %>
+            <%= form.text_field :name, class: "mt-1 rounded-md border border-gray-300 px-2 py-1.5 font-mono text-sm" %>
+          </div>
+          <%= form.submit "Save", class: "cursor-pointer rounded-md border border-gray-300 px-3 py-2 text-sm hover:bg-gray-50" %>
+        <% end %>
+
+        <%= button_to "Remove this output", project_target_path(@project, @target), method: :delete,
+              class: "mt-4 cursor-pointer text-sm text-red-700 hover:underline",
+              data: { turbo_confirm: "Remove “#{@target.display_label}” and its #{pluralize(@target.builds.size, 'build')}?" } %>
+      </div>
+    </div>
+  </div>
+<% end %>

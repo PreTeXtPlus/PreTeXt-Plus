@@ -25,8 +25,15 @@ formats are not.
 ```
 Project ──< Target ──< Build ──< BuildFile
                 │
-                └── current_build ── the latest *successful* build (what readers see)
+                ├── current_build ── the latest *successful* build (what readers see)
+                └── latest_build  ── the most recent attempt (what the pill reports)
 ```
+
+Both pointers are denormalized onto `targets` and kept in step by
+`Target#sync_from_builds!`, called from `Build` on create, destroy and every status
+transition. They diverge exactly when a rebuild fails over a published output. Keeping
+both on the row is also what makes `Target#state` free of queries, so a page rendering
+many targets costs a fixed number.
 
 ### Five states
 
@@ -140,7 +147,7 @@ builds pages keep working throughout.
 - `Division` / `Asset` touch `source_updated_at`.
 - `Project` gets a default `web` target on create, and copies targets in `full_dup`.
 
-### PR 2 — The dashboard  *(iframe out, target rows in)*
+### PR 2 — The dashboard  *(iframe out, target rows in)* — **done**
 
 - `projects/show` becomes the target list. Delete `projects/_project.html.erb` (the preview
   iframe) and both `builds/` views.
@@ -151,18 +158,32 @@ builds pages keep working throughout.
   `<meta http-equiv="refresh" content="5">` at the top of `builds/show`.
 - Projects index: cards become rows with an `Edit` button and a chip strip.
 
-**Dev caveat:** `config/cable.yml` uses the `async` adapter in development, which only
-delivers within one process. Builds broadcast from a `solid_queue` worker — a separate process
-under `bin/dev` — so rows will not live-update locally until dev points at `solid_cable` too.
+**Dev cable, as shipped:** development now uses the `postgresql` adapter rather than
+`async`. Builds broadcast from a `solid_queue` worker — a separate process under `bin/dev`
+— and `async` only delivers within one process, so rows would have live-updated in
+production and looked frozen locally. `postgresql` uses LISTEN/NOTIFY on the primary
+database, so it crosses the process boundary without the separate `cable` database that
+production's `solid_cable` needs and development does not have.
 
-**N+1:** eager-load `Project.where(user: current_user).includes(targets: :current_build)`.
-`current_build_id` and `last_built_at` are denormalized onto `targets` precisely so the index
-is one query. Guard it with `assert_queries_count`.
+**N+1, as shipped:** `includes(targets: [ :current_build, :latest_build ])`, guarded by a
+query-count test that adds targets and asserts the count does not move. The first cut
+eager-loaded only `current_build` and still went N+1, because `Target#state` also called
+`building?` and `latest_build`, each a query per target. That is what motivated the second
+denormalized pointer.
+
+**Build access, as shipped:** opened to all project owners rather than admins only — the
+dashboard is not worth much if the only thing most users can do is look at it. Spend is
+bounded in `BuildsController` instead: a 20/hour rate limit, and `MAX_CONCURRENT_BUILDS`
+in-flight builds per user.
+
+**Still on the quick build:** `projects#share` remains linked from the dashboard as
+"Quick preview", and stays embedded on the public `projects#source` page, until publishing
+gives every project a real html build to point at. Retired in PR 5.
 
 ### PR 3 — Publish and download  *(the part authors are asking for)*
 
-- `Ability`: replace the commented-out builds rule with `can :manage, Target` and
-  `can :manage, Build` scoped to the owner, plus an anonymous read rule:
+- `Ability`: the owner rules (`can :manage, Target` / `can :manage, Build`) landed in
+  PR 2. What remains is the anonymous read rule:
 
   ```ruby
   can :read, Build do |build|

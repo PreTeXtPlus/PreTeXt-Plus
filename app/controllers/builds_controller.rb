@@ -1,43 +1,74 @@
 class BuildsController < ApplicationController
   load_and_authorize_resource :project
-  load_and_authorize_resource :build, through: :project
+  load_and_authorize_resource :build, through: :project, except: :create
 
-  def index
-  end
+  before_action :set_target, only: :create
+
+  # A build occupies a container on the build server for minutes at a time, so the cost
+  # of this endpoint is real and does not scale with how careful the caller is. Two
+  # independent bounds: a burst limit here, and a cap on how many builds one user may
+  # have running at once (see #within_concurrency_cap?).
+  rate_limit to: 20, within: 1.hour, only: :create,
+             with: -> { reject_build("You've started a lot of builds recently. Please wait a few minutes and try again.") }
+
+  MAX_CONCURRENT_BUILDS = 3
 
   def show
   end
 
   def check_status
     result = BuildStatusChecker.new(@build).check!
-    if result.ok?
-      redirect_to project_build_path(@project, @build), notice: result.message
-    else
-      redirect_to project_build_path(@project, @build), alert: result.message
-    end
+    redirect_to project_target_path(@project, @build.target),
+                (result.ok? ? :notice : :alert) => result.message
   end
 
   def create
-    # A build now belongs to a target. Until the dashboard lets you pick one (PR 2),
-    # fall back to the project's first -- which for every existing project is `web`.
-    @build.target ||= @project.targets.first
+    return reject_build("You already have #{MAX_CONCURRENT_BUILDS} builds running. Wait for one to finish.") unless within_concurrency_cap?
+
+    # project is set explicitly rather than left to Build's before_validation, because
+    # cancancan authorizes against build.project and `new` does not run validations.
+    @build = @target.builds.new(project: @project)
+    authorize! :create, @build
 
     if @build.save
       FullBuildJob.perform_later(@build)
-      redirect_to project_build_path(@project, @build), notice: "Build was successfully created."
+      # The row *is* the progress indicator: swap it into its building state in place
+      # rather than navigating to a page whose only job is to say "queued".
+      respond_to do |format|
+        format.turbo_stream do
+          render turbo_stream: turbo_stream.replace(
+            ActionView::RecordIdentifier.dom_id(@target),
+            partial: "targets/target", locals: { target: @target.reload }
+          )
+        end
+        format.html { redirect_to project_path(@project), notice: "Building #{@target.display_label}." }
+      end
     else
-      render :new, status: :unprocessable_entity
+      reject_build(@build.errors.full_messages.to_sentence)
     end
   end
 
   def destroy
+    target = @build.target
     @build.destroy!
-    redirect_to project_builds_path(@project), notice: "Build was successfully deleted.", status: :see_other
+    redirect_to project_target_path(@project, target), notice: "Build deleted.", status: :see_other
   end
 
   private
 
-    def build_params
-      params.permit(build: [ :status ]).fetch(:build, {})
+    def set_target
+      @target = @project.targets.find(params[:target_id])
+      authorize! :read, @target
+    end
+
+    def within_concurrency_cap?
+      Build.where(project_id: current_user.project_ids,
+                  status: Build.statuses.values_at(*Target::IN_FLIGHT)).count < MAX_CONCURRENT_BUILDS
+    end
+
+    # Turbo follows a redirect from a turbo_stream request as a full visit, so the flash
+    # renders normally and there is no separate error-stream path to maintain.
+    def reject_build(message)
+      redirect_to project_path(@project), alert: message
     end
 end

@@ -1,9 +1,10 @@
-# Async adapter only works within the same process, so for manually triggering cable updates from a console,
-# and seeing results in the browser, you must do so from the web console (running inside the dev process),
-# not a terminal started via bin/rails console! Add "console" to any action or any ERB template view
-# to make the web console appear.
+# Builds are broadcast from a solid_queue worker, which under bin/dev is a *separate
+# process* from the web server. The async adapter only delivers within one process, so
+# with it a target row would live-update in production and appear frozen in development.
+# The postgresql adapter uses LISTEN/NOTIFY on the primary database, so it crosses the
+# process boundary without needing the separate `cable` database production uses.
 development:
-  adapter: async
+  adapter: postgresql
 
 test:
   adapter: test
