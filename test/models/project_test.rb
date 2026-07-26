@@ -39,4 +39,91 @@ class ProjectTest < ActiveSupport::TestCase
     assert_equal original_id, division.reload.id
     assert_equal "new-xml-id", division.ref
   end
+
+  # ---- source_updated_at ----
+  #
+  # Regression tests for a confirmed bug: the editor saves through nested
+  # divisions_attributes, and because no attribute on the projects row itself changes,
+  # Rails never issues an UPDATE on the parent. So `updated_at` reported the last rename
+  # rather than the last edit, and build staleness had no timestamp to compare against.
+
+  test "editing a division through nested attributes bumps source_updated_at" do
+    project = projects(:one)
+    project.update_column(:source_updated_at, 3.days.ago)
+    division = project.root_division
+
+    stub_build_server do
+      project.update!(divisions_attributes: [ { id: division.id, source: "<section><title>Edited</title></section>" } ])
+    end
+
+    assert_operator project.reload.source_updated_at, :>, 1.minute.ago
+  end
+
+  test "editing a division also fixes the mis-sorted updated_at" do
+    project = projects(:one)
+    project.update_column(:updated_at, 3.days.ago)
+    division = project.root_division
+
+    stub_build_server do
+      project.update!(divisions_attributes: [ { id: division.id, source: "<section><title>Edited</title></section>" } ])
+    end
+
+    assert_operator project.reload.updated_at, :>, 1.minute.ago
+  end
+
+  test "changing an asset bumps source_updated_at" do
+    project = projects(:one)
+    project.update_column(:source_updated_at, 3.days.ago)
+
+    assets(:authored_one).update!(source: "<p>new</p>")
+
+    assert_operator project.reload.source_updated_at, :>, 1.minute.ago
+  end
+
+  test "changing the docinfo bumps source_updated_at" do
+    project = projects(:one)
+    project.update_column(:source_updated_at, 3.days.ago)
+
+    project.update!(docinfo: "<docinfo><macros>\\newcommand{\\Z}{\\mathbb Z}</macros></docinfo>")
+
+    assert_operator project.reload.source_updated_at, :>, 1.minute.ago
+  end
+
+  # The reason this is a separate column rather than a fix to updated_at: renaming must
+  # not mark every built target stale.
+  test "renaming a project does not bump source_updated_at" do
+    project = projects(:one)
+    was = 3.days.ago.change(usec: 0)
+    project.update_column(:source_updated_at, was)
+
+    project.update!(title: "A New Title")
+
+    assert_equal was, project.reload.source_updated_at
+  end
+
+  # ---- default target ----
+
+  test "a new project is created with a web html target" do
+    project = Project.create!(user: users(:one), title: "Fresh")
+
+    assert_equal 1, project.targets.count
+    target = project.targets.first
+    assert_equal "web", target.name
+    assert target.html_output_format?
+  end
+
+  test "full_dup copies target configuration but no build history" do
+    original = projects(:two)
+    assert original.targets.first.update(published: true)
+
+    copy = original.full_dup(users(:one))
+    assert copy.save
+
+    assert_equal original.targets.map(&:name).sort, copy.targets.map(&:name).sort
+    copy.targets.each do |target|
+      assert_not target.published?, "a copy must not inherit the original's public URLs"
+      assert_nil target.current_build_id
+      assert_empty target.builds
+    end
+  end
 end

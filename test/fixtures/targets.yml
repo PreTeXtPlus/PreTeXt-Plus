@@ -1,0 +1,38 @@
+# Every project has a `web` html target, mirroring both Project::DEFAULT_TARGET (what a
+# new project is created with) and the backfill in the CreateTargets migration.
+
+one_web:
+  project: one
+  name: web
+  label: Website
+  output_format: html
+  position: 0
+
+# Two builds, both in flight -- exercises the `building` state.
+two_web:
+  project: two
+  name: web
+  label: Website
+  output_format: html
+  position: 0
+  # Points at the successful build even though a later build failed: a failed rebuild
+  # must not take a published output down. Exercises `failed` alongside a live output.
+  current_build: two
+  last_built_at: <%= 3.days.ago.to_fs(:db) %>
+
+# A second html target on the same project. Names are unique within a project;
+# output_format deliberately is not -- this is how a "student"/"instructor" pair works,
+# and how PreTeXt-CLI treats <targets> in project.ptx.
+one_instructor:
+  project: one
+  name: instructor
+  label: Instructor edition
+  output_format: html
+  position: 1
+
+# Configured but never built -- exercises the `never` state.
+one_print:
+  project: one
+  name: print
+  output_format: pdf
+  position: 2

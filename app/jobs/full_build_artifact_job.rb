@@ -21,7 +21,7 @@ class FullBuildArtifactJob < ApplicationJob
     end
 
     unless response.is_a?(Net::HTTPSuccess)
-      build.update_column(:status, Build.statuses[:failed])
+      build.mark!(:failed)
       Rails.logger.error("Artifact fetch failed for build #{build.id} (HTTP #{response.code})")
       return
     end
@@ -57,9 +57,9 @@ class FullBuildArtifactJob < ApplicationJob
       content_type: "application/zip"
     )
 
-    build.update_column(:status, Build.statuses[:success])
+    build.mark!(:success)
   rescue => e
-    build.update_column(:status, Build.statuses[:failed])
+    build.mark!(:failed)
     raise e
   end
 end

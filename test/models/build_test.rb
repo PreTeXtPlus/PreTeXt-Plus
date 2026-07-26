@@ -5,8 +5,17 @@ class BuildTest < ActiveSupport::TestCase
     assert_equal projects(:one), builds(:one).project
   end
 
+  test "belongs to target" do
+    assert_equal targets(:one_web), builds(:one).target
+  end
+
+  test "project is inherited from the target when not given" do
+    build = Build.create!(target: targets(:one_instructor))
+    assert_equal projects(:one), build.project
+  end
+
   test "default status is pending" do
-    build = Build.new(project: projects(:one))
+    build = Build.new(target: targets(:one_web))
     assert build.pending?
   end
 
@@ -28,8 +37,45 @@ class BuildTest < ActiveSupport::TestCase
   end
 
   test "invalid status is rejected" do
-    build = Build.new(project: projects(:one), status: 99)
+    build = Build.new(target: targets(:one_web), status: 99)
     assert_not build.valid?
+  end
+
+  # ---- mark! ----
+  #
+  # The single funnel for status transitions. Every job and controller goes through it so
+  # that promoting a finished build (and, from PR 2, broadcasting the row) cannot be
+  # forgotten at a new transition site.
+
+  test "mark! sets the status and any extra columns" do
+    build = builds(:one)
+    build.mark!(:failed, log: "boom")
+
+    assert build.reload.failed?
+    assert_equal "boom", build.log
+  end
+
+  test "mark! rejects a status that is not in the enum" do
+    assert_raises(KeyError) { builds(:one).mark!(:exploded) }
+  end
+
+  test "mark!(:success) promotes the build on its target" do
+    build = builds(:one)
+    assert_nil build.target.current_build_id
+
+    build.mark!(:success)
+
+    assert_equal build, build.target.reload.current_build
+    assert_equal build.created_at, build.target.last_built_at
+  end
+
+  test "mark!(:failed) leaves an already-published output in place" do
+    target = targets(:two_web)
+    assert_equal builds(:two), target.current_build
+
+    target.builds.create!.mark!(:failed)
+
+    assert_equal builds(:two), target.reload.current_build
   end
 
   test "has many build_files" do

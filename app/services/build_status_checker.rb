@@ -58,7 +58,7 @@ class BuildStatusChecker
       Result.new(ok: true, message: "Build server reports success -- importing files now.")
     when "failed"
       Rails.logger.warn("Build #{@build.id} was in_progress locally but build server already reports failure -- full_callback was likely never received.")
-      @build.update_columns(status: Build.statuses[:failed], log: data["log"])
+      @build.mark!(:failed, log: data["log"])
       Result.new(ok: false, message: "Build server reports failure: #{data["log"].to_s.truncate(300)}")
     else
       Result.new(ok: true, message: "Build server reports status: #{data["status"]}.")

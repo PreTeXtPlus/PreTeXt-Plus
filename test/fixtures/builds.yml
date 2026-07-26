@@ -1,15 +1,29 @@
+# created_at is explicit because Target#latest_build orders by it, and fixtures loaded
+# in the same instant would make that ordering -- and every state derived from it --
+# nondeterministic.
+
 one:
   project: one
+  target: one_web
   status: pending
+  created_at: <%= 1.hour.ago.to_fs(:db) %>
 
 two:
   project: two
+  target: two_web
   status: success
+  created_at: <%= 3.days.ago.to_fs(:db) %>
 
 in_progress:
   project: one
+  target: one_web
   status: in_progress
+  created_at: <%= 30.minutes.ago.to_fs(:db) %>
 
+# Newer than the successful build on the same target, so two_web reads as `failed`
+# while still serving build `two` to readers.
 failed:
   project: two
+  target: two_web
   status: failed
+  created_at: <%= 1.day.ago.to_fs(:db) %>

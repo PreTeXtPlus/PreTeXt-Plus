@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_07_11_111301) do
+ActiveRecord::Schema[8.1].define(version: 2026_07_26_022310) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
   enable_extension "pgcrypto"
@@ -81,8 +81,10 @@ ActiveRecord::Schema[8.1].define(version: 2026_07_11_111301) do
     t.uuid "project_id", null: false
     t.string "remote_status_url"
     t.integer "status", default: 0, null: false
+    t.uuid "target_id", null: false
     t.datetime "updated_at", null: false
     t.index ["project_id"], name: "index_builds_on_project_id"
+    t.index ["target_id"], name: "index_builds_on_target_id"
   end
 
   create_table "divisions", id: :uuid, default: -> { "gen_random_uuid()" }, force: :cascade do |t|
@@ -201,6 +203,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_07_11_111301) do
     t.integer "document_type", default: 0, null: false
     t.text "html_source"
     t.text "pretext_source"
+    t.datetime "source_updated_at", default: -> { "CURRENT_TIMESTAMP" }, null: false
     t.string "title"
     t.datetime "updated_at", null: false
     t.boolean "use_common_docinfo", default: false, null: false
@@ -227,6 +230,21 @@ ActiveRecord::Schema[8.1].define(version: 2026_07_11_111301) do
     t.string "stripe_price_id"
     t.string "trial_date"
     t.datetime "updated_at", null: false
+  end
+
+  create_table "targets", id: :uuid, default: -> { "gen_random_uuid()" }, force: :cascade do |t|
+    t.datetime "created_at", null: false
+    t.uuid "current_build_id"
+    t.string "label"
+    t.datetime "last_built_at"
+    t.string "name", null: false
+    t.integer "output_format", default: 0, null: false
+    t.integer "position", default: 0, null: false
+    t.uuid "project_id", null: false
+    t.boolean "published", default: false, null: false
+    t.datetime "updated_at", null: false
+    t.index ["project_id", "name"], name: "index_targets_on_project_id_and_name", unique: true
+    t.index ["project_id"], name: "index_targets_on_project_id"
   end
 
   create_table "terms", id: :uuid, default: -> { "gen_random_uuid()" }, force: :cascade do |t|
@@ -270,6 +288,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_07_11_111301) do
   add_foreign_key "assets", "projects"
   add_foreign_key "build_files", "builds"
   add_foreign_key "builds", "projects"
+  add_foreign_key "builds", "targets"
   add_foreign_key "divisions", "projects"
   add_foreign_key "pay_charges", "pay_customers", column: "customer_id"
   add_foreign_key "pay_charges", "pay_subscriptions", column: "subscription_id"
@@ -278,4 +297,5 @@ ActiveRecord::Schema[8.1].define(version: 2026_07_11_111301) do
   add_foreign_key "projects", "users"
   add_foreign_key "subscription_seats", "pay_subscriptions"
   add_foreign_key "subscription_seats", "users"
+  add_foreign_key "targets", "projects"
 end

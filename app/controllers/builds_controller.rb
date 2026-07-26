@@ -18,6 +18,10 @@ class BuildsController < ApplicationController
   end
 
   def create
+    # A build now belongs to a target. Until the dashboard lets you pick one (PR 2),
+    # fall back to the project's first -- which for every existing project is `web`.
+    @build.target ||= @project.targets.first
+
     if @build.save
       FullBuildJob.perform_later(@build)
       redirect_to project_build_path(@project, @build), notice: "Build was successfully created."
