@@ -98,7 +98,7 @@
                         opening, and hand over the artifact itself otherwise. %>
                     <% if build.success? && build.entry_path.present? %>
                       <% if @target.site? || @target.viewable? %>
-                        <%= link_to @target.site? ? "View" : "Open", build_file_path(build, build.entry_path),
+                        <%= link_to @target.site? ? "Preview" : "Open", build_file_path(build, build.entry_path),
                               class: "text-indigo-700 hover:underline", target: "_blank", rel: "noopener",
                               data: { turbo: false } %>
                       <% else %>

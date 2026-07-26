@@ -7,10 +7,10 @@
 
   <div class="min-w-0 md:w-52">
     <p class="font-semibold text-gray-900"><%= target.name %></p>
-    <p class="text-xs text-gray-500"><%= target.kind_label %> · <span class="font-mono"><%= target.slug %></span></p>
+    <p class="text-xs text-gray-500"><%= target.kind_label %></p>
+  <div class="md:w-32"><%= target_state_pill(state) %></div>
   </div>
 
-  <div class="md:w-32"><%= target_state_pill(state) %></div>
 
   <div class="flex-1">
     <p class="text-sm text-gray-600"><%= target_timing(target) %></p>
@@ -43,7 +43,7 @@
           container for something else, so there is nothing worth opening. Same route
           either way -- ServesBuildFiles sends html inline and redirects the rest. %>
       <% if target.site? || target.viewable? %>
-        <%= link_to target.site? ? "View" : "Open",
+        <%= link_to target.site? ? "Preview" : "Open",
               build_file_path(target.current_build, target.entry_path),
               class: "rounded-md border border-gray-300 px-2.5 py-1.5 text-sm hover:bg-gray-50",
               target: "_blank", rel: "noopener", data: { turbo: false } %>
