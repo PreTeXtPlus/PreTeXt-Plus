@@ -1,6 +1,6 @@
   <p>
   <% if user.subscribed? %>
-    You are subscribed until <%= user.subscribed_until.strftime("%B %d, %Y") %>.
+    You are subscribed until <%= local_time_tag(user.subscribed_until, date_only: true) %>.
     <% if user.subscription_seats.first.subscription.user != user %>
       Your subscription is managed by <code><%= user.subscription_seats.first.subscription.user.email %></code>.
     <% else %>
