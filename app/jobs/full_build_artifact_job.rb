@@ -77,9 +77,11 @@ class FullBuildArtifactJob < ApplicationJob
 
       return "index.html" if build.target.site? && paths.include?("index.html")
 
-      # Otherwise the shallowest file with an extension the format is known to produce --
-      # shallowest so a stray asset in a subdirectory never beats the real artifact.
-      extensions = Target::OUTPUT_EXTENSIONS.fetch(build.target.output_format, [])
+      # Otherwise the shallowest file with an extension the kind is known to produce --
+      # shallowest so a stray asset in a subdirectory never beats the real artifact. The
+      # kind is what is consulted, not the format: a SCORM package and a website are both
+      # format="html" but leave behind a .zip and a tree of .html respectively.
+      extensions = build.target.output_extensions
       candidates = paths.select { |p| extensions.include?(File.extname(p).downcase) }
       candidates.min_by { |p| [ p.count("/"), p.length ] } || paths.min_by(&:length)
     end

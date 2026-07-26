@@ -18,9 +18,9 @@ Branch `builds`, based on `fbf2b0d` (`git log fbf2b0d..HEAD` for the commits, on
 
 | | |
 |---|---|
-| PRs 1–4 | **Done** — see the per-PR sections below, each with what shipped and how it differs from the original plan |
+| PRs 1–4, plus 4b | **Done** — see the per-PR sections below, each with what shipped and how it differs from the original plan |
 | PR 5 (retire the quick build) | **Not started.** The only remaining implementation work |
-| Suite | 268 tests / 737 assertions green; rubocop and brakeman clean |
+| Suite | 293 tests / 825 assertions green; rubocop and brakeman clean |
 | Migrations | Four, all applied in dev. See *Deploying* below before running in production |
 
 ### What has never actually run
@@ -28,12 +28,13 @@ Branch `builds`, based on `fbf2b0d` (`git log fbf2b0d..HEAD` for the commits, on
 Three things are implemented and tested but unproven against reality. A fresh session
 should not assume they work:
 
-1. **No format other than html has ever been built.** The generated `project.ptx` is
+1. **Nothing but a website has ever been built.** The generated `project.ptx` is
    schema-valid and the plumbing is unit-tested, but the first real `pdf` / `epub` /
-   `braille` build against `pretext-plus-build-full` is the actual proof. Most likely
-   places to break: whether the server writes to `output/<target-name>/` as
-   `ProjectArchiveBuilder` assumes, and whether `entry_path` detection picks the right
-   file for braille.
+   `braille` / `scorm` build against `pretext-plus-build-full` is the actual proof. Most
+   likely places to break: whether the server writes to `output/<target-name>/` as
+   `ProjectArchiveBuilder` assumes, whether `entry_path` detection picks the right file
+   for braille, and whether a SCORM build really leaves a `.zip` where
+   `Target::Catalog` expects one.
 2. **Nothing has been published end-to-end through a browser.** `PublishedController` is
    covered by integration tests, but no real built site has been served through `/o/…`,
    so relative links, the search index and knowls are unverified in situ.
@@ -46,18 +47,18 @@ should not assume they work:
 
 | Concern | Files |
 |---|---|
-| Model | `app/models/target.rb`, `build.rb`, plus `touch:` on `division.rb` / `asset.rb` and callbacks in `project.rb` |
+| Model | `app/models/target.rb`, `target/catalog.rb`, `build.rb`, plus `touch:` on `division.rb` / `asset.rb` and callbacks in `project.rb` |
 | Dashboard | `app/views/projects/show.html.erb`, `app/views/targets/_target.html.erb`, `app/helpers/targets_helper.rb` |
-| Drawer | `app/views/targets/show.html.erb`, `app/javascript/controllers/drawer_controller.js`, `TargetsController#show` |
+| Drawer | `app/views/targets/show.html.erb`, `app/javascript/controllers/{drawer,clipboard}_controller.js`, `TargetsController#show` |
 | Building | `BuildsController`, `FullBuildJob`, `FullBuildArtifactJob`, `BuildCallbacksController`, `BuildStatusChecker` |
 | Public output | `app/controllers/published_controller.rb` + `app/controllers/concerns/serves_build_files.rb` (shared with `BuildFilesController`) |
 | Manifest | `app/services/project_archive_builder.rb` |
-| Tests | `test/models/target_test.rb`, `test/controllers/{targets,builds,published}_controller_test.rb`, `test/jobs/entry_path_detection_test.rb`, `test/services/project_archive_builder_test.rb` |
+| Tests | `test/models/{target,project}_test.rb`, `test/controllers/{targets,builds,published,build_files}_controller_test.rb`, `test/jobs/entry_path_detection_test.rb`, `test/services/project_archive_builder_test.rb` |
 
 ### Deploying
 
 Four migrations, in order: `source_updated_at` on projects, `create_targets`,
-`latest_build_id`, then `compression` + `entry_path`.
+`latest_build_id`, then `entry_path` on builds.
 
 `CreateTargets` sets `builds.target_id` NOT NULL in the same migration that backfills it,
 so **check `Build.where.missing(:project).count` is zero in production first** — a build
@@ -73,11 +74,11 @@ with no project would get no target and the NOT NULL would fail the migration.
 visited. That works with exactly one output. With several, "which build is my PDF?" has no
 answer the interface can give.
 
-So a **target** is now a first-class, persistent object — name, format, published flag,
+So a **target** is now a first-class, persistent object — name, kind, published flag,
 current state — and builds become its history. This mirrors how PreTeXt-CLI already works:
-`project.ptx` declares a list of named targets, and several targets may share a format
-(a "student" and an "instructor" HTML, say). Target *names* are unique within a project;
-formats are not.
+`project.ptx` declares a list of named targets, and several targets may be of the same
+kind (a "student" and an "instructor" website, say). Target *names* are unique within a
+project; kinds are not.
 
 ```
 Project ──< Target ──< Build ──< BuildFile
@@ -167,7 +168,8 @@ to record a transition and (from PR 2) announce it.
 
 `Kernel#format` is a private instance method on every object. An ActiveRecord attribute called
 `format` overrides it, so a later `format("%.1f", x)` inside a `Target` method breaks in a way
-that reads like a typo. Use `output_format`, which also matches `Division#source_format`.
+that reads like a typo. PR 4 used `output_format`, matching `Division#source_format`; PR 4b
+replaced the column with `kind`, which sidesteps the collision for the same reason.
 
 ---
 
@@ -178,7 +180,8 @@ that reads like a typo. Use `output_format`, which also matches `Division#source
 | `targets` | new table, uuid pk | The persistent output. |
 | `targets.current_build_id` | uuid | Latest successful build — what readers see. |
 | `targets.latest_build_id` | uuid | Most recent attempt — what the state pill reports. Added in PR 2, once it became clear `Target#state` could not be query-free without it. |
-| `targets.compression` | string | `zip` or `scorm`, html only. PreTeXt has no `scorm` *format*; packaging is a separate axis. Added in PR 4. |
+| `targets.kind` | string | What the author picked, at the author's altitude — `website`, `scorm`, `pdf`. `Target::Catalog` translates it into project.ptx attributes. A string, never an integer enum: retiring a value must not be a data migration. |
+| `targets.options` | jsonb | Per-target manifest attributes (a stringparam, an xsl). Open-ended so the next PreTeXt knob does not cost a column. |
 | `builds.target_id` | uuid, not null, fk | A build is an attempt at a target. `project_id` stays as a denormalization so existing nested routes keep working. |
 | `builds.entry_path` | string | What to open for this build — `index.html` for a site, the artifact for a pdf. Detected at import. Added in PR 4. |
 | `projects.source_updated_at` | datetime, not null | When the author last changed source, docinfo or assets. |
@@ -302,12 +305,12 @@ is authoritative: `@format` is one of `html`, `pdf`, `latex`, `epub`, `kindle`,
 `braille`, `revealjs`, `beamer`, `webwork`, `custom`.
 
 - **There is no `scorm` format.** A SCORM package is
-  `<target format="html" compression="scorm">`, so packaging is a separate axis and
-  `targets.compression` carries it. The PR 1 enum had `scorm` as a *format*, which would
-  have produced a manifest the CLI rejects. Enum value 4 was reused for `latex`, safe
-  only because no row had ever used it.
-- A test asserts every enum value is one the schema accepts, so a future format cannot
-  silently break every build of that target.
+  `<target format="html" compression="scorm">`. The PR 1 enum had `scorm` as a *format*,
+  which would have produced a manifest the CLI rejects. Enum value 4 was reused for
+  `latex`, safe only because no row had ever used it — the incident that eventually
+  motivated PR 4b.
+- A test asserts every format the app can emit is one the schema accepts, so a future
+  format cannot silently break every build of that target.
 
 **Entry points are recorded, not guessed.** The schema allows `@output-filename` on
 `pdf`, `latex`, `epub`, `kindle` and `revealjs`, so the manifest names those artifacts
@@ -322,6 +325,99 @@ default, because the artifact job strips exactly that prefix off the returned zi
 **Formats are not gated by subscription.** The plan suggested gating non-html formats on
 `subscribed?`; that is a monetization decision that is still open, so what shipped is a
 cost bound (`target_quota`) rather than a paywall. Adding a gate later is one ability rule.
+
+### PR 4b — Kinds instead of formats — **done**
+
+PR 4 stored PreTeXt's own vocabulary on the row: an integer `output_format` enum plus a
+`compression` column. Two problems showed up immediately, and both are the same problem.
+
+**The decomposition leaked into the UI.** An author does not want "html with
+compression=scorm", they want *a SCORM package*. Forcing them to discover that SCORM is
+spelled as two attributes exposes an implementation detail of the CLI.
+
+**And the app could not reason about it.** `OUTPUT_EXTENSIONS` was keyed on the format,
+so `detect_entry_path` for a SCORM target looked up `html → [".html"]` and would have
+sent the author to some page *inside* the package rather than the package itself. A
+website and a SCORM package are both `format="html"` and the lookup structurally could
+not tell them apart.
+
+So a target now stores a **kind** — the thing the author picked — and `Target::Catalog`
+translates it into manifest attributes:
+
+```ruby
+Kind.build(:scorm, label: "SCORM package (for an LMS)",
+  emits: { "format" => "html", "compression" => "scorm" },
+  extensions: %w[ .zip ])
+```
+
+The direction of the derivation is the point. Storing the kind and computing the
+decomposition means that if PreTeXt promotes SCORM to a real format, or renames
+`compression`, that is an edit to `emits` — no migration, and no data change across the
+rows that already used it. Storing the decomposition instead, as PR 4 did, makes the same
+event a data migration over every SCORM target.
+
+`kind` is a **string**, not an integer enum. Reusing enum value 4 for `latex` in PR 4 was
+only safe because no row had used it; that will not be true the second time.
+
+**What collapsed into the catalog.** Four constants and a validation became columns of one
+table, and one whole class of bug became unrepresentable:
+
+| Was | Is |
+|---|---|
+| `NAMEABLE_OUTPUT` | `filename_ext:` |
+| `OUTPUT_EXTENSIONS` | `extensions:` |
+| `COMPRESSIONS` + `compression_only_on_html` | gone — no kind emits an illegal pair, so there is nothing to validate |
+| `Target#site?` inferring from format + compression | `site:`, declared per kind |
+| "Open" offered for every output | `viewable:`, declared per kind |
+| `TargetsHelper::FORMAT_CHOICES` | `label:` + `document_types:` |
+
+**What a row offers depends on the kind, not the format.** `site:` and `viewable:` split
+three cases that the old `site?` collapsed into two:
+
+| | Opens | Downloads |
+|---|---|---|
+| `website` | **View** — browse it | the whole output as a zip |
+| `pdf`, `revealjs`, `beamer` | **Open** — worth reading in a browser | the artifact itself |
+| `scorm`, `website_zip`, `epub`, `kindle`, `braille`, `latex` | — nothing worth opening | the artifact itself |
+
+A SCORM package is a zip you hand to an LMS, so an "Open" button on it was a download
+wearing a disguise; and "Download all" handing over a zip *containing* the PDF was never
+what anyone wanted. Only a site has no single file to give, so only a site downloads
+`build.zip`.
+
+The download link goes through `build_file_path(..., disposition: "attachment")` rather
+than at the blob, because finding the entry `BuildFile` per row would put the dashboard
+back to a query per target — the exact thing `current_build_id` was denormalized to avoid.
+`ServesBuildFiles` redirects to storage for attachments like it does for any other
+non-html file, so a large package never occupies a web worker.
+
+**`targets.options`, a jsonb bag,** carries per-target manifest attributes that are not
+worth a kind of their own — a `stringparam`, an `xsl`, a `braille-mode`. PreTeXt has many
+such knobs and adding the next one should not cost a migration. `Target::RESERVED_ATTRIBUTES`
+keeps `options` away from `name`, `output-dir` and `output-filename`, which the builder
+derives from the row: renaming a target through that back door would move its output
+directory out from under `FullBuildArtifactJob` and break its published URL. Nothing writes
+`options` from the UI yet.
+
+**Slides are restricted to slideshows.** `document_types: %i[ slideshow ]` on the
+`revealjs` and `beamer` kinds is the single declaration, enforced three ways: the picker
+filters (`target_kind_options`), `Target` validates, and — the one that is easy to miss —
+**`Project` validates too**. Rails does not re-validate children when the parent changes,
+so without a check on `Project`, converting a slideshow to an article would silently leave
+a reveal.js target behind to fail at the build server for reasons the author cannot see.
+The error names the offending targets, because the author has to go delete them.
+
+Two live gaps closed on the way: `FORMAT_CHOICES` offered reveal.js to every project
+including articles, and `target_params` never permitted `compression`, so SCORM was
+unreachable from the UI entirely.
+
+**Beamer takes no `output-filename`.** The schema allows it on pdf, latex, epub, kindle
+and revealjs. Beamer produces a PDF but is not on that list, and guessing wrong fails
+every build of the target with a manifest error, so beamer discovers its artifact from
+`extensions` instead. Worth confirming against the `.rnc` if beamer is ever exercised.
+
+`webwork` and `custom` are in PreTeXt's schema but not in the catalog: neither is a
+coherent author-facing choice on its own, and `custom` means nothing without an `@xsl`.
 
 ### PR 5 — Retire the quick build — **not started, the only remaining work**
 
@@ -354,15 +450,26 @@ Still live — things future work can break:
 - **`mark!` must not be bypassed.** Every status transition goes through `Build#mark!`,
   which is what keeps the denormalized pointers in step and broadcasts the row. The value
   evaporates the first time someone adds a transition with a bare `update_column`.
+- **Publishing from the drawer replaces two things.** `TargetsController#publish` adds a
+  `turbo_stream.replace("drawer", ...)` only when `turbo_frame_request_id == "drawer"`.
+  The dashboard carries an empty `drawer` frame of its own, so dropping that guard makes
+  publishing from a *row* pop the drawer open. Both directions are covered by tests.
 - **`targets/_target.html.erb` has no session.** It is re-rendered by a background job
   during a broadcast, so it must never call `can?`, `current_user`, or a `_url` helper
   (no request means no host). Authorization lives on the actions; the copyable absolute
   URL lives in the drawer, which is always request-scoped.
 - **`Target` has a two-column `default_scope`,** so `Target.group(...)` raises in Postgres
   ("must appear in the GROUP BY clause"). Use `Target.reorder(nil).group(...)`.
-- **Enum values are load-bearing.** `output_format` must only ever contain formats
-  PreTeXt's `project.ptx` schema accepts; a test enforces this. `scorm` is not one — it is
-  html plus `compression`.
+- **The catalog is load-bearing.** Every `emits["format"]` in `Target::Catalog` must be
+  a format PreTeXt's `project.ptx` schema accepts, and a kind that carries `compression`
+  must emit `format="html"`; tests enforce both. A kind slug is also stored data — renaming
+  one is a data migration, which is exactly what the string column exists to keep rare.
+- **`options` is free-form and reaches the manifest.** `Target::RESERVED_ATTRIBUTES` is
+  what stops it reaching `name` / `output-dir` / `output-filename`. Anything else added to
+  the manifest that the builder derives from the row belongs on that list too.
+- **A new kind is never pure data.** `site:`, `filename_ext:` and `extensions:` all have to
+  be right or the target builds and then cannot be opened. The catalog makes this one
+  edit in one place, but it is still an edit.
 
 Already handled, recorded because the reasoning is not obvious from the diff:
 
@@ -461,9 +568,11 @@ changes. DNS, TLS and Kamal/proxy config are not.
 
 | Question | Blocks | Answer |
 |---|---|---|
-| Can two targets share a format? | PR 1 | **Yes** — consistent with how the CLI uses `project.ptx`. `name` is the unique key, not `output_format`. |
+| Can two targets share a format? | PR 1 | **Yes** — consistent with how the CLI uses `project.ptx`. `name` is the unique key, not `kind`. |
 | Does a published output follow the latest good build, or pin to a chosen one? | PR 3 | Follow the latest. `current_build_id` is already a pointer, so pinning is a later feature that writes to it manually rather than a schema change. |
 | Does publishing cost a subscription? | PR 3 | **Still open.** Shipped free and uncapped. Suggest no, but cap published targets for free accounts. |
 | Are non-html formats a paid feature? | PR 4 | **Still open.** Shipped free, bounded only by `target_quota`. |
+| Store PreTeXt's `format`/`compression`, or the author's choice? | PR 4b | **Answered:** store the author's choice (`kind`) and derive the manifest attributes from `Target::Catalog`. A change on PreTeXt's side becomes an edit to `emits` rather than a data migration. |
+| Should the whole of `project.ptx` be one editable string instead? | PR 4b | **No.** `builds.target_id` is a foreign key and `/o/:project_id/:target_name` is a public URL, so a target needs stable row identity that an XML element cannot provide. The open-ended *configuration* moved to `targets.options` instead, which is the half of the concern that was real. |
 | What bounds build minutes? | PR 4 | **Answered:** builds are open to every owner, bounded by a 20/hour rate limit, `MAX_CONCURRENT_BUILDS = 3` in flight per user, and `User#target_quota`. |
 | Should published output move to its own origin? | — | **Open, and the most consequential.** PreTeXt embeds author JavaScript by design, so published output can run scripts on our origin. See [Open security decision](#open-security-decision-user-content-on-the-primary-origin). |

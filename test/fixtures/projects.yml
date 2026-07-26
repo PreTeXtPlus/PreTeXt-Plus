@@ -11,3 +11,10 @@ two:
   title: My Second Project
   pretext_source: <pretext><article><section><title>Other</title><p>Content</p></section></article></pretext>
   document_type: article
+
+# The only slideshow, and so the only project that may hold a revealjs or beamer target.
+slides:
+  user: one
+  title: My Slide Deck
+  pretext_source: <pretext><slideshow><slide><title>First</title><p>Content</p></slide></slideshow></pretext>
+  document_type: slideshow

@@ -9,25 +9,128 @@ class TargetTest < ActiveSupport::TestCase
   end
 
   test "name must be unique within a project but not across projects" do
-    duplicate = Target.new(project: projects(:one), name: "web", output_format: :html)
+    duplicate = Target.new(project: projects(:one), name: "web", kind: "website")
     assert_not duplicate.valid?
 
-    other_project = Target.new(project: projects(:two), name: "instructor", output_format: :html)
+    other_project = Target.new(project: projects(:two), name: "instructor", kind: "website")
     assert other_project.valid?
   end
 
-  # The decision that shapes the schema: `name` is the unique key, not `output_format`,
-  # matching how PreTeXt-CLI treats <targets> in project.ptx.
-  test "two targets in one project may share an output format" do
-    assert_equal "html", targets(:one_web).output_format
-    assert_equal "html", targets(:one_instructor).output_format
+  # The decision that shapes the schema: `name` is the unique key, not `kind`, matching
+  # how PreTeXt-CLI treats <targets> in project.ptx.
+  test "two targets in one project may share a kind" do
+    assert_equal "website", targets(:one_web).kind
+    assert_equal "website", targets(:one_instructor).kind
     assert_equal projects(:one), targets(:one_instructor).project
   end
 
   test "name must be a legal PreTeXt target name" do
-    assert_not Target.new(project: projects(:one), name: "not a ref", output_format: :html).valid?
-    assert_not Target.new(project: projects(:one), name: "", output_format: :html).valid?
-    assert Target.new(project: projects(:one), name: "web-2", output_format: :html).valid?
+    assert_not Target.new(project: projects(:one), name: "not a ref", kind: "website").valid?
+    assert_not Target.new(project: projects(:one), name: "", kind: "website").valid?
+    assert Target.new(project: projects(:one), name: "web-2", kind: "website").valid?
+  end
+
+  # ---- kind and the catalog ----
+
+  test "kind must be one the catalog offers" do
+    assert_not Target.new(project: projects(:one), name: "nope", kind: "docx").valid?
+    # Nor a PreTeXt format that is not itself an author-facing choice.
+    assert_not Target.new(project: projects(:one), name: "nope", kind: "custom").valid?
+  end
+
+  # The pair the whole re-modelling exists for. An author picks one thing; PreTeXt needs
+  # two attributes; neither vocabulary leaks into the other.
+  test "a scorm package emits html plus compression without being an html target" do
+    target = projects(:one).targets.create!(name: "lms", kind: "scorm")
+
+    assert_equal({ "format" => "html", "compression" => "scorm" }, target.manifest_attributes)
+    # Not a site: it is a package you hand to an LMS, not something a reader browses.
+    assert_not target.site?
+    assert_includes target.output_extensions, ".zip"
+  end
+
+  test "a website is a site and a zipped website is not, though both emit html" do
+    site = targets(:one_web)
+    zipped = projects(:one).targets.create!(name: "offline", kind: "website_zip")
+
+    assert site.site?
+    assert_not zipped.site?
+    assert_equal "html", site.manifest_attributes["format"]
+    assert_equal "html", zipped.manifest_attributes["format"]
+  end
+
+  # There is no way to spell an illegal combination, so there is nothing to validate:
+  # compression exists only inside the kinds that legitimately carry it.
+  test "no kind emits compression on a format that cannot carry it" do
+    Target::Catalog.all.each do |kind|
+      next if kind.emits["compression"].nil?
+
+      assert_equal "html", kind.emits["format"],
+        "#{kind.slug} emits compression on #{kind.emits['format']}, which project.ptx rejects"
+    end
+  end
+
+  # Drives whether a row offers "Open" at all. A container you feed to something else has
+  # nothing worth opening, and an "Open" button on it is a download in disguise.
+  test "only outputs worth opening in a browser are viewable" do
+    viewable = Target::Catalog.all.select(&:viewable).map(&:slug)
+
+    assert_equal %w[ website pdf revealjs beamer ], viewable
+    assert_not_includes viewable, "scorm"
+    assert_not_includes viewable, "epub"
+    assert_not_includes viewable, "website_zip"
+  end
+
+  test "every site is viewable without having to say so" do
+    Target::Catalog.all.each do |kind|
+      assert kind.viewable, "#{kind.slug} is a site but not viewable" if kind.site
+    end
+  end
+
+  test "options are merged into the manifest attributes and win over the kind" do
+    target = projects(:one).targets.create!(
+      name: "tuned", kind: "pdf", options: { "stringparam" => "debug.datedfiles yes" }
+    )
+
+    assert_equal "debug.datedfiles yes", target.manifest_attributes["stringparam"]
+    assert_equal "pdf", target.manifest_attributes["format"]
+  end
+
+  test "output_filename is set only where the schema allows @output-filename" do
+    assert_equal "print.pdf", targets(:one_print).output_filename
+    # A website is a directory, so there is nothing to name.
+    assert_nil targets(:one_web).output_filename
+    # Beamer produces a PDF but is left to discovery -- see Target::Catalog.
+    assert_nil projects(:slides).targets.create!(name: "handout", kind: "beamer").output_filename
+  end
+
+  # ---- kind against the project's document type ----
+
+  test "slides are rejected on a project that is not a slideshow" do
+    target = Target.new(project: projects(:one), name: "deck", kind: "revealjs")
+
+    assert_not target.valid?
+    assert_match(/slideshow/, target.errors[:kind].to_sentence)
+  end
+
+  test "slides are accepted on a slideshow" do
+    assert Target.new(project: projects(:slides), name: "deck-2", kind: "revealjs").valid?
+    assert Target.new(project: projects(:slides), name: "handout", kind: "beamer").valid?
+  end
+
+  test "an unrestricted kind is available to every document type" do
+    assert Target.new(project: projects(:slides), name: "notes", kind: "pdf").valid?
+    assert Target.new(project: projects(:one), name: "notes", kind: "pdf").valid?
+  end
+
+  test "the picker offers slides only to a slideshow" do
+    slugs = Target::Catalog.for_document_type(:article).map(&:slug)
+    assert_includes slugs, "website"
+    assert_includes slugs, "scorm"
+    assert_not_includes slugs, "revealjs"
+    assert_not_includes slugs, "beamer"
+
+    assert_includes Target::Catalog.for_document_type(:slideshow).map(&:slug), "revealjs"
   end
 
   test "display_label falls back to a humanized name" do

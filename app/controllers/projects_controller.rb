@@ -74,7 +74,9 @@ class ProjectsController < ApplicationController
   # Found, not Moved Permanently: a browser that cached a 301 would keep redirecting
   # after the target was unpublished.
   def share
-    published = @project.targets.detect { |t| t.html_output_format? && t.published? && t.current_build_id }
+    # A browsable site, not merely something html-derived: redirecting a link handed to
+    # students at a SCORM package would be worse than the quick build it replaces.
+    published = @project.targets.detect { |t| t.site? && t.published? && t.current_build_id }
     return redirect_to published_path(@project, published.name), status: :found if published
 
     render html: (@project.html_source || "Document not found").html_safe

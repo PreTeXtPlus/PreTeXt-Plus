@@ -113,7 +113,7 @@ class PublishedControllerTest < ActionDispatch::IntegrationTest
 
   # A pdf target has no index.html, so the bare URL has to land on the artifact itself.
   test "a single-file output redirects to its artifact, not to an index" do
-    target = projects(:two).targets.create!(name: "print", output_format: :pdf)
+    target = projects(:two).targets.create!(name: "print", kind: "pdf")
     build = target.builds.create!
     build.build_files.create!(relative_path: "print.pdf")
     build.mark!(:success, entry_path: "print.pdf")
@@ -125,7 +125,7 @@ class PublishedControllerTest < ActionDispatch::IntegrationTest
   end
 
   test "an unbuilt target has nowhere to redirect to" do
-    target = projects(:two).targets.create!(name: "print", output_format: :pdf, published: true)
+    target = projects(:two).targets.create!(name: "print", kind: "pdf", published: true)
 
     get published_url(projects(:two), "print")
 

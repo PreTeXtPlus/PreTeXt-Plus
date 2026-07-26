@@ -11,10 +11,17 @@ class BuildFilesController < ApplicationController
   before_action :load_and_authorize_build
 
   def show
-    serve_build_file(@build, params[:relative_path])
+    serve_build_file(@build, params[:relative_path], disposition: requested_disposition)
   end
 
   private
+
+    # Only "attachment" is honoured, and only as an exact match: anything else falls back
+    # to how the file is normally served, so the parameter can never be used to change
+    # the content type or disposition of a response into something unexpected.
+    def requested_disposition
+      params[:disposition] == "attachment" ? "attachment" : "inline"
+    end
 
     def load_and_authorize_build
       @build = Build.find(params[:build_id])

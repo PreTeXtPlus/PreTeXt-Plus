@@ -109,7 +109,33 @@ class ProjectTest < ActiveSupport::TestCase
     assert_equal 1, project.targets.count
     target = project.targets.first
     assert_equal "web", target.name
-    assert target.html_output_format?
+    assert_equal "website", target.kind
+  end
+
+  # The trap this guard exists for: Rails does not re-validate children when the parent
+  # changes, so without an explicit check on Project a slideshow could become an article
+  # while keeping a reveal.js target that can never build again.
+  test "document_type cannot change out from under a target that depends on it" do
+    project = projects(:slides)
+    assert project.targets.any? { |t| t.kind == "revealjs" }
+
+    assert_not project.update(document_type: :article)
+    assert_match(/Slides/, project.errors[:document_type].to_sentence)
+    assert_equal "slideshow", project.reload.document_type
+  end
+
+  test "document_type may change once nothing depends on it" do
+    project = projects(:slides)
+    project.targets.where(kind: "revealjs").destroy_all
+
+    assert project.reload.update(document_type: :article)
+  end
+
+  test "an unrestricted target does not block a document_type change" do
+    project = projects(:one)
+    assert project.targets.any?
+
+    assert project.update(document_type: :book)
   end
 
   test "full_dup copies target configuration but no build history" do

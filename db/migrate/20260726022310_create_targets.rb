@@ -1,7 +1,7 @@
 # A target is a named output configuration -- the persistent thing an author manages
 # ("my PDF"), as opposed to a Build, which is one attempt at producing it. Mirrors the
 # <targets> list in a PreTeXt-CLI project.ptx: names are unique within a project, and
-# several targets may share a format (a "student" and an "instructor" html, say).
+# several targets may share a kind (a "student" and an "instructor" website, say).
 #
 # Every existing project gets one `web` target matching the hardcoded
 # ProjectArchiveBuilder::TARGET, and adopts that project's existing builds, so nothing
@@ -12,9 +12,21 @@ class CreateTargets < ActiveRecord::Migration[8.1]
       t.references :project, null: false, foreign_key: true, type: :uuid
       t.string   :name, null: false                    # goes verbatim into project.ptx
       t.string   :label                                # human-facing; nil -> derived
-      t.integer  :output_format, null: false, default: 0
       t.boolean  :published, null: false, default: false
       t.integer  :position, null: false, default: 0
+
+      # What the author picked, at the author's altitude -- "scorm", not PreTeXt's
+      # `format="html" compression="scorm"`. Target::Catalog owns the translation, so a
+      # change on PreTeXt's side is an edit to that catalog rather than a migration here.
+      #
+      # A string, not an integer enum: renaming or retiring a value must never be a data
+      # migration, and the value is far more legible in a database dump this way.
+      t.string   :kind, null: false, default: "website"
+
+      # Per-target tuning that goes straight into the manifest as attributes --
+      # stringparams, an xsl, a braille-mode. Open-ended on purpose: PreTeXt has many
+      # such knobs and adding the next one should not cost a column.
+      t.jsonb    :options, null: false, default: {}
 
       # Denormalized pointers to the latest *successful* build -- what a reader sees.
       # Kept on the row so the projects index can render every target's state in one
@@ -35,8 +47,8 @@ class CreateTargets < ActiveRecord::Migration[8.1]
       dir.up do
         execute <<~SQL
           INSERT INTO targets
-            (id, project_id, name, label, output_format, published, position, created_at, updated_at)
-          SELECT gen_random_uuid(), id, 'web', 'Website', 0, FALSE, 0, NOW(), NOW()
+            (id, project_id, name, label, kind, published, position, created_at, updated_at)
+          SELECT gen_random_uuid(), id, 'web', 'Website', 'website', FALSE, 0, NOW(), NOW()
           FROM projects
         SQL
 

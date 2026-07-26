@@ -9,11 +9,19 @@ module ServesBuildFiles
 
   private
 
-    def serve_build_file(build, relative_path)
+    # `disposition: "attachment"` is how a single-file output (a PDF, a SCORM package) is
+    # downloaded as itself rather than browsed. It redirects to storage like any other
+    # non-html file, so a large package never occupies a web worker.
+    #
+    # blob_download_url may be missing from an entry cached before it was stored; falling
+    # back to the inline URL serves the same bytes, just without the attachment header.
+    def serve_build_file(build, relative_path, disposition: "inline")
       file_data = cached_file_data(build, relative_path)
       raise ActiveRecord::RecordNotFound unless file_data
 
-      if file_data[:content_type] == "text/html"
+      if disposition == "attachment"
+        redirect_to_cdn_url(file_data[:blob_download_url] || file_data[:blob_url])
+      elsif file_data[:content_type] == "text/html"
         content = ActiveStorage::Blob.service.download(file_data[:blob_key])
         send_data content, type: "text/html", disposition: "inline"
       else
@@ -56,6 +64,7 @@ module ServesBuildFiles
           {
             content_type: bf.blob.content_type,
             blob_url: rails_blob_url(bf.blob),
+            blob_download_url: rails_blob_url(bf.blob, disposition: "attachment"),
             blob_key: bf.blob.key
           },
           unless_exist: true

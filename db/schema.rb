@@ -234,14 +234,14 @@ ActiveRecord::Schema[8.1].define(version: 2026_07_26_034041) do
   end
 
   create_table "targets", id: :uuid, default: -> { "gen_random_uuid()" }, force: :cascade do |t|
-    t.string "compression"
     t.datetime "created_at", null: false
     t.uuid "current_build_id"
+    t.string "kind", default: "website", null: false
     t.string "label"
     t.datetime "last_built_at"
     t.uuid "latest_build_id"
     t.string "name", null: false
-    t.integer "output_format", default: 0, null: false
+    t.jsonb "options", default: {}, null: false
     t.integer "position", default: 0, null: false
     t.uuid "project_id", null: false
     t.boolean "published", default: false, null: false

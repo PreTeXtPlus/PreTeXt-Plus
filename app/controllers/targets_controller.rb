@@ -38,10 +38,24 @@ class TargetsController < ApplicationController
 
     respond_to do |format|
       format.turbo_stream do
-        render turbo_stream: turbo_stream.replace(
+        streams = [ turbo_stream.replace(
           ActionView::RecordIdentifier.dom_id(@target),
           partial: "targets/target", locals: { target: @target }
-        )
+        ) ]
+
+        # Publishing from the drawer has to redraw the drawer as well: it is the surface
+        # that shows the public URL, and it would otherwise keep offering "Publish" for
+        # something already published.
+        #
+        # Guarded on the frame id rather than done unconditionally, because the dashboard
+        # carries an empty "drawer" frame of its own -- an unguarded replace would pop the
+        # drawer open on anyone who published from a row.
+        if turbo_frame_request_id == "drawer"
+          @builds = @target.builds.order(created_at: :desc).limit(20)
+          streams << turbo_stream.replace("drawer", template: "targets/show")
+        end
+
+        render turbo_stream: streams
       end
       format.html do
         redirect_to project_path(@project),
@@ -59,6 +73,6 @@ class TargetsController < ApplicationController
   private
 
     def target_params
-      params.expect(target: [ :name, :label, :output_format ])
+      params.expect(target: [ :name, :label, :kind ])
     end
 end

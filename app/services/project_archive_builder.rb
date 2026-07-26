@@ -89,14 +89,18 @@ class ProjectArchiveBuilder
 
   private
 
+    # `manifest_attributes` is whatever the target's kind decided it emits (a SCORM
+    # package contributes both format and compression), plus any per-target options. The
+    # two attributes named here are ours rather than the kind's: output-dir because
+    # FullBuildArtifactJob strips exactly this prefix, and output-filename because fixing
+    # it to the target name is what makes a single-file artifact's path knowable up front.
     def target_element(target)
       attributes = {
-        "name" => target.name,
-        "format" => target.output_format,
+        "name" => target.name
+      }.merge(target.manifest_attributes).merge(
         "output-dir" => target.name,
-        "output-filename" => target.output_filename,
-        "compression" => target.compression.presence
-      }.compact
+        "output-filename" => target.output_filename
+      ).compact
 
       pairs = attributes.map { |key, value| %(#{key}="#{ERB::Util.html_escape(value)}") }
       "<target #{pairs.join(' ')} />"

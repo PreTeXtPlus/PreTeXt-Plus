@@ -7,7 +7,7 @@
 
   <div class="min-w-0 md:w-52">
     <p class="font-semibold text-gray-900"><%= target.display_label %></p>
-    <p class="font-mono text-xs text-gray-500"><%= target.output_format %> · <%= target.name %></p>
+    <p class="text-xs text-gray-500"><%= target.kind_label %> · <span class="font-mono"><%= target.name %></span></p>
   </div>
 
   <div class="md:w-32"><%= target_state_pill(state) %></div>
@@ -39,15 +39,30 @@
 
   <div class="flex flex-wrap items-center gap-2">
     <% if target.current_build.present? && target.entry_path.present? %>
-      <%# A site is browsed; a pdf or braille file is opened. Same route either way --
-          ServesBuildFiles sends html inline and redirects everything else to its blob. %>
-      <%= link_to target.site? ? "View" : "Open #{target.output_format.upcase}",
-            build_file_path(target.current_build, target.entry_path),
-            class: "rounded-md border border-gray-300 px-2.5 py-1.5 text-sm hover:bg-gray-50",
-            target: "_blank", rel: "noopener", data: { turbo: false } %>
+      <%# A site is browsed and a pdf or deck is opened; a SCORM package or an EPUB is a
+          container for something else, so there is nothing worth opening. Same route
+          either way -- ServesBuildFiles sends html inline and redirects the rest. %>
+      <% if target.site? || target.viewable? %>
+        <%= link_to target.site? ? "View" : "Open",
+              build_file_path(target.current_build, target.entry_path),
+              class: "rounded-md border border-gray-300 px-2.5 py-1.5 text-sm hover:bg-gray-50",
+              target: "_blank", rel: "noopener", data: { turbo: false } %>
+      <% end %>
+
+      <%# Everything that is not a site is one artifact, so "Download" means that file --
+          not a zip of the output directory it happened to be built into. Routed through
+          build_file_path rather than the blob so the row costs no extra query. %>
+      <% unless target.site? %>
+        <%= link_to "Download",
+              build_file_path(target.current_build, target.entry_path, disposition: "attachment"),
+              class: "rounded-md border border-gray-300 px-2.5 py-1.5 text-sm hover:bg-gray-50",
+              data: { turbo: false } %>
+      <% end %>
     <% end %>
-    <% if target.current_build&.zip&.attached? %>
-      <%= link_to target.site? ? "Download" : "Download all",
+
+    <%# A site has no single file to hand over, so its download is the whole output. %>
+    <% if target.site? && target.current_build&.zip&.attached? %>
+      <%= link_to "Download",
             rails_blob_path(target.current_build.zip, disposition: "attachment"),
             class: "rounded-md border border-gray-300 px-2.5 py-1.5 text-sm hover:bg-gray-50",
             data: { turbo: false } %>

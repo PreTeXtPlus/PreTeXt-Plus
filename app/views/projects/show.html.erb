@@ -65,8 +65,8 @@
                 class: "mt-1 rounded-md border border-gray-300 px-2 py-1.5 font-mono text-sm" %>
         </div>
         <div>
-          <%= form.label :output_format, "Format", class: "block text-xs text-gray-600" %>
-          <%= form.select :output_format, target_format_options, {},
+          <%= form.label :kind, "Output", class: "block text-xs text-gray-600" %>
+          <%= form.select :kind, target_kind_options(@project), {},
                 class: "mt-1 rounded-md border border-gray-300 px-2 py-1.5 text-sm" %>
         </div>
         <%= form.submit "Add output",
@@ -75,7 +75,7 @@
       <p class="mt-3 text-xs text-gray-500">
         The target name is what identifies this output in <code>project.ptx</code>, so it also
         works with <code>pretext build &lt;name&gt;</code> on a downloaded copy. Several outputs
-        may share a format — a student and an instructor website, say.
+        may be of the same kind — a student and an instructor website, say.
       </p>
     </details>
   <% else %>
@@ -85,8 +85,10 @@
   <% end %>
 
   <div class="mt-8 flex items-center justify-between border-t border-gray-200 pt-5">
+    <%# The quota is not worth reporting until it bites; the "+ Add an output" block
+        already says so when it does. %>
     <p class="text-sm text-gray-500">
-      <%= pluralize(@project.targets.size, "output") %> of <%= current_user.target_quota %>.
+      <%= pluralize(@project.targets.size, "output") %>
     </p>
     <%= button_to "Delete this project", @project, method: :delete,
           class: "cursor-pointer rounded-md px-3 py-2 text-sm text-red-700 hover:bg-red-50",

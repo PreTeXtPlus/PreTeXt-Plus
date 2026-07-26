@@ -1,9 +1,10 @@
 require "test_helper"
 
-# Where a reader gets sent for a finished build. An html site has an index; a pdf or
-# braille build is one file whose name PreTeXt chose. Detection runs at import time in
-# FullBuildArtifactJob, against the files that actually arrived, rather than guessing
-# later from the format.
+# Where a reader gets sent for a finished build. A site has an index; a pdf or braille
+# build is one file whose name PreTeXt chose; a SCORM build is a package. Detection runs
+# at import time in FullBuildArtifactJob, against the files that actually arrived, rather
+# than guessing later -- and it consults the target's *kind*, which is the only thing
+# that can tell a website from a SCORM package, since both are format="html".
 class EntryPathDetectionTest < ActiveSupport::TestCase
   def detect(target, paths)
     build = target.builds.create!
@@ -25,8 +26,8 @@ class EntryPathDetectionTest < ActiveSupport::TestCase
 
   # braille takes no output-filename in PreTeXt's schema, so its name is only knowable
   # after the build.
-  test "braille falls back to the extension the format produces" do
-    target = projects(:one).targets.create!(name: "brl", output_format: :braille)
+  test "braille falls back to the extension the kind produces" do
+    target = projects(:one).targets.create!(name: "brl", kind: "braille")
     assert_equal "book.brf", detect(target, %w[ book.brf build.log ])
   end
 
@@ -36,7 +37,7 @@ class EntryPathDetectionTest < ActiveSupport::TestCase
   end
 
   test "an unrecognizable output still yields something openable" do
-    target = projects(:one).targets.create!(name: "odd", output_format: :braille)
+    target = projects(:one).targets.create!(name: "odd", kind: "braille")
     assert_equal "out.dat", detect(target, %w[ out.dat ])
   end
 
@@ -58,17 +59,27 @@ class EntryPathDetectionTest < ActiveSupport::TestCase
     assert_equal "something-else.pdf", target.reload.entry_path
   end
 
-  test "a compressed html target is a file, not a site" do
-    target = projects(:one).targets.create!(name: "lms", output_format: :html, compression: "scorm")
+  # The case that keying detection on `format` alone got wrong: a SCORM package is
+  # format="html", so an extension table keyed on the format would send the author to
+  # some .html file inside the package instead of the package itself.
+  test "a scorm package opens at the package, not at the html inside it" do
+    target = projects(:one).targets.create!(name: "lms", kind: "scorm")
 
-    assert_not target.site?
-    assert targets(:one_web).site?
+    assert_equal "lms.zip", detect(target, %w[ lms.zip index.html chapter-1.html ])
   end
 
-  test "compression is rejected on formats that cannot carry it" do
-    target = Target.new(project: projects(:one), name: "nope", output_format: :pdf, compression: "scorm")
+  test "a zipped website behaves the same way" do
+    target = projects(:one).targets.create!(name: "offline", kind: "website_zip")
 
-    assert_not target.valid?
-    assert_includes target.errors[:compression], "is only available for html targets"
+    assert_equal "offline.zip", detect(target, %w[ offline.zip index.html ])
+  end
+
+  # Same document, same PreTeXt format, opposite answers -- which is the whole reason the
+  # kind is what gets stored.
+  test "a website and a scorm package disagree despite both being html" do
+    scorm = projects(:one).targets.create!(name: "lms2", kind: "scorm")
+
+    assert_equal "index.html", detect(targets(:one_web), %w[ index.html out.zip ])
+    assert_equal "out.zip", detect(scorm, %w[ index.html out.zip ])
   end
 end

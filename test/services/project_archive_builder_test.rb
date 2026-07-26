@@ -54,24 +54,55 @@ class ProjectArchiveBuilderTest < ActiveSupport::TestCase
     assert_no_match(/<target [^>]*name="web"[^>]*output-filename/, manifest)
   end
 
-  # PreTeXt's schema has no `scorm` format -- it is html plus compression.
-  test "compression is emitted for a scorm package" do
+  # PreTeXt's schema has no `scorm` format -- it is html plus compression. The author
+  # picked one thing; the manifest gets both attributes.
+  test "a scorm target emits format and compression together" do
     project = projects(:one)
-    project.targets.create!(name: "lms", output_format: :html, compression: "scorm")
+    project.targets.create!(name: "lms", kind: "scorm")
 
     manifest = ProjectArchiveBuilder.new(project).project_ptx
 
     assert_match(/<target [^>]*name="lms"[^>]*format="html"[^>]*compression="scorm"/, manifest)
   end
 
-  test "every emitted format is one the PreTeXt schema accepts" do
+  # Per-target tuning reaches the manifest without the catalog needing a variant for
+  # every combination, and without a column per PreTeXt attribute.
+  test "options are emitted as attributes alongside what the kind emits" do
     project = projects(:one)
-    valid = %w[ html pdf latex epub kindle braille revealjs webwork custom ]
+    project.targets.create!(name: "big", kind: "pdf", options: { "asy-method" => "server" })
 
-    Target.output_formats.each_key do |format|
-      assert_includes valid, format,
-        "Target declares #{format.inspect}, which project.ptx would reject"
+    manifest = ProjectArchiveBuilder.new(project).project_ptx
+
+    assert_match(/<target [^>]*name="big"[^>]*asy-method="server"/, manifest)
+    assert_match(/<target [^>]*name="big"[^>]*format="pdf"/, manifest)
+  end
+
+  # The guard that keeps the catalog honest: a kind whose `emits` names a format PreTeXt
+  # does not have would produce a manifest the CLI rejects, failing every build of it.
+  test "every format the catalog can emit is one the PreTeXt schema accepts" do
+    valid = %w[ html pdf latex epub kindle braille revealjs beamer webwork custom ]
+
+    Target::Catalog.all.each do |kind|
+      assert_includes valid, kind.emits["format"],
+        "#{kind.slug} emits format=#{kind.emits['format'].inspect}, which project.ptx would reject"
     end
+  end
+
+  # `options` is free-form and will eventually be author-editable, so it must not be able
+  # to reach the attributes the builder derives from the row. Renaming a target through
+  # that back door would move its output directory out from under the artifact job and
+  # break its published URL.
+  test "options cannot override the attributes the builder owns" do
+    project = projects(:one)
+    project.targets.create!(
+      name: "sneaky", kind: "pdf",
+      options: { "name" => "elsewhere", "output-dir" => "../etc", "output-filename" => "x.pdf" }
+    )
+
+    manifest = ProjectArchiveBuilder.new(project).project_ptx
+
+    assert_match(/<target [^>]*name="sneaky"[^>]*output-dir="sneaky"[^>]*output-filename="sneaky\.pdf"/, manifest)
+    assert_no_match(/elsewhere|\.\.\/etc/, manifest)
   end
 
   test "packs each asset with a file under source/external using its ref" do

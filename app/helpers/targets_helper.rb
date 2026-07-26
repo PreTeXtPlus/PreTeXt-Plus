@@ -15,20 +15,14 @@ module TargetsHelper
     failed: "border-l-red-500", never: "border-l-gray-300"
   }.freeze
 
-  # Formats offered in the add-output form. Every value is one PreTeXt's project.ptx
-  # schema accepts; the wording is what an author would call the thing they want.
-  FORMAT_CHOICES = [
-    [ "Website (HTML)", "html" ],
-    [ "PDF", "pdf" ],
-    [ "EPUB", "epub" ],
-    [ "Kindle", "kindle" ],
-    [ "Braille", "braille" ],
-    [ "Slides (reveal.js)", "revealjs" ],
-    [ "LaTeX source", "latex" ]
-  ].freeze
-
-  def target_format_options
-    options_for_select(FORMAT_CHOICES)
+  # The add-output picker, filtered to what this project can actually build. Slides only
+  # come out of a <slideshow>, and offering them on an article would queue a build that
+  # fails at the server -- so the restriction is enforced by absence here, and by
+  # validations on Target and Project for every path that does not go through this form.
+  def target_kind_options(project)
+    options_for_select(
+      Target::Catalog.for_document_type(project.document_type).map { |kind| [ kind.label, kind.slug ] }
+    )
   end
 
   def target_state_pill(state)

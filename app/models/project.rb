@@ -23,7 +23,13 @@ class Project < ApplicationRecord
   # their own `belongs_to ... touch:`.
   SOURCE_ATTRIBUTES = %w[ pretext_source docinfo use_common_docinfo document_type ].freeze
 
-  DEFAULT_TARGET = { name: "web", label: "Website", output_format: :html }.freeze
+  DEFAULT_TARGET = { name: "web", label: "Website", kind: "website" }.freeze
+
+  # The mirror of Target's own check, and the one that is easy to miss: Rails does not
+  # re-validate children when the parent changes, so without this, converting a slideshow
+  # to an article would silently leave a reveal.js target behind to fail at the build
+  # server for reasons the author cannot see from the dashboard.
+  validate :targets_supported_by_document_type, if: :document_type_changed?
 
   before_validation :stamp_source_updated_at, if: -> { (changed & SOURCE_ATTRIBUTES).any? }
   before_validation(on: :create) { self.source_updated_at ||= Time.current }
@@ -116,5 +122,16 @@ class Project < ApplicationRecord
       return if targets.any?
 
       targets.build(**DEFAULT_TARGET)
+    end
+
+    # Names the targets standing in the way rather than just refusing, because the author
+    # has to go delete them and the dashboard will not tell them which.
+    def targets_supported_by_document_type
+      blocked = targets.reject { |target| target.kind_config&.available_for?(document_type) }
+      return if blocked.empty?
+
+      errors.add(:document_type,
+                 "cannot change to #{document_type} while this project has " \
+                 "#{blocked.map(&:display_label).to_sentence} — remove #{blocked.one? ? 'it' : 'them'} first")
     end
 end

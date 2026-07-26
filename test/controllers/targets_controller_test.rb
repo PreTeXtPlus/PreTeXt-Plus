@@ -54,6 +54,36 @@ class TargetsControllerTest < ActionDispatch::IntegrationTest
     assert_select "a[data-turbo-frame=drawer]", minimum: 1
   end
 
+  # Publishing from the drawer used to leave the drawer showing "Publish this output",
+  # because the response only replaced the dashboard row behind it.
+  test "publishing from the drawer redraws the drawer with the public URL" do
+    sign_in users(:two)
+    target = targets(:two_web)
+
+    patch publish_project_target_url(projects(:two), target),
+          params: { published: true },
+          headers: { "Turbo-Frame" => "drawer" },
+          as: :turbo_stream
+
+    assert_response :success
+    assert_match(/turbo-stream[^>]*target="drawer"/, response.body)
+    assert_match(/#{Regexp.escape(published_url(projects(:two), target.name))}/, response.body)
+    assert_match(/data-controller="clipboard"/, response.body)
+  end
+
+  # The dashboard carries an empty "drawer" frame of its own, so an unguarded replace
+  # would pop the drawer open on anyone who published from a row.
+  test "publishing from a row does not open the drawer" do
+    sign_in users(:two)
+
+    patch publish_project_target_url(projects(:two), targets(:two_web)),
+          params: { published: true },
+          as: :turbo_stream
+
+    assert_response :success
+    assert_no_match(/target="drawer"/, response.body)
+  end
+
   test "the drawer distinguishes what readers see from the last attempt" do
     sign_in users(:two)
     # two_web serves build `two` while a later build failed.
@@ -66,18 +96,18 @@ class TargetsControllerTest < ActionDispatch::IntegrationTest
 
   test "should create a target" do
     assert_difference("Target.count") do
-      post project_targets_url(@project), params: { target: { name: "slides", label: "Slides", output_format: "html" } }
+      post project_targets_url(@project), params: { target: { name: "slides", label: "Slides", kind: "website" } }
     end
     assert_redirected_to project_url(@project)
   end
 
   test "can add a non-html output" do
     assert_difference("Target.count") do
-      post project_targets_url(@project), params: { target: { name: "handout", label: "Handout PDF", output_format: "pdf" } }
+      post project_targets_url(@project), params: { target: { name: "handout", label: "Handout PDF", kind: "pdf" } }
     end
 
     target = @project.targets.find_by(name: "handout")
-    assert target.pdf_output_format?
+    assert_equal "pdf", target.kind
     assert_not target.site?
     assert_equal "handout.pdf", target.output_filename
   end
@@ -86,17 +116,17 @@ class TargetsControllerTest < ActionDispatch::IntegrationTest
   # bounded even though building itself is open to every owner.
   test "outputs are capped by the user's target quota" do
     quota = @user.target_quota
-    (quota - @project.targets.count).times { |i| @project.targets.create!(name: "extra#{i}", output_format: :html) }
+    (quota - @project.targets.count).times { |i| @project.targets.create!(name: "extra#{i}", kind: "website") }
     assert_equal quota, @project.targets.count
 
     assert_no_difference("Target.count") do
-      post project_targets_url(@project), params: { target: { name: "one-too-many", output_format: "html" } }
+      post project_targets_url(@project), params: { target: { name: "one-too-many", kind: "website" } }
     end
     assert_redirected_to projects_path
   end
 
   test "the add-output form disappears at the quota" do
-    (@user.target_quota - @project.targets.count).times { |i| @project.targets.create!(name: "extra#{i}", output_format: :html) }
+    (@user.target_quota - @project.targets.count).times { |i| @project.targets.create!(name: "extra#{i}", kind: "website") }
 
     get project_url(@project)
 
@@ -106,7 +136,7 @@ class TargetsControllerTest < ActionDispatch::IntegrationTest
 
   test "creating a target with a duplicate name is rejected" do
     assert_no_difference("Target.count") do
-      post project_targets_url(@project), params: { target: { name: "web", output_format: "html" } }
+      post project_targets_url(@project), params: { target: { name: "web", kind: "website" } }
     end
     assert_equal "Name has already been taken", flash[:alert]
   end
@@ -193,8 +223,8 @@ class TargetsControllerTest < ActionDispatch::IntegrationTest
     get projects_url # warm any first-request caching so the baseline is honest
     baseline = count_queries { get projects_url }
 
-    projects(:one).targets.create!(name: "extra-one", output_format: :pdf)
-    projects(:one).targets.create!(name: "extra-two", output_format: :epub)
+    projects(:one).targets.create!(name: "extra-one", kind: "pdf")
+    projects(:one).targets.create!(name: "extra-two", kind: "epub")
 
     assert_equal baseline, count_queries { get projects_url },
                  "adding targets changed the query count -- the index has gone N+1"
