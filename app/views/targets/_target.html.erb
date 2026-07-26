@@ -12,7 +12,30 @@
 
   <div class="md:w-32"><%= target_state_pill(state) %></div>
 
-  <p class="flex-1 text-sm text-gray-600"><%= target_timing(target) %></p>
+  <div class="flex-1">
+    <p class="text-sm text-gray-600"><%= target_timing(target) %></p>
+
+    <div class="mt-1 flex flex-wrap items-center gap-2 text-sm">
+      <% if target.published? %>
+        <%# _path, never _url: this partial is re-rendered by a background job during a
+            broadcast, where there is no request to derive a host from. The full
+            copyable URL lives in the drawer, which is always request-scoped. %>
+        <%= link_to "Public link ↗", published_path(target.project, target.name),
+              class: "text-xs font-medium text-indigo-700 hover:underline",
+              target: "_blank", rel: "noopener", data: { turbo: false } %>
+        <%= button_to "Unpublish", publish_project_target_path(target.project, target),
+              method: :patch, params: { published: false },
+              class: "cursor-pointer text-xs text-gray-500 hover:underline" %>
+      <% elsif target.current_build.present? %>
+        <%= button_to "Publish", publish_project_target_path(target.project, target),
+              method: :patch, params: { published: true },
+              class: "cursor-pointer text-xs text-gray-600 hover:underline" %>
+        <span class="text-xs text-gray-400">Not public</span>
+      <% else %>
+        <span class="text-xs text-gray-400">Build it before publishing</span>
+      <% end %>
+    </div>
+  </div>
 
   <div class="flex flex-wrap items-center gap-2">
     <% if target.current_build.present? %>

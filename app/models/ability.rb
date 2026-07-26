@@ -7,6 +7,14 @@ class Ability
       project.user.has_copiable_projects?
     end
 
+    # Anyone may read the build a published target currently points at. The
+    # current_build_id clause is what makes unpublishing effective and keeps superseded
+    # builds private: without it, any build URL would stay readable forever once its
+    # target had been published even once.
+    can :read, Build do |build|
+      build.target.published? && build.target.current_build_id == build.id
+    end
+
     can :read, Announcement do |announcement|
       if !announcement.published?
         false
@@ -30,6 +38,7 @@ class Ability
       :read,
       :update,
       :destroy,
+      :download,
       :editor_state,
       :update_editor_state
       ], Project, user_id: user.id

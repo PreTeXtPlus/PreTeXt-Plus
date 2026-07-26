@@ -50,6 +50,75 @@ class ProjectsControllerTest < ActionDispatch::IntegrationTest
     assert_response :success
   end
 
+  # ---- download ----
+  #
+  # The escape hatch: someone choosing where to keep years of writing should be able to
+  # leave with a zip that opens in PreTeXt-CLI.
+
+  test "download returns a PreTeXt-CLI project zip" do
+    get download_project_url(@project)
+
+    assert_response :success
+    assert_equal "application/zip", response.media_type
+
+    entries = {}
+    Zip::File.open_buffer(StringIO.new(response.body)) do |zip|
+      zip.each { |e| entries[e.name] = e.get_input_stream.read if e.file? }
+    end
+
+    assert_includes entries.keys, "project.ptx"
+    assert_includes entries.keys, "publication/publication.ptx"
+    assert_includes entries.keys, "source/main.ptx"
+  end
+
+  test "cannot download another user's project" do
+    sign_out :user
+    sign_in users(:two)
+
+    get download_project_url(@project)
+
+    assert_redirected_to projects_path
+  end
+
+  # ---- legacy share links ----
+  #
+  # These URLs are already in the world, possibly printed in syllabi, so they stay
+  # working whether or not the project has a published output.
+
+  test "share still serves the quick build when nothing is published" do
+    @project.update_column(:html_source, "<h1>quick build</h1>")
+
+    get share_project_url(@project)
+
+    assert_response :success
+    assert_match "quick build", response.body
+  end
+
+  test "share redirects to the published output once there is one" do
+    target = @project.targets.first
+    build = target.builds.create!
+    build.mark!(:success)
+    target.update!(published: true)
+
+    get share_project_url(@project)
+
+    assert_redirected_to published_path(@project, target.name)
+    assert_response :found, "a 301 would still be followed after unpublishing"
+  end
+
+  test "share falls back to the quick build again after unpublishing" do
+    target = @project.targets.first
+    target.builds.create!.mark!(:success)
+    target.update!(published: true)
+    target.update!(published: false)
+    @project.update_column(:html_source, "<h1>quick build</h1>")
+
+    get share_project_url(@project)
+
+    assert_response :success
+    assert_match "quick build", response.body
+  end
+
   test "should update project" do
     patch project_url(@project), params: { project: { title: @project.title } }, as: :json
     assert_response :ok

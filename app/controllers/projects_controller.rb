@@ -66,8 +66,27 @@ class ProjectsController < ApplicationController
     end
   end
 
+  # Legacy share link. These URLs are already in the world -- handed to students,
+  # possibly printed in syllabi -- so the route stays permanently. Once the project has
+  # a published html output, that is the better destination; until then it keeps
+  # serving the quick build as before.
+  #
+  # Found, not Moved Permanently: a browser that cached a 301 would keep redirecting
+  # after the target was unpublished.
   def share
+    published = @project.targets.detect { |t| t.html_output_format? && t.published? && t.current_build_id }
+    return redirect_to published_path(@project, published.name), status: :found if published
+
     render html: (@project.html_source || "Document not found").html_safe
+  end
+
+  # The whole project as a PreTeXt-CLI-compatible zip: source, assets, project.ptx and
+  # publication.ptx. The escape hatch -- someone choosing where to keep five years of
+  # writing should be able to leave with it.
+  def download
+    send_data ProjectArchiveBuilder.new(@project).build.read,
+              filename: "#{@project.title.parameterize.presence || 'project'}.zip",
+              type: "application/zip"
   end
 
   def source

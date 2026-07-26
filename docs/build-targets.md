@@ -119,12 +119,15 @@ that reads like a typo. Use `output_format`, which also matches `Division#source
 | Change | Shape | Purpose |
 |---|---|---|
 | `targets` | new table, uuid pk | The persistent output. |
+| `targets.current_build_id` | uuid | Latest successful build — what readers see. |
+| `targets.latest_build_id` | uuid | Most recent attempt — what the state pill reports. Added in PR 2, once it became clear `Target#state` could not be query-free without it. |
 | `builds.target_id` | uuid, not null, fk | A build is an attempt at a target. `project_id` stays as a denormalization so existing nested routes keep working. |
 | `projects.source_updated_at` | datetime, not null | When the author last changed source, docinfo or assets. |
 
-`targets.current_build_id` deliberately has **no** foreign key constraint. A FK would be
-circular (`targets.current_build_id -> builds.id -> targets.id`) and would make
-`dependent: :destroy` awkward. `Build#release_from_target` keeps it honest instead.
+Both build pointers deliberately have **no** foreign key constraint. One would be circular
+(`targets.current_build_id -> builds.id -> targets.id`) and would fight
+`dependent: :destroy`. `Build#sync_target` keeps them honest instead, recomputing both
+whenever a build is created, transitions, or is destroyed.
 
 ---
 
@@ -133,7 +136,7 @@ circular (`targets.current_build_id -> builds.id -> targets.id`) and would make
 Each is independently deployable. The first three need nothing from
 `pretext-plus-build-full`, so the whole interface can ship before any new format exists.
 
-### PR 1 — Targets exist  *(no visible UI change)*
+### PR 1 — Targets exist  *(no visible UI change)* — **done**
 
 Pure plumbing. Every existing project gets one `web` target that adopts its builds. The admin
 builds pages keep working throughout.
@@ -142,7 +145,8 @@ builds pages keep working throughout.
   anything it owns, `NOT NULL`.
 - `CreateTargets` — table, one `web` target per existing project, adopt existing builds,
   point `current_build_id` at the newest successful build per target.
-- `Target` model with `state` / `stale?` / `adopt!` / `refresh_current_build!`.
+- `Target` model with `state` / `stale?` / `sync_from_builds!`. (Shipped as `adopt!` plus
+  `refresh_current_build!`; PR 2 consolidated the pair into one recompute.)
 - `Build#mark!` replacing all eleven `update_column` sites.
 - `Division` / `Asset` touch `source_updated_at`.
 - `Project` gets a default `web` target on create, and copies targets in `full_dup`.
@@ -180,7 +184,7 @@ in-flight builds per user.
 "Quick preview", and stays embedded on the public `projects#source` page, until publishing
 gives every project a real html build to point at. Retired in PR 5.
 
-### PR 3 — Publish and download  *(the part authors are asking for)*
+### PR 3 — Publish and download  *(the part authors are asking for)* — **done**
 
 - `Ability`: the owner rules (`can :manage, Target` / `can :manage, Build`) landed in
   PR 2. What remains is the anonymous read rule:
@@ -204,6 +208,39 @@ possibly in syllabi. Keep the route permanently and 301 it to the html target's 
 The three `lunr-pretext-search-index.js` redirects and the `get ":id/*_.html"` catch-all exist
 because built PreTeXt HTML uses relative links — replicate them under `/o/…` or published
 sites will 404 on search and cross-chapter navigation.
+
+**Shipped in PR 3:** `/o/:project_id/:target_name/*path` served by `PublishedController`,
+sharing `ServesBuildFiles` with `BuildFilesController`. `BuildFilesController` stays
+login-only on purpose, so published output has exactly one anonymous surface and
+unpublishing cannot be worked around by addressing the build directly. `projects#download`
+returns the CLI zip. `Ability` gained `:download` on Project (the owner list is
+deliberately explicit, so it had to be named).
+
+**No trailing slash.** Rails normalizes trailing slashes away during route recognition —
+`/o/x/web` and `/o/x/web/` are indistinguishable by the time a controller runs, and only
+`request.original_fullpath` still knows. Rather than depend on that, both bare forms 302
+to an explicit `/o/x/web/index.html`, which puts the visitor one level inside the target
+so the built page's relative links resolve.
+
+> ### ⚠ Unresolved before publishing is promoted: user content on the primary origin
+>
+> Published output is user-authored HTML+JS served from `pretext.plus` itself, now
+> anonymously reachable by design. Any script in a published document runs with the
+> application's origin: it can make credentialed same-origin requests as a logged-in
+> visitor, read a CSRF token out of a fetched page, and phish from a trusted URL. Session
+> cookies are `httponly; samesite=lax`, which blocks cookie theft and cross-site CSRF but
+> not same-origin fetches from a page a victim actually visits. The app currently sets no
+> CSP at all (`config/initializers/content_security_policy.rb` is entirely commented out).
+>
+> This is not new — `projects#share` and `/builds/:id/files/...` already served user HTML —
+> but publishing turns it into a promoted, shareable, anonymous surface, and the URL shape
+> is being fixed now, which is the expensive thing to change later.
+>
+> **Recommended:** serve published output from a separate origin, the way GitHub uses
+> `githubusercontent.com`. A CSP `sandbox` directive is the cheap alternative and would
+> neutralize same-origin access, but sandboxing forces an opaque origin, so any PreTeXt
+> feature touching `localStorage` (Runestone progress, knowl state) would start throwing.
+> That needs testing against a real build before it could ship, so nothing was applied.
 
 ### PR 4 — More formats  *(gated on build-server support)*
 

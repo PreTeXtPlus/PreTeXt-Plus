@@ -37,8 +37,28 @@ Rails.application.routes.draw do
       get "checkout" => "subscription_types#checkout", as: "checkout"
     end
   end
+  # Public output.
+  #
+  # Built PreTeXt links between its pages relatively ("chapter-1.html"), so the page a
+  # visitor lands on must sit one level *inside* the target, or every internal link
+  # resolves a directory too high. Rails normalizes trailing slashes away during route
+  # recognition -- "/o/x/web" and "/o/x/web/" are indistinguishable by the time a
+  # controller sees them -- so rather than depend on the raw path, both bare forms
+  # redirect to an explicit index.html and the file route requires a path segment.
+  #
+  # format: false keeps ".html" in the path instead of being parsed as a response format.
+  get "o/:project_id/:target_name" => "published#redirect_to_index", as: :published
+  get "o/:project_id/:target_name/*relative_path" => "published#show",
+      as: :published_file, format: false
+
   resources :projects do
+    member do
+      get "download" => "projects#download", as: "download"
+    end
     resources :targets, only: [ :show, :create, :update, :destroy ] do
+      member do
+        patch "publish" => "targets#publish", as: "publish"
+      end
       # Builds are always attempts at a target, so that is where they are created.
       resources :builds, only: [ :create ]
     end

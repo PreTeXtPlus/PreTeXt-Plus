@@ -24,8 +24,12 @@
         <%= link_to "Share source", share_source_project_path(@project),
               class: "rounded-md border border-gray-300 px-3.5 py-2 font-medium hover:bg-gray-50" %>
       <% end %>
-      <%# Quick build stays reachable until publishing lands and every project has a real
-          html build to point at. Retired in PR 5. %>
+      <%# Source, assets and a project.ptx -- opens directly in PreTeXt-CLI. %>
+      <%= link_to "Download project", download_project_path(@project),
+            class: "rounded-md border border-gray-300 px-3.5 py-2 font-medium hover:bg-gray-50",
+            data: { turbo: false } %>
+      <%# Quick build stays reachable until every project has a real html build to point
+          at. Retired in PR 5. %>
       <%= link_to "Quick preview", share_project_path(@project),
             class: "rounded-md border border-gray-300 px-3.5 py-2 font-medium hover:bg-gray-50",
             target: "_blank", rel: "noopener" %>

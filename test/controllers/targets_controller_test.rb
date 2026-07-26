@@ -96,6 +96,56 @@ class TargetsControllerTest < ActionDispatch::IntegrationTest
     assert_empty Build.where(id: build_ids)
   end
 
+  # ---- publishing ----
+
+  test "publishing exposes the output without starting a build" do
+    target = targets(:two_web)
+    sign_in users(:two)
+
+    assert_no_difference("Build.count") do
+      patch publish_project_target_url(projects(:two), target), params: { published: true }
+    end
+
+    assert target.reload.published?
+  end
+
+  test "unpublishing is one click back" do
+    target = targets(:two_web)
+    target.update!(published: true)
+    sign_in users(:two)
+
+    patch publish_project_target_url(projects(:two), target), params: { published: false }
+
+    assert_not target.reload.published?
+  end
+
+  test "a target with nothing built cannot be published" do
+    assert_nil @target.current_build_id
+
+    patch publish_project_target_url(@project, @target), params: { published: true }
+
+    assert_not @target.reload.published?
+    assert_match(/Build .* before publishing/, flash[:alert])
+  end
+
+  test "publishing swaps the row in place for a turbo request" do
+    target = targets(:two_web)
+    sign_in users(:two)
+
+    patch publish_project_target_url(projects(:two), target), params: { published: true },
+          headers: { "Accept" => "text/vnd.turbo-stream.html" }
+
+    assert_response :success
+    assert_match ActionView::RecordIdentifier.dom_id(target), response.body
+  end
+
+  test "cannot publish another user's target" do
+    patch publish_project_target_url(projects(:two), targets(:two_web)), params: { published: true }
+
+    assert_redirected_to projects_path
+    assert_not targets(:two_web).reload.published?
+  end
+
   test "cannot reach another user's target" do
     get project_target_url(projects(:two), targets(:two_web))
 

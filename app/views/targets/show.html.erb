@@ -46,6 +46,29 @@
         </div>
       </div>
 
+      <div class="border-b border-gray-200 p-5">
+        <p class="font-mono text-xs uppercase tracking-wider text-gray-500">Public link</p>
+        <% if @target.published? %>
+          <div class="mt-2 flex items-center gap-2 rounded-md border border-gray-200 bg-gray-50 p-2">
+            <code class="flex-1 truncate text-xs"><%= published_url(@project, @target.name) %></code>
+            <%= button_to "Unpublish", publish_project_target_path(@project, @target),
+                  method: :patch, params: { published: false },
+                  class: "cursor-pointer rounded-md border border-gray-300 bg-white px-2.5 py-1.5 text-xs hover:bg-gray-50" %>
+          </div>
+          <p class="mt-2 text-xs text-gray-500">
+            Anyone with this link can read it. It always serves the most recent successful
+            build, so a failed rebuild leaves it untouched. Unpublishing breaks it immediately.
+          </p>
+        <% elsif @target.current_build.present? %>
+          <%= button_to "Publish this output", publish_project_target_path(@project, @target),
+                method: :patch, params: { published: true },
+                class: "mt-2 cursor-pointer rounded-md border border-gray-300 px-3 py-2 text-sm hover:bg-gray-50" %>
+          <p class="mt-2 text-xs text-gray-500">Publishing does not start a build — it exposes the one already built.</p>
+        <% else %>
+          <p class="mt-2 text-sm text-gray-600">Build this output before publishing it.</p>
+        <% end %>
+      </div>
+
       <% if (log = @target.latest_build&.log).present? %>
         <div class="border-b border-gray-200 p-5">
           <p class="font-mono text-xs uppercase tracking-wider text-gray-500">Build log</p>
