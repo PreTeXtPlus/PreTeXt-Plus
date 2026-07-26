@@ -1,7 +1,8 @@
 # Build targets
 
-Plan of record for turning the single hardcoded `web` build into a set of user-managed
-output targets (html, pdf, epub, kindle, braille, revealjs, latex, and custom variants).
+Plan of record and running status for turning the single hardcoded `web` build into a set
+of user-managed output targets (html, pdf, epub, kindle, braille, revealjs, latex, and
+custom variants).
 
 Companion design docs (clickable mockups of the three screens):
 
@@ -10,13 +11,69 @@ Companion design docs (clickable mockups of the three screens):
 
 ---
 
+## Status
+
+Branch `builds`, based on `fbf2b0d` (`git log fbf2b0d..HEAD` for the commits, one per PR).
+**Not deployed, not merged.**
+
+| | |
+|---|---|
+| PRs 1–4 | **Done** — see the per-PR sections below, each with what shipped and how it differs from the original plan |
+| PR 5 (retire the quick build) | **Not started.** The only remaining implementation work |
+| Suite | 268 tests / 737 assertions green; rubocop and brakeman clean |
+| Migrations | Four, all applied in dev. See *Deploying* below before running in production |
+
+### What has never actually run
+
+Three things are implemented and tested but unproven against reality. A fresh session
+should not assume they work:
+
+1. **No format other than html has ever been built.** The generated `project.ptx` is
+   schema-valid and the plumbing is unit-tested, but the first real `pdf` / `epub` /
+   `braille` build against `pretext-plus-build-full` is the actual proof. Most likely
+   places to break: whether the server writes to `output/<target-name>/` as
+   `ProjectArchiveBuilder` assumes, and whether `entry_path` detection picks the right
+   file for braille.
+2. **Nothing has been published end-to-end through a browser.** `PublishedController` is
+   covered by integration tests, but no real built site has been served through `/o/…`,
+   so relative links, the search index and knowls are unverified in situ.
+3. **The drawer and live-updating rows are unverified in a browser.** There is no Chrome
+   in the dev container, so `bin/rails test:system` cannot run locally; CI has Chrome and
+   will exercise them. Integration tests assert the Stimulus/Turbo wiring those depend on,
+   which is not the same as watching it work.
+
+### Where the code lives
+
+| Concern | Files |
+|---|---|
+| Model | `app/models/target.rb`, `build.rb`, plus `touch:` on `division.rb` / `asset.rb` and callbacks in `project.rb` |
+| Dashboard | `app/views/projects/show.html.erb`, `app/views/targets/_target.html.erb`, `app/helpers/targets_helper.rb` |
+| Drawer | `app/views/targets/show.html.erb`, `app/javascript/controllers/drawer_controller.js`, `TargetsController#show` |
+| Building | `BuildsController`, `FullBuildJob`, `FullBuildArtifactJob`, `BuildCallbacksController`, `BuildStatusChecker` |
+| Public output | `app/controllers/published_controller.rb` + `app/controllers/concerns/serves_build_files.rb` (shared with `BuildFilesController`) |
+| Manifest | `app/services/project_archive_builder.rb` |
+| Tests | `test/models/target_test.rb`, `test/controllers/{targets,builds,published}_controller_test.rb`, `test/jobs/entry_path_detection_test.rb`, `test/services/project_archive_builder_test.rb` |
+
+### Deploying
+
+Four migrations, in order: `source_updated_at` on projects, `create_targets`,
+`latest_build_id`, then `compression` + `entry_path`.
+
+`CreateTargets` sets `builds.target_id` NOT NULL in the same migration that backfills it,
+so **check `Build.where.missing(:project).count` is zero in production first** — a build
+with no project would get no target and the NOT NULL would fail the migration.
+
+`config/cable.yml` changed for development only; production still uses `solid_cable`.
+
+---
+
 ## The modeling change
 
-`Build` currently does two jobs: it is the record of an attempt *and* the thing a reader
-visits. That works with exactly one output. With several, "which build is my PDF?" has no
+`Build` used to do two jobs: it was the record of an attempt *and* the thing a reader
+visited. That works with exactly one output. With several, "which build is my PDF?" has no
 answer the interface can give.
 
-So a **target** becomes a first-class, persistent object — name, format, published flag,
+So a **target** is now a first-class, persistent object — name, format, published flag,
 current state — and builds become its history. This mirrors how PreTeXt-CLI already works:
 `project.ptx` declares a list of named targets, and several targets may share a format
 (a "student" and an "instructor" HTML, say). Target *names* are unique within a project;
@@ -133,10 +190,12 @@ whenever a build is created, transitions, or is destroyed.
 
 ---
 
-## The four PRs
+## The PRs
 
-Each is independently deployable. The first three need nothing from
-`pretext-plus-build-full`, so the whole interface can ship before any new format exists.
+Each is independently deployable. The first three needed nothing from
+`pretext-plus-build-full`, so the interface shipped before any new format existed. Each
+section below records what actually shipped, including where it diverged from the plan and
+why — those divergences are the parts worth reading.
 
 ### PR 1 — Targets exist  *(no visible UI change)* — **done**
 
@@ -264,10 +323,16 @@ default, because the artifact job strips exactly that prefix off the returned zi
 `subscribed?`; that is a monetization decision that is still open, so what shipped is a
 cost bound (`target_quota`) rather than a paywall. Adding a gate later is one ability rule.
 
-### PR 5 — Retire the quick build  *(optional, last)*
+### PR 5 — Retire the quick build — **not started, the only remaining work**
 
-Separable, and deliberately after PR 3 — only safe once every project has a successful html
-build.
+Deliberately last: only safe once projects actually have successful html builds to point
+at, because it removes the fallback. Right now the dashboard still links `projects#share`
+as "Quick preview", and `projects#source` still embeds it in an iframe for visitors
+deciding whether to copy a project — that second use is the one that needs a real
+replacement, since it serves people who do not own the project.
+
+Retiring it also removes the older, unpublished instance of the origin problem described
+below, since `projects#share` is the other place user HTML is served anonymously.
 
 | Artifact | Last consumer | Disposition |
 |---|---|---|
@@ -281,17 +346,32 @@ build.
 
 ## Traps
 
+Still live — things future work can break:
+
 - **In-flight callback URLs.** `FullBuildJob` bakes an absolute `callback_url` into each
   submission, so a build submitted before a deploy calls back *after* it. `full_callback` is
   the one route that cannot move without dropping builds on the floor.
-- **`mark!` must not be bypassed.** The value evaporates the first time someone adds a twelfth
-  transition with `update_column`.
+- **`mark!` must not be bypassed.** Every status transition goes through `Build#mark!`,
+  which is what keeps the denormalized pointers in step and broadcasts the row. The value
+  evaporates the first time someone adds a transition with a bare `update_column`.
+- **`targets/_target.html.erb` has no session.** It is re-rendered by a background job
+  during a broadcast, so it must never call `can?`, `current_user`, or a `_url` helper
+  (no request means no host). Authorization lives on the actions; the copyable absolute
+  URL lives in the drawer, which is always request-scoped.
+- **`Target` has a two-column `default_scope`,** so `Target.group(...)` raises in Postgres
+  ("must appear in the GROUP BY clause"). Use `Target.reorder(nil).group(...)`.
+- **Enum values are load-bearing.** `output_format` must only ever contain formats
+  PreTeXt's `project.ptx` schema accepts; a test enforces this. `scorm` is not one — it is
+  html plus `compression`.
+
+Already handled, recorded because the reasoning is not obvious from the diff:
+
 - **Migration ordering.** `CreateTargets` backfills from `builds.project_id` and sets
-  `target_id` NOT NULL in the same migration. Check `Build.where.missing(:project).count` in
-  production first.
-- **Fixture cascade.** `fixtures :all` loads everything for every test, so a NOT NULL
-  `target_id` breaks fixtures in suites unrelated to this work. Update them in the same commit
-  as the migration.
+  `target_id` NOT NULL in the same migration — see *Deploying* above.
+- **Fixture cascade.** `fixtures :all` loads everything for every test, so the NOT NULL
+  `target_id` needed `test/fixtures/builds.yml` and a new `targets.yml` updated in the
+  same commit. Build fixtures carry explicit `created_at` because `latest_build` ordering
+  depends on it.
 
 ---
 
