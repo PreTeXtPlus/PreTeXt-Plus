@@ -194,6 +194,7 @@ class TargetsControllerTest < ActionDispatch::IntegrationTest
   end
 
   test "should create a target" do
+    @project.targets.where.not(id: @target.id).destroy_all
     assert_difference("Target.count") do
       post project_targets_url(@project), params: { target: { name: "Instructor site", kind: "website" } }
     end
@@ -201,6 +202,7 @@ class TargetsControllerTest < ActionDispatch::IntegrationTest
   end
 
   test "can add a non-html output" do
+    @project.targets.where.not(id: @target.id).destroy_all    
     assert_difference("Target.count") do
       post project_targets_url(@project), params: { target: { name: "Handout", kind: "pdf" } }
     end
@@ -214,6 +216,7 @@ class TargetsControllerTest < ActionDispatch::IntegrationTest
   # The form asks for one name, not two: what goes into project.ptx and the public URL is
   # derived from what the author typed.
   test "adding an output derives its project.ptx name from the name given" do
+    @project.targets.where.not(id: @target.id).destroy_all
     post project_targets_url(@project), params: { target: { name: "Instructor PDF", kind: "pdf" } }
 
     assert_equal "instructor-pdf", @project.targets.find_by(name: "Instructor PDF").slug
@@ -250,6 +253,7 @@ class TargetsControllerTest < ActionDispatch::IntegrationTest
   end
 
   test "creating a target with a duplicate name is rejected" do
+    @project.targets.where.not(id: @target.id).destroy_all
     assert_no_difference("Target.count") do
       post project_targets_url(@project), params: { target: { name: "Website", kind: "website" } }
     end
