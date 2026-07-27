@@ -73,11 +73,22 @@ class ProjectsControllerTest < ActionDispatch::IntegrationTest
 
   test "cannot download another user's project" do
     sign_out :user
-    sign_in users(:two)
+    # Not users(:two): they collaborate on this project (see collaborations.yml)
+    # and so can legitimately download it. This needs someone with no access at all.
+    sign_in users(:subscribed)
 
     get download_project_url(@project)
 
     assert_redirected_to projects_path
+  end
+
+  test "a collaborator can download the project they share" do
+    sign_out :user
+    sign_in users(:two)
+
+    get download_project_url(@project)
+
+    assert_response :success
   end
 
   # ---- legacy share links ----

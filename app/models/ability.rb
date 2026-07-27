@@ -42,11 +42,12 @@ class Ability
       :editor_state,
       :update_editor_state
       ], Project, user_id: user.id
-    # Shared projects: collaborators can read and edit, but never destroy —
-    # removing a project entirely stays with its owner.
+    # Shared projects: a collaborator is a co-author, so they get everything the
+    # owner has except destroying the project — that stays with whoever owns it.
     can [
       :read,
       :update,
+      :download,
       :editor_state,
       :update_editor_state
       ], Project, collaborations: { user_id: user.id }
@@ -73,15 +74,24 @@ class Ability
     # Targets and builds belonging to own projects. Build volume is bounded by the rate
     # limit and concurrency cap in BuildsController rather than by who is signed in.
     can :manage, Target, project: { user_id: user.id }
+    # Collaborators get the same build pipeline: a co-author who can rewrite every
+    # division but cannot build the result could never check their own work. Must
+    # precede the `cannot :create` below, or it would re-grant :create unquota'd.
+    can :manage, Target, project: { collaborations: { user_id: user.id } }
     # Creating one more is additionally bounded by quota. The `cannot` is required: a
     # block that returns false does not *match*, so without it CanCan would fall back to
     # the broader :manage rule above and allow the create anyway.
     cannot :create, Target
     can :create, Target do |target|
-      target.project&.user_id == user.id &&
-        target.project.targets.count < user.target_quota
+      project = target.project
+      # Quota follows the OWNER's plan, exactly like collaborator_limit: what a
+      # project may cost belongs to whoever owns it, and a collaborator's own
+      # subscription says nothing about someone else's project.
+      project.present? && project.editable_by?(user) &&
+        project.targets.count < project.user.target_quota
     end
     can :manage, Build, project: { user_id: user.id }
+    can :manage, Build, project: { collaborations: { user_id: user.id } }
 
     can :subscribe, Announcement
 

@@ -56,6 +56,9 @@ export class YCableProvider {
     this.ready = false;
     this.destroyed = false;
     this.hasConnectedOnce = false;
+    // Coalescing state for scheduleResync.
+    this.resyncInFlight = false;
+    this.resyncQueued = false;
     /** @type {Array<{type: string, payload: string, id?: number, sender?: string}>} */
     this.buffered = [];
     this.consumer = null;
@@ -196,6 +199,15 @@ export class YCableProvider {
       if (message.sender !== this.sender) {
         Y.applyUpdate(this.doc, fromBase64(message.payload), this);
       }
+    } else if (message.type === "resync") {
+      // An update too large for the cable transport to carry (see
+      // ProjectDocChannel::MAX_BROADCAST_BYTES). It is already persisted, so pull it
+      // over HTTP. The sender already has it locally and can skip.
+      if (typeof message.id === "number" && message.id > this.maxUpdateId) {
+        this.maxUpdateId = message.id;
+        this.updatesSinceCompaction += 1;
+      }
+      if (message.sender !== this.sender) this.scheduleResync();
     } else if (message.type === "awareness") {
       if (message.sender !== this.sender) {
         applyAwarenessUpdate(this.awareness, fromBase64(message.payload), this);
@@ -260,6 +272,31 @@ export class YCableProvider {
 
   async fetchAndApply() {
     this.applyDocInfo(await this.fetchDocInfo());
+  }
+
+  /**
+   * Catch up over HTTP, coalescing concurrent requests: a burst of oversized updates
+   * (a paste storm, or several peers converting divisions at once) would otherwise
+   * fire one full document fetch each. A fetch already in flight may have started
+   * before the newest update landed, so a resync arriving mid-flight queues exactly
+   * one more pass rather than being dropped.
+   * @returns {void}
+   */
+  scheduleResync() {
+    if (this.resyncInFlight) {
+      this.resyncQueued = true;
+      return;
+    }
+    this.resyncInFlight = true;
+    this.fetchAndApply()
+      .catch((error) => console.error("Failed to resync collaborative doc:", error))
+      .finally(() => {
+        this.resyncInFlight = false;
+        if (this.resyncQueued) {
+          this.resyncQueued = false;
+          this.scheduleResync();
+        }
+      });
   }
 
   async maybeCompact() {
