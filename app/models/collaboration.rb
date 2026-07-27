@@ -29,12 +29,14 @@ class Collaboration < ApplicationRecord
     user_id.present?
   end
 
-  # Link every pending invitation addressed to this user's (just confirmed)
-  # email. Confirmation proves address ownership, so no token is needed. An
-  # invite to a project the user already collaborates on (possible when a
-  # collaborator confirms a changed email that was separately invited) is
-  # discarded rather than claimed, so a user never holds two rows on one
-  # project.
+  # Link every pending invitation addressed to this user's email. Called when an
+  # account is registered and again whenever an address is confirmed, since a
+  # collaborator need only be registered (see CollaborationsController#create);
+  # no token is needed because the invitation is addressed to the very address
+  # the account is registered under. An invite to a project the user already
+  # collaborates on (possible when a collaborator confirms a changed email that
+  # was separately invited) is discarded rather than claimed, so a user never
+  # holds two rows on one project.
   def self.claim_for(user)
     pending.where(invited_email: user.email).find_each do |collaboration|
       if collaboration.project.editable_by?(user)

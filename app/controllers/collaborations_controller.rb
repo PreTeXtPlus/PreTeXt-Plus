@@ -2,17 +2,20 @@ class CollaborationsController < ApplicationController
   before_action :set_project
 
   # POST /projects/:project_id/collaborations
-  # Invite by email. A confirmed account under that email becomes a
-  # collaborator immediately; otherwise the row sits pending until someone
-  # confirms an account with that address (Collaboration.claim_for).
+  # Invite by email. Any registered account under that address becomes a
+  # collaborator immediately; only an address with no account at all sits
+  # pending, until someone registers or confirms it (Collaboration.claim_for).
   def create
     collaboration = @project.collaborations.build(invited_email: params[:email])
     authorize! :create, collaboration
 
-    # An unconfirmed account is treated like no account: the invite stays
-    # pending and gets claimed automatically when the email is confirmed.
+    # Registration, not confirmation, is the bar. An unconfirmed account is a
+    # working account everywhere else in the app -- Devise is configured with
+    # allow_unconfirmed_access_for, so its owner can sign in and edit their own
+    # projects -- and treating it as nonexistent here produced the worst of both
+    # worlds: a pending invite plus a message telling a signed-in user to go make
+    # the account they already had.
     invitee = User.find_by(email: collaboration.invited_email)
-    invitee = nil unless invitee&.confirmed?
     if invitee
       collaboration.user = invitee
       collaboration.accepted_at = Time.current

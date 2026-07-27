@@ -10,14 +10,18 @@ class AbilityTest < ActiveSupport::TestCase
     assert_not ability.can?(:destroy, project)
   end
 
-  test "a pending invite grants nothing" do
-    stranger = User.create!(name: "Pending", email: "invited@example.com",
-                            password: "password123", confirmed_at: nil)
-    # Fixture :pending invites this email to the team project, but the row is
-    # unclaimed (user_id nil), so no access yet.
-    ability = Ability.new(stranger)
-    assert_not ability.can?(:read, projects(:team))
-    assert_not ability.can?(:update, projects(:team))
+  test "an unclaimed invitation grants nothing, even to the account it names" do
+    project = projects(:team)
+    user = users(:one)
+    # Built straight through the model, so nothing linked it -- this is what a
+    # pending row looks like. Access keys on the linked user_id and never on the
+    # invited email, so naming an existing address must not be enough on its own.
+    invitation = project.collaborations.create!(invited_email: user.email)
+    assert_not invitation.accepted?
+
+    ability = Ability.new(user)
+    assert_not ability.can?(:read, project)
+    assert_not ability.can?(:update, project)
   end
 
   test "non-collaborator cannot touch someone else's project" do

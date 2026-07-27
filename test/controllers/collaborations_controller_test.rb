@@ -27,6 +27,29 @@ class CollaborationsControllerTest < ActionDispatch::IntegrationTest
     assert_match "You can now edit", mail.subject
   end
 
+  test "owner invites a registered but unconfirmed user, who is added immediately" do
+    sign_in @owner
+    invitee = users(:unconfirmed)
+    assert_nil invitee.confirmed_at
+
+    assert_difference("Collaboration.count") do
+      perform_enqueued_jobs do
+        post project_collaborations_url(@project), params: { email: invitee.email }
+      end
+    end
+
+    collaboration = @project.collaborations.find_by(invited_email: invitee.email)
+    assert collaboration.accepted?, "a registered account should not be left pending"
+    assert_equal invitee, collaboration.user
+    assert_includes invitee.reload.shared_projects, @project
+
+    # And the owner is told the truth, rather than that the invitee must go
+    # create an account they already have.
+    assert_match(/can now edit/, flash[:notice])
+    mail = ActionMailer::Base.deliveries.last
+    assert_match "You can now edit", mail.subject
+  end
+
   test "owner invites an unknown email, creating a pending invitation" do
     sign_in @owner
 

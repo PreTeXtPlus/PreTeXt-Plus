@@ -36,6 +36,7 @@ class User < ApplicationRecord
     allow_nil: true
 
   before_create :set_common_docinfo
+  after_create :claim_project_invitations
 
   # Case-insensitive counterpart to find_by(username:) -- a profile URL should
   # resolve regardless of how the visitor cased it, matching the uniqueness rule
@@ -96,13 +97,22 @@ class User < ApplicationRecord
 
   private
 
-  # Devise (confirmable) hook: runs whenever this user confirms an email
-  # address -- initial signup or a reconfirmed change. Confirmation proves the
-  # user owns the address, so any project invitations sent to it can be linked
-  # to this account.
+  # Registering is enough to pick up invitations already addressed to you: a
+  # collaborator only has to be a registered user, not a confirmed one (see
+  # CollaborationsController#create). Without this, an invite sent *before*
+  # someone signed up would strand them until they confirmed, which is the same
+  # inconsistency from the other direction.
+  def claim_project_invitations
+    Collaboration.claim_for(self)
+  end
+
+  # Devise (confirmable) hook: runs whenever this user confirms an email address.
+  # Still needed alongside the create hook because `reconfirmable` means a
+  # *changed* address only becomes this user's `email` once confirmed, so an
+  # invitation sent to the new address can only be claimed here.
   def after_confirmation
     super
-    Collaboration.claim_for(self)
+    claim_project_invitations
   end
 
   def set_common_docinfo

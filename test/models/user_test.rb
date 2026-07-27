@@ -114,19 +114,35 @@ class UserTest < ActiveSupport::TestCase
     assert_equal Project.default_docinfo.squish, user.reload.common_docinfo.squish
   end
 
-  test "confirming an account claims pending project invitations" do
+  test "registering claims pending project invitations, without waiting for confirmation" do
+    assert_not collaborations(:pending).accepted?
+
     user = User.create!(
       name: "Invited Person",
       email: "invited@example.com", # matches fixture collaborations(:pending)
       password: "secret123"
     )
-    assert_not collaborations(:pending).accepted?
 
-    user.confirm
-
+    assert_nil user.confirmed_at, "the point of this test is an unconfirmed account"
     collaboration = collaborations(:pending).reload
     assert_equal user, collaboration.user
     assert collaboration.accepted?
     assert_includes user.shared_projects, projects(:team)
+  end
+
+  test "confirming a changed email claims invitations addressed to the new address" do
+    # `reconfirmable` keeps the old address as `email` until the new one is
+    # confirmed, so this invitation cannot be claimed at registration time --
+    # the confirmation hook is the only thing that can catch it.
+    user = users(:one)
+    invitation = projects(:team).collaborations.create!(invited_email: "moved@example.com")
+    assert_not invitation.accepted?
+
+    user.update!(email: "moved@example.com")
+    assert_equal "moved@example.com", user.unconfirmed_email
+    user.confirm
+
+    assert_equal user, invitation.reload.user
+    assert invitation.accepted?
   end
 end
