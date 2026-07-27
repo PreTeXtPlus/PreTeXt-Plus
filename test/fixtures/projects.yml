@@ -18,3 +18,14 @@ slides:
   title: My Slide Deck
   pretext_source: <pretext><slideshow><slide><title>First</title><p>Content</p></slide></slideshow></pretext>
   document_type: slideshow
+
+# A team-curated starter, flagged is_template so it shows up in the
+# "Start project from template" chooser. Owned by user two like any other
+# project -- templates are ordinary projects the admin UI has flagged.
+template:
+  user: two
+  title: Calc Template
+  pretext_source: <pretext><article><section><title>Template</title><p>Starter content</p></section></article></pretext>
+  document_type: article
+  is_template: true
+  template_description: A great starter

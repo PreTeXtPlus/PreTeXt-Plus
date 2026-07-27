@@ -13,3 +13,10 @@ two:
   is_root: true
   ref: document
   project: two
+
+template:
+  source: <section><title>Template</title><p>Starter content</p></section>
+  source_format: 0
+  is_root: true
+  ref: document
+  project: template

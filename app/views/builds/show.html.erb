@@ -16,7 +16,7 @@
   </div>
 
   <p class="mt-1 text-sm text-gray-600">
-    Started <%= @build.created_at.to_fs(:long) %>
+    Started <%= local_time_tag(@build.created_at, relative: true) %>
   </p>
 
   <%# in_flight?, not "not success and not failed": a canceled build is finished too, and

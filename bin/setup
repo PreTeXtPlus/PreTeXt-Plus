@@ -13,7 +13,11 @@ FileUtils.chdir APP_ROOT do
   # Add necessary setup steps to this file.
 
   puts "== Installing dependencies =="
-  system("bundle check") || system!("bundle install")
+  # Always run `bundle install` rather than gating on `bundle check`: `bundle
+  # check` only verifies the dependency graph resolves, it does not detect
+  # gems whose native extensions failed to build (e.g. after a gem version
+  # bump), which then blow up later when Rails actually requires them.
+  system! "bundle install"
 
   # puts "\n== Copying sample files =="
   # unless File.exist?("config/database.yml")

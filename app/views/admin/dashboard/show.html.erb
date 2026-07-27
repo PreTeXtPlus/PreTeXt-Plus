@@ -34,7 +34,7 @@
       </div>
       <p class="text-sm text-gray-500">
         <% if @host_health[:generated_at].present? %>
-          Captured <time datetime="<%= @host_health[:generated_at].iso8601 %>"><%= time_ago_in_words(@host_health[:generated_at]) %> ago</time>
+          Captured <%= local_time_tag(@host_health[:generated_at], relative: true) %>
         <% end %>
       </p>
     </div>
@@ -115,7 +115,7 @@
                   <p class="text-sm text-gray-600"><%= user.last_sign_in_ip.presence || "IP unavailable" %></p>
                 </div>
                 <p class="text-sm text-gray-500">
-                  <time datetime="<%= user.last_sign_in_at.iso8601 %>"><%= time_ago_in_words(user.last_sign_in_at) %> ago</time>
+                  <%= local_time_tag(user.last_sign_in_at, relative: true) %>
                 </p>
               </div>
             </div>
@@ -138,7 +138,7 @@
                   <p class="text-sm text-gray-600">Owner: <%= link_to project.user.email, admin_user_path(project.user), class: "text-blue-600 hover:underline" %></p>
                 </div>
                 <p class="text-sm text-gray-500">
-                  <time datetime="<%= project.updated_at.iso8601 %>"><%= time_ago_in_words(project.updated_at) %> ago</time>
+                  <%= local_time_tag(project.updated_at, relative: true) %>
                 </p>
               </div>
             </div>

@@ -13,5 +13,11 @@ application.register("drawer", DrawerController)
 import EditorController from "./editor_controller"
 application.register("editor", EditorController)
 
+import ImportController from "./import_controller"
+application.register("import", ImportController)
+
+import NewProjectController from "./new_project_controller"
+application.register("new-project", NewProjectController)
+
 import TryitController from "./tryit_controller"
 application.register("tryit", TryitController)
