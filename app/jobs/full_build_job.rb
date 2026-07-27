@@ -14,7 +14,7 @@ class FullBuildJob < ApplicationJob
   queue_as :default
 
   def perform(build)
-    build.update_column(:status, Build.statuses[:in_progress])
+    build.mark!(:in_progress)
 
     archive = ProjectArchiveBuilder.new(build.project).build
 
@@ -26,7 +26,7 @@ class FullBuildJob < ApplicationJob
     request.set_form(
       [
         [ "archive", archive, { filename: "project.zip", content_type: "application/zip" } ],
-        [ "target", ProjectArchiveBuilder::TARGET ],
+        [ "target", build.target.slug ],
         [ "callback_url", resolved_callback_url ]
       ],
       "multipart/form-data"
@@ -38,14 +38,14 @@ class FullBuildJob < ApplicationJob
 
     if response.is_a?(Net::HTTPSuccess)
       status_url = JSON.parse(response.body)["status_url"]
-      build.update_column(:status, Build.statuses[:sent_to_server])
-      build.update_column(:remote_status_url, status_url) if status_url.present?
+      submitted = status_url.present? ? { remote_status_url: status_url } : {}
+      build.mark!(:sent_to_server, **submitted)
     else
-      build.update_column(:status, Build.statuses[:failed])
+      build.mark!(:failed)
       Rails.logger.error("FullBuildJob submit failed for build #{build.id} (HTTP #{response.code}): #{response.body}")
     end
   rescue => e
-    build.update_column(:status, Build.statuses[:failed])
+    build.mark!(:failed)
     raise e
   end
 

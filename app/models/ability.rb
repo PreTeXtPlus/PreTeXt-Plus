@@ -7,6 +7,14 @@ class Ability
       project.user.has_copiable_projects?
     end
 
+    # Anyone may read the build a published target currently points at. The
+    # current_build_id clause is what makes unpublishing effective and keeps superseded
+    # builds private: without it, any build URL would stay readable forever once its
+    # target had been published even once.
+    can :read, Build do |build|
+      build.target.published? && build.target.current_build_id == build.id
+    end
+
     can :read, Announcement do |announcement|
       if !announcement.published?
         false
@@ -30,6 +38,7 @@ class Ability
       :read,
       :update,
       :destroy,
+      :download,
       :editor_state,
       :update_editor_state
       ], Project, user_id: user.id
@@ -46,9 +55,18 @@ class Ability
     # Divisions belonging to own projects
     can :manage, Division, project: { user_id: user.id }
 
-    # For now, only admins can work with builds.
-    # # Builds belonging to own projects
-    # can :manage, Build, project: { user_id: user.id }
+    # Targets and builds belonging to own projects. Build volume is bounded by the rate
+    # limit and concurrency cap in BuildsController rather than by who is signed in.
+    can :manage, Target, project: { user_id: user.id }
+    # Creating one more is additionally bounded by quota. The `cannot` is required: a
+    # block that returns false does not *match*, so without it CanCan would fall back to
+    # the broader :manage rule above and allow the create anyway.
+    cannot :create, Target
+    can :create, Target do |target|
+      target.project&.user_id == user.id &&
+        target.project.targets.count < user.target_quota
+    end
+    can :manage, Build, project: { user_id: user.id }
 
     can :subscribe, Announcement
 

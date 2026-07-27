@@ -1,0 +1,83 @@
+# A target is a named output configuration -- the persistent thing an author manages
+# ("my PDF"), as opposed to a Build, which is one attempt at producing it. Mirrors the
+# <targets> list in a PreTeXt-CLI project.ptx: names are unique within a project, and
+# several targets may share a kind (a "student" and an "instructor" website, say).
+#
+# Every existing project gets one website target that adopts its existing builds, so
+# nothing user-facing changes when this runs.
+class CreateTargets < ActiveRecord::Migration[8.1]
+  def change
+    create_table :targets, id: :uuid do |t|
+      t.references :project, null: false, foreign_key: true, type: :uuid
+
+      # The two halves of naming an output, and the only one an author types is `name`.
+      # `slug` is derived from it by Target#assign_slug, because project.ptx and the
+      # public URL need something machine-shaped and an author should not have to think
+      # about that twice.
+      t.string   :name, null: false                    # human-facing: "Instructor edition"
+      t.string   :slug, null: false                    # goes verbatim into project.ptx
+
+      t.boolean  :published, null: false, default: false
+      t.integer  :position, null: false, default: 0
+
+      # What the author picked, at the author's altitude -- "scorm", not PreTeXt's
+      # `format="html" compression="scorm"`. Target::Catalog owns the translation, so a
+      # change on PreTeXt's side is an edit to that catalog rather than a migration here.
+      #
+      # A string, not an integer enum: renaming or retiring a value must never be a data
+      # migration, and the value is far more legible in a database dump this way.
+      t.string   :kind, null: false, default: "website"
+
+      # Per-target tuning that goes straight into the manifest as attributes --
+      # stringparams, an xsl, a braille-mode. Open-ended on purpose: PreTeXt has many
+      # such knobs and adding the next one should not cost a column.
+      t.jsonb    :options, null: false, default: {}
+
+      # Denormalized pointers to the latest *successful* build -- what a reader sees.
+      # Kept on the row so the projects index can render every target's state in one
+      # query instead of one per target. Deliberately no foreign key: it would be
+      # circular (targets.current_build_id -> builds.id -> targets.id) and would fight
+      # dependent: :destroy. Build#release_from_target keeps it honest instead.
+      t.datetime :last_built_at
+      t.uuid     :current_build_id
+
+      t.timestamps
+
+      # Only the slug is enforced here. It addresses a public URL and names a <target> in
+      # project.ptx, so a duplicate is a real collision; a duplicate display name is only
+      # confusing, and Target validates that one on its own.
+      t.index [ :project_id, :slug ], unique: true
+    end
+
+    add_reference :builds, :target, foreign_key: true, type: :uuid
+
+    reversible do |dir|
+      dir.up do
+        execute <<~SQL
+          INSERT INTO targets
+            (id, project_id, name, slug, kind, published, position, created_at, updated_at)
+          SELECT gen_random_uuid(), id, 'Website', 'website', 'website', FALSE, 0, NOW(), NOW()
+          FROM projects
+        SQL
+
+        execute <<~SQL
+          UPDATE builds SET target_id = targets.id
+          FROM targets WHERE targets.project_id = builds.project_id
+        SQL
+
+        # status = 2 is Build.statuses[:success].
+        execute <<~SQL
+          UPDATE targets SET current_build_id = b.id, last_built_at = b.created_at
+          FROM (
+            SELECT DISTINCT ON (target_id) id, target_id, created_at
+            FROM builds WHERE status = 2
+            ORDER BY target_id, created_at DESC
+          ) b
+          WHERE b.target_id = targets.id
+        SQL
+      end
+    end
+
+    change_column_null :builds, :target_id, false
+  end
+end

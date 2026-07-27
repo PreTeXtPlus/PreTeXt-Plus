@@ -1,5 +1,6 @@
 class Asset < ApplicationRecord
-  belongs_to :project
+  # See Division: a build consumes assets too, so changing one makes built targets stale.
+  belongs_to :project, touch: :source_updated_at
   has_one_attached :file
 
   enum :kind, {

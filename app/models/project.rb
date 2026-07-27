@@ -8,6 +8,7 @@ class Project < ApplicationRecord
   # allow_destroy lets the editor delete an asset by sending `_destroy: true`.
   accepts_nested_attributes_for :assets, allow_destroy: true
 
+  has_many :targets, dependent: :destroy
   has_many :builds, dependent: :destroy
   has_many :divisions, dependent: :destroy
   # allow_destroy lets the editor remove a division by sending `_destroy: true`.
@@ -23,6 +24,27 @@ class Project < ApplicationRecord
   scope :templates, -> { where(is_template: true) }
 
   default_scope { order(updated_at: :desc) }
+
+  # Attributes a build actually consumes. Changing any of them makes every built target
+  # stale; changing `title` does not. Divisions and assets bump the same timestamp from
+  # their own `belongs_to ... touch:`.
+  SOURCE_ATTRIBUTES = %w[ pretext_source docinfo use_common_docinfo document_type ].freeze
+
+  # Slug omitted deliberately: Target derives "website" from this name like it does for
+  # every other output, so there is one rule rather than one rule and an exception.
+  DEFAULT_TARGET = { name: "Website", kind: "website" }.freeze
+
+  # The mirror of Target's own check, and the one that is easy to miss: Rails does not
+  # re-validate children when the parent changes, so without this, converting a slideshow
+  # to an article would silently leave a reveal.js target behind to fail at the build
+  # server for reasons the author cannot see from the dashboard.
+  validate :targets_supported_by_document_type, if: :document_type_changed?
+
+  before_validation :stamp_source_updated_at, if: -> { (changed & SOURCE_ATTRIBUTES).any? }
+  before_validation(on: :create) { self.source_updated_at ||= Time.current }
+  # Built (not created) so it saves in the same transaction as the project. Skipped when
+  # targets are already present, which is how full_dup carries a project's own set over.
+  before_create :build_default_target
 
   def root_division
     divisions.find_by(is_root: true)
@@ -63,6 +85,13 @@ class Project < ApplicationRecord
       duplicate.user = new_owner
     end
     duplicate.title = "Copy of #{title}"
+    # Carry the target *configuration* but none of its build history, and never the
+    # published flag -- a copy is not entitled to the original's public URLs.
+    targets.each do |target|
+      duplicate.targets.build(
+        target.dup.attributes.except("current_build_id", "last_built_at", "published")
+      )
+    end
     divisions.each do |division|
       duplicate.divisions.build(division.dup.attributes)
     end
@@ -102,4 +131,27 @@ class Project < ApplicationRecord
     project.divisions.build(ref: "tryit-markdown", source_format: :markdown, source: TRYIT_MARKDOWN_SOURCE)
     project
   end
+
+  private
+
+    def stamp_source_updated_at
+      self.source_updated_at = Time.current
+    end
+
+    def build_default_target
+      return if targets.any?
+
+      targets.build(**DEFAULT_TARGET)
+    end
+
+    # Names the targets standing in the way rather than just refusing, because the author
+    # has to go delete them and the dashboard will not tell them which.
+    def targets_supported_by_document_type
+      blocked = targets.reject { |target| target.kind_config&.available_for?(document_type) }
+      return if blocked.empty?
+
+      errors.add(:document_type,
+                 "cannot change to #{document_type} while this project has " \
+                 "#{blocked.map(&:name).to_sentence} — remove #{blocked.one? ? 'it' : 'them'} first")
+    end
 end

@@ -1,0 +1,37 @@
+<% content_for :title, "Not publicly available" %>
+<% content_for :head do %>
+  <meta name="robots" content="noindex, nofollow">
+<% end %>
+
+<%# Reached by someone who followed a link, not by someone who mistyped one: the first
+    thing to say is that the address was probably fine and the document is simply not
+    public, so a reader knows to ask the author rather than to retype the URL. %>
+<div class="mx-auto w-full max-w-2xl px-6 py-20 text-center">
+  <p class="font-mono text-xs uppercase tracking-wider text-gray-500">404 — Not found</p>
+
+  <h1 class="mt-3 text-3xl font-semibold text-gray-900">
+    This content is not publicly available on PreTeXt.Plus
+  </h1>
+
+  <p class="mt-4 text-gray-600">
+    The link may be out of date, or its author may have unpublished the document. If
+    someone shared this address with you, ask them for a current link.
+  </p>
+
+  <p class="mt-2 text-gray-600">
+    If this is your own project, sign in and open its build targets — an output is only
+    readable here while it is published.
+  </p>
+
+  <div class="mt-8 flex flex-wrap justify-center gap-3">
+    <% if current_user.present? %>
+      <%= link_to "Your projects", projects_path,
+            class: "rounded-md bg-sky-600 px-3.5 py-2 font-medium text-white hover:bg-sky-500" %>
+    <% else %>
+      <%= link_to "Sign in", new_user_session_path,
+            class: "rounded-md bg-sky-600 px-3.5 py-2 font-medium text-white hover:bg-sky-500" %>
+    <% end %>
+    <%= link_to "About PreTeXt.Plus", root_path,
+          class: "rounded-md border border-gray-300 px-3.5 py-2 font-medium text-gray-800 hover:bg-gray-50" %>
+  </div>
+</div>

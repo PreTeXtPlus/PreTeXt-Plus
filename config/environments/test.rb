@@ -39,6 +39,11 @@ Rails.application.configure do
   # Set host to be used by links generated in mailer templates.
   config.action_mailer.default_url_options = { host: "example.com" }
 
+  # Exercise the published-origin split (see production.rb) rather than the
+  # development fallback, so the host constraint and cross-origin URLs are what the
+  # suite actually tests. Integration tests reach it with `host! "pub.example.com"`.
+  config.x.published_url_options = { host: "pub.example.com" }
+
   # Print deprecation notices to the stderr.
   config.active_support.deprecation = :stderr
 

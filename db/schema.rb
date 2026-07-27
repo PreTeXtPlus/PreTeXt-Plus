@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_07_22_120000) do
+ActiveRecord::Schema[8.1].define(version: 2026_07_26_034041) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
   enable_extension "pgcrypto"
@@ -77,12 +77,15 @@ ActiveRecord::Schema[8.1].define(version: 2026_07_22_120000) do
 
   create_table "builds", id: :uuid, default: -> { "gen_random_uuid()" }, force: :cascade do |t|
     t.datetime "created_at", null: false
+    t.string "entry_path"
     t.text "log"
     t.uuid "project_id", null: false
     t.string "remote_status_url"
     t.integer "status", default: 0, null: false
+    t.uuid "target_id", null: false
     t.datetime "updated_at", null: false
     t.index ["project_id"], name: "index_builds_on_project_id"
+    t.index ["target_id"], name: "index_builds_on_target_id"
   end
 
   create_table "divisions", id: :uuid, default: -> { "gen_random_uuid()" }, force: :cascade do |t|
@@ -202,6 +205,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_07_22_120000) do
     t.text "html_source"
     t.boolean "is_template", default: false, null: false
     t.text "pretext_source"
+    t.datetime "source_updated_at", default: -> { "CURRENT_TIMESTAMP" }, null: false
     t.text "template_description"
     t.string "title"
     t.datetime "updated_at", null: false
@@ -230,6 +234,23 @@ ActiveRecord::Schema[8.1].define(version: 2026_07_22_120000) do
     t.string "stripe_price_id"
     t.string "trial_date"
     t.datetime "updated_at", null: false
+  end
+
+  create_table "targets", id: :uuid, default: -> { "gen_random_uuid()" }, force: :cascade do |t|
+    t.datetime "created_at", null: false
+    t.uuid "current_build_id"
+    t.string "kind", default: "website", null: false
+    t.datetime "last_built_at"
+    t.uuid "latest_build_id"
+    t.string "name", null: false
+    t.jsonb "options", default: {}, null: false
+    t.integer "position", default: 0, null: false
+    t.uuid "project_id", null: false
+    t.boolean "published", default: false, null: false
+    t.string "slug", null: false
+    t.datetime "updated_at", null: false
+    t.index ["project_id", "slug"], name: "index_targets_on_project_id_and_slug", unique: true
+    t.index ["project_id"], name: "index_targets_on_project_id"
   end
 
   create_table "terms", id: :uuid, default: -> { "gen_random_uuid()" }, force: :cascade do |t|
@@ -273,6 +294,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_07_22_120000) do
   add_foreign_key "assets", "projects"
   add_foreign_key "build_files", "builds"
   add_foreign_key "builds", "projects"
+  add_foreign_key "builds", "targets"
   add_foreign_key "divisions", "projects"
   add_foreign_key "pay_charges", "pay_customers", column: "customer_id"
   add_foreign_key "pay_charges", "pay_subscriptions", column: "subscription_id"
@@ -281,4 +303,5 @@ ActiveRecord::Schema[8.1].define(version: 2026_07_22_120000) do
   add_foreign_key "projects", "users"
   add_foreign_key "subscription_seats", "pay_subscriptions"
   add_foreign_key "subscription_seats", "users"
+  add_foreign_key "targets", "projects"
 end

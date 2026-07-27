@@ -16,7 +16,10 @@
       <textarea class="size-full mt-2 bg-gray-100 font-mono text-gray-800 p-3 resize-none" readonly><%= @project.pretext_source %></textarea>
     </div>
     <div class="w-full md:w-1/2 h-screen md:h-full">
-      <%= render @project %>
+      <%# Quick build. This is the one place the preview still earns its keep: a visitor
+          deciding whether to copy the project needs to see it without owning it. %>
+      <iframe id="<%= dom_id @project %>" src="<%= share_project_path(@project) %>"
+              class="size-full" title="Preview of <%= @project.title %>"></iframe>
     </div>
 </div>
 <% end %>

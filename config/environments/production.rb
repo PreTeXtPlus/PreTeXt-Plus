@@ -64,6 +64,13 @@ Rails.application.configure do
   # Set host to be used by links generated in mailer templates.
   config.action_mailer.default_url_options = { host: "pretext.plus" }
 
+  # Published output -- user-authored HTML and JavaScript -- is served from its own
+  # origin so a script in it cannot make credentialed requests against the origin that
+  # holds sessions. config/routes.rb constrains the /o/... routes to this host and
+  # bounces everything else off it; TargetsHelper#target_public_url generates links
+  # with it. Unset in development, where Codespaces forwards exactly one host.
+  config.x.published_url_options = { host: "pub.pretext.plus", protocol: "https" }
+
   # Specify outgoing SMTP server. Remember to add smtp/* credentials via bin/rails credentials:edit.
   # config.action_mailer.smtp_settings = {
   #   user_name: Rails.application.credentials.dig(:smtp, :user_name),
@@ -83,12 +90,12 @@ Rails.application.configure do
   # Only use :id for inspections in production.
   config.active_record.attributes_for_inspect = [ :id ]
 
-  # Enable DNS rebinding protection and other `Host` header attacks.
-  # config.hosts = [
-  #   "example.com",     # Allow requests from example.com
-  #   /.*\.example\.com/ # Allow requests from subdomains like `www.example.com`
-  # ]
-  #
-  # Skip DNS rebinding protection for the default health check endpoint.
-  # config.host_authorization = { exclude: ->(request) { request.path == "/up" } }
+  # Enable DNS rebinding protection and other `Host` header attacks. Published output
+  # is routed by host (see config/routes.rb), so the app refuses Host headers it does
+  # not recognize rather than guessing which origin was meant.
+  config.hosts = [ "pretext.plus", "www.pretext.plus", "pub.pretext.plus" ]
+
+  # Skip DNS rebinding protection for the default health check endpoint, which is
+  # probed by IP.
+  config.host_authorization = { exclude: ->(request) { request.path == "/up" } }
 end

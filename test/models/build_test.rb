@@ -1,12 +1,24 @@
 require "test_helper"
 
 class BuildTest < ActiveSupport::TestCase
+  include ActionCable::TestHelper
+  include ActiveJob::TestHelper
+
   test "belongs to project" do
     assert_equal projects(:one), builds(:one).project
   end
 
+  test "belongs to target" do
+    assert_equal targets(:one_web), builds(:one).target
+  end
+
+  test "project is inherited from the target when not given" do
+    build = Build.create!(target: targets(:one_instructor))
+    assert_equal projects(:one), build.project
+  end
+
   test "default status is pending" do
-    build = Build.new(project: projects(:one))
+    build = Build.new(target: targets(:one_web))
     assert build.pending?
   end
 
@@ -28,8 +40,97 @@ class BuildTest < ActiveSupport::TestCase
   end
 
   test "invalid status is rejected" do
-    build = Build.new(project: projects(:one), status: 99)
+    build = Build.new(target: targets(:one_web), status: 99)
     assert_not build.valid?
+  end
+
+  # ---- mark! ----
+  #
+  # The single funnel for status transitions. Every job and controller goes through it so
+  # that promoting a finished build (and, from PR 2, broadcasting the row) cannot be
+  # forgotten at a new transition site.
+
+  test "mark! sets the status and any extra columns" do
+    build = builds(:one)
+    build.mark!(:failed, log: "boom")
+
+    assert build.reload.failed?
+    assert_equal "boom", build.log
+  end
+
+  # click colours the CLI's level labels, so a raw log reads "\e[33mwarning: \e[0m..." and
+  # the drawer's <pre> would print the codes as literal "[33m" in front of the warning.
+  test "mark! strips the CLI's ANSI colour codes out of the log" do
+    build = builds(:one)
+    build.mark!(:failed, log: "\e[33mwarning: \e[0mno source\n\e[1;31merror: \e[0mboom")
+
+    assert_equal "warning: no source\nerror: boom", build.reload.log
+  end
+
+  test "mark! rejects a status that is not in the enum" do
+    assert_raises(KeyError) { builds(:one).mark!(:exploded) }
+  end
+
+  test "mark!(:success) promotes the build on its target" do
+    build = builds(:one)
+    assert_nil build.target.current_build_id
+
+    build.mark!(:success)
+
+    assert_equal build, build.target.reload.current_build
+    assert_equal build.created_at, build.target.last_built_at
+  end
+
+  test "mark!(:failed) leaves an already-published output in place" do
+    target = targets(:two_web)
+    assert_equal builds(:two), target.current_build
+
+    target.builds.create!.mark!(:failed)
+
+    assert_equal builds(:two), target.reload.current_build
+  end
+
+  # The row used to be the only thing a finished build redrew, so an author who had the
+  # drawer open watched it sit on "Building" -- with no log and a Cancel button -- until
+  # they closed and reopened it.
+  test "mark! tells an open drawer to reload as well as redrawing the row" do
+    build = builds(:one)
+    stream = Turbo::StreamsChannel.send(:stream_name_from, [ build.project, :targets ])
+
+    broadcasts = capture_broadcasts(stream) do
+      perform_enqueued_jobs { build.mark!(:success) }
+    end
+
+    assert_equal 2, broadcasts.size
+    drawer, row = broadcasts.partition { |b| b.include?("reload_drawer") }
+
+    assert_equal 1, row.size
+    assert_equal 1, drawer.size
+
+    # Aimed at the panel's own id, not the "drawer" frame: every dashboard watching this
+    # project carries that frame, and only some of them have this target open.
+    assert_match(/target="#{ActionView::RecordIdentifier.dom_id(build.target, :drawer)}"/, drawer.first)
+    # A signal, not a payload -- the template rides along empty.
+    assert_match(%r{<template></template>}, drawer.first)
+  end
+
+  # Why the drawer refresh is a signal at all. Its content is unbounded -- FullBuildLogJob
+  # swaps the 4000-char log tail for the entire server-side log the moment a build
+  # finishes, and the history table adds up to Target::HISTORY_LIMIT rows -- and an
+  # earlier version of this broadcast sent that HTML. Development's cable.yml uses
+  # Postgres LISTEN/NOTIFY, which rejects any payload past ~8000 bytes inside the
+  # background job with nothing surfaced to the browser, so the drawer simply looked
+  # frozen there while working in production's solid_cable.
+  test "the drawer refresh broadcast is a signal, not the drawer's HTML" do
+    target = targets(:one_web)
+    target.builds.first.update_columns(log: "x" * 500_000)
+    21.times { |i| target.builds.create!(project: target.project, status: :success, created_at: i.hours.ago) }
+
+    stream = Turbo::StreamsChannel.send(:stream_name_from, [ target.project, :targets ])
+    broadcasts = capture_broadcasts(stream) { target.broadcast_drawer }
+
+    assert broadcasts.first.bytesize < 1000,
+      "drawer broadcast was #{broadcasts.first.bytesize} bytes -- it should carry no HTML at all"
   end
 
   test "has many build_files" do

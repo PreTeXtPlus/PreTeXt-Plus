@@ -10,7 +10,9 @@ class FullBuildArtifactJob < ApplicationJob
   queue_as :default
 
   def perform(build, artifact_url)
-    return if build.success?
+    # Cancelled as well as already-imported: a cancel can land while the artifact is
+    # downloading, and finishing the import would republish output nobody is waiting for.
+    return if build.success? || build.canceled?
 
     uri = URI.parse(artifact_url)
     request = Net::HTTP::Get.new(uri)
@@ -21,7 +23,7 @@ class FullBuildArtifactJob < ApplicationJob
     end
 
     unless response.is_a?(Net::HTTPSuccess)
-      build.update_column(:status, Build.statuses[:failed])
+      build.mark!(:failed)
       Rails.logger.error("Artifact fetch failed for build #{build.id} (HTTP #{response.code})")
       return
     end
@@ -35,12 +37,11 @@ class FullBuildArtifactJob < ApplicationJob
         # output, and importing it roughly doubles the file count.
         next if entry.name.start_with?("__MACOSX/") || File.basename(entry.name).start_with?("._")
         content = entry.get_input_stream.read
-        # Zip entries come out as "<target>/..." (e.g. "web/index.html") since
-        # the build server zips its output/ dir, and PreTeXt writes each
-        # target's output to output/<target>/. Strip that prefix so stored
-        # paths are just "index.html", matching what BuildFilesController and
-        # build_file_path expect.
-        relative_path = entry.name.delete_prefix("#{ProjectArchiveBuilder::TARGET}/")
+        # Zip entries come out as "<target>/..." (e.g. "web/index.html") since the build
+        # server zips its output/ dir, and ProjectArchiveBuilder sets each target's
+        # output-dir to its own name. Strip that prefix so stored paths are just
+        # "index.html", matching what BuildFilesController and build_file_path expect.
+        relative_path = entry.name.delete_prefix("#{build.target.slug}/")
         build_file = build.build_files.create!(relative_path: relative_path)
         build_file.blob.attach(
           io: StringIO.new(content),
@@ -57,9 +58,37 @@ class FullBuildArtifactJob < ApplicationJob
       content_type: "application/zip"
     )
 
-    build.update_column(:status, Build.statuses[:success])
+    build.mark!(:success, entry_path: detect_entry_path(build))
+
+    # A new success is the one moment history grows, so it is also when the retention
+    # window (Target::KEPT_SUCCESSES) is enforced -- no scheduled sweep to forget about.
+    build.target.prune_builds!
   rescue => e
-    build.update_column(:status, Build.statuses[:failed])
+    build.mark!(:failed)
     raise e
   end
+
+  private
+
+    # What a reader should be sent to. An html site has an index; a pdf or braille build
+    # is one file whose name PreTeXt chose. Recorded now, from the files that actually
+    # arrived, rather than guessed later from the format.
+    def detect_entry_path(build)
+      paths = build.build_files.pluck(:relative_path)
+      return nil if paths.empty?
+
+      # What the manifest asked for, when the schema let us ask (ProjectArchiveBuilder).
+      requested = build.target.output_filename
+      return requested if requested && paths.include?(requested)
+
+      return "index.html" if build.target.site? && paths.include?("index.html")
+
+      # Otherwise the shallowest file with an extension the kind is known to produce --
+      # shallowest so a stray asset in a subdirectory never beats the real artifact. The
+      # kind is what is consulted, not the format: a SCORM package and a website are both
+      # format="html" but leave behind a .zip and a tree of .html respectively.
+      extensions = build.target.output_extensions
+      candidates = paths.select { |p| extensions.include?(File.extname(p).downcase) }
+      candidates.min_by { |p| [ p.count("/"), p.length ] } || paths.min_by(&:length)
+    end
 end

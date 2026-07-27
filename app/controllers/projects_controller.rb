@@ -11,7 +11,10 @@ class ProjectsController < ApplicationController
 
   # GET /projects
   def index
-    @projects = Project.where user: current_user
+    # Each row renders a chip per target, and every chip's state reads both build
+    # pointers. Without eager loading that is two queries per target per project; with
+    # it, and because Target#state touches nothing else, the page is a fixed handful.
+    @projects = Project.where(user: current_user).includes(targets: [ :current_build, :latest_build ])
   end
 
   # GET /projects/1 or /projects/1.json
@@ -99,8 +102,43 @@ class ProjectsController < ApplicationController
     end
   end
 
+  # Legacy share link. These URLs are already in the world -- handed to students,
+  # possibly printed in syllabi -- so the route stays permanently. Once the project has
+  # a published html output, that is the better destination; until then it keeps
+  # serving the quick build as before.
+  #
+  # Found, not Moved Permanently: a browser that cached a 301 would keep redirecting
+  # after the target was unpublished.
   def share
+    # A browsable site, not merely something html-derived: redirecting a link handed to
+    # students at a SCORM package would be worse than the quick build it replaces.
+    published = @project.targets.detect { |t| t.site? && t.published? && t.current_build_id }
+    if published
+      # Cross-origin in production: the public URL lives on the published origin, which
+      # is the point -- this redirect is how legacy same-origin links stop serving user
+      # content from the origin that holds sessions.
+      return redirect_to helpers.target_public_url(published), status: :found, allow_other_host: true
+    end
+
+    # The quick build is user HTML too, so it renders only on the published origin;
+    # reached on any other host, this bounces there first (the routes mount this same
+    # action on the published host). Development configures no published origin and
+    # renders in place, as before.
+    origin = Rails.application.config.x.published_url_options.presence
+    if origin && request.host != origin[:host]
+      return redirect_to share_project_url(@project, **origin), status: :found, allow_other_host: true
+    end
+
     render html: (@project.html_source || "Document not found").html_safe
+  end
+
+  # The whole project as a PreTeXt-CLI-compatible zip: source, assets, project.ptx and
+  # publication.ptx. The escape hatch -- someone choosing where to keep five years of
+  # writing should be able to leave with it.
+  def download
+    send_data ProjectArchiveBuilder.new(@project).build.read,
+              filename: "#{@project.title.parameterize.presence || 'project'}.zip",
+              type: "application/zip"
   end
 
   def source

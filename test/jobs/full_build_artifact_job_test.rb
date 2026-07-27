@@ -45,6 +45,24 @@ class FullBuildArtifactJobTest < ActiveJob::TestCase
       build.build_files.find_by!(relative_path: "index.html").blob.download
   end
 
+  # The moment a build succeeds is the moment history is trimmed: nothing else grows it,
+  # so nothing else needs to prune it.
+  test "a successful import prunes builds beyond the retention window" do
+    target = build.target
+    old_successes = 3.times.map do |i|
+      target.builds.create!(created_at: (i + 2).days.ago, status: :success)
+    end
+    target.sync_from_builds!
+
+    response = http_response(Net::HTTPOK, "200", fake_zip("index.html" => "<html>home</html>"))
+    stub_artifact(response) { FullBuildArtifactJob.perform_now(build, ARTIFACT_URL) }
+
+    # The fresh success plus the newest old one fill the window; the rest are gone.
+    assert build.reload.success?
+    assert Build.exists?(old_successes[0].id)
+    assert_empty Build.where(id: old_successes[1..].map(&:id))
+  end
+
   test "marks build failed on a non-success artifact response" do
     response = http_response(Net::HTTPInternalServerError, "500", "boom")
 

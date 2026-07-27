@@ -1,5 +1,6 @@
 /** Rails/esbuild entry point: wires up Turbo and registers all Stimulus controllers. */
 import "@hotwired/turbo-rails"
+import "./turbo/stream_actions"
 import "./controllers"
 
 // Detects the browser's IANA timezone and stores it in a cookie so the server can

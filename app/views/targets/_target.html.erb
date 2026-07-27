@@ -1,0 +1,96 @@
+<%# One output row on the project dashboard, and the unit Target#broadcast_row replaces
+    as a build progresses. Rendered from a background job during a broadcast, so it has
+    no session: no `can?`, no current_user. Authorization lives on the actions. %>
+<% state = target.state %>
+<div id="<%= dom_id target %>"
+     class="flex flex-col gap-3 rounded-lg border border-gray-200 border-l-4 <%= target_state_stripe(state) %> bg-white p-4 md:flex-row md:items-center md:gap-4">
+
+  <div class="min-w-0 md:w-52">
+    <p class="font-semibold text-gray-900"><%= target.name %></p>
+    <p class="text-xs text-gray-500"><%= target.kind_label %></p>
+  <div class="md:w-32"><%= target_state_pill(state) %></div>
+  </div>
+
+
+  <div class="flex-1">
+    <p class="text-sm text-gray-600"><%= target_timing(target) %></p>
+
+    <div class="mt-1 flex flex-wrap items-center gap-2 text-sm">
+      <% if target.published? %>
+        <%# target_public_url, never published_path or _url: the link points at the
+            published origin, not the dashboard's own, and this partial is re-rendered
+            by a background job during a broadcast, where there is no request to derive
+            a host from -- the helper takes both from config. %>
+        <%= link_to "Public link ↗", target_public_url(target),
+              class: "text-xs font-medium text-indigo-700 hover:underline",
+              target: "_blank", rel: "noopener", data: { turbo: false } %>
+        <%= button_to "Unpublish", publish_project_target_path(target.project, target),
+              method: :patch, params: { published: false },
+              class: "cursor-pointer text-xs text-gray-500 hover:underline" %>
+      <% elsif target.current_build.present? %>
+        <%= button_to "Publish", publish_project_target_path(target.project, target),
+              method: :patch, params: { published: true },
+              class: "cursor-pointer text-xs text-gray-600 hover:underline" %>
+        <span class="text-xs text-gray-400">Not public</span>
+      <% else %>
+        <span class="text-xs text-gray-400">Build it before publishing</span>
+      <% end %>
+    </div>
+  </div>
+
+  <div class="flex flex-wrap items-center gap-2">
+    <% if target.current_build.present? && target.entry_path.present? %>
+      <%# A site is browsed and a pdf or deck is opened; a SCORM package or an EPUB is a
+          container for something else, so there is nothing worth opening. Same route
+          either way -- ServesBuildFiles sends html inline and redirects the rest. %>
+      <% if target.site? || target.viewable? %>
+        <%= link_to target.site? ? "Preview" : "Open",
+              build_file_path(target.current_build, target.entry_path),
+              class: "rounded-md border border-gray-300 px-2.5 py-1.5 text-sm hover:bg-gray-50",
+              target: "_blank", rel: "noopener", data: { turbo: false } %>
+      <% end %>
+
+      <%# Everything that is not a site is one artifact, so "Download" means that file --
+          not a zip of the output directory it happened to be built into. Routed through
+          build_file_path rather than the blob so the row costs no extra query. %>
+      <% unless target.site? %>
+        <%= link_to "Download",
+              build_file_path(target.current_build, target.entry_path, disposition: "attachment"),
+              class: "rounded-md border border-gray-300 px-2.5 py-1.5 text-sm hover:bg-gray-50",
+              data: { turbo: false } %>
+      <% end %>
+    <% end %>
+
+    <%# A site has no single file to hand over, so its download is the whole output. %>
+    <% if target.site? && target.current_build&.zip&.attached? %>
+      <%= link_to "Download",
+            rails_blob_path(target.current_build.zip, disposition: "attachment"),
+            class: "rounded-md border border-gray-300 px-2.5 py-1.5 text-sm hover:bg-gray-50",
+            data: { turbo: false } %>
+    <% end %>
+
+    <% if state == :building %>
+      <%# A build holds one of the author's concurrent slots for up to BUILD_TIMEOUT, so
+          the row that says it is running is also where it can be stopped. %>
+      <span class="text-sm text-gray-400">Building…</span>
+      <%= button_to "Cancel", cancel_project_build_path(target.project, target.latest_build),
+            class: "cursor-pointer rounded-md border border-gray-300 px-2.5 py-1.5 text-sm hover:bg-gray-50",
+            data: { turbo_confirm: "Stop this build? Nothing that is already published changes." } %>
+    <% else %>
+      <%# Only a row that wants attention gets a filled button. %>
+      <% emphasize = [ :stale, :never ].include?(state) %>
+      <%= button_to (state == :never ? "Build" : "Rebuild"),
+            project_target_builds_path(target.project, target),
+            class: class_names(
+              "cursor-pointer rounded-md px-2.5 py-1.5 text-sm font-medium",
+              "bg-indigo-600 text-white hover:bg-indigo-500" => emphasize,
+              "border border-gray-300 hover:bg-gray-50" => !emphasize
+            ) %>
+    <% end %>
+
+    <%= link_to "⋯", project_target_path(target.project, target),
+          class: "rounded-md border border-gray-300 px-2.5 py-1.5 text-sm hover:bg-gray-50",
+          aria: { label: "#{target.name} details" },
+          data: { turbo_frame: "drawer" } %>
+  </div>
+</div>

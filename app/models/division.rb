@@ -1,5 +1,8 @@
 class Division < ApplicationRecord
-  belongs_to :project
+  # touch: bumps source_updated_at *and* updated_at on the project. The editor saves
+  # divisions through nested attributes, which leaves the projects row itself unchanged,
+  # so without this neither "last edited" nor build staleness has a timestamp to trust.
+  belongs_to :project, touch: :source_updated_at
   enum :source_format, { pretext: 0, latex: 1, markdown: 2 }, default: :pretext, suffix: true, validate: true
 
   validates :is_root, uniqueness: { scope: :project_id, message: "root division already exists for this project" }, if: :is_root?

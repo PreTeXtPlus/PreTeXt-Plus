@@ -40,57 +40,56 @@
     <% end %>
     <% if @projects.any? %>
       <% @projects.each do |project| %>
-        <%= link_to project, class: "block rounded-xl p-4 m-3 ring-2 sm:p-6 lg:p-8 #{project.is_template? ? 'bg-amber-50 ring-amber-300 hover:ring-amber-400' : 'bg-white ring-gray-100 hover:ring-indigo-200'}", data: { turbo: false } do %>
-          <span class="flex items-start sm:gap-8">
-            <span class="hidden sm:grid sm:size-20 sm:shrink-0 sm:place-content-center" aria-hidden="true">
-              <% if project.root_division&.latex_source_format? %>
-                <%= image_tag "latex-pretext-logo.svg", alt: "PreTeXt logo" %>
-                <% elsif project.root_division&.markdown_source_format? %>
-                <%= image_tag "markdown-pretext-logo.svg", alt: "PreTeXt logo" %>
-              <% else %>
-                <%= image_tag "pretext-logo.svg", alt: "PreTeXt logo" %>
-              <% end %>
-            </span>
-
-            <span>
-              <% if project.root_division&.latex_source_format? %>
-                <strong class="rounded-sm border border-orange-500 bg-orange-500 px-3 py-1.5 text-[10px] font-medium text-white">
-                  LaTeX-style PreTeXt
-                </strong>
-              <% elsif project.root_division&.markdown_source_format? %>
-                <strong class="rounded-sm border border-purple-500 bg-purple-500 px-3 py-1.5 text-[10px] font-medium text-white">
-                  Markdown-style PreTeXt
-                </strong>
-              <% else %>
-                <strong class="rounded-sm border border-indigo-500 bg-indigo-500 px-3 py-1.5 text-[10px] font-medium text-white">
-                  PreTeXt
-                </strong>
-              <% end %>
-
-              <% if project.is_template? %>
-                <strong class="rounded-sm border border-amber-500 bg-amber-500 px-3 py-1.5 mx-3 text-[10px] font-medium text-white">
-                  Template
-                </strong>
-              <% end %>
-
-              <h3 class="mt-4 text-lg font-medium sm:text-xl">
-                <%= project.title %>
-              </h3>
-
-              <% if project.is_template? %>
-                <p class="mt-1 text-sm text-amber-800">
-                  ⚠ This project is offered as a template on the new-project page. Edit with care —
-                  your changes affect what new users start from.
-                </p>
-              <% end %>
-
-              <p class="mt-1 text-sm text-gray-700">
-                Last updated:
-                <%= local_time_tag(project.updated_at, relative: true) %>
-              </p>
-            </span>
+        <div class="m-3 rounded-xl bg-white p-4 ring-2 ring-gray-100 hover:ring-indigo-200">
+          <% if project.is_template? %>
+            <div class="mt-1 text-sm text-amber-800 bg-amber-50 rounded-md sm:p-2">
+              ⚠ This project is offered as a template for new projects. Edit with care —
+              your changes affect what new users start from.
+            </div>
+          <% end %>
+          <div class="flex flex-col gap-4 sm:flex-row sm:items-center sm:p-6">
+          <span class="hidden sm:grid sm:size-14 sm:shrink-0 sm:place-content-center" aria-hidden="true">
+            <% if project.root_division&.latex_source_format? %>
+              <%= image_tag "latex-pretext-logo.svg", alt: "" %>
+            <% elsif project.root_division&.markdown_source_format? %>
+              <%= image_tag "markdown-pretext-logo.svg", alt: "" %>
+            <% else %>
+              <%= image_tag "pretext-logo.svg", alt: "" %>
+            <% end %>
           </span>
-        <% end %>
+
+          <div class="min-w-0 flex-1">
+            <h3 class="text-lg font-medium">
+              <%= link_to project.title, project, class: "hover:underline", data: { turbo: false } %>
+            </h3>
+
+            <%# The whole status report for this project at a glance: one chip per output,
+                so scanning the column answers "what needs rebuilding?" across every project. %>
+            <div class="mt-2 flex flex-wrap items-center gap-1.5">
+              <% project.targets.each do |target| %>
+                <% state = target.state %>
+                <% label, classes = TargetsHelper::STATE_PILL.fetch(state) %>
+                <%= link_to project_target_path(project, target),
+                      class: "inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 font-mono text-xs font-semibold #{classes}",
+                      title: "#{target.name} — #{label.downcase}", data: { turbo: false } do %>
+                  <span class="size-1.5 rounded-full bg-current <%= 'animate-pulse' if state == :building %>"></span>
+                  <%= target.name %>
+                <% end %>
+              <% end %>
+            </div>
+
+            <p class="mt-2 text-sm text-gray-700">
+              Edited
+              <%= local_time_tag(project.source_updated_at, relative: true) %>
+            </p>
+          </div>
+
+          <div class="flex shrink-0 items-center gap-2">
+            <%= link_to "Manage", project, class: "rounded-md border border-gray-300 px-3 py-2 text-sm font-medium hover:bg-gray-50", data: { turbo: false } %>
+            <%= link_to "Write", edit_project_path(project), class: "rounded-md bg-indigo-600 px-3 py-2 text-sm font-medium text-white hover:bg-indigo-500", data: { turbo: false } %>
+          </div>
+          </div>
+        </div>
       <% end %>
     <% else %>
       <p class="text-center my-10">No projects found.</p>
