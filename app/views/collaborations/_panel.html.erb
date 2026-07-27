@@ -1,0 +1,61 @@
+<%# Collaborator management for a project's show page.
+    Owner: full list (pending invites badged), remove buttons, invite form,
+    and an n-of-limit counter with an upsell when the free cap is hit.
+    Collaborator: who owns the project, plus a button to leave it. %>
+<% owner = project.user == current_user || current_user&.admin? %>
+<div class="my-2 flex flex-col gap-2">
+  <span class="w-full md:w-auto text-center font-medium">Collaborators</span>
+
+  <% if owner %>
+    <% collaborations = project.collaborations.order(:created_at) %>
+    <% if collaborations.any? %>
+      <ul class="flex flex-col gap-1">
+        <% collaborations.each do |collaboration| %>
+          <li class="flex items-center justify-between gap-2 rounded-md bg-gray-50 px-3 py-1.5 text-sm">
+            <span class="truncate">
+              <%= collaboration.user&.name_with_email || collaboration.invited_email %>
+              <% unless collaboration.accepted? %>
+                <span class="ml-1 rounded-sm bg-amber-100 px-1.5 py-0.5 text-xs text-amber-800">invited</span>
+              <% end %>
+            </span>
+            <%= button_to "Remove", project_collaboration_path(project, collaboration),
+                  method: :delete,
+                  class: "shrink-0 rounded-md px-2 py-1 text-xs bg-red-200 hover:bg-red-100 cursor-pointer",
+                  data: { turbo_confirm: "Remove #{collaboration.invited_email} from this project?" } %>
+          </li>
+        <% end %>
+      </ul>
+    <% end %>
+
+    <% if collaborations.count < project.collaborator_limit %>
+      <%= form_with url: project_collaborations_path(project), method: :post, class: "flex gap-1" do |f| %>
+        <%= f.email_field :email, placeholder: "colleague@example.com", required: true,
+              class: "min-w-0 flex-1 rounded-md border border-gray-300 px-2 py-1.5 text-sm" %>
+        <%= f.submit "Invite", class: "shrink-0 rounded-md px-3 py-1.5 text-sm bg-green-600 hover:bg-green-500 text-white font-medium cursor-pointer" %>
+      <% end %>
+      <p class="text-xs text-gray-500 text-center">
+        <%= collaborations.count %> of <%= project.collaborator_limit %> collaborators
+      </p>
+    <% else %>
+      <p class="text-xs text-gray-500 text-center">
+        Collaborator limit reached (<%= collaborations.count %> of <%= project.collaborator_limit %>).
+        <% unless project.user.subscribed? %>
+          <%= link_to "Subscribe", subscriptions_path, class: "font-semibold text-green-700 hover:underline" %>
+          to invite up to 5 collaborators.
+        <% end %>
+      </p>
+    <% end %>
+  <% else %>
+    <p class="text-sm text-gray-600 text-center">
+      Owned by <%= project.user.name_with_email %>
+    </p>
+    <% my_collaboration = project.collaborations.find_by(user: current_user) %>
+    <% if my_collaboration %>
+      <%= button_to "Leave this project", project_collaboration_path(project, my_collaboration),
+            method: :delete,
+            form_class: "inline-block w-full",
+            class: "w-full text-center rounded-md px-2.5 py-1.5 text-sm bg-red-200 hover:bg-red-100 text-black cursor-pointer",
+            data: { turbo_confirm: "Leave this project? The owner can invite you again later." } %>
+    <% end %>
+  <% end %>
+</div>

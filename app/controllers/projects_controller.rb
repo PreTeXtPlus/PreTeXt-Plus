@@ -15,6 +15,8 @@ class ProjectsController < ApplicationController
     # pointers. Without eager loading that is two queries per target per project; with
     # it, and because Target#state touches nothing else, the page is a fixed handful.
     @projects = Project.where(user: current_user).includes(targets: [ :current_build, :latest_build ])
+    # Shared projects render the identical row, so they need the identical eager load.
+    @shared_projects = current_user.shared_projects.includes(targets: [ :current_build, :latest_build ])
   end
 
   # GET /projects/1 or /projects/1.json

@@ -5,6 +5,13 @@ class User < ApplicationRecord
   has_many :projects, dependent: :destroy
   has_many :assets, through: :projects
 
+  # Projects this user collaborates on (owned by someone else). A collaboration
+  # row with a user_id is accepted by definition -- pending invites have no
+  # user yet -- so no scoping is needed here. Destroying the rows on account
+  # deletion just removes this user from those projects.
+  has_many :collaborations, dependent: :destroy
+  has_many :shared_projects, through: :collaborations, source: :project
+
   belongs_to :tos, class_name: "Term", required: false
   belongs_to :privacy, class_name: "Term", required: false
 
@@ -88,6 +95,15 @@ class User < ApplicationRecord
   end
 
   private
+
+  # Devise (confirmable) hook: runs whenever this user confirms an email
+  # address -- initial signup or a reconfirmed change. Confirmation proves the
+  # user owns the address, so any project invitations sent to it can be linked
+  # to this account.
+  def after_confirmation
+    super
+    Collaboration.claim_for(self)
+  end
 
   def set_common_docinfo
     self.common_docinfo = Project.default_docinfo if self.common_docinfo.blank?

@@ -113,4 +113,20 @@ class UserTest < ActiveSupport::TestCase
 
     assert_equal Project.default_docinfo.squish, user.reload.common_docinfo.squish
   end
+
+  test "confirming an account claims pending project invitations" do
+    user = User.create!(
+      name: "Invited Person",
+      email: "invited@example.com", # matches fixture collaborations(:pending)
+      password: "secret123"
+    )
+    assert_not collaborations(:pending).accepted?
+
+    user.confirm
+
+    collaboration = collaborations(:pending).reload
+    assert_equal user, collaboration.user
+    assert collaboration.accepted?
+    assert_includes user.shared_projects, projects(:team)
+  end
 end

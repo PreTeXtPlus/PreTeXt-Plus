@@ -101,6 +101,7 @@ Rails.application.routes.draw do
     member do
       get "download" => "projects#download", as: "download"
     end
+    resources :collaborations, only: [ :create, :destroy ]
     resources :targets, only: [ :show, :create, :update, :destroy ] do
       member do
         patch "publish" => "targets#publish", as: "publish"

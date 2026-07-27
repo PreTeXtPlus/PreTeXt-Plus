@@ -183,4 +183,28 @@ class ProjectTest < ActiveSupport::TestCase
     assert_equal "#{template.title} (generated from template)", copy.title
     assert_equal template.divisions.count, copy.divisions.count
   end
+
+  # --- Collaboration ---
+
+  test "collaborator_limit follows the owner's subscription" do
+    assert_equal 1, projects(:one).collaborator_limit
+    assert_equal 5, Project.new(user: users(:subscribed)).collaborator_limit
+  end
+
+  test "editable_by? covers the owner and accepted collaborators only" do
+    project = projects(:one)
+    assert project.editable_by?(project.user)
+    assert project.editable_by?(users(:two)) # fixture :accepted
+    assert_not project.editable_by?(users(:subscribed))
+    assert_not project.editable_by?(nil)
+
+    # A pending invite does not grant editing.
+    assert_not projects(:two).editable_by?(User.new(email: "invited@example.com"))
+  end
+
+  test "full_dup does not copy collaborations" do
+    copy = projects(:one).full_dup(users(:subscribed))
+    stub_build_server { copy.save! }
+    assert_empty copy.collaborations
+  end
 end

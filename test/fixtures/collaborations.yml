@@ -1,0 +1,12 @@
+# User two collaborates on user one's project.
+accepted:
+  project: one
+  user: two
+  invited_email: two@example.com
+  accepted_at: <%= 1.week.ago %>
+
+# An invite on the subscribed user's project still waiting for its recipient
+# to sign up.
+pending:
+  project: team
+  invited_email: invited@example.com

@@ -1,6 +1,12 @@
 class Project < ApplicationRecord
   belongs_to :user
 
+  # Collaborators (and pending invitations) die with the project; the users
+  # themselves are of course untouched.
+  has_many :collaborations, dependent: :destroy
+  has_many :collaborators, -> { merge(Collaboration.accepted) },
+    through: :collaborations, source: :user
+
   # dependent: :destroy so deleting a project drops its assets (and their
   # attached files) too -- an asset has no life outside its
   # project, so there's nothing to preserve.
@@ -55,6 +61,19 @@ class Project < ApplicationRecord
 
   def root_division
     divisions.find_by(is_root: true)
+  end
+
+  # How many collaborators (accepted + pending invites) this project may have.
+  # Keyed to the OWNER's standing, not the inviter's or invitee's. Enforced
+  # only when adding (see Collaboration#within_collaborator_limit), so a lapsed
+  # subscription grandfathers existing collaborators rather than evicting them.
+  def collaborator_limit
+    user.subscribed? || user.admin? ? 5 : 1
+  end
+
+  def editable_by?(other_user)
+    return false if other_user.nil?
+    other_user == user || collaborators.include?(other_user)
   end
 
   def effective_docinfo

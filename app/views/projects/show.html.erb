@@ -87,15 +87,23 @@
     </p>
   <% end %>
 
+  <h2 class="mt-8 font-mono text-xs font-semibold uppercase tracking-widest text-gray-500">Collaborators</h2>
+
+  <%= render "collaborations/panel", project: @project %>
+
   <div class="mt-8 flex items-center justify-between border-t border-gray-200 pt-5">
     <%# The quota is not worth reporting until it bites; the "+ Add an output" block
         already says so when it does. %>
     <p class="text-sm text-gray-500">
       <%= pluralize(@project.targets.size, "output") %>
     </p>
-    <%= button_to "Delete this project", @project, method: :delete,
-          class: "cursor-pointer rounded-md px-3 py-2 text-sm text-red-700 hover:bg-red-50",
-          data: { turbo_confirm: "Delete “#{@project.title}” and all of its outputs? This cannot be undone." } %>
+    <%# Deleting a project stays with its owner: a collaborator holds edit access,
+        not the right to destroy someone else's work. %>
+    <% if can? :destroy, @project %>
+      <%= button_to "Delete this project", @project, method: :delete,
+            class: "cursor-pointer rounded-md px-3 py-2 text-sm text-red-700 hover:bg-red-50",
+            data: { turbo_confirm: "Delete “#{@project.title}” and all of its outputs? This cannot be undone." } %>
+    <% end %>
   </div>
 </div>
 

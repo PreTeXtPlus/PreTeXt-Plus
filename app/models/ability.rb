@@ -42,6 +42,14 @@ class Ability
       :editor_state,
       :update_editor_state
       ], Project, user_id: user.id
+    # Shared projects: collaborators can read and edit, but never destroy —
+    # removing a project entirely stays with its owner.
+    can [
+      :read,
+      :update,
+      :editor_state,
+      :update_editor_state
+      ], Project, collaborations: { user_id: user.id }
     can :create, Project if user.projects.count < user.project_quota
 
     # Copy or view source requires a subscription (owner's or current user's)
@@ -51,9 +59,16 @@ class Ability
 
     # Assets belonging to own projects (hash condition enables accessible_by scoping)
     can :manage, Asset, project: { user_id: user.id }
+    can :manage, Asset, project: { collaborations: { user_id: user.id } }
 
     # Divisions belonging to own projects
     can :manage, Division, project: { user_id: user.id }
+    can :manage, Division, project: { collaborations: { user_id: user.id } }
+
+    # Only the owner manages who collaborates; a collaborator may remove
+    # (only) their own row to leave the project.
+    can [ :create, :destroy ], Collaboration, project: { user_id: user.id }
+    can :destroy, Collaboration, user_id: user.id
 
     # Targets and builds belonging to own projects. Build volume is bounded by the rate
     # limit and concurrency cap in BuildsController rather than by who is signed in.

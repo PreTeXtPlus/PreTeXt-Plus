@@ -1,0 +1,15 @@
+You're invited to collaborate
+=============================
+
+<%= @owner.name_with_email %> invited you to collaborate on their project
+"<%= @project.title %>" on PreTeXt.Plus, a free online editor for creating
+accessible scholarly documents.
+
+Create an account using this email address (<%= @collaboration.invited_email %>)
+and the project will appear in your project list as soon as you confirm your
+email:
+
+<%= new_user_url %>
+
+This invitation was sent by a PreTeXt.Plus (https://pretext.plus) user. If you
+weren't expecting it, you can safely ignore this email.
