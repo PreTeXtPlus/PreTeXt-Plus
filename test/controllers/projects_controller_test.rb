@@ -548,8 +548,7 @@ class ProjectsControllerTest < ActionDispatch::IntegrationTest
   end
 
   test "create_from_template duplicates a flagged template into the current user's account" do
-    template = projects(:two)
-    template.update!(is_template: true, title: "Calc Template")
+    template = projects(:template)
 
     stub_build_server do
       assert_difference("Project.count", 1) do

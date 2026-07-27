@@ -43,19 +43,16 @@ class ProjectTest < ActiveSupport::TestCase
   # --- Templates ---
 
   test "templates scope returns only flagged projects" do
-    template = projects(:two)
-    template.update!(is_template: true)
-    assert_includes Project.templates, template
+    assert_includes Project.templates, projects(:template)
     assert_not_includes Project.templates, projects(:one)
   end
 
   test "instantiate_for produces a non-template copy owned by the new user" do
-    template = projects(:one)
-    template.update!(is_template: true, template_description: "A starter")
-    copy = template.instantiate_for(users(:two))
+    template = projects(:template)
+    copy = template.instantiate_for(users(:one))
     stub_build_server { copy.save! }
 
-    assert_equal users(:two), copy.user
+    assert_equal users(:one), copy.user
     assert_not copy.is_template?
     assert_nil copy.template_description
     # Keeps the template's own title rather than "Copy of ...".
