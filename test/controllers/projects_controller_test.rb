@@ -166,6 +166,22 @@ class ProjectsControllerTest < ActionDispatch::IntegrationTest
     assert_equal "png", asset_json["extension"]
   end
 
+  # --- Visibility ---
+
+  test "update changes project visibility via a plain HTML form post" do
+    assert @project.private_visibility?
+    patch project_url(@project), params: { project: { visibility: "public" } }
+    assert_redirected_to project_url(@project)
+    assert @project.reload.public_visibility?
+  end
+
+  test "non-owner cannot change another user's project visibility" do
+    other_project = projects(:two)
+    patch project_url(other_project), params: { project: { visibility: "public" } }
+    assert_redirected_to projects_path
+    assert other_project.reload.private_visibility?
+  end
+
   # --- Divisions (nested attributes; the /divisions endpoint was removed) ---
 
   test "update creates a non-root division via an id-less divisions_attributes entry" do

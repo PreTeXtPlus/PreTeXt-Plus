@@ -16,6 +16,13 @@
         <%= pluralize(@project.divisions.size, "division") %> ·
         <%= pluralize(@project.assets.size, "asset") %>
       </p>
+      <%= form_with model: @project, method: :patch, class: "mt-2 flex items-center gap-2" do |form| %>
+        <%= form.label :visibility, "Visibility on your public profile", class: "text-xs text-gray-600" %>
+        <%= form.select :visibility, Project.visibilities.keys.map { |v| [ v.humanize, v ] },
+              {}, class: "rounded-md border border-gray-300 px-2 py-1 text-xs" %>
+        <%= form.submit "Update",
+              class: "cursor-pointer rounded-md border border-gray-300 px-2 py-1 text-xs font-medium hover:bg-gray-50" %>
+      <% end %>
     </div>
     <div class="flex flex-wrap items-center gap-2">
       <%= link_to "Write", edit_project_path(@project),

@@ -78,6 +78,10 @@ Rails.application.routes.draw do
     confirmations: "users/confirmations"
   }
   resources :users, only: [ :new, :create, :edit, :update ]
+  # The leading "@" keeps this off the plain top-level namespace (no bare
+  # "/:username" to collide with "/tos", "/subscriptions", etc.) while reading as a
+  # public handle, the way it does on most other sites.
+  get "@:username" => "users#show", as: :user_profile
 
   get "tos" => "terms#tos", as: "tos"
   get "privacy" => "terms#privacy", as: "privacy"

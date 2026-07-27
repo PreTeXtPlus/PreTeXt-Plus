@@ -55,6 +55,56 @@ class UserTest < ActiveSupport::TestCase
     assert_equal user.email, user.name_with_email
   end
 
+  test "username is optional" do
+    user = User.new(email: "nousername@example.com", password: "secret123")
+    assert user.valid?
+  end
+
+  test "username is stripped but keeps its casing" do
+    user = users(:one)
+    user.username = "  MixedCase  "
+    assert_equal "MixedCase", user.username
+  end
+
+  test "blank username normalizes to nil" do
+    user = users(:one)
+    user.username = "   "
+    assert_nil user.username
+  end
+
+  test "username must be unique case-insensitively" do
+    user = User.new(email: "dupe@example.com", password: "secret123", username: users(:one).username.upcase)
+    assert_not user.valid?
+    assert_includes user.errors[:username], "has already been taken"
+  end
+
+  test "username rejects invalid characters" do
+    user = User.new(email: "bad@example.com", password: "secret123", username: "not valid!")
+    assert_not user.valid?
+    assert_includes user.errors[:username], "must start with a letter or number, and may only contain letters, numbers, underscores, and hyphens"
+  end
+
+  test "username accepts uppercase letters" do
+    user = User.new(email: "cased@example.com", password: "secret123", username: "CoolName")
+    assert user.valid?
+  end
+
+  test "find_by_username finds a user regardless of the casing looked up" do
+    user = users(:one)
+    assert_equal user, User.find_by_username(user.username.upcase)
+    assert_equal user, User.find_by_username(user.username.downcase)
+  end
+
+  test "find_by_username returns nil for an unknown username" do
+    assert_nil User.find_by_username("no-such-user")
+  end
+
+  test "username rejects too-short values" do
+    user = User.new(email: "short@example.com", password: "secret123", username: "ab")
+    assert_not user.valid?
+    assert_includes user.errors[:username], "is too short (minimum is 3 characters)"
+  end
+
   test "new users get default common_docinfo" do
     user = User.create!(
       email: "defaults@example.com",

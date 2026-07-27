@@ -49,4 +49,53 @@ class UsersControllerTest < ActionDispatch::IntegrationTest
     assert_redirected_to edit_user_path(users(:one))
     assert_equal docinfo, users(:one).reload.common_docinfo
   end
+
+  test "update changes username" do
+    sign_in users(:one)
+    patch user_path(users(:one)), params: { user: { username: "brand-new-name" } }
+    assert_redirected_to edit_user_path(users(:one))
+    assert_equal "brand-new-name", users(:one).reload.username
+  end
+
+  test "update rejects a username already taken by another user" do
+    sign_in users(:one)
+    patch user_path(users(:one)), params: { user: { username: users(:two).username } }
+    assert_response :unprocessable_entity
+    assert_not_equal users(:two).username, users(:one).reload.username
+  end
+
+  test "profile is visible to its own owner even when not a subscriber" do
+    sign_in users(:one)
+    get user_profile_path(users(:one).username)
+    assert_response :success
+  end
+
+  test "profile 404s for a stranger when the owner is not a subscriber" do
+    sign_in users(:two)
+    get user_profile_path(users(:one).username)
+    assert_response :not_found
+  end
+
+  test "profile 404s for an unauthenticated visitor when the owner is not a subscriber" do
+    get user_profile_path(users(:one).username)
+    assert_response :not_found
+  end
+
+  test "profile 404s for an unknown username" do
+    get user_profile_path("no-such-user")
+    assert_response :not_found
+  end
+
+  test "profile is visible to anyone when the owner is a subscriber" do
+    get user_profile_path(users(:subscribed).username)
+    assert_response :success
+    assert_select "h3", text: projects(:public_project).title
+  end
+
+  test "profile lists only the owner's public-visibility projects" do
+    sign_in users(:subscribed)
+    get user_profile_path(users(:subscribed).username)
+    assert_response :success
+    assert_select "h3", text: projects(:public_project).title
+  end
 end

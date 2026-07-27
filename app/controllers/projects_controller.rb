@@ -81,14 +81,16 @@ class ProjectsController < ApplicationController
     end
   end
 
-  # PATCH/PUT /projects/1.json
+  # PATCH/PUT /projects/1 or /projects/1.json
   def update
     respond_to do |format|
       if @project.update(project_params)
         @project.enqueue_html_source_job if params[:enqueue_html_source_job]
         format.json { render :show, status: :ok, location: @project }
+        format.html { redirect_to @project, notice: "Project was successfully updated." }
       else
         format.json { render json: @project.errors, status: :unprocessable_entity }
+        format.html { redirect_to @project, alert: @project.errors.full_messages.to_sentence }
       end
     end
   end
@@ -213,7 +215,7 @@ class ProjectsController < ApplicationController
     # Only allow a list of trusted parameters through.
     def project_params
       params.expect(project: [
-        :title, :pretext_source, :docinfo, :use_common_docinfo,
+        :title, :pretext_source, :docinfo, :use_common_docinfo, :visibility,
         divisions_attributes: [ [ :id, :source, :source_format, :is_root, :ref, :_destroy ] ],
         assets_attributes: [ [ :id, :ref, :kind, :file, :source, :short_description, :description, :title, :_destroy ] ]
       ])

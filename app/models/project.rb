@@ -16,6 +16,13 @@ class Project < ApplicationRecord
 
   enum :document_type, { article: 0, book: 1, slideshow: 2 }, default: :article, suffix: true, validate: true
 
+  # Gates listing on the owner's /users/:username profile page only -- it does not
+  # change who can open the project itself (see Ability). unlisted exists for a link
+  # an author wants to hand out without appearing in their public index.
+  enum :visibility, { private: 0, unlisted: 1, public: 2 }, default: :private, suffix: true, validate: true
+
+  scope :publicly_listed, -> { where(visibility: :public) }
+
   # Templates are curated projects the PreTeXt.Plus team flags (via the admin
   # UI) as starting points; picking one duplicates it into the chooser's account.
   # A template is otherwise an ordinary project for its owner: it still appears

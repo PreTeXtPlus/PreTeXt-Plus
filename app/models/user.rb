@@ -13,8 +13,29 @@ class User < ApplicationRecord
   has_many :subscription_seats
 
   normalizes :email, with: ->(e) { e.strip.downcase }
+  # Casing is kept (a vanity name is part of the point) -- blank -> nil rather than
+  # "": an empty string would still trip the uniqueness index the moment a second
+  # user left the field blank.
+  normalizes :username, with: ->(u) { u.strip.presence }
+
+  # case_sensitive: false so "Alice" and "alice" collide despite both being kept
+  # verbatim; index_users_on_lower_username backs this at the database level too,
+  # since the app-level check alone would race under concurrent signups.
+  validates :username,
+    uniqueness: { case_sensitive: false },
+    length: { minimum: 3, maximum: 30 },
+    format: { with: /\A[a-zA-Z0-9][a-zA-Z0-9_-]*\z/,
+              message: "must start with a letter or number, and may only contain letters, numbers, underscores, and hyphens" },
+    allow_nil: true
 
   before_create :set_common_docinfo
+
+  # Case-insensitive counterpart to find_by(username:) -- a profile URL should
+  # resolve regardless of how the visitor cased it, matching the uniqueness rule
+  # above and the lower(username) index it relies on.
+  def self.find_by_username(username)
+    find_by("lower(username) = ?", username.to_s.strip.downcase)
+  end
 
   def subscribed?
     self.subscription_seats.any? { |s| s.grants_privileges? }

@@ -1,0 +1,20 @@
+<% content_for(:title, @profile_user.name.presence || @profile_user.username) %>
+
+<div class="w-full mx-auto p-2 md:w-2/3">
+  <h1 class="text-3xl font-semibold"><%= @profile_user.name.presence || @profile_user.username %></h1>
+  <p class="text-sm text-gray-600">@<%= @profile_user.username %></p>
+
+  <div id="public-projects" class="mt-6 space-y-4">
+    <% if @projects.any? %>
+      <% @projects.each do |project| %>
+        <div class="rounded-xl bg-white p-4 ring-2 ring-gray-100 hover:ring-indigo-200">
+          <h3 class="text-lg font-medium">
+            <%= link_to project.title, share_project_path(project), class: "hover:underline", target: "_blank", rel: "noopener" %>
+          </h3>
+        </div>
+      <% end %>
+    <% else %>
+      <p class="text-center my-10 text-gray-600">No public projects yet.</p>
+    <% end %>
+  </div>
+</div>
