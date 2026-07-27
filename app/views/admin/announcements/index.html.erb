@@ -39,9 +39,9 @@
               <% end %>
             </td>
             <td class="px-4 py-4 text-gray-700">
-              <%= announcement.published_at&.to_date || "—" %>
+              <%= announcement.published_at ? local_time_tag(announcement.published_at, date_only: true) : "—" %>
             </td>
-            <td class="px-4 py-4 text-gray-700"><%= announcement.created_at.to_date %></td>
+            <td class="px-4 py-4 text-gray-700"><%= local_time_tag(announcement.created_at, date_only: true) %></td>
             <td class="px-4 py-4">
               <%= link_to "Edit", edit_admin_announcement_path(announcement), class: "text-blue-600 hover:underline text-sm" %>
             </td>
