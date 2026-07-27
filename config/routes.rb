@@ -100,6 +100,7 @@ Rails.application.routes.draw do
     resources :targets, only: [ :show, :create, :update, :destroy ] do
       member do
         patch "publish" => "targets#publish", as: "publish"
+        patch "revert" => "targets#revert", as: "revert"
       end
       # Builds are always attempts at a target, so that is where they are created.
       resources :builds, only: [ :create ]
@@ -113,6 +114,7 @@ Rails.application.routes.draw do
       member do
         post "full_callback" => "build_callbacks#create", as: "full_callback"
         post "check_status" => "builds#check_status", as: "check_status"
+        post "cancel" => "builds#cancel", as: "cancel"
       end
     end
     collection do

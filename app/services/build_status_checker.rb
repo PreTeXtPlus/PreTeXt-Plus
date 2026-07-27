@@ -1,4 +1,3 @@
-require "uri"
 require "net/http"
 require "json"
 
@@ -28,17 +27,15 @@ class BuildStatusChecker
       return Result.new(ok: false, message: "The build failed.")
     end
 
+    if @build.canceled?
+      return Result.new(ok: false, message: "This build was canceled.")
+    end
+
     unless @build.remote_status_url.present?
       return Result.new(ok: false, message: "No status URL on record for this build yet -- it may not have finished submitting.")
     end
 
-    uri = URI.parse("https://#{Rails.application.credentials.dig(:full_build, :host)}#{@build.remote_status_url}")
-    request = Net::HTTP::Get.new(uri)
-    request["Authorization"] = "Bearer #{Rails.application.credentials.dig(:full_build, :token)}"
-
-    response = Net::HTTP.start(uri.host, uri.port, use_ssl: uri.scheme == "https") do |http|
-      http.request(request)
-    end
+    response = FullBuildServer.get(@build.remote_status_url)
 
     unless response.is_a?(Net::HTTPSuccess)
       return Result.new(ok: false, message: "Build server returned HTTP #{response.code}: #{response.body.to_s.truncate(300)}")
@@ -53,17 +50,26 @@ class BuildStatusChecker
       # a silently dropped callback shows up in logs instead of only being
       # noticed when someone happens to click "check status".
       Rails.logger.warn("Build #{@build.id} was in_progress locally but build server already reports success -- full_callback was likely never received.")
-      artifact_url = URI.join(uri, data["artifact_url"]).to_s
-      FullBuildArtifactJob.perform_later(@build, artifact_url)
+      @build.mark!(:received_from_server, log: remote_log(data))
+      FullBuildArtifactJob.perform_later(@build, FullBuildServer.url_for(data["artifact_url"]))
       Result.new(ok: true, message: "Build server reports success -- importing files now.")
     when "failed"
       Rails.logger.warn("Build #{@build.id} was in_progress locally but build server already reports failure -- full_callback was likely never received.")
-      @build.mark!(:failed, log: data["log"])
-      Result.new(ok: false, message: "Build server reports failure: #{data["log"].to_s.truncate(300)}")
+      @build.mark!(:failed, log: remote_log(data))
+      Result.new(ok: false, message: "Build server reports failure: #{remote_log(data).truncate(300)}")
     else
       Result.new(ok: true, message: "Build server reports status: #{data["status"]}.")
     end
   rescue => e
     Result.new(ok: false, message: "Couldn't reach the build server: #{e.class}: #{e.message}")
   end
+
+  private
+
+    # GET /builds/<job> returns the server's whole job record, so unlike the webhook
+    # payload -- which carries only a truncated tail and a URL for the rest -- `log` here
+    # is already the complete log. No follow-up fetch, and no FullBuildLogJob.
+    def remote_log(data)
+      data["log"].presence || BuildCallbacksController::NO_LOG
+    end
 end

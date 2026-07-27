@@ -7,12 +7,14 @@ module TargetsHelper
     stale:    [ "Out of date", "bg-amber-100 text-amber-900" ],
     building: [ "Building",    "bg-sky-100 text-sky-800" ],
     failed:   [ "Failed",      "bg-red-100 text-red-800" ],
+    # Grey rather than red: the author stopped it on purpose, and nothing is wrong.
+    canceled: [ "Canceled",    "bg-gray-100 text-gray-700" ],
     never:    [ "Not built",   "bg-gray-100 text-gray-700" ]
   }.freeze
 
   STATE_STRIPE = {
     current: "border-l-green-600", stale: "border-l-amber-500", building: "border-l-sky-500",
-    failed: "border-l-red-500", never: "border-l-gray-300"
+    failed: "border-l-red-500", canceled: "border-l-gray-400", never: "border-l-gray-300"
   }.freeze
 
   # The URL an author hands out for a published target. Points at the published origin
@@ -61,7 +63,8 @@ module TargetsHelper
   def build_history_pill(build, target)
     label, classes =
       if build.failed? then [ "Failed", "bg-red-100 text-red-800" ]
-      elsif Target::IN_FLIGHT.include?(build.status) then [ "Building", "bg-sky-100 text-sky-800" ]
+      elsif build.canceled? then [ "Canceled", "bg-gray-100 text-gray-700" ]
+      elsif build.in_flight? then [ "Building", "bg-sky-100 text-sky-800" ]
       elsif build.id == target.current_build_id then [ "Live", "bg-green-100 text-green-800" ]
       else [ "Superseded", "bg-gray-100 text-gray-700" ]
       end
@@ -82,6 +85,9 @@ module TargetsHelper
     when :failed
       tag.span("Readers see the build from #{time_ago_in_words(target.last_built_at)} ago") +
         tag.span("The most recent build failed", class: "block text-red-700")
+    when :canceled
+      tag.span("Readers see the build from #{time_ago_in_words(target.last_built_at)} ago") +
+        tag.span("The most recent build was canceled", class: "block text-gray-500")
     else
       built
     end

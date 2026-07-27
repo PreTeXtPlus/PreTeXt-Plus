@@ -144,6 +144,23 @@ class TargetsControllerTest < ActionDispatch::IntegrationTest
     assert_match(/Last try/, response.body)
   end
 
+  # The header offers one action, whichever way round it is: a build that is running can
+  # be stopped, and one that is not can be started.
+  test "a running build is offered a cancel button instead of rebuild" do
+    # one_web has builds in flight; one_print does not.
+    get project_target_url(@project, @target)
+
+    assert_response :success
+    assert_equal :building, @target.reload.state
+    assert_match cancel_project_build_path(@project, @target.latest_build), response.body
+    assert_match(/Cancel build/, response.body)
+
+    get project_target_url(@project, targets(:one_print))
+
+    assert_match(/Rebuild/, response.body)
+    assert_no_match(/Cancel build/, response.body)
+  end
+
   test "should create a target" do
     assert_difference("Target.count") do
       post project_targets_url(@project), params: { target: { name: "Instructor site", kind: "website" } }
@@ -282,6 +299,59 @@ class TargetsControllerTest < ActionDispatch::IntegrationTest
     # ApplicationController rescues CanCan::AccessDenied into a redirect.
     assert_redirected_to projects_path
     assert flash[:alert].present?
+  end
+
+  # ---- restoring the previous build ----
+
+  test "reverting deletes the newest success and readers get the previous one" do
+    target = targets(:one_print)
+    older = target.builds.create!(created_at: 2.days.ago, status: :success)
+    newer = target.builds.create!(created_at: 1.day.ago, status: :success)
+    target.sync_from_builds!
+    assert_equal newer, target.reload.current_build
+
+    patch revert_project_target_url(@project, target)
+
+    assert_redirected_to project_target_url(@project, target)
+    assert_empty Build.where(id: newer.id)
+    assert_equal older, target.reload.current_build
+  end
+
+  test "reverting with nothing to fall back to is refused" do
+    target = targets(:one_print)
+    only = target.builds.create!(status: :success)
+    target.sync_from_builds!
+
+    patch revert_project_target_url(@project, target)
+
+    # Refused outright: destroying the only success would take the output down, which
+    # is not what "restore" means.
+    assert Build.exists?(only.id)
+    assert_match(/no earlier build/, flash[:alert])
+  end
+
+  test "cannot revert another user's target" do
+    patch revert_project_target_url(projects(:two), targets(:two_web))
+
+    assert_redirected_to projects_path
+    assert flash[:alert].present?
+  end
+
+  test "the drawer offers restore exactly when there is a build to fall back to" do
+    target = targets(:one_print)
+    target.builds.create!(created_at: 2.days.ago, status: :success)
+    target.sync_from_builds!
+
+    get project_target_url(@project, target)
+    assert_select "form[action=?]", revert_project_target_path(@project, target), false,
+                  "one success has nothing to fall back to"
+
+    target.builds.create!(created_at: 1.day.ago, status: :success)
+    target.sync_from_builds!
+
+    get project_target_url(@project, target)
+    assert_select "form[action=?][data-turbo-frame=_top]",
+                  revert_project_target_path(@project, target)
   end
 
   # The denormalized current_build_id on targets exists so this page does not issue a

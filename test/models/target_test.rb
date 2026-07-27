@@ -237,6 +237,27 @@ class TargetTest < ActiveSupport::TestCase
     assert_equal builds(:two), target.current_build
   end
 
+  # Canceled is terminal like failed, and reported separately from it: nothing went
+  # wrong with the source, so a row saying Failed would send the author hunting through
+  # a log for an error that is not there.
+  test "state is canceled when the last attempt was canceled, and readers keep the live build" do
+    target = targets(:two_web)
+    builds(:failed).mark!(:canceled)
+
+    assert_equal :canceled, target.reload.state
+    assert_equal builds(:two), target.current_build
+    assert_not target.building?
+  end
+
+  test "a canceled build is no longer in flight" do
+    build = builds(:in_progress)
+    assert build.in_flight?
+
+    build.mark!(:canceled)
+
+    assert_not build.reload.in_flight?
+  end
+
   test "state is current when the successful build is newer than the last source edit" do
     target = targets(:one_print)
     projects(:one).update_column(:source_updated_at, 2.days.ago)
@@ -293,6 +314,63 @@ class TargetTest < ActiveSupport::TestCase
 
     assert_nil target.reload.current_build_id
     assert_nil target.last_built_at
+  end
+
+  # ---- retention ----
+
+  test "pruning keeps only the retention window of successes" do
+    target = targets(:one_print)
+    oldest = target.builds.create!(created_at: 4.days.ago, status: :success)
+    middle = target.builds.create!(created_at: 3.days.ago, status: :success)
+    newest = target.builds.create!(created_at: 2.days.ago, status: :success)
+    target.sync_from_builds!
+
+    target.prune_builds!
+
+    assert_empty Build.where(id: oldest.id)
+    assert_equal [ newest, middle ], target.builds.where(status: :success).to_a
+    # The pointers survive the cull intact.
+    assert_equal newest, target.reload.current_build
+  end
+
+  test "pruning keeps a failure newer than the current success, and drops older ones" do
+    target = targets(:one_print)
+    old_failure = target.builds.create!(created_at: 4.days.ago, status: :failed)
+    success = target.builds.create!(created_at: 2.days.ago, status: :success)
+    new_failure = target.builds.create!(created_at: 1.day.ago, status: :failed)
+    target.sync_from_builds!
+
+    target.prune_builds!
+
+    # The newest attempt is what `state` and the drawer's log report, so it stays.
+    assert_empty Build.where(id: old_failure.id)
+    assert Build.exists?(new_failure.id)
+    assert_equal success, target.reload.current_build
+    assert_equal new_failure, target.latest_build
+  end
+
+  test "pruning never removes an in-flight build" do
+    target = targets(:one_print)
+    in_flight = target.builds.create!(created_at: 4.days.ago, status: :in_progress)
+    3.times { |i| target.builds.create!(created_at: (3 - i).days.ago, status: :success) }
+    target.sync_from_builds!
+
+    target.prune_builds!
+
+    # Older than every kept success, but the build server still owes its callback an
+    # answer, so the row has to be there to receive it.
+    assert Build.exists?(in_flight.id)
+  end
+
+  test "previous_successful_build is the fallback, not the current build" do
+    target = targets(:one_print)
+    assert_nil target.previous_successful_build
+
+    older = target.builds.create!(created_at: 2.days.ago, status: :success)
+    assert_nil target.previous_successful_build
+
+    target.builds.create!(created_at: 1.day.ago, status: :success)
+    assert_equal older, target.previous_successful_build
   end
 
   test "destroying a target destroys its builds" do

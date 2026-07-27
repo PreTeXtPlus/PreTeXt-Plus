@@ -8,13 +8,24 @@ class Build < ApplicationRecord
   has_one_attached :zip
   has_many :build_files, dependent: :destroy
 
-  enum :status, { pending: 0, in_progress: 1, success: 2, failed: 3, sent_to_server: 4, received_from_server: 5 }, default: :pending, validate: true
+  # `canceled` is terminal but distinct from `failed`: nothing went wrong with the
+  # source, the author simply stopped waiting, and a row that says Failed would send them
+  # hunting through a log for an error that isn't there.
+  enum :status, { pending: 0, in_progress: 1, success: 2, failed: 3, sent_to_server: 4,
+                  received_from_server: 5, canceled: 6 },
+       default: :pending, validate: true
 
   default_scope { order(created_at: :desc) }
 
   before_validation :inherit_project_from_target
   after_create :sync_target
   after_destroy :sync_target
+
+  # Whether the build server still owes us an answer, and so whether there is anything
+  # left to cancel. The list itself lives on Target, which is where it is read from most.
+  def in_flight?
+    Target::IN_FLIGHT.include?(status)
+  end
 
   # The only way a build's status should ever change.
   #

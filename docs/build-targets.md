@@ -122,9 +122,27 @@ transition. They diverge exactly when a rebuild fails over a published output. K
 both on the row is also what makes `Target#state` free of queries, so a page rendering
 many targets costs a fixed number.
 
-### Five states
+### Retention: two successes deep
 
-One state set, used identically on the projects list, the dashboard and the drawer. The six
+History is not kept forever. Nothing in the app reads past the two pointers, and every
+successful build is a whole unpacked site of Active Storage blobs plus its zip, so
+unbounded history is a storage bill, not a feature. `Target#prune_builds!`, run by
+`FullBuildArtifactJob` each time a build succeeds (the one moment history grows, so no
+scheduled sweep), keeps: the `Target::KEPT_SUCCESSES` (two) newest successes, anything
+still in flight (the build server's callback must find its row), and the newest build
+outright — which is how the latest *failure* survives to keep `state` and the drawer's
+log honest.
+
+Two successes, not one, because the second is what backs the drawer's **Restore previous
+build** button (`TargetsController#revert`). Restoring is honestly just deleting the
+newest successful build: `sync_from_builds!` has always fallen back to the previous
+success when a build is destroyed, so the button is a label over an existing guarantee.
+One step deep, deliberately — deeper revert would mean keeping the history the pruning
+exists to drop, and an author who wants an older state rebuilds from source.
+
+### Six states
+
+One state set, used identically on the projects list, the dashboard and the drawer. The seven
 database statuses collapse into these — `pending`, `in_progress`, `sent_to_server` and
 `received_from_server` are all "Building" to an author.
 
@@ -134,11 +152,52 @@ database statuses collapse into these — `pending`, `in_progress`, `sent_to_ser
 | `stale` | Source changed since this built. |
 | `building` | Queued or running. |
 | `failed` | Last attempt failed. Any previous good output stays live. |
+| `canceled` | Last attempt was stopped by the author. Any previous good output stays live. |
 | `never` | Configured but never run. |
 
 `state` describes the last **attempt**. `current_build` describes what readers **see**.
 They are independent, and that is the point: a rebuild failing while a target is published
 must not take the published output down, and the row has to say both things at once.
+
+`canceled` is terminal but kept distinct from `failed`, because the two send an author to
+different places: a failure means read the log, a cancel means nothing is wrong. It is also
+the state that gives a concurrency slot back — `Target::IN_FLIGHT` (and therefore
+`BuildsController::MAX_CONCURRENT_BUILDS`) no longer counts the build.
+
+### Cancelling a build
+
+`BuildCanceller` POSTs `/builds/<job>/cancel` on the build server, which drops a queued job
+and kills a running container. Three cases never reach it, and two of them still mark the
+build canceled here:
+
+| Case | What happens |
+|---|---|
+| No `remote_status_url` yet | Never submitted — nothing on the server to stop. Marked canceled. |
+| Server answers 404 / 409 | The job finished in the gap, or aged out past `JOB_TTL`. Marked canceled. |
+| Server errors or is unreachable | **Left in flight.** Something may still be running there, and `BuildWatchdogJob` still owns it. |
+
+Cancelling races a build that was already finishing, so the guards in
+`BuildCallbacksController` (`return head(:ok) if build.canceled?`) and `FullBuildArtifactJob`
+(`return if build.success? || build.canceled?`) are what stop a canceled build from importing
+its output over the top of what is published.
+
+### Where the log comes from
+
+The build server sends **no `log` key**. `notify.py`'s `_build_payload` carries `log_tail`
+(the last `CALLBACK_LOG_TAIL_CHARS`, 4000 by default), a `log_truncated` flag, and `log_url`
+for the rest. `BuildCallbacksController` read `payload["log"]` for the first several months of
+this branch, so `.presence` fell through on every build and every author saw
+`(No log returned from server.)` — the placeholder was the *only* log the app ever recorded.
+
+Two paths, two shapes, and the difference matters:
+
+| Path | What it gets | Follow-up |
+|---|---|---|
+| Webhook (`BuildCallbacksController`) | `log_tail` — truncated | `FullBuildLogJob` fetches `log_url` when `log_truncated` |
+| Poll (`BuildStatusChecker`) | `data["log"]` — GET `/builds/<job>` returns the whole job record | None needed |
+
+`FullBuildLogJob` writes through `build.mark!(build.status, ...)` rather than a fixed status:
+it races `FullBuildArtifactJob`, and the log is its to write while the status is not.
 
 ---
 
@@ -490,6 +549,14 @@ Still live — things future work can break:
 - **`mark!` must not be bypassed.** Every status transition goes through `Build#mark!`,
   which is what keeps the denormalized pointers in step and broadcasts the row. The value
   evaporates the first time someone adds a transition with a bare `update_column`.
+- **The build server's payload keys are not ours.** `log_tail` / `log_url` / `artifact_url`
+  come from `notify.py`'s `_build_payload`, and reading a key it does not send fails
+  silently — `.presence` falls through to a fallback and nothing ever errors. That is
+  exactly how the log stayed empty for months. When a log or an artifact goes missing,
+  diff the key names against `_build_payload` before anything else.
+- **`builds.status` is an integer enum, so new values are additive only.** `canceled` is 6
+  and cost no migration; renumbering or reusing an integer silently reinterprets every
+  existing row.
 - **Publishing from the drawer replaces two things.** `TargetsController#publish` adds a
   `turbo_stream.replace("drawer", ...)` only when `turbo_frame_request_id == "drawer"`.
   The dashboard carries an empty `drawer` frame of its own, so dropping that guard makes

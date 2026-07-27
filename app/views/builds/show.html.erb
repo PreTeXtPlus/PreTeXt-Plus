@@ -19,11 +19,16 @@
     Started <%= @build.created_at.to_fs(:long) %>
   </p>
 
-  <% unless @build.success? || @build.failed? %>
-    <div class="mt-4 flex items-center gap-3 rounded-lg border border-sky-200 bg-sky-50 p-3 text-sm text-sky-900">
+  <%# in_flight?, not "not success and not failed": a canceled build is finished too, and
+      this banner used to tell its reader it was still running. %>
+  <% if @build.in_flight? %>
+    <div class="mt-4 flex flex-wrap items-center gap-3 rounded-lg border border-sky-200 bg-sky-50 p-3 text-sm text-sky-900">
       <span>This build is still running.</span>
       <%= button_to "Check the server", check_status_project_build_path(@project, @build),
             class: "cursor-pointer rounded-md border border-sky-600 px-2 py-1 text-xs font-medium text-sky-800 hover:bg-sky-100" %>
+      <%= button_to "Cancel it", cancel_project_build_path(@project, @build),
+            class: "cursor-pointer rounded-md border border-sky-600 px-2 py-1 text-xs font-medium text-sky-800 hover:bg-sky-100",
+            data: { turbo_confirm: "Stop this build? Nothing that is already published changes." } %>
     </div>
   <% end %>
 

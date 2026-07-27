@@ -10,7 +10,9 @@ class FullBuildArtifactJob < ApplicationJob
   queue_as :default
 
   def perform(build, artifact_url)
-    return if build.success?
+    # Cancelled as well as already-imported: a cancel can land while the artifact is
+    # downloading, and finishing the import would republish output nobody is waiting for.
+    return if build.success? || build.canceled?
 
     uri = URI.parse(artifact_url)
     request = Net::HTTP::Get.new(uri)
@@ -57,6 +59,10 @@ class FullBuildArtifactJob < ApplicationJob
     )
 
     build.mark!(:success, entry_path: detect_entry_path(build))
+
+    # A new success is the one moment history grows, so it is also when the retention
+    # window (Target::KEPT_SUCCESSES) is enforced -- no scheduled sweep to forget about.
+    build.target.prune_builds!
   rescue => e
     build.mark!(:failed)
     raise e

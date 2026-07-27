@@ -70,7 +70,12 @@
     <% end %>
 
     <% if state == :building %>
-      <span class="rounded-md px-2.5 py-1.5 text-sm text-gray-400">Building…</span>
+      <%# A build holds one of the author's concurrent slots for up to BUILD_TIMEOUT, so
+          the row that says it is running is also where it can be stopped. %>
+      <span class="text-sm text-gray-400">Building…</span>
+      <%= button_to "Cancel", cancel_project_build_path(target.project, target.latest_build),
+            class: "cursor-pointer rounded-md border border-gray-300 px-2.5 py-1.5 text-sm hover:bg-gray-50",
+            data: { turbo_confirm: "Stop this build? Nothing that is already published changes." } %>
     <% else %>
       <%# Only a row that wants attention gets a filled button. %>
       <% emphasize = [ :stale, :never ].include?(state) %>

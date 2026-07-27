@@ -10,6 +10,17 @@ class BuildsControllerTest < ActionDispatch::IntegrationTest
     sign_in @user
   end
 
+  # The build server's cancel endpoint, stood in for by its two outcomes that matter:
+  # it stopped the job, or it could not.
+  def stub_cancel(outcome, &blk)
+    klass, code = outcome == :ok ? [ Net::HTTPOK, "200" ] : [ Net::HTTPInternalServerError, "500" ]
+    response = klass.new("1.1", code, "")
+    response.instance_variable_set(:@read, true)
+    response.define_singleton_method(:body) { "" }
+
+    Net::HTTP.stub(:start, ->(*_args, **_kw) { response }, &blk)
+  end
+
   # The permission change that makes the dashboard worth having: building used to be
   # admin-only.
   test "a project owner who is not an admin can start a build" do
@@ -34,6 +45,29 @@ class BuildsControllerTest < ActionDispatch::IntegrationTest
     assert_match "turbo-stream", response.media_type
     assert_match ActionView::RecordIdentifier.dom_id(@target), response.body
     assert_match "Building", response.body
+  end
+
+  # Rebuilding from the drawer used to update only the row behind it, leaving the drawer
+  # showing the old state and a Rebuild button for a build already running.
+  test "rebuilding from the drawer redraws the drawer too" do
+    post project_target_builds_url(@project, @target),
+         headers: { "Turbo-Frame" => "drawer" },
+         as: :turbo_stream
+
+    assert_response :success
+    assert_match(/turbo-stream[^>]*target="drawer"/, response.body)
+    # And still swaps the row behind it into its building state.
+    assert_match ActionView::RecordIdentifier.dom_id(@target), response.body
+    assert_match "Building", response.body
+  end
+
+  # The dashboard carries an empty "drawer" frame of its own, so an unguarded replace
+  # would pop the drawer open on anyone who rebuilt from a row.
+  test "rebuilding from a row does not open the drawer" do
+    post project_target_builds_url(@project, @target), as: :turbo_stream
+
+    assert_response :success
+    assert_no_match(/target="drawer"/, response.body)
   end
 
   test "a plain request falls back to the dashboard" do
@@ -83,6 +117,47 @@ class BuildsControllerTest < ActionDispatch::IntegrationTest
 
     assert_response :success
     assert_match "fig-hasse.svg", response.body
+  end
+
+  # Cancelling is what gives a concurrent-build slot back, so the cap has to see it go.
+  test "cancelling a build frees its concurrency slot" do
+    build = builds(:in_progress)
+    build.update_column(:remote_status_url, "/builds/job-123")
+
+    stub_cancel(:ok) { post cancel_project_build_url(@project, build) }
+
+    assert build.reload.canceled?
+    assert_redirected_to project_target_url(@project, build.target)
+    assert_match(/canceled/i, flash[:notice])
+  end
+
+  test "cancelling a build that is not running says so" do
+    build = builds(:in_progress)
+    build.mark!(:success)
+
+    post cancel_project_build_url(@project, build)
+
+    assert_match(/already finished/, flash[:alert])
+    assert build.reload.success?
+  end
+
+  test "a build server that refuses the cancel leaves the build running" do
+    build = builds(:in_progress)
+    build.update_column(:remote_status_url, "/builds/job-123")
+
+    stub_cancel(:error) { post cancel_project_build_url(@project, build) }
+
+    assert build.reload.in_progress?
+    assert_match(/still be running/, flash[:alert])
+  end
+
+  test "cannot cancel a build in another user's project" do
+    build = builds(:two)
+
+    post cancel_project_build_url(projects(:two), build)
+
+    assert_redirected_to projects_path
+    assert flash[:alert].present?
   end
 
   test "deleting a build returns to the target drawer" do

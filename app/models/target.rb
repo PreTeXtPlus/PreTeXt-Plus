@@ -64,6 +64,13 @@ class Target < ApplicationRecord
   # not care which -- they all present as Building; the distinction belongs in the log.
   IN_FLIGHT = %w[ pending in_progress sent_to_server received_from_server ].freeze
 
+  # How many successful builds a target retains. Two, not one, is what makes "Restore
+  # previous build" possible: the one readers see, and the one to fall back to. Anything
+  # deeper is dead weight -- nothing in the app reads past these -- and each successful
+  # build is a whole unpacked site of Active Storage blobs plus its zip, so unbounded
+  # history is a storage bill, not a feature.
+  KEPT_SUCCESSES = 2
+
   # The catalog entry behind this row. nil only if `kind` holds something the catalog no
   # longer offers, which the inclusion validation prevents on write.
   def kind_config
@@ -149,6 +156,7 @@ class Target < ApplicationRecord
     return :never if latest_build.nil?
     return :building if building?
     return :failed if latest_build.failed?
+    return :canceled if latest_build.canceled?
     return :never if current_build.nil?
 
     stale? ? :stale : :current
@@ -181,6 +189,28 @@ class Target < ApplicationRecord
                    current_build_id: current&.id,
                    last_built_at: current&.created_at,
                    updated_at: Time.current)
+  end
+
+  # What "Restore previous build" would fall back to; nil is what hides the button.
+  def previous_successful_build
+    builds.where(status: :success).order(created_at: :desc).offset(1).first
+  end
+
+  # Enforces the retention window, called after each build succeeds. Keeps the
+  # KEPT_SUCCESSES newest successes, anything still in flight (the build server owes an
+  # answer, and its callback must find the row), and the newest build outright -- that
+  # last one is how the most recent *failure* survives to keep `state` and the drawer's
+  # log honest. Everything older goes, cascading build_files and purging their blobs.
+  #
+  # Each destroy re-runs sync_from_builds! via Build's after_destroy; redundant here,
+  # but it keeps "a destroyed build can never leave a dangling pointer" true with no
+  # exceptions to reason about.
+  def prune_builds!
+    keep_ids = builds.where(status: :success).order(created_at: :desc).limit(KEPT_SUCCESSES).ids
+    keep_ids |= builds.where(status: IN_FLIGHT).ids
+    keep_ids |= builds.order(created_at: :desc).limit(1).ids
+
+    builds.where.not(id: keep_ids).destroy_all
   end
 
   private

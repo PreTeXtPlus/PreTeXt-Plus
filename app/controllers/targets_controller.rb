@@ -73,6 +73,25 @@ class TargetsController < ApplicationController
     end
   end
 
+  # Rolls what readers see back one step, by destroying the newest successful build:
+  # Build's after_destroy re-runs sync_from_builds!, which promotes the previous success
+  # to current_build. Not a new mechanism -- deleting a build has always fallen back this
+  # way -- just a button over the one step the retention window guarantees is there.
+  # Exactly one step deep, deliberately: deeper history is precisely what prune_builds!
+  # no longer keeps, and an author who wants an older state rebuilds from source.
+  def revert
+    previous = @target.previous_successful_build
+    if previous.nil?
+      return redirect_to project_target_path(@project, @target),
+                         alert: "There is no earlier build to go back to."
+    end
+
+    @target.current_build.destroy!
+    redirect_to project_target_path(@project, @target),
+                notice: "Restored the build from #{previous.created_at.to_fs(:long)}.",
+                status: :see_other
+  end
+
   def destroy
     @target.destroy!
     redirect_to project_path(@project),
