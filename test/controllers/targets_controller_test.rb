@@ -202,7 +202,7 @@ class TargetsControllerTest < ActionDispatch::IntegrationTest
   end
 
   test "can add a non-html output" do
-    @project.targets.where.not(id: @target.id).destroy_all    
+    @project.targets.where.not(id: @target.id).destroy_all
     assert_difference("Target.count") do
       post project_targets_url(@project), params: { target: { name: "Handout", kind: "pdf" } }
     end
