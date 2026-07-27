@@ -7,6 +7,13 @@ class Project < ApplicationRecord
   has_many :collaborators, -> { merge(Collaboration.accepted) },
     through: :collaborations, source: :user
 
+  # The shared Yjs document backing real-time collaborative editing, plus its
+  # append-only update log. Exists only while the project actually has
+  # collaborations (see #collaborative? and #reset_collaborative_doc!) and is
+  # created lazily by the first collaborative editor session.
+  has_one :project_doc, dependent: :destroy
+  has_many :project_doc_updates, dependent: :delete_all
+
   # dependent: :destroy so deleting a project drops its assets (and their
   # attached files) too -- an asset has no life outside its
   # project, so there's nothing to preserve.
@@ -74,6 +81,23 @@ class Project < ApplicationRecord
   def editable_by?(other_user)
     return false if other_user.nil?
     other_user == user || collaborators.include?(other_user)
+  end
+
+  # Real-time collaborative editing is on whenever anyone besides the owner
+  # holds (or is invited to) edit access. The editor also runs collaboratively
+  # for the owner's own solo sessions on such a project, so the shared doc
+  # never falls behind the divisions materialized from it.
+  def collaborative?
+    collaborations.any?
+  end
+
+  # Drop the shared doc and its update log. Called when the last collaboration
+  # is removed: from then on the owner edits solo (non-collaborative autosave
+  # writes divisions directly, leaving a persisted doc stale), so the doc is
+  # reseeded from the divisions if collaboration ever starts again.
+  def reset_collaborative_doc!
+    project_doc&.destroy!
+    project_doc_updates.delete_all
   end
 
   def effective_docinfo

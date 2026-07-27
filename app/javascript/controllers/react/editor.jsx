@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useRef } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import ReactDOM from "react-dom/client";
 import {
   QueryClient,
@@ -7,8 +7,9 @@ import {
   useQuery,
   useQueryClient,
 } from "@tanstack/react-query";
-import { Editors, assembleFullProjectSource } from "@pretextbook/web-editor";
+import { Editors, assembleFullProjectSource, docToState } from "@pretextbook/web-editor";
 import "@pretextbook/web-editor/dist/web-editor.css";
+import { YCableProvider } from "./collab/yCableProvider";
 
 /** @typedef {import("@pretextbook/web-editor").Asset} Asset */
 /** @typedef {import("@pretextbook/web-editor").Division} Division */
@@ -291,6 +292,12 @@ function railsToEditorState(json) {
     // rootDivisionId is the root division's *xmlId* (its ref), which is how the
     // web-editor identifies divisions, not the database id.
     rootDivisionId: root ? (root.ref ?? "") : undefined,
+    // The root's *database* id: stable across xml:id renames, which is how the
+    // collab save path re-finds the root in doc-derived state.
+    rootDivisionUuid: root ? String(root.id) : undefined,
+    // Real-time collaboration flag + the identity shown on remote cursors.
+    collaborative: json.collaborative === true,
+    editorUser: json.editor_user ?? null,
   };
 }
 
@@ -396,6 +403,89 @@ function persistableShape(state) {
   });
 }
 
+// --- Collaboration helpers -------------------------------------------------
+
+// Deterministic per-user cursor/avatar color (same palette every session, so
+// a collaborator keeps their color across visits).
+const COLLAB_COLORS = [
+  "#0e639c", "#b45309", "#15803d", "#7c3aed",
+  "#be123c", "#0f766e", "#a16207", "#4338ca",
+];
+
+/**
+ * @param {string|undefined} id
+ * @returns {string}
+ */
+function colorForUser(id) {
+  let hash = 0;
+  for (const char of String(id ?? "")) {
+    hash = (hash * 31 + char.charCodeAt(0)) >>> 0;
+  }
+  return COLLAB_COLORS[hash % COLLAB_COLORS.length];
+}
+
+// The CollabDocState used to seed a brand-new shared doc, from the project
+// state we already loaded. Only runs for the one client that wins the seed
+// race (see YCableProvider.loadOrSeed).
+/**
+ * @param {EditorState} state
+ * @returns {import("@pretextbook/web-editor").CollabDocState}
+ */
+function editorStateToCollabSeed(state) {
+  return {
+    title: state.title,
+    docinfo: state.docinfo,
+    useCommonDocinfo: state.useCommonDocinfo,
+    divisions: state.divisions.map((d) => ({
+      id: d.id,
+      xmlId: d.xmlId,
+      sourceFormat: d.sourceFormat,
+      source: d.source,
+      title: d.title,
+      type: d.type,
+    })),
+  };
+}
+
+// In collab mode the shared doc — not this client's working copy — is the
+// authoritative document, so save payloads are derived from it: it already
+// contains every peer's edits, which is exactly what lets a single "leader"
+// client autosave on behalf of the whole session. Shaped like EditorState so
+// editorStateToRailsPayload/persistableShape work unchanged; divisions sorted
+// by id so dirty-check comparisons don't depend on Y.Map iteration order.
+/**
+ * @param {import("yjs").Doc} doc
+ * @param {EditorState} base - The initially loaded state (supplies the fields
+ *   that don't live in the doc: commonDocinfo, projectType, root identity).
+ * @returns {EditorState}
+ */
+function collabEditorState(doc, base) {
+  const shared = docToState(doc);
+  const divisions = shared.divisions
+    .slice()
+    .sort((a, b) => (a.id < b.id ? -1 : 1))
+    .map((d) => ({
+      id: d.id,
+      xmlId: d.xmlId,
+      source: d.source,
+      sourceFormat: d.sourceFormat,
+      title: d.title,
+      type: d.type,
+    }));
+  // Re-find the root by database id — stable across xml:id renames.
+  const root = divisions.find((d) => d.id === base.rootDivisionUuid);
+  return {
+    title: shared.title,
+    docinfo: shared.docinfo,
+    commonDocinfo: base.commonDocinfo,
+    useCommonDocinfo: shared.useCommonDocinfo ?? base.useCommonDocinfo,
+    projectType: base.projectType,
+    divisions,
+    rootDivisionId: root?.xmlId ?? base.rootDivisionId,
+    rootDivisionUuid: base.rootDivisionUuid,
+  };
+}
+
 // --- The editor app --------------------------------------------------------
 
 /**
@@ -448,10 +538,6 @@ function EditorApp({ config }) {
   // here — the web-editor re-renders itself from its own store.
   const working = useRef(null);
   const serverSnapshot = useRef(null);
-  // Division ids (Rails UUID PKs) the user removed but we haven't saved yet.
-  // Held separately because a removed division is gone from `working`, so its
-  // _destroy marker has to be tracked outside the pool until the next save.
-  const pendingDeletes = useRef([]);
   // The initial data handed to <Editors>.  Captured exactly once so the props
   // stay stable for the whole session; pushing fresh `divisions` mid-edit would
   // fight the user's cursor.  Subsequent edits flow out via onContentChange.
@@ -469,6 +555,49 @@ function EditorApp({ config }) {
     serverSnapshot.current = structuredClone(projectQuery.data);
   }
   if (projectQuery.data) serverAssets.current = projectQuery.data.projectAssets;
+
+  // ----- Real-time collaboration ------------------------------------------
+  // When the project has collaborators, the buffer sync moves to a shared
+  // Yjs doc carried over ActionCable (YCableProvider); this PATCH-based module
+  // remains the *persistence* layer, with the save payload derived from the
+  // doc (see collabEditorState) and autosave gated to the session leader.
+  // Solo projects skip all of this — providerRef stays null and behavior is
+  // exactly as before.
+  const providerRef = useRef(null);
+  // The doc-derived state as of the last successful save (or session join) —
+  // the collab-mode dirty-check baseline, mirroring serverSnapshot.
+  const collabServerSnapshot = useRef(null);
+  const [collabStatus, setCollabStatus] = useState("off"); // off|connecting|ready|error
+
+  useEffect(() => {
+    const data = projectQuery.data;
+    if (!data?.collaborative || providerRef.current) return;
+    const provider = new YCableProvider({
+      projectId,
+      csrfToken,
+      user: {
+        name: data.editorUser?.name || "Anonymous",
+        color: colorForUser(data.editorUser?.id),
+      },
+    });
+    providerRef.current = provider;
+    setCollabStatus("connecting");
+    provider
+      .connect(() => editorStateToCollabSeed(data))
+      .then(() => {
+        // Baseline for the dirty check comes from the doc itself: it may
+        // already be ahead of what we loaded (peers kept editing), and those
+        // differences belong to the next autosave, not to a false "clean".
+        collabServerSnapshot.current = collabEditorState(provider.doc, data);
+        setCollabStatus("ready");
+      })
+      .catch((error) => {
+        console.error("Failed to join collaborative session:", error);
+        setCollabStatus("error");
+      });
+  }, [projectQuery.data, projectId, csrfToken]);
+
+  useEffect(() => () => providerRef.current?.destroy(), []);
 
   // ----- WRITE: save via TanStack mutation ---------------------------------
   const saveMutation = useMutation({
@@ -490,32 +619,65 @@ function EditorApp({ config }) {
   });
 
   const isDirty = useCallback(() => {
+    // Collab mode: dirtiness is a property of the shared doc vs. what was last
+    // persisted from it, not of this client's own working copy.
+    const provider = providerRef.current;
+    if (provider) {
+      if (!collabServerSnapshot.current || !initial.current) return false;
+      const docState = collabEditorState(provider.doc, initial.current);
+      return persistableShape(docState) !== persistableShape(collabServerSnapshot.current);
+    }
     if (!working.current || !serverSnapshot.current) return false;
-    if (pendingDeletes.current.length > 0) return true;
     return persistableShape(working.current) !== persistableShape(serverSnapshot.current);
   }, []);
 
-  // Save the current working copy.  `force` saves even when not dirty (used by
-  // the Save button and before copy-conversion).  `enqueue` triggers the server
-  // to kick off an html_source background build (Save button only, not autosave).
-  // Snapshots the buffer up front so edits made *during* the in-flight save
-  // aren't mistakenly marked saved.
+  // Save the current document.  `hard` saves even when not dirty (used by
+  // the Save button and before copy-conversion) and triggers the server-side
+  // html_source rebuild.  Snapshots the buffer up front so edits made *during*
+  // the in-flight save aren't mistakenly marked saved.
+  //
+  // In collab mode the payload is derived from the shared doc (which holds
+  // every peer's edits), and soft (auto)saves run only on the session leader —
+  // one writer for the whole session instead of N clients issuing near-
+  // identical PATCHes. Autosave failures are logged but not alerted: with the
+  // doc as the source of truth a transient failure is retried on the next
+  // tick, and racing a just-deleted division is an expected (self-healing)
+  // case. Explicit saves still alert.
   const save = useCallback(
     async (hard = false) => {
+      const provider = providerRef.current;
+      if (provider) {
+        if (!initial.current || !collabServerSnapshot.current) return false;
+        if (!hard && !provider.isLeader()) return true;
+        if (!hard && !isDirty()) return true;
+        const snapshot = collabEditorState(provider.doc, initial.current);
+        try {
+          await saveMutation.mutateAsync({
+            state: snapshot,
+            assets: serverAssets.current,
+            deletes: [],
+            enqueue: hard,
+          });
+          collabServerSnapshot.current = snapshot;
+          return true;
+        } catch (error) {
+          console.error("Error saving:", error);
+          if (hard) alert("An error occurred while saving.");
+          return false;
+        }
+      }
+
       if (!working.current) return false;
       if (!hard && !isDirty()) return true;
       const snapshot = structuredClone(working.current);
       const assets = serverAssets.current;
-      const deletes = pendingDeletes.current.slice();
       try {
-        await saveMutation.mutateAsync({ state: snapshot, assets, deletes, enqueue: hard });
+        await saveMutation.mutateAsync({ state: snapshot, assets, deletes: [], enqueue: hard });
         serverSnapshot.current = snapshot;
-        // Drop the deletes we just persisted, keeping any queued mid-save.
-        pendingDeletes.current = pendingDeletes.current.filter((id) => !deletes.includes(id));
         return true;
       } catch (error) {
         console.error("Error saving:", error);
-        alert("An error occurred while saving.");
+        if (hard) alert("An error occurred while saving.");
         return false;
       }
     },
@@ -671,20 +833,36 @@ function EditorApp({ config }) {
     [patchProjectJson],
   );
 
-  const onDivisionRemove = useCallback((xmlId) => {
-    const w = working.current;
-    if (!w) return;
-    const index = w.divisions.findIndex((d) => d.xmlId === xmlId);
-    if (index === -1) return;
-    const [removed] = w.divisions.splice(index, 1);
-    // Only ask Rails to destroy a row that was actually persisted. onDivisionAdd
-    // records every division it creates into serverSnapshot, so a division that
-    // reached the server -- whether loaded initially or added this session -- is
-    // found here and gets a _destroy; one the editor created and dropped without
-    // ever calling onDivisionAdd (no server row) is correctly skipped.
-    const persisted = serverSnapshot.current?.divisions.some((d) => d.id === removed.id);
-    if (persisted) pendingDeletes.current.push(removed.id);
-  }, []);
+  // Division removal persists immediately (like every asset mutation), not on
+  // the next bulk save: in collab mode the bulk autosave may run on a *different*
+  // client (the leader), whose doc-derived payload simply omits the removed
+  // division — it would never carry the _destroy marker, orphaning the row.
+  // Immediate destruction by the acting client works identically in both modes.
+  const onDivisionRemove = useCallback(
+    (xmlId) => {
+      const w = working.current;
+      if (!w) return;
+      const index = w.divisions.findIndex((d) => d.xmlId === xmlId);
+      if (index === -1) return;
+      const [removed] = w.divisions.splice(index, 1);
+      // Only ask Rails to destroy a row that was actually persisted.
+      // onDivisionAdd records every division it creates into serverSnapshot, so
+      // a division that reached the server -- whether loaded initially or added
+      // this session -- is found here; one the editor created and dropped
+      // without ever persisting (no server row) is correctly skipped.
+      const persisted = serverSnapshot.current?.divisions.some((d) => d.id === removed.id);
+      if (!persisted) return;
+      serverSnapshot.current.divisions = serverSnapshot.current.divisions.filter(
+        (d) => d.id !== removed.id,
+      );
+      patchProjectJson({ divisions_attributes: [ { id: removed.id, _destroy: true } ] })
+        .catch((error) => {
+          console.error("Error removing division:", error);
+          alert("An error occurred while removing the section.");
+        });
+    },
+    [patchProjectJson],
+  );
 
   const onDivisionUpdate = useCallback((xmlId, changes) => {
     const w = working.current;
@@ -968,8 +1146,22 @@ function EditorApp({ config }) {
   if (projectQuery.isError) {
     return <div className="mx-5">Error loading editor state. Please reload the page.</div>;
   }
+  // A collaborative project's editor waits for the shared doc: mounting before
+  // it arrives would show (and let the user edit) state the session may have
+  // long since moved past.
+  if (projectQuery.data?.collaborative && collabStatus !== "ready") {
+    if (collabStatus === "error") {
+      return (
+        <div className="mx-5">
+          Could not join the collaborative editing session. Please reload the page.
+        </div>
+      );
+    }
+    return <div className="mx-5">Connecting to collaborative session…</div>;
+  }
 
   const state = initial.current;
+  const provider = providerRef.current;
   return (
     <Editors
       title={state.title}
@@ -979,6 +1171,15 @@ function EditorApp({ config }) {
       projectType={state.projectType}
       divisions={state.divisions}
       rootDivisionId={state.rootDivisionId}
+      collaboration={
+        provider
+          ? {
+              doc: provider.doc,
+              awareness: provider.awareness,
+              user: provider.user,
+            }
+          : undefined
+      }
       projectAssets={projectAssets}
       projectUrl={projectUrl}
       saveButtonLabel="Save"

@@ -20,6 +20,11 @@ class Collaboration < ApplicationRecord
   scope :accepted, -> { where.not(user_id: nil) }
   scope :pending, -> { where(user_id: nil) }
 
+  # Once the last collaboration is gone the owner edits solo again, where
+  # autosave writes divisions directly and a persisted shared doc would go
+  # stale -- so drop it; it reseeds if collaboration resumes.
+  after_destroy :reset_doc_when_last
+
   def accepted?
     user_id.present?
   end
@@ -41,6 +46,10 @@ class Collaboration < ApplicationRecord
   end
 
   private
+
+  def reset_doc_when_last
+    project.reset_collaborative_doc! if project.collaborations.none?
+  end
 
   def not_the_owner
     if invited_email == project.user.email
