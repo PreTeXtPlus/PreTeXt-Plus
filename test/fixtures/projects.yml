@@ -60,7 +60,7 @@ template:
   template_description: A great starter
 
 # Owned by the subscribed fixture user, whose profile page is publicly viewable --
-# this is what shows up there.
+# this is what shows up there, linked via its published target (see targets.yml).
 public_project:
   user: subscribed
   title: A Public Project
@@ -68,6 +68,20 @@ public_project:
     <pretext>
     <article xml:id="document" label="document">
       <title>Public</title>
+    </article>
+    </pretext>
+  document_type: article
+  visibility: public
+
+# Public but nothing built and published yet -- exercises the profile's empty state
+# for a project that still shouldn't be hidden.
+public_project_unbuilt:
+  user: subscribed
+  title: A Public But Unbuilt Project
+  pretext_source: |
+    <pretext>
+    <article xml:id="document" label="document">
+      <title>Unbuilt</title>
     </article>
     </pretext>
   document_type: article

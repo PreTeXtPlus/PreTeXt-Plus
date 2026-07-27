@@ -17,10 +17,22 @@
   <div id="public-projects" class="mt-6 space-y-4">
     <% if @projects.any? %>
       <% @projects.each do |project| %>
+        <% published_targets = project.targets.select(&:published?) %>
         <div class="rounded-xl bg-white p-4 ring-2 ring-gray-100 hover:ring-indigo-200">
-          <h3 class="text-lg font-medium">
-            <%= link_to project.title, share_project_path(project), class: "hover:underline", target: "_blank", rel: "noopener" %>
-          </h3>
+          <h3 class="text-lg font-medium"><%= project.title %></h3>
+          <% if published_targets.any? %>
+            <div class="mt-2 flex flex-wrap items-center gap-2">
+              <%# target_public_url, never share_project_path -- a profile visitor should
+                  land on the built output itself, not the dashboard's quick-build page. %>
+              <% published_targets.each do |target| %>
+                <%= link_to target.name, target_public_url(target),
+                      class: "inline-flex items-center rounded-full border border-gray-300 px-2.5 py-1 text-xs font-medium hover:bg-gray-50",
+                      target: "_blank", rel: "noopener", data: { turbo: false } %>
+              <% end %>
+            </div>
+          <% else %>
+            <p class="mt-1 text-xs text-gray-500">No published outputs yet.</p>
+          <% end %>
         </div>
       <% end %>
     <% else %>

@@ -100,4 +100,20 @@ class UsersControllerTest < ActionDispatch::IntegrationTest
     assert_response :success
     assert_select "h3", text: projects(:public_project).title
   end
+
+  test "profile links each published target to its public build, not the quick-build share page" do
+    get user_profile_path(users(:subscribed).username)
+    assert_response :success
+
+    target = targets(:public_project_web)
+    assert_select "a[href=?]", published_url(projects(:public_project), target.slug, host: "pub.example.com"),
+      text: target.name
+    assert_select "a[href=?]", share_project_path(projects(:public_project)), count: 0
+  end
+
+  test "profile shows an empty-state note for a public project with no published targets" do
+    get user_profile_path(users(:subscribed).username)
+    assert_response :success
+    assert_select "p", text: "No published outputs yet."
+  end
 end

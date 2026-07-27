@@ -30,7 +30,9 @@ class UsersController < ApplicationController
     @profile_user = User.find_by_username(params[:username])
     raise ActiveRecord::RecordNotFound unless @profile_user && profile_visible?(@profile_user)
 
-    @projects = @profile_user.projects.publicly_listed
+    # Each card lists its own published targets, so eager-load them rather than
+    # querying per project.
+    @projects = @profile_user.projects.publicly_listed.includes(:targets)
   end
 
   def update
