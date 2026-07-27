@@ -3,13 +3,30 @@
 one:
   user: one
   title: My First Project
-  pretext_source: <pretext><article><section><title>First</title><p>Content</p></section></article></pretext>
+  pretext_source: |
+    <pretext>
+    <article xml:id="document" label="document">
+      <title>Hello</title>
+      <p>
+        World
+      </p>
+    </article>
+    </pretext>
   document_type: article
 
 two:
   user: two
   title: My Second Project
-  pretext_source: <pretext><article><section><title>Other</title><p>Content</p></section></article></pretext>
+  pretext_source: |
+    <pretext>
+    <article xml:id="document" label="document">
+      <title>Welcome to PreTeXt.Plus!</title>
+
+      <p>
+        Hello world
+      </p>
+    </article>
+    </pretext>
   document_type: article
 
 # The only slideshow, and so the only project that may hold a revealjs or beamer target.
@@ -25,7 +42,19 @@ slides:
 template:
   user: two
   title: Calc Template
-  pretext_source: <pretext><article><section><title>Template</title><p>Starter content</p></section></article></pretext>
+  pretext_source: |
+    <pretext>
+    <article xml:id="document" label="document">
+      <title>Template</title>
+      <section xml:id="subdivision">
+      <title>Section</title>
+      <p>
+        Starter content
+      </p>
+    </section>
+    </article>
+
+    </pretext>
   document_type: article
   is_template: true
   template_description: A great starter

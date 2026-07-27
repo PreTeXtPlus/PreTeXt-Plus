@@ -1,7 +1,13 @@
 # Read about fixtures at https://api.rubyonrails.org/classes/ActiveRecord/FixtureSet.html
 
 one:
-  source: <article><title>Hello</title><p>World</p></article>
+  source: |
+    <article xml:id="document">
+      <title>Hello</title>
+      <p>
+        World
+      </p>
+    </article>
   source_format: 0
   is_root: true
   ref: document
@@ -10,7 +16,7 @@ one:
 two:
   source: |
     \article{Welcome to PreTeXt.Plus!}\label{document}
-    
+
     Hello world
   source_format: 1
   is_root: true
@@ -18,15 +24,25 @@ two:
   project: two
 
 template:
-  source: <article><title>Template</title><plus:section ref="subdivision"/></article>
+  source: |
+    <article xml:id="document">
+      <title>Template</title>
+      <plus:section ref="subdivision"/>
+    </article>
   source_format: 0
   is_root: true
   ref: document
   project: template
 
 template_subdivision:
-  source: <section><title>Section</title><p>Starter content</p></section>
+  source: |
+    <section xml:id="subdivision">
+      <title>Section</title>
+      <p>
+        Starter content
+      </p>
+    </section>
   source_format: 0
-  is_root: true
+  is_root: false
   ref: subdivision
   project: template
