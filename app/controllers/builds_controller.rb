@@ -55,11 +55,17 @@ class BuildsController < ApplicationController
           # Rebuilding from the drawer has to redraw the drawer too, or it keeps showing
           # the old state and a Rebuild button for a build already running. Guarded on
           # the frame id for the same reason as targets#publish: the dashboard carries
-          # an empty "drawer" frame, and an unguarded replace would pop the drawer open
+          # an empty "drawer" frame, and an unguarded update would pop the drawer open
           # on anyone who rebuilt from a row.
+          #
+          # update, not replace: replace swaps the <turbo-frame> element itself, and with
+          # it the src Turbo set when the drawer was opened -- which is the very thing
+          # Target#broadcast_drawer asks the frame to reload. A drawer that started its
+          # own build would then sit on "Building" for good, deaf to the broadcast that
+          # says the build finished, while the row behind it updated normally.
           if turbo_frame_request_id == "drawer"
-            @builds = @target.builds.order(created_at: :desc).limit(20)
-            streams << turbo_stream.replace("drawer", template: "targets/show")
+            streams << turbo_stream.update("drawer",
+              partial: "targets/drawer", locals: { project: @project, target: @target })
           end
 
           render turbo_stream: streams

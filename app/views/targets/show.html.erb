@@ -2,6 +2,13 @@
     visit to this URL does not render this template -- TargetsController#show renders the
     dashboard instead, with the drawer already open inside it -- because a bare overlay
     has nothing behind it, and closing it would empty the only element on the page. %>
-<%= turbo_frame_tag "drawer" do %>
-  <%= render "targets/drawer", project: @project, target: @target, builds: @builds %>
+<%# refresh: "morph" is repeated here so that a frame filled by the ⋯ keeps morphing on
+    reload; Turbo carries the attribute over from whichever element it renders.
+
+    No src, deliberately: this template *is* the response to fetching that URL, and Turbo
+    refuses a frame whose src points at the request it arrived in ("has a source URL which
+    references itself"), leaving the drawer empty. The requesting frame already knows its
+    own src -- either Turbo set it navigating here, or projects/show rendered it. %>
+<%= turbo_frame_tag "drawer", refresh: "morph" do %>
+  <%= render "targets/drawer", project: @project, target: @target %>
 <% end %>

@@ -88,6 +88,38 @@ class TargetsControllerTest < ActionDispatch::IntegrationTest
     assert_select "turbo-frame#drawer [data-controller=drawer]", false
   end
 
+  # Target#broadcast_drawer aims at this id as a build progresses, and it has to sit on
+  # the panel inside the overlay: a stream that replaced the overlay would nest a second
+  # one inside it and disconnect the controller that closes it.
+  # The wiring a build's reload_drawer broadcast depends on: it finds the panel by this
+  # id, then reloads the frame around it. Without a src Turbo will not reload a frame at
+  # all, and without refresh="morph" the reload would replace rather than morph, throwing
+  # away the panel's scroll position on every build transition.
+  test "the drawer frame is set up for a build broadcast to reload it" do
+    panel = "##{ActionView::RecordIdentifier.dom_id(@target, :drawer)}"
+
+    # The frame response: morphing, but carrying no src. Turbo rejects a frame whose src
+    # is the request it arrived in ("has a source URL which references itself") and leaves
+    # the drawer empty, so this must stay absent -- the requesting frame has its own.
+    get project_target_url(@project, @target), headers: { "Turbo-Frame" => "drawer" }
+    assert_select "[data-controller=drawer] #{panel}", 1
+    assert_select "turbo-frame#drawer[refresh=morph]:not([src])"
+
+    # The inline render, which no frame navigation gave a src: without one Turbo will not
+    # reload the frame at all, so here it has to be set.
+    get project_target_url(@project, @target)
+    assert_select "turbo-frame#drawer[refresh=morph][src=?]", project_target_path(@project, @target)
+    assert_select "[data-controller=drawer] #{panel}", 1
+  end
+
+  # ...but the dashboard's own empty frame must not carry a src, or every project page
+  # would immediately fetch a drawer nobody asked to open.
+  test "the dashboard's empty drawer frame has nothing to load" do
+    get project_url(@project)
+
+    assert_select "turbo-frame#drawer:not([src])"
+  end
+
   # There is no browser in this environment, so the drawer's behaviour is only exercised
   # by CI's system tests. These assert the wiring those tests depend on, so a rename of
   # the Stimulus controller or the frame fails here rather than silently in a browser.

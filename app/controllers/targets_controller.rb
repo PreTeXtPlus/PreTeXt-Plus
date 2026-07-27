@@ -12,8 +12,6 @@ class TargetsController < ApplicationController
   # the document and only a reload brought anything back. Answering with the dashboard,
   # drawer already open, means close always lands on the project.
   def show
-    @builds = @target.builds.order(created_at: :desc).limit(20)
-
     render "projects/show" unless turbo_frame_request_id == "drawer"
   end
 
@@ -57,11 +55,14 @@ class TargetsController < ApplicationController
         # something already published.
         #
         # Guarded on the frame id rather than done unconditionally, because the dashboard
-        # carries an empty "drawer" frame of its own -- an unguarded replace would pop the
+        # carries an empty "drawer" frame of its own -- an unguarded update would pop the
         # drawer open on anyone who published from a row.
+        #
+        # update rather than replace, so that the frame element -- and the src a build's
+        # broadcast reloads -- survives; see the same call in builds#create.
         if turbo_frame_request_id == "drawer"
-          @builds = @target.builds.order(created_at: :desc).limit(20)
-          streams << turbo_stream.replace("drawer", template: "targets/show")
+          streams << turbo_stream.update("drawer",
+            partial: "targets/drawer", locals: { project: @project, target: @target })
         end
 
         render turbo_stream: streams

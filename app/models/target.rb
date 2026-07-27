@@ -71,6 +71,10 @@ class Target < ApplicationRecord
   # history is a storage bill, not a feature.
   KEPT_SUCCESSES = 2
 
+  # How many attempts the drawer's history table shows. Well above what prune_builds!
+  # actually keeps, so in practice it is a ceiling rather than a cut.
+  HISTORY_LIMIT = 20
+
   # The catalog entry behind this row. nil only if `kind` holds something the catalog no
   # longer offers, which the inclusion validation prevents on write.
   def kind_config
@@ -162,6 +166,11 @@ class Target < ApplicationRecord
     stale? ? :stale : :current
   end
 
+  # The drawer's history table: recent attempts, newest first.
+  def recent_builds
+    builds.order(created_at: :desc).limit(HISTORY_LIMIT)
+  end
+
   # Pushes a freshly rendered row to anyone watching the project's dashboard. Called from
   # Build#mark! on every transition, which is what makes a build's progress visible
   # without the page-level <meta refresh> the old builds view relied on.
@@ -174,6 +183,37 @@ class Target < ApplicationRecord
       target: ActionView::RecordIdentifier.dom_id(self),
       partial: "targets/target",
       locals: { target: self }
+    )
+  end
+
+  # Same transition, for anyone who has *this* target's drawer open: state, log and
+  # history all live in there, and none of them moved when only the row was replaced.
+  #
+  # Sends a signal rather than the drawer's HTML -- see the reload_drawer stream action in
+  # app/javascript/turbo_stream_actions.js, which answers it by reloading the frame the
+  # panel sits in. The drawer is the wrong shape to push down a socket: it carries the
+  # build log, which FullBuildLogJob deliberately grows from a 4000-char tail to the whole
+  # server-side log the moment a build finishes, plus up to HISTORY_LIMIT history rows. As
+  # HTML that is unbounded and, on a hot path, wasteful; in development it is worse than
+  # wasteful, because cable.yml uses Postgres LISTEN/NOTIFY there and NOTIFY rejects any
+  # payload past ~8000 bytes, in a background job, with nothing surfaced to the browser.
+  # A signal is ~200 bytes forever, and the content comes back over ordinary HTTP with the
+  # author's own session behind it.
+  #
+  # Aimed at the panel's per-target dom id rather than the "drawer" frame's, for the
+  # reason targets#publish guards its own drawer replace on the frame id: every dashboard
+  # watching this project carries that frame, and only some of them have *this* target
+  # open. An id that matches nothing yields no targetElements and the action no-ops, which
+  # is exactly right for a closed drawer, or one showing a different output.
+  #
+  # Synchronous, unlike broadcast_row: with nothing to render there is no work to move
+  # off the caller, and a job would cost more than the NOTIFY it wraps.
+  def broadcast_drawer
+    broadcast_action_to(
+      [ project, :targets ],
+      action: :reload_drawer,
+      target: ActionView::RecordIdentifier.dom_id(self, :drawer),
+      render: false
     )
   end
 

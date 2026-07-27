@@ -92,7 +92,20 @@
 <%# The drawer loads into here from the ⋯ on any target row, and is rendered inline when
     this page *is* a target URL -- TargetsController#show renders the dashboard for any
     request that is not the frame asking. That is what gives the overlay something behind
-    it: closing it then reveals the project, rather than emptying the whole document. %>
-<%= turbo_frame_tag "drawer" do %>
-  <%= render "targets/drawer", project: @project, target: @target, builds: @builds if @target %>
+    it: closing it then reveals the project, rather than emptying the whole document.
+
+    refresh: "morph" is what makes a build's reload_drawer broadcast morph this frame
+    rather than replace it, so a refresh mid-read leaves the panel's elements in place --
+    including the build log's own scroll box, which keeps its position.
+
+    On the inline render the src has to be set here, because no frame navigation set it:
+    Turbo will not reload a frame that has no src, and that is the case an author lands in
+    by following a build-log breadcrumb or a bookmark. It costs one immediate re-fetch of
+    the panel the server just rendered -- Turbo clears `complete` when it upgrades an
+    element that has a src, so there is no way to hand it pre-filled content and a src at
+    the same time -- which is a fair price on an uncommon path for a drawer that then
+    refreshes like any other. %>
+<%= turbo_frame_tag "drawer", refresh: "morph",
+      src: (project_target_path(@project, @target) if @target) do %>
+  <%= render "targets/drawer", project: @project, target: @target if @target %>
 <% end %>

@@ -1,11 +1,26 @@
 <%# The drawer panel itself, without the frame around it. Rendered two ways: into the
     dashboard's "drawer" frame by the ⋯ on a row, and inline by projects/show when the
     request was a full-page visit to a target URL. Takes locals rather than ivars so both
-    callers can supply them. %>
+    callers can supply them.
+
+    Always rendered from a real request, including when a finished build refreshes it:
+    that broadcast is a signal, and the frame around this panel re-fetches the content
+    itself (see Target#broadcast_drawer). Which is what lets this keep using `request`,
+    and lets the log and history below run to any size at all.
+
+    The panel carries the id that broadcast aims at -- on the panel rather than the
+    overlay, so that the id says *which* target's drawer is open. %>
 <div data-controller="drawer" class="fixed inset-0 z-30 flex justify-end">
   <div class="absolute inset-0 bg-gray-900/30" data-action="click->drawer#close"></div>
 
-  <div role="dialog" aria-modal="true" aria-label="<%= target.name %> details"
+  <%# data-drawer-url is the panel saying where it came from, so a reload_drawer broadcast
+      can put the frame's src back if something has re-rendered the frame without one.
+      Nothing should now -- both drawer re-renders go through turbo_stream.update, which
+      leaves the frame element alone -- but a drawer that silently stops live-updating is
+      a hard thing to notice, and this makes the recovery automatic. %>
+  <div id="<%= dom_id(target, :drawer) %>"
+       data-drawer-url="<%= project_target_path(project, target) %>"
+       role="dialog" aria-modal="true" aria-label="<%= target.name %> details"
        class="relative flex h-full w-full max-w-xl flex-col overflow-y-auto bg-white shadow-xl">
 
     <div class="flex items-start justify-between gap-4 border-b border-gray-200 p-5">
@@ -113,6 +128,7 @@
 
     <div class="border-b border-gray-200 p-5">
       <p class="font-mono text-xs uppercase tracking-wider text-gray-500">History</p>
+      <% builds = target.recent_builds %>
       <% if builds.any? %>
         <table class="mt-2 w-full text-sm">
           <tbody class="divide-y divide-gray-100">

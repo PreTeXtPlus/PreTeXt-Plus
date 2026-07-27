@@ -3,6 +3,15 @@
 # with it a target row would live-update in production and appear frozen in development.
 # The postgresql adapter uses LISTEN/NOTIFY on the primary database, so it crosses the
 # process boundary without needing the separate `cable` database production uses.
+#
+# That LISTEN/NOTIFY transport caps a single message at ~8000 bytes: past that Postgres
+# raises "payload string too long", inside the broadcast job, where nothing surfaces it to
+# a developer watching the browser. solid_cable has no such limit, so a broadcast that is
+# fine in production can still go silent here -- which is exactly how the drawer's live
+# update was lost once already. Anything broadcast on a hot path should either render
+# something whose size cannot grow with a build's log or a target's build count
+# (Target#broadcast_row), or send a signal and let the browser fetch the content over HTTP
+# (Target#broadcast_drawer).
 development:
   adapter: postgresql
 
