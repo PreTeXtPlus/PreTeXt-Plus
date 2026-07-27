@@ -1,22 +1,32 @@
 # Read about fixtures at https://api.rubyonrails.org/classes/ActiveRecord/FixtureSet.html
 
 one:
-  source: <section><title>Hello</title><p>World</p></section>
+  source: <article><title>Hello</title><p>World</p></article>
   source_format: 0
   is_root: true
   ref: document
   project: one
 
 two:
-  source: \begin{section}Hello world!\end{section}
+  source: |
+    \article{Welcome to PreTeXt.Plus!}\label{document}
+    
+    Hello world
   source_format: 1
   is_root: true
   ref: document
   project: two
 
 template:
-  source: <section><title>Template</title><p>Starter content</p></section>
+  source: <article><title>Template</title><plus:section ref="subdivision"/></article>
   source_format: 0
   is_root: true
   ref: document
+  project: template
+
+template_subdivision:
+  source: <section><title>Section</title><p>Starter content</p></section>
+  source_format: 0
+  is_root: true
+  ref: subdivision
   project: template
