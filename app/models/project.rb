@@ -15,6 +15,13 @@ class Project < ApplicationRecord
 
   enum :document_type, { article: 0, book: 1, slideshow: 2 }, default: :article, suffix: true, validate: true
 
+  # Templates are curated projects the PreTeXt.Plus team flags (via the admin
+  # UI) as starting points; picking one duplicates it into the chooser's account.
+  # A template is otherwise an ordinary project for its owner: it still appears
+  # in their project list (badged, so they know edits affect what new users
+  # start from) and still counts against their quota.
+  scope :templates, -> { where(is_template: true) }
+
   default_scope { order(updated_at: :desc) }
 
   def root_division
@@ -69,6 +76,17 @@ class Project < ApplicationRecord
       new_asset.file.attach(asset.file.blob) if asset.file.attached?
     end
     duplicate
+  end
+
+  # Build a user's own project from this template: a deep copy (divisions,
+  # assets, docinfo) via full_dup, but stripped of its template identity and
+  # keeping the template's own title rather than "Copy of ...".
+  def instantiate_for(new_owner)
+    copy = full_dup(new_owner)
+    copy.title = title
+    copy.is_template = false
+    copy.template_description = nil
+    copy
   end
 
   def enqueue_html_source_job

@@ -7,7 +7,7 @@ Rails.application.routes.draw do
         post :reset_password
       end
     end
-    resources :projects, only: %i[show]
+    resources :projects, only: %i[show update]
     resources :terms, only: %i[new create]
     resources :announcements do
       member do
@@ -47,6 +47,8 @@ Rails.application.routes.draw do
       end
     end
     collection do
+      post "from_template/:template_id" => "projects#create_from_template", as: "create_from_template"
+      post "import" => "projects#create_from_import", as: "create_from_import"
       post "feedback" => "projects#feedback", as: "feedback"
       get "lunr-pretext-search-index.js", to: redirect("/ptx-search.js")
       get "*_/lunr-pretext-search-index.js", to: redirect("/ptx-search.js")

@@ -1,8 +1,8 @@
 class ProjectsController < ApplicationController
   allow_unauthenticated_access only: %i[ share preview source copy_redirect ]
   require_unauthenticated_access only: %i[ tryit ]
-  before_action :limit_projects, only: %i[ new create copy ]
-  load_and_authorize_resource except: %i[ index new tryit preview feedback copy_redirect ]
+  before_action :limit_projects, only: %i[ new create copy create_from_template create_from_import ]
+  load_and_authorize_resource except: %i[ index new tryit preview feedback copy_redirect create_from_template create_from_import ]
   skip_authorize_resource only: %i[ share ]
   after_action :allow_iframe, only: :share
   rate_limit to: 25, within: 10.minutes, only: :preview,
@@ -22,6 +22,9 @@ class ProjectsController < ApplicationController
   def new
     @project = Project.new(user: current_user)
     @project.divisions.build(is_root: true, ref: "document")
+    # Templates offered in the "Start project from template" modal. Read-only:
+    # picking one duplicates it into the current user's account.
+    @templates = Project.templates
   end
 
   # GET /projects/1/edit
@@ -37,8 +40,41 @@ class ProjectsController < ApplicationController
       if @project.save
         format.html { redirect_to edit_project_path(@project) }
       else
+        # The chooser page needs its template list even on a validation re-render,
+        # since the `new` action body doesn't run on this path.
+        @templates = Project.templates
         format.html { render :new, status: :unprocessable_entity }
       end
+    end
+  end
+
+  # POST /projects/from_template/:template_id
+  # Duplicate a team-curated template into the current user's account.
+  def create_from_template
+    # Only projects actually flagged as templates are copyable here, regardless
+    # of which account owns them.
+    template = Project.templates.find(params[:template_id])
+    project = template.instantiate_for(current_user)
+    if project.save
+      redirect_to edit_project_path(project)
+    else
+      redirect_to new_project_path, alert: "Could not create a project from that template."
+    end
+  end
+
+  # POST /projects/import
+  # Create a project from an @pretextbook/import result (posted as multipart so
+  # asset bytes come through as real uploads). Returns the editor URL as JSON;
+  # the import wizard redirects the browser there.
+  def create_from_import
+    @project = Project.new(import_params)
+    @project.user = current_user
+    @project.title = "Imported Project" if @project.title.blank?
+    @project.set_default_docinfo if @project.docinfo.blank?
+    if @project.save
+      render json: { project_url: edit_project_path(@project) }, status: :created
+    else
+      render json: { errors: @project.errors.full_messages }, status: :unprocessable_entity
     end
   end
 
@@ -143,6 +179,41 @@ class ProjectsController < ApplicationController
         divisions_attributes: [ [ :id, :source, :source_format, :is_root, :ref, :_destroy ] ],
         assets_attributes: [ [ :id, :ref, :kind, :file, :source, :short_description, :description, :title, :_destroy ] ]
       ])
+    end
+
+    # The import wizard posts what @pretextbook/import already emits, in this
+    # controller's own shape (see react/import.jsx), so there is nothing to
+    # rename here. Divisions and assets arrive as brand-new records (no id), so
+    # no id/_destroy is permitted.
+    #
+    # The one thing that can't ride along as JSON is an asset's bytes: they
+    # arrive base64-encoded in `file`, and are decoded back into an
+    # ActiveStorage attachable below.
+    def import_params
+      attrs = params.expect(project: [
+        :title, :docinfo, :document_type,
+        divisions_attributes: [ [ :ref, :source, :source_format, :is_root ] ],
+        assets_attributes: [ [ :ref, :kind, :title, :short_description,
+                               { file: [ :filename, :content_type, :data ] } ] ]
+      ]).to_h.deep_symbolize_keys
+
+      if attrs[:assets_attributes].present?
+        attrs[:assets_attributes] = attrs[:assets_attributes].map { |asset| decode_import_asset(asset) }
+      end
+      attrs
+    end
+
+    # Swap an imported asset's base64 `file` object for something ActiveStorage
+    # can attach.
+    def decode_import_asset(asset)
+      file = asset[:file]
+      return asset if file.blank?
+
+      asset.merge(file: {
+        io: StringIO.new(file[:data].to_s.unpack1("m") || ""),
+        filename: file[:filename].presence || asset[:ref].presence || "asset",
+        content_type: file[:content_type].presence || "application/octet-stream"
+      })
     end
 
     def limit_projects

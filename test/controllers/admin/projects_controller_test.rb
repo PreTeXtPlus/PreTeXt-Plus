@@ -26,4 +26,26 @@ class Admin::ProjectsControllerTest < ActionDispatch::IntegrationTest
     assert_includes response.body, "Rendered share view"
     assert_includes response.body, "Read-only support view"
   end
+
+  test "admin can flag a project as a template with a description" do
+    sign_in @admin
+
+    patch admin_project_path(@project), params: {
+      project: { is_template: "1", template_description: "A great starter" }
+    }
+
+    assert_redirected_to admin_project_path(@project)
+    @project.reload
+    assert @project.is_template?
+    assert_equal "A great starter", @project.template_description
+  end
+
+  test "non-admin cannot update template settings" do
+    sign_in @non_admin
+
+    patch admin_project_path(@project), params: { project: { is_template: "1" } }
+
+    assert_redirected_to projects_path
+    assert_not @project.reload.is_template?
+  end
 end
