@@ -25,7 +25,7 @@
             Username <span class="font-normal text-gray-500">(sets your public profile address)</span>
         <% end %>
         <%= form.text_field :username, autocomplete: "off", placeholder: "your-username", class: "block shadow-sm rounded-md border border-gray-400 focus:outline-blue-600 px-3 py-2 mt-2 w-full" %>
-        <% if form.object.username.present? %>
+        <% if form.object.valid? && form.object.username.present? %>
             <p class="mt-1 text-xs text-gray-500">
                 Your profile:
                 <%= link_to "@#{form.object.username}", 

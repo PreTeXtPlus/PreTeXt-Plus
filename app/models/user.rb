@@ -79,6 +79,10 @@ class User < ApplicationRecord
     subscribed? || admin
   end
 
+  def has_profile_page?
+    username.present?
+  end
+
   def update_terms
     update(tos: Term.current(:tos), privacy: Term.current(:privacy))
   end

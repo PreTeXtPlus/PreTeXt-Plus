@@ -68,6 +68,7 @@ class UsersControllerTest < ActionDispatch::IntegrationTest
     sign_in users(:one)
     get user_profile_path(users(:one).username)
     assert_response :success
+    assert_select "div", text: /isn't public yet/
   end
 
   test "profile 404s for a stranger when the owner is not a subscriber" do
@@ -90,6 +91,7 @@ class UsersControllerTest < ActionDispatch::IntegrationTest
     get user_profile_path(users(:subscribed).username)
     assert_response :success
     assert_select "h3", text: projects(:public_project).title
+    assert_select "div", text: /isn't public yet/, count: 0
   end
 
   test "profile lists only the owner's public-visibility projects" do

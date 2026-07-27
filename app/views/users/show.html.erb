@@ -4,6 +4,16 @@
   <h1 class="text-3xl font-semibold"><%= @profile_user.name.presence || @profile_user.username %></h1>
   <p class="text-sm text-gray-600">@<%= @profile_user.username %></p>
 
+  <%# Reaching this page at all while unlisted means the viewer is the owner --
+      profile_visible? in UsersController is what keeps anyone else out. %>
+  <% unless @profile_user.has_copiable_projects? %>
+    <div class="mt-4 text-sm text-amber-800 bg-amber-50 rounded-md p-3">
+      ⚠ This profile isn't public yet — only you can see it.
+      <%= link_to "Subscribe", subscriptions_path, class: "font-semibold hover:underline" %>
+      to make it visible to everyone.
+    </div>
+  <% end %>
+
   <div id="public-projects" class="mt-6 space-y-4">
     <% if @projects.any? %>
       <% @projects.each do |project| %>
