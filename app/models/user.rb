@@ -45,7 +45,7 @@ class User < ApplicationRecord
   def target_quota
     return 50 if admin
     return 12 if subscribed?
-    4
+    2
   end
 
   def upload_mb_quota
