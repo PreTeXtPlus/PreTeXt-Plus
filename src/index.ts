@@ -73,6 +73,22 @@ export {
   createLatexConclusion,
 } from "./sectionUtils";
 
+// Collaboration: the shared-doc schema (hosts seed/serialize through these)
+// and the session types the `collaboration` prop expects. The host owns the
+// transport (creating, seeding, and syncing the Y.Doc with its server).
+export {
+  seedDocFromState,
+  docToState,
+  getDivisionsMap,
+  getMetaMap,
+  getDivisionText,
+} from "./collab/schema";
+export type {
+  CollabDivisionSnapshot,
+  CollabDocState,
+} from "./collab/schema";
+export type { CollabSession, CollabUser } from "./collab/types";
+
 // Export components
 export { default as CodeEditor } from "./components/CodeEditor";
 export { VisualEditor } from "@pretextbook/visual-editor";

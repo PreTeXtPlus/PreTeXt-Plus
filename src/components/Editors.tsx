@@ -5,6 +5,7 @@ import {
   useMemo,
   useRef,
   useState,
+  useSyncExternalStore,
   type ReactNode,
 } from "react";
 
@@ -68,6 +69,9 @@ import {
 } from "../store/editorStore";
 import { EditorStoreProvider } from "../store/EditorStoreProvider";
 import { useEditorStore } from "../store/hooks";
+import { CollabBridge } from "../collab/bridge";
+import type { CollabSession } from "../collab/types";
+import PresenceAvatars from "../collab/PresenceAvatars";
 
 // ── Public prop interface ─────────────────────────────────────────
 
@@ -190,8 +194,16 @@ export interface editorProps {
    * arrives with **no** `id`: it is new until the host saves it through the
    * project's nested `divisions_attributes` (no id = insert) and the server
    * mints one, which flows back via the `divisions` prop (matched by `xmlId`).
+   *
+   * A host that persists immediately may return the server-minted id (or a
+   * promise of it). When collaboration is active that id keys the division in
+   * the shared document, so peers and doc-derived saves agree on identity; a
+   * rejected promise keeps the division out of the shared doc, mirroring the
+   * failed create. Without collaboration the return value is ignored.
    */
-  onDivisionAdd?: (division: Division) => void;
+  onDivisionAdd?: (
+    division: Division,
+  ) => void | string | Promise<string | undefined | void>;
 
   /**
    * Called when the user deletes a division via the TOC UI.
@@ -251,6 +263,18 @@ export interface editorProps {
   onAssetUpdate?: (asset: Asset) => Promise<void> | void;
   /** If true, the TOC and asset manager hide all assets. */
   hideAssets?: boolean;
+
+  /**
+   * Real-time collaboration session. When provided, the editor binds its
+   * buffers to the session's Y.Doc (per the schema in `src/collab/schema.ts`),
+   * renders collaborator presence (avatar chips, remote cursors), and treats
+   * the doc as the shared source of truth: remote structural changes flow into
+   * the editor automatically, and local ones are mirrored into the doc. The
+   * host owns the transport — creating, seeding, and syncing the doc — see
+   * {@link CollabSession}. When omitted, nothing collaborative is loaded and
+   * behavior is identical to previous versions.
+   */
+  collaboration?: CollabSession;
 }
 
 // ── Helper: find the root division for a divisions pool ─────────────────────
@@ -315,9 +339,27 @@ const Editors = (props: editorProps) => {
     });
   });
 
+  // The collaboration bridge lives beside the store for the whole mount (the
+  // session is expected to be stable — hosts construct doc/awareness before
+  // mounting). Attached in an effect so observers are torn down on unmount.
+  const [bridge] = useState<CollabBridge | null>(() =>
+    props.collaboration
+      ? new CollabBridge(props.collaboration, handle.store)
+      : null,
+  );
+  useEffect(() => {
+    if (!bridge) return;
+    bridge.attach();
+    return () => bridge.detach();
+  }, [bridge]);
+
   return (
     <EditorStoreProvider store={handle.store}>
-      <EditorsInner {...props} bindCallbacks={handle.bindCallbacks} />
+      <EditorsInner
+        {...props}
+        bindCallbacks={handle.bindCallbacks}
+        bridge={bridge}
+      />
     </EditorStoreProvider>
   );
 };
@@ -326,10 +368,19 @@ const Editors = (props: editorProps) => {
 
 interface EditorsInnerProps extends editorProps {
   bindCallbacks: (cbs: EditorCallbacks) => void;
+  bridge: CollabBridge | null;
 }
 
 const EditorsInner = (props: EditorsInnerProps) => {
-  const { bindCallbacks } = props;
+  const { bindCallbacks, bridge } = props;
+
+  // Re-render when the set of shared-doc entries changes outside React's flow
+  // (a remote division add/remove, or a local add whose host id resolved
+  // asynchronously) — the active division's Y.Text is looked up per render.
+  useSyncExternalStore(
+    bridge?.subscribe ?? (() => () => {}),
+    bridge?.getVersion ?? (() => 0),
+  );
 
   // ── Store reads (UI state owned by the store) ───────────────────────────
   const showLivePreview = useEditorStore((s) => s.showLivePreview);
@@ -465,6 +516,11 @@ const EditorsInner = (props: EditorsInnerProps) => {
     extra?: Partial<EditorContentChange>,
   ) => {
     setDivisionContent(xmlId, content);
+    // Mirror into the shared doc as a minimal diff. For Monaco keystrokes the
+    // binding already wrote the precise delta, making this a no-op; for
+    // whole-string rewrites (TOC reorder, metadata edits, conversions) this is
+    // the write-through.
+    bridge?.localContentChange(xmlId, content);
     props.onContentChange({
       xmlId,
       source: content,
@@ -479,6 +535,7 @@ const EditorsInner = (props: EditorsInnerProps) => {
   // callback as a persistence notification.
   const applyDivisionUpdate = (xmlId: string, changes: DivisionChanges) => {
     patchDivision(xmlId, changes);
+    bridge?.localDivisionUpdate(xmlId, changes);
     props.onDivisionUpdate?.(xmlId, changes);
   };
 
@@ -582,11 +639,15 @@ const EditorsInner = (props: EditorsInnerProps) => {
     // flows back later via the `divisions` prop (matched by `xmlId`).
     const newDivision: Division = { ...division, id: undefined };
     addDivisionToPool(newDivision);
-    props.onDivisionAdd?.(newDivision);
+    const idResult = props.onDivisionAdd?.(newDivision);
+    // The shared-doc entry is keyed by the host's id when one is returned, so
+    // peers and doc-derived saves agree on identity from the start.
+    bridge?.localDivisionAdd(newDivision, idResult);
   };
 
   const applyDivisionRemove = (xmlId: string) => {
     removeDivisionFromPool(xmlId);
+    bridge?.localDivisionRemove(xmlId);
     props.onDivisionRemove?.(xmlId);
   };
 
@@ -951,6 +1012,7 @@ const EditorsInner = (props: EditorsInnerProps) => {
         codeEditorRef.current?.insertAtCursor(content),
       updateTitle: (value) => {
         setTitle(value);
+        bridge?.localTitleChange(value);
         props.onTitleChange?.(value);
       },
       feedbackSubmit: props.onFeedbackSubmit,
@@ -1304,12 +1366,41 @@ const EditorsInner = (props: EditorsInnerProps) => {
     applyDivisionUpdate(activeDivision.xmlId, { sourceFormat: "pretext" });
   };
 
+  // Which division each collaborator is looking at (drives presence detail).
+  useEffect(() => {
+    if (!props.collaboration) return;
+    props.collaboration.awareness.setLocalStateField(
+      "division",
+      activeDivisionId ?? null,
+    );
+  }, [props.collaboration, activeDivisionId]);
+
+  // The active division's shared text, when collaboration is on and the
+  // division has reached the doc (a just-created one lands after its host id
+  // resolves — the bridge version subscription re-renders us then).
+  const activeCollabText =
+    bridge && activeDivision ? bridge.getYText(activeDivision.xmlId) : undefined;
+
   // ── Code editor ──────────────────────────────────────────────────────────
   const codeEditor = (
     <CodeEditor
       ref={codeEditorRef}
       content={divisionActiveSource}
       sourceFormat={activeDivisionFormat}
+      collab={
+        props.collaboration && bridge && activeCollabText && activeDivision
+          ? {
+              ytext: activeCollabText,
+              awareness: props.collaboration.awareness,
+              user: props.collaboration.user,
+              divisionKey: activeDivision.xmlId,
+              registerLocalOrigin: (origin) =>
+                bridge.registerLocalOrigin(origin),
+              unregisterLocalOrigin: (origin) =>
+                bridge.unregisterLocalOrigin(origin),
+            }
+          : undefined
+      }
       onChange={handleDivisionContentChange}
       onRebuild={canPreview ? triggerRebuild : undefined}
       onSave={triggerSaveAndRebuild}
@@ -1474,6 +1565,11 @@ const EditorsInner = (props: EditorsInnerProps) => {
         onCancelButton={props.onCancelButton}
         cancelButtonLabel={props.cancelButtonLabel}
         showPreviewModeToggle={false}
+        presence={
+          props.collaboration ? (
+            <PresenceAvatars awareness={props.collaboration.awareness} />
+          ) : undefined
+        }
       />
       <div className="pretext-plus-editor__editor-displays">
         <ErrorBoundary resetKeys={[divisionActiveSource, activeDivisionId]}>
@@ -1505,6 +1601,10 @@ const EditorsInner = (props: EditorsInnerProps) => {
                   commonDocinfo: value.commonDocinfo,
                   useCommonDocinfo: value.useCommonDocinfo,
                 });
+                bridge?.localDocinfoChange(
+                  value.docinfo,
+                  value.useCommonDocinfo,
+                );
                 props.onCommonDocinfoChange?.(value.commonDocinfo);
                 props.onUseCommonDocinfoChange?.(value.useCommonDocinfo);
                 // Docinfo is document-wide: report it against the root

@@ -80,9 +80,22 @@ Splits and merges PreTeXt documents at section boundaries. Supported section typ
 - Drag-and-drop reordering via `@dnd-kit`
 - Hooks: `useBookChapters`, `useSectionDnd`, `useSectionEdit`
 
+### Collaboration (`src/collab/`)
+
+Optional real-time co-editing via Yjs, activated by passing a `collaboration` prop (`{ doc, awareness, user }`) to `Editors`. The **host owns the transport** — it creates, seeds (`seedDocFromState`), and syncs the `Y.Doc` with its server; the editor only binds to it. `yjs` and `y-protocols` are **peer dependencies** so host and editor share one instance.
+
+- `schema.ts` — doc layout: `divisions` map (key = host record id → entry with `xmlId`/`sourceFormat`/`title`/`type` + `Y.Text` source) and `meta` map (`title`, `docinfo`, `useCommonDocinfo`, all LWW). Division *order* lives in parent sources as `<plus:* ref/>` placeholders, so it needs no structure. `seedDocFromState`/`docToState` are exported for hosts.
+- `bridge.ts` — `CollabBridge` keeps doc ↔ Zustand store equal. Local writes flow through the same `EditorsInner` choke points that update the store (`emitContentChange`, `applyDivision*`, title/docinfo commits); remote transactions are translated into pure store pool actions (which never fire host persistence callbacks). Origin tags distinguish the two — anything not registered as local is remote.
+- `monacoBinding.ts` — Monaco ↔ `Y.Text` binding, reimplemented instead of using `y-monaco` because y-monaco imports the `monaco-editor` npm package while this library gets Monaco from `@monaco-editor/react`'s CDN loader. Also publishes/renders cursor presence via relative positions in awareness.
+- `PresenceAvatars.tsx` — avatar chips in the menu bar, driven by awareness.
+- In collab mode, `CodeEditor` disables the constrained-editor locked regions (the plugin would revert remote CRDT edits landing in a locked range, diverging that client) and skips the `content`-prop → model sync (the binding owns the model).
+- A division created locally reaches the doc keyed by whatever `onDivisionAdd` returns (sync or async host id; random UUID fallback), so hosts that persist immediately get doc entries keyed by real record ids and can serialize saves straight from the doc via `docToState`.
+
+The demo app's "Load Collab Demo" button renders two `Editors` relayed in-memory — the fastest way to exercise convergence, remote cursors, and structural sync without a host.
+
 ### Public API (`src/index.ts`)
 
-Only exports meant for consumers should be added here. Exported types include `EditorContentChange`, `FeedbackSubmission`, `PretextProjectCopyRequest`, `DocumentSection`, `DocumentChapter`, `DocinfoEditorProps`.
+Only exports meant for consumers should be added here. Exported types include `EditorContentChange`, `FeedbackSubmission`, `PretextProjectCopyRequest`, `DocumentSection`, `DocumentChapter`, `DocinfoEditorProps`, and the collaboration surface (`CollabSession`, `CollabUser`, `seedDocFromState`, `docToState`).
 
 ## Coding Conventions
 

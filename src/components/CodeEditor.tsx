@@ -1,10 +1,26 @@
 import { Editor } from "@monaco-editor/react";
 import { constrainedEditor } from "constrained-editor-plugin";
 import { useState, useRef, useEffect, forwardRef, useImperativeHandle } from "react";
+import type * as Y from "yjs";
+import type { Awareness } from "y-protocols/awareness";
 import { editorConfigs } from "./editorConfigs";
 import CodeEditorMenu from "./CodeEditorMenu";
+import { MonacoCollabBinding } from "../collab/monacoBinding";
+import type { CollabUser } from "../collab/types";
 import type { SourceFormat } from "../types/editor";
 import "./CodeEditor.css";
+
+/** Live-collaboration wiring for the active division's shared text. */
+export interface CodeEditorCollab {
+  ytext: Y.Text;
+  awareness: Awareness;
+  user: CollabUser;
+  /** Identifies the division (for scoping remote cursors to this buffer). */
+  divisionKey: string;
+  /** Register/unregister the Monaco binding as a local Y.Doc origin. */
+  registerLocalOrigin: (origin: unknown) => void;
+  unregisterLocalOrigin: (origin: unknown) => void;
+}
 
 interface CodeEditorProps {
   /** The current source content to display. */
@@ -52,6 +68,15 @@ interface CodeEditorProps {
    */
   onRequestWrapperEdit?: () => void;
   hideAssets?: boolean;
+  /**
+   * When set, the editor model is bound to this shared `Y.Text` instead of
+   * being driven by the `content` prop: keystrokes emit CRDT deltas, remote
+   * edits land in the model directly, and remote cursors render as colored
+   * carets. Locked structural regions are disabled in this mode — the
+   * constrained-editor plugin would revert remote edits touching them — and
+   * the source-level metadata re-assertion in the host guards identity instead.
+   */
+  collab?: CodeEditorCollab;
 }
 
 /** Imperative handle exposed via `forwardRef` for programmatic control. */
@@ -214,9 +239,16 @@ const CodeEditor = forwardRef<CodeEditorHandle, CodeEditorProps>(({
   onShowFullSource,
   onRequestWrapperEdit,
   hideAssets,
+  collab,
 }, ref) => {
   const editorRef = useRef<any>(null);
   const monacoRef = useRef<any>(null);
+  // The live Monaco↔Y.Text binding when collaboration is on. Read through a
+  // ref inside applyConstraints/mount handlers, which aren't re-created per
+  // render.
+  const collabRef = useRef(collab);
+  collabRef.current = collab;
+  const collabBindingRef = useRef<MonacoCollabBinding | null>(null);
   const constrainedRef = useRef<ReturnType<typeof constrainedEditor> | null>(null);
   const lockedDecorationsRef = useRef<any>(null);
   const lockedRef = useRef(false);
@@ -416,6 +448,19 @@ const CodeEditor = forwardRef<CodeEditorHandle, CodeEditorProps>(({
       model.disposeRestrictions();
     }
 
+    // In collaboration mode nothing is locked: the constrained-editor plugin
+    // reverts any edit inside a locked range, and a remote CRDT edit landing
+    // there would be reverted locally — diverging this client from every peer.
+    // The host's source-level metadata re-assertion still protects xml:ids,
+    // and the trim/pad normalizations are skipped too (two peers running them
+    // concurrently would each insert the same fix-up twice).
+    if (collabRef.current) {
+      lockedRef.current = false;
+      leadingLockedLinesRef.current = 0;
+      lockedDecorationsRef.current?.clear();
+      return;
+    }
+
     trimPretextTrailingBlankLines(editor, model, monaco);
 
     // A PreTeXt division whose body is emptied collapses to just its locked
@@ -493,7 +538,12 @@ const CodeEditor = forwardRef<CodeEditorHandle, CodeEditorProps>(({
   // model only if it actually differs from what the editor currently contains.
   // This prevents cursor jumps caused by the parent re-rendering with the same
   // value the user just typed.
+  //
+  // Skipped entirely while a collab binding owns the model: the store's copy
+  // can lag the model by the debounce interval, and a whole-model setValue on
+  // a bound model would re-enter the shared doc as delete-everything+insert.
   useEffect(() => {
+    if (collabRef.current) return;
     const editor = editorRef.current;
     if (!editor) return;
     const model = editor.getModel();
@@ -505,7 +555,60 @@ const CodeEditor = forwardRef<CodeEditorHandle, CodeEditorProps>(({
       if (position) editor.setPosition(position);
       if (selections) editor.setSelections(selections);
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [content]);
+
+  // ── Collaboration binding lifecycle ───────────────────────────────────────
+  // (Re)bind whenever the shared text changes: on entering collab mode, on
+  // switching divisions, or after a just-created division's doc entry appears.
+  // Also invoked from handleEditorMount, since the editor instance usually
+  // arrives after the first render.
+  const rebindCollab = () => {
+    const previous = collabBindingRef.current;
+    if (previous) {
+      collabBindingRef.current = null;
+      previous.dispose();
+    }
+    const c = collabRef.current;
+    const editor = editorRef.current;
+    const monaco = monacoRef.current;
+    if (!c || !editor || !monaco) return;
+    const model = editor.getModel();
+    if (!model) return;
+    // The shared text is authoritative; align the model before binding so the
+    // binding never observes a divergent starting state.
+    setModelValueSafely(model, c.ytext.toString());
+    const binding = new MonacoCollabBinding({
+      ytext: c.ytext,
+      editor,
+      monaco,
+      awareness: c.awareness,
+      user: c.user,
+      divisionKey: c.divisionKey,
+    });
+    // The binding's transactions are local writes; the bridge must not echo
+    // them back into the store as remote changes.
+    c.registerLocalOrigin(binding);
+    collabBindingRef.current = binding;
+    const unregister = () => c.unregisterLocalOrigin(binding);
+    const originalDispose = binding.dispose.bind(binding);
+    binding.dispose = () => {
+      unregister();
+      originalDispose();
+    };
+  };
+
+  useEffect(() => {
+    rebindCollab();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [collab?.ytext]);
+
+  useEffect(() => {
+    return () => {
+      collabBindingRef.current?.dispose();
+      collabBindingRef.current = null;
+    };
+  }, []);
 
   const handleEditorMount = (editor: any, monaco: any) => {
     editorRef.current = editor;
@@ -516,9 +619,11 @@ const CodeEditor = forwardRef<CodeEditorHandle, CodeEditorProps>(({
     constrainedRef.current.initializeIn(editor);
     // Ensure the newly mounted editor has the latest content in case the
     // component was remounted while content changed without triggering the
-    // content-sync effect (editorRef.current was null at that point).
+    // content-sync effect (editorRef.current was null at that point). In
+    // collab mode the binding (created below) aligns the model to the shared
+    // text instead.
     const model = editor.getModel();
-    if (model && model.getValue() !== content) {
+    if (!collabRef.current && model && model.getValue() !== content) {
       setModelValueSafely(model, content);
     }
     // Report line changes for source → preview sync.
@@ -570,6 +675,7 @@ const CodeEditor = forwardRef<CodeEditorHandle, CodeEditorProps>(({
       config.registerMonacoExtensions?.(monaco, editor) ?? null;
 
     applyConstraints();
+    rebindCollab();
   };
 
   /**

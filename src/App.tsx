@@ -1,5 +1,6 @@
 import "./App.css";
 import Editors from "./components/Editors";
+import CollabDemo from "./CollabDemo";
 import { useMemo, useState } from "react";
 import type {
   Asset,
@@ -518,6 +519,10 @@ function App() {
 
   const [projectType, setProjectType] = useState<"article" | "book">("article");
   const [demoLabel, setDemoLabel] = useState("Article");
+  // Collaboration demo: two editors sharing one (in-memory-relayed) Y.Doc.
+  // Keyed so each entry builds a fresh session pair.
+  const [collabKey, setCollabKey] = useState(0);
+  const [showCollab, setShowCollab] = useState(false);
 
   // ---------------------------------------------------------------------------
   // Full-build payload panel (demo-only debug tool)
@@ -737,6 +742,16 @@ function App() {
         </button>
         <button
           className="app-demo-toolbar__button"
+          onClick={() => {
+            setShowCollab((v) => !v);
+            setCollabKey((k) => k + 1);
+            setDemoLabel(showCollab ? "Article" : "Collab (two clients)");
+          }}
+        >
+          {showCollab ? "Exit Collab Demo" : "Load Collab Demo"}
+        </button>
+        <button
+          className="app-demo-toolbar__button"
           onClick={() => setShowBuildPayload((v) => !v)}
         >
           {showBuildPayload ? "Hide Build Payload" : "Show Build Payload"}
@@ -770,6 +785,13 @@ function App() {
           </pre>
         </div>
       )}
+      {showCollab ? (
+        <CollabDemo
+          key={collabKey}
+          divisions={DEMO_DIVISIONS}
+          title="Collab Demo"
+        />
+      ) : (
       <Editors
         onContentChange={handleContentChange}
         title={title}
@@ -798,6 +820,7 @@ function App() {
         onDivisionUpdate={handleDivisionUpdate}
         hideAssets={false}
       />
+      )}
     </>
   );
 }

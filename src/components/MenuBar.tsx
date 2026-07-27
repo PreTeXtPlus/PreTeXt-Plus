@@ -1,3 +1,4 @@
+import type { ReactNode } from "react";
 import { useEditorStore } from "../store/hooks";
 import StoreFeedbackLink from "./StoreFeedbackLink";
 import "./MenuBar.css";
@@ -16,6 +17,8 @@ export interface MenuBarProps {
    * Defaults to showing the toggle.
    */
   showPreviewModeToggle?: boolean;
+  /** Collaborator presence indicator (avatar chips), when collaboration is on. */
+  presence?: ReactNode;
 }
 
 const MenuBar = (props: MenuBarProps) => {
@@ -86,6 +89,7 @@ const MenuBar = (props: MenuBarProps) => {
         </label>
       </div>
       <div className="pretext-plus-editor__menu-right">
+        {props.presence}
         {props.onSaveButton && (
           <button
             className="pretext-plus-editor__button pretext-plus-editor__button--save"

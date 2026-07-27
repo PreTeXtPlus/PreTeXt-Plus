@@ -46,6 +46,13 @@ export default defineConfig(({ mode }) => {
             /^use-sync-external-store($|\/)/,
             /^@pretextbook\/pretext-html($|\/)/,
             /^@pretextbook\/libxslt-wasm($|\/)/,
+            // Peer dependencies for collaboration: the host passes Y.Doc /
+            // Awareness instances across the package boundary, so host and
+            // editor MUST resolve the same module instance — bundling a copy
+            // here would silently break that (instanceof checks, struct
+            // sharing) in every collaborative session.
+            /^yjs($|\/)/,
+            /^y-protocols($|\/)/,
           ],
           output: {
             globals: {
@@ -53,7 +60,9 @@ export default defineConfig(({ mode }) => {
               'react/jsx-runtime': 'React',
               'react-dom': 'ReactDOM',
               'use-sync-external-store/shim/index.js': 'useSyncExternalStoreShim',
-              'use-sync-external-store/shim/with-selector.js': 'useSyncExternalStoreShimWithSelector'
+              'use-sync-external-store/shim/with-selector.js': 'useSyncExternalStoreShimWithSelector',
+              yjs: 'Y',
+              'y-protocols/awareness': 'awarenessProtocol'
             }
           }
         },
