@@ -20,6 +20,16 @@ class ProjectTest < ActiveSupport::TestCase
     assert_equal users(:one), project.user
   end
 
+  test "visibility defaults to private" do
+    project = projects(:one)
+    assert project.private_visibility?
+  end
+
+  test "publicly_listed scope returns only public-visibility projects" do
+    assert_includes Project.publicly_listed, projects(:public_project)
+    assert_not_includes Project.publicly_listed, projects(:one)
+  end
+
   test "an existing root division's source can be updated without resending its ref" do
     project = projects(:one)
     division = project.root_division

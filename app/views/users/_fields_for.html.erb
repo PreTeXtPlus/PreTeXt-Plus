@@ -19,4 +19,22 @@
         <% end %>
         <%= form.password_field :password, required: true, placeholder: "Enter a password", maxlength: 72, class: "block shadow-sm rounded-md border border-gray-400 focus:outline-blue-600 px-3 py-2 mt-2 w-full" %>
     </div>
+<% else %>
+    <div class="my-5">
+        <%= form.label :username, class: "text-sm font-semibold text-gray-800" do %>
+            Username <span class="font-normal text-gray-500">(sets your public profile address)</span>
+        <% end %>
+        <%= form.text_field :username, autocomplete: "off", placeholder: "your-username", class: "block shadow-sm rounded-md border border-gray-400 focus:outline-blue-600 px-3 py-2 mt-2 w-full" %>
+        <% if form.object.valid? && form.object.username.present? %>
+            <p class="mt-1 text-xs text-gray-500">
+                Your profile:
+                <%= link_to "@#{form.object.username}", 
+                    user_profile_path(form.object.username),
+                    class: "text-blue-600 hover:underline" %>
+            </p>
+            <% unless form.object.has_copiable_projects? %>
+                <p class="mt-1 text-xs text-gray-500">Only you can view this page until you become a subscriber.</p>
+            <% end %>
+        <% end %>
+    </div>
 <% end %>

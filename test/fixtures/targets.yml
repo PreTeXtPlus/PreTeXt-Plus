@@ -52,3 +52,12 @@ slides_deck:
   slug: slides
   kind: revealjs
   position: 0
+
+# Published, so this is what a visitor to the owner's public profile sees linked.
+public_project_web:
+  project: public_project
+  name: Website
+  slug: website
+  kind: website
+  position: 0
+  published: true

@@ -49,4 +49,71 @@ class UsersControllerTest < ActionDispatch::IntegrationTest
     assert_redirected_to edit_user_path(users(:one))
     assert_equal docinfo, users(:one).reload.common_docinfo
   end
+
+  test "update changes username" do
+    sign_in users(:one)
+    patch user_path(users(:one)), params: { user: { username: "brand-new-name" } }
+    assert_redirected_to edit_user_path(users(:one))
+    assert_equal "brand-new-name", users(:one).reload.username
+  end
+
+  test "update rejects a username already taken by another user" do
+    sign_in users(:one)
+    patch user_path(users(:one)), params: { user: { username: users(:two).username } }
+    assert_response :unprocessable_entity
+    assert_not_equal users(:two).username, users(:one).reload.username
+  end
+
+  test "profile is visible to its own owner even when not a subscriber" do
+    sign_in users(:one)
+    get user_profile_path(users(:one).username)
+    assert_response :success
+    assert_select "div", text: /isn't public yet/
+  end
+
+  test "profile 404s for a stranger when the owner is not a subscriber" do
+    sign_in users(:two)
+    get user_profile_path(users(:one).username)
+    assert_response :not_found
+  end
+
+  test "profile 404s for an unauthenticated visitor when the owner is not a subscriber" do
+    get user_profile_path(users(:one).username)
+    assert_response :not_found
+  end
+
+  test "profile 404s for an unknown username" do
+    get user_profile_path("no-such-user")
+    assert_response :not_found
+  end
+
+  test "profile is visible to anyone when the owner is a subscriber" do
+    get user_profile_path(users(:subscribed).username)
+    assert_response :success
+    assert_select "h3", text: projects(:public_project).title
+    assert_select "div", text: /isn't public yet/, count: 0
+  end
+
+  test "profile lists only the owner's public-visibility projects" do
+    sign_in users(:subscribed)
+    get user_profile_path(users(:subscribed).username)
+    assert_response :success
+    assert_select "h3", text: projects(:public_project).title
+  end
+
+  test "profile links each published target to its public build, not the quick-build share page" do
+    get user_profile_path(users(:subscribed).username)
+    assert_response :success
+
+    target = targets(:public_project_web)
+    assert_select "a[href=?]", published_url(projects(:public_project), target.slug, host: "pub.example.com"),
+      text: target.name
+    assert_select "a[href=?]", share_project_path(projects(:public_project)), count: 0
+  end
+
+  test "profile shows an empty-state note for a public project with no published targets" do
+    get user_profile_path(users(:subscribed).username)
+    assert_response :success
+    assert_select "p", text: "No published outputs yet."
+  end
 end

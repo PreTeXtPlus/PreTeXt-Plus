@@ -3,18 +3,21 @@
 one:
   name: User One
   email: one@example.com
+  username: user-one
   encrypted_password: <%= encrypted_password %>
   confirmed_at: <%= 1.year.ago %>
 
 two:
   name: User Two
   email: two@example.com
+  username: user-two
   encrypted_password: <%= encrypted_password %>
   confirmed_at: <%= 1.year.ago %>
 
 subscribed:
   name: Subscribed User
   email: subbed@example.com
+  username: subscribed-user
   encrypted_password: <%= encrypted_password %>
   confirmed_at: <%= 1.year.ago %>
 

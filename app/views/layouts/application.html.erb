@@ -99,8 +99,13 @@
                 <% end %>
                 <% if current_user.present? %>
                   <%= render layout: "layouts/nav_dropdown", locals: { toggle_id: "accountMenu", label: safe_join(["Account (", current_user.email, ") ▾"]) } do %>
+                    <% if current_user.has_profile_page? %>
+                      <%= link_to user_profile_path(current_user.username), class: "block px-4 py-2 text-gray-800 hover:bg-blue-50 hover:text-blue-500" do %>
+                        Public Profile
+                      <% end %>
+                    <% end %>
                     <%= link_to edit_user_path(current_user), class: "block px-4 py-2 text-gray-800 hover:bg-blue-50 hover:text-blue-500" do %>
-                      Profile
+                      Settings
                     <% end %>
                     <%= link_to subscriptions_path, class: "block px-4 py-2 text-gray-800 hover:bg-blue-50 hover:text-blue-500" do %>
                       Manage Subscriptions
