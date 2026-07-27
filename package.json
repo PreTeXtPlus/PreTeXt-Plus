@@ -1,6 +1,6 @@
 {
   "name": "@pretextbook/web-editor",
-  "version": "0.17.0",
+  "version": "0.17.1",
   "private": false,
   "description": "A web-based editor for PreTeXt documents, with simple preview functionality",
   "keywords": [
