@@ -18,8 +18,8 @@ export default class extends Controller {
     // document is not focused. Either way the author still has the URL on screen to
     // select by hand, so failing quietly beats an alert.
     navigator.clipboard?.writeText(text).then(
-      () => this.#confirm("Copied"),
-      () => this.#confirm("Press ⌘C")
+      () => this.#confirm("Copied"),  // success
+      () => this.#confirm("Press ⌘C")  // failure
     )
   }
 
