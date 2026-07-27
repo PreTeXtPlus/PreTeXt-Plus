@@ -81,9 +81,9 @@ class Project < ApplicationRecord
   # Build a user's own project from this template: a deep copy (divisions,
   # assets, docinfo) via full_dup, but stripped of its template identity and
   # keeping the template's own title rather than "Copy of ...".
-  def instantiate_for(new_owner)
+  def instantiate_from_template_for(new_owner)
     copy = full_dup(new_owner)
-    copy.title = title
+    copy.title = "#{title} (generated from template)"
     copy.is_template = false
     copy.template_description = nil
     copy

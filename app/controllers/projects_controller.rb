@@ -54,7 +54,7 @@ class ProjectsController < ApplicationController
     # Only projects actually flagged as templates are copyable here, regardless
     # of which account owns them.
     template = Project.templates.find(params[:template_id])
-    project = template.instantiate_for(current_user)
+    project = template.instantiate_from_template_for(current_user)
     if project.save
       redirect_to edit_project_path(project)
     else

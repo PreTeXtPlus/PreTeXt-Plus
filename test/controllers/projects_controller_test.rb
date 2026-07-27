@@ -556,7 +556,7 @@ class ProjectsControllerTest < ActionDispatch::IntegrationTest
       end
     end
 
-    copy = Project.find_by!(title: "Calc Template", user: @user)
+    copy = Project.find_by!(title: "Calc Template (generated from template)", user: @user)
     assert_not copy.is_template?
     assert_equal template.divisions.count, copy.divisions.count
     assert_redirected_to edit_project_url(copy)
