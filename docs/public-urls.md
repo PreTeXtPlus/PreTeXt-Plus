@@ -14,7 +14,7 @@ comes from.
 A published target is addressed by the project's primary key:
 
 ```
-pretext.plus/o/8f14e45f-ceea-4b7e-9d1a-8a2b3c4d5e6f/website/index.html
+pub.pretext.plus/o/8f14e45f-ceea-4b7e-9d1a-8a2b3c4d5e6f/website/index.html
 ```
 
 Thirty-six characters of hex in a link that authors hand to students, put in a syllabus,
@@ -45,9 +45,9 @@ stops working — it merely stops being the one we generate.
 string (`0-9a-z` minus `i`, `l`, `o`, `u`), with the title slug as a decorative prefix.
 
 ```
-now       pretext.plus/o/8f14e45f-ceea-4b7e-9d1a-8a2b3c4d5e6f/website/index.html
-plain     pretext.plus/o/k3m9xq2p/website/index.html
-prefixed  pretext.plus/o/linear-algebra-k3m9xq/website/index.html  <- recommended
+now       pub.pretext.plus/o/8f14e45f-ceea-4b7e-9d1a-8a2b3c4d5e6f/website/index.html
+plain     pub.pretext.plus/o/k3m9xq2p/website/index.html
+prefixed  pub.pretext.plus/o/linear-algebra-k3m9xq/website/index.html  <- recommended
 ```
 
 **Look up on the trailing code only; treat the prefix as decorative.** This is the Notion
@@ -114,7 +114,7 @@ loads a project inherits *both* forms with no other change.
 ### Optional, and worth doing at the same time
 
 `get "o/:project_id"` redirecting to the project's default published site target. Then the
-*copyable* link is `pretext.plus/o/linear-algebra-k3m9xq` and the deep `/website/index.html`
+*copyable* link is `pub.pretext.plus/o/linear-algebra-k3m9xq` and the deep `/website/index.html`
 path is only where the browser lands — the same trick the existing bare-target redirect
 already uses, one level up.
 

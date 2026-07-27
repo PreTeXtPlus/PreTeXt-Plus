@@ -4,8 +4,17 @@ class TargetsController < ApplicationController
 
   # The drawer: build history, the last log, and settings. A drawer rather than a page
   # because build history is a rabbit hole you want to back out of with Escape.
+  #
+  # An overlay needs something behind it, and plenty of things arrive here as a full-page
+  # visit rather than through the dashboard's frame: the breadcrumb on a build log, the
+  # redirect after checking or deleting a build, a bookmarked URL. Rendering the drawer
+  # alone left those on a page whose entire body was the panel -- so closing it emptied
+  # the document and only a reload brought anything back. Answering with the dashboard,
+  # drawer already open, means close always lands on the project.
   def show
     @builds = @target.builds.order(created_at: :desc).limit(20)
+
+    render "projects/show" unless turbo_frame_request_id == "drawer"
   end
 
   def create

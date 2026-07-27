@@ -18,8 +18,10 @@ export default class extends Controller {
 
   close() {
     const frame = this.element.closest("turbo-frame")
-    // Falls back to removing the panel itself when rendered outside a frame
-    // (a direct link to the drawer URL with JS enabled).
+    // Emptying the frame is safe in both places the drawer is rendered: the dashboard's
+    // own frame, and the one projects/show renders inline when the URL is a target's.
+    // Either way the project is underneath. Removing just the panel is the fallback for
+    // a frameless render, which nothing currently does.
     if (frame) {
       frame.innerHTML = ""
       frame.removeAttribute("src")

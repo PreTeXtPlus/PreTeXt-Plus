@@ -17,10 +17,11 @@
 
     <div class="mt-1 flex flex-wrap items-center gap-2 text-sm">
       <% if target.published? %>
-        <%# _path, never _url: this partial is re-rendered by a background job during a
-            broadcast, where there is no request to derive a host from. The full
-            copyable URL lives in the drawer, which is always request-scoped. %>
-        <%= link_to "Public link ↗", published_path(target.project, target.slug),
+        <%# target_public_url, never published_path or _url: the link points at the
+            published origin, not the dashboard's own, and this partial is re-rendered
+            by a background job during a broadcast, where there is no request to derive
+            a host from -- the helper takes both from config. %>
+        <%= link_to "Public link ↗", target_public_url(target),
               class: "text-xs font-medium text-indigo-700 hover:underline",
               target: "_blank", rel: "noopener", data: { turbo: false } %>
         <%= button_to "Unpublish", publish_project_target_path(target.project, target),

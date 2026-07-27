@@ -10,6 +10,11 @@ class PublishedControllerTest < ActionDispatch::IntegrationTest
     @build = builds(:two) # the target's current_build
     attach_page(@build, "index.html", "<h1>Chapter One</h1>")
     Rails.cache.clear
+
+    # Published output answers only on the published origin (config.x.published_url_options);
+    # on the default www.example.com host these routes do not exist. The cross-origin
+    # tests at the bottom flip the host back to prove that.
+    host! "pub.example.com"
   end
 
   def attach_page(build, path, body)
@@ -172,19 +177,53 @@ class PublishedControllerTest < ActionDispatch::IntegrationTest
     assert_response :not_found
   end
 
-  test "an owner may preview their own unpublished output at its public url" do
+  # There used to be an owner exception here. It went with the origin split: the session
+  # cookie is host-only on the app origin, so on the published origin even the owner is
+  # anonymous and the exception could never fire in production -- keeping it would only
+  # have made this suite lie (Warden's test mode bypasses cookies). Owners preview
+  # through the dashboard's Preview button (build_file_path) instead.
+  test "an unpublished output is hidden even from its owner at the public url" do
     sign_in users(:two)
     assert_not @target.published?
 
     get published_file_url(@project, @target.slug, "index.html")
 
-    assert_response :success
+    assert_response :not_found
   end
 
-  test "a signed-in stranger still cannot see an unpublished output" do
+  test "a signed-in stranger cannot see an unpublished output" do
     sign_in users(:one)
 
     get published_file_url(@project, @target.slug, "index.html")
+
+    assert_response :not_found
+  end
+
+  # The origin split is the security boundary: published pages carry author JavaScript,
+  # so they must never be served by -- and nothing session-bearing must ever answer on --
+  # the published origin. See docs/build-targets.md.
+  test "the app origin does not serve published output, it bounces to the published origin" do
+    publish!
+    host! "www.example.com"
+
+    get "/o/#{@project.id}/#{@target.slug}/index.html"
+
+    assert_redirected_to "http://pub.example.com/o/#{@project.id}/#{@target.slug}/index.html"
+  end
+
+  test "nothing but published output answers on the published origin" do
+    get "/users/sign_in"
+    assert_redirected_to "http://example.com/users/sign_in"
+
+    get "/"
+    assert_redirected_to "http://example.com/"
+  end
+
+  # A stray /o path must dead-end, not bounce between the two origins forever: the
+  # app-origin redirect only matches the real route shape, so this 404s on the app side.
+  test "a malformed published path does not redirect-loop across origins" do
+    get "/o/not-enough-segments"
+    follow_redirect!
 
     assert_response :not_found
   end

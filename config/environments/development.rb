@@ -41,6 +41,12 @@ Rails.application.configure do
   # Set localhost to be used by links generated in mailer templates.
   config.action_mailer.default_url_options = { host: "localhost", port: 3000 }
 
+  # No published origin here on purpose: Codespaces forwards exactly one host, so there
+  # is no second hostname to serve published output from. The /o/... routes fall back to
+  # the app's own origin (see config/routes.rb); the origin split itself is exercised by
+  # the test environment and real in production.
+  # config.x.published_url_options = { host: "pub.localhost", port: 3000 }
+
   # help out ActiveStorage in dev
   config.after_initialize do
     ActiveStorage::Current.url_options = { host: "localhost", port: 3000 }

@@ -89,5 +89,10 @@
   </div>
 </div>
 
-<%# The drawer loads into here from the ⋯ on any target row. %>
-<%= turbo_frame_tag "drawer" %>
+<%# The drawer loads into here from the ⋯ on any target row, and is rendered inline when
+    this page *is* a target URL -- TargetsController#show renders the dashboard for any
+    request that is not the frame asking. That is what gives the overlay something behind
+    it: closing it then reveals the project, rather than emptying the whole document. %>
+<%= turbo_frame_tag "drawer" do %>
+  <%= render "targets/drawer", project: @project, target: @target, builds: @builds if @target %>
+<% end %>

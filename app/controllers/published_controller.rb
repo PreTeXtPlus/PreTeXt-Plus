@@ -3,6 +3,11 @@
 # Resolves a target to the build it currently publishes and serves that build's files to
 # anyone, signed in or not. Publishing points at Target#current_build, so a later failed
 # build never takes a live site down, and unpublishing takes effect immediately.
+#
+# In production these routes answer only on the published origin (pub.pretext.plus),
+# and nothing else answers there: the output is user-authored HTML and JavaScript, so
+# it must not run on the origin that holds sessions. See config/routes.rb and
+# docs/build-targets.md.
 class PublishedController < ApplicationController
   include ServesBuildFiles
 
@@ -51,10 +56,12 @@ class PublishedController < ApplicationController
       @project = Project.find(params[:project_id])
       @target = @project.targets.find_by!(slug: params[:target_slug])
 
-      # An owner may preview their own unpublished output at its public URL; to everyone
-      # else an unpublished target does not exist. 404 rather than 403 so the response
-      # does not confirm that the target is there.
-      raise ActiveRecord::RecordNotFound unless @target.published? || can?(:manage, @target)
+      # An unpublished target does not exist here, for everyone -- owner included. The
+      # session cookie is host-only on the app origin, so on the published origin every
+      # visitor is anonymous and an owner exception could never actually fire; owners
+      # preview through the dashboard's Preview button (build_file_path) instead. 404
+      # rather than 403 so the response does not confirm the target is there.
+      raise ActiveRecord::RecordNotFound unless @target.published?
 
       @build = @target.current_build
       raise ActiveRecord::RecordNotFound if @build.nil?

@@ -85,10 +85,15 @@ class ProjectsControllerTest < ActionDispatch::IntegrationTest
   # These URLs are already in the world, possibly printed in syllabi, so they stay
   # working whether or not the project has a published output.
 
-  test "share still serves the quick build when nothing is published" do
+  test "share still serves the quick build when nothing is published, from the published origin" do
     @project.update_column(:html_source, "<h1>quick build</h1>")
 
     get share_project_url(@project)
+
+    # The quick build is user HTML too, so even the fallback moves off the session
+    # origin: the link keeps working, but what it serves renders on pub.
+    assert_redirected_to share_project_url(@project, host: "pub.example.com")
+    follow_redirect!
 
     assert_response :success
     assert_match "quick build", response.body
@@ -98,12 +103,23 @@ class ProjectsControllerTest < ActionDispatch::IntegrationTest
     target = @project.targets.first
     build = target.builds.create!
     build.mark!(:success)
+    build.build_files.create!(relative_path: "index.html")
+      .blob.attach(io: StringIO.new("<h1>published</h1>"), filename: "index.html", content_type: "text/html")
     target.update!(published: true)
 
     get share_project_url(@project)
 
-    assert_redirected_to published_path(@project, target.name)
+    # Absolute, and on the published origin: this redirect is how legacy same-origin
+    # share links stop serving user content from the origin that holds sessions.
+    assert_redirected_to published_url(@project, target.slug, host: "pub.example.com")
     assert_response :found, "a 301 would still be followed after unpublishing"
+
+    # Follow it all the way through: the old assertion stopped at the redirect, which
+    # hid that it pointed at target.name where the route wants target.slug.
+    follow_redirect! # to the published origin
+    follow_redirect! # to index.html, one level inside the target
+    assert_response :success
+    assert_match "published", response.body
   end
 
   test "share falls back to the quick build again after unpublishing" do
@@ -114,6 +130,7 @@ class ProjectsControllerTest < ActionDispatch::IntegrationTest
     @project.update_column(:html_source, "<h1>quick build</h1>")
 
     get share_project_url(@project)
+    follow_redirect! # to the published origin
 
     assert_response :success
     assert_match "quick build", response.body
@@ -346,6 +363,7 @@ class ProjectsControllerTest < ActionDispatch::IntegrationTest
   test "share is publicly accessible without authentication" do
     sign_out :user  # sign out
     get share_project_url(@project)
+    follow_redirect! # to the published origin
     assert_response :success
   end
 

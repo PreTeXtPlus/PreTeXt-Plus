@@ -22,13 +22,14 @@ Branch `builds`, based on `fbf2b0d` (`git log fbf2b0d..HEAD` for the commits, on
 | | |
 |---|---|
 | PRs 1–4, plus 4b | **Done** — see the per-PR sections below, each with what shipped and how it differs from the original plan |
+| Published origin | **Rails side done** — `/o/…` answers only on `pub.pretext.plus`; DNS, TLS and proxy routing remain (see the resolved security section) |
 | PR 5 (retire the quick build) | **Not started.** The only remaining implementation work |
-| Suite | 302 tests / 848 assertions green; rubocop and brakeman clean |
+| Suite | 309 tests / 867 assertions green; rubocop and brakeman clean |
 | Migrations | Four, all applied in dev. See *Deploying* below before running in production |
 
 ### What has never actually run
 
-Three things are implemented and tested but unproven against reality. A fresh session
+Four things are implemented and tested but unproven against reality. A fresh session
 should not assume they work:
 
 1. **Nothing but a website has ever been built.** The generated `project.ptx` is
@@ -45,6 +46,16 @@ should not assume they work:
    in the dev container, so `bin/rails test:system` cannot run locally; CI has Chrome and
    will exercise them. Integration tests assert the Stimulus/Turbo wiring those depend on,
    which is not the same as watching it work.
+
+   The first browser report against this was the drawer blanking the project page, fixed
+   by rendering the dashboard behind a full-page visit to a target URL (see *Traps*).
+   Treat that as evidence about the whole surface, not a one-off: the rest of the drawer's
+   Turbo behaviour has still only been reasoned about.
+4. **The published origin has never met real DNS.** The host-constrained routing is
+   integration-tested against `pub.example.com`, but development cannot exercise it
+   (Codespaces forwards one host), and nothing has proven the DNS/TLS/proxy checklist in
+   the resolved security section, nor watched a real interactive built page work on
+   `pub.pretext.plus`.
 
 ### Where the code lives
 
@@ -314,10 +325,10 @@ away. The page is `noindex`.
 to an explicit `/o/x/web/index.html`, which puts the visitor one level inside the target
 so the built page's relative links resolve.
 
-> ⚠ Published output is user-authored HTML **and JavaScript** served from the
-> application's own origin. This predates PR 3 but publishing widens it, and the URL shape
-> is now fixed. Nothing was applied; see
-> [Open security decision](#open-security-decision-user-content-on-the-primary-origin).
+> ⚠ Published output is user-authored HTML **and JavaScript**, so serving it from the
+> application's own origin was an exposure. Since resolved: it is served from
+> `pub.pretext.plus` and only there — see
+> [Security decision, resolved](#security-decision-resolved-published-output-moves-to-pubpretextplus).
 
 ### PR 4 — More formats — **done**
 
@@ -455,8 +466,9 @@ as "Quick preview", and `projects#source` still embeds it in an iframe for visit
 deciding whether to copy a project — that second use is the one that needs a real
 replacement, since it serves people who do not own the project.
 
-Retiring it also removes the older, unpublished instance of the origin problem described
-below, since `projects#share` is the other place user HTML is served anonymously.
+The origin exposure `projects#share` used to carry is already handled — the quick build
+now renders only on the published origin (see the resolved security section) — so
+retiring it is cleanup and simplification, no longer a security fix.
 
 | Artifact | Last consumer | Disposition |
 |---|---|---|
@@ -482,6 +494,19 @@ Still live — things future work can break:
   `turbo_stream.replace("drawer", ...)` only when `turbo_frame_request_id == "drawer"`.
   The dashboard carries an empty `drawer` frame of its own, so dropping that guard makes
   publishing from a *row* pop the drawer open. Both directions are covered by tests.
+- **The drawer must never be a whole page.** `TargetsController#show` answers a frame
+  request with the panel (`targets/show`) and everything else with the dashboard
+  (`projects/show`, which renders `targets/_drawer` inline). Rendering the panel alone
+  for a full-page visit is what blanked the project: the overlay was the only thing in
+  `<main>`, so `drawer#close` emptying its frame emptied the document. Full-page visits
+  are not an edge case — a build log's breadcrumb and the redirects from
+  `BuildsController#check_status` and `#destroy` all land on a target URL.
+- **A drawer form that redirects to the dashboard needs `data-turbo-frame="_top"`.**
+  Followed inside the frame, the redirect is absorbed by the dashboard's own empty
+  `drawer` frame: the drawer closes, the flash is dropped, and the row behind it still
+  shows the old name — or the removed output — until a reload. Rename and remove carry
+  the attribute; publish and rebuild deliberately do not, because they answer with a
+  `turbo_stream` that updates the row in place.
 - **`targets/_target.html.erb` has no session.** It is re-rendered by a background job
   during a broadcast, so it must never call `can?`, `current_user`, or a `_url` helper
   (no request means no host). Authorization lives on the actions; the copyable absolute
@@ -502,6 +527,20 @@ Still live — things future work can break:
 - **A new kind is never pure data.** `site:`, `filename_ext:` and `extensions:` all have to
   be right or the target builds and then cannot be opened. The catalog makes this one
   edit in one place, but it is still an edit.
+- **The published-origin block must stay first in `config/routes.rb`.** Routes match
+  top-down, and its catch-all is what keeps the login form (and every other
+  session-bearing page) off the origin user scripts run on. A route added above it
+  answers on `pub.pretext.plus`.
+- **Public links go through `TargetsHelper#target_public_url`, nothing else.** A bare
+  `published_path` renders a same-origin path that 404s in production (the route only
+  answers on the published origin), and a bare `published_url` takes the request's host —
+  wrong in a drawer, impossible in a broadcast. Development masks both mistakes, because
+  there the fallback mounts `/o/…` on the app's own origin.
+- **Nothing on the published origin may depend on a session.** The cookie is host-only
+  and `__Host-`-prefixed on purpose; that is the security boundary. The owner-preview
+  exception in `PublishedController` was removed for exactly this reason — re-adding a
+  `can?` there would pass in tests (Warden bypasses cookies) and never fire in
+  production.
 
 Already handled, recorded because the reasoning is not obvious from the diff:
 
@@ -514,10 +553,13 @@ Already handled, recorded because the reasoning is not obvious from the diff:
 
 ---
 
-## Open security decision: user content on the primary origin
+## Security decision, resolved: published output moves to `pub.pretext.plus`
 
-Published output is served from `pretext.plus` itself and is anonymously reachable by
-design. The question is whether an author can get JavaScript into it. They can.
+**Decided and implemented (2026-07-27): published output is served from its own origin,
+`pub.pretext.plus`, and nothing else answers on that origin.** The sections below record
+the exposure that forced the decision, then what shipped and what remains to do outside
+the repo. Published output is anonymously reachable by design; the question was whether
+an author can get JavaScript into it. They can.
 
 ### "PreTeXt transforms the XML, so the output is safe" — it isn't
 
@@ -565,34 +607,98 @@ inline to anyone, so the vector exists on `main` today. PR 3 widens it — full 
 builds with complete interactive support, at permanent shareable URLs — rather than
 creating it. This is a roadmap item, not a release blocker.
 
-### Options
+### The options, and the one taken
 
 | Option | Cost | Leaves open |
 |---|---|---|
 | **Separate registrable domain** (`pretextusercontent.com`), as GitHub does | DNS, cert, proxy config | Nothing |
-| **Subdomain** (`content.pretext.plus`) | DNS, cert, a host constraint on `PublishedController` | Same *site*, so cookies still attach on requests to the parent; and a subdomain can shadow a parent-domain cookie |
+| **Subdomain** (`pub.pretext.plus`) — **taken** | DNS, cert, a host constraint in routes | Same *site*, so cookies still attach on requests to the parent; and a subdomain can shadow a parent-domain cookie |
 | CSP `sandbox` | One header | **Not viable** — forces an opaque origin, so PreTeXt's `localStorage` use (Runestone progress, knowl state) starts throwing |
 
-A subdomain is probably sufficient and much cheaper than a separate domain. There is no
-`session_store` initializer, so Rails defaults to a **host-only** session cookie: from
-`content.pretext.plus`, a `fetch` to `pretext.plus` becomes cross-origin, we send no CORS
-headers, so the response is unreadable and the CSRF token cannot be stolen.
+The subdomain is sufficient because the session cookie is **host-only** (no `Domain`
+attribute): from `pub.pretext.plus`, a `fetch` to `pretext.plus` is cross-origin, we send
+no CORS headers, so the response is unreadable and the CSRF token cannot be stolen — and
+the cookie is not sent in the first place. The cookie-shadowing caveat is closed by the
+`__Host-` prefix, which browsers refuse to store with a `Domain` attribute at all.
 
-To close the cookie-shadowing caveat, rename the session cookie with the `__Host-` prefix.
-`__Host-` cookies require `Secure` and `Path=/` and forbid a `Domain` attribute, so a
-subdomain cannot overwrite them.
+### What shipped (all of the Rails side)
 
-### To decide
+- **`config.x.published_url_options`** — `{ host: "pub.pretext.plus", protocol: "https" }`
+  in production, `{ host: "pub.example.com" }` in test, **unset in development**, where
+  Codespaces forwards exactly one host so the `/o/…` routes fall back to the app's own
+  origin. The origin split is therefore *only* exercised by the test env until it meets
+  real DNS.
+- **Host-constrained routes, first in the file.** When a published origin is configured,
+  the `/o/…` routes answer only on it, and a catch-all bounces everything else — the
+  login form above all — back to the app origin, so no page that can set or send a
+  session cookie ever renders on the origin user scripts run on. The block *must* stay
+  first: routes match top-down, and every unconstrained route below would otherwise
+  answer on the published origin too.
+- **`/o/…` on the app origin redirects to the published origin.** Shaped like the real
+  routes rather than a bare glob, so a stray `/o` path 404s instead of bouncing between
+  the origins forever. Nothing was deployed, so no link in the world depends on it; it
+  exists for pasted-against-the-wrong-host convenience.
+- **`TargetsHelper#target_public_url`** — the one way a public link is generated. Host
+  and protocol come from config, never the request, so it is safe in the broadcast
+  re-render of a row (no request), and it degrades to a same-origin path in development.
+- **`__Host-pretext_plus_session`** (`config/initializers/session_store.rb`) — production
+  only, since `__Host-` requires `Secure`. Renaming signs every production session out
+  once at deploy.
+- **`config.hosts`** in production now lists `pretext.plus`, `www.pretext.plus`,
+  `pub.pretext.plus` (health check excluded) — routing is host-based now, so unknown
+  `Host` headers are refused rather than guessed about.
+- **The owner-preview exception in `PublishedController` is gone.** The session cookie
+  never travels to the published origin, so the owner is anonymous there and the
+  exception could never fire in production; keeping it would have made the test suite
+  lie (Warden's test mode bypasses cookies). Owners preview via the dashboard's Preview
+  button, which serves the same bytes through the login-only `build_file_path`.
+- **Legacy share links redirect too, in every case.** `/projects/:id/share` URLs are
+  already in the world, so on the app origin the action never renders: a published site
+  redirects to its `/o/…` URL, and the quick-build fallback redirects to the *same
+  share path on the published origin*, where the routes mount `projects#share` a second
+  time and `html_source` actually renders. The link keeps working; what it serves moves
+  off the session origin. (The quick build's relative asset fetches bounce back through
+  the app origin's redirect routes — an extra 302 per asset, no user content served.)
+- **Bug fixed on the way:** `projects#share` redirected to
+  `published_path(@project, published.name)` — `name` ("Website") where the route wants
+  `slug` ("website") — so the redirect landed on the 404 page. The test only asserted
+  the redirect and never followed it; it follows all the way to the page now.
 
-1. Subdomain or separate domain?
-2. Whether existing `/o/...` links must keep working after the move (they would need a
-   redirect from the old origin, which reintroduces nothing — the redirect target is what
-   matters).
-3. Whether `projects#share` moves too, or is simply retired with PR 5, which removes the
-   older instance of the same problem.
+### What still has to happen outside this repo
 
-The Rails side is small — a host constraint on `PublishedController` plus URL helper
-changes. DNS, TLS and Kamal/proxy config are not.
+1. **DNS**: an `A`/`CNAME` (or Cloudflare-proxied) record for `pub.pretext.plus`
+   pointing at the same place as `pretext.plus`. Both hostnames reach the same app;
+   Rails separates them by `Host`.
+2. **TLS**: a certificate covering `pub.pretext.plus`. Cloudflare's universal cert
+   covers `*.pretext.plus` for proxied records; if kamal-proxy terminates TLS instead,
+   add the host so Let's Encrypt issues for it (`proxy: ssl: true, hosts:` in
+   `config/deploy.yml` — currently commented out there).
+3. **Proxy routing**: whatever fronts the app must forward requests for both hostnames
+   to the same container, preserving the `Host` header. If kamal-proxy is given an
+   explicit host list, `pub.pretext.plus` belongs on it.
+4. After deploy, verify from a real browser: a published page loads on
+   `pub.pretext.plus`; `https://pretext.plus/o/…` redirects there; the login form on
+   `pub.pretext.plus` redirects away; and document.cookie / devtools show no session
+   cookie on the published origin.
+
+### Residual, accepted for now
+
+- **`projects#source` still iframes the quick build** on its public copy-this-project
+  page; the iframe now follows share's redirect to the published origin, so the frame's
+  *content* runs there, not on the app origin. The quick build itself survives until
+  PR 5, but no longer renders anywhere on the session origin.
+- **Owner preview (`BuildFilesController`) serves the owner's own build HTML on the app
+  origin, login-only.** Running your own scripts is self-XSS; the social-engineering
+  path (copy a stranger's project, build it, preview it) remains and is the reason a
+  GitHub-style separate domain for *all* build output could still be worth it later.
+- **Devise's `remember_user_token` cookie is not `__Host-`-prefixed** (Devise does not
+  make the cookie name configurable), so a subdomain could in principle shadow it to
+  fixate a remembered login. Low value to an attacker — it grants the attacker's own
+  session, not the victim's — noted for completeness.
+- Blob URLs cached by `ServesBuildFiles` carry whichever host populated the cache, so a
+  non-HTML asset fetched from a published page may hop `pub → app origin → CDN`. One
+  extra 302, no exposure: the app-origin hop is Active Storage's signed redirect, not
+  user content.
 
 ---
 
@@ -607,5 +713,5 @@ changes. DNS, TLS and Kamal/proxy config are not.
 | Store PreTeXt's `format`/`compression`, or the author's choice? | PR 4b | **Answered:** store the author's choice (`kind`) and derive the manifest attributes from `Target::Catalog`. A change on PreTeXt's side becomes an edit to `emits` rather than a data migration. |
 | Should the whole of `project.ptx` be one editable string instead? | PR 4b | **No.** `builds.target_id` is a foreign key and `/o/:project_id/:target_slug` is a public URL, so a target needs stable row identity that an XML element cannot provide. The open-ended *configuration* moved to `targets.options` instead, which is the half of the concern that was real. |
 | What bounds build minutes? | PR 4 | **Answered:** builds are open to every owner, bounded by a 20/hour rate limit, `MAX_CONCURRENT_BUILDS = 3` in flight per user, and `User#target_quota`. |
-| Should published output move to its own origin? | — | **Open, and the most consequential.** PreTeXt embeds author JavaScript by design, so published output can run scripts on our origin. See [Open security decision](#open-security-decision-user-content-on-the-primary-origin). |
+| Should published output move to its own origin? | — | **Answered: yes, `pub.pretext.plus`.** PreTeXt embeds author JavaScript by design, so published output must not run scripts on the origin that holds sessions. Rails side shipped; DNS/TLS/proxy remain. See [Security decision, resolved](#security-decision-resolved-published-output-moves-to-pubpretextplus). |
 | Does `/o/…` have to carry the project UUID? | — | **Open, and time-boxed.** No: give projects a short public id and keep the UUID as a permanent alternate lookup key. Free to do while `/o/…` is undeployed, expensive after. See [public-urls.md](public-urls.md). |

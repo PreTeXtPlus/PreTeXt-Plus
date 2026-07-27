@@ -77,7 +77,21 @@ class ProjectsController < ApplicationController
     # A browsable site, not merely something html-derived: redirecting a link handed to
     # students at a SCORM package would be worse than the quick build it replaces.
     published = @project.targets.detect { |t| t.site? && t.published? && t.current_build_id }
-    return redirect_to published_path(@project, published.name), status: :found if published
+    if published
+      # Cross-origin in production: the public URL lives on the published origin, which
+      # is the point -- this redirect is how legacy same-origin links stop serving user
+      # content from the origin that holds sessions.
+      return redirect_to helpers.target_public_url(published), status: :found, allow_other_host: true
+    end
+
+    # The quick build is user HTML too, so it renders only on the published origin;
+    # reached on any other host, this bounces there first (the routes mount this same
+    # action on the published host). Development configures no published origin and
+    # renders in place, as before.
+    origin = Rails.application.config.x.published_url_options.presence
+    if origin && request.host != origin[:host]
+      return redirect_to share_project_url(@project, **origin), status: :found, allow_other_host: true
+    end
 
     render html: (@project.html_source || "Document not found").html_safe
   end

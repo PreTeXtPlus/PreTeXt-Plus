@@ -39,6 +39,55 @@ class TargetsControllerTest < ActionDispatch::IntegrationTest
     assert_select "turbo-frame#drawer"
   end
 
+  # The drawer is an overlay, and it used to be the *entire* body of this page: a
+  # full-page visit -- the breadcrumb on a build log, the redirect after checking or
+  # deleting a build, a bookmark -- got a panel floating over nothing, and closing it
+  # emptied the document until the author reloaded.
+  test "a full-page visit to a target renders the dashboard behind the drawer" do
+    get project_target_url(@project, @target)
+
+    assert_response :success
+    assert_select "turbo-frame#drawer [data-controller=drawer]", 1
+    # The project is really underneath, not just the chrome around it.
+    @project.targets.each do |target|
+      assert_select "##{ActionView::RecordIdentifier.dom_id(target)}"
+    end
+    assert_select "turbo-cable-stream-source"
+  end
+
+  # The other half of the same rule: when the dashboard's own frame asks, it must get the
+  # panel alone, or the frame would swallow a second copy of the dashboard.
+  test "a frame request for a target renders only the drawer" do
+    get project_target_url(@project, @target), headers: { "Turbo-Frame" => "drawer" }
+
+    assert_response :success
+    assert_select "turbo-frame#drawer [data-controller=drawer]", 1
+    assert_select "##{ActionView::RecordIdentifier.dom_id(@target)}", false,
+                  "the frame response should not carry the dashboard rows"
+  end
+
+  # Both of these redirect to the dashboard. Followed inside the frame, that redirect is
+  # absorbed by the dashboard's own empty drawer frame -- the drawer closes, the flash is
+  # dropped, and the row behind it keeps the old name (or the removed output) until the
+  # page is reloaded.
+  test "the drawer's rename and remove break out of the frame" do
+    get project_target_url(@project, @target), headers: { "Turbo-Frame" => "drawer" }
+
+    assert_select "form[action=?][data-turbo-frame=_top]",
+                  project_target_path(@project, @target)
+    assert_select "form[action=?][data-turbo-frame=_top] input[value=delete]",
+                  project_target_path(@project, @target)
+  end
+
+  # The dashboard is reachable without a target, so the inline drawer has to stay out of
+  # the way when there is none.
+  test "the dashboard leaves its drawer frame empty" do
+    get project_url(@project)
+
+    assert_select "turbo-frame#drawer"
+    assert_select "turbo-frame#drawer [data-controller=drawer]", false
+  end
+
   # There is no browser in this environment, so the drawer's behaviour is only exercised
   # by CI's system tests. These assert the wiring those tests depend on, so a rename of
   # the Stimulus controller or the frame fails here rather than silently in a browser.
@@ -67,7 +116,8 @@ class TargetsControllerTest < ActionDispatch::IntegrationTest
 
     assert_response :success
     assert_match(/turbo-stream[^>]*target="drawer"/, response.body)
-    assert_match(/#{Regexp.escape(published_url(projects(:two), target.slug))}/, response.body)
+    # The copyable URL points at the published origin, not the origin the drawer is on.
+    assert_match(/#{Regexp.escape(published_url(projects(:two), target.slug, host: "pub.example.com"))}/, response.body)
     assert_match(/data-controller="clipboard"/, response.body)
   end
 

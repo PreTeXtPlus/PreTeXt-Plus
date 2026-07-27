@@ -15,6 +15,25 @@ module TargetsHelper
     failed: "border-l-red-500", never: "border-l-gray-300"
   }.freeze
 
+  # The URL an author hands out for a published target. Points at the published origin
+  # when one is configured (production and test -- user output must not script against
+  # the origin that holds sessions; see docs/build-targets.md), and is a same-origin
+  # path in development, where there is no second host to point at. Host and protocol
+  # come from config, never from the request, so this is safe in the broadcast
+  # re-render of a dashboard row, which has no request to derive a host from.
+  # base_url: only for request-scoped callers (the drawer). The development fallback is
+  # a bare path -- correct as an href, but useless as the copyable text an author hands
+  # out -- so a caller that has a request may pass request.base_url to absolutize it.
+  # When a published origin is configured, config wins and base_url is ignored.
+  def target_public_url(target, base_url: nil)
+    # .presence: an unset config.x key reads as an empty OrderedOptions, not nil.
+    origin = Rails.application.config.x.published_url_options.presence
+    return published_url(target.project, target.slug, **origin) if origin
+
+    path = published_path(target.project, target.slug)
+    base_url ? base_url + path : path
+  end
+
   # The add-output picker, filtered to what this project can actually build. Slides only
   # come out of a <slideshow>, and offering them on an article would queue a build that
   # fails at the server -- so the restriction is enforced by absence here, and by
