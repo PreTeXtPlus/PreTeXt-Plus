@@ -47,16 +47,16 @@ class ProjectTest < ActiveSupport::TestCase
     assert_not_includes Project.templates, projects(:one)
   end
 
-  test "instantiate_for produces a non-template copy owned by the new user" do
+  test "instantiate_from_template_for produces a non-template copy owned by the new user" do
     template = projects(:template)
-    copy = template.instantiate_for(users(:one))
+    copy = template.instantiate_from_template_for(users(:one))
     stub_build_server { copy.save! }
 
     assert_equal users(:one), copy.user
     assert_not copy.is_template?
     assert_nil copy.template_description
-    # Keeps the template's own title rather than "Copy of ...".
-    assert_equal template.title, copy.title
+    # Adds "generated from template"
+    assert_equal "#{template.title} (generated from template)", copy.title
     assert_equal template.divisions.count, copy.divisions.count
   end
 end
