@@ -1,0 +1,763 @@
+/* TableOfContents sidebar styles */
+
+.pretext-plus-editor__toc {
+  display: flex;
+  flex-direction: column;
+  width: 260px;
+  min-width: 260px;
+  height: 100%;
+  background: #f5f6f8;
+  border-right: 1px solid #dde0e6;
+  overflow: hidden;
+  flex-shrink: 0;
+  transition: width 0.2s ease, min-width 0.2s ease;
+  user-select: none;
+}
+
+.pretext-plus-editor__toc--collapsed {
+  width: 36px;
+  min-width: 36px;
+  align-items: center;
+  padding-top: 8px;
+}
+
+/* ── Parse-error banner ─────────────────────────────── */
+.pretext-plus-editor__toc-parse-error {
+  background: #fde8e8;
+  color: #842029;
+  border-bottom: 1px solid #f5c2c7;
+  padding: 8px 10px;
+  font-size: 0.78rem;
+  line-height: 1.35;
+  flex-shrink: 0;
+}
+
+.pretext-plus-editor__toc-parse-error-detail {
+  margin-top: 4px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.72rem;
+  color: #6c1f24;
+  word-break: break-word;
+  max-height: 4.5em;
+  overflow-y: auto;
+}
+
+/* ── Header ─────────────────────────────────────────── */
+.pretext-plus-editor__toc-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 10px 6px;
+  border-bottom: 1px solid #dde0e6;
+  flex-shrink: 0;
+}
+
+.pretext-plus-editor__toc-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.pretext-plus-editor__toc-heading {
+  font-size: 0.75rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: #555;
+}
+
+.pretext-plus-editor__toc-toggle {
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 2px 4px;
+  font-size: 1rem;
+  color: #666;
+  line-height: 1;
+  border-radius: 3px;
+  flex-shrink: 0;
+}
+
+.pretext-plus-editor__toc-toggle:hover {
+  background: #e3e6ec;
+  color: #333;
+}
+
+/* ── Section list ────────────────────────────────────── */
+.pretext-plus-editor__toc-list {
+  list-style: none;
+  margin: 0;
+  padding: 4px 0;
+  overflow-y: auto;
+  flex: 1;
+}
+
+/* ── Item internal layout ────────────────────────────── */
+.pretext-plus-editor__toc-item {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  border-left: 3px solid transparent;
+  cursor: default;
+}
+
+.pretext-plus-editor__toc-item-row {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 0 4px 0 4px;
+  min-height: 32px;
+}
+
+/* ── Chevron expand/collapse toggle ──────────────────── */
+.pretext-plus-editor__toc-expand-btn {
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 0 2px;
+  font-size: 0.7rem;
+  color: #aaa;
+  line-height: 1;
+  flex-shrink: 0;
+  width: 16px;
+  text-align: center;
+  border-radius: 3px;
+}
+
+.pretext-plus-editor__toc-expand-btn:hover {
+  color: #555;
+  background: #dde0e6;
+}
+
+/* ── Inline edit form ─────────────────────────────────── */
+.pretext-plus-editor__toc-edit-form {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 8px 8px 8px 10px;
+  background: #eef2ff;
+  border-top: 1px solid #c7d2fe;
+}
+
+.pretext-plus-editor__toc-edit-field {
+  display: grid;
+  grid-template-columns: 52px 1fr;
+  align-items: center;
+  gap: 4px;
+  font-size: 0.76rem;
+  color: #555;
+}
+
+.pretext-plus-editor__toc-edit-field > span {
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.pretext-plus-editor__toc-edit-field input,
+.pretext-plus-editor__toc-edit-field select {
+  font: inherit;
+  font-size: 0.8rem;
+  border: 1px solid #a5b4fc;
+  border-radius: 3px;
+  padding: 2px 5px;
+  background: #fff;
+  outline: none;
+  color: #111;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.pretext-plus-editor__toc-edit-field input:focus,
+.pretext-plus-editor__toc-edit-field select:focus {
+  border-color: #2563eb;
+  box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.15);
+}
+
+.pretext-plus-editor__toc-edit-actions {
+  display: flex;
+  gap: 6px;
+  margin-top: 2px;
+}
+
+.pretext-plus-editor__toc-edit-save,
+.pretext-plus-editor__toc-edit-cancel {
+  font: inherit;
+  font-size: 0.76rem;
+  padding: 3px 10px;
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.pretext-plus-editor__toc-edit-save {
+  background: #2563eb;
+  color: #fff;
+  border: 1px solid #1d4ed8;
+}
+
+.pretext-plus-editor__toc-edit-save:hover {
+  background: #1d4ed8;
+}
+
+.pretext-plus-editor__toc-edit-cancel {
+  background: #fff;
+  color: #555;
+  border: 1px solid #ccc;
+}
+
+.pretext-plus-editor__toc-edit-cancel:hover {
+  background: #f1f5f9;
+  border-color: #999;
+}
+
+.pretext-plus-editor__toc-item--editing {
+  background: #f0f4ff;
+}
+
+.pretext-plus-editor__toc-item--active {
+  border-left-color: #2563eb;
+}
+
+.pretext-plus-editor__toc-item:hover > .pretext-plus-editor__toc-item-row {
+  background: #e8eaf0;
+}
+
+.pretext-plus-editor__toc-item--active > .pretext-plus-editor__toc-item-row {
+  background: #e0e8ff;
+}
+
+.pretext-plus-editor__toc-select {
+  flex: 1;
+  min-width: 0;
+  background: none;
+  border: none;
+  cursor: pointer;
+  text-align: left;
+  font: inherit;
+  color: #333;
+  padding: 4px 2px;
+  overflow: hidden;
+}
+
+.pretext-plus-editor__toc-item--active .pretext-plus-editor__toc-select {
+  font-weight: 600;
+}
+
+.pretext-plus-editor__toc-title {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 0.83rem;
+}
+
+/* xml:id shown under the title — edited only via "Edit properties". */
+.pretext-plus-editor__toc-xmlid {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 0.68rem;
+  font-weight: 400;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  color: #94a3b8;
+}
+
+/* ── Action buttons wrapper (dots menu) ──────────────── */
+.pretext-plus-editor__toc-actions {
+  display: flex;
+  align-items: center;
+  flex-shrink: 0;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.1s;
+}
+
+.pretext-plus-editor__toc-item:hover .pretext-plus-editor__toc-actions,
+.pretext-plus-editor__toc-item--active .pretext-plus-editor__toc-actions,
+.pretext-plus-editor__toc-asset-item:hover .pretext-plus-editor__toc-actions,
+.pretext-plus-editor__toc-asset-item--busy .pretext-plus-editor__toc-actions {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+/* ── Dots menu ───────────────────────────────────────── */
+.pretext-plus-editor__toc-div-menu {
+  position: relative;
+  flex-shrink: 0;
+}
+
+.pretext-plus-editor__toc-div-menu-trigger {
+  background: none;
+  border: 1px solid transparent;
+  border-radius: 3px;
+  cursor: pointer;
+  padding: 1px 5px;
+  font-size: 0.9rem;
+  color: #666;
+  line-height: 1.3;
+  flex-shrink: 0;
+}
+
+.pretext-plus-editor__toc-div-menu-trigger:hover {
+  background: #dde0e6;
+  border-color: #b0b5c0;
+  color: #111;
+}
+
+.pretext-plus-editor__toc-div-menu-popup {
+  position: absolute;
+  right: 0;
+  background: #fff;
+  border: 1px solid #ccc;
+  border-radius: 5px;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.13);
+  z-index: 200;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  min-width: 170px;
+}
+
+.pretext-plus-editor__toc-div-menu-popup--below {
+  top: calc(100% + 3px);
+}
+
+.pretext-plus-editor__toc-div-menu-popup--above {
+  bottom: calc(100% + 3px);
+}
+
+/* Portalled to <body> and positioned in viewport coordinates so it escapes any
+   `overflow` scroll container (e.g. the assets list) that would clip it. */
+.pretext-plus-editor__toc-div-menu-popup--portal {
+  position: fixed;
+  z-index: 1000;
+}
+
+.pretext-plus-editor__toc-div-menu-item {
+  background: none;
+  border: none;
+  padding: 7px 12px;
+  font: inherit;
+  font-size: 0.82rem;
+  cursor: pointer;
+  text-align: left;
+  color: #333;
+  white-space: nowrap;
+}
+
+.pretext-plus-editor__toc-div-menu-item:hover {
+  background: #e8edf8;
+  color: #1a3a9c;
+}
+
+.pretext-plus-editor__toc-div-menu-item--danger {
+  color: #b91c1c;
+}
+
+.pretext-plus-editor__toc-div-menu-item--danger:hover {
+  background: #fee2e2;
+  color: #dc2626;
+}
+
+/* ── No-sections placeholder ─────────────────────────── */
+.pretext-plus-editor__toc-no-sections {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  padding: 16px 8px;
+  color: #888;
+  font-size: 0.82rem;
+  text-align: center;
+}
+
+/* ── Rename input ────────────────────────────────────── */
+.pretext-plus-editor__toc-rename-input {
+  width: 100%;
+  font: inherit;
+  font-size: 0.83rem;
+  border: 1px solid #2563eb;
+  border-radius: 3px;
+  padding: 1px 4px;
+  outline: none;
+  background: #fff;
+}
+
+/* ── Add section inline item ─────────────────────────── */
+.pretext-plus-editor__toc-add-item {
+  list-style: none;
+  position: relative;
+}
+
+.pretext-plus-editor__toc-add-item-trigger {
+  display: block;
+  width: 100%;
+  padding: 4px 8px 4px 16px;
+  background: none;
+  border: none;
+  border-top: 1px dashed #ccd0d8;
+  font: inherit;
+  font-size: 0.78rem;
+  color: #aaa;
+  cursor: pointer;
+  text-align: left;
+  transition: color 0.15s, background 0.15s;
+}
+
+.pretext-plus-editor__toc-add-item-trigger:hover {
+  color: #2563eb;
+  background: #f0f4ff;
+}
+
+.pretext-plus-editor__toc-add-menu-popup {
+  position: absolute;
+  left: 0;
+  right: 0;
+  background: #fff;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.12);
+  z-index: 1000;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.pretext-plus-editor__toc-add-menu-popup--below {
+  top: calc(100% + 4px);
+}
+
+.pretext-plus-editor__toc-add-menu-popup--above {
+  bottom: calc(100% + 4px);
+}
+
+.pretext-plus-editor__toc-add-menu-item {
+  background: none;
+  border: none;
+  padding: 6px 10px;
+  font: inherit;
+  font-size: 0.82rem;
+  cursor: pointer;
+  text-align: left;
+  color: #333;
+}
+
+.pretext-plus-editor__toc-add-menu-item:hover {
+  background: #e0e8ff;
+  color: #2563eb;
+}
+
+.pretext-plus-editor__toc-footer {
+  padding: 8px;
+  border-top: 1px solid #dde0e6;
+  flex-shrink: 0;
+}
+
+.pretext-plus-editor__toc-footer-btn {
+  background: #fff;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  padding: 4px 8px;
+  font: inherit;
+  font-size: 0.78rem;
+  cursor: pointer;
+  color: #333;
+  text-align: center;
+}
+
+.pretext-plus-editor__toc-footer-btn:hover {
+  background: #e0e8ff;
+  border-color: #2563eb;
+  color: #2563eb;
+}
+
+/* ── Hidden-section-list note (e.g. Markdown mode) ── */
+.pretext-plus-editor__toc-hidden-sections-note {
+  padding: 12px 12px;
+  color: #94a3b8;
+  font-size: 0.78rem;
+  font-style: italic;
+  line-height: 1.4;
+  flex: 1;
+}
+
+/* ── Assets panel ────────────────────────────────── */
+.pretext-plus-editor__toc-assets {
+  flex-shrink: 0;
+  border-top: 1px solid #dde0e6;
+  display: flex;
+  flex-direction: column;
+  max-height: 220px;
+}
+
+.pretext-plus-editor__toc-assets-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 4px 6px 4px 4px;
+  flex-shrink: 0;
+}
+
+.pretext-plus-editor__toc-assets-toggle {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 2px 4px;
+  font: inherit;
+  flex: 1;
+  min-width: 0;
+  text-align: left;
+  border-radius: 3px;
+}
+
+.pretext-plus-editor__toc-assets-toggle:hover {
+  background: #e3e6ec;
+}
+
+.pretext-plus-editor__toc-assets-chevron {
+  font-size: 0.7rem;
+  color: #888;
+  width: 10px;
+  flex-shrink: 0;
+}
+
+.pretext-plus-editor__toc-assets-count {
+  font-size: 0.68rem;
+  font-weight: 600;
+  color: #fff;
+  background: #94a3b8;
+  border-radius: 999px;
+  padding: 0 5px;
+  line-height: 1.4;
+  flex-shrink: 0;
+}
+
+.pretext-plus-editor__toc-assets-body {
+  overflow-y: auto;
+  flex: 1;
+  min-height: 0;
+}
+
+.pretext-plus-editor__toc-assets-empty {
+  margin: 0;
+  padding: 8px 12px;
+  color: #94a3b8;
+  font-size: 0.78rem;
+}
+
+.pretext-plus-editor__toc-assets-add-link {
+  background: none;
+  border: none;
+  color: #2563eb;
+  cursor: pointer;
+  font: inherit;
+  font-size: 0.78rem;
+  padding: 0;
+}
+
+.pretext-plus-editor__toc-assets-add-link:hover {
+  text-decoration: underline;
+}
+
+.pretext-plus-editor__toc-assets-groups {
+  display: flex;
+  flex-direction: column;
+}
+
+.pretext-plus-editor__toc-assets-group-header {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 8px 2px;
+  font-size: 0.7rem;
+  font-weight: 600;
+  color: #64748b;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.pretext-plus-editor__toc-assets-list {
+  list-style: none;
+  margin: 0;
+  padding: 0 0 4px;
+}
+
+.pretext-plus-editor__toc-asset-img {
+  height: 30px;
+  cursor: pointer;
+}
+
+.pretext-plus-editor__toc-asset-img--placeholder {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  font-size: 0.85rem;
+  border-radius: 4px;
+  background: #eef2f7;
+  color: #94a3b8;
+}
+
+.pretext-plus-editor__toc-asset-item--unlinked
+  .pretext-plus-editor__toc-asset-img--placeholder {
+  background: #fef3c7;
+  color: #b45309;
+}
+
+.pretext-plus-editor__toc-asset-item--unlinked
+  .pretext-plus-editor__toc-asset-filename {
+  color: #b45309;
+}
+
+.pretext-plus-editor__toc-asset-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 6px 3px 16px;
+  min-height: 28px;
+}
+
+.pretext-plus-editor__toc-asset-item:hover {
+  background: #e8eaf0;
+}
+
+.pretext-plus-editor__toc-asset-name {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 1px;
+  overflow: hidden;
+  border: none;
+  background: none;
+  padding: 0;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.pretext-plus-editor__toc-asset-label {
+  font-size: 0.78rem;
+  color: #334155;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.pretext-plus-editor__toc-asset-filename {
+  font-size: 0.68rem;
+  color: #94a3b8;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.pretext-plus-editor__toc-asset-item--busy {
+  opacity: 0.6;
+  pointer-events: none;
+}
+
+/* Shown in place of the actions menu while an asset is being duplicated.
+   Reuses the shared `pretext-plus-editor-spin` keyframes (LivePreview.css). */
+.pretext-plus-editor__toc-asset-spinner {
+  display: inline-block;
+  width: 14px;
+  height: 14px;
+  border: 2px solid #cbd5e1;
+  border-top-color: #10b981;
+  border-radius: 50%;
+  animation: pretext-plus-editor-spin 0.8s linear infinite;
+}
+
+.pretext-plus-editor__toc-asset-item .pretext-plus-editor__toc-action-btn {
+  opacity: 0;
+  transition: opacity 0.1s;
+  pointer-events: none;
+  padding: 0px 3px;
+}
+
+.pretext-plus-editor__toc-asset-item:hover
+  .pretext-plus-editor__toc-action-btn {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+/* ── Unplaced (orphaned) divisions ───────────────────── */
+.pretext-plus-editor__toc-orphans {
+  flex-shrink: 0;
+  border-top: 2px dashed #e2c97e;
+  background: #fffbeb;
+}
+
+.pretext-plus-editor__toc-orphans-heading {
+  font-size: 0.7rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: #92400e;
+  padding: 5px 10px 2px;
+}
+
+.pretext-plus-editor__toc-orphans .pretext-plus-editor__toc-list {
+  flex: initial;
+  overflow-y: initial;
+}
+
+.pretext-plus-editor__toc-item--orphan {
+  border-left-color: #d97706;
+}
+
+.pretext-plus-editor__toc-item--orphan .pretext-plus-editor__toc-type-badge {
+  background: #d97706;
+}
+
+/* ── Assets button ───────────────────────────────────── */
+.pretext-plus-editor__toc-assets-btns {
+  display: block;
+  width: 100%;
+  background: none;
+  border: none;
+  border-top: 1px solid #dde0e6;
+  padding: 7px 10px;
+  font: inherit;
+  font-size: 0.78rem;
+  text-align: left;
+  flex-shrink: 0;
+}
+.pretext-plus-editor__toc-assets-btn {
+  background: none;
+  border: none;
+  color: #2563eb;
+  cursor: pointer;
+}
+
+.pretext-plus-editor__toc-assets-btn:hover {
+  background: #eff6ff;
+  text-decoration: underline;
+}
+
+/* ── Action button base (used by asset panel) ─────────── */
+.pretext-plus-editor__toc-action-btn {
+  background: none;
+  border: 1px solid transparent;
+  border-radius: 3px;
+  cursor: pointer;
+  padding: 2px 5px;
+  font-size: 0.78rem;
+  color: #555;
+  line-height: 1.3;
+  flex-shrink: 0;
+}
+
+.pretext-plus-editor__toc-action-btn:hover:not(:disabled) {
+  background: #dde0e6;
+  border-color: #b0b5c0;
+  color: #111;
+}
