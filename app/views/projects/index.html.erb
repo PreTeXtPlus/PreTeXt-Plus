@@ -49,13 +49,7 @@
           <% end %>
           <div class="flex flex-col gap-4 sm:flex-row sm:items-center sm:p-6">
           <span class="hidden sm:grid sm:size-14 sm:shrink-0 sm:place-content-center" aria-hidden="true">
-            <% if project.root_division&.latex_source_format? %>
-              <%= image_tag "latex-pretext-logo.svg", alt: "" %>
-            <% elsif project.root_division&.markdown_source_format? %>
-              <%= image_tag "markdown-pretext-logo.svg", alt: "" %>
-            <% else %>
-              <%= image_tag "pretext-logo.svg", alt: "" %>
-            <% end %>
+            <%= project_format_icon(project) %>
           </span>
 
           <div class="min-w-0 flex-1">
