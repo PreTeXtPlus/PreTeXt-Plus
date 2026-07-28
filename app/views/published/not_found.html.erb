@@ -26,12 +26,12 @@
   <div class="mt-8 flex flex-wrap justify-center gap-3">
     <% if current_user.present? %>
       <%= link_to "Your projects", projects_path,
-            class: "rounded-md bg-sky-600 px-3.5 py-2 font-medium text-white hover:bg-sky-500" %>
+            class: "#{button_classes(color: "sky")} px-3.5 py-2" %>
     <% else %>
       <%= link_to "Sign in", new_user_session_path,
-            class: "rounded-md bg-sky-600 px-3.5 py-2 font-medium text-white hover:bg-sky-500" %>
+            class: "#{button_classes(color: "sky")} px-3.5 py-2" %>
     <% end %>
     <%= link_to "About PreTeXt.Plus", root_path,
-          class: "rounded-md border border-gray-300 px-3.5 py-2 font-medium text-gray-800 hover:bg-gray-50" %>
+          class: "#{button_classes(color: "gray", outlined: true)} px-3.5 py-2" %>
   </div>
 </div>

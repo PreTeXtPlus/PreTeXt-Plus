@@ -1,40 +1,37 @@
 <% content_for(:title, 'Sign in') %>
+<% content_for(:heading, 'Sign in') %>
 
-<div class="mx-auto md:w-2/3 w-full py-4">
-  <h1 class="font-bold text-4xl">Sign in</h1>
+<%= form_with(model: resource, as: resource_name, url: session_path(resource_name), class: "contents", data: { turbo: false }) do |form| %>
+  <div class="my-5">
+    <%= form.email_field :email, required: true, autofocus: true, autocomplete: "username", placeholder: "Enter your email address", value: params.dig(resource_name, :email), class: "block shadow-sm rounded-md border border-gray-400 focus:outline-blue-600 px-3 py-2 mt-2 w-full" %>
+  </div>
 
-  <%= form_with(model: resource, as: resource_name, url: session_path(resource_name), class: "contents", data: { turbo: false }) do |form| %>
-    <div class="my-5">
-      <%= form.email_field :email, required: true, autofocus: true, autocomplete: "username", placeholder: "Enter your email address", value: params.dig(resource_name, :email), class: "block shadow-sm rounded-md border border-gray-400 focus:outline-blue-600 px-3 py-2 mt-2 w-full" %>
+  <div class="my-5">
+    <%= form.password_field :password, required: true, autocomplete: "current-password", placeholder: "Enter your password", maxlength: 72, class: "block shadow-sm rounded-md border border-gray-400 focus:outline-blue-600 px-3 py-2 mt-2 w-full" %>
+  </div>
+
+  <div class="col-span-6 sm:flex sm:items-center sm:gap-4">
+    <div class="inline">
+      <%= form.submit "Sign in", class: "#{button_classes(color: "blue")} w-full sm:w-auto text-center px-3.5 py-2.5 inline-block" %>
     </div>
 
-    <div class="my-5">
-      <%= form.password_field :password, required: true, autocomplete: "current-password", placeholder: "Enter your password", maxlength: 72, class: "block shadow-sm rounded-md border border-gray-400 focus:outline-blue-600 px-3 py-2 mt-2 w-full" %>
+    <div class="mt-4 text-sm sm:mt-0">
+      <%= link_to "Register a new account", new_user_path, class: "text-green-700 underline hover:no-underline" %>
     </div>
 
-    <div class="col-span-6 sm:flex sm:items-center sm:gap-4">
-      <div class="inline">
-        <%= form.submit "Sign in", class: "w-full sm:w-auto text-center rounded-md px-3.5 py-2.5 bg-blue-600 hover:bg-blue-500 text-white inline-block font-medium cursor-pointer" %>
-      </div>
-
-      <div class="mt-4 text-sm sm:mt-0">
-        <%= link_to "Register a new account", new_user_path, class: "text-green-700 underline hover:no-underline" %>
-      </div>
-
-      <div class="mt-4 text-sm sm:mt-0">
-        <%= link_to "Forgot password?", new_user_password_path, class: "text-gray-700 underline hover:no-underline" %>
-      </div>
-
-      <div class="mt-4 text-sm sm:mt-0">
-        <%= link_to "Resend confirmation email", new_user_confirmation_path, class: "text-gray-700 underline hover:no-underline" %>
-      </div>
+    <div class="mt-4 text-sm sm:mt-0">
+      <%= link_to "Forgot password?", new_user_password_path, class: "text-gray-700 underline hover:no-underline" %>
     </div>
 
-    <div class="my-4 text-sm text-gray-700">
-      By signing in, you agree to our updated
-      <%= link_to "Terms of Service", tos_path, class: "text-gray-900 hover:text-black hover:underline" %>
-      and
-      <%= link_to "Privacy Policy", privacy_path, class: "text-gray-900 hover:text-black hover:underline" %>.
+    <div class="mt-4 text-sm sm:mt-0">
+      <%= link_to "Resend confirmation email", new_user_confirmation_path, class: "text-gray-700 underline hover:no-underline" %>
     </div>
-  <% end %>
-</div>
+  </div>
+
+  <div class="my-4 text-sm text-gray-700">
+    By signing in, you agree to our updated
+    <%= link_to "Terms of Service", tos_path, class: "text-gray-900 hover:text-black hover:underline" %>
+    and
+    <%= link_to "Privacy Policy", privacy_path, class: "text-gray-900 hover:text-black hover:underline" %>.
+  </div>
+<% end %>

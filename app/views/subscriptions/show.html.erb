@@ -1,21 +1,18 @@
 <% content_for :title, "Manage Subscription Plan" %>
-
-<p class="my-3">
-    <%= link_to subscriptions_path, class: "text-blue-500 hover:text-blue-700 hover:font-semibold" do %>
-        ←&nbsp;View all plans
-    <% end %>
-</p>
-
-<h2 class="text-2xl my-3 inline-flex items-center gap-2">
-    <span class="text-violet-800"><%= @subscription.type.name %></span> Plan
-</h2>
+<% content_for :subscription_notice do %><!-- no subscribe nudge on subscriptions pages --><% end %>
+<% content_for :breadcrumb do %>
+  <%= link_to "Subscriptions", subscriptions_path, class: "hover:underline" %> /
+<% end %>
+<% content_for :heading do %>
+  <span class="text-violet-800"><%= @subscription.type.name %></span> Plan
+<% end %>
+<% content_for :actions do %>
+  <%= link_to "Manage plan",
+      current_user.payment_processor.billing_portal.url,
+      class: "#{button_classes(color: "gray", outlined: true)} inline-flex select-none items-center gap-2 ml-1 px-4 py-2 my-1 text-sm" %>
+<% end %>
 
 <%= render "subscription", subscription: @subscription %>
-<div>
-    <%= link_to "Manage plan", 
-        current_user.payment_processor.billing_portal.url, 
-        class: "inline-flex select-none items-center gap-2 rounded-md cursor-pointer ml-1 px-4 py-2 my-1 text-sm bg-gray-50 text-gray-700 drop-shadow-md hover:bg-white" %>
-</div>
 
 <h3 class="text-xl my-3 inline-flex items-center gap-2">
     Users
@@ -30,5 +27,5 @@
     <%= hidden_field_tag :subscription_id, value: @subscription.id %>
     <%= label_tag :emails, "Enter user emails, separated by commas or newlines", class: "text-sm text-gray-700" %>
     <%= text_area_tag :emails, @emails, rows: [@subscription.quantity,10].min, class: "w-full p-2 font-mono rounded-md border-1 bg-white border-gray-300 shadow-sm focus:border-blue-500 focus:ring focus:ring-blue-200 focus:ring-opacity-50" %>
-    <%= submit_tag "Update users", class: "inline-flex select-none items-center gap-2 rounded-md cursor-pointer ml-1 px-4 py-2 my-1 text-sm bg-gray-50 text-gray-700 drop-shadow-md hover:bg-white" %>
+    <%= submit_tag "Update users", class: "#{button_classes(color: "gray", outlined: true)} inline-flex select-none items-center gap-2 ml-1 px-4 py-2 my-1 text-sm" %>
 <% end %>

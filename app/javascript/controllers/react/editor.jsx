@@ -1221,10 +1221,14 @@ function EditorApp({ config }) {
 
   // ----- Render ------------------------------------------------------------
   if (projectQuery.isPending) {
-    return <div className="mx-5">Loading editor…</div>;
+    return <div className="flex h-full items-center justify-center">
+      <div class="mx-5 text-center text-lg">Loading editor…</div>
+    </div>;
   }
   if (projectQuery.isError) {
-    return <div className="mx-5">Error loading editor state. Please reload the page.</div>;
+    return <div className="flex h-full items-center justify-center">
+      <div class="mx-5 text-center">Error loading editor state. Please reload the page.</div>
+    </div>;
   }
   // A collaborative project's editor waits for the shared doc: mounting before
   // it arrives would show (and let the user edit) state the session may have

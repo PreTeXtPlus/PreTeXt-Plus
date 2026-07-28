@@ -1,11 +1,8 @@
 <% content_for :title, "Showing subscription type" %>
+<% content_for :heading, "Showing subscription type" %>
 
-<div class="md:w-2/3 mx-auto p-4 w-full">
-  <h1 class="font-bold text-4xl">Showing subscription type</h1>
+<%= render @subscription_type %>
 
-  <%= render @subscription_type %>
-
-  <%= link_to "Edit this subscription type", edit_subscription_type_path(@subscription_type), class: "w-full sm:w-auto text-center rounded-md px-3.5 py-2.5 bg-gray-100 hover:bg-gray-50 inline-block font-medium" %>
-  <%= link_to "Back to subscription types", subscription_types_path, class: "w-full sm:w-auto text-center mt-2 sm:mt-0 sm:ml-2 rounded-md px-3.5 py-2.5 bg-gray-100 hover:bg-gray-50 inline-block font-medium" %>
-  <%= button_to "Destroy this subscription type", @subscription_type, method: :delete, form_class: "sm:inline-block mt-2 sm:mt-0 sm:ml-2", class: "w-full rounded-md px-3.5 py-2.5 text-white bg-red-600 hover:bg-red-500 font-medium cursor-pointer", data: { turbo_confirm: "Are you sure?" } %>
-</div>
+<%= link_to "Edit this subscription type", edit_subscription_type_path(@subscription_type), class: "#{button_classes(color: "gray")} w-full sm:w-auto text-center px-3.5 py-2.5 inline-block" %>
+<%= link_to "Back to subscription types", subscription_types_path, class: "#{button_classes(color: "gray")} w-full sm:w-auto text-center mt-2 sm:mt-0 sm:ml-2 px-3.5 py-2.5 inline-block" %>
+<%= button_to "Destroy this subscription type", @subscription_type, method: :delete, form_class: "sm:inline-block mt-2 sm:mt-0 sm:ml-2", class: "#{button_classes(color: "red")} w-full px-3.5 py-2.5", data: { turbo_confirm: "Are you sure?" } %>

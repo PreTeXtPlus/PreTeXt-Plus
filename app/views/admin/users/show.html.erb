@@ -1,18 +1,12 @@
 <% content_for :title, @user.email %>
+<% content_for :heading, @user.name_with_email %>
+<% content_for :subtitle, "Read-only support view for account activity, access state, and projects." %>
+<% content_for :actions do %>
+  <%= link_to "Back to users", admin_users_path, class: "#{button_classes(color: "gray")} px-3.5 py-2" %>
+  <%= link_to "Dashboard", admin_root_path, class: "#{button_classes(color: "blue")} px-3.5 py-2" %>
+<% end %>
 
-<div class="w-full mx-auto p-4 md:w-5/6">
-  <div class="flex items-center justify-between gap-4">
-    <div>
-      <h1 class="text-3xl font-semibold"><%= @user.name_with_email %></h1>
-      <p class="mt-2 text-gray-600">Read-only support view for account activity, access state, and projects.</p>
-    </div>
-    <div class="flex gap-2">
-      <%= link_to "Back to users", admin_users_path, class: "rounded-md px-3.5 py-2 bg-gray-100 hover:bg-gray-50 text-gray-800 font-medium" %>
-      <%= link_to "Dashboard", admin_root_path, class: "rounded-md px-3.5 py-2 bg-blue-600 hover:bg-blue-500 text-white font-medium" %>
-    </div>
-  </div>
-
-  <section class="mt-8 grid gap-4 xl:grid-cols-4">
+<section class="mt-8 grid gap-4 xl:grid-cols-4">
     <div class="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
       <p class="text-sm font-medium uppercase tracking-wide text-gray-500">Access</p>
       <p class="mt-3 text-lg font-semibold text-gray-900"><%= access_label_for(@user) %></p>
@@ -110,16 +104,16 @@
               <%= local_time_tag(@user.confirmed_at, date_only: true) %>
             <% else %>
               Not confirmed
-              <%= button_to "Confirm email", confirm_admin_user_path(@user), method: :post, class: "ml-2 rounded-md px-2.5 py-1 bg-blue-600 hover:bg-blue-500 text-white text-xs font-medium cursor-pointer", form_class: "inline-block" %>
+              <%= button_to "Confirm email", confirm_admin_user_path(@user), method: :post, class: "#{button_classes(color: "blue")} ml-2 px-2.5 py-1 text-xs", form_class: "inline-block" %>
             <% end %>
           </dd>
         </div>
         <div>
           <dt class="font-medium text-gray-500">Password reset</dt>
           <dd>
-            <%= button_to "Send password reset email", 
-              reset_password_admin_user_path(@user), method: :post, 
-              class: "rounded-md px-2.5 py-1 bg-yellow-600 hover:bg-yellow-500 text-white text-xs font-medium cursor-pointer",
+            <%= button_to "Send password reset email",
+              reset_password_admin_user_path(@user), method: :post,
+              class: "#{button_classes(color: "yellow")} px-2.5 py-1 text-xs",
               form_class: "inline-block" %>
           </dd>
         </div>
@@ -149,5 +143,3 @@
       <% end %>
     </div>
   </section>
-
-</div>
