@@ -114,14 +114,8 @@
                       "flex flex-col items-center text-center rounded-xl bg-gray-100 text-gray-400 p-3 ring-2 ring-gray-200 cursor-not-allowed",
                     disabled: !enabled do %>
                   <%= fields.radio_button :source_format, value, class: "sr-only" %>
-                  <span class="grid size-10 shrink-0 place-content-center mb-2" aria-hidden="true">
-                    <% if value == "latex" %>
-                      <%= image_tag "latex-pretext-logo.svg", alt: "PreTeXt logo", class: enabled ? nil : "opacity-30" %>
-                    <% elsif value == "markdown" %>
-                      <%= image_tag "markdown-pretext-logo.svg", alt: "PreTeXt logo", class: enabled ? nil : "opacity-30" %>
-                    <% else %>
-                      <%= image_tag "pretext-logo.svg", alt: "PreTeXt logo", class: enabled ? nil : "opacity-30" %>
-                    <% end %>
+                  <span class="grid size-18 shrink-0 place-content-center mb-2" aria-hidden="true">
+                    <%= project_format_icon value, classes: "size-full#{enabled ? nil : ' opacity-30'}" %>
                   </span>
                   <span class="text-sm font-semibold leading-tight"><%= title %><% unless enabled %> (coming soon!)<% end %></span>
                   <span class="hidden has-sibling-checked:inline text-indigo-600 text-xs font-medium mt-0.5">✓ selected</span>

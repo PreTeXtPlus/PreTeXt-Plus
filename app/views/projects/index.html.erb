@@ -48,33 +48,21 @@
             </div>
           <% end %>
           <div class="flex flex-col gap-4 sm:flex-row sm:items-center sm:p-6">
-          <span class="hidden sm:grid sm:size-14 sm:shrink-0 sm:place-content-center" aria-hidden="true">
-            <% if project.root_division&.latex_source_format? %>
-              <%= image_tag "latex-pretext-logo.svg", alt: "" %>
-            <% elsif project.root_division&.markdown_source_format? %>
-              <%= image_tag "markdown-pretext-logo.svg", alt: "" %>
-            <% else %>
-              <%= image_tag "pretext-logo.svg", alt: "" %>
-            <% end %>
+          <span class="hidden sm:grid sm:size-18 sm:shrink-0 sm:place-content-center" aria-hidden="true">
+            <%= project_format_icon project, classes: "size-full" %>
           </span>
 
           <div class="min-w-0 flex-1">
-            <h3 class="text-lg font-medium">
+            <h3 class="flex items-center gap-2 text-lg font-medium">
               <%= link_to project.title, project, class: "hover:underline", data: { turbo: false } %>
+              <%= project_visibility_pill(project) %>
             </h3>
 
             <%# The whole status report for this project at a glance: one chip per output,
                 so scanning the column answers "what needs rebuilding?" across every project. %>
             <div class="mt-2 flex flex-wrap items-center gap-1.5">
               <% project.targets.each do |target| %>
-                <% state = target.state %>
-                <% label, classes = TargetsHelper::STATE_PILL.fetch(state) %>
-                <%= link_to project_target_path(project, target),
-                      class: "inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 font-mono text-xs font-semibold #{classes}",
-                      title: "#{target.name} — #{label.downcase}", data: { turbo: false } do %>
-                  <span class="size-1.5 rounded-full bg-current <%= 'animate-pulse' if state == :building %>"></span>
-                  <%= target.name %>
-                <% end %>
+                <%= target_status_pill(target) %>
               <% end %>
             </div>
 
