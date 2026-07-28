@@ -1,4 +1,5 @@
 <% content_for :title, "Manage Subscription Plans" %>
+<% content_for :subscription_notice do %><!-- no subscribe nudge on subscriptions pages --><% end %>
 <% content_for :heading, "Manage Subscription Plans" %>
 <% content_for :actions do %>
   <% if @subscriptions.any? %>

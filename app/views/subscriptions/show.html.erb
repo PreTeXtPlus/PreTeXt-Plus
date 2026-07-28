@@ -1,4 +1,5 @@
 <% content_for :title, "Manage Subscription Plan" %>
+<% content_for :subscription_notice do %><!-- no subscribe nudge on subscriptions pages --><% end %>
 <% content_for :breadcrumb do %>
   <%= link_to "Subscriptions", subscriptions_path, class: "hover:underline" %> /
 <% end %>
