@@ -19,7 +19,7 @@ module ApplicationHelper
     # gray is only ever a secondary/neutral action, never a dark filled button
     # (that would read as disabled), so "solid" here means a light fill.
     "gray"   => { solid: "bg-gray-100 text-gray-800 hover:bg-gray-50",
-                  outlined: "border border-gray-300 text-gray-700 hover:bg-gray-50" },
+                  outlined: "border border-gray-300 text-gray-700 hover:bg-gray-50" }
   }.freeze
   private_constant :BUTTON_COLORS
 
