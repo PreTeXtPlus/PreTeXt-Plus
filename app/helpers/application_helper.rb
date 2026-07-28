@@ -5,21 +5,21 @@ module ApplicationHelper
   # button would silently render unstyled.
   BUTTON_COLORS = {
     "indigo" => { solid: "bg-indigo-600 text-white hover:bg-indigo-500",
-                  outlined: "border border-indigo-300 text-indigo-700 hover:bg-indigo-50" },
+                  outlined: "bg-white border border-indigo-300 text-indigo-700 hover:bg-indigo-50" },
     "blue"   => { solid: "bg-blue-600 text-white hover:bg-blue-500",
-                  outlined: "border border-blue-300 text-blue-700 hover:bg-blue-50" },
+                  outlined: "bg-white border border-blue-300 text-blue-700 hover:bg-blue-50" },
     "green"  => { solid: "bg-green-600 text-white hover:bg-green-500",
-                  outlined: "border border-green-300 text-green-700 hover:bg-green-50" },
+                  outlined: "bg-white border border-green-300 text-green-700 hover:bg-green-50" },
     "red"    => { solid: "bg-red-600 text-white hover:bg-red-500",
-                  outlined: "border border-red-300 text-red-700 hover:bg-red-50" },
+                  outlined: "bg-white border border-red-300 text-red-700 hover:bg-red-50" },
     "sky"    => { solid: "bg-sky-600 text-white hover:bg-sky-500",
-                  outlined: "border border-sky-300 text-sky-700 hover:bg-sky-50" },
+                  outlined: "bg-white border border-sky-300 text-sky-700 hover:bg-sky-50" },
     "yellow" => { solid: "bg-yellow-600 text-white hover:bg-yellow-500",
-                  outlined: "border border-yellow-300 text-yellow-700 hover:bg-yellow-50" },
+                  outlined: "bg-white border border-yellow-300 text-yellow-700 hover:bg-yellow-50" },
     # gray is only ever a secondary/neutral action, never a dark filled button
     # (that would read as disabled), so "solid" here means a light fill.
     "gray"   => { solid: "bg-gray-100 text-gray-800 hover:bg-gray-50",
-                  outlined: "border border-gray-300 text-gray-700 hover:bg-gray-50" }
+                  outlined: "bg-white border border-gray-300 text-gray-700 hover:bg-gray-50" }
   }.freeze
   private_constant :BUTTON_COLORS
 

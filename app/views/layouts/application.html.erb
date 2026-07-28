@@ -124,7 +124,7 @@
         </div>
     </nav>
       <% if notice.present? or params[:notice].present? or alert.present? %>
-        <div class="relative flex justify-center w-full cursor-pointer -mb-20 bg-white" onclick="this.remove()">
+        <div class="relative flex justify-center w-full cursor-pointer -mb-20 bg-gray-50" onclick="this.remove()">
           <% if notice.present? or params[:notice].present? %>
             <div class="mt-20 mb-2 rounded-lg border border-blue-200 bg-blue-50 px-4 py-2 text-blue-800 text-sm w-full lg:w-2/3 flex justify-between">
               <span>
@@ -155,10 +155,10 @@
         <% else %>
           <div class="lg:pt-16 flex-1 flex flex-col bg-white">
             <% if content_for?(:heading) %>
-              <header class="border-b border-gray-200">
+              <header class="border-b border-gray-200 bg-gray-50">
                 <% if current_user.present? %>
                   <% unless current_user.confirmed? %>
-                    <div class="mx-auto w-full lg:w-2/3 mt-2">
+                    <div class="mx-auto w-full lg:w-2/3 mt-2 bg-white">
                       <div class="rounded-lg border border-blue-200 bg-blue-50 px-4 py-2 text-sm text-blue-800">
                         ℹ Your email address has not yet been confirmed. Please
                         <%= link_to "confirm your email", new_user_confirmation_path, class: "font-semibold hover:underline" %>
@@ -171,7 +171,7 @@
                       <%= yield(:subscription_notice) %>
                     <% elsif current_user.confirmed? %>
                       <div class="mx-auto w-full lg:w-2/3 mt-2">
-                        <div class="flex items-center justify-between gap-3 rounded-md border border-gray-200 bg-gray-50 px-4 py-2 text-sm text-gray-700">
+                        <div class="flex items-center justify-between gap-3 rounded-md border border-gray-200 bg-white px-4 py-2 text-sm text-gray-700">
                           <span>Finding PreTeXt.Plus useful to you? Sustaining subscribers help keep it running.</span>
                           <%= link_to "Subscribe", subscriptions_path, class: "font-semibold text-blue-700 hover:underline" %>
                         </div>

@@ -15,7 +15,7 @@
   <%= form_with model: @project, method: :patch, class: "mt-2 flex items-center gap-2" do |form| %>
     <%= form.label :visibility, "Visibility on your public profile", class: "text-xs text-gray-600" %>
     <%= form.select :visibility, Project.visibilities.keys.map { |v| [ v.humanize, v ] },
-          {}, class: "rounded-md border border-gray-300 px-2 py-1 text-xs" %>
+          {}, class: "rounded-md bg-white border border-gray-300 px-2 py-1 text-xs" %>
     <%= form.submit "Update",
           class: "#{button_classes(color: "gray", outlined: true)} px-2 py-1 text-xs" %>
   <% end %>
