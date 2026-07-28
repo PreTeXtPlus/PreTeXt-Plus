@@ -2,7 +2,10 @@
 <% content_for :breadcrumb do %>
   <%= link_to "Projects", projects_path, class: "hover:underline" %> /
 <% end %>
-<% content_for :heading, @project.title %>
+<% content_for :heading do %>
+  <%= @project.title %>
+  <%= project_visibility_pill(@project) %>
+<% end %>
 <% content_for :subtitle do %>
   <p>
     Edited <%= time_ago_in_words(@project.source_updated_at) %> ago ·
