@@ -31,8 +31,13 @@ class CollaborativeEditingTest < ApplicationSystemTestCase
     # ...and vice versa.
     assert_selector ".pretext-plus-editor__presence-avatar", wait: 15
 
-    # Type a distinctive token into the first window's editor.
-    find(".monaco-editor .view-lines").click
+    # Type a distinctive token into the first window's editor. Click on the
+    # body text itself (not the generic `.view-lines` container): Monaco's
+    # default `scrollBeyondLastLine` leaves that container much taller than
+    # the six lines of fixture content, so a center-click there lands past
+    # the last line — inside the locked closing tag — and the collab edit
+    # guard silently discards anything typed there.
+    find(".monaco-editor .view-line", text: "World").click
     page.send_keys "ZZCOLLABZZ"
     assert_selector ".monaco-editor", text: "ZZCOLLABZZ", wait: 10
 
