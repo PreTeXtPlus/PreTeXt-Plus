@@ -2,12 +2,12 @@
 <% content_for :heading, "Manage Subscription Plans" %>
 <% content_for :actions do %>
   <% if @subscriptions.any? %>
-    <%= link_to current_user.payment_processor.billing_portal.url, class: "inline-flex select-none items-center gap-2 rounded-md cursor-pointer ml-1 px-4 py-2 my-1 text-sm bg-gray-50 text-gray-700 drop-shadow-md hover:bg-white" do %>
+    <%= link_to current_user.payment_processor.billing_portal.url, class: "#{button_classes(color: "gray", outlined: true)} inline-flex select-none items-center gap-2 ml-1 px-4 py-2 my-1 text-sm" do %>
       Manage payment info
     <% end %>
   <% end %>
   <span class="relative">
-    <label for="subscribe-toggle" class="inline-flex select-none items-center gap-2 rounded-md cursor-pointer ml-1 px-4 py-2 my-1 text-sm bg-gray-50 text-gray-700 drop-shadow-md hover:bg-white">
+    <label for="subscribe-toggle" class="<%= button_classes(color: "gray", outlined: true) %> inline-flex select-none items-center gap-2 ml-1 px-4 py-2 my-1 text-sm">
       New Subscription Plan&nbsp;&#9662;
     </label>
     <input type="checkbox" id="subscribe-toggle" class="navbarMenuToggle sr-only">

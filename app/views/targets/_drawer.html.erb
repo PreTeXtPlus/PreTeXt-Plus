@@ -36,11 +36,11 @@
         <% if target.state == :building %>
           <%= button_to "Cancel build", cancel_project_build_path(project, target.latest_build),
                 form: { data: { turbo_frame: "_top" } },
-                class: "cursor-pointer rounded-md border border-gray-300 px-2.5 py-1.5 text-sm hover:bg-gray-50",
+                class: "#{button_classes(color: "gray", outlined: true)} px-2.5 py-1.5 text-sm",
                 data: { turbo_confirm: "Stop this build? Nothing that is already published changes." } %>
         <% else %>
           <%= button_to "Rebuild", project_target_builds_path(project, target),
-                class: "cursor-pointer rounded-md border border-gray-300 px-2.5 py-1.5 text-sm hover:bg-gray-50" %>
+                class: "#{button_classes(color: "gray", outlined: true)} px-2.5 py-1.5 text-sm" %>
         <% end %>
         <button type="button" data-action="drawer#close" aria-label="Close"
                 class="cursor-pointer rounded-md px-2.5 py-1.5 text-sm text-gray-500 hover:bg-gray-100">✕</button>
@@ -77,7 +77,7 @@
         <div class="pt-1">
           <%= button_to "Restore previous build", revert_project_target_path(project, target),
                 method: :patch, form: { data: { turbo_frame: "_top" } },
-                class: "cursor-pointer rounded-md border border-gray-300 px-2.5 py-1.5 text-sm hover:bg-gray-50",
+                class: "#{button_classes(color: "gray", outlined: true)} px-2.5 py-1.5 text-sm",
                 data: { turbo_confirm: "Go back to the build from #{previous.created_at.to_fs(:long)}? " \
                                        "The current build will be deleted." } %>
           <p class="mt-1 text-xs text-gray-500">
@@ -108,11 +108,11 @@
         </p>
         <%= button_to "Unpublish", publish_project_target_path(project, target),
               method: :patch, params: { published: false },
-              class: "mt-3 cursor-pointer rounded-md border border-gray-300 px-3 py-2 text-sm hover:bg-gray-50" %>
+              class: "#{button_classes(color: "gray", outlined: true)} mt-3 px-3 py-2 text-sm" %>
       <% elsif target.current_build.present? %>
         <%= button_to "Publish this output", publish_project_target_path(project, target),
               method: :patch, params: { published: true },
-              class: "mt-2 cursor-pointer rounded-md border border-gray-300 px-3 py-2 text-sm hover:bg-gray-50" %>
+              class: "#{button_classes(color: "gray", outlined: true)} mt-2 px-3 py-2 text-sm" %>
         <p class="mt-2 text-xs text-gray-500">Publishing does not start a build — it exposes the one already built.</p>
       <% else %>
         <p class="mt-2 text-sm text-gray-600">Build this output before publishing it.</p>
@@ -174,7 +174,7 @@
           <%= form.text_field :name, required: true,
                 class: "mt-1 rounded-md border border-gray-300 px-2 py-1.5 text-sm" %>
         </div>
-        <%= form.submit "Save", class: "cursor-pointer rounded-md border border-gray-300 px-3 py-2 text-sm hover:bg-gray-50" %>
+        <%= form.submit "Save", class: "#{button_classes(color: "gray", outlined: true)} px-3 py-2 text-sm" %>
       <% end %>
 
       <%# The slug is fixed at creation on purpose, and this is the one place an author

@@ -46,7 +46,7 @@
       <% if target.site? || target.viewable? %>
         <%= link_to target.site? ? "Preview" : "Open",
               build_file_path(target.current_build, target.entry_path),
-              class: "rounded-md border border-gray-300 px-2.5 py-1.5 text-sm hover:bg-gray-50",
+              class: "#{button_classes(color: "gray", outlined: true)} px-2.5 py-1.5 text-sm",
               target: "_blank", rel: "noopener", data: { turbo: false } %>
       <% end %>
 
@@ -56,7 +56,7 @@
       <% unless target.site? %>
         <%= link_to "Download",
               build_file_path(target.current_build, target.entry_path, disposition: "attachment"),
-              class: "rounded-md border border-gray-300 px-2.5 py-1.5 text-sm hover:bg-gray-50",
+              class: "#{button_classes(color: "gray", outlined: true)} px-2.5 py-1.5 text-sm",
               data: { turbo: false } %>
       <% end %>
     <% end %>
@@ -65,7 +65,7 @@
     <% if target.site? && target.current_build&.zip&.attached? %>
       <%= link_to "Download",
             rails_blob_path(target.current_build.zip, disposition: "attachment"),
-            class: "rounded-md border border-gray-300 px-2.5 py-1.5 text-sm hover:bg-gray-50",
+            class: "#{button_classes(color: "gray", outlined: true)} px-2.5 py-1.5 text-sm",
             data: { turbo: false } %>
     <% end %>
 
@@ -74,22 +74,18 @@
           the row that says it is running is also where it can be stopped. %>
       <span class="text-sm text-gray-400">Building…</span>
       <%= button_to "Cancel", cancel_project_build_path(target.project, target.latest_build),
-            class: "cursor-pointer rounded-md border border-gray-300 px-2.5 py-1.5 text-sm hover:bg-gray-50",
+            class: "#{button_classes(color: "gray", outlined: true)} px-2.5 py-1.5 text-sm",
             data: { turbo_confirm: "Stop this build? Nothing that is already published changes." } %>
     <% else %>
       <%# Only a row that wants attention gets a filled button. %>
       <% emphasize = [ :stale, :never ].include?(state) %>
       <%= button_to (state == :never ? "Build" : "Rebuild"),
             project_target_builds_path(target.project, target),
-            class: class_names(
-              "cursor-pointer rounded-md px-2.5 py-1.5 text-sm font-medium",
-              "bg-indigo-600 text-white hover:bg-indigo-500" => emphasize,
-              "border border-gray-300 hover:bg-gray-50" => !emphasize
-            ) %>
+            class: "#{button_classes(color: emphasize ? "indigo" : "gray", outlined: !emphasize)} px-2.5 py-1.5 text-sm" %>
     <% end %>
 
     <%= link_to "⋯", project_target_path(target.project, target),
-          class: "rounded-md border border-gray-300 px-2.5 py-1.5 text-sm hover:bg-gray-50",
+          class: "#{button_classes(color: "gray", outlined: true)} px-2.5 py-1.5 text-sm",
           aria: { label: "#{target.name} details" },
           data: { turbo_frame: "drawer" } %>
   </div>

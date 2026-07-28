@@ -3,6 +3,6 @@
 
 <div class="pb-4">
   <%= render "form", subscription_type: @subscription_type %>
-  <%= link_to "Show this subscription type", @subscription_type, class: "w-full sm:w-auto text-center mt-2 sm:mt-0 sm:ml-2 rounded-md px-3.5 py-2.5 bg-gray-100 hover:bg-gray-50 inline-block font-medium" %>
-  <%= link_to "Back to subscription types", subscription_types_path, class: "w-full sm:w-auto text-center mt-2 sm:mt-0 sm:ml-2 rounded-md px-3.5 py-2.5 bg-gray-100 hover:bg-gray-50 inline-block font-medium" %>
+  <%= link_to "Show this subscription type", @subscription_type, class: "#{button_classes(color: "gray")} w-full sm:w-auto text-center mt-2 sm:mt-0 sm:ml-2 px-3.5 py-2.5 inline-block" %>
+  <%= link_to "Back to subscription types", subscription_types_path, class: "#{button_classes(color: "gray")} w-full sm:w-auto text-center mt-2 sm:mt-0 sm:ml-2 px-3.5 py-2.5 inline-block" %>
 </div>

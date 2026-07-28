@@ -3,7 +3,7 @@
 <% content_for :subtitle, "Choose how you'd like to get started." %>
 <% content_for :actions do %>
   <%= link_to "Cancel", projects_path,
-        class: "rounded-md px-5 py-2.5 bg-gray-100 hover:bg-gray-200 font-medium text-gray-700" %>
+        class: "#{button_classes(color: "gray")} px-5 py-2.5" %>
 <% end %>
 
 <%
@@ -126,8 +126,8 @@
 
         <div class="flex items-center gap-4 pt-2">
           <%= form.submit "Create project",
-                class: "rounded-md px-5 py-2.5 bg-blue-600 hover:bg-blue-500 text-white font-medium cursor-pointer" %>
-          <button type="button" class="rounded-md px-5 py-2.5 bg-gray-100 hover:bg-gray-200 font-medium text-gray-700"
+                class: "#{button_classes(color: "blue")} px-5 py-2.5" %>
+          <button type="button" class="<%= button_classes(color: "gray") %> px-5 py-2.5"
                   data-action="new-project#close">Cancel</button>
         </div>
       <% end %>
@@ -163,7 +163,7 @@
                   <% end %>
                 </div>
                 <%= button_to "Use this template", create_from_template_projects_path(template_id: template.id),
-                      class: "shrink-0 rounded-md px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white text-sm font-medium cursor-pointer" %>
+                      class: "#{button_classes(color: "blue")} shrink-0 px-4 py-2 text-sm" %>
               </div>
             </li>
           <% end %>

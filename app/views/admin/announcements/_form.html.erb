@@ -36,7 +36,7 @@
   </div>
 
   <div class="flex gap-2">
-    <%= form.submit class: "rounded-md px-3.5 py-2 bg-blue-600 hover:bg-blue-500 text-white font-medium cursor-pointer" %>
-    <%= link_to "Cancel", admin_announcements_path, class: "rounded-md px-3.5 py-2 bg-gray-100 hover:bg-gray-50 text-gray-800 font-medium" %>
+    <%= form.submit class: "#{button_classes(color: "blue")} px-3.5 py-2" %>
+    <%= link_to "Cancel", admin_announcements_path, class: "#{button_classes(color: "gray")} px-3.5 py-2" %>
   </div>
 <% end %>

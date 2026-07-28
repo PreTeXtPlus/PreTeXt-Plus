@@ -5,7 +5,7 @@
 <% end %>
 <% if current_user && current_user.projects.count < current_user.project_quota %>
   <% content_for :actions do %>
-    <%= link_to "+ New project", new_project_path, class: "inline-flex select-none items-center gap-2 rounded-md cursor-pointer ml-1 px-4 py-2 my-1 text-medium bg-green-600 text-white font-bold drop-shadow-md hover:bg-green-500", data: { turbo: false } %>
+    <%= link_to "+ New project", new_project_path, class: "#{button_classes(color: "green")} inline-flex items-center gap-2 px-4 py-2", data: { turbo: false } %>
   <% end %>
 <% end %>
 
@@ -30,7 +30,7 @@
         </p>
         <div class="mt-4 flex gap-2 items-center">
           <span class="font-semibold">Support PreTeXt.Plus development:</span>
-          <%= link_to subscriptions_path, class: "rounded-md px-3.5 py-2 bg-green-600 hover:bg-green-500 text-white font-medium" do %>
+          <%= link_to subscriptions_path, class: "#{button_classes(color: "green")} px-3.5 py-2" do %>
             Subscribe
           <% end %>
         </div>
@@ -71,8 +71,8 @@
           </div>
 
           <div class="flex shrink-0 items-center gap-2">
-            <%= link_to "Manage", project, class: "rounded-md border border-gray-300 px-3 py-2 text-sm font-medium hover:bg-gray-50", data: { turbo: false } %>
-            <%= link_to "Write", edit_project_path(project), class: "rounded-md bg-indigo-600 px-3 py-2 text-sm font-medium text-white hover:bg-indigo-500", data: { turbo: false } %>
+            <%= link_to "Manage", project, class: "#{button_classes(color: "gray", outlined: true)} px-3 py-2 text-sm", data: { turbo: false } %>
+            <%= link_to "Write", edit_project_path(project), class: "#{button_classes(color: "indigo")} px-3 py-2 text-sm", data: { turbo: false } %>
           </div>
           </div>
         </div>

@@ -1,7 +1,7 @@
 <% content_for :title, "New announcement" %>
 <% content_for :heading, "New announcement" %>
 <% content_for :actions do %>
-  <%= link_to "All announcements", admin_announcements_path, class: "rounded-md px-3.5 py-2 bg-gray-100 hover:bg-gray-50 text-gray-800 font-medium" %>
+  <%= link_to "All announcements", admin_announcements_path, class: "#{button_classes(color: "gray")} px-3.5 py-2" %>
 <% end %>
 
 <div class="rounded-xl border border-gray-200 bg-white p-6 shadow-sm">
