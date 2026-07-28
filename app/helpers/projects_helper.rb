@@ -10,10 +10,15 @@ module ProjectsHelper
     tag.span(label, class: "inline-flex items-center rounded-full px-2.5 py-1 text-xs font-semibold #{classes}")
   end
 
+  # Accepts either a project (whose root division's format is looked up) or the raw
+  # source_format string the new-project form uses before a division exists yet --
+  # #try keeps the lookup nil, rather than an error, when project is that string.
   def project_format_icon(project, classes: nil)
-    if project.root_division&.latex_source_format? || project == "latex"
+    root_division = project.try(:root_division)
+
+    if root_division&.latex_source_format? || project == "latex"
       image_tag "latex-pretext-logo.svg", alt: "LaTeX-style PreTeXt logo", class: classes
-    elsif project.root_division&.markdown_source_format? || project == "markdown"
+    elsif root_division&.markdown_source_format? || project == "markdown"
       image_tag "markdown-pretext-logo.svg", alt: "Markdown-style PreTeXt logo", class: classes
     else
       image_tag "pretext-logo.svg", alt: "PreTeXt logo", class: classes
