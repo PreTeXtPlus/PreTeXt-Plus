@@ -161,6 +161,15 @@ const CodeEditor = forwardRef<CodeEditorHandle, CodeEditorProps>(({
   // PreTeXt, the frontmatter block — title included — for Markdown). Clicking
   // any of them opens the TOC properties form.
   const leadingLockedLinesRef = useRef(0);
+  // Always points at the latest `applyConstraints` closure. The collab content
+  // listener below is registered once inside `handleEditorMount` and is never
+  // re-subscribed when `sourceFormat` changes later (Monaco's `onMount` fires
+  // once per component lifetime, and this editor persists across division
+  // switches) — so it must go through this ref rather than close over
+  // `applyConstraints` directly, or every keystroke in collab mode would
+  // silently re-lock the document using whatever format was active at the very
+  // first mount instead of the division actually being edited.
+  const applyConstraintsRef = useRef<() => void>(() => {});
   const contentListenerRef = useRef<{ dispose: () => void } | null>(null);
   const mouseListenerRef = useRef<{ dispose: () => void } | null>(null);
   const cursorListenerRef = useRef<{ dispose: () => void } | null>(null);
@@ -448,6 +457,7 @@ const CodeEditor = forwardRef<CodeEditorHandle, CodeEditorProps>(({
       }
     }
   };
+  applyConstraintsRef.current = applyConstraints;
 
   const setModelValueSafely = (model: any, nextValue: string) => {
     if (model.getValue() === nextValue) return;
@@ -598,8 +608,10 @@ const CodeEditor = forwardRef<CodeEditorHandle, CodeEditorProps>(({
       // text shifts. Collab mode has no such bookkeeping, and the geometry does
       // move — a PreTeXt division's closing tag is whatever line is last — so
       // recompute the locked lines (and their dimming) after every change,
-      // local or remote.
-      if (collabRef.current) applyConstraints();
+      // local or remote. Goes through the ref (not the closed-over
+      // `applyConstraints`) since this listener is registered once here and
+      // never re-subscribed when `sourceFormat` changes later.
+      if (collabRef.current) applyConstraintsRef.current();
     });
     updateUndoRedoState();
 
