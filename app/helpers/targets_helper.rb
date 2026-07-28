@@ -54,6 +54,21 @@ module TargetsHelper
     end
   end
 
+  # The projects dashboard variant: the whole pill links to the target's status page,
+  # and carries the target's name (not the state label) since a row already has several
+  # of these side by side.
+  def target_status_pill(target)
+    project = target.project
+    state = target.state
+    label, classes = STATE_PILL.fetch(state, STATE_PILL[:never])
+    link_to project_target_path(project, target),
+      class: "inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 font-mono text-xs font-semibold #{classes}",
+      title: "#{target.name} — #{label.downcase}", data: { turbo: false } do
+      concat tag.span("", class: "size-1.5 rounded-full bg-current #{'animate-pulse' if state == :building}")
+      concat target.name
+    end
+  end
+
   def target_state_stripe(state)
     STATE_STRIPE.fetch(state, STATE_STRIPE[:never])
   end

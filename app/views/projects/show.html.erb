@@ -10,14 +10,17 @@
       <p class="font-mono text-xs text-gray-500">
         <%= link_to "Projects", projects_path, class: "hover:underline" %> /
       </p>
-      <h1 class="mt-1 text-2xl font-semibold"><%= @project.title %></h1>
+      <h1 class="mt-1 text-2xl font-semibold">
+        <%= @project.title %>
+        <%= project_visibility_pill(@project) %>
+      </h1>
       <p class="mt-1 text-sm text-gray-600">
         Edited <%= time_ago_in_words(@project.source_updated_at) %> ago ·
         <%= pluralize(@project.divisions.size, "division") %> ·
         <%= pluralize(@project.assets.size, "asset") %>
       </p>
       <%= form_with model: @project, method: :patch, class: "mt-2 flex items-center gap-2" do |form| %>
-        <%= form.label :visibility, "Visibility on your public profile", class: "text-xs text-gray-600" %>
+        <%= form.label :visibility, "Manage visibility of this project", class: "text-xs text-gray-600" %>
         <%= form.select :visibility, Project.visibilities.keys.map { |v| [ v.humanize, v ] },
               {}, class: "rounded-md border border-gray-300 px-2 py-1 text-xs" %>
         <%= form.submit "Update",
