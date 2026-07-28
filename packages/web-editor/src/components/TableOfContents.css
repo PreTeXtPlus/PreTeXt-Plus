@@ -736,6 +736,7 @@
   border: none;
   color: #2563eb;
   cursor: pointer;
+  padding: 0px 2px;
 }
 
 .pretext-plus-editor__toc-assets-btn:hover {
