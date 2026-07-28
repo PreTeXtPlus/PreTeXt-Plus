@@ -1027,12 +1027,33 @@ function EditorApp({ config }) {
     [assetFetchUrl, csrfToken],
   );
 
-  // Persists an edit to an asset's authored `source` (e.g. an image's
-  // <shortdescription>/<description> XML) made via the web-editor's "Edit
-  // source" dialog.
+  // Persists an edit to an existing asset made through the web-editor's asset
+  // editor -- its `ref`, its `title`, and its authored `source` (an image's
+  // <shortdescription>/<description> XML).  Also the commit step of Duplicate
+  // and Replace, which upload a file first and then give the resulting asset
+  // its real ref/title/source.
+  //
+  // All three fields go every time, keyed by `id` (the UUID, stable across
+  // renames -- never `ref`, which is the thing being changed).  `ref`
+  // especially: it is the name `<plus:* ref="..."/>` placeholders resolve
+  // against, the `<image source="ref.ext">` the assembled pretext_source
+  // carries, and the segment `/projects/:id/external/:ref` serves the file
+  // from.  Leaving it here -- as this callback used to, sending only `source`
+  // -- meant a rename showed correctly in the editor while every build and
+  // published page still looked the asset up under its old name.
+  //
+  // JSON.stringify drops undefined values, so an asset that arrives without a
+  // title or ref simply leaves that column alone rather than nulling it.
   const onAssetUpdate = useCallback(
     async (asset) => {
-      await patchProjectJson({ assets_attributes: [{ id: asset.id, source: asset.source ?? "" }] });
+      await patchProjectJson({
+        assets_attributes: [ {
+          id: asset.id,
+          ref: asset.ref,
+          title: asset.title,
+          source: asset.source ?? "",
+        } ],
+      });
       invalidateAssetQueries();
     },
     [patchProjectJson, invalidateAssetQueries],
@@ -1047,8 +1068,14 @@ function EditorApp({ config }) {
   // shared doc, so this request failing is recoverable: the session leader
   // re-sends the _destroy on its next save, and peers have already dropped the
   // asset from their pools regardless.
+  //
+  // The promise is returned so Replace can await it: the replacement takes over
+  // this asset's ref, and Asset validates ref uniqueness within a project, so
+  // that rename only succeeds once this row is gone.  It still resolves rather
+  // than rejects on failure (the alert below is the report) -- a Replace whose
+  // removal failed then fails again, visibly, on the rename.
   const onAssetRemove = useCallback(
-    (asset) => {
+    (asset) =>
       patchProjectJson({ assets_attributes: [{ id: asset.id, _destroy: true }] })
         .then(() => invalidateAssetQueries())
         .catch((error) => {
@@ -1056,8 +1083,7 @@ function EditorApp({ config }) {
           if (!providerRef.current) {
             alert("An error occurred while removing the asset.");
           }
-        });
-    },
+        }),
     [patchProjectJson, invalidateAssetQueries],
   );
 
