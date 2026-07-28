@@ -963,10 +963,14 @@ function EditorApp({ config }) {
 
   // ----- Render ------------------------------------------------------------
   if (projectQuery.isPending) {
-    return <div className="mx-5">Loading editor…</div>;
+    return <div className="flex h-full items-center justify-center">
+      <div class="mx-5 text-center text-lg">Loading editor…</div>
+    </div>;
   }
   if (projectQuery.isError) {
-    return <div className="mx-5">Error loading editor state. Please reload the page.</div>;
+    return <div className="flex h-full items-center justify-center">
+      <div class="mx-5 text-center">Error loading editor state. Please reload the page.</div>
+    </div>;
   }
 
   const state = initial.current;
