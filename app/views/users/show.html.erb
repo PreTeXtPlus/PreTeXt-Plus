@@ -1,42 +1,39 @@
 <% content_for(:title, @profile_user.name.presence || @profile_user.username) %>
+<% content_for(:heading, @profile_user.name.presence || @profile_user.username) %>
+<% content_for(:subtitle, "@#{@profile_user.username}") %>
 
-<div class="w-full mx-auto p-2 md:w-2/3">
-  <h1 class="text-3xl font-semibold"><%= @profile_user.name.presence || @profile_user.username %></h1>
-  <p class="text-sm text-gray-600">@<%= @profile_user.username %></p>
-
-  <%# Reaching this page at all while unlisted means the viewer is the owner --
-      profile_visible? in UsersController is what keeps anyone else out. %>
-  <% unless @profile_user.has_copiable_projects? %>
-    <div class="mt-4 text-sm text-amber-800 bg-amber-50 rounded-md p-3">
-      ⚠ This profile isn't public yet — only you can see it.
-      <%= link_to "Subscribe", subscriptions_path, class: "font-semibold hover:underline" %>
-      to make it visible to everyone.
-    </div>
-  <% end %>
-
-  <div id="public-projects" class="mt-6 space-y-4">
-    <% if @projects.any? %>
-      <% @projects.each do |project| %>
-        <% published_targets = project.targets.select(&:published?) %>
-        <div class="rounded-xl bg-white p-4 ring-2 ring-gray-100 hover:ring-indigo-200">
-          <h3 class="text-lg font-medium"><%= project.title %></h3>
-          <% if published_targets.any? %>
-            <div class="mt-2 flex flex-wrap items-center gap-2">
-              <%# target_public_url, never share_project_path -- a profile visitor should
-                  land on the built output itself, not the dashboard's quick-build page. %>
-              <% published_targets.each do |target| %>
-                <%= link_to target.name, target_public_url(target),
-                      class: "inline-flex items-center rounded-full border border-gray-300 px-2.5 py-1 text-xs font-medium hover:bg-gray-50",
-                      target: "_blank", rel: "noopener", data: { turbo: false } %>
-              <% end %>
-            </div>
-          <% else %>
-            <p class="mt-1 text-xs text-gray-500">No published outputs yet.</p>
-          <% end %>
-        </div>
-      <% end %>
-    <% else %>
-      <p class="text-center my-10 text-gray-600">No public projects yet.</p>
-    <% end %>
+<%# Reaching this page at all while unlisted means the viewer is the owner --
+    profile_visible? in UsersController is what keeps anyone else out. %>
+<% unless @profile_user.has_copiable_projects? %>
+  <div class="mt-4 text-sm text-amber-800 bg-amber-50 rounded-md p-3">
+    ⚠ This profile isn't public yet — only you can see it.
+    <%= link_to "Subscribe", subscriptions_path, class: "font-semibold hover:underline" %>
+    to make it visible to everyone.
   </div>
+<% end %>
+
+<div id="public-projects" class="mt-6 space-y-4">
+  <% if @projects.any? %>
+    <% @projects.each do |project| %>
+      <% published_targets = project.targets.select(&:published?) %>
+      <div class="rounded-xl bg-white p-4 ring-2 ring-gray-100 hover:ring-indigo-200">
+        <h3 class="text-lg font-medium"><%= project.title %></h3>
+        <% if published_targets.any? %>
+          <div class="mt-2 flex flex-wrap items-center gap-2">
+            <%# target_public_url, never share_project_path -- a profile visitor should
+                land on the built output itself, not the dashboard's quick-build page. %>
+            <% published_targets.each do |target| %>
+              <%= link_to target.name, target_public_url(target),
+                    class: "inline-flex items-center rounded-full border border-gray-300 px-2.5 py-1 text-xs font-medium hover:bg-gray-50",
+                    target: "_blank", rel: "noopener", data: { turbo: false } %>
+            <% end %>
+          </div>
+        <% else %>
+          <p class="mt-1 text-xs text-gray-500">No published outputs yet.</p>
+        <% end %>
+      </div>
+    <% end %>
+  <% else %>
+    <p class="text-center my-10 text-gray-600">No public projects yet.</p>
+  <% end %>
 </div>

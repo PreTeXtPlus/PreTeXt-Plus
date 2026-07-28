@@ -1,4 +1,9 @@
 <% content_for :title, "Request Invoice for Subscription Plan" %>
+<% content_for :breadcrumb do %>
+  <%= link_to "Subscriptions", subscriptions_path, class: "hover:underline" %> /
+<% end %>
+<% content_for :heading, "Request Invoice for Subscription Plan" %>
+
 <p class="my-3">
     Need an invoice for your subscription? Please provide details on your request and we will get back to you as soon as possible.
 </p>

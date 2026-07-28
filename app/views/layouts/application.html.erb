@@ -161,8 +161,28 @@
           </main>
         <% else %>
           <div class="md:pt-16 md:min-h-screen bg-gray-50">
+            <% if content_for?(:heading) %>
+              <header class="border-b border-gray-200 bg-white">
+                <div class="mx-auto flex w-full max-w-5xl flex-wrap items-start justify-between gap-4 px-4 py-5 md:px-6">
+                  <div class="min-w-0">
+                    <% if content_for?(:breadcrumb) %>
+                      <p class="font-mono text-xs text-gray-500"><%= yield(:breadcrumb) %></p>
+                    <% end %>
+                    <h1 class="<%= "mt-1 " if content_for?(:breadcrumb) %>text-2xl font-semibold"><%= yield(:heading) %></h1>
+                    <% if content_for?(:subtitle) %>
+                      <div class="mt-1 text-sm text-gray-600"><%= yield(:subtitle) %></div>
+                    <% end %>
+                  </div>
+                  <% if content_for?(:actions) %>
+                    <div class="flex flex-wrap items-center gap-2"><%= yield(:actions) %></div>
+                  <% end %>
+                </div>
+              </header>
+            <% end %>
             <main class="w-full md:min-h-[80vh] bg-white">
-              <%= content_for?(:content) ? yield(:content) : yield %>
+              <div class="w-full mx-auto p-2 md:w-2/3">
+                <%= yield %>
+              </div>
             </main>
             <footer class="w-full p-3 h-1/8 text-center">
               <p>© 2025-<%= Time.current.year %> PreTeXt Plus LLC</p>

@@ -1,19 +1,17 @@
 <% content_for :title, "New account" %>
+<% content_for :heading, "Create account" %>
 
-<div class="w-full mx-auto p-2 md:w-2/3">
-  <h1 class="font-bold text-4xl">Create account</h1>
-  <%= form_with model: @user do |form| %>
-    <%= render "fields_for", form: form %>
-    <div class="col-span-6 sm:flex sm:items-center sm:gap-4">
-      <%= form.submit "Register and sign in", class: "w-full sm:w-auto text-center rounded-md px-3.5 py-2.5 bg-green-600 hover:bg-green-500 text-white inline-block font-medium cursor-pointer" %>
-      <%= link_to "Sign into existing account", new_user_session_path, class: "text-sm text-blue-700 underline hover:no-underline" %>
-    </div>
-  <% end %>
+<%= form_with model: @user do |form| %>
+  <%= render "fields_for", form: form %>
+  <div class="col-span-6 sm:flex sm:items-center sm:gap-4">
+    <%= form.submit "Register and sign in", class: "w-full sm:w-auto text-center rounded-md px-3.5 py-2.5 bg-green-600 hover:bg-green-500 text-white inline-block font-medium cursor-pointer" %>
+    <%= link_to "Sign into existing account", new_user_session_path, class: "text-sm text-blue-700 underline hover:no-underline" %>
+  </div>
+<% end %>
 
-    <div class="my-4 text-sm text-gray-700">
-      By creating an account, you agree to our updated
-      <%= link_to "Terms of Service", tos_path, class: "text-gray-900 hover:text-black hover:underline" %>
-      and
-      <%= link_to "Privacy Policy", privacy_path, class: "text-gray-900 hover:text-black hover:underline" %>.
-    </div>
+<div class="my-4 text-sm text-gray-700">
+  By creating an account, you agree to our updated
+  <%= link_to "Terms of Service", tos_path, class: "text-gray-900 hover:text-black hover:underline" %>
+  and
+  <%= link_to "Privacy Policy", privacy_path, class: "text-gray-900 hover:text-black hover:underline" %>.
 </div>

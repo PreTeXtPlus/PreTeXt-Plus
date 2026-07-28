@@ -2,55 +2,50 @@
     drawer; this exists so "Log" in that table, and links in support email, resolve to
     something permanent. %>
 <% content_for :title, "Build log — #{@project.title}" %>
+<% content_for :breadcrumb do %>
+  <%= link_to "Projects", projects_path, class: "hover:underline" %> /
+  <%= link_to @project.title, @project, class: "hover:underline" %> /
+  <%= link_to @build.target.name, project_target_path(@project, @build.target), class: "hover:underline" %> /
+<% end %>
+<% content_for :heading, "Build log" %>
+<% content_for :subtitle do %>
+  Started <%= local_time_tag(@build.created_at, relative: true) %>
+<% end %>
+<% content_for :actions do %>
+  <%= build_history_pill(@build, @build.target) %>
+<% end %>
 
-<div class="mx-auto w-full p-4 md:w-2/3">
-  <p class="font-mono text-xs text-gray-500">
-    <%= link_to "Projects", projects_path, class: "hover:underline" %> /
-    <%= link_to @project.title, @project, class: "hover:underline" %> /
-    <%= link_to @build.target.name, project_target_path(@project, @build.target), class: "hover:underline" %> /
-  </p>
-
-  <div class="mt-2 flex flex-wrap items-center justify-between gap-3">
-    <h1 class="text-2xl font-semibold">Build log</h1>
-    <%= build_history_pill(@build, @build.target) %>
+<%# in_flight?, not "not success and not failed": a canceled build is finished too, and
+    this banner used to tell its reader it was still running. %>
+<% if @build.in_flight? %>
+  <div class="mt-4 flex flex-wrap items-center gap-3 rounded-lg border border-sky-200 bg-sky-50 p-3 text-sm text-sky-900">
+    <span>This build is still running.</span>
+    <%= button_to "Check the server", check_status_project_build_path(@project, @build),
+          class: "cursor-pointer rounded-md border border-sky-600 px-2 py-1 text-xs font-medium text-sky-800 hover:bg-sky-100" %>
+    <%= button_to "Cancel it", cancel_project_build_path(@project, @build),
+          class: "cursor-pointer rounded-md border border-sky-600 px-2 py-1 text-xs font-medium text-sky-800 hover:bg-sky-100",
+          data: { turbo_confirm: "Stop this build? Nothing that is already published changes." } %>
   </div>
+<% end %>
 
-  <p class="mt-1 text-sm text-gray-600">
-    Started <%= local_time_tag(@build.created_at, relative: true) %>
-  </p>
+<% if @build.log.present? %>
+  <pre class="mt-4 overflow-auto rounded-lg bg-gray-900 p-4 text-xs text-gray-100 whitespace-pre-wrap"><%= @build.log %></pre>
+<% else %>
+  <p class="mt-4 text-gray-600">No log was returned for this build.</p>
+<% end %>
 
-  <%# in_flight?, not "not success and not failed": a canceled build is finished too, and
-      this banner used to tell its reader it was still running. %>
-  <% if @build.in_flight? %>
-    <div class="mt-4 flex flex-wrap items-center gap-3 rounded-lg border border-sky-200 bg-sky-50 p-3 text-sm text-sky-900">
-      <span>This build is still running.</span>
-      <%= button_to "Check the server", check_status_project_build_path(@project, @build),
-            class: "cursor-pointer rounded-md border border-sky-600 px-2 py-1 text-xs font-medium text-sky-800 hover:bg-sky-100" %>
-      <%= button_to "Cancel it", cancel_project_build_path(@project, @build),
-            class: "cursor-pointer rounded-md border border-sky-600 px-2 py-1 text-xs font-medium text-sky-800 hover:bg-sky-100",
-            data: { turbo_confirm: "Stop this build? Nothing that is already published changes." } %>
-    </div>
+<div class="mt-6 flex flex-wrap items-center gap-3 border-t border-gray-200 pt-5">
+  <% if @build.success? && @build.entry_path.present? %>
+    <%= link_to "View output", build_file_path(@build, @build.entry_path),
+          class: "rounded-md border border-gray-300 px-3 py-2 text-sm hover:bg-gray-50",
+          target: "_blank", rel: "noopener", data: { turbo: false } %>
   <% end %>
-
-  <% if @build.log.present? %>
-    <pre class="mt-4 overflow-auto rounded-lg bg-gray-900 p-4 text-xs text-gray-100 whitespace-pre-wrap"><%= @build.log %></pre>
-  <% else %>
-    <p class="mt-4 text-gray-600">No log was returned for this build.</p>
+  <% if @build.zip.attached? %>
+    <%= link_to "Download zip", rails_blob_path(@build.zip, disposition: "attachment"),
+          class: "rounded-md border border-gray-300 px-3 py-2 text-sm hover:bg-gray-50",
+          data: { turbo: false } %>
   <% end %>
-
-  <div class="mt-6 flex flex-wrap items-center gap-3 border-t border-gray-200 pt-5">
-    <% if @build.success? && @build.entry_path.present? %>
-      <%= link_to "View output", build_file_path(@build, @build.entry_path),
-            class: "rounded-md border border-gray-300 px-3 py-2 text-sm hover:bg-gray-50",
-            target: "_blank", rel: "noopener", data: { turbo: false } %>
-    <% end %>
-    <% if @build.zip.attached? %>
-      <%= link_to "Download zip", rails_blob_path(@build.zip, disposition: "attachment"),
-            class: "rounded-md border border-gray-300 px-3 py-2 text-sm hover:bg-gray-50",
-            data: { turbo: false } %>
-    <% end %>
-    <%= button_to "Delete this build", project_build_path(@project, @build), method: :delete,
-          class: "cursor-pointer text-sm text-red-700 hover:underline",
-          data: { turbo_confirm: "Delete this build?" } %>
-  </div>
+  <%= button_to "Delete this build", project_build_path(@project, @build), method: :delete,
+        class: "cursor-pointer text-sm text-red-700 hover:underline",
+        data: { turbo_confirm: "Delete this build?" } %>
 </div>

@@ -1,17 +1,15 @@
 <% content_for :title, "Projects" %>
+<% content_for :heading do %>
+  Projects
+  (<%= @projects.count %>/<%= current_user.project_quota %>)
+<% end %>
+<% if current_user && current_user.projects.count < current_user.project_quota %>
+  <% content_for :actions do %>
+    <%= link_to "+ New project", new_project_path, class: "inline-flex select-none items-center gap-2 rounded-md cursor-pointer ml-1 px-4 py-2 my-1 text-medium bg-green-600 text-white font-bold drop-shadow-md hover:bg-green-500", data: { turbo: false } %>
+  <% end %>
+<% end %>
 
-<div class="w-full mx-auto p-2 md:w-2/3">
-  <div class="flex items-center gap-2">
-    <h1 class="text-3xl">
-      Projects
-      (<%= @projects.count %>/<%= current_user.project_quota %>)
-    </h1>
-    <% if current_user && current_user.projects.count < current_user.project_quota %>
-      <%= link_to "+ New project", new_project_path, class: "inline-flex select-none items-center gap-2 rounded-md cursor-pointer ml-1 px-4 py-2 my-1 text-medium bg-green-600 text-white font-bold drop-shadow-md hover:bg-green-500", data: { turbo: false } %>
-    <% end %>
-  </div>
-
-  <div id="projects" class="min-w-full space-y-5">
+<div id="projects" class="min-w-full space-y-5">
     <% if current_user.present? and !current_user.confirmed? %>
       <div class="flex justify-center">
         <p class="my-2 py-2 px-3 bg-blue-50 border-blue-200 border-1 text-blue-500 rounded-md inline-block">
@@ -95,4 +93,3 @@
       <p class="text-center my-10">No projects found.</p>
     <% end %>
   </div>
-</div>
