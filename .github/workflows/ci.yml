@@ -43,6 +43,31 @@ jobs:
       - name: Scan for security vulnerabilities in JavaScript dependencies
         run: npm audit --audit-level=high
 
+  web_editor:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v7
+
+      - name: Set up Node
+        uses: actions/setup-node@v7
+        with:
+          node-version-file: .node-version
+          cache: npm
+
+      - name: Install JS dependencies
+        run: npm ci
+
+      - name: Lint
+        run: npm run lint --workspace=packages/web-editor
+
+      - name: Typecheck
+        run: npm run typecheck --workspace=packages/web-editor
+
+      - name: Test
+        run: npm run test --workspace=packages/web-editor
+
   lint:
     runs-on: ubuntu-latest
     env:
