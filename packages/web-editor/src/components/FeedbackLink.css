@@ -1,0 +1,77 @@
+.pretext-plus-editor__feedback-trigger {
+  border: none;
+  background: transparent;
+  color: #0e639c;
+  cursor: pointer;
+  font-size: 0.85rem;
+  font-weight: 600;
+  padding: 0;
+}
+
+.pretext-plus-editor__feedback-trigger:hover {
+  text-decoration: underline;
+}
+
+.pretext-plus-editor__feedback-dialog {
+  width: min(96%, 560px);
+  height: auto;
+  max-height: min(90%, 640px);
+}
+
+.pretext-plus-editor__feedback-form {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+}
+
+.pretext-plus-editor__feedback-label {
+  color: #334155;
+  font-size: 0.85rem;
+  font-weight: 600;
+}
+
+.pretext-plus-editor__feedback-input,
+.pretext-plus-editor__feedback-textarea {
+  width: 100%;
+  border: 1px solid #cbd5e1;
+  border-radius: 2px;
+  padding: 0.5rem 0.6rem;
+  font: inherit;
+  color: #0f172a;
+  background: #fff;
+}
+
+.pretext-plus-editor__feedback-input:focus,
+.pretext-plus-editor__feedback-textarea:focus {
+  outline: 2px solid #93c5fd;
+  outline-offset: 1px;
+}
+
+.pretext-plus-editor__feedback-textarea {
+  resize: vertical;
+  min-height: 110px;
+}
+
+.pretext-plus-editor__feedback-checkbox-row {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  color: #1f2937;
+  font-size: 0.9rem;
+}
+
+.pretext-plus-editor__feedback-project {
+  margin: 0;
+  color: #64748b;
+  font-size: 0.8rem;
+}
+
+.pretext-plus-editor__feedback-error {
+  margin: 0;
+  color: #b91c1c;
+  font-size: 0.85rem;
+  font-weight: 600;
+}

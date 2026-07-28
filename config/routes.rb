@@ -101,6 +101,7 @@ Rails.application.routes.draw do
     member do
       get "download" => "projects#download", as: "download"
     end
+    resources :collaborations, only: [ :create, :destroy ]
     resources :targets, only: [ :show, :create, :update, :destroy ] do
       member do
         patch "publish" => "targets#publish", as: "publish"
@@ -130,6 +131,10 @@ Rails.application.routes.draw do
       get ":id/*_.html", to: redirect("/projects/%{id}/share")
     end
     member do
+      # Collaborative-editing doc persistence (live relay is ProjectDocChannel).
+      get "doc" => "project_docs#show", as: "doc"
+      post "doc/seed" => "project_docs#seed", as: "seed_doc"
+      put "doc" => "project_docs#update"
       get "share" => "projects#share", as: "share"
       get "share/source" => "projects#source", as: "share_source"
       get "share/copy" => "projects#copy_redirect"

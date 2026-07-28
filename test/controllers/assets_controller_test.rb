@@ -62,7 +62,9 @@ class AssetsControllerTest < ActionDispatch::IntegrationTest
     asset = asset_with_file
 
     sign_out @user
-    sign_in users(:two)
+    # The subscribed user neither owns nor collaborates on this asset's
+    # project (user two is now a collaborator via fixtures).
+    sign_in users(:subscribed)
 
     get share_asset_file_path(asset, format: "png")
 

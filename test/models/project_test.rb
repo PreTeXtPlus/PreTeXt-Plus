@@ -183,4 +183,133 @@ class ProjectTest < ActiveSupport::TestCase
     assert_equal "#{template.title} (generated from template)", copy.title
     assert_equal template.divisions.count, copy.divisions.count
   end
+
+  # --- Collaboration ---
+
+  test "collaborator_limit follows the owner's subscription" do
+    assert_equal 1, projects(:one).collaborator_limit
+    assert_equal 5, Project.new(user: users(:subscribed)).collaborator_limit
+  end
+
+  test "editable_by? covers the owner and accepted collaborators only" do
+    project = projects(:one)
+    assert project.editable_by?(project.user)
+    assert project.editable_by?(users(:two)) # fixture :accepted
+    assert_not project.editable_by?(users(:subscribed))
+    assert_not project.editable_by?(nil)
+
+    # A pending invite does not grant editing.
+    assert_not projects(:two).editable_by?(User.new(email: "invited@example.com"))
+  end
+
+  test "full_dup does not copy collaborations" do
+    copy = projects(:one).full_dup(users(:subscribed))
+    stub_build_server { copy.save! }
+    assert_empty copy.collaborations
+  end
+
+  # --- Client-minted nested-attribute ids ---
+  #
+  # The collaborative editor mints a division's/asset's uuid itself so the
+  # record exists in the shared document immediately, without waiting on a
+  # round trip here. That makes creates arrive under ids Rails has never seen,
+  # and destroys arrive more than once. Both used to raise RecordNotFound and
+  # take the whole save down with them.
+
+  test "a division sent under a client-minted id is created with that id" do
+    project = projects(:one)
+    id = SecureRandom.uuid
+
+    stub_build_server do
+      project.update!(divisions_attributes: [
+        { id: id, ref: "minted-section", source: "<section><title>Minted</title></section>" }
+      ])
+    end
+
+    division = project.divisions.find(id)
+    assert_equal "minted-section", division.ref
+    assert_equal "<section><title>Minted</title></section>", division.source
+  end
+
+  test "re-sending a client-minted division updates rather than duplicating it" do
+    project = projects(:one)
+    id = SecureRandom.uuid
+
+    stub_build_server do
+      project.update!(divisions_attributes: [ { id: id, ref: "minted-section", source: "<section/>" } ])
+      project.reload.update!(divisions_attributes: [ { id: id, source: "<section><title>Again</title></section>" } ])
+    end
+
+    assert_equal 1, project.divisions.where(id: id).count
+    assert_equal "<section><title>Again</title></section>", project.divisions.find(id).source
+  end
+
+  test "an asset sent under a client-minted id is created with that id" do
+    project = projects(:one)
+    id = SecureRandom.uuid
+
+    stub_build_server do
+      project.update!(assets_attributes: [
+        { id: id, ref: "minted-asset", kind: "authored", title: "Minted", source: "<p>x</p>" }
+      ])
+    end
+
+    asset = project.assets.find(id)
+    assert_equal "minted-asset", asset.ref
+    assert_equal "<p>x</p>", asset.source
+  end
+
+  test "destroying a division that is already gone is a no-op, not an error" do
+    project = projects(:one)
+    division = project.divisions.create!(ref: "doomed", source: "<section/>")
+
+    stub_build_server do
+      project.reload.update!(divisions_attributes: [ { id: division.id, _destroy: true } ])
+      # The collaborator who removed it persisted that above; the session
+      # leader's next bulk save re-sends it from the doc's tombstones.
+      project.reload.update!(divisions_attributes: [ { id: division.id, _destroy: true } ])
+    end
+
+    assert_not project.divisions.exists?(division.id)
+  end
+
+  test "destroying an asset that is already gone is a no-op, not an error" do
+    project = projects(:one)
+    asset = project.assets.create!(ref: "doomed-asset", kind: "authored", title: "Doomed")
+
+    stub_build_server do
+      project.reload.update!(assets_attributes: [ { id: asset.id, _destroy: true } ])
+      project.reload.update!(assets_attributes: [ { id: asset.id, _destroy: true } ])
+    end
+
+    assert_not project.assets.exists?(asset.id)
+  end
+
+  # A destroy naming a row that never existed is dropped rather than turned into
+  # a create: the tolerance is only ever allowed to *remove* work.
+  test "destroying an id that never existed does not create a record" do
+    project = projects(:one)
+    before = project.divisions.count
+
+    stub_build_server do
+      project.update!(divisions_attributes: [ { id: SecureRandom.uuid, _destroy: true, ref: "ghost" } ])
+    end
+
+    assert_equal before, project.reload.divisions.count
+  end
+
+  # The one shape that does not arrive as an array: an asset upload, whose file
+  # forces a multipart body (`project[assets_attributes][0][ref]`).
+  test "index-keyed nested attributes are handled like an array" do
+    project = projects(:one)
+    id = SecureRandom.uuid
+
+    stub_build_server do
+      project.update!(assets_attributes: {
+        "0" => { id: id, ref: "keyed-asset", kind: "authored", title: "Keyed" }
+      })
+    end
+
+    assert_equal "keyed-asset", project.assets.find(id).ref
+  end
 end

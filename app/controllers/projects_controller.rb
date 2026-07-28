@@ -15,6 +15,8 @@ class ProjectsController < ApplicationController
     # pointers. Without eager loading that is two queries per target per project; with
     # it, and because Target#state touches nothing else, the page is a fixed handful.
     @projects = Project.where(user: current_user).includes(targets: [ :current_build, :latest_build ])
+    # Shared projects render the identical row, so they need the identical eager load.
+    @shared_projects = current_user.shared_projects.includes(targets: [ :current_build, :latest_build ])
   end
 
   # GET /projects/1 or /projects/1.json
@@ -93,6 +95,15 @@ class ProjectsController < ApplicationController
         format.html { redirect_to @project, alert: @project.errors.full_messages.to_sentence }
       end
     end
+  rescue ActiveRecord::RecordNotUnique
+    # A nested division/asset named a record id that already exists on some
+    # *other* project. Project#tolerate_client_minted_ids treats an id this
+    # project has never seen as an insert -- which is what lets the editor mint
+    # its own uuids -- so an id belonging elsewhere reaches the database as a
+    # primary-key conflict. It cannot read or touch that other row, but it can
+    # raise here, so answer it as the bad request it is rather than a 500.
+    render json: { error: "A record id in this request belongs to another project." },
+           status: :unprocessable_entity
   end
 
   # DELETE /projects/1

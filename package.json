@@ -1,21 +1,28 @@
 {
   "name": "app",
   "private": true,
+  "workspaces": [
+    "packages/web-editor"
+  ],
   "devDependencies": {
     "@tailwindcss/typography": "^0.5.19",
     "esbuild": "^0.28.1"
   },
   "scripts": {
-    "build": "node -e \"const fs=require('fs');fs.mkdirSync('public/assets',{recursive:true});fs.copyFileSync(require.resolve('@pretextbook/libxslt-wasm/output/libxslt.wasm'),'public/assets/libxslt.wasm')\" && esbuild app/javascript/*.* --bundle --sourcemap --format=esm --outdir=app/assets/builds --public-path=/assets --external:module --external:worker_threads"
+    "build": "node -e \"const fs=require('fs');fs.mkdirSync('public/assets',{recursive:true});fs.copyFileSync(require.resolve('@pretextbook/libxslt-wasm/output/libxslt.wasm'),'public/assets/libxslt.wasm')\" && esbuild app/javascript/*.* --bundle --sourcemap --format=esm --outdir=app/assets/builds --public-path=/assets --external:module --external:worker_threads --loader:.png=dataurl --jsx=automatic"
   },
   "dependencies": {
     "@hotwired/stimulus": "^3.2.2",
     "@hotwired/turbo-rails": "^8.0.20",
     "@pretextbook/import": "^0.3.0",
-    "@pretextbook/web-editor": "^0.17.1",
+    "@pretextbook/libxslt-wasm": "^0.1.1",
+    "@pretextbook/web-editor": "*",
+    "@rails/actioncable": "^8.1.300",
     "@tanstack/react-query": "^5.101.0",
     "react": "^19.2.0",
-    "react-dom": "^19.2.0"
+    "react-dom": "^19.2.0",
+    "y-protocols": "^1.0.7",
+    "yjs": "^13.6.31"
   },
   "overrides": {
     "dompurify": "^3.3.2"

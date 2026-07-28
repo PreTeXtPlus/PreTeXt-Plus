@@ -30,47 +30,13 @@
 
 <div id="projects" class="min-w-full space-y-5">
     <% if @projects.any? %>
-      <% @projects.each do |project| %>
-        <div class="m-3 rounded-xl bg-white p-4 ring-2 ring-gray-100 hover:ring-indigo-200">
-          <% if project.is_template? %>
-            <div class="mt-1 text-sm text-amber-800 bg-amber-50 rounded-md sm:p-2">
-              ⚠ This project is offered as a template for new projects. Edit with care —
-              your changes affect what new users start from.
-            </div>
-          <% end %>
-          <div class="flex flex-col gap-4 sm:flex-row sm:items-center sm:p-6">
-          <span class="hidden sm:grid sm:size-18 sm:shrink-0 sm:place-content-center" aria-hidden="true">
-            <%= project_format_icon project, classes: "size-full" %>
-          </span>
-
-          <div class="min-w-0 flex-1">
-            <h3 class="flex items-center gap-2 text-lg font-medium">
-              <%= link_to project.title, project, class: "hover:underline", data: { turbo: false } %>
-              <%= project_visibility_pill(project) %>
-            </h3>
-
-            <%# The whole status report for this project at a glance: one chip per output,
-                so scanning the column answers "what needs rebuilding?" across every project. %>
-            <div class="mt-2 flex flex-wrap items-center gap-1.5">
-              <% project.targets.each do |target| %>
-                <%= target_status_pill(target) %>
-              <% end %>
-            </div>
-
-            <p class="mt-2 text-sm text-gray-700">
-              Edited
-              <%= local_time_tag(project.source_updated_at, relative: true) %>
-            </p>
-          </div>
-
-          <div class="flex shrink-0 items-center gap-2">
-            <%= link_to "Manage", project, class: "#{button_classes(color: "gray", outlined: true)} px-3 py-2 text-sm", data: { turbo: false } %>
-            <%= link_to "Write", edit_project_path(project), class: "#{button_classes(color: "indigo")} px-3 py-2 text-sm", data: { turbo: false } %>
-          </div>
-          </div>
-        </div>
-      <% end %>
+      <%= render partial: "card", collection: @projects, as: :project %>
     <% else %>
       <p class="text-center my-10">No projects found.</p>
+    <% end %>
+
+    <% if @shared_projects.any? %>
+      <h2 class="text-2xl mt-10">Shared with me</h2>
+      <%= render partial: "card", collection: @shared_projects, as: :project, locals: { shared: true } %>
     <% end %>
   </div>

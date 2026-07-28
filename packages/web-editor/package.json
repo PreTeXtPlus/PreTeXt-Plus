@@ -1,0 +1,87 @@
+{
+  "name": "@pretextbook/web-editor",
+  "version": "0.20.1",
+  "private": false,
+  "description": "A web-based editor for PreTeXt documents, with simple preview functionality",
+  "keywords": [
+    "pretext",
+    "editor"
+  ],
+  "homepage": "https://github.com/PreTeXtPlus/pretext-plus-editor#readme",
+  "bugs": {
+    "url": "https://github.com/PreTeXtPlus/pretext-plus-editor/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/PreTeXtPlus/pretext-plus-editor.git"
+  },
+  "license": "MIT",
+  "author": "Oscar Levin",
+  "type": "module",
+  "main": "./src/index.ts",
+  "module": "./src/index.ts",
+  "types": "./src/index.ts",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "peerDependencies": {
+    "react": "^18.0.0 || ^19.0.0",
+    "react-dom": "^18.0.0 || ^19.0.0",
+    "yjs": "^13.6.0",
+    "y-protocols": "^1.0.6"
+  },
+  "scripts": {
+    "dev": "vite",
+    "build:demo": "tsc -b && vite build",
+    "lint": "eslint .",
+    "typecheck": "tsc -b",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:coverage": "vitest run --coverage",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "@dnd-kit/core": "^6.3.1",
+    "@dnd-kit/sortable": "^10.0.0",
+    "@monaco-editor/react": "^4.8.0-rc.3",
+    "@pretextbook/completions": "^0.1.0",
+    "@pretextbook/format": "^0.3.0",
+    "@pretextbook/latex-pretext": "^0.0.14",
+    "@pretextbook/latex-style-pretext": "^0.0.1",
+    "@pretextbook/markdown-style-pretext": "^0.0.1",
+    "@pretextbook/pretext-html": "^0.4.0",
+    "@pretextbook/remark-pretext": "^0.0.11",
+    "@pretextbook/visual-editor": "^0.1.0",
+    "@tailwindcss/vite": "^4.3.3",
+    "constrained-editor-plugin": "^1.4.0",
+    "react-resizable-panels": "^4.12.2",
+    "tailwindcss": "^4.3.3",
+    "xast-util-from-xml": "^4.0.0",
+    "zustand": "^5.0.14"
+  },
+  "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "@testing-library/dom": "^10.4.1",
+    "@testing-library/jest-dom": "^7.0.0",
+    "@testing-library/react": "^16.3.2",
+    "@testing-library/user-event": "^14.6.1",
+    "@types/node": "^26.0.0",
+    "@types/react": "^19.2.7",
+    "@types/react-dom": "^19.2.3",
+    "@vitejs/plugin-react": "^6.0.2",
+    "@vitest/coverage-v8": "^4.1.10",
+    "eslint": "^10.5.0",
+    "eslint-plugin-react-hooks": "^7.0.1",
+    "eslint-plugin-react-refresh": "^0.5.3",
+    "globals": "^17.6.0",
+    "jsdom": "^29.1.1",
+    "react": "^19.2.0",
+    "react-dom": "^19.2.0",
+    "typescript": "^6.0.3",
+    "typescript-eslint": "^8.50.0",
+    "vite": "^8.0.16",
+    "vitest": "^4.1.10",
+    "y-protocols": "^1.0.7",
+    "yjs": "^13.6.31"
+  }
+}
