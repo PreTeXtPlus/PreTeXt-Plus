@@ -262,9 +262,21 @@ export interface editorProps {
   onAssetFetchUrl?: (url: string) => Promise<File>;
   /** Called when the user creates a new Doenet activity. */
   onCreateDoenet?: (title: string, ref: string) => Promise<Asset>;
-  /** Called when the user removes an asset from the project. */
-  onAssetRemove?: (asset: Asset) => void;
-  /** Called when the user saves edits to an asset's content (e.g. its `source`). */
+  /**
+   * Called when the user removes an asset from the project. Return a promise
+   * if the removal is persisted asynchronously: the Replace flow awaits it
+   * before handing the removed asset's `ref` to its replacement.
+   */
+  onAssetRemove?: (asset: Asset) => Promise<void> | void;
+  /**
+   * Called when the user saves edits to an existing asset. The asset is
+   * identified by its `id` (stable across renames) and every user-editable
+   * field on it may have changed — `ref`, `title` and `source` — so all three
+   * must be persisted, not just the authored `source`. `ref` in particular is
+   * the name every `<plus:* ref="..."/>` placeholder (and every built
+   * `<image source>`) resolves against, so a rename that isn't stored leaves
+   * the document pointing at an asset the host can no longer find.
+   */
   onAssetUpdate?: (asset: Asset) => Promise<void> | void;
   /** If true, the TOC and asset manager hide all assets. */
   hideAssets?: boolean;
@@ -976,10 +988,22 @@ const EditorsInner = (props: EditorsInnerProps) => {
       title: oldAsset.title,
       source: oldAsset.source,
     };
+    // Drop the old asset *before* handing its ref to the replacement, and do
+    // both against the host before touching the pool. Two reasons, one per
+    // side of that ordering:
+    //
+    //  - A ref identifies an asset within its project, so a host that enforces
+    //    that (ours does) rejects the rename while the old record still holds
+    //    the ref. Removing first is what makes the rename land in the database
+    //    rather than failing there and leaving the replacement under whatever
+    //    ref its upload was given.
+    //  - The pool is keyed by kind+ref, and after the swap both assets share
+    //    one — so dropping the old one from the pool last would take the
+    //    replacement with it.
+    await props.onAssetRemove?.(oldAsset);
     await props.onAssetUpdate?.(replaced);
-    updateAssetInPool(replaced);
-    props.onAssetRemove?.(oldAsset);
     removeAssetFromPool(oldAsset);
+    updateAssetInPool(replaced);
     // The replacement keeps the old ref, so peers see one asset swap its file
     // rather than a removal followed by an unrelated addition.
     collabTransact(() => {
@@ -1731,8 +1755,14 @@ const EditorsInner = (props: EditorsInnerProps) => {
                 : undefined
             }
             onSave={async (asset, prevRef) => {
-              // Optimistic: reflect the edit in the authoritative pool first so
-              // the change shows immediately, then notify the host to persist.
+              // Persist before touching the document. A `ref` has to be unique
+              // across the whole project, which is more than this modal can
+              // check against its own pool (a division or another kind of
+              // asset can hold the name too), so the host is the only place
+              // the rename is truly settled. Letting it fail first means the
+              // modal reports the error with the document still intact, rather
+              // than leaving every placeholder rewritten to a ref nothing owns.
+              await props.onAssetUpdate?.(asset);
               // A ref rename also rewrites every placeholder that names it, so
               // the whole edit goes to peers as one transaction — otherwise
               // they would briefly hold placeholders pointing at neither ref.
@@ -1746,7 +1776,6 @@ const EditorsInner = (props: EditorsInnerProps) => {
                   bridge?.localAssetUpdate(asset);
                 }
               });
-              await props.onAssetUpdate?.(asset);
             }}
           />
         ) : null}
