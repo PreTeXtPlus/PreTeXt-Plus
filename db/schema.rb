@@ -88,6 +88,18 @@ ActiveRecord::Schema[8.1].define(version: 2026_07_27_221129) do
     t.index ["target_id"], name: "index_builds_on_target_id"
   end
 
+  create_table "collaborations", id: :uuid, default: -> { "gen_random_uuid()" }, force: :cascade do |t|
+    t.datetime "accepted_at"
+    t.datetime "created_at", null: false
+    t.string "invited_email", null: false
+    t.uuid "project_id", null: false
+    t.datetime "updated_at", null: false
+    t.uuid "user_id"
+    t.index ["project_id", "invited_email"], name: "index_collaborations_on_project_id_and_invited_email", unique: true
+    t.index ["project_id"], name: "index_collaborations_on_project_id"
+    t.index ["user_id"], name: "index_collaborations_on_user_id"
+  end
+
   create_table "divisions", id: :uuid, default: -> { "gen_random_uuid()" }, force: :cascade do |t|
     t.datetime "created_at", null: false
     t.boolean "is_root", default: false, null: false
@@ -198,6 +210,21 @@ ActiveRecord::Schema[8.1].define(version: 2026_07_27_221129) do
     t.datetime "updated_at", null: false
   end
 
+  create_table "project_doc_updates", force: :cascade do |t|
+    t.datetime "created_at", null: false
+    t.binary "payload", null: false
+    t.uuid "project_id", null: false
+    t.index ["project_id"], name: "index_project_doc_updates_on_project_id"
+  end
+
+  create_table "project_docs", id: :uuid, default: -> { "gen_random_uuid()" }, force: :cascade do |t|
+    t.datetime "created_at", null: false
+    t.uuid "project_id", null: false
+    t.binary "snapshot"
+    t.datetime "updated_at", null: false
+    t.index ["project_id"], name: "index_project_docs_on_project_id", unique: true
+  end
+
   create_table "projects", id: :uuid, default: -> { "gen_random_uuid()" }, force: :cascade do |t|
     t.datetime "created_at", null: false
     t.text "docinfo"
@@ -299,11 +326,15 @@ ActiveRecord::Schema[8.1].define(version: 2026_07_27_221129) do
   add_foreign_key "build_files", "builds"
   add_foreign_key "builds", "projects"
   add_foreign_key "builds", "targets"
+  add_foreign_key "collaborations", "projects"
+  add_foreign_key "collaborations", "users"
   add_foreign_key "divisions", "projects"
   add_foreign_key "pay_charges", "pay_customers", column: "customer_id"
   add_foreign_key "pay_charges", "pay_subscriptions", column: "subscription_id"
   add_foreign_key "pay_payment_methods", "pay_customers", column: "customer_id"
   add_foreign_key "pay_subscriptions", "pay_customers", column: "customer_id"
+  add_foreign_key "project_doc_updates", "projects"
+  add_foreign_key "project_docs", "projects"
   add_foreign_key "projects", "users"
   add_foreign_key "subscription_seats", "pay_subscriptions"
   add_foreign_key "subscription_seats", "users"

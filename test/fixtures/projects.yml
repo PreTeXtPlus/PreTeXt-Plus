@@ -36,6 +36,14 @@ slides:
   pretext_source: <pretext><slideshow><slide><title>First</title><p>Content</p></slide></slideshow></pretext>
   document_type: slideshow
 
+# A subscriber-owned project (collaborator cap 5), used by collaboration
+# tests that need room to invite. Holds the :pending invitation fixture.
+team:
+  user: subscribed
+  title: Team Book
+  pretext_source: <pretext><book><chapter><title>Team</title><p>Content</p></chapter></book></pretext>
+  document_type: book
+
 # A team-curated starter, flagged is_template so it shows up in the
 # "Start project from template" chooser. Owned by user two like any other
 # project -- templates are ordinary projects the admin UI has flagged.

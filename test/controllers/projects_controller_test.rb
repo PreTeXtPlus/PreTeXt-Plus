@@ -73,11 +73,22 @@ class ProjectsControllerTest < ActionDispatch::IntegrationTest
 
   test "cannot download another user's project" do
     sign_out :user
-    sign_in users(:two)
+    # Not users(:two): they collaborate on this project (see collaborations.yml)
+    # and so can legitimately download it. This needs someone with no access at all.
+    sign_in users(:subscribed)
 
     get download_project_url(@project)
 
     assert_redirected_to projects_path
+  end
+
+  test "a collaborator can download the project they share" do
+    sign_out :user
+    sign_in users(:two)
+
+    get download_project_url(@project)
+
+    assert_response :success
   end
 
   # ---- legacy share links ----
@@ -233,6 +244,46 @@ class ProjectsControllerTest < ActionDispatch::IntegrationTest
     end
     assert_response :success
     assert_not Division.exists?(division.id)
+  end
+
+  # The collaborative editor mints its own uuids and sends the division under
+  # one, so a create no longer waits on this request to learn an id.
+  test "update creates a division under a client-minted id" do
+    id = SecureRandom.uuid
+    assert_difference("@project.divisions.count", 1) do
+      patch project_url(@project),
+        params: { project: { divisions_attributes: [ { id: id, ref: "minted", source_format: "pretext", source: "<section/>" } ] } },
+        as: :json
+    end
+    assert_response :success
+    assert_equal "minted", @project.divisions.find(id).ref
+  end
+
+  # A removal is re-sent from the shared doc's tombstones until it sticks, so
+  # the second attempt must not fail the whole save.
+  test "update tolerates a _destroy for a division that is already gone" do
+    division = @project.divisions.create!(ref: "twice-removed", source_format: "pretext", source: "<section/>")
+    2.times do
+      patch project_url(@project),
+        params: { project: { divisions_attributes: [ { id: division.id, _destroy: true } ] } },
+        as: :json
+      assert_response :success
+    end
+    assert_not Division.exists?(division.id)
+  end
+
+  # Tolerating unknown ids means an id belonging to *another* project reaches
+  # the database as a primary-key conflict. It cannot touch that row, but it
+  # must not surface as a 500 either.
+  test "update refuses a nested id that belongs to another project" do
+    foreign = divisions(:two)
+    assert_no_difference("@project.divisions.count") do
+      patch project_url(@project),
+        params: { project: { divisions_attributes: [ { id: foreign.id, ref: "stolen", source_format: "pretext", source: "<section/>" } ] } },
+        as: :json
+    end
+    assert_response :unprocessable_entity
+    assert_equal "document", foreign.reload.ref
   end
 
   test "update rejects a division whose ref collides with an asset" do

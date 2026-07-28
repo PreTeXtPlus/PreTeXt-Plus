@@ -5,6 +5,13 @@ class User < ApplicationRecord
   has_many :projects, dependent: :destroy
   has_many :assets, through: :projects
 
+  # Projects this user collaborates on (owned by someone else). A collaboration
+  # row with a user_id is accepted by definition -- pending invites have no
+  # user yet -- so no scoping is needed here. Destroying the rows on account
+  # deletion just removes this user from those projects.
+  has_many :collaborations, dependent: :destroy
+  has_many :shared_projects, through: :collaborations, source: :project
+
   belongs_to :tos, class_name: "Term", required: false
   belongs_to :privacy, class_name: "Term", required: false
 
@@ -29,6 +36,7 @@ class User < ApplicationRecord
     allow_nil: true
 
   before_create :set_common_docinfo
+  after_create :claim_project_invitations
 
   # Case-insensitive counterpart to find_by(username:) -- a profile URL should
   # resolve regardless of how the visitor cased it, matching the uniqueness rule
@@ -88,6 +96,24 @@ class User < ApplicationRecord
   end
 
   private
+
+  # Registering is enough to pick up invitations already addressed to you: a
+  # collaborator only has to be a registered user, not a confirmed one (see
+  # CollaborationsController#create). Without this, an invite sent *before*
+  # someone signed up would strand them until they confirmed, which is the same
+  # inconsistency from the other direction.
+  def claim_project_invitations
+    Collaboration.claim_for(self)
+  end
+
+  # Devise (confirmable) hook: runs whenever this user confirms an email address.
+  # Still needed alongside the create hook because `reconfirmable` means a
+  # *changed* address only becomes this user's `email` once confirmed, so an
+  # invitation sent to the new address can only be claimed here.
+  def after_confirmation
+    super
+    claim_project_invitations
+  end
 
   def set_common_docinfo
     self.common_docinfo = Project.default_docinfo if self.common_docinfo.blank?

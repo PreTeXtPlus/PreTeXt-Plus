@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useRef } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import ReactDOM from "react-dom/client";
 import {
   QueryClient,
@@ -7,8 +7,14 @@ import {
   useQuery,
   useQueryClient,
 } from "@tanstack/react-query";
-import { Editors, assembleFullProjectSource } from "@pretextbook/web-editor";
+import {
+  Editors,
+  assembleFullProjectSource,
+  clearDeletions,
+  docToState,
+} from "@pretextbook/web-editor";
 import "@pretextbook/web-editor/dist/web-editor.css";
+import { YCableProvider } from "./collab/yCableProvider";
 
 /** @typedef {import("@pretextbook/web-editor").Asset} Asset */
 /** @typedef {import("@pretextbook/web-editor").Division} Division */
@@ -291,6 +297,12 @@ function railsToEditorState(json) {
     // rootDivisionId is the root division's *xmlId* (its ref), which is how the
     // web-editor identifies divisions, not the database id.
     rootDivisionId: root ? (root.ref ?? "") : undefined,
+    // The root's *database* id: stable across xml:id renames, which is how the
+    // collab save path re-finds the root in doc-derived state.
+    rootDivisionUuid: root ? String(root.id) : undefined,
+    // Real-time collaboration flag + the identity shown on remote cursors.
+    collaborative: json.collaborative === true,
+    editorUser: json.editor_user ?? null,
   };
 }
 
@@ -336,41 +348,53 @@ function assembleFullPretextSource(state, projectAssets) {
 // Build the PATCH body Rails expects.  Only the fields permitted by
 // project_params are sent.  We omit is_root so updates never toggle the root.
 //
-// `deletes` is a list of division ids (Rails UUID PKs) the user removed; each
-// is sent as a `_destroy` marker so Rails drops that row.  New divisions are
-// sent with the client-minted UUID the host assigned in onDivisionAdd, which
-// Rails inserts under that id -- so the id the host holds is stable from
-// creation and survives later xml:id (ref) renames.
+// Every division carries the UUID the *editor* minted for it (see
+// `onDivisionAdd`), which Rails inserts under if it has never seen it and
+// updates otherwise -- Project#tolerate_client_minted_ids makes that entry an
+// upsert.  So this one payload both creates and updates, and re-sending a
+// division is harmless: the id is stable from the moment the editor created it
+// and survives later xml:id (ref) renames.
 //
-// Asset *membership* is NOT in this payload: it's persisted the moment the user
-// adds/removes an asset, via its own single-entry `assets_attributes` PATCH
-// (see the asset callbacks), not deferred to this bulk PATCH.  We still pass
-// `projectAssets` (server truth) so the assembled `pretext_source` can resolve
-// image refs.
+// `deletes` are records the session removed, as `{id, kind}` -- the shared
+// doc's tombstones.  Each becomes a `_destroy` marker in the matching
+// collection.  Re-sending one is likewise harmless (Rails drops a `_destroy`
+// naming a row that is already gone), which is what makes a removal survive the
+// acting client's own request failing or its tab closing mid-flight.
+//
+// Asset *content* is NOT in this payload: an asset's bytes can't ride in the
+// shared doc, so the client that uploads one persists it immediately through
+// its own single-entry `assets_attributes` PATCH (see the asset callbacks).
+// Only asset *destroys* are re-sent from here.  We still pass `projectAssets`
+// so the assembled `pretext_source` can resolve image refs.
 /**
  * @param {EditorState} state
  * @param {Asset[]} projectAssets
- * @param {string[]} [deletes] - Division ids (Rails UUID PKs) to destroy.
+ * @param {{id: string, kind: "division"|"asset"}[]} [deletes] - Records to destroy.
  * @returns {{project: Object}}
  */
 function editorStateToRailsPayload(state, projectAssets, deletes = []) {
-  return {
-    project: {
-      title: state.title,
-      docinfo: state.docinfo,
-      use_common_docinfo: state.useCommonDocinfo,
-      pretext_source: assembleFullPretextSource(state, projectAssets),
-      divisions_attributes: [
-        ...state.divisions.map((d) => ({
-          id: d.id,
-          ref: d.xmlId,
-          source: d.source,
-          source_format: d.sourceFormat,
-        })),
-        ...deletes.map((id) => ({ id, _destroy: true })),
-      ],
-    },
+  const project = {
+    title: state.title,
+    docinfo: state.docinfo,
+    use_common_docinfo: state.useCommonDocinfo,
+    pretext_source: assembleFullPretextSource(state, projectAssets),
+    divisions_attributes: [
+      ...state.divisions.map((d) => ({
+        id: d.id,
+        ref: d.xmlId,
+        source: d.source,
+        source_format: d.sourceFormat,
+      })),
+      ...deletes
+        .filter((d) => d.kind === "division")
+        .map(({ id }) => ({ id, _destroy: true })),
+    ],
   };
+  const assetDeletes = deletes
+    .filter((d) => d.kind === "asset")
+    .map(({ id }) => ({ id, _destroy: true }));
+  if (assetDeletes.length) project.assets_attributes = assetDeletes;
+  return { project };
 }
 
 // The subset of working state that actually persists — used for dirty checks so
@@ -390,10 +414,108 @@ function persistableShape(state) {
       source: d.source,
       sourceFormat: d.sourceFormat,
     })),
-    // Asset membership is deliberately excluded: it's persisted immediately via
+    // Tombstones count as unsaved work: a removal whose own PATCH failed is
+    // only ever retried because the next dirty check still sees it here.
+    deletes: (state.deletes ?? []).map((d) => `${d.kind}:${d.id}`).sort(),
+    // Asset *content* is deliberately excluded: it's persisted immediately via
     // its own single-entry PATCH, so it never participates in the document
     // dirty check.
   });
+}
+
+// --- Collaboration helpers -------------------------------------------------
+
+// Deterministic per-user cursor/avatar color (same palette every session, so
+// a collaborator keeps their color across visits).
+const COLLAB_COLORS = [
+  "#0e639c", "#b45309", "#15803d", "#7c3aed",
+  "#be123c", "#0f766e", "#a16207", "#4338ca",
+];
+
+/**
+ * @param {string|undefined} id
+ * @returns {string}
+ */
+function colorForUser(id) {
+  let hash = 0;
+  for (const char of String(id ?? "")) {
+    hash = (hash * 31 + char.charCodeAt(0)) >>> 0;
+  }
+  return COLLAB_COLORS[hash % COLLAB_COLORS.length];
+}
+
+// The CollabDocState used to seed a brand-new shared doc, from the project
+// state we already loaded. Only runs for the one client that wins the seed
+// race (see YCableProvider.loadOrSeed).
+//
+// Assets are seeded too: from here on the doc, not this endpoint, is where
+// collaborators learn about each other's assets, so anything the project
+// already has must be in it. Only their metadata travels -- the bytes stay in
+// ActiveStorage, reachable through the `url` each record carries.
+/**
+ * @param {EditorState} state
+ * @returns {import("@pretextbook/web-editor").CollabDocState}
+ */
+function editorStateToCollabSeed(state) {
+  return {
+    title: state.title,
+    docinfo: state.docinfo,
+    useCommonDocinfo: state.useCommonDocinfo,
+    divisions: state.divisions.map((d) => ({
+      id: d.id,
+      xmlId: d.xmlId,
+      sourceFormat: d.sourceFormat,
+      source: d.source,
+      title: d.title,
+      type: d.type,
+    })),
+    assets: (state.projectAssets ?? []).filter((a) => a.id).map(toEditorAsset),
+  };
+}
+
+// In collab mode the shared doc — not this client's working copy — is the
+// authoritative document, so save payloads are derived from it: it already
+// contains every peer's edits, which is exactly what lets a single "leader"
+// client autosave on behalf of the whole session. Shaped like EditorState so
+// editorStateToRailsPayload/persistableShape work unchanged; divisions sorted
+// by id so dirty-check comparisons don't depend on Y.Map iteration order.
+/**
+ * @param {import("yjs").Doc} doc
+ * @param {EditorState} base - The initially loaded state (supplies the fields
+ *   that don't live in the doc: commonDocinfo, projectType, root identity).
+ * @returns {EditorState}
+ */
+function collabEditorState(doc, base) {
+  const shared = docToState(doc);
+  const divisions = shared.divisions
+    .slice()
+    .sort((a, b) => (a.id < b.id ? -1 : 1))
+    .map((d) => ({
+      id: d.id,
+      xmlId: d.xmlId,
+      source: d.source,
+      sourceFormat: d.sourceFormat,
+      title: d.title,
+      type: d.type,
+    }));
+  // Re-find the root by database id — stable across xml:id renames.
+  const root = divisions.find((d) => d.id === base.rootDivisionUuid);
+  return {
+    title: shared.title,
+    docinfo: shared.docinfo,
+    commonDocinfo: base.commonDocinfo,
+    useCommonDocinfo: shared.useCommonDocinfo ?? base.useCommonDocinfo,
+    projectType: base.projectType,
+    divisions,
+    // The doc's assets are the session's truth about which assets exist; the
+    // save only needs them to resolve <plus:* ref="..."/> placeholders in the
+    // assembled source, since asset rows are written by whoever uploaded them.
+    projectAssets: shared.assets.slice().sort((a, b) => (a.id < b.id ? -1 : 1)),
+    // Tombstones, sorted for a stable dirty-check comparison.
+    deletes: shared.deleted.slice().sort((a, b) => (a.id < b.id ? -1 : 1)),
+    rootDivisionId: root?.xmlId ?? base.rootDivisionId,
+    rootDivisionUuid: base.rootDivisionUuid,
+  };
 }
 
 // --- The editor app --------------------------------------------------------
@@ -448,10 +570,6 @@ function EditorApp({ config }) {
   // here — the web-editor re-renders itself from its own store.
   const working = useRef(null);
   const serverSnapshot = useRef(null);
-  // Division ids (Rails UUID PKs) the user removed but we haven't saved yet.
-  // Held separately because a removed division is gone from `working`, so its
-  // _destroy marker has to be tracked outside the pool until the next save.
-  const pendingDeletes = useRef([]);
   // The initial data handed to <Editors>.  Captured exactly once so the props
   // stay stable for the whole session; pushing fresh `divisions` mid-edit would
   // fight the user's cursor.  Subsequent edits flow out via onContentChange.
@@ -469,6 +587,49 @@ function EditorApp({ config }) {
     serverSnapshot.current = structuredClone(projectQuery.data);
   }
   if (projectQuery.data) serverAssets.current = projectQuery.data.projectAssets;
+
+  // ----- Real-time collaboration ------------------------------------------
+  // When the project has collaborators, the buffer sync moves to a shared
+  // Yjs doc carried over ActionCable (YCableProvider); this PATCH-based module
+  // remains the *persistence* layer, with the save payload derived from the
+  // doc (see collabEditorState) and autosave gated to the session leader.
+  // Solo projects skip all of this — providerRef stays null and behavior is
+  // exactly as before.
+  const providerRef = useRef(null);
+  // The doc-derived state as of the last successful save (or session join) —
+  // the collab-mode dirty-check baseline, mirroring serverSnapshot.
+  const collabServerSnapshot = useRef(null);
+  const [collabStatus, setCollabStatus] = useState("off"); // off|connecting|ready|error
+
+  useEffect(() => {
+    const data = projectQuery.data;
+    if (!data?.collaborative || providerRef.current) return;
+    const provider = new YCableProvider({
+      projectId,
+      csrfToken,
+      user: {
+        name: data.editorUser?.name || "Anonymous",
+        color: colorForUser(data.editorUser?.id),
+      },
+    });
+    providerRef.current = provider;
+    setCollabStatus("connecting");
+    provider
+      .connect(() => editorStateToCollabSeed(data))
+      .then(() => {
+        // Baseline for the dirty check comes from the doc itself: it may
+        // already be ahead of what we loaded (peers kept editing), and those
+        // differences belong to the next autosave, not to a false "clean".
+        collabServerSnapshot.current = collabEditorState(provider.doc, data);
+        setCollabStatus("ready");
+      })
+      .catch((error) => {
+        console.error("Failed to join collaborative session:", error);
+        setCollabStatus("error");
+      });
+  }, [projectQuery.data, projectId, csrfToken]);
+
+  useEffect(() => () => providerRef.current?.destroy(), []);
 
   // ----- WRITE: save via TanStack mutation ---------------------------------
   const saveMutation = useMutation({
@@ -490,32 +651,72 @@ function EditorApp({ config }) {
   });
 
   const isDirty = useCallback(() => {
+    // Collab mode: dirtiness is a property of the shared doc vs. what was last
+    // persisted from it, not of this client's own working copy.
+    const provider = providerRef.current;
+    if (provider) {
+      if (!collabServerSnapshot.current || !initial.current) return false;
+      const docState = collabEditorState(provider.doc, initial.current);
+      return persistableShape(docState) !== persistableShape(collabServerSnapshot.current);
+    }
     if (!working.current || !serverSnapshot.current) return false;
-    if (pendingDeletes.current.length > 0) return true;
     return persistableShape(working.current) !== persistableShape(serverSnapshot.current);
   }, []);
 
-  // Save the current working copy.  `force` saves even when not dirty (used by
-  // the Save button and before copy-conversion).  `enqueue` triggers the server
-  // to kick off an html_source background build (Save button only, not autosave).
-  // Snapshots the buffer up front so edits made *during* the in-flight save
-  // aren't mistakenly marked saved.
+  // Save the current document.  `hard` saves even when not dirty (used by
+  // the Save button and before copy-conversion) and triggers the server-side
+  // html_source rebuild.  Snapshots the buffer up front so edits made *during*
+  // the in-flight save aren't mistakenly marked saved.
+  //
+  // In collab mode the payload is derived from the shared doc (which holds
+  // every peer's edits), and soft (auto)saves run only on the session leader —
+  // one writer for the whole session instead of N clients issuing near-
+  // identical PATCHes. Autosave failures are logged but not alerted: with the
+  // doc as the source of truth a transient failure is retried on the next
+  // tick, and racing a just-deleted division is an expected (self-healing)
+  // case. Explicit saves still alert.
   const save = useCallback(
     async (hard = false) => {
+      const provider = providerRef.current;
+      if (provider) {
+        if (!initial.current || !collabServerSnapshot.current) return false;
+        if (!hard && !provider.isLeader()) return true;
+        if (!hard && !isDirty()) return true;
+        const snapshot = collabEditorState(provider.doc, initial.current);
+        try {
+          await saveMutation.mutateAsync({
+            state: snapshot,
+            // The doc's assets, not this client's last fetch: a peer may have
+            // added an asset whose placeholder is already in the source, and
+            // the assembled document has to be able to resolve it.
+            assets: snapshot.projectAssets,
+            deletes: snapshot.deletes,
+            enqueue: hard,
+          });
+          // Rails has now dropped those rows, so the tombstones have done their
+          // job; clearing them keeps the doc from accumulating one per removal
+          // for the life of the session.
+          clearDeletions(provider.doc, snapshot.deletes);
+          collabServerSnapshot.current = { ...snapshot, deletes: [] };
+          return true;
+        } catch (error) {
+          console.error("Error saving:", error);
+          if (hard) alert("An error occurred while saving.");
+          return false;
+        }
+      }
+
       if (!working.current) return false;
       if (!hard && !isDirty()) return true;
       const snapshot = structuredClone(working.current);
       const assets = serverAssets.current;
-      const deletes = pendingDeletes.current.slice();
       try {
-        await saveMutation.mutateAsync({ state: snapshot, assets, deletes, enqueue: hard });
+        await saveMutation.mutateAsync({ state: snapshot, assets, deletes: [], enqueue: hard });
         serverSnapshot.current = snapshot;
-        // Drop the deletes we just persisted, keeping any queued mid-save.
-        pendingDeletes.current = pendingDeletes.current.filter((id) => !deletes.includes(id));
         return true;
       } catch (error) {
         console.error("Error saving:", error);
-        alert("An error occurred while saving.");
+        if (hard) alert("An error occurred while saving.");
         return false;
       }
     },
@@ -616,75 +817,100 @@ function EditorApp({ config }) {
   // onDivisionAdd fires for every new division -- manually added via the TOC,
   // converted from latex/markdown, or auto-created from a typed
   // <plus:TYPE ref="..."/> placeholder -- and the web-editor has already added
-  // it to its own pool under a throwaway local id before calling us. Unlike the
-  // rest of the pool (which only reaches Rails on the next save), we persist
-  // this one immediately via a single-entry `divisions_attributes` PATCH (no
-  // `id`, so Rails builds a brand new row and assigns its own UUID): the
-  // web-editor awaits our return value to learn the real backend id, so
-  // creation can't wait for the next autosave. The new row's `ref` is unique
-  // per project (validated), so we match the response back to it by `ref`.
+  // it to its own pool, and to the shared doc, before calling us.
   //
-  // On failure we log and rethrow rather than add anything to `working` --  the
-  // web-editor swallows the rejection and keeps the division in its own pool
-  // under the local id, with no backing Rails record and no retry. Acceptable
-  // for a first pass, but means a failed create here is currently invisible to
-  // the user.
+  // The division arrives carrying the UUID the *editor* minted for it, and we
+  // insert under that id rather than let Rails assign one. That inversion is
+  // the point: the record exists for collaborators the instant it is created
+  // rather than only after this round trip, so the parent's
+  // <plus:* ref="..."/> placeholder is never briefly pointing at nothing.
+  // Rails takes the unfamiliar id as an insert (see
+  // Project#tolerate_client_minted_ids), which also makes re-sending it later
+  // -- as the bulk save does -- an update rather than a duplicate.
+  //
+  // We still persist immediately rather than waiting for the next bulk save, so
+  // a division survives the tab closing right after it is created. But nothing
+  // depends on this call succeeding any more: the division is already in the
+  // doc and in `working`, the next save re-sends it, and the editor ignores our
+  // return value. So a failure is logged, not thrown.
   const onDivisionAdd = useCallback(
     async (division) => {
       const w = working.current;
       if (!w) return;
       if (w.divisions.some((d) => d.xmlId === division.xmlId)) return;
+      const record = {
+        id: division.id,
+        xmlId: division.xmlId,
+        source: division.source ?? "",
+        sourceFormat: division.sourceFormat ?? "pretext",
+      };
+      w.divisions.push(record);
       try {
         // division.title/type aren't sent: like the root division, they're
         // derivable from `source` itself (the wrapping tag + <title>) rather
         // than stored separately, so there's nothing here that could go stale.
-        const json = await patchProjectJson({
+        await patchProjectJson({
           divisions_attributes: [
             {
-              ref: division.xmlId,
-              source_format: division.sourceFormat,
-              source: division.source,
+              id: record.id,
+              ref: record.xmlId,
+              source_format: record.sourceFormat,
+              source: record.source,
             },
           ],
         });
-        const created = (json.divisions ?? []).find((d) => d.ref === division.xmlId);
-        if (!created) throw new Error("Newly created division missing from response");
-        const record = {
-          id: created.id,
-          xmlId: division.xmlId,
-          source: division.source ?? "",
-          sourceFormat: division.sourceFormat ?? "pretext",
-        };
-        w.divisions.push(record);
-        // This division is already persisted (we just PATCHed it), so mirror it
-        // into the server snapshot too: otherwise it looks unsaved, and removing
-        // it before the next bulk save would skip the _destroy (see
-        // onDivisionRemove) and orphan the row on the server. A distinct object
-        // per pool keeps the working copy and snapshot from aliasing.
+        // Now persisted, so mirror it into the server snapshot too: otherwise
+        // it looks unsaved, and removing it before the next bulk save would
+        // skip the _destroy (see onDivisionRemove) and orphan the row on the
+        // server. A distinct object per pool keeps the working copy and
+        // snapshot from aliasing.
         serverSnapshot.current?.divisions.push({ ...record });
-        return created.id;
       } catch (error) {
+        // Deliberately left out of serverSnapshot: the division stays dirty, so
+        // the next bulk save carries it -- and in a collaborative session that
+        // save may run on any client, since the doc holds the division too.
         console.error("Error creating division:", error);
-        throw error;
       }
     },
     [patchProjectJson],
   );
 
-  const onDivisionRemove = useCallback((xmlId) => {
-    const w = working.current;
-    if (!w) return;
-    const index = w.divisions.findIndex((d) => d.xmlId === xmlId);
-    if (index === -1) return;
-    const [removed] = w.divisions.splice(index, 1);
-    // Only ask Rails to destroy a row that was actually persisted. onDivisionAdd
-    // records every division it creates into serverSnapshot, so a division that
-    // reached the server -- whether loaded initially or added this session -- is
-    // found here and gets a _destroy; one the editor created and dropped without
-    // ever calling onDivisionAdd (no server row) is correctly skipped.
-    const persisted = serverSnapshot.current?.divisions.some((d) => d.id === removed.id);
-    if (persisted) pendingDeletes.current.push(removed.id);
-  }, []);
+  // Division removal persists immediately (like every asset mutation), not on
+  // the next bulk save: in collab mode the bulk autosave may run on a *different*
+  // client (the leader), whose doc-derived payload simply omits the removed
+  // division. What carries the removal *across* clients is the shared doc's
+  // tombstone, which the leader replays as a _destroy until it sticks — so this
+  // immediate request is the fast path, not the only one.
+  //
+  // The destroy is sent unconditionally now. Rails drops a _destroy naming a row
+  // it doesn't have (Project#tolerate_client_minted_ids), so a division the
+  // editor created and removed before its create landed costs one harmless
+  // request rather than needing to be recognized here.
+  const onDivisionRemove = useCallback(
+    (xmlId) => {
+      const w = working.current;
+      if (!w) return;
+      const index = w.divisions.findIndex((d) => d.xmlId === xmlId);
+      if (index === -1) return;
+      const [removed] = w.divisions.splice(index, 1);
+      if (serverSnapshot.current) {
+        serverSnapshot.current.divisions = serverSnapshot.current.divisions.filter(
+          (d) => d.id !== removed.id,
+        );
+      }
+      patchProjectJson({ divisions_attributes: [ { id: removed.id, _destroy: true } ] })
+        .catch((error) => {
+          console.error("Error removing division:", error);
+          // In a collaborative session the doc's tombstone means the leader will
+          // retry this, so only a solo editor is left with nothing to fall back
+          // on and needs telling.
+          if (!providerRef.current) {
+            alert("An error occurred while removing the section.");
+          }
+        });
+    },
+    [patchProjectJson],
+  );
 
   const onDivisionUpdate = useCallback((xmlId, changes) => {
     const w = working.current;
@@ -801,12 +1027,33 @@ function EditorApp({ config }) {
     [assetFetchUrl, csrfToken],
   );
 
-  // Persists an edit to an asset's authored `source` (e.g. an image's
-  // <shortdescription>/<description> XML) made via the web-editor's "Edit
-  // source" dialog.
+  // Persists an edit to an existing asset made through the web-editor's asset
+  // editor -- its `ref`, its `title`, and its authored `source` (an image's
+  // <shortdescription>/<description> XML).  Also the commit step of Duplicate
+  // and Replace, which upload a file first and then give the resulting asset
+  // its real ref/title/source.
+  //
+  // All three fields go every time, keyed by `id` (the UUID, stable across
+  // renames -- never `ref`, which is the thing being changed).  `ref`
+  // especially: it is the name `<plus:* ref="..."/>` placeholders resolve
+  // against, the `<image source="ref.ext">` the assembled pretext_source
+  // carries, and the segment `/projects/:id/external/:ref` serves the file
+  // from.  Leaving it here -- as this callback used to, sending only `source`
+  // -- meant a rename showed correctly in the editor while every build and
+  // published page still looked the asset up under its old name.
+  //
+  // JSON.stringify drops undefined values, so an asset that arrives without a
+  // title or ref simply leaves that column alone rather than nulling it.
   const onAssetUpdate = useCallback(
     async (asset) => {
-      await patchProjectJson({ assets_attributes: [{ id: asset.id, source: asset.source ?? "" }] });
+      await patchProjectJson({
+        assets_attributes: [ {
+          id: asset.id,
+          ref: asset.ref,
+          title: asset.title,
+          source: asset.source ?? "",
+        } ],
+      });
       invalidateAssetQueries();
     },
     [patchProjectJson, invalidateAssetQueries],
@@ -816,15 +1063,27 @@ function EditorApp({ config }) {
   // project now, so there's no separate "remove membership vs. delete" -- this
   // destroys the row). The editor has already removed it from its pool; this is
   // fire-and-forget persistence, then a reconcile via invalidate.
+  //
+  // In a collaborative session the editor has also written a tombstone into the
+  // shared doc, so this request failing is recoverable: the session leader
+  // re-sends the _destroy on its next save, and peers have already dropped the
+  // asset from their pools regardless.
+  //
+  // The promise is returned so Replace can await it: the replacement takes over
+  // this asset's ref, and Asset validates ref uniqueness within a project, so
+  // that rename only succeeds once this row is gone.  It still resolves rather
+  // than rejects on failure (the alert below is the report) -- a Replace whose
+  // removal failed then fails again, visibly, on the rename.
   const onAssetRemove = useCallback(
-    (asset) => {
+    (asset) =>
       patchProjectJson({ assets_attributes: [{ id: asset.id, _destroy: true }] })
         .then(() => invalidateAssetQueries())
         .catch((error) => {
           console.error("Error removing asset:", error);
-          alert("An error occurred while removing the asset.");
-        });
-    },
+          if (!providerRef.current) {
+            alert("An error occurred while removing the asset.");
+          }
+        }),
     [patchProjectJson, invalidateAssetQueries],
   );
 
@@ -968,8 +1227,22 @@ function EditorApp({ config }) {
   if (projectQuery.isError) {
     return <div className="mx-5">Error loading editor state. Please reload the page.</div>;
   }
+  // A collaborative project's editor waits for the shared doc: mounting before
+  // it arrives would show (and let the user edit) state the session may have
+  // long since moved past.
+  if (projectQuery.data?.collaborative && collabStatus !== "ready") {
+    if (collabStatus === "error") {
+      return (
+        <div className="mx-5">
+          Could not join the collaborative editing session. Please reload the page.
+        </div>
+      );
+    }
+    return <div className="mx-5">Connecting to collaborative session…</div>;
+  }
 
   const state = initial.current;
+  const provider = providerRef.current;
   return (
     <Editors
       title={state.title}
@@ -979,6 +1252,15 @@ function EditorApp({ config }) {
       projectType={state.projectType}
       divisions={state.divisions}
       rootDivisionId={state.rootDivisionId}
+      collaboration={
+        provider
+          ? {
+              doc: provider.doc,
+              awareness: provider.awareness,
+              user: provider.user,
+            }
+          : undefined
+      }
       projectAssets={projectAssets}
       projectUrl={projectUrl}
       saveButtonLabel="Save"

@@ -1,0 +1,95 @@
+<%# Collaborator management on the project dashboard.
+
+    The roster leads with the project's owner, badged as such: who owns the
+    project is roster information, so it belongs in the list rather than in a
+    footnote beneath it. The owner's row carries no Remove button — ownership
+    is not access that can be revoked here.
+
+    Owner: the rest of the roster gets a Remove button, plus an invite form
+    and the cap.
+
+    Collaborator: the same list read-only, plus a separate "Leave" action.
+    Leaving is deliberately NOT a Remove button on your own roster row:
+    removing a collaborator and walking away from someone else's project are
+    different acts, and a shared control would imply roster power a
+    collaborator does not have. Only the owner can invite or remove anyone. %>
+<% can_manage = project.user == current_user || current_user&.admin? %>
+<% collaborations = project.collaborations.includes(:user).order(:created_at) %>
+
+<div class="mt-3">
+  <ul class="flex flex-col gap-2">
+    <li class="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-gray-200 px-3 py-2">
+      <span class="min-w-0">
+        <span class="text-sm font-medium"><%= project.user.name_with_email %></span>
+        <span class="ml-1 rounded-full bg-indigo-100 px-2 py-0.5 font-mono text-xs text-indigo-800">owner</span>
+        <% if project.user == current_user %>
+          <span class="ml-1 rounded-full bg-gray-100 px-2 py-0.5 font-mono text-xs text-gray-600">you</span>
+        <% end %>
+      </span>
+    </li>
+    <% collaborations.each do |collaboration| %>
+      <li class="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-gray-200 px-3 py-2">
+        <span class="min-w-0">
+          <span class="text-sm font-medium">
+            <%= collaboration.user&.name_with_email || collaboration.invited_email %>
+          </span>
+          <% unless collaboration.accepted? %>
+            <span class="ml-1 rounded-full bg-amber-100 px-2 py-0.5 font-mono text-xs text-amber-800">invited</span>
+          <% end %>
+          <% if collaboration.user == current_user %>
+            <span class="ml-1 rounded-full bg-gray-100 px-2 py-0.5 font-mono text-xs text-gray-600">you</span>
+          <% end %>
+        </span>
+        <% if can_manage %>
+          <%= button_to "Remove", project_collaboration_path(project, collaboration),
+                method: :delete,
+                class: "shrink-0 cursor-pointer rounded-md px-2.5 py-1.5 text-sm text-red-700 hover:bg-red-50",
+                data: { turbo_confirm: "Remove #{collaboration.invited_email} from this project? They lose access immediately." } %>
+        <% end %>
+      </li>
+    <% end %>
+  </ul>
+
+  <% if can_manage %>
+    <% if collaborations.count < project.collaborator_limit %>
+      <%= form_with url: project_collaborations_path(project), method: :post,
+            class: "mt-3 flex flex-wrap items-end gap-3" do |form| %>
+        <div>
+          <%= form.label :email, "Invite by email", class: "block text-xs text-gray-600" %>
+          <%= form.email_field :email, placeholder: "colleague@example.com", required: true,
+                class: "mt-1 rounded-md border border-gray-300 px-2 py-1.5 text-sm" %>
+        </div>
+        <%= form.submit "Invite",
+              class: "cursor-pointer rounded-md bg-indigo-600 px-3 py-2 text-sm font-medium text-white hover:bg-indigo-500" %>
+      <% end %>
+      <p class="mt-2 text-xs text-gray-500">
+        Collaborators can write, build, and publish this project — everything except deleting it.
+        <%= pluralize(collaborations.count, "collaborator") %> of <%= project.collaborator_limit %>.
+      </p>
+    <% else %>
+      <p class="mt-3 text-sm text-gray-500">
+        This project has its full <%= project.collaborator_limit %>
+        <%= "collaborator".pluralize(project.collaborator_limit) %>.
+        <% unless project.user.subscribed? %>
+          <%= link_to "Subscribe", subscriptions_path, class: "text-blue-600 hover:underline" %>
+          to invite up to 5.
+        <% end %>
+      </p>
+    <% end %>
+  <% else %>
+    <div class="mt-3 flex flex-wrap items-center justify-between gap-3">
+      <%# Who the owner is now reads off the roster; this only has to say that
+          the roster is not yours to change. %>
+      <p class="text-sm text-gray-600">Only the owner can change who has access.</p>
+      <% my_collaboration = collaborations.find { |c| c.user_id == current_user&.id } %>
+      <% if my_collaboration %>
+        <%# Your own way out, not a roster action: it ends *your* access and
+            nothing else, and reads that way. %>
+        <%= button_to "Leave this project", project_collaboration_path(project, my_collaboration),
+              method: :delete,
+              class: "shrink-0 cursor-pointer rounded-md border border-gray-300 px-3 py-2 text-sm font-medium hover:bg-gray-50",
+              data: { turbo_confirm: "Leave “#{project.title}”? You lose access until #{project.user.name_with_email} invites you again." } %>
+      <% end %>
+    </div>
+  <% end %>
+</div>

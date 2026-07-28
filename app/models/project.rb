@@ -1,6 +1,19 @@
 class Project < ApplicationRecord
   belongs_to :user
 
+  # Collaborators (and pending invitations) die with the project; the users
+  # themselves are of course untouched.
+  has_many :collaborations, dependent: :destroy
+  has_many :collaborators, -> { merge(Collaboration.accepted) },
+    through: :collaborations, source: :user
+
+  # The shared Yjs document backing real-time collaborative editing, plus its
+  # append-only update log. Exists only while the project actually has
+  # collaborations (see #collaborative? and #reset_collaborative_doc!) and is
+  # created lazily by the first collaborative editor session.
+  has_one :project_doc, dependent: :destroy
+  has_many :project_doc_updates, dependent: :delete_all
+
   # dependent: :destroy so deleting a project drops its assets (and their
   # attached files) too -- an asset has no life outside its
   # project, so there's nothing to preserve.
@@ -13,6 +26,16 @@ class Project < ApplicationRecord
   has_many :divisions, dependent: :destroy
   # allow_destroy lets the editor remove a division by sending `_destroy: true`.
   accepts_nested_attributes_for :divisions, allow_destroy: true
+
+  # Both nested collections accept ids the editor minted itself; see
+  # #tolerate_client_minted_ids for why, and for what these two overrides do.
+  def divisions_attributes=(attributes)
+    super(tolerate_client_minted_ids(divisions, attributes))
+  end
+
+  def assets_attributes=(attributes)
+    super(tolerate_client_minted_ids(assets, attributes))
+  end
 
   enum :document_type, { article: 0, book: 1, slideshow: 2 }, default: :article, suffix: true, validate: true
 
@@ -55,6 +78,36 @@ class Project < ApplicationRecord
 
   def root_division
     divisions.find_by(is_root: true)
+  end
+
+  # How many collaborators (accepted + pending invites) this project may have.
+  # Keyed to the OWNER's standing, not the inviter's or invitee's. Enforced
+  # only when adding (see Collaboration#within_collaborator_limit), so a lapsed
+  # subscription grandfathers existing collaborators rather than evicting them.
+  def collaborator_limit
+    user.subscribed? || user.admin? ? 5 : 1
+  end
+
+  def editable_by?(other_user)
+    return false if other_user.nil?
+    other_user == user || collaborators.include?(other_user)
+  end
+
+  # Real-time collaborative editing is on whenever anyone besides the owner
+  # holds (or is invited to) edit access. The editor also runs collaboratively
+  # for the owner's own solo sessions on such a project, so the shared doc
+  # never falls behind the divisions materialized from it.
+  def collaborative?
+    collaborations.any?
+  end
+
+  # Drop the shared doc and its update log. Called when the last collaboration
+  # is removed: from then on the owner edits solo (non-collaborative autosave
+  # writes divisions directly, leaving a persisted doc stale), so the doc is
+  # reseeded from the divisions if collaboration ever starts again.
+  def reset_collaborative_doc!
+    project_doc&.destroy!
+    project_doc_updates.delete_all
   end
 
   def effective_docinfo
@@ -140,6 +193,64 @@ class Project < ApplicationRecord
   end
 
   private
+
+    # Rails' nested attributes assume every id it is handed came from the
+    # database: an entry whose id names no row raises RecordNotFound, and so
+    # does a `_destroy` for a row that is already gone. Neither assumption
+    # survives collaborative editing, where the editor mints record ids itself
+    # (both tables use uuid primary keys, so it can) and any number of peers
+    # may send the same create, or the same destroy, at once.
+    #
+    # Relaxing exactly those two cases is what turns a create into an upsert
+    # and a destroy into something safe to retry:
+    #
+    #   * an unknown id is *built* under that id, so the entry inserts a row
+    #     rather than raising -- which is how a division/asset the editor
+    #     created reaches the database at all now that it no longer asks the
+    #     server for an id first;
+    #   * a `_destroy` naming an unknown id is dropped, since the row being
+    #     gone is the outcome the caller wanted. A collaborator who removes a
+    #     division persists that removal immediately, and the session leader's
+    #     next bulk save re-sends it from the doc's tombstones; without this,
+    #     the second of those two requests would fail and take the whole save
+    #     down with it.
+    #
+    # Everything else is passed through untouched, so solo editing (where every
+    # id really did come from the database) behaves exactly as before.
+    #
+    # `load_target` (rather than `load`) because it is the association itself,
+    # not the relation wrapping it, that has to come back loaded: Rails only
+    # consults the in-memory target to decide whether an id exists when
+    # `association.loaded?` is true, and otherwise re-queries the table, where
+    # the records built here do not yet exist.
+    def tolerate_client_minted_ids(association, attributes)
+      entries = nested_attribute_entries(attributes)
+      return attributes if entries.empty?
+
+      association.load_target
+      known = association.filter_map { |record| record.id&.to_s }.to_set
+
+      entries.filter_map do |entry|
+        id = (entry[:id] || entry["id"]).presence&.to_s
+        next entry if id.nil? || known.include?(id)
+        next nil if ActiveModel::Type::Boolean.new.cast(entry[:_destroy] || entry["_destroy"])
+
+        association.build(id: id)
+        known << id
+        entry
+      end
+    end
+
+    # Nested attributes reach a model either as an array of entries or as the
+    # index-keyed hash a multipart form produces (`[assets_attributes][0][ref]`,
+    # which is how an asset upload carries its file). Normalize to an array --
+    # Rails accepts either shape back.
+    def nested_attribute_entries(attributes)
+      return attributes if attributes.is_a?(Array)
+      return [] unless attributes.respond_to?(:each_pair)
+
+      [].tap { |entries| attributes.each_pair { |_index, entry| entries << entry } }
+    end
 
     def stamp_source_updated_at
       self.source_updated_at = Time.current
