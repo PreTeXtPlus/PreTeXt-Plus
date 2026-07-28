@@ -1,0 +1,13 @@
+.git
+.gitignore
+.eslintrc.cjs
+src
+public
+node_modules
+.DS_Store
+*.log
+*.tsbuildinfo
+vite.config.ts
+tsconfig*.json
+eslint.config.js
+index.html

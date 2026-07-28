@@ -1,0 +1,17 @@
+/* The wrapper tag lines (opening tag with xml:id, and closing tag) are locked
+   read-only via constrained-editor-plugin. These styles dim them so it's clear
+   they're structural and edited from the Table of Contents instead.
+
+   `.locked-line` is the whole-line decoration (a full-width tint painted behind
+   the text), so it can only style the background. */
+.pretext-plus-editor__locked-line {
+  background: rgba(148, 163, 184, 0.12);
+}
+
+/* `.locked-line-text` is an inline decoration Monaco merges onto the syntax
+   token spans (which carry their own `.mtkN` color class), so `!important` is
+   needed to override the per-token theme colors with a single muted slate.
+   The slate matches the xml:id sub-line in the Table of Contents. */
+.pretext-plus-editor__locked-line-text {
+  color: #94a3b8 !important;
+}

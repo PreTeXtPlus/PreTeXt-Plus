@@ -1,0 +1,295 @@
+.pretext-plus-editor__dialog-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 2000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 2vh 2vw;
+  background: rgba(15, 23, 42, 0.76);
+}
+
+.pretext-plus-editor__dialog {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  width: min(96%, 1400px);
+  height: min(92%, 1000px);
+  padding: 1.25rem;
+  border-radius: 2px;
+  background: #f8fafc;
+  box-shadow: 0 25px 80px rgba(15, 23, 42, 0.35);
+  overflow: hidden;
+}
+
+.pretext-plus-editor__dialog--common-mode {
+  border: 2px solid #0c4a6e;
+}
+
+.pretext-plus-editor__dialog-content {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1rem;
+}
+
+.pretext-plus-editor__dialog-content--single {
+  grid-template-columns: 1fr;
+}
+
+.pretext-plus-editor__dialog-tab-bar {
+  display: flex;
+  gap: 0;
+  border-bottom: 2px solid #e2e8f0;
+  flex-shrink: 0;
+}
+
+.pretext-plus-editor__dialog-tab {
+  padding: 6px 16px;
+  border: none;
+  border-bottom: 2px solid transparent;
+  margin-bottom: -2px;
+  background: transparent;
+  color: #64748b;
+  cursor: pointer;
+  font-size: 0.9rem;
+  font-weight: 500;
+}
+
+.pretext-plus-editor__dialog-tab:hover {
+  color: #0f172a;
+}
+
+.pretext-plus-editor__dialog-tab--active {
+  color: #0e639c;
+  border-bottom-color: #0e639c;
+  font-weight: 600;
+}
+
+.pretext-plus-editor__dialog-section {
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.pretext-plus-editor__dialog-label-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.pretext-plus-editor__dialog-link-button {
+  border: none;
+  background: transparent;
+  color: #0e639c;
+  cursor: pointer;
+  font-size: 0.85rem;
+  font-weight: 600;
+  padding: 0;
+}
+
+.pretext-plus-editor__dialog-link-button:hover {
+  text-decoration: underline;
+}
+
+.pretext-plus-editor__dialog-file-input {
+  display: none;
+}
+
+.pretext-plus-editor__dialog-helper-copy {
+  margin: 0;
+  color: #64748b;
+  font-size: 0.78rem;
+}
+
+.pretext-plus-editor__dialog-label {
+  color: #334155;
+  font-size: 0.85rem;
+  font-weight: 600;
+}
+
+.pretext-plus-editor__dialog-status {
+  color: #0f766e;
+  font-size: 0.8rem;
+  font-weight: 600;
+}
+
+.pretext-plus-editor__dialog-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+  flex-shrink: 0;
+}
+
+.pretext-plus-editor__dialog-title {
+  margin: 0;
+  color: #0f172a;
+  font-size: 1.4rem;
+}
+
+.pretext-plus-editor__dialog-copy {
+  margin: 0.4rem 0 0;
+  color: #475569;
+  max-width: 70ch;
+}
+
+.pretext-plus-editor__dialog-mode-badge {
+  display: inline-block;
+  margin-top: 0.45rem;
+  padding: 0.15rem 0.5rem;
+  border-radius: 999px;
+  background: #0c4a6e;
+  color: #ecfeff;
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+}
+
+.pretext-plus-editor__dialog-common-mode-banner {
+  border: 1px solid #0c4a6e;
+  background: #ecfeff;
+  color: #164e63;
+  padding: 0.65rem 0.8rem;
+  border-radius: 2px;
+  font-size: 0.9rem;
+  font-weight: 600;
+}
+
+.pretext-plus-editor__dialog-checkbox-row {
+  margin-top: 0.75rem;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  color: #334155;
+  font-size: 0.92rem;
+}
+
+.pretext-plus-editor__dialog-common-import-row {
+  margin-top: 0.4rem;
+}
+
+.pretext-plus-editor__dialog-common-copy {
+  border: 1px solid #bfdbfe;
+  background: #eff6ff;
+  color: #1e3a8a;
+  padding: 0.8rem 0.9rem;
+  border-radius: 2px;
+  font-size: 0.92rem;
+}
+
+.pretext-plus-editor__dialog-feedback-row {
+  margin-top: 0.45rem;
+}
+
+.pretext-plus-editor__dialog-close {
+  border: none;
+  background: transparent;
+  color: #334155;
+  cursor: pointer;
+  font-size: 0.95rem;
+  font-weight: 600;
+}
+
+.pretext-plus-editor__dialog-editor {
+  flex: 1;
+  width: 100%;
+  min-height: 140px;
+  border: 1px solid #cbd5e1;
+  border-radius: 0.2px;
+  overflow: hidden;
+  background: #fff;
+}
+
+.pretext-plus-editor__dialog-editor--drag {
+  border-color: #0e639c;
+  background: #f0f9ff;
+}
+
+.pretext-plus-editor__dialog-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.75rem;
+  flex-shrink: 0;
+}
+
+.pretext-plus-editor__dialog-button {
+  padding: 6px 16px;
+  background-color: #0e639c;
+  color: #fff;
+  border: none;
+  border-radius: 2px;
+  cursor: pointer;
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.pretext-plus-editor__dialog-button:hover:not(:disabled) {
+  background-color: #1177bb;
+}
+
+.pretext-plus-editor__dialog-button:disabled {
+  background-color: #555;
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+.pretext-plus-editor__dialog-button--secondary {
+  background-color: #6b7280;
+}
+
+.pretext-plus-editor__dialog-button--secondary:hover:not(:disabled) {
+  background-color: #4b5563;
+}
+
+.pretext-plus-editor__dialog-button--danger {
+  background-color: #b91c1c;
+}
+
+.pretext-plus-editor__dialog-button--danger:hover:not(:disabled) {
+  background-color: #991b1b;
+}
+
+@media (max-width: 700px) {
+  .pretext-plus-editor__dialog-overlay {
+    padding: 1vh 1vw;
+  }
+
+  .pretext-plus-editor__dialog {
+    width: 98%;
+    height: 96%;
+    padding: 1rem;
+  }
+
+  .pretext-plus-editor__dialog-content {
+    grid-template-columns: 1fr;
+  }
+
+  .pretext-plus-editor__dialog-header {
+    flex-direction: column;
+  }
+
+  .pretext-plus-editor__dialog-close {
+    align-self: flex-end;
+  }
+}
+
+@media (max-height: 600px) {
+  .pretext-plus-editor__dialog {
+    height: 98%;
+    padding: 0.75rem;
+    gap: 0.5rem;
+  }
+
+  .pretext-plus-editor__dialog-title {
+    font-size: 1.15rem;
+  }
+
+  .pretext-plus-editor__dialog-copy {
+    font-size: 0.82rem;
+  }
+}

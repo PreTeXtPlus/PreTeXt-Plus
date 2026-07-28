@@ -13,7 +13,6 @@ import {
   clearDeletions,
   docToState,
 } from "@pretextbook/web-editor";
-import "@pretextbook/web-editor/dist/web-editor.css";
 import { YCableProvider } from "./collab/yCableProvider";
 
 /** @typedef {import("@pretextbook/web-editor").Asset} Asset */
