@@ -6,6 +6,8 @@ import type { Awareness } from "y-protocols/awareness";
 import { editorConfigs } from "./editorConfigs";
 import CodeEditorMenu from "./CodeEditorMenu";
 import { MonacoCollabBinding } from "../collab/monacoBinding";
+import { installEditGuard } from "../collab/editGuard";
+import { computeLockedRegion, findPretextHeaderEnd } from "./lockedRegion";
 import type { CollabUser } from "../collab/types";
 import type { SourceFormat } from "../types/editor";
 import "./CodeEditor.css";
@@ -72,9 +74,10 @@ interface CodeEditorProps {
    * When set, the editor model is bound to this shared `Y.Text` instead of
    * being driven by the `content` prop: keystrokes emit CRDT deltas, remote
    * edits land in the model directly, and remote cursors render as colored
-   * carets. Locked structural regions are disabled in this mode — the
-   * constrained-editor plugin would revert remote edits touching them — and
-   * the source-level metadata re-assertion in the host guards identity instead.
+   * carets. The structural lines stay locked, but enforcement switches from
+   * the constrained-editor plugin (which reverts, and cannot tell a remote
+   * delta from local typing) to the preventive guard in
+   * `src/collab/editGuard.ts`.
    */
   collab?: CodeEditorCollab;
 }
@@ -87,116 +90,6 @@ export interface CodeEditorHandle {
   focus: () => void;
   /** Put the cursor on `line`, scrolling it into view if it is off-screen. */
   revealLine: (line: number) => void;
-}
-
-/**
- * Returns the line number where a PreTeXt division's locked header ends. The
- * header is always at least the opening tag (line 1); if a `<title>` element
- * immediately follows it on line 2, the header is extended through that
- * element's closing `</title>` line, since titles are now only editable from
- * the TOC. Divisions with no title line (introduction/conclusion) keep a
- * one-line header.
- */
-function findPretextHeaderEnd(model: any): number {
-  const lineCount = model.getLineCount();
-  if (lineCount < 2 || !/^\s*<title\b/.test(model.getLineContent(2))) return 1;
-  let end = 2;
-  while (end <= lineCount && !/<\/title\s*>/.test(model.getLineContent(end))) {
-    end++;
-  }
-  return end <= lineCount ? end : 1;
-}
-
-/**
- * Describes which lines of the model are structural (locked) for a given source
- * format.  `editableRange` is the single multiline region the user may edit
- * (Monaco `[startLine, startCol, endLine, endCol]`); every other line is
- * locked.  `leadingLockedLines` is how many lines at the very top are locked —
- * clicking any of them opens the division's properties form in the TOC.
- * Returns `null` when nothing should be locked (e.g. mid-edit or unsupported
- * format), leaving the whole document editable.
- */
-function computeLockedRegion(
-  model: any,
-  sourceFormat: SourceFormat,
-): {
-  editableRange: [number, number, number, number];
-  lockedLines: number[];
-  leadingLockedLines: number;
-} | null {
-  const lineCount = model.getLineCount();
-
-  // PreTeXt: lock the opening tag (plus the title line right after it, when
-  // present) and the closing tag, keeping the body in between editable.
-  if (sourceFormat === "pretext") {
-    if (lineCount < 3) return null;
-    const headerEnd = findPretextHeaderEnd(model);
-    if (headerEnd >= lineCount - 1) return null;
-    const lockedLines: number[] = [];
-    for (let ln = 1; ln <= headerEnd; ln++) lockedLines.push(ln);
-    lockedLines.push(lineCount);
-    return {
-      editableRange: [
-        headerEnd + 1,
-        1,
-        lineCount - 1,
-        model.getLineMaxColumn(lineCount - 1),
-      ],
-      lockedLines,
-      leadingLockedLines: headerEnd,
-    };
-  }
-
-  // Markdown: lock a leading `---` ... `---` YAML frontmatter block (the
-  // division's type/xml:id/label/title — title included, since it's now only
-  // editable from the TOC), keeping the markdown body below fully editable.
-  if (sourceFormat === "markdown") {
-    if (model.getLineContent(1).trim() !== "---") return null;
-    let fence = -1;
-    for (let ln = 2; ln <= lineCount; ln++) {
-      if (model.getLineContent(ln).trim() === "---") {
-        fence = ln;
-        break;
-      }
-    }
-    if (fence === -1) return null;
-
-    // Need at least one body line after the locked frontmatter; otherwise
-    // lock nothing (don't trap the user mid-edit).
-    if (fence >= lineCount) return null;
-    const lockedLines: number[] = [];
-    for (let ln = 1; ln <= fence; ln++) lockedLines.push(ln);
-    return {
-      editableRange: [fence + 1, 1, lineCount, model.getLineMaxColumn(lineCount)],
-      lockedLines,
-      leadingLockedLines: fence,
-    };
-  }
-
-  // LaTeX: a `\section{title}\label{ref}` header (or `\worksheet{…}` etc. — the
-  // command is named after the division type) occupies the first line; lock it
-  // and keep the body below editable, so the type/title/xml:id are edited from
-  // the TOC instead. Other LaTeX divisions (introduction/conclusion comments,
-  // `\begin{section}` environments, a multi-section document root that opens
-  // with prose) have no single header line to freeze, so nothing is locked.
-  if (sourceFormat === "latex") {
-    // Need a body line after the header; otherwise locking line 1 would leave
-    // no editable region and trap the user.
-    if (lineCount < 2) return null;
-    if (
-      !/^\s*\\(?!begin\b|end\b)[A-Za-z][A-Za-z-]*\*?\{/.test(
-        model.getLineContent(1),
-      )
-    )
-      return null;
-    return {
-      editableRange: [2, 1, lineCount, model.getLineMaxColumn(lineCount)],
-      lockedLines: [1],
-      leadingLockedLines: 1,
-    };
-  }
-
-  return null;
 }
 
 /** Static Monaco editor options shared across all instances of this component. */
@@ -250,6 +143,18 @@ const CodeEditor = forwardRef<CodeEditorHandle, CodeEditorProps>(({
   collabRef.current = collab;
   const collabBindingRef = useRef<MonacoCollabBinding | null>(null);
   const constrainedRef = useRef<ReturnType<typeof constrainedEditor> | null>(null);
+  // Removes the collab edit guard's patch from the model. Installed once at
+  // mount; the guard itself only enforces while a collab binding is live.
+  const editGuardRef = useRef<(() => void) | null>(null);
+  // Set while the editor applies its own structural normalization, so those
+  // edits — which deliberately write to the locked lines — pass the guard.
+  const guardBypassRef = useRef(false);
+  // Set while the structural normalizations run, so the content-change they
+  // trigger doesn't re-enter applyConstraints halfway through it.
+  const normalizingRef = useRef(false);
+  // The live source format, read from inside the mount-time guard closure.
+  const sourceFormatRef = useRef(sourceFormat);
+  sourceFormatRef.current = sourceFormat;
   const lockedDecorationsRef = useRef<any>(null);
   const lockedRef = useRef(false);
   // How many lines at the very top are locked (the wrapper tag + title for
@@ -356,6 +261,8 @@ const CodeEditor = forwardRef<CodeEditorHandle, CodeEditorProps>(({
       mouseListenerRef.current?.dispose?.();
       cursorListenerRef.current?.dispose?.();
       constrainedRef.current?.disposeConstrainer?.();
+      editGuardRef.current?.();
+      editGuardRef.current = null;
       if (debounceRef.current) clearTimeout(debounceRef.current);
     };
   }, []);
@@ -381,13 +288,20 @@ const CodeEditor = forwardRef<CodeEditorHandle, CodeEditorProps>(({
 
     isProgrammaticUpdateRef.current = true;
     const endCol = model.getLineMaxColumn(headerEnd);
-    editor.executeEdits("ensure-body-line", [
-      {
-        range: new monaco.Range(headerEnd, endCol, headerEnd, endCol),
-        text: "\n",
-        forceMoveMarkers: true,
-      },
-    ]);
+    // The insertion point is the end of the locked header, so it has to skip
+    // the collab guard (which would otherwise reject its own repair).
+    guardBypassRef.current = true;
+    try {
+      editor.executeEdits("ensure-body-line", [
+        {
+          range: new monaco.Range(headerEnd, endCol, headerEnd, endCol),
+          text: "\n",
+          forceMoveMarkers: true,
+        },
+      ]);
+    } finally {
+      guardBypassRef.current = false;
+    }
     queueMicrotask(() => {
       isProgrammaticUpdateRef.current = false;
     });
@@ -412,18 +326,25 @@ const CodeEditor = forwardRef<CodeEditorHandle, CodeEditorProps>(({
     if (!/^<\/[A-Za-z][\w.:-]*\s*>$/.test(closing)) return;
 
     isProgrammaticUpdateRef.current = true;
-    editor.executeEdits("trim-trailing-blank-lines", [
-      {
-        range: new monaco.Range(
-          lastContentLine,
-          model.getLineMaxColumn(lastContentLine),
-          lineCount,
-          model.getLineMaxColumn(lineCount),
-        ),
-        text: "",
-        forceMoveMarkers: true,
-      },
-    ]);
+    // Spans the (currently unlocked) trailing blank lines down past what will
+    // become the locked closing tag, so it too must skip the collab guard.
+    guardBypassRef.current = true;
+    try {
+      editor.executeEdits("trim-trailing-blank-lines", [
+        {
+          range: new monaco.Range(
+            lastContentLine,
+            model.getLineMaxColumn(lastContentLine),
+            lineCount,
+            model.getLineMaxColumn(lineCount),
+          ),
+          text: "",
+          forceMoveMarkers: true,
+        },
+      ]);
+    } finally {
+      guardBypassRef.current = false;
+    }
     queueMicrotask(() => {
       isProgrammaticUpdateRef.current = false;
     });
@@ -442,40 +363,50 @@ const CodeEditor = forwardRef<CodeEditorHandle, CodeEditorProps>(({
     if (!editor || !monaco || !instance) return;
     const model = editor.getModel();
     if (!model) return;
+    // Re-entered from the collab content listener by the normalizations below.
+    // That inner pass is redundant — this one goes on to recompute the region
+    // against the normalized model — so drop it.
+    if (normalizingRef.current) return;
 
     // Start clean — the previous restrictions reference stale line numbers.
+    // This also tears the plugin off a model that has just entered collab mode
+    // (a newly created division reaches the shared doc mid-session), where the
+    // guard takes over enforcement instead.
     if (typeof model.disposeRestrictions === "function") {
       model.disposeRestrictions();
     }
 
-    // In collaboration mode nothing is locked: the constrained-editor plugin
-    // reverts any edit inside a locked range, and a remote CRDT edit landing
-    // there would be reverted locally — diverging this client from every peer.
-    // The host's source-level metadata re-assertion still protects xml:ids,
-    // and the trim/pad normalizations are skipped too (two peers running them
-    // concurrently would each insert the same fix-up twice).
-    if (collabRef.current) {
-      lockedRef.current = false;
-      leadingLockedLinesRef.current = 0;
-      lockedDecorationsRef.current?.clear();
-      return;
+    normalizingRef.current = true;
+    try {
+      trimPretextTrailingBlankLines(editor, model, monaco);
+
+      // A PreTeXt division whose body is emptied collapses to just its locked
+      // wrapper tags (`<section…>` / `</section>`) on adjacent lines. With no line
+      // between them there's nowhere unlocked to type — and `computeLockedRegion`
+      // bails (`lineCount < 3`), dropping the wrapper protection entirely. Insert a
+      // blank middle line so the wrapper stays locked and there is always a clean,
+      // editable line in between to add content back into.
+      //
+      // This runs in collab mode too. Two peers staring at the same emptied
+      // division would each insert a newline, leaving one stray blank line — a
+      // cosmetic, self-limiting outcome (the condition stops holding once either
+      // lands), and far cheaper than leaving the wrapper unguarded.
+      ensurePretextBodyLine(editor, model, monaco);
+    } finally {
+      normalizingRef.current = false;
     }
-
-    trimPretextTrailingBlankLines(editor, model, monaco);
-
-    // A PreTeXt division whose body is emptied collapses to just its locked
-    // wrapper tags (`<section…>` / `</section>`) on adjacent lines. With no line
-    // between them there's nowhere unlocked to type — and `computeLockedRegion`
-    // bails (`lineCount < 3`), dropping the wrapper protection entirely. Insert a
-    // blank middle line so the wrapper stays locked and there is always a clean,
-    // editable line in between to add content back into.
-    ensurePretextBodyLine(editor, model, monaco);
 
     const region = computeLockedRegion(model, sourceFormat);
     lockedRef.current = region !== null;
     leadingLockedLinesRef.current = region?.leadingLockedLines ?? 0;
 
-    if (region) {
+    // Solo editing enforces through the plugin. Collab editing must not: the
+    // plugin reverts an out-of-range change by calling `model.undo()` from a
+    // content listener that cannot distinguish local typing from a remote CRDT
+    // delta, so it would undo a peer's edit — and re-broadcast that undo. The
+    // guard installed at mount enforces the same geometry by prevention
+    // instead; see `src/collab/editGuard.ts`.
+    if (region && !collabRef.current) {
       instance.addRestrictionsTo(model, [
         { range: region.editableRange, allowMultiline: true },
       ]);
@@ -578,6 +509,10 @@ const CodeEditor = forwardRef<CodeEditorHandle, CodeEditorProps>(({
     // The shared text is authoritative; align the model before binding so the
     // binding never observes a divergent starting state.
     setModelValueSafely(model, c.ytext.toString());
+    // Entering collab mode has to hand enforcement from the plugin to the guard
+    // even when the model already held the shared text — `setModelValueSafely`
+    // short-circuits on an identical value and would leave the plugin attached.
+    applyConstraints();
     const binding = new MonacoCollabBinding({
       ytext: c.ytext,
       editor,
@@ -626,6 +561,25 @@ const CodeEditor = forwardRef<CodeEditorHandle, CodeEditorProps>(({
     if (!collabRef.current && model && model.getValue() !== content) {
       setModelValueSafely(model, content);
     }
+    // Install the collab edit guard once per mount. It enforces only while a
+    // binding is live (`isEnabled`), so it is inert in solo mode where the
+    // constrained-editor plugin owns the locked ranges, and it takes over
+    // without a re-install when a division later joins the shared doc.
+    editGuardRef.current?.();
+    editGuardRef.current = installEditGuard(model, {
+      isEnabled: () => Boolean(collabRef.current),
+      isBypassed: () => guardBypassRef.current,
+      // Recomputed per edit: the locked lines move as the body grows and
+      // shrinks, and remote deltas move them with no local event to react to.
+      getEditableRange: () => {
+        const current = editorRef.current?.getModel?.();
+        if (!current) return null;
+        return (
+          computeLockedRegion(current, sourceFormatRef.current)?.editableRange ??
+          null
+        );
+      },
+    });
     // Report line changes for source → preview sync.
     cursorListenerRef.current?.dispose?.();
     cursorListenerRef.current = editor.onDidChangeCursorPosition((e: any) => {
@@ -640,6 +594,12 @@ const CodeEditor = forwardRef<CodeEditorHandle, CodeEditorProps>(({
     contentListenerRef.current?.dispose?.();
     contentListenerRef.current = editor.onDidChangeModelContent(() => {
       updateUndoRedoState();
+      // Solo mode leaves this to the plugin, which tracks its own ranges as the
+      // text shifts. Collab mode has no such bookkeeping, and the geometry does
+      // move — a PreTeXt division's closing tag is whatever line is last — so
+      // recompute the locked lines (and their dimming) after every change,
+      // local or remote.
+      if (collabRef.current) applyConstraints();
     });
     updateUndoRedoState();
 
