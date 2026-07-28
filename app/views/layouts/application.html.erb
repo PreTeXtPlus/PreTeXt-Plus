@@ -24,8 +24,8 @@
   </head>
 
   <body>
-    <nav class="relative bg-white px-6 py-4 w-full shadow border-b border-gray-200 md:fixed md:z-10 md:top-0 md:left-0 md:h-16">
-        <div class="flex flex-col container mx-auto md:flex-row md:items-center md:justify-between">
+    <nav class="relative bg-white px-6 py-4 w-full shadow border-b border-gray-200 lg:fixed lg:z-10 lg:top-0 lg:left-0 lg:h-16">
+        <div class="flex flex-col container mx-auto lg:flex-row lg:items-center lg:justify-between">
             <div class="flex justify-between items-center">
                 <div class="flex items-center">
                   <%= link_to :root, class: "flex items-center" do %>
@@ -33,12 +33,7 @@
                       <span class="hidden min-[400px]:inline-block self-center text-xl font-semibold whitespace-nowrap">PreTeXt.Plus (beta)</span>
                   <% end %>
                 </div>
-                <div class="flex items-center gap-4 md:hidden">
-                  <% if current_user.present? %>
-                    <%= link_to :projects, class: "text-gray-800 hover:text-blue-500" do %>
-                      Projects
-                    <% end %>
-                  <% end %>
+                <div class="flex items-center gap-4 lg:hidden">
                   <label for="mobileNavToggle" class="cursor-pointer p-2 text-gray-800 hover:text-blue-500 select-none" aria-label="Toggle menu">
                     <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                       <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16" />
@@ -47,16 +42,14 @@
                 </div>
             </div>
             <input type="checkbox" id="mobileNavToggle" class="mobileNavToggle sr-only">
-            <div class="mobileNavMenu absolute inset-x-0 top-full z-20 flex-col bg-white shadow-lg border-t border-gray-200 px-6 py-4 md:static md:inset-auto md:z-auto md:flex md:flex-row md:-mx-4 md:bg-transparent md:shadow-none md:border-0 md:px-0 md:py-0">
-                <% if current_user.present? %>
-                  <%= link_to :projects, class: "hidden md:inline-block text-gray-800 hover:text-blue-500 md:mx-4" do %>
-                    Projects
-                  <% end %>
+            <div class="mobileNavMenu absolute inset-x-0 top-full z-20 flex-col bg-white shadow-lg border-t border-gray-200 px-6 py-4 lg:static lg:inset-auto lg:z-auto lg:flex lg:flex-row lg:-mx-4 lg:bg-transparent lg:shadow-none lg:border-0 lg:px-0 lg:py-0">
+                <%= link_to :projects, class: "my-1 text-gray-800 hover:text-blue-500 lg:mx-4 lg:my-0" do %>
+                  Projects
                 <% end %>
-                <%= link_to :root, class: "my-1 text-gray-800 hover:text-blue-500 md:mx-4 md:my-0" do %>
+                <%= link_to :root, class: "my-1 text-gray-800 hover:text-blue-500 lg:mx-4 lg:my-0" do %>
                   About
                 <% end %>
-                <%= link_to announcements_path, class: "my-1 text-gray-800 hover:text-blue-500 md:mx-4 md:my-0" do %>
+                <%= link_to announcements_path, class: "my-1 text-gray-800 hover:text-blue-500 lg:mx-4 lg:my-0" do %>
                   Announcements
                 <% end %>
                 <% if current_user.present? %>
@@ -74,11 +67,11 @@
                 <% end %>
                 <% if current_user&.admin? %>
                   <div class="relative group">
-                    <label for="adminMenu" class="my-1 text-gray-800 cursor-pointer hover:text-blue-500 md:mx-4 md:my-0 select-none">
+                    <label for="adminMenu" class="my-1 text-gray-800 cursor-pointer hover:text-blue-500 lg:mx-4 lg:my-0 select-none">
                       Admin&nbsp;&#9662;
                     </label>
                     <input type="checkbox" id="adminMenu" class="navbarMenuToggle sr-only">
-                    <div class="navbarMenu absolute left-0 mt-2 w-48 bg-white rounded-md shadow-lg border border-gray-200 md:left-auto md:right-0">
+                    <div class="navbarMenu absolute left-0 mt-2 w-48 bg-white rounded-md shadow-lg border border-gray-200 lg:left-auto lg:right-0">
                       <%= link_to admin_root_path, class: "block px-4 py-2 text-gray-800 hover:bg-blue-50 hover:text-blue-500" do %>
                         Dashboard
                       <% end %>
@@ -123,7 +116,7 @@
                       Sign in
                     <% end %>
                   <% end %>
-                  <%= link_to tryit_path, class: "my-1 text-gray-800 hover:text-blue-500 md:mx-4 md:my-0", data: { turbo: false } do %>
+                  <%= link_to tryit_path, class: "my-1 text-gray-800 hover:text-blue-500 lg:mx-4 lg:my-0", data: { turbo: false } do %>
                     Try it!
                   <% end %>
                 <% end %>
@@ -133,7 +126,7 @@
       <% if notice.present? or params[:notice].present? or alert.present? %>
         <div class="relative flex justify-center w-full cursor-pointer -mb-20 bg-white" onclick="this.remove()">
           <% if notice.present? or params[:notice].present? %>
-            <div class="mt-20 mb-2 rounded-lg border border-blue-200 bg-blue-50 px-4 py-2 text-blue-800 text-sm w-full md:w-2/3 flex justify-between">
+            <div class="mt-20 mb-2 rounded-lg border border-blue-200 bg-blue-50 px-4 py-2 text-blue-800 text-sm w-full lg:w-2/3 flex justify-between">
               <span>
                 <span>
                   <svg class="inline mr-2" width="24px" height="24px" stroke-width="1" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" color="currentColor"><path d="M14 14V6M14 14L20.1023 17.487C20.5023 17.7156 21 17.4268 21 16.9661V3.03391C21 2.57321 20.5023 2.28439 20.1023 2.51296L14 6M14 14H7C4.79086 14 3 12.2091 3 10V10C3 7.79086 4.79086 6 7 6H14" stroke="currentColor" stroke-width="1"></path><path d="M7.75716 19.3001L7 14H11L11.6772 18.7401C11.8476 19.9329 10.922 21 9.71716 21C8.73186 21 7.8965 20.2755 7.75716 19.3001Z" stroke="currentColor" stroke-width="1"></path></svg>
@@ -143,7 +136,7 @@
               <span><svg width="24px" height="24px" stroke-width="1" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M6.75827 17.2426L12.0009 12M17.2435 6.75736L12.0009 12M12.0009 12L6.75827 6.75736M12.0009 12L17.2435 17.2426" stroke="currentColor" stroke-width="1" stroke-linecap="round" stroke-linejoin="round"></path></svg></span>
             </div>
           <% else %>
-            <div class="mt-20 mb-2 rounded-lg border border-yellow-200 bg-yellow-50 px-4 py-2 text-yellow-800 text-sm w-full md:w-2/3 flex justify-between">
+            <div class="mt-20 mb-2 rounded-lg border border-yellow-200 bg-yellow-50 px-4 py-2 text-yellow-800 text-sm w-full lg:w-2/3 flex justify-between">
               <span>
                 <span>
                   <svg class="inline mr-2" width="24px" height="24px" stroke-width="1" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" color="currentColor"><path d="M20.0429 21H3.95705C2.41902 21 1.45658 19.3364 2.22324 18.0031L10.2662 4.01533C11.0352 2.67792 12.9648 2.67791 13.7338 4.01532L21.7768 18.0031C22.5434 19.3364 21.581 21 20.0429 21Z" stroke="currentColor" stroke-width="1" stroke-linecap="round"></path><path d="M12 9V13" stroke="currentColor" stroke-width="1" stroke-linecap="round"></path><path d="M12 17.01L12.01 16.9989" stroke="currentColor" stroke-width="1" stroke-linecap="round" stroke-linejoin="round"></path></svg>
@@ -156,14 +149,14 @@
         </div>
       <% end %>
         <% if content_for?(:full_screen_content) %>
-          <main class="md:pt-16 md:h-screen">
+          <main class="lg:pt-16 lg:h-screen">
             <%= yield(:full_screen_content) %>
           </main>
         <% else %>
-          <div class="md:pt-16 md:min-h-screen bg-gray-50">
+          <div class="lg:pt-16 lg:min-h-screen bg-gray-50">
             <% if content_for?(:heading) %>
               <header class="border-b border-gray-200 bg-white">
-                <div class="mx-auto flex w-full max-w-5xl flex-wrap items-center justify-between gap-4 px-4 py-5 md:px-6">
+                <div class="w-full mx-auto p-2 lg:w-2/3 flex flex-wrap items-center justify-between gap-4 px-4 py-5 lg:px-6">
                   <div class="min-w-0">
                     <% if content_for?(:breadcrumb) %>
                       <p class="font-mono text-xs text-gray-500"><%= yield(:breadcrumb) %></p>
@@ -179,8 +172,8 @@
                 </div>
               </header>
             <% end %>
-            <main class="w-full md:min-h-[80vh] bg-white">
-              <div class="w-full mx-auto p-2 md:w-2/3">
+            <main class="w-full lg:min-h-[80vh] bg-white">
+              <div class="w-full mx-auto p-2 lg:w-2/3">
                 <%= yield %>
               </div>
             </main>
