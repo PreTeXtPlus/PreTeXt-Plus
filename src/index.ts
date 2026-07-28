@@ -79,15 +79,25 @@ export {
 export {
   seedDocFromState,
   docToState,
+  clearDeletions,
   getDivisionsMap,
+  getAssetsMap,
   getMetaMap,
+  getDeletedMap,
   getDivisionText,
 } from "./collab/schema";
 export type {
+  CollabAssetSnapshot,
+  CollabDeletedKind,
+  CollabDeletion,
   CollabDivisionSnapshot,
+  CollabDocSnapshot,
   CollabDocState,
 } from "./collab/schema";
 export type { CollabSession, CollabUser } from "./collab/types";
+// Record ids are minted client-side (see `onDivisionAdd`); exported so a host
+// can mint one for a record it creates outside the editor's own flows.
+export { newRecordId } from "./recordId";
 
 // Export components
 export { default as CodeEditor } from "./components/CodeEditor";

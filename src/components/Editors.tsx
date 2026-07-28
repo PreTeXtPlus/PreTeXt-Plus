@@ -61,6 +61,7 @@ import {
   normalizeDivisionsOnLoad,
 } from "../sectionUtils";
 import { buildProjectAssetView, makeUniqueAssetRef } from "../assetView";
+import { newRecordId } from "../recordId";
 import {
   createEditorStore,
   type DivisionChanges,
@@ -190,16 +191,20 @@ export interface editorProps {
    * `xmlId` the editor picked — and should be persisted as-is.
    *
    * The division is added to the local pool synchronously and immediately,
-   * before this is called, so persistence never blocks the UI. The division
-   * arrives with **no** `id`: it is new until the host saves it through the
-   * project's nested `divisions_attributes` (no id = insert) and the server
-   * mints one, which flows back via the `divisions` prop (matched by `xmlId`).
+   * before this is called, so persistence never blocks the UI.
    *
-   * A host that persists immediately may return the server-minted id (or a
-   * promise of it). When collaboration is active that id keys the division in
-   * the shared document, so peers and doc-derived saves agree on identity; a
-   * rejected promise keeps the division out of the shared doc, mirroring the
-   * failed create. Without collaboration the return value is ignored.
+   * The division arrives carrying an `id` the **editor** minted (a UUID — see
+   * `src/recordId.ts`), and the host should persist the record *under that id*
+   * rather than letting its database assign one. That is what lets a new
+   * division exist in the shared document in the same tick as the placeholder
+   * that references it, instead of appearing to collaborators only after a
+   * round trip. It also means the host's create must be an upsert: the same
+   * division may be sent more than once (this call, then the session leader's
+   * next save), and both must converge on one row.
+   *
+   * The return value is not used. A host that fails to persist should simply
+   * let the promise reject — the division stays in the pool and in the shared
+   * doc, and the next save retries it.
    */
   onDivisionAdd?: (
     division: Division,
@@ -375,12 +380,22 @@ const EditorsInner = (props: EditorsInnerProps) => {
   const { bindCallbacks, bridge } = props;
 
   // Re-render when the set of shared-doc entries changes outside React's flow
-  // (a remote division add/remove, or a local add whose host id resolved
-  // asynchronously) — the active division's Y.Text is looked up per render.
+  // (a remote division or asset add/remove, or a local one) — the active
+  // division's Y.Text is looked up per render.
   useSyncExternalStore(
     bridge?.subscribe ?? (() => () => {}),
     bridge?.getVersion ?? (() => 0),
   );
+
+  /**
+   * Group several local edits into one shared-document transaction, so peers
+   * apply them together and never observe the intermediate state. A no-op
+   * passthrough when collaboration is off.
+   */
+  const collabTransact = (run: () => void) => {
+    if (bridge) bridge.transact(run);
+    else run();
+  };
 
   // ── Store reads (UI state owned by the store) ───────────────────────────
   const showLivePreview = useEditorStore((s) => s.showLivePreview);
@@ -559,7 +574,7 @@ const EditorsInner = (props: EditorsInnerProps) => {
       return;
     }
 
-    // 1. Rewrite this division's own source so its metadata matches.
+    // Compute the division's rewritten source, so its metadata matches.
     let updated: Division;
     if (
       changes.sourceFormat !== undefined &&
@@ -596,34 +611,41 @@ const EditorsInner = (props: EditorsInnerProps) => {
       updated = updateSectionMetadata(division, changes);
     }
     const newXmlId = updated.xmlId;
-    if (updated.source !== division.source) {
-      // Emit keyed on the OLD id — before the record is renamed in step 2.
-      emitContentChange(division.xmlId, updated.source, updated.sourceFormat);
-    }
+    // Steps 1–3 are one edit as far as the document is concerned: the division's
+    // own source, its record fields, and the parent's ref placeholder all name
+    // the same xml:id, and a peer that observed only some of them would see a
+    // placeholder pointing at neither the old id nor the new one.
+    collabTransact(() => {
+      // 1. Rewrite this division's own source so its metadata matches.
+      if (updated.source !== division.source) {
+        // Emit keyed on the OLD id — before the record is renamed in step 2.
+        emitContentChange(division.xmlId, updated.source, updated.sourceFormat);
+      }
 
-    // 2. Patch the record fields (this renames the pool key to newXmlId).
-    applyDivisionUpdate(xmlId, { ...changes, xmlId: newXmlId });
+      // 2. Patch the record fields (this renames the pool key to newXmlId).
+      applyDivisionUpdate(xmlId, { ...changes, xmlId: newXmlId });
 
-    // 3. Keep the parent's ref placeholder in sync with an id or type change so
-    //    the division stays placed in the tree.
-    if (newXmlId !== division.xmlId || updated.type !== division.type) {
-      const parent = findDivisionParent(divisions, division.xmlId);
-      if (parent) {
-        const newParentContent = renameDivisionRef(
-          parent.source,
-          division.xmlId,
-          newXmlId,
-          updated.type,
-        );
-        if (newParentContent !== parent.source) {
-          emitContentChange(
-            parent.xmlId,
-            newParentContent,
-            parent.sourceFormat,
+      // 3. Keep the parent's ref placeholder in sync with an id or type change
+      //    so the division stays placed in the tree.
+      if (newXmlId !== division.xmlId || updated.type !== division.type) {
+        const parent = findDivisionParent(divisions, division.xmlId);
+        if (parent) {
+          const newParentContent = renameDivisionRef(
+            parent.source,
+            division.xmlId,
+            newXmlId,
+            updated.type,
           );
+          if (newParentContent !== parent.source) {
+            emitContentChange(
+              parent.xmlId,
+              newParentContent,
+              parent.sourceFormat,
+            );
+          }
         }
       }
-    }
+    });
 
     // 4. Follow an id rename so the user stays on the same division.
     if (newXmlId !== division.xmlId) {
@@ -632,17 +654,20 @@ const EditorsInner = (props: EditorsInnerProps) => {
   };
 
   const applyDivisionAdd = (division: Division) => {
-    // A newly created division is persisted through the project's nested
-    // `divisions_attributes` with no id, so the server mints one on save
-    // (no id = new). Strip any placeholder id a creation helper set locally —
-    // `xmlId` is what every code path keys on, and the server-assigned id
-    // flows back later via the `divisions` prop (matched by `xmlId`).
-    const newDivision: Division = { ...division, id: undefined };
+    // The record id is minted here rather than asked of the host. Creation
+    // helpers set `id` to the xml:id (a display identity, and renameable), so
+    // it is always replaced: `id` is the *record*'s identity, stable across
+    // xml:id renames, and it is what keys the division in the shared document.
+    // Having it up front is what lets the doc entry and the parent placeholder
+    // that refers to it land in the same transaction — see handleDivisionAdd.
+    const newDivision: Division = { ...division, id: newRecordId() };
     addDivisionToPool(newDivision);
-    const idResult = props.onDivisionAdd?.(newDivision);
-    // The shared-doc entry is keyed by the host's id when one is returned, so
-    // peers and doc-derived saves agree on identity from the start.
-    bridge?.localDivisionAdd(newDivision, idResult);
+    bridge?.localDivisionAdd(newDivision);
+    // Nothing waits on the host: it persists under the id we just minted, and
+    // a failure leaves the division in the doc for the next save to retry.
+    void Promise.resolve(props.onDivisionAdd?.(newDivision)).catch(() => {
+      /* host reports its own create failures */
+    });
   };
 
   const applyDivisionRemove = (xmlId: string) => {
@@ -830,23 +855,28 @@ const EditorsInner = (props: EditorsInnerProps) => {
   // division's first real edit — see SectionEditForm.
   const handleDivisionAdd = (parentXmlId: string | null) => {
     const newDiv = createNewSection();
-    applyDivisionAdd(newDiv);
-    if (parentXmlId) {
-      const parent = divisions.find((d) => d.xmlId === parentXmlId);
-      if (parent) {
-        emitContentChange(
-          parent.xmlId,
-          insertDivisionRef(
-            parent.source,
-            newDiv.xmlId,
-            newDiv.type,
-            null,
+    // One transaction: the division's entry and the parent's `<plus:* ref/>`
+    // placeholder pointing at it must reach peers together, or they briefly
+    // render a reference to a division they don't have.
+    collabTransact(() => {
+      applyDivisionAdd(newDiv);
+      if (parentXmlId) {
+        const parent = divisions.find((d) => d.xmlId === parentXmlId);
+        if (parent) {
+          emitContentChange(
+            parent.xmlId,
+            insertDivisionRef(
+              parent.source,
+              newDiv.xmlId,
+              newDiv.type,
+              null,
+              parent.sourceFormat,
+            ),
             parent.sourceFormat,
-          ),
-          parent.sourceFormat,
-        );
+          );
+        }
       }
-    }
+    });
     setActiveDivisionId(newDiv.xmlId);
     startSectionEdit(newDiv, { isNew: true });
   };
@@ -863,11 +893,16 @@ const EditorsInner = (props: EditorsInnerProps) => {
     // produced it (`onAssetUpload`/`onCreateDoenet`), so the deprecated
     // `onAssetInsert` is no longer fired here.
     addAssetToPool(asset);
+    // Publishing to the shared doc is how *other* collaborators learn of it:
+    // by the time this runs the host has already stored the file and handed
+    // back a URL, so the entry carries everything a peer needs.
+    bridge?.localAssetAdd(asset);
   };
 
   const handleAssetRemove = (asset: Asset) => {
     // Optimistically drop it from the pool, then notify the host to persist.
     removeAssetFromPool(asset);
+    bridge?.localAssetRemove(asset);
     props.onAssetRemove?.(asset);
   };
 
@@ -924,6 +959,7 @@ const EditorsInner = (props: EditorsInnerProps) => {
     };
     await props.onAssetUpdate?.(copy);
     addAssetToPool(copy);
+    bridge?.localAssetAdd(copy);
     openAssetEditor(copy.kind, newRef);
   };
 
@@ -944,6 +980,12 @@ const EditorsInner = (props: EditorsInnerProps) => {
     updateAssetInPool(replaced);
     props.onAssetRemove?.(oldAsset);
     removeAssetFromPool(oldAsset);
+    // The replacement keeps the old ref, so peers see one asset swap its file
+    // rather than a removal followed by an unrelated addition.
+    collabTransact(() => {
+      bridge?.localAssetAdd(replaced);
+      bridge?.localAssetRemove(oldAsset);
+    });
   };
 
   /**
@@ -1063,7 +1105,13 @@ const EditorsInner = (props: EditorsInnerProps) => {
     const update: Parameters<typeof applyExternalUpdate>[0] = {};
     let changed = false;
 
+    // Under collaboration the shared doc — not the host — is authoritative for
+    // the asset pool, and a fresh prop is by definition a snapshot of the host
+    // taken before the peers' latest additions reached it. Honoring it as a
+    // reset would delete, from every client, whatever this one hadn't yet
+    // fetched. The doc's own asset map keeps the pool current instead.
     if (
+      !bridge &&
       props.projectAssets !== undefined &&
       props.projectAssets !== prev.projectAssets
     ) {
@@ -1685,12 +1733,19 @@ const EditorsInner = (props: EditorsInnerProps) => {
             onSave={async (asset, prevRef) => {
               // Optimistic: reflect the edit in the authoritative pool first so
               // the change shows immediately, then notify the host to persist.
-              if (asset.ref && asset.ref !== prevRef) {
-                renameAssetRefEverywhere(asset.kind, prevRef, asset.ref);
-                renameAssetInPool(asset.kind, prevRef, asset);
-              } else {
-                updateAssetInPool(asset);
-              }
+              // A ref rename also rewrites every placeholder that names it, so
+              // the whole edit goes to peers as one transaction — otherwise
+              // they would briefly hold placeholders pointing at neither ref.
+              collabTransact(() => {
+                if (asset.ref && asset.ref !== prevRef) {
+                  renameAssetRefEverywhere(asset.kind, prevRef, asset.ref);
+                  renameAssetInPool(asset.kind, prevRef, asset);
+                  bridge?.localAssetUpdate(asset, prevRef);
+                } else {
+                  updateAssetInPool(asset);
+                  bridge?.localAssetUpdate(asset);
+                }
+              });
               await props.onAssetUpdate?.(asset);
             }}
           />
