@@ -57,7 +57,7 @@
       <div class="flex items-start justify-between mb-4">
         <h2 class="font-bold text-2xl">New empty document</h2>
         <button type="button" class="text-gray-400 hover:text-gray-700 text-2xl leading-none"
-                data-action="new-project#close" aria-label="Close">&times;</button>
+                data-action="new-project#close" aria-label="Close">✕</button>
       </div>
 
       <% if @project.errors.any? %>
@@ -141,7 +141,7 @@
       <div class="flex items-start justify-between mb-4">
         <h2 class="font-bold text-2xl">Start project from template</h2>
         <button type="button" class="text-gray-400 hover:text-gray-700 text-2xl leading-none"
-                data-action="new-project#close" aria-label="Close">&times;</button>
+                data-action="new-project#close" aria-label="Close">✕</button>
       </div>
 
       <% if @templates.any? %>
@@ -183,7 +183,7 @@
       <div class="flex items-start justify-between mb-4">
         <h2 class="font-bold text-2xl">Import existing documents</h2>
         <button type="button" class="text-gray-400 hover:text-gray-700 text-2xl leading-none"
-                data-action="new-project#close" aria-label="Close">&times;</button>
+                data-action="new-project#close" aria-label="Close">✕</button>
       </div>
       <div data-import-target="root">
         <p class="text-gray-500">Loading importer…</p>
