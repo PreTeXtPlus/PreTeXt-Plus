@@ -27,6 +27,16 @@ class Project < ApplicationRecord
   # allow_destroy lets the editor remove a division by sending `_destroy: true`.
   accepts_nested_attributes_for :divisions, allow_destroy: true
 
+  # Both nested collections accept ids the editor minted itself; see
+  # #tolerate_client_minted_ids for why, and for what these two overrides do.
+  def divisions_attributes=(attributes)
+    super(tolerate_client_minted_ids(divisions, attributes))
+  end
+
+  def assets_attributes=(attributes)
+    super(tolerate_client_minted_ids(assets, attributes))
+  end
+
   enum :document_type, { article: 0, book: 1, slideshow: 2 }, default: :article, suffix: true, validate: true
 
   # Gates listing on the owner's /users/:username profile page only -- it does not
@@ -183,6 +193,64 @@ class Project < ApplicationRecord
   end
 
   private
+
+    # Rails' nested attributes assume every id it is handed came from the
+    # database: an entry whose id names no row raises RecordNotFound, and so
+    # does a `_destroy` for a row that is already gone. Neither assumption
+    # survives collaborative editing, where the editor mints record ids itself
+    # (both tables use uuid primary keys, so it can) and any number of peers
+    # may send the same create, or the same destroy, at once.
+    #
+    # Relaxing exactly those two cases is what turns a create into an upsert
+    # and a destroy into something safe to retry:
+    #
+    #   * an unknown id is *built* under that id, so the entry inserts a row
+    #     rather than raising -- which is how a division/asset the editor
+    #     created reaches the database at all now that it no longer asks the
+    #     server for an id first;
+    #   * a `_destroy` naming an unknown id is dropped, since the row being
+    #     gone is the outcome the caller wanted. A collaborator who removes a
+    #     division persists that removal immediately, and the session leader's
+    #     next bulk save re-sends it from the doc's tombstones; without this,
+    #     the second of those two requests would fail and take the whole save
+    #     down with it.
+    #
+    # Everything else is passed through untouched, so solo editing (where every
+    # id really did come from the database) behaves exactly as before.
+    #
+    # `load_target` (rather than `load`) because it is the association itself,
+    # not the relation wrapping it, that has to come back loaded: Rails only
+    # consults the in-memory target to decide whether an id exists when
+    # `association.loaded?` is true, and otherwise re-queries the table, where
+    # the records built here do not yet exist.
+    def tolerate_client_minted_ids(association, attributes)
+      entries = nested_attribute_entries(attributes)
+      return attributes if entries.empty?
+
+      association.load_target
+      known = association.filter_map { |record| record.id&.to_s }.to_set
+
+      entries.filter_map do |entry|
+        id = (entry[:id] || entry["id"]).presence&.to_s
+        next entry if id.nil? || known.include?(id)
+        next nil if ActiveModel::Type::Boolean.new.cast(entry[:_destroy] || entry["_destroy"])
+
+        association.build(id: id)
+        known << id
+        entry
+      end
+    end
+
+    # Nested attributes reach a model either as an array of entries or as the
+    # index-keyed hash a multipart form produces (`[assets_attributes][0][ref]`,
+    # which is how an asset upload carries its file). Normalize to an array --
+    # Rails accepts either shape back.
+    def nested_attribute_entries(attributes)
+      return attributes if attributes.is_a?(Array)
+      return [] unless attributes.respond_to?(:each_pair)
+
+      [].tap { |entries| attributes.each_pair { |_index, entry| entries << entry } }
+    end
 
     def stamp_source_updated_at
       self.source_updated_at = Time.current
