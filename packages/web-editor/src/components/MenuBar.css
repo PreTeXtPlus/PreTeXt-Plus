@@ -9,6 +9,18 @@
   border-bottom: 1px solid #d1d5db;
 }
 
+@media (max-width: 500px) {
+  .pretext-plus-editor__menu-bar {
+    flex-wrap: wrap;
+    row-gap: 0.75rem;
+  }
+
+  .pretext-plus-editor__menu-left,
+  .pretext-plus-editor__menu-right {
+    flex-basis: 100%;
+  }
+}
+
 .pretext-plus-editor__menu-left {
   display: flex;
   align-items: center;
@@ -22,7 +34,9 @@
 }
 
 .pretext-plus-editor__title-label {
-  display: inline-block;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
   font-weight: 600;
   padding-right: 1rem;
 }
@@ -35,11 +49,23 @@
   border-radius: 3px;
   border: 1px solid #9ca3af;
   font-family: monospace;
+  background-color: #fff;
 }
 
 .pretext-plus-editor__title-input:focus {
   outline: 2px solid #3b82f6;
   outline-offset: 2px;
+}
+
+@media (max-width: 500px) {
+  .pretext-plus-editor__title-label {
+    width: 100%;
+  }
+
+  .pretext-plus-editor__title-input {
+    flex: 1;
+    width: auto;
+  }
 }
 
 .pretext-plus-editor__source-badge {
@@ -91,7 +117,7 @@
 .pretext-plus-editor__button--cancel {
   background-color: #d1d5db;
   color: black;
-  margin-left: 1rem;
+  margin:0;
 }
 
 .pretext-plus-editor__button--cancel:hover {
