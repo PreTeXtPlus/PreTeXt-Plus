@@ -25,7 +25,7 @@
 
 .pretext-plus-editor__tabs {
   height: 100%;
-  width: 98vw;
+  width: 100%;
   display: flex;
   flex-direction: row;
   overflow: hidden;
@@ -67,7 +67,7 @@
 /* Splitter container */
 .pretext-plus-editor__splitter {
   height: 100%;
-  width: 98vw;
+  width: 100%;
 }
 
 /* Editor panel (code editor) */
@@ -152,6 +152,8 @@
   align-items: center;
   justify-content: center;
   height: 100%;
+  padding: 0 0.5px;
+  background: #dde0e6;
 }
 
 .pretext-plus-editor__resize-dots::before,

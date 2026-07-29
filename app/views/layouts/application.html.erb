@@ -24,7 +24,7 @@
   </head>
 
   <body class="min-h-dvh flex flex-col">
-    <nav class="relative bg-white px-6 py-4 w-full shadow border-b border-gray-200 lg:fixed lg:z-10 lg:top-0 lg:left-0 lg:h-16">
+    <nav class="fixed z-10 top-0 left-0 bg-white px-6 py-4 w-full shadow border-b border-gray-200 h-16">
         <div class="flex flex-col container mx-auto lg:flex-row lg:items-center lg:justify-between">
             <div class="flex justify-between items-center">
                 <div class="flex items-center">
@@ -42,7 +42,7 @@
                 </div>
             </div>
             <input type="checkbox" id="mobileNavToggle" class="mobileNavToggle sr-only">
-            <div class="mobileNavMenu absolute inset-x-0 top-full z-20 flex-col bg-white shadow-lg border-t border-gray-200 px-6 py-4 lg:static lg:inset-auto lg:z-auto lg:flex lg:flex-row lg:-mx-4 lg:bg-transparent lg:shadow-none lg:border-0 lg:px-0 lg:py-0">
+            <div class="mobileNavMenu absolute inset-x-0 top-full z-20 flex-col bg-white shadow-lg border-t border-gray-200 px-4 py-2 lg:static lg:inset-auto lg:z-auto lg:flex lg:flex-row lg:-mx-4 lg:bg-transparent lg:shadow-none lg:border-0 lg:px-0 lg:py-0">
                 <%= link_to :projects, class: "my-1 text-gray-800 hover:text-blue-500 lg:mx-4 lg:my-0" do %>
                   Projects
                 <% end %>
@@ -66,7 +66,7 @@
                   <% end %>
                 <% end %>
                 <% if current_user&.admin? %>
-                  <div class="relative group">
+                  <div class="relative group my-1 lg:m-0">
                     <label for="adminMenu" class="my-1 text-gray-800 cursor-pointer hover:text-blue-500 lg:mx-4 lg:my-0 select-none">
                       Admin&nbsp;&#9662;
                     </label>
@@ -149,11 +149,11 @@
         </div>
       <% end %>
         <% if content_for?(:full_screen_content) %>
-          <main class="h-dvh lg:h-screen lg:pt-16">
+          <main class="h-dvh pt-16">
             <%= yield(:full_screen_content) %>
           </main>
         <% else %>
-          <div class="lg:pt-16 flex-1 flex flex-col bg-white">
+          <div class="pt-16 flex-1 flex flex-col bg-white">
             <% if content_for?(:heading) %>
               <header class="border-b border-gray-200 bg-gray-50">
                 <% if current_user.present? %>

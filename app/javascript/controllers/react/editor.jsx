@@ -1222,7 +1222,7 @@ function EditorApp({ config }) {
   // ----- Render ------------------------------------------------------------
   if (projectQuery.isPending) {
     return <div className="flex h-full items-center justify-center">
-      <div class="mx-5 text-center text-lg">Loading editor…</div>
+      <div className="mx-5 text-center text-lg">Loading editor…</div>
     </div>;
   }
   if (projectQuery.isError) {
@@ -1236,12 +1236,16 @@ function EditorApp({ config }) {
   if (projectQuery.data?.collaborative && collabStatus !== "ready") {
     if (collabStatus === "error") {
       return (
-        <div className="mx-5">
+        <div class="flex h-full items-center justify-center"><div class="mx-5 text-center">
           Could not join the collaborative editing session. Please reload the page.
-        </div>
+        </div></div>
       );
     }
-    return <div className="mx-5">Connecting to collaborative session…</div>;
+    return (
+      <div class="flex h-full items-center justify-center"><div class="mx-5 text-center">
+        Connecting to collaborative session…
+      </div></div>
+    );
   }
 
   const state = initial.current;

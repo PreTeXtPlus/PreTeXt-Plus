@@ -64,6 +64,7 @@ import { buildProjectAssetView, makeUniqueAssetRef } from "../assetView";
 import { newRecordId } from "../recordId";
 import {
   createEditorStore,
+  isNarrowViewport,
   type DivisionChanges,
   type EditorCallbacks,
   type EditorStoreHandle,
@@ -1044,11 +1045,26 @@ const EditorsInner = (props: EditorsInnerProps) => {
   };
 
   // ── Resize listener ──────────────────────────────────────────────────────
+  // The TOC follows the same narrow/wide breakpoint as the tabs-vs-split
+  // layout: collapsed on narrow screens, expanded once the viewport crosses
+  // back to wide. It only snaps on an actual crossing (not every resize
+  // event), so a manual toggle made while on one side of the breakpoint
+  // survives until the layout itself would change. Tracked via a ref (rather
+  // than the reactive `isNarrowScreen` value) so the listener never needs to
+  // be torn down and re-added as that value changes.
+  const wasNarrowScreenRef = useRef(isNarrowScreen);
   useEffect(() => {
-    const handleResize = () => setIsNarrowScreen(window.innerWidth < 800);
+    const handleResize = () => {
+      const narrow = isNarrowViewport();
+      if (narrow !== wasNarrowScreenRef.current) {
+        wasNarrowScreenRef.current = narrow;
+        setIsNarrowScreen(narrow);
+        setIsTocCollapsed(narrow);
+      }
+    };
     window.addEventListener("resize", handleResize);
     return () => window.removeEventListener("resize", handleResize);
-  }, [setIsNarrowScreen]);
+  }, [setIsNarrowScreen, setIsTocCollapsed]);
 
   const isNonPretextDoc = activeDivisionFormat !== "pretext";
 
@@ -1615,7 +1631,10 @@ const EditorsInner = (props: EditorsInnerProps) => {
           orientation="horizontal"
           className="pretext-plus-editor__splitter"
         >
-          <Panel className="pretext-plus-editor__editor-panel">
+          <Panel
+            className="pretext-plus-editor__editor-panel"
+            style={{ overflow: "hidden" }}
+          >
             {codeEditor}
           </Panel>
           <Separator className="pretext-plus-editor__resize-handle">
