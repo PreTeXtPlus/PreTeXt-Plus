@@ -15,6 +15,7 @@
   padding-top: 0.5rem;
   padding-bottom: 0.5rem;
   background: #f3f3f3;
+  border-bottom: 1px solid #dde0e6;
 }
 
 .pretext-plus-editor__preview-title {

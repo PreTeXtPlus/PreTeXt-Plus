@@ -4,7 +4,7 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 1rem;
+  padding: 0.5rem 1rem;
   background-color: #f3f4f6;
   border-bottom: 1px solid #d1d5db;
 }
@@ -43,7 +43,7 @@
 
 .pretext-plus-editor__title-input {
   width: 40vw;
-  padding: 0.5rem;
+  padding: 0.25rem 0.5rem;
   display: inline-block;
   box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
   border-radius: 3px;
@@ -83,7 +83,7 @@
 .pretext-plus-editor__button {
   width: 100%;
   border-radius: 3px;
-  padding: 0.625rem 0.875rem;
+  padding: 0.25rem 0.625rem;
   font-weight: 500;
   cursor: pointer;
   border: none;
