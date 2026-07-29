@@ -6,7 +6,8 @@
   ],
   "devDependencies": {
     "@tailwindcss/typography": "^0.5.19",
-    "esbuild": "^0.28.1"
+    "esbuild": "^0.28.1",
+    "playwright": "^1.62.0"
   },
   "scripts": {
     "build": "node -e \"const fs=require('fs');fs.mkdirSync('public/assets',{recursive:true});fs.copyFileSync(require.resolve('@pretextbook/libxslt-wasm/output/libxslt.wasm'),'public/assets/libxslt.wasm')\" && esbuild app/javascript/*.* --bundle --sourcemap --format=esm --outdir=app/assets/builds --public-path=/assets --external:module --external:worker_threads --loader:.png=dataurl --jsx=automatic"
