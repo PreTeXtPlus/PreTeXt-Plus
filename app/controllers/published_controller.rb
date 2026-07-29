@@ -24,7 +24,7 @@ class PublishedController < ApplicationController
   before_action :load_published_build
 
   def show
-    serve_build_file(@build, params[:relative_path])
+    serve_build_file(@build, params[:relative_path], public: !@target.site?)
   end
 
   # Lands a visitor on the target's entry point -- index.html for a site, the artifact

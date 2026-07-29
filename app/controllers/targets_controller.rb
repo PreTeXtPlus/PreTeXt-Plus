@@ -42,6 +42,7 @@ class TargetsController < ApplicationController
     end
 
     @target.update!(published: publishing)
+    @target.make_current_build_public! if publishing
 
     respond_to do |format|
       format.turbo_stream do

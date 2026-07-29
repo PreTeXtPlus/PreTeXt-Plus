@@ -1,6 +1,8 @@
 require "test_helper"
 
 class TargetsControllerTest < ActionDispatch::IntegrationTest
+  include ActiveJob::TestHelper
+
   setup do
     @project = projects(:one)
     @target = targets(:one_web)
@@ -290,6 +292,25 @@ class TargetsControllerTest < ActionDispatch::IntegrationTest
     end
 
     assert target.reload.published?
+  end
+
+  test "publishing a built single-file target enqueues it to go public" do
+    target = targets(:one_print)
+    build = target.builds.create!
+    build.mark!(:success)
+
+    assert_enqueued_with(job: PublishBuildFilesJob, args: [ build ]) do
+      patch publish_project_target_url(@project, target), params: { published: true }
+    end
+  end
+
+  test "publishing a website enqueues nothing -- its files never go through the CDN" do
+    target = targets(:two_web)
+    sign_in users(:two)
+
+    assert_no_enqueued_jobs(only: PublishBuildFilesJob) do
+      patch publish_project_target_url(projects(:two), target), params: { published: true }
+    end
   end
 
   test "unpublishing is one click back" do

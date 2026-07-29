@@ -15,15 +15,25 @@ module ServesBuildFiles
     #
     # blob_download_url may be missing from an entry cached before it was stored; falling
     # back to the inline URL serves the same bytes, just without the attachment header.
-    def serve_build_file(build, relative_path, disposition: "inline")
+    #
+    # `public:` is only ever true from PublishedController, and only for a target whose
+    # kind is not a site (Target#make_current_build_public! is what actually flips the
+    # object world-readable, on the same condition) -- everything else, including this
+    # same file addressed through the login-only BuildFilesController, keeps getting a
+    # signed URL against the storage provider's own domain.
+    def serve_build_file(build, relative_path, disposition: "inline", public: false)
       file_data = cached_file_data(build, relative_path)
       raise ActiveRecord::RecordNotFound unless file_data
+
+      cdn_host = Rails.application.config.x.cdn_url_options&.dig(:host) if public
 
       if disposition == "attachment"
         redirect_to_cdn_url(file_data[:blob_download_url] || file_data[:blob_url])
       elsif file_data[:content_type] == "text/html"
         content = ActiveStorage::Blob.service.download(file_data[:blob_key])
         send_data content, type: "text/html", disposition: "inline"
+      elsif cdn_host
+        redirect_to_cdn_url "https://#{cdn_host}/#{file_data[:blob_key]}"
       else
         redirect_to_cdn_url file_data[:blob_url]
       end
