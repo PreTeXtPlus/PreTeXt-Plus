@@ -46,6 +46,16 @@ import {
 const sameAssetRef = (a: Asset, b: Asset): boolean =>
   a.kind === b.kind && a.ref === b.ref;
 
+/**
+ * Breakpoint shared by `isNarrowScreen` (tabs vs. split layout) and the TOC's
+ * default collapsed state — both derive from the same viewport check, so
+ * they always agree on which side of it the layout is on.
+ */
+export const NARROW_SCREEN_MAX_WIDTH = 800;
+
+export const isNarrowViewport = (): boolean =>
+  typeof window !== "undefined" && window.innerWidth < NARROW_SCREEN_MAX_WIDTH;
+
 // ── Types ───────────────────────────────────────────────────────────────────
 
 export type DivisionChanges = {
@@ -348,10 +358,9 @@ export function createEditorStore(init: EditorStoreInit): EditorStoreHandle {
     hasAssetDuplicate: false,
 
     // ── Initial UI state ───────────────────────────────────────────────────
-    isTocCollapsed: false,
+    isTocCollapsed: isNarrowViewport(),
     showLivePreview: true,
-    isNarrowScreen:
-      typeof window !== "undefined" ? window.innerWidth < 800 : false,
+    isNarrowScreen: isNarrowViewport(),
     activeTab: "editor",
     isLatexDialogOpen: false,
     isConvertDialogOpen: false,
