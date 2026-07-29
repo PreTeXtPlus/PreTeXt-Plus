@@ -1222,7 +1222,7 @@ function EditorApp({ config }) {
   // ----- Render ------------------------------------------------------------
   if (projectQuery.isPending) {
     return <div className="flex h-full items-center justify-center">
-      <div class="mx-5 text-center text-lg">Loading editor…</div>
+      <div className="mx-5 text-center text-lg">Loading editor…</div>
     </div>;
   }
   if (projectQuery.isError) {
