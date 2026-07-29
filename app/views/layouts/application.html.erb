@@ -23,7 +23,7 @@
     <%= javascript_include_tag "application", "data-turbo-track": "reload", type: "module" %>
   </head>
 
-  <body class="min-h-screen flex flex-col">
+  <body class="min-h-dvh flex flex-col">
     <nav class="relative bg-white px-6 py-4 w-full shadow border-b border-gray-200 lg:fixed lg:z-10 lg:top-0 lg:left-0 lg:h-16">
         <div class="flex flex-col container mx-auto lg:flex-row lg:items-center lg:justify-between">
             <div class="flex justify-between items-center">
@@ -149,7 +149,7 @@
         </div>
       <% end %>
         <% if content_for?(:full_screen_content) %>
-          <main class="lg:pt-16 lg:h-screen">
+          <main class="flex-1 min-h-0 lg:pt-16 lg:h-screen">
             <%= yield(:full_screen_content) %>
           </main>
         <% else %>
