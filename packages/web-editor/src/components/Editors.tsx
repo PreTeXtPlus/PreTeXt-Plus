@@ -1631,7 +1631,10 @@ const EditorsInner = (props: EditorsInnerProps) => {
           orientation="horizontal"
           className="pretext-plus-editor__splitter"
         >
-          <Panel className="pretext-plus-editor__editor-panel">
+          <Panel
+            className="pretext-plus-editor__editor-panel"
+            style={{ overflow: "hidden" }}
+          >
             {codeEditor}
           </Panel>
           <Separator className="pretext-plus-editor__resize-handle">
