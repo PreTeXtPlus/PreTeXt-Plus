@@ -130,6 +130,16 @@ class Project < ApplicationRecord
     user.common_docinfo
   end
 
+  def tryit_json
+    {
+      title: self.title,
+      docinfo: self.docinfo,
+      divisions: self.divisions.map { |d|
+        { id: d.id || d.ref, ref: d.ref, is_root: d.is_root, source: d.source, source_format: d.source_format }
+      }
+    }.to_json
+  end
+
   DEFAULT_DOCINFO = File.read Rails.root.join("app", "default_docs", "docinfo.xml")
 
   TRYIT_DOCINFO = File.read Rails.root.join("app", "default_docs", "tryit", "docinfo.xml")
