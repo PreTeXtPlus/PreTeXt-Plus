@@ -42,7 +42,7 @@
                 </div>
             </div>
             <input type="checkbox" id="mobileNavToggle" class="mobileNavToggle sr-only">
-            <div class="mobileNavMenu absolute inset-x-0 top-full z-20 flex-col bg-white shadow-lg border-t border-gray-200 px-6 py-4 lg:static lg:inset-auto lg:z-auto lg:flex lg:flex-row lg:-mx-4 lg:bg-transparent lg:shadow-none lg:border-0 lg:px-0 lg:py-0">
+            <div class="mobileNavMenu absolute inset-x-0 top-full z-20 flex-col bg-white shadow-lg border-t border-gray-200 px-4 py-2 lg:static lg:inset-auto lg:z-auto lg:flex lg:flex-row lg:-mx-4 lg:bg-transparent lg:shadow-none lg:border-0 lg:px-0 lg:py-0">
                 <%= link_to :projects, class: "my-1 text-gray-800 hover:text-blue-500 lg:mx-4 lg:my-0" do %>
                   Projects
                 <% end %>
@@ -66,7 +66,7 @@
                   <% end %>
                 <% end %>
                 <% if current_user&.admin? %>
-                  <div class="relative group">
+                  <div class="relative group my-1">
                     <label for="adminMenu" class="my-1 text-gray-800 cursor-pointer hover:text-blue-500 lg:mx-4 lg:my-0 select-none">
                       Admin&nbsp;&#9662;
                     </label>
