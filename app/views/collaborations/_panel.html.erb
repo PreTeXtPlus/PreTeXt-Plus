@@ -8,11 +8,11 @@
     Owner: the rest of the roster gets a Remove button, plus an invite form
     and the cap.
 
-    Collaborator: the same list read-only, plus a separate "Leave" action.
-    Leaving is deliberately NOT a Remove button on your own roster row:
+    Collaborator: the same list read-only, plus a "Leave this project" button
+    on your own roster row in place of Remove. Same slot, different verb:
     removing a collaborator and walking away from someone else's project are
-    different acts, and a shared control would imply roster power a
-    collaborator does not have. Only the owner can invite or remove anyone. %>
+    different acts, so leaving reads as your own way out rather than roster
+    power you don't have. Only the owner can invite or remove anyone. %>
 <% can_manage = project.user == current_user || current_user&.admin? %>
 <% collaborations = project.collaborations.includes(:user).order(:created_at) %>
 
@@ -50,6 +50,13 @@
                 method: :delete,
                 class: "shrink-0 cursor-pointer rounded-md px-2.5 py-1.5 text-sm text-red-700 hover:bg-red-50",
                 data: { turbo_confirm: "Remove #{collaboration.invited_email} from this project? They lose access immediately." } %>
+        <% elsif collaboration.user == current_user %>
+          <%# Your own way out, not a roster action: it ends *your* access and
+              nothing else, and reads that way. %>
+          <%= button_to "Leave this project", project_collaboration_path(project, collaboration),
+                method: :delete,
+                class: "shrink-0 cursor-pointer rounded-md px-2.5 py-1.5 text-sm text-red-700 hover:bg-red-50",
+                data: { turbo_confirm: "Leave “#{project.title}”? You lose access until #{project.user.name_with_email} invites you again." } %>
         <% end %>
       </li>
     <% end %>
@@ -82,19 +89,8 @@
       </p>
     <% end %>
   <% else %>
-    <div class="mt-3 flex flex-wrap items-center justify-between gap-3">
-      <%# Who the owner is now reads off the roster; this only has to say that
-          the roster is not yours to change. %>
-      <p class="text-sm text-gray-600">Only the owner can change who has access.</p>
-      <% my_collaboration = collaborations.find { |c| c.user_id == current_user&.id } %>
-      <% if my_collaboration %>
-        <%# Your own way out, not a roster action: it ends *your* access and
-            nothing else, and reads that way. %>
-        <%= button_to "Leave this project", project_collaboration_path(project, my_collaboration),
-              method: :delete,
-              class: "shrink-0 cursor-pointer rounded-md border border-gray-300 px-3 py-2 text-sm font-medium hover:bg-gray-50",
-              data: { turbo_confirm: "Leave “#{project.title}”? You lose access until #{project.user.name_with_email} invites you again." } %>
-      <% end %>
-    </div>
+    <%# Who the owner is now reads off the roster; this only has to say that
+        the roster is not yours to change. Leaving is on your own row above. %>
+    <p class="mt-3 text-sm text-gray-600">Only the owner can change who has access.</p>
   <% end %>
 </div>
