@@ -87,7 +87,6 @@ class ProjectsController < ApplicationController
   def update
     respond_to do |format|
       if @project.update(project_params)
-        @project.enqueue_html_source_job if params[:enqueue_html_source_job]
         format.json { render :show, status: :ok, location: @project }
         format.html { redirect_to @project, notice: "Project was successfully updated." }
       else

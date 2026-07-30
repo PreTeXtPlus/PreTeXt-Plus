@@ -45,6 +45,21 @@ class ProjectsControllerTest < ActionDispatch::IntegrationTest
     assert_response :success
   end
 
+  test "show has no legacy quick-preview notice when html_source was never set" do
+    get project_url(@project)
+    assert_response :success
+    assert_select "a[href=?]", share_project_path(@project), count: 0
+  end
+
+  test "show has a legacy quick-preview notice when html_source is present" do
+    @project.update_column(:html_source, "<h1>quick build</h1>")
+
+    get project_url(@project)
+
+    assert_response :success
+    assert_select "a[href=?]", share_project_path(@project)
+  end
+
   test "should get edit" do
     get edit_project_url(@project)
     assert_response :success
@@ -642,29 +657,6 @@ class ProjectsControllerTest < ActionDispatch::IntegrationTest
 
     assert_equal true, json["use_common_docinfo"]
     assert_equal "<docinfo><macros>\\newcommand{\\R}{\\mathbb{R}}</macros></docinfo>", json["common_docinfo"]
-  end
-
-  test "JSON update with enqueue_html_source_job param enqueues SetHtmlSourceJob" do
-    assert_enqueued_with(job: SetHtmlSourceJob) do
-      patch project_url(@project),
-        params: { project: { title: @project.title }, enqueue_html_source_job: true },
-        as: :json
-    end
-  end
-
-  test "JSON update with enqueue_html_source_job param sets generating placeholder immediately" do
-    patch project_url(@project),
-      params: { project: { title: @project.title }, enqueue_html_source_job: true },
-      as: :json
-    assert_equal Project::ENQUEUE_SOURCE_PLACEHOLDER, @project.reload.html_source
-  end
-
-  test "JSON update without enqueue_html_source_job param does not enqueue SetHtmlSourceJob" do
-    assert_no_enqueued_jobs(only: SetHtmlSourceJob) do
-      patch project_url(@project),
-        params: { project: { title: "API Title" } },
-        as: :json
-    end
   end
 
   test "non-owner cannot get project json" do

@@ -29,11 +29,6 @@
   <%= link_to "Download source", download_project_path(@project),
         class: "#{button_classes(color: "gray", outlined: true)} px-3.5 py-2",
         data: { turbo: false } %>
-  <%# Quick build stays reachable until every project has a real html build to point
-      at. Retired in PR 5. %>
-  <%= link_to "Quick preview", share_project_path(@project),
-        class: "#{button_classes(color: "gray", outlined: true)} px-3.5 py-2",
-        target: "_blank", rel: "noopener" %>
 <% end %>
 
 <%# Subscribes the dashboard to this project's target rows. Build#mark! broadcasts here
@@ -96,6 +91,17 @@
   <% end %>
 
   <%= render "collaborations/panel", project: @project %>
+
+  <%# html_source is no longer written for any project (see Project#enqueue_html_source_job,
+      removed); this only ever renders for projects that got one before the cutover. %>
+  <% if @project.html_source.present? %>
+    <p class="mt-8 text-xs text-gray-500">
+      This project has a legacy <%= link_to "quick-preview link", share_project_path(@project),
+            class: "text-blue-600 hover:underline", target: "_blank", rel: "noopener" %>.
+      This link will stop working after November 1, 2026 — build and publish a website for future
+      access.
+    </p>
+  <% end %>
 
   <div class="mt-8 flex items-center justify-between border-t border-gray-200 pt-5">
     <p class="text-sm text-gray-500">First created <%= local_time_tag(@project.created_at, relative: true) %></p>

@@ -632,9 +632,8 @@ function EditorApp({ config }) {
 
   // ----- WRITE: save via TanStack mutation ---------------------------------
   const saveMutation = useMutation({
-    mutationFn: async ({ state, assets, deletes, enqueue }) => {
+    mutationFn: async ({ state, assets, deletes }) => {
       const payload = editorStateToRailsPayload(state, assets, deletes);
-      if (enqueue) payload.enqueue_html_source_job = true;
       const res = await fetch(apiBase, {
         method: "PATCH",
         headers: {
@@ -663,9 +662,9 @@ function EditorApp({ config }) {
   }, []);
 
   // Save the current document.  `hard` saves even when not dirty (used by
-  // the Save button and before copy-conversion) and triggers the server-side
-  // html_source rebuild.  Snapshots the buffer up front so edits made *during*
-  // the in-flight save aren't mistakenly marked saved.
+  // the Save button and before copy-conversion).  Snapshots the buffer up
+  // front so edits made *during* the in-flight save aren't mistakenly marked
+  // saved.
   //
   // In collab mode the payload is derived from the shared doc (which holds
   // every peer's edits), and soft (auto)saves run only on the session leader —
@@ -690,7 +689,6 @@ function EditorApp({ config }) {
             // the assembled document has to be able to resolve it.
             assets: snapshot.projectAssets,
             deletes: snapshot.deletes,
-            enqueue: hard,
           });
           // Rails has now dropped those rows, so the tombstones have done their
           // job; clearing them keeps the doc from accumulating one per removal
@@ -710,7 +708,7 @@ function EditorApp({ config }) {
       const snapshot = structuredClone(working.current);
       const assets = serverAssets.current;
       try {
-        await saveMutation.mutateAsync({ state: snapshot, assets, deletes: [], enqueue: hard });
+        await saveMutation.mutateAsync({ state: snapshot, assets, deletes: [] });
         serverSnapshot.current = snapshot;
         return true;
       } catch (error) {
