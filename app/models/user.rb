@@ -83,7 +83,7 @@ class User < ApplicationRecord
     20
   end
 
-  def has_copiable_projects?
+  def has_subscriber_benefits?
     subscribed? || admin
   end
 

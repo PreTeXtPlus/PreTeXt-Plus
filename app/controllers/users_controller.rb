@@ -21,8 +21,7 @@ class UsersController < ApplicationController
   end
 
   # GET /users/:username
-  # Public profile: lists a user's publicly-visible projects. Kept behind the same
-  # subscriber gate as has_copiable_projects? everywhere else -- an unsubscribed
+  # Public profile: lists a user's publicly-visible projects. An unsubscribed
   # owner can still see their own page (so they can preview it before subscribing),
   # but no one else can. NotFound rather than Forbidden so a private profile
   # doesn't confirm to a stranger that the username exists.
@@ -47,7 +46,7 @@ class UsersController < ApplicationController
   private
 
   def profile_visible?(profile_user)
-    current_user == profile_user || profile_user.has_copiable_projects?
+    current_user == profile_user || profile_user.has_subscriber_benefits?
   end
 
   def sign_up_params

@@ -4,7 +4,7 @@
 
 <%# Reaching this page at all while unlisted means the viewer is the owner --
     profile_visible? in UsersController is what keeps anyone else out. %>
-<% unless @profile_user.has_copiable_projects? %>
+<% unless @profile_user.has_subscriber_benefits? %>
   <div class="mt-4 text-sm text-amber-800 bg-amber-50 rounded-md p-3">
     ⚠ This profile isn't public yet — only you can see it.
     <%= link_to "Subscribe", subscriptions_path, class: "font-semibold hover:underline" %>

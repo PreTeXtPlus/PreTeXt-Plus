@@ -6,8 +6,6 @@
 <% end %>
 <% content_for :actions do %>
   <%= link_to "Back to user", admin_user_path(@project.user), class: "#{button_classes(color: "gray")} px-3.5 py-2" %>
-  <%= link_to "Rendered share view", share_project_path(@project), class: "#{button_classes(color: "blue")} px-3.5 py-2", target: "_blank", rel: "noopener" %>
-  <%= link_to "Shared source", share_source_project_path(@project), class: "#{button_classes(color: "gray")} px-3.5 py-2", target: "_blank", rel: "noopener" %>
 <% end %>
 
 <section class="mt-8 grid gap-4 xl:grid-cols-4">
