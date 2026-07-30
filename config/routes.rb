@@ -137,7 +137,6 @@ Rails.application.routes.draw do
       put "doc" => "project_docs#update"
       get "share" => "projects#share", as: "share"
       get "share/source" => "projects#source", as: "share_source"
-      get "share/copy" => "projects#copy_redirect"
       post "share/copy" => "projects#copy", as: "copy"
       get "(*_)/external/:ref" => "assets#share", as: "share_asset"
       post "preview" => "projects#preview", as: "preview"

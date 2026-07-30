@@ -147,8 +147,6 @@ class Project < ApplicationRecord
   TRYIT_PRETEXT_SOURCE = File.read Rails.root.join("app", "default_docs", "tryit", "pretext.xml")
   TRYIT_MARKDOWN_SOURCE = File.read Rails.root.join("app", "default_docs", "tryit", "markdown.md")
 
-  ENQUEUE_SOURCE_PLACEHOLDER = File.read Rails.root.join("app", "default_docs", "enqueue_placeholder.html")
-
   def full_dup(new_owner = nil)
     duplicate = Project.build(self.dup.attributes)
     if new_owner.present?
@@ -186,11 +184,6 @@ class Project < ApplicationRecord
     copy.is_template = false
     copy.template_description = nil
     copy
-  end
-
-  def enqueue_html_source_job
-    self.update_column(:html_source, ENQUEUE_SOURCE_PLACEHOLDER)
-    SetHtmlSourceJob.perform_later(self)
   end
 
   def self.tryit

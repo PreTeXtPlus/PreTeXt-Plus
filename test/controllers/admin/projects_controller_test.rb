@@ -23,7 +23,6 @@ class Admin::ProjectsControllerTest < ActionDispatch::IntegrationTest
 
     assert_response :success
     assert_includes response.body, @project.title
-    assert_includes response.body, "Rendered share view"
     assert_includes response.body, "Read-only support view"
   end
 

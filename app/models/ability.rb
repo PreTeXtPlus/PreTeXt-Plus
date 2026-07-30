@@ -2,11 +2,6 @@ class Ability
   include CanCan::Ability
 
   def initialize(user)
-    # Unauthenticated users can view project source if the owner has a subscription
-    can :source, Project do |project|
-      project.user.has_copiable_projects?
-    end
-
     # Anyone may read the build a published target currently points at. The
     # current_build_id clause is what makes unpublishing effective and keeps superseded
     # builds private: without it, any build URL would stay readable forever once its
@@ -33,7 +28,7 @@ class Ability
       return
     end
 
-    # Own projects — use specific aliases so :copy/:source can have their own rules
+    # Own projects — use specific aliases so :source can have its own rule
     can [
       :read,
       :update,
@@ -53,9 +48,9 @@ class Ability
       ], Project, collaborations: { user_id: user.id }
     can :create, Project if user.projects.count < user.project_quota
 
-    # Copy or view source requires a subscription (owner's or current user's)
+    # Copying or viewing source requires a subscription (owner's or current user's).
     can [ :copy, :source ], Project do |project|
-      project.user.has_copiable_projects? || user.has_copiable_projects?
+      project.user.has_subscriber_benefits? || user.has_subscriber_benefits?
     end
 
     # Assets belonging to own projects (hash condition enables accessible_by scoping)

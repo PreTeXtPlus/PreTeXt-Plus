@@ -1,9 +1,9 @@
 class ProjectsController < ApplicationController
-  allow_unauthenticated_access only: %i[ share preview source copy_redirect ]
+  allow_unauthenticated_access only: %i[ share preview source ]
   require_unauthenticated_access only: %i[ tryit ]
   before_action :limit_projects, only: %i[ new create copy create_from_template create_from_import ]
-  load_and_authorize_resource except: %i[ index new tryit preview feedback copy_redirect create_from_template create_from_import ]
-  skip_authorize_resource only: %i[ share ]
+  load_and_authorize_resource except: %i[ index new tryit preview feedback create_from_template create_from_import ]
+  skip_authorize_resource only: %i[ share copy ]
   after_action :allow_iframe, only: :share
   rate_limit to: 25, within: 10.minutes, only: :preview,
              with: -> { render plain: "Preview limit reached. Please wait a few minutes and try again, or create an account to continue writing and save your work!", status: :too_many_requests },
@@ -87,7 +87,6 @@ class ProjectsController < ApplicationController
   def update
     respond_to do |format|
       if @project.update(project_params)
-        @project.enqueue_html_source_job if params[:enqueue_html_source_job]
         format.json { render :show, status: :ok, location: @project }
         format.html { redirect_to @project, notice: "Project was successfully updated." }
       else
@@ -165,10 +164,6 @@ class ProjectsController < ApplicationController
     else
       redirect_to copy_project_path(@project), alert: "Copy failed."
     end
-  end
-
-  def copy_redirect
-    redirect_to share_source_project_path(params[:id])
   end
 
   def preview

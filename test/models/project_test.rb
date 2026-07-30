@@ -1,20 +1,6 @@
 require "test_helper"
 
 class ProjectTest < ActiveSupport::TestCase
-  include ActiveJob::TestHelper
-  test "enqueue_html_source_job writes placeholder to html_source immediately" do
-    project = projects(:one)
-    project.enqueue_html_source_job
-    assert_equal Project::ENQUEUE_SOURCE_PLACEHOLDER, project.reload.html_source
-  end
-
-  test "enqueue_html_source_job enqueues SetHtmlSourceJob" do
-    project = projects(:one)
-    assert_enqueued_with(job: SetHtmlSourceJob, args: [ project ]) do
-      project.enqueue_html_source_job
-    end
-  end
-
   test "belongs to user" do
     project = projects(:one)
     assert_equal users(:one), project.user

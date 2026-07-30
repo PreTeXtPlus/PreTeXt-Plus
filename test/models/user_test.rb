@@ -24,22 +24,22 @@ class UserTest < ActiveSupport::TestCase
     assert_equal 100, user.project_quota
   end
 
-  test "has_copiable_projects? is true for admin" do
+  test "has_subscriber_benefits? is true for admin" do
     user = users(:one)
     user.admin = true
-    assert user.has_copiable_projects?
+    assert user.has_subscriber_benefits?
   end
 
-  test "has_copiable_projects? is true for subscriber" do
+  test "has_subscriber_benefits? is true for subscriber" do
     user = users(:subscribed)
     user.admin = false
-    assert user.has_copiable_projects?
+    assert user.has_subscriber_benefits?
   end
 
-  test "has_copiable_projects? is false for unsubscribed user" do
+  test "has_subscriber_benefits? is false for unsubscribed user" do
     user = users(:one)
     user.admin = false
-    assert_not user.has_copiable_projects?
+    assert_not user.has_subscriber_benefits?
   end
 
   test "name_with_email returns formatted string when name present" do

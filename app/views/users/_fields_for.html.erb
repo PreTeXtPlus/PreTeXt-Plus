@@ -32,7 +32,7 @@
                     user_profile_path(form.object.username),
                     class: "text-blue-600 hover:underline" %>
             </p>
-            <% unless form.object.has_copiable_projects? %>
+            <% unless form.object.has_subscriber_benefits? %>
                 <p class="mt-1 text-xs text-gray-500">Only you can view this page until you become a subscriber.</p>
             <% end %>
         <% end %>
