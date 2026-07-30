@@ -85,7 +85,7 @@ class Project < ApplicationRecord
   # only when adding (see Collaboration#within_collaborator_limit), so a lapsed
   # subscription grandfathers existing collaborators rather than evicting them.
   def collaborator_limit
-    user.subscribed? || user.admin? ? 5 : 1
+    user.has_subscriber_benefits? ? 5 : 1
   end
 
   def editable_by?(other_user)
