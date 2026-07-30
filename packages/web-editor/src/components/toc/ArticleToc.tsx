@@ -324,12 +324,6 @@ const ArticleToc = ({ onOpenAssetPicker, hideAssets }: ArticleTocProps) => {
           />
         )}
 
-        {/* Placed divisions — depth offset by 1 since root is now at depth 0 */}
-        {visibleNodes.length === 0 && rootDivision && isExpanded(rootDivision.xmlId) && (
-          <li className="pretext-plus-editor__toc-no-sections">
-            <span>No placed divisions</span>
-          </li>
-        )}
         {visibleNodes.map((node) => (
           <SectionItem
             key={node.division.xmlId}
