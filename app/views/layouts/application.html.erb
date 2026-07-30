@@ -170,7 +170,7 @@
                     <% if content_for?(:subscription_notice) %>
                       <%= yield(:subscription_notice) %>
                     <% elsif current_user.confirmed? %>
-                      <div class="mx-auto w-full lg:w-2/3 mt-2">
+                      <div class="mx-auto w-full lg:w-2/3 mt-2 py-2">
                         <div class="flex items-center justify-between gap-3 rounded-md border border-gray-200 bg-white px-4 py-2 text-sm text-gray-700">
                           <span>Finding PreTeXt.Plus useful to you? Sustaining subscribers help keep it running.</span>
                           <%= link_to "Subscribe", subscriptions_path, class: "font-semibold text-blue-700 hover:underline" %>

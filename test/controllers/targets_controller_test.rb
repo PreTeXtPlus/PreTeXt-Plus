@@ -249,7 +249,7 @@ class TargetsControllerTest < ActionDispatch::IntegrationTest
     get project_url(@project)
 
     assert_response :success
-    assert_match(/reached the limit/, response.body)
+    assert_match(/reached the maximum/, response.body)
   end
 
   test "creating a target with a duplicate name is rejected" do
