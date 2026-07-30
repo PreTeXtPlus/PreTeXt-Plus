@@ -20,12 +20,9 @@
 <% end %>
 <% content_for :heading do %>
   Projects
-  (<%= @projects.count %>/<%= current_user.project_quota %>)
 <% end %>
-<% if current_user && current_user.projects.count < current_user.project_quota %>
-  <% content_for :actions do %>
-    <%= link_to "+ New project", new_project_path, class: "#{button_classes(color: "green")} inline-flex items-center gap-2 px-4 py-2", data: { turbo: false } %>
-  <% end %>
+<% content_for :actions do %>
+  <%= link_to "+ New project", new_project_path, class: "#{button_classes(color: "green")} inline-flex items-center gap-2 px-4 py-2", data: { turbo: false } %>
 <% end %>
 
 <div id="projects" class="min-w-full space-y-5">

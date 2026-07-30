@@ -28,15 +28,9 @@ class Ability
       return
     end
 
-    # Own projects — use specific aliases so :source can have its own rule
-    can [
-      :read,
-      :update,
-      :destroy,
-      :download,
-      :editor_state,
-      :update_editor_state
-      ], Project, user_id: user.id
+    # Manage projects except for [ :copy, :source ] for their own rule
+    can :manage, Project, user_id: user.id
+    cannot [ :copy, :source ], Project
     # Shared projects: a collaborator is a co-author, so they get everything the
     # owner has except destroying the project — that stays with whoever owns it.
     can [
@@ -46,7 +40,6 @@ class Ability
       :editor_state,
       :update_editor_state
       ], Project, collaborations: { user_id: user.id }
-    can :create, Project if user.projects.count < user.project_quota
 
     # Copying or viewing source requires a subscription (owner's or current user's).
     can [ :copy, :source ], Project do |project|

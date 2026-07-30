@@ -1,7 +1,6 @@
 class ProjectsController < ApplicationController
   allow_unauthenticated_access only: %i[ share preview source ]
   require_unauthenticated_access only: %i[ tryit ]
-  before_action :limit_projects, only: %i[ new create copy create_from_template create_from_import ]
   load_and_authorize_resource except: %i[ index new tryit preview feedback create_from_template create_from_import ]
   skip_authorize_resource only: %i[ share copy ]
   after_action :allow_iframe, only: :share
@@ -63,7 +62,8 @@ class ProjectsController < ApplicationController
     if project.save
       redirect_to edit_project_path(project)
     else
-      redirect_to new_project_path, alert: "Could not create a project from that template."
+      alert = project.errors.full_messages.to_sentence.presence || "Could not create a project from that template."
+      redirect_to new_project_path, alert: alert
     end
   end
 
@@ -162,7 +162,8 @@ class ProjectsController < ApplicationController
     if project_copy.save
       redirect_to edit_project_path(project_copy)
     else
-      redirect_to copy_project_path(@project), alert: "Copy failed."
+      alert = project_copy.errors.full_messages.to_sentence.presence || "Copy failed."
+      redirect_to copy_project_path(@project), alert: alert
     end
   end
 
@@ -260,17 +261,5 @@ class ProjectsController < ApplicationController
         filename: file[:filename].presence || asset[:ref].presence || "asset",
         content_type: file[:content_type].presence || "application/octet-stream"
       })
-    end
-
-    def limit_projects
-      return unless cannot?(:create, Project)
-
-      quota_message = "Project quota (#{current_user.project_quota}) cannot be exceeded.  Consider upgrading your subscription for more projects and to support PreTeXt.Plus!"
-
-      if request.format.json?
-        render json: { error: quota_message }, status: :unprocessable_entity
-      else
-        redirect_to projects_path, alert: quota_message
-      end
     end
 end

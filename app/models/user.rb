@@ -63,24 +63,18 @@ class User < ApplicationRecord
     end
   end
 
-  def project_quota
-    return 10_000 if admin
-    return 100 if subscribed?
-    10
-  end
-
-  # Outputs per project. Unlike project_quota this is a cost bound rather than a plan
+  # Outputs per project. Unlike asset_quota this is a cost bound rather than a plan
   # feature: every target is something an author can ask the build server to run.
   def target_quota
-    return 50 if admin
-    return 12 if subscribed?
+    return 12 if has_subscriber_benefits?
     3
   end
 
-  def upload_mb_quota
-    return 1_000 if admin
-    return 100 if subscribed?
-    20
+  # Total assets across every project the user owns -- a single pool for the
+  # whole account, not per-project, since assets are the actual storage cost.
+  def asset_quota
+    return Float::INFINITY if has_subscriber_benefits?
+    100
   end
 
   def has_subscriber_benefits?

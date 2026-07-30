@@ -90,6 +90,11 @@ class AbilityTest < ActiveSupport::TestCase
     assert_not ability.can?(:download, project)
   end
 
+  test "any signed-in user can create a project regardless of how many they already own" do
+    ability = Ability.new(users(:one))
+    assert ability.can?(:create, Project)
+  end
+
   test "accessible_by includes shared projects for a collaborator" do
     accessible = Project.accessible_by(Ability.new(users(:two)), :update)
     assert_includes accessible, projects(:one)

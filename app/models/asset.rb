@@ -10,6 +10,11 @@ class Asset < ApplicationRecord
 
   validates :ref, format: REF_REGEX, presence: true, uniqueness: { scope: :project }
   validate :ref_unique_among_divisions
+  # The cap applies only when adding a new asset: an account already over its
+  # limit (subscription lapsed) keeps its existing assets rather than being
+  # forced to delete them (see Collaboration#within_collaborator_limit for the
+  # identical grandfathering rule).
+  validate :within_asset_quota, on: :create, if: -> { project.present? }
 
   # Rails forces SVGs to download rather than display inline by default,
   # since an SVG can carry a <script> (a stored-XSS precaution). This asset's
@@ -40,6 +45,16 @@ class Asset < ApplicationRecord
 
     if Division.where(project_id: project_id, ref: ref).exists?
       errors.add(:ref, "has already been taken")
+    end
+  end
+
+  # Keyed to the project OWNER, not whoever is actually uploading -- an
+  # asset's storage cost belongs to whoever's account it lives in, exactly
+  # like Project#collaborator_limit follows the owner rather than the inviter.
+  def within_asset_quota
+    owner = project.user
+    if owner.present? && owner.assets.count >= owner.asset_quota
+      errors.add(:base, "Asset limit (#{owner.asset_quota}) reached for this account")
     end
   end
 end
