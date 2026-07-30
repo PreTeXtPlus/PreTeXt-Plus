@@ -224,16 +224,40 @@ class Target < ApplicationRecord
   def sync_from_builds!
     latest = builds.order(created_at: :desc).first
     current = builds.where(status: :success).order(created_at: :desc).first
+    current_changed = current&.id != current_build_id
 
     update_columns(latest_build_id: latest&.id,
                    current_build_id: current&.id,
                    last_built_at: current&.created_at,
                    updated_at: Time.current)
+
+    make_current_build_public! if current_changed
   end
 
   # What "Restore previous build" would fall back to; nil is what hides the button.
   def previous_successful_build
     builds.where(status: :success).order(created_at: :desc).offset(1).first
+  end
+
+  # A site's HTML is streamed straight out of Rails and never takes this path; a
+  # single-file target's artifact (a PDF, an epub) instead redirects to storage, which
+  # is why only these get flipped world-readable -- it is what lets
+  # cdn.pretext.plus serve a plain, cacheable URL instead of a signed one pointing at
+  # the storage provider's own domain (see ServesBuildFiles#serve_build_file).
+  #
+  # Deliberately one-directional: unpublishing does not flip the object back to
+  # private. Doing that safely would also mean purging any CDN cache of it, and the
+  # object is no worse than unguessable once the /o/... route stops resolving --
+  # the same trade a plain "anyone with the link" share already makes.
+  #
+  # Called from both triggers that can make a build "the thing a published target
+  # shows": sync_from_builds! (a new build supersedes the current one) and
+  # TargetsController#publish (the target itself is published, current_build
+  # unchanged).
+  def make_current_build_public!
+    return unless published? && !site? && current_build.present?
+
+    PublishBuildFilesJob.perform_later(current_build)
   end
 
   # Enforces the retention window, called after each build succeeds. Keeps the

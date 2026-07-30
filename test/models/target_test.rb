@@ -1,6 +1,8 @@
 require "test_helper"
 
 class TargetTest < ActiveSupport::TestCase
+  include ActiveJob::TestHelper
+
   test "belongs to a project and has many builds" do
     target = targets(:two_web)
     assert_equal projects(:two), target.project
@@ -371,6 +373,64 @@ class TargetTest < ActiveSupport::TestCase
 
     target.builds.create!(created_at: 1.day.ago, status: :success)
     assert_equal older, target.previous_successful_build
+  end
+
+  # ---- making a build public for the CDN ----
+
+  test "publishing a single-file target enqueues its current build to go public" do
+    target = targets(:one_print)
+    build = target.builds.create!
+    build.mark!(:success)
+    target.update!(published: true)
+
+    assert_enqueued_with(job: PublishBuildFilesJob, args: [ build ]) do
+      target.make_current_build_public!
+    end
+  end
+
+  test "make_current_build_public! is a no-op for a site" do
+    target = targets(:two_web)
+    target.update!(published: true)
+
+    assert_no_enqueued_jobs(only: PublishBuildFilesJob) do
+      target.make_current_build_public!
+    end
+  end
+
+  test "make_current_build_public! is a no-op when unpublished or never built" do
+    assert_no_enqueued_jobs(only: PublishBuildFilesJob) do
+      targets(:one_print).make_current_build_public!
+    end
+
+    target = targets(:one_print)
+    target.builds.create!.mark!(:success)
+    assert_no_enqueued_jobs(only: PublishBuildFilesJob) do
+      target.make_current_build_public!
+    end
+  end
+
+  test "a new success on an already-published target is enqueued automatically" do
+    target = targets(:one_print)
+    target.builds.create!.mark!(:success)
+    target.update!(published: true)
+
+    newer = target.builds.create!
+
+    assert_enqueued_with(job: PublishBuildFilesJob, args: [ newer ]) do
+      newer.mark!(:success)
+    end
+  end
+
+  test "a status transition that leaves current_build unchanged enqueues nothing" do
+    target = targets(:one_print)
+    target.builds.create!.mark!(:success)
+    target.update!(published: true)
+    clear_enqueued_jobs
+
+    failing = target.builds.create!
+    assert_no_enqueued_jobs(only: PublishBuildFilesJob) do
+      failing.mark!(:failed)
+    end
   end
 
   test "destroying a target destroys its builds" do

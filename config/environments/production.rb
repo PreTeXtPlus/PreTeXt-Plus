@@ -71,6 +71,13 @@ Rails.application.configure do
   # with it. Unset in development, where Codespaces forwards exactly one host.
   config.x.published_url_options = { host: "pub.pretext.plus", protocol: "https" }
 
+  # A single-file target's artifact (a PDF, an epub) is world-readable once its target
+  # is published -- see Target#make_current_build_public! -- so it can be served from
+  # here as a plain, cacheable URL instead of a signed one pointing at the storage
+  # provider's own domain. Unset in development and test, where nothing serves this
+  # domain, so ServesBuildFiles falls back to the existing signed redirect.
+  config.x.cdn_url_options = { host: "cdn.pretext.plus", protocol: "https" }
+
   # Specify outgoing SMTP server. Remember to add smtp/* credentials via bin/rails credentials:edit.
   # config.action_mailer.smtp_settings = {
   #   user_name: Rails.application.credentials.dig(:smtp, :user_name),
