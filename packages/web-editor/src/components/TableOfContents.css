@@ -87,7 +87,6 @@
 .pretext-plus-editor__toc-list {
   list-style: none;
   margin: 0;
-  padding: 4px 0;
   overflow-y: auto;
   flex: 1;
 }

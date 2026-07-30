@@ -281,6 +281,12 @@ export interface editorProps {
   onAssetUpdate?: (asset: Asset) => Promise<void> | void;
   /** If true, the TOC and asset manager hide all assets. */
   hideAssets?: boolean;
+  /**
+   * If true, the built-in menu bar (title field, Save/Cancel buttons,
+   * feedback link, presence avatars) is not rendered at all. Useful when
+   * the host renders its own header above the editor.
+   */
+  hideMenuBar?: boolean;
 
   /**
    * Real-time collaboration session. When provided, the editor binds its
@@ -1650,18 +1656,20 @@ const EditorsInner = (props: EditorsInnerProps) => {
 
   return (
     <div className="pretext-plus-editor" onKeyDown={handleKeyDown}>
-      <MenuBar
-        onSaveButton={props.onSaveButton}
-        saveButtonLabel={props.saveButtonLabel}
-        onCancelButton={props.onCancelButton}
-        cancelButtonLabel={props.cancelButtonLabel}
-        showPreviewModeToggle={false}
-        presence={
-          props.collaboration ? (
-            <PresenceAvatars awareness={props.collaboration.awareness} />
-          ) : undefined
-        }
-      />
+      {!props.hideMenuBar && (
+        <MenuBar
+          onSaveButton={props.onSaveButton}
+          saveButtonLabel={props.saveButtonLabel}
+          onCancelButton={props.onCancelButton}
+          cancelButtonLabel={props.cancelButtonLabel}
+          showPreviewModeToggle={false}
+          presence={
+            props.collaboration ? (
+              <PresenceAvatars awareness={props.collaboration.awareness} />
+            ) : undefined
+          }
+        />
+      )}
       <div className="pretext-plus-editor__editor-displays">
         <ErrorBoundary resetKeys={[divisionActiveSource, activeDivisionId]}>
           {editorDisplays}
