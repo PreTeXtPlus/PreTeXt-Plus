@@ -98,7 +98,7 @@
   <%= render "collaborations/panel", project: @project %>
 
   <div class="mt-8 flex items-center justify-between border-t border-gray-200 pt-5">
-    <p></p>
+    <p class="text-sm text-gray-500">First created <%= local_time_tag(@project.created_at, relative: true) %></p>
     <%# Deleting a project stays with its owner: a collaborator holds edit access,
         not the right to destroy someone else's work. %>
     <% if can? :destroy, @project %>
