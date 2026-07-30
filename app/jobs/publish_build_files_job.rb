@@ -8,10 +8,19 @@
 class PublishBuildFilesJob < ApplicationJob
   queue_as :default
 
+  # The stamp goes on only after every file is through, and is what PublishedController
+  # checks before handing out a cdn.pretext.plus URL. A raise partway leaves it null, so
+  # readers keep getting signed URLs -- which resolve whatever the ACL says -- instead of
+  # public ones pointing at objects that are still private.
+  #
+  # update_column rather than update!: pure bookkeeping, with no reason to bump the row's
+  # updated_at or wake the broadcasts that hang off a build changing.
   def perform(build)
     build.build_files.with_attached_blob.find_each do |build_file|
       make_public(build_file.blob) if build_file.blob.attached?
     end
+
+    build.update_column(:files_public_at, Time.current)
   end
 
   private

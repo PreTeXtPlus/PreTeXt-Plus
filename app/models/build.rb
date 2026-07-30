@@ -35,6 +35,14 @@ class Build < ApplicationRecord
     Target::IN_FLIGHT.include?(status)
   end
 
+  # Whether PublishBuildFilesJob has actually finished making this build's stored files
+  # world-readable, and so whether a plain cdn.pretext.plus URL for them will resolve.
+  # Only ever true for a published single-file target's build -- see
+  # Target#make_current_build_public!, which is the only thing that enqueues that job.
+  def files_public?
+    files_public_at.present?
+  end
+
   # The only way a build's status should ever change.
   #
   # Every transition used to be a bare update_column, which skips callbacks -- fine while

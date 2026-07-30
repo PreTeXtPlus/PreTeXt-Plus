@@ -27,6 +27,29 @@ class PublishedControllerTest < ActionDispatch::IntegrationTest
     target.update!(published: true)
   end
 
+  # A published pdf target with one real artifact behind it. `files_public` stands in for
+  # PublishBuildFilesJob having run, which it does not in an integration test.
+  def published_pdf_build(files_public: true)
+    target = projects(:two).targets.create!(name: "Print", kind: "pdf")
+    build = target.builds.create!
+    file = build.build_files.create!(relative_path: "print.pdf")
+    file.blob.attach(io: StringIO.new("%PDF-1.4"), filename: "print.pdf", content_type: "application/pdf")
+    build.mark!(:success, entry_path: "print.pdf")
+    publish!(target)
+    build.update_column(:files_public_at, Time.current) if files_public
+    build
+  end
+
+  # config.x.cdn_url_options is set in production only, so the CDN branch is unreachable
+  # in test without saying so here.
+  def with_cdn_url_options(options)
+    previous = Rails.application.config.x.cdn_url_options
+    Rails.application.config.x.cdn_url_options = options
+    yield
+  ensure
+    Rails.application.config.x.cdn_url_options = previous
+  end
+
   test "anyone can read a published target" do
     publish!
 
@@ -148,6 +171,45 @@ class PublishedControllerTest < ActionDispatch::IntegrationTest
     get published_url(projects(:two), "print")
 
     assert_redirected_to "/o/#{projects(:two).id}/print/print.pdf"
+  end
+
+  # ---- the CDN ----
+
+  test "a public single-file artifact is served from the CDN, not from storage" do
+    build = published_pdf_build
+
+    with_cdn_url_options(host: "cdn.example.com", protocol: "https") do
+      get published_file_url(projects(:two), "print", "print.pdf")
+    end
+
+    assert_redirected_to "https://cdn.example.com/#{build.build_files.sole.blob.key}"
+  end
+
+  # The scheme comes from the same config entry as the host. Hard-coding https here would
+  # keep working right up until the config said otherwise, and then fail silently.
+  test "the CDN redirect uses the configured protocol" do
+    build = published_pdf_build
+
+    with_cdn_url_options(host: "cdn.example.com", protocol: "http") do
+      get published_file_url(projects(:two), "print", "print.pdf")
+    end
+
+    assert_redirected_to "http://cdn.example.com/#{build.build_files.sole.blob.key}"
+  end
+
+  # PublishBuildFilesJob flips the objects world-readable in the background, so for a
+  # moment after publishing -- or for good, if the storage provider refused -- the CDN URL
+  # would 404 at the reader. The signed URL resolves whatever the ACL says, so it is what
+  # goes out until the job has said otherwise.
+  test "an artifact that is not yet public gets a signed url rather than a broken CDN one" do
+    published_pdf_build(files_public: false)
+
+    with_cdn_url_options(host: "cdn.example.com", protocol: "https") do
+      get published_file_url(projects(:two), "print", "print.pdf")
+    end
+
+    assert_response :redirect
+    assert_no_match(/cdn\.example\.com/, response.headers["Location"])
   end
 
   test "an unbuilt target has nowhere to redirect to" do

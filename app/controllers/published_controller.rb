@@ -23,8 +23,12 @@ class PublishedController < ApplicationController
 
   before_action :load_published_build
 
+  # The CDN is offered only for a build whose files are confirmed world-readable, never
+  # merely for one that ought to be: the flip runs in a background job, and a public URL
+  # sent before it lands would 404 at the reader. files_public? is false for every site
+  # anyway -- nothing enqueues that job for one -- so it subsumes the kind check.
   def show
-    serve_build_file(@build, params[:relative_path], public: !@target.site?)
+    serve_build_file(@build, params[:relative_path], public: @build.files_public?)
   end
 
   # Lands a visitor on the target's entry point -- index.html for a site, the artifact
