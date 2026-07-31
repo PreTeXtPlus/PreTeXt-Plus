@@ -96,6 +96,43 @@ class Admin::UsersControllerTest < ActionDispatch::IntegrationTest
     assert_not users(:unconfirmed).reload.confirmed?
   end
 
+  test "updates a user's email" do
+    sign_in @admin
+
+    patch update_email_admin_user_path(users(:subscribed)), params: { user: { email: "new-email@example.com" } }
+
+    assert_redirected_to admin_user_path(users(:subscribed))
+    assert_equal "new-email@example.com", users(:subscribed).reload.email
+  end
+
+  test "does not reconfirm when admin changes a confirmed user's email" do
+    sign_in @admin
+
+    patch update_email_admin_user_path(users(:subscribed)), params: { user: { email: "new-email@example.com" } }
+
+    assert users(:subscribed).reload.confirmed?
+  end
+
+  test "shows validation errors when the new email is invalid" do
+    sign_in @admin
+    original_email = users(:subscribed).email
+
+    patch update_email_admin_user_path(users(:subscribed)), params: { user: { email: "not-an-email" } }
+
+    assert_redirected_to admin_user_path(users(:subscribed))
+    assert_equal original_email, users(:subscribed).reload.email
+  end
+
+  test "redirects non-admin users from update_email" do
+    sign_in @non_admin
+    original_email = users(:unconfirmed).email
+
+    patch update_email_admin_user_path(users(:unconfirmed)), params: { user: { email: "new-email@example.com" } }
+
+    assert_redirected_to projects_path
+    assert_equal original_email, users(:unconfirmed).reload.email
+  end
+
   test "search escapes sql like wildcards" do
     User.create!(email: "test_user@example.com", name: "Exact User", password: "password123", confirmed_at: Time.current)
     User.create!(email: "testxuser@example.com", name: "Wildcard User", password: "password123", confirmed_at: Time.current)

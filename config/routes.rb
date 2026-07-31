@@ -61,6 +61,7 @@ Rails.application.routes.draw do
       member do
         post :confirm
         post :reset_password
+        patch :update_email
       end
     end
     resources :projects, only: %i[show update]
