@@ -97,7 +97,9 @@ module Publication
     def offers?(option)
       return false unless option.offered_for?(document_type)
       return project.present? if option.project_scoped?
-      return true if option.free_number?
+      # A number to type and words to type are bounded by a range and a pattern, not by a
+      # list, so there is nothing here that could come up empty.
+      return true unless option.fixed_choices?
 
       choices_for(option).any?
     end
@@ -128,7 +130,7 @@ module Publication
     def fallback_label(option = nil)
       return "PreTeXt's default" if option&.default_label.blank?
 
-      "PreTeXt's default (#{option.default_label})"
+      "#{option.default_note} (#{option.default_label})"
     end
 
     # What the select's empty choice says, which is: what happens if this level stays
@@ -141,6 +143,29 @@ module Publication
       return fallback_label(option) if chain.one?
 
       "Inherit — #{inherited_label(option) || fallback_label(option)}"
+    end
+
+    # The same choice, worded to fit a table cell or a row of a disclosure: the value that
+    # takes over, and nothing about where it comes from. Twenty selects across four columns
+    # have no room for the sentence, and a select clipped mid-word tells an author less
+    # than a short one that is true. The long form goes on the control's title, so hovering
+    # still answers "from where?".
+    def compact_blank_label(option)
+      value, = inherited(option.key)
+      reading = value ? label_for(option, value) : option.default_label
+      return blank_choice_label(option) if reading.blank?
+
+      chain.one? ? "Default — #{reading}" : "Inherit — #{reading}"
+    end
+
+    # What a text field shows while it is empty. The inherited value if there is one, so an
+    # author sees what is actually in force; otherwise the shape of a good answer, which is
+    # the more useful thing an empty margin field can say. Either way the control's title
+    # carries blank_choice_label, which is the sentence neither of these has room for.
+    def placeholder_for(option)
+      value, = inherited(option.key)
+
+      value.presence || option.hint
     end
 
     # Narrows what the modal offers. Document type bounds the level options; an output's
@@ -169,6 +194,40 @@ module Publication
         shown = family_options.select { |option| offers?(option) }
         [ family, shown ] if shown.any?
       end
+    end
+
+    # One thing a panel lays out: an option on its own, or a group's disclosure with the
+    # options it holds.
+    Section = Data.define(:option, :group, :options) do
+      def self.for_option(option) = new(option:, group: nil, options: nil)
+      def self.for_group(group, options) = new(option: nil, group:, options:)
+
+      def group? = !group.nil?
+    end
+
+    # A panel's contents in the order they are drawn. One ordered list rather than "the
+    # loose options, then the groups", because a group may belong beside the option it
+    # elaborates: the numbering table goes under division numbering, which is the setting
+    # an author is looking at when they want the rest of it.
+    #
+    # A group with nothing left to show -- every option in it dropped by document type --
+    # is left out rather than rendered as an empty disclosure. So is a group whose anchor
+    # this level does not offer: it falls to the end rather than disappearing, since a
+    # disclosure with nowhere to sit is still a disclosure an author may want.
+    def sections(options)
+      loose, grouped = options.partition { |option| option.group.nil? }
+
+      groups = Catalog::GROUPS.values.filter_map do |group|
+        shown = grouped.select { |option| option.group == group.key }
+        Section.for_group(group, shown) if shown.any?
+      end
+
+      anchored = groups.group_by { |section| section.group.after }
+      placed = loose.flat_map do |option|
+        [ Section.for_option(option), *anchored.delete(option.key) ]
+      end
+
+      placed + anchored.values.flatten
     end
 
     private

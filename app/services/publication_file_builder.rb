@@ -18,6 +18,10 @@ class PublicationFileBuilder
   # Author options merge *onto* this, so an option may extend one of these elements (a
   # theme lands on html/css, alongside html/resources) but the attributes here are not
   # something the catalog can offer, and nothing above can drop them.
+  #
+  # Not the same thing as Publication::Catalog.applied_defaults, which is also written into
+  # every file: those *are* the catalog's to offer, and an author who turns the embed
+  # button off overrides one. Anything an author may change belongs there, not here.
   BASE = {
     %w[ source directories ] => { "external" => "external", "generated" => "generated" },
     %w[ html resources ] => { "host" => "cdn" }
@@ -41,16 +45,27 @@ class PublicationFileBuilder
 
     attr_reader :settings
 
-    # Element path => attributes, with the author's choices merged onto BASE. Nested
-    # rather than flat because two options may share an ancestor (a theme and a page size
-    # both live under <html>), and the file has to nest them under one element.
+    # Element path => attributes, with the author's choices merged onto what every file
+    # starts from. Nested rather than flat because two options may share an ancestor (a
+    # theme and a page size both live under <html>), and the file has to nest them under
+    # one element.
     def attributes_by_path
-      settings.each_with_object(BASE.transform_values(&:dup)) do |(key, value), paths|
+      settings.each_with_object(starting_attributes) do |(key, value), paths|
         option = Publication::Catalog.find(key)
         next if option.nil?
 
         (paths[option.element] ||= {})[option.attribute] = value
       end
+    end
+
+    # BASE, plus a value for each option PreTeXt.Plus defaults differently from PreTeXt.
+    # Written as ordinary attributes so the author's settings, merging next, simply
+    # overwrite them -- turning the embed button off is a setting, not a special case.
+    def starting_attributes
+      Publication::Catalog.applied_defaults
+        .each_with_object(BASE.transform_values(&:dup)) do |(option, value), paths|
+          (paths[option.element] ||= {})[option.attribute] = value
+        end
     end
 
     # A nested Hash of element name => [children, attributes], so that

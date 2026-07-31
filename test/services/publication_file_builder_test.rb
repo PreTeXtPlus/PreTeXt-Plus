@@ -45,8 +45,8 @@ class PublicationFileBuilderTest < ActiveSupport::TestCase
   test "options sharing an ancestor are nested under one element" do
     result = xml("theme" => "salem")
 
-    assert_equal 1, result.scan("<html>").length
-    assert_match(%r{<html>\s*<resources host="cdn"/>\s*<css theme="salem"/>\s*</html>}, result)
+    assert_equal 1, result.scan("<html ").length
+    assert_match(%r{<html [^>]*>\s*<resources host="cdn"/>\s*<css theme="salem"/>\s*</html>}, result)
   end
 
   # Same hazard one level down: theme and dark mode are two attributes of one <css>, and
@@ -57,18 +57,74 @@ class PublicationFileBuilderTest < ActiveSupport::TestCase
     assert_equal 1, result.scan("<css ").length
   end
 
-  test "an empty set of settings is the file the build always had" do
+  test "an empty set of settings is the file every build starts from" do
     assert_equal <<~XML, xml({})
       <?xml version="1.0" encoding="UTF-8"?>
       <publication>
         <source>
           <directories external="external" generated="generated"/>
         </source>
-        <html>
+        <html embed-button="yes">
           <resources host="cdn"/>
         </html>
       </publication>
     XML
+  end
+
+  # PreTeXt ships the embed button off; PreTeXt.Plus writes it on. It goes in as an
+  # ordinary attribute rather than as part of BASE precisely so that an author's own
+  # setting, merging next, can take it back off -- and the second assertion is the whole
+  # reason for the distinction.
+  test "an option PreTeXt.Plus defaults is written, and an author can override it" do
+    assert_match(/<html embed-button="yes">/, xml({}))
+    assert_match(/<html embed-button="no">/, xml("embed_button" => "no"))
+  end
+
+  # The two long tails. Every knowl is an attribute of one <html><knowl>, and every
+  # exercise component an attribute of a per-type element under <common> -- so a family of
+  # settings that shared an element and got written as several would silently lose all but
+  # the first, which is the hazard the nesting exists for.
+  test "knowl options become attributes of one element" do
+    result = xml("knowl_theorem" => "yes", "knowl_proof" => "no", "knowl_figure" => "yes")
+
+    assert_equal 1, result.scan("<knowl ").length
+    assert_match(%r{<knowl theorem="yes" proof="no" figure="yes"/>}, result)
+  end
+
+  # Every numbered family is its own child of <numbering>, alongside <divisions>, and the
+  # two attributes of one family land on one element. A family's level and its counter are
+  # separate options in the catalog and must not come out as separate elements.
+  test "numbering options join divisions under one numbering element" do
+    result = xml("division_numbering_level" => "2", "numbering_blocks_level" => "1",
+                 "numbering_figures_level" => "0", "numbering_figures_distinct" => "yes")
+
+    assert_equal 1, result.scan("<numbering>").length
+    assert_match(%r{<divisions level="2"/>}, result)
+    assert_match(%r{<blocks level="1"/>}, result)
+    assert_match(%r{<figures level="0" distinct="yes"/>}, result)
+  end
+
+  # The margins are attributes of <worksheet> itself; each header band is a child of it.
+  # Two levels of nesting under one element that also carries attributes of its own, which
+  # is the case most likely to come out as two <worksheet> elements.
+  test "printout margins and headers nest under one worksheet element" do
+    result = xml("worksheet_margin" => "1in", "worksheet_top" => "0.5in",
+                 "first_page_header_left" => "Name:",
+                 "running_footer_right" => "Math 101")
+
+    assert_equal 1, result.scan("<worksheet ").length
+    assert_match(%r{<worksheet margin="1in" top="0\.5in">}, result)
+    assert_match(%r{<first-page-header left="Name:"/>}, result)
+    assert_match(%r{<running-footer right="Math 101"/>}, result)
+  end
+
+  test "exercise component visibility lands under common, one element per exercise kind" do
+    result = xml("exercise_inline_hint" => "no", "exercise_inline_solution" => "no",
+                 "exercise_divisional_answer" => "no", "exercise_project_statement" => "no")
+
+    assert_match(%r{<exercise-inline hint="no" solution="no"/>}, result)
+    assert_match(%r{<exercise-divisional answer="no"/>}, result)
+    assert_match(%r{<exercise-project statement="no"/>}, result)
   end
 
   # HasPublicationSettings validates values against the catalog, so this cannot come from

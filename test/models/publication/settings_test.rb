@@ -119,6 +119,168 @@ class Publication::SettingsTest < ActiveSupport::TestCase
     assert_equal %w[ general pdf ], families_of(targets(:one_print))
   end
 
+  # Groups are how a panel stays readable: the handful of settings an author came for sit
+  # in the panel, and the long tails go behind a disclosure. The split is by the option's
+  # own `group`, so adding one to a group takes it out of the panel and nothing else.
+  test "a panel lays out its options and its disclosures in one order" do
+    settings = Publication::Settings.new(@project)
+    families = settings.families.to_h.transform_keys(&:key)
+
+    html = settings.sections(families["html"])
+
+    assert_equal %w[ theme dark_mode chunk_level embed_button knowls ],
+                 html.map { |section| section.group? ? section.group.key : section.option.key }
+    assert_equal 18, html.last.options.size
+
+    general = settings.sections(families["general"]).select(&:group?)
+
+    assert_equal({ "numbering" => 11, "exercise_components" => 20, "printout" => 17 },
+                 general.to_h { |section| [ section.group.key, section.options.size ] })
+  end
+
+  # A group that elaborates one setting sits under it, not at the foot of the panel: the
+  # rest of the numbering options belong where an author is standing when they want them.
+  # Groups with no anchor still go last, in catalog order.
+  test "an anchored group sits under the option it elaborates" do
+    settings = Publication::Settings.new(@project)
+    general = settings.families.to_h.transform_keys(&:key)["general"]
+
+    order = settings.sections(general).map { |s| s.group? ? s.group.key : s.option.key }
+
+    assert_equal %w[ division_numbering_level numbering toc_level
+                     exercise_components printout ], order
+  end
+
+  # Every grouped option's family is the family its group is declared under. They are two
+  # declarations and could disagree, which would put a disclosure on a tab where none of
+  # its options belong -- or, worse, split one group across two tabs.
+  test "a grouped option sits in its group's family" do
+    Publication::Catalog.all.select(&:group).each do |option|
+      assert_equal Publication::Catalog::GROUPS.fetch(option.group).family, option.family,
+                   option.key
+    end
+  end
+
+  # The invariant that matters: a group's options and its grids' cells name the same set of
+  # keys. An option no cell reaches is one an author can never set, and a cell reaching no
+  # option is a hole in a table. Both are what generating options from the grid's own rows
+  # and columns is supposed to make impossible.
+  test "a group's options are exactly what its grids reach" do
+    Publication::Catalog::GROUPS.each_value do |group|
+      next unless group.grids?
+
+      cells = group.grids.flat_map do |grid|
+        grid.row_list.flat_map do |row_key, _|
+          grid.columns.map { |column_key, _| grid.cell_key(row_key, column_key) }
+        end
+      end
+      held = Publication::Catalog.all.select { |option| option.group == group.key }
+
+      assert_equal held.map(&:key).sort,
+                   cells.select { |key| Publication::Catalog.find(key) }.sort,
+                   group.key
+    end
+  end
+
+  # The one table that is deliberately ragged. PreTeXt has no numbering/blocks/@distinct --
+  # blocks *are* the counter the others share -- and equations and footnotes have counters
+  # with nothing to opt out of, so those three cells stay empty rather than offering a
+  # switch that would be written into the file and ignored.
+  test "the numbering table offers a counter only where PreTeXt has one" do
+    grid = Publication::Catalog::GROUPS.fetch("numbering").grids.sole
+
+    distinct = grid.rows.to_h.keys.select do |row|
+      Publication::Catalog.find(grid.cell_key(row, "distinct"))
+    end
+
+    assert_equal %w[ exercises figures projects openproblems ], distinct
+    grid.rows.each do |row, _|
+      assert Publication::Catalog.find(grid.cell_key(row, "level")), row
+    end
+  end
+
+  # A margin is interpolated into \newgeometry{left=...} in LaTeX that a build server then
+  # compiles, so the pattern is the whole of what stands between a text field and that
+  # command line. The units are the intersection of CSS and TeX, because the same string is
+  # also written into a browser's page margins.
+  test "a printout margin takes a length and nothing else" do
+    option = Publication::Catalog.find("worksheet_top")
+
+    assert option.free_text?
+    %w[ 0.75in 2cm 18mm 36pt 1pc 2em 3ex 0in ].each do |value|
+      assert option.permits?(value), value
+    end
+    %w[ 1px 2rem 1 in 0.75 -1in 1in} ].each do |value|
+      assert_not option.permits?(value), value
+    end
+    assert_not option.permits?("1in}\\input{/etc/passwd")
+    assert_not option.permits?("#{'1' * 20}in")
+  end
+
+  test "a printout margin is rejected on write like any other value" do
+    @project.publication_settings = { "worksheet_margin" => "1px" }
+
+    assert_not @project.valid?
+    assert_match(/margin on all sides/, @project.errors.full_messages.to_sentence)
+  end
+
+  # A header is words an author picks, so it is bounded by a shape rather than a list. The
+  # one thing ruled out is angle brackets: they cannot be meant in a page header, and the
+  # value passes through an HTML attribute on its way to being printed.
+  test "a printout header takes one line of text without angle brackets" do
+    option = Publication::Catalog.find("first_page_header_left")
+
+    assert option.permits?("Name: ______  Math 101 & 102")
+    assert_not option.permits?("<script>alert(1)</script>")
+    assert_not option.permits?("two\nlines")
+    assert_not option.permits?("x" * 101)
+  end
+
+  # A text field's placeholder answers the same question a select's blank option does, but
+  # in the space of a table cell: the value in force if there is one, the shape of a good
+  # answer if there is not. The sentence goes on the title.
+  test "a text field's placeholder shows what is in force, or the shape of an answer" do
+    option = Publication::Catalog.find("worksheet_margin")
+
+    assert_equal "0.75in", Publication::Settings.new(@project).placeholder_for(option)
+
+    @user.update!(publication_settings: { "worksheet_margin" => "1in" })
+
+    assert_equal "1in", Publication::Settings.new(@project.reload).placeholder_for(option)
+    assert_equal "Inherit — 1in (from your account)",
+                 Publication::Settings.new(@project).blank_choice_label(option)
+  end
+
+  # Twenty selects across four columns have no room for "Inherit — Show (from your
+  # account)". The compact form drops the provenance and keeps the value, which is the half
+  # that changes what a build does; the long form goes on the control's title.
+  test "a grouped control's empty choice names the value without the sentence" do
+    option = Publication::Catalog.find("exercise_inline_solution")
+
+    assert_equal "Default — Show",
+                 Publication::Settings.new(@user).compact_blank_label(option)
+    assert_equal "Inherit — Show",
+                 Publication::Settings.new(@project).compact_blank_label(option)
+
+    @user.update!(publication_settings: { "exercise_inline_solution" => "no" })
+
+    assert_equal "Inherit — Hide",
+                 Publication::Settings.new(@project.reload).compact_blank_label(option)
+    assert_equal "Inherit — Hide (from your account)",
+                 Publication::Settings.new(@project).blank_choice_label(option)
+  end
+
+  # PreTeXt's own default for the embed button is "no" and ours is "yes". Naming PreTeXt as
+  # the source would tell an author the opposite of what leaving the field alone does.
+  test "an option PreTeXt.Plus defaults says whose default it is" do
+    assert_equal "PreTeXt.Plus default (Offer an embed button)",
+                 Publication::Settings.new(@user)
+                   .blank_choice_label(Publication::Catalog.find("embed_button"))
+    assert_equal "PreTeXt's default (Behind a link)",
+                 Publication::Settings.new(@user)
+                   .blank_choice_label(Publication::Catalog.find("knowl_proof"))
+  end
+
   # Braille and EPUB are worth a tab on a project that has never built either -- an author
   # who does not know PreTeXt.Plus embosses braille will not go looking for the setting.
   # Braille asks for numbers, which need no project to supply, so it always shows.
@@ -251,18 +413,32 @@ class Publication::SettingsTest < ActiveSupport::TestCase
     assert_not chunking.affects?("pdf")
   end
 
-  # A family with nothing to show is left out rather than rendered empty: a slideshow
-  # numbers no divisions and has no contents to list, so its General tab would be blank.
-  test "a family with nothing to offer is dropped rather than shown empty" do
-    slides = Publication::Settings.new(projects(:slides))
+  # An option a document type has nothing to say about is dropped from its family rather
+  # than offered and then clamped: a slideshow numbers no divisions and lists no contents,
+  # so both level options go, and General is left holding only what a slideshow can honor.
+  test "a family drops the options its document type cannot use" do
+    general = Publication::Settings.new(projects(:slides)).families.to_h
+                                   .transform_keys(&:key)["general"]
 
-    assert_not_includes slides.families.map { |family, _| family.key }, "general"
-    # reveal.js is in no format family, so a slides output has nothing at all.
-    assert_empty Publication::Settings.new(targets(:slides_deck)).families
+    assert_not_includes general.map(&:key), "division_numbering_level"
+    assert_not_includes general.map(&:key), "toc_level"
+    assert_includes general.map(&:key), "exercise_inline_hint"
   end
 
-  # Both level options are bounded by the document's own structure. A slideshow numbers no
-  # divisions and pages itself, so its outputs have nothing to offer at all.
+  # reveal.js is in no format family, so a slides output keeps only General -- which every
+  # output has, because exercise components are read by pretext-common.xsl and so reach
+  # every conversion there is.
+  test "an output in no format family still gets the General tab" do
+    families = Publication::Settings.new(targets(:slides_deck)).families
+
+    assert_equal %w[ general ], families.map { |family, _| family.key }
+    assert families.first.last.all?(&:group),
+           "a slideshow's General tab is groups only -- it numbers no divisions and lists " \
+           "no contents, so both loose options drop"
+  end
+
+  # Both level options are bounded by the document's own structure: a book numbers one
+  # division deeper than an article, and a slideshow numbers none at all.
   test "choices follow the document type" do
     book = Publication::Settings.new(projects(:team))
     article = Publication::Settings.new(projects(:one))
@@ -271,7 +447,8 @@ class Publication::SettingsTest < ActiveSupport::TestCase
       .choices_for(book.document_type).size
     assert_equal 4, Publication::Catalog.find("division_numbering_level")
       .choices_for(article.document_type).size
-    assert_empty Publication::Settings.new(targets(:slides_deck)).options
+    assert_empty Publication::Catalog.find("division_numbering_level")
+      .choices_for("slideshow")
   end
 
   # The account modal has no project, so it offers the widest list any document type

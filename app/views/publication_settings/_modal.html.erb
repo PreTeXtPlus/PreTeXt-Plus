@@ -9,7 +9,7 @@
   <div class="absolute inset-0 bg-gray-900/40" data-action="click->modal#close"></div>
 
   <div role="dialog" aria-modal="true" aria-labelledby="publication-settings-title"
-       class="relative flex max-h-full w-full max-w-lg flex-col overflow-y-auto rounded-lg bg-white shadow-xl">
+       class="relative flex max-h-full w-full max-w-2xl flex-col overflow-y-auto rounded-lg bg-white shadow-xl">
 
     <div class="flex items-start justify-between gap-4 border-b border-gray-200 p-5">
       <div>
@@ -62,31 +62,20 @@
                   setting appears not to have worked is which format it was for. %>
               <p class="text-xs text-gray-500"><%= family.note %></p>
 
+              <%# Options and disclosures in one ordered list, because a group may belong
+                  beside the option it elaborates rather than at the foot of the panel --
+                  see Publication::Settings#sections. A group holds a long tail (eighteen
+                  knowl switches, twenty exercise components) that would bury the settings
+                  around it if it were laid out inline. %>
               <div class="mt-4 space-y-4">
-                <% options.each do |option| %>
-                  <div>
-                    <%= form.label option.key, option.label, class: "block text-sm font-medium text-gray-800" %>
-                    <%# Empty means inherit, whichever control asks: the select's blank
-                        option and the number field's placeholder both say what would take
-                        over -- see Publication::Settings#blank_choice_label. %>
-                    <% if (note = settings.unavailable_note(option)) %>
-                      <p class="mt-1 text-sm text-gray-600"><%= note %></p>
-                    <% elsif option.free_number? %>
-                      <%= form.number_field option.key, value: settings.own(option.key),
-                            in: option.choices.min..option.choices.max, step: 1,
-                            placeholder: settings.blank_choice_label(option),
-                            class: "mt-1 w-full rounded-md border border-gray-300 bg-white px-2 py-1.5 text-sm" %>
-                    <% else %>
-                      <%= form.select option.key,
-                            settings.select_choices_for(option),
-                            { include_blank: settings.blank_choice_label(option),
-                              selected: settings.own(option.key) },
-                            class: "mt-1 w-full rounded-md border border-gray-300 bg-white px-2 py-1.5 text-sm" %>
-                    <% end %>
-                    <% if option.help.present? %>
-                      <p class="mt-1 text-xs text-gray-500"><%= option.help %></p>
-                    <% end %>
-                  </div>
+                <% settings.sections(options).each do |section| %>
+                  <% if section.group? %>
+                    <%= render "publication_settings/group", group: section.group,
+                          options: section.options, form:, settings: %>
+                  <% else %>
+                    <%= render "publication_settings/option", option: section.option,
+                          form:, settings: %>
+                  <% end %>
                 <% end %>
               </div>
             </section>
@@ -103,13 +92,14 @@
       <% end %>
 
       <p class="border-t border-gray-200 px-5 py-4 text-xs text-gray-500">
-        These go into the publication file each build is given. Saving does not start a
-        build — the next one picks them up.
+        These settings are saved to the publication file. Rebuild output to see the changes.
       </p>
     <% else %>
-      <%# Reachable: a slideshow numbers no divisions and pages itself, and reveal.js is in
-          no format family, so a slides output has nothing on offer at all. Better to say
-          so than to show an empty dialog. %>
+      <%# Nothing reaches this today: General offers exercise-component visibility whatever
+          the document type and whatever the output, so every level has at least one tab.
+          It stays as the guard against a catalog change that empties a level again --
+          a dialog with a heading and a Save button and nothing between them reads as a
+          bug, and this is a sentence. %>
       <p class="p-5 text-sm text-gray-600">
         There are no build settings to choose for this
         <%= settings.owner.is_a?(Target) ? "output" : "document type" %> yet.
