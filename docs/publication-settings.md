@@ -42,6 +42,8 @@ outputs they reach. One declaration, because they are the same question: an auth
 | General | every output |
 | HTML | `website`, `scorm` |
 | PDF | `pdf`, `latex` |
+| EPUB | `epub`, `kindle` |
+| Braille | `braille` |
 
 | Key | Family | Publication path | Values |
 |---|---|---|---|
@@ -52,6 +54,49 @@ outputs they reach. One declaration, because they are the same question: an auth
 | `chunk_level` | HTML | `common/chunking/@level` | book `0`–`3`, article `0`–`2` |
 | `latex_print` | PDF | `latex/@print` | `no` (PreTeXt's default), `yes` |
 | `latex_sides` | PDF | `latex/@sides` | `one`, `two` |
+| `epub_cover` | EPUB | `epub/cover/@front` | the project's own uploaded images |
+| `braille_page_width` | Braille | `braille/page/@width` | whole number, 1–100 (PreTeXt's default 40) |
+| `braille_page_height` | Braille | `braille/page/@height` | whole number, 1–100 (PreTeXt's default 25) |
+
+The Braille and EPUB tabs show on **any** project, not only ones that have built either —
+an author who does not know PreTeXt.Plus embosses braille will never go looking for the
+setting. That is why the EPUB cover, with no image to offer, renders a line saying what to
+upload rather than vanishing.
+
+### Three kinds of choice
+
+`Option#choices` says both what an option accepts and how the modal asks for it:
+
+| `choices` | Control | Used by |
+|---|---|---|
+| Array of `[value, label]` | select | theme, dark mode, latex print/sides |
+| Hash keyed by document type | select | the level options, which the document's structure bounds |
+| `WholeNumber(min:, max:, unit:)` | number field | braille page width and height |
+| `PROJECT_IMAGES` | select built per project | the EPUB cover |
+
+`Option#permits?` is the single check validation makes, so the branch over these lives in
+one place rather than in the concern that stores them. The last two cannot answer for
+themselves — a project's images are not the catalog's to know, and a number has no list —
+so **`Publication::Settings` is what the modal asks** (`choices_for`, `select_choices_for`,
+`label_for`, `offers?`), and it delegates to the option for the static cases.
+
+Two consequences worth knowing:
+
+- **The EPUB cover value is an asset's filename in the external directory.** PreTeXt
+  resolves `epub/cover/@front` against that directory, and `ProjectArchiveBuilder` writes
+  each asset there as `<ref><ext>` — so the picker offers exactly those names, and the two
+  have to keep agreeing. Validation checks the *shape* (`EXTERNAL_FILENAME`: a bare
+  filename, no path), not membership: the concern also runs on `User`, which has no
+  project, and an asset deleted later must not make a project unsaveable.
+- **Braille page size is a number, not a list.** An embosser's line width is whatever that
+  embosser does, so a dropdown of the few we thought of would be wrong for the next one.
+  The 1–100 bounds are ours; PreTeXt takes any positive whole number and falls back with a
+  `PTX:FALLBACK` message otherwise.
+
+`Option#default_label` names PreTeXt's default where it is a fixed knowable thing ("40
+cells"), so an empty number field is usable. It stays nil where PreTeXt derives the default
+from the document's own structure — most level options — because naming one there would be
+a guess dressed up as information.
 
 Every spelling above was read off
 `node_modules/@pretextbook/pretext-html/assets/xsl/publisher-variables.xsl` — the code that

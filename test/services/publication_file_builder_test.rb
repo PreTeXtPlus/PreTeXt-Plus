@@ -31,6 +31,14 @@ class PublicationFileBuilderTest < ActiveSupport::TestCase
     assert_match(%r{<latex print="yes" sides="two"/>}, result)
   end
 
+  test "the epub and braille options land at their own paths" do
+    result = xml("epub_cover" => "front.png",
+                 "braille_page_width" => "32", "braille_page_height" => "28")
+
+    assert_match(%r{<epub>\s*<cover front="front.png"/>\s*</epub>}, result)
+    assert_match(%r{<braille>\s*<page width="32" height="28"/>\s*</braille>}, result)
+  end
+
   # Two options can share an ancestor. Emitting two <html> elements would leave PreTeXt
   # reading only the first, so the theme or the CDN resources would go missing depending
   # on the order they happened to be written in.

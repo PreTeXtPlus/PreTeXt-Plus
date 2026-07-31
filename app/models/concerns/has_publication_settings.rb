@@ -28,17 +28,14 @@ module HasPublicationSettings
     # Values are written into a publication file that a build server then runs, so they
     # are checked against the catalog rather than merely escaped on the way out. The
     # normalizer has already dropped unknown keys, so anything left has an option to
-    # check against.
-    #
-    # Checked against every value the option allows for *any* document type, not just this
-    # one: a book that becomes an article keeps its level-4 numbering setting, PreTeXt
-    # clamps it, and re-saving something unrelated should not fail on it.
+    # check against, and Publication::Catalog::Option#permits? owns what each kind of
+    # option will accept -- a list, a number in a range, or a bare filename.
     def publication_settings_are_offered
       publication_settings.each do |key, value|
         option = Publication::Catalog.find(key)
-        next if option.values.include?(value)
+        next if option.permits?(value)
 
-        errors.add(:publication_settings, "has no #{option.label.downcase} called “#{value}”")
+        errors.add(:publication_settings, "has no #{option.label.downcase} of “#{value}”")
       end
     end
 end

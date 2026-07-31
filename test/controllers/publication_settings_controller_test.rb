@@ -66,8 +66,54 @@ class PublicationSettingsControllerTest < ActionDispatch::IntegrationTest
   test "a project's modal offers every format's tab" do
     get edit_project_publication_settings_url(@project), headers: modal_headers
 
-    assert_select "[role=tab]", 3
-    %w[ general html pdf ].each { |family| assert_select "#publication-tab-#{family}" }
+    %w[ general html pdf braille ].each { |family| assert_select "#publication-tab-#{family}" }
+  end
+
+  # A braille page size is a number to type, not a list to pick from, and empty still
+  # means inherit -- so the placeholder has to carry what the select's blank option does.
+  test "a braille page size renders as a bounded number field" do
+    get edit_project_publication_settings_url(@project), headers: modal_headers
+
+    assert_select "input[type=number][name='publication_settings[braille_page_width]']" \
+                  "[min='1'][max='100']" do |input|
+      assert_match(/Inherit — PreTeXt's default \(40 cells\)/, input.first["placeholder"])
+    end
+  end
+
+  test "a braille page size saves, and a nonsense one is refused" do
+    patch project_publication_settings_url(@project),
+      params: { publication_settings: { braille_page_width: "32" } }
+    assert_equal "32", @project.reload.publication_settings["braille_page_width"]
+
+    patch project_publication_settings_url(@project),
+      params: { publication_settings: { braille_page_width: "-4" } }
+    assert_match(/cells per line/, flash[:alert])
+    assert_equal "32", @project.reload.publication_settings["braille_page_width"]
+  end
+
+  # The EPUB tab appears once the project has an image to be a cover, and the picker
+  # offers it under the name the archive writes it as.
+  test "the cover picker offers the project's own images" do
+    assets(:image_one).file.attach(
+      io: File.open(Rails.root.join("test/fixtures/files/test_image.png")),
+      filename: "test_image.png", content_type: "image/png"
+    )
+
+    get edit_project_publication_settings_url(@project), headers: modal_headers
+
+    assert_select "#publication-tab-epub"
+    assert_select "select[name='publication_settings[epub_cover]'] " \
+                  "option[value=?]", "#{assets(:image_one).ref}.png"
+  end
+
+  # Without one, the tab stays but says what to do -- an author who has never built an
+  # EPUB should still find out a cover is something they can set.
+  test "with no images the cover says what to do instead of offering an empty picker" do
+    get edit_project_publication_settings_url(@project), headers: modal_headers
+
+    assert_select "#publication-tab-epub"
+    assert_select "select[name='publication_settings[epub_cover]']", false
+    assert_select "#publication-panel-epub", /upload an image/i
   end
 
   # Panels are hidden, not unmounted, so a change on one tab and a change on another save

@@ -53,7 +53,15 @@ module Publication
 
       Family.build(:pdf, label: "PDF",
         note: "Applies to PDF and LaTeX outputs.",
-        formats: %w[ pdf latex ])
+        formats: %w[ pdf latex ]),
+
+      Family.build(:epub, label: "EPUB",
+        note: "Applies to EPUB and Kindle outputs.",
+        formats: %w[ epub kindle ]),
+
+      Family.build(:braille, label: "Braille",
+        note: "Applies to braille outputs.",
+        formats: %w[ braille ])
     ].index_by(&:key).freeze
 
     # `key`       -- our storage key, and the form field name. Ours, not PreTeXt's, so
@@ -62,50 +70,112 @@ module Publication
     # `attribute` -- the attribute on that element which carries the value.
     # `family`    -- which of FAMILIES it belongs to, which decides both its tab and the
     #                outputs it affects.
-    # `choices`   -- [value, label] pairs. A bare array when every document type gets the
-    #                same list, or a Hash keyed by document type when the list depends on
-    #                the document's own structure, which the level options do. A type
-    #                absent from that Hash is a type the option is not offered for.
-    Option = Data.define(:key, :label, :help, :element, :attribute, :family, :choices) do
-      def self.build(key, label:, element:, attribute:, family:, choices:, help: nil)
+    # An option whose answer is a number rather than one of a list. Braille page geometry
+    # is the case that needs it: an embosser's line width is whatever that embosser does,
+    # and a dropdown of the handful we happened to think of would be wrong for the next
+    # one. PreTeXt asks only for a positive whole number; the bounds here are ours, wide
+    # enough for any real embosser and narrow enough that a typo cannot reach a build.
+    WholeNumber = Data.define(:min, :max, :unit)
+
+    # An option whose list is the project's own uploaded images -- the EPUB cover, which
+    # PreTeXt resolves against the external directory, exactly where ProjectArchiveBuilder
+    # writes a project's assets. Publication::Settings builds the list, since the catalog
+    # has no project to ask.
+    PROJECT_IMAGES = :project_images
+
+    # What an asset is called inside the external directory: ProjectArchiveBuilder writes
+    # each one as "<ref><ext>", and `ref` is REF_REGEX. Spelled out rather than composed
+    # from REF_REGEX so that what it permits is readable where it is enforced -- and
+    # because what matters is what it forbids, which is anything carrying a path.
+    EXTERNAL_FILENAME = /\A[a-zA-Z_][a-zA-Z0-9\-_]*\.[a-zA-Z0-9]+\z/
+
+    # `choices`   -- what the option accepts, and so how the modal asks for it:
+    #                  Array          -- a fixed list of [value, label]; a select
+    #                  Hash           -- those lists keyed by document type, for options
+    #                                    bounded by the document's own structure; a select.
+    #                                    A type absent from the Hash is one the option is
+    #                                    not offered for at all
+    #                  WholeNumber    -- any whole number in a range; a number field
+    #                  PROJECT_IMAGES -- the project's uploaded images; a select
+    # `default_label` -- what PreTeXt does when nobody sets the option, where that is a
+    #                fixed knowable thing ("40 cells"). Left nil where PreTeXt derives the
+    #                default from the document's own structure, which most level options
+    #                do: naming a default that depends on the source would be a guess
+    #                dressed up as information.
+    Option = Data.define(:key, :label, :help, :element, :attribute, :family, :choices,
+                         :default_label) do
+      def self.build(key, label:, element:, attribute:, family:, choices:, help: nil,
+                     default_label: nil)
         new(key: key.to_s, label: label, help: help, element: element.map(&:to_s).freeze,
-            attribute: attribute.to_s, family: family.to_s, choices: choices.freeze)
+            attribute: attribute.to_s, family: family.to_s, choices: choices.freeze,
+            default_label: default_label)
+      end
+
+      # A number to type rather than a list to pick from.
+      def free_number?
+        choices.is_a?(WholeNumber)
+      end
+
+      # A list only a project can supply. Publication::Settings resolves these; everything
+      # here would have to guess.
+      def project_scoped?
+        choices == PROJECT_IMAGES
+      end
+
+      def fixed_choices?
+        !free_number? && !project_scoped?
       end
 
       # The [value, label] pairs to offer for a project of this document type, or [] when
       # the option has nothing to offer it -- a slideshow has no divisions to number, and
-      # numbering it is not a setting we should pretend exists.
+      # numbering it is not a setting we should pretend exists. Also [] for the two kinds
+      # of option this class cannot answer for on its own; see Publication::Settings.
       #
       # Document type is a Project concern, so nil (the account-level modal, which has no
       # project) gets the longest list any type would produce. An account default a given
       # project cannot honor is harmless: PreTeXt clamps an over-deep level to what the
       # document can bear, and that project's own modal will not offer it.
       def choices_for(document_type)
+        return [] unless fixed_choices?
         return choices unless choices.is_a?(Hash)
         return choices.values.max_by(&:size) if document_type.nil?
 
         choices[document_type.to_s] || []
       end
 
-      # The same choices in the order Rails' select helper takes them, which is [label,
-      # value] -- the reverse of how they are written here. Written [value, label] because
-      # that is the direction everything else reads them in (looking a stored value's
-      # label up), and flipped in exactly this one place rather than storing them
-      # backwards to suit one helper.
-      def select_choices_for(document_type)
-        choices_for(document_type).map(&:reverse)
-      end
-
       # The label an option's value reads as, for showing an inherited value as something
-      # other than a bare "1".
+      # other than a bare "1". A free number carries its unit, which is the whole
+      # difference between "40" and "40 cells".
       def label_for(value, document_type)
+        return "#{value} #{choices.unit}" if free_number?
+
         choices_for(document_type).to_h[value] || value
       end
 
-      # Every value this option will accept, across all document types. What validation
-      # checks against: the modal already filters by document type, so anything here is a
-      # value some project could legitimately have chosen.
+      # Whether this option accepts the value at all. The single check validation makes,
+      # so that the branch over what kind of option this is lives here rather than in the
+      # concern that stores them.
+      #
+      # A fixed-list option is checked against every value it allows for *any* document
+      # type: a book that becomes an article keeps its level-4 numbering setting, PreTeXt
+      # clamps it, and re-saving something unrelated should not fail on it.
+      def permits?(value)
+        if free_number?
+          value.match?(/\A\d+\z/) && value.to_i.between?(choices.min, choices.max)
+        elsif project_scoped?
+          # Not checked against the project's actual assets: this runs on User too, which
+          # has no project, and an asset deleted later would otherwise make a level
+          # unsaveable. What it does rule out is anything carrying a path.
+          value.match?(EXTERNAL_FILENAME)
+        else
+          values.include?(value)
+        end
+      end
+
+      # Every value a fixed-list option will accept, across all document types.
       def values
+        return [] unless fixed_choices?
+
         pairs = choices.is_a?(Hash) ? choices.values.flatten(1) : choices
         pairs.map(&:first)
       end
@@ -120,7 +190,14 @@ module Publication
         family_config.affects?(target_kind)
       end
 
+      # Whether the document's own structure leaves this option anything to ask about. Only
+      # fixed lists are bounded that way -- an embosser's page size and a cover image mean
+      # the same thing whatever the document is -- so the other two answer yes and leave
+      # the real question (does this project have any images?) to Publication::Settings,
+      # which is the only thing holding a project.
       def offered_for?(document_type)
+        return true unless fixed_choices?
+
         choices_for(document_type).any?
       end
     end
@@ -268,7 +345,34 @@ module Publication
         label: "Page sides",
         help: "Whether chapters and sections lay out for printing on both sides of a sheet.",
         element: %w[ latex ], attribute: "sides", family: :pdf,
-        choices: LATEX_SIDES)
+        choices: LATEX_SIDES),
+
+      # $epub-cover-source resolves this against the external directory, which is exactly
+      # where ProjectArchiveBuilder writes a project's assets -- so the value is an asset's
+      # own "<ref><ext>", and picking one is picking an image already in the project.
+      Option.build(:epub_cover,
+        label: "Cover image",
+        help: "What a reader sees in their library. PreTeXt makes a plain cover if you " \
+              "pick nothing; anything you have uploaded to this project can be used instead.",
+        element: %w[ epub cover ], attribute: "front", family: :epub,
+        choices: PROJECT_IMAGES),
+
+      # $braille-page-width / $braille-page-height. PreTeXt takes any positive whole number
+      # and falls back to these defaults with a message; the range is ours, wide enough for
+      # any real embosser.
+      Option.build(:braille_page_width,
+        label: "Cells per line",
+        help: "How wide your embosser's page is. 40 suits the usual North American sheet.",
+        element: %w[ braille page ], attribute: "width", family: :braille,
+        default_label: "40 cells",
+        choices: WholeNumber.new(min: 1, max: 100, unit: "cells")),
+
+      Option.build(:braille_page_height,
+        label: "Lines per page",
+        help: "How tall your embosser's page is. 25 suits the usual North American sheet.",
+        element: %w[ braille page ], attribute: "height", family: :braille,
+        default_label: "25 lines",
+        choices: WholeNumber.new(min: 1, max: 100, unit: "lines"))
     ].index_by(&:key).freeze
 
     class << self

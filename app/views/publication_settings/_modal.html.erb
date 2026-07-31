@@ -66,13 +66,23 @@
                 <% options.each do |option| %>
                   <div>
                     <%= form.label option.key, option.label, class: "block text-sm font-medium text-gray-800" %>
-                    <%# The empty choice is how an override is cleared, and it names what
-                        would take over -- see Publication::Settings#blank_choice_label. %>
-                    <%= form.select option.key,
-                          option.select_choices_for(settings.document_type),
-                          { include_blank: settings.blank_choice_label(option),
-                            selected: settings.own(option.key) },
-                          class: "mt-1 w-full rounded-md border border-gray-300 bg-white px-2 py-1.5 text-sm" %>
+                    <%# Empty means inherit, whichever control asks: the select's blank
+                        option and the number field's placeholder both say what would take
+                        over -- see Publication::Settings#blank_choice_label. %>
+                    <% if (note = settings.unavailable_note(option)) %>
+                      <p class="mt-1 text-sm text-gray-600"><%= note %></p>
+                    <% elsif option.free_number? %>
+                      <%= form.number_field option.key, value: settings.own(option.key),
+                            in: option.choices.min..option.choices.max, step: 1,
+                            placeholder: settings.blank_choice_label(option),
+                            class: "mt-1 w-full rounded-md border border-gray-300 bg-white px-2 py-1.5 text-sm" %>
+                    <% else %>
+                      <%= form.select option.key,
+                            settings.select_choices_for(option),
+                            { include_blank: settings.blank_choice_label(option),
+                              selected: settings.own(option.key) },
+                            class: "mt-1 w-full rounded-md border border-gray-300 bg-white px-2 py-1.5 text-sm" %>
+                    <% end %>
                     <% if option.help.present? %>
                       <p class="mt-1 text-xs text-gray-500"><%= option.help %></p>
                     <% end %>
