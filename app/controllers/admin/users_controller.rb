@@ -1,5 +1,5 @@
 class Admin::UsersController < Admin::BaseController
-  before_action :set_user, only: %i[show confirm reset_password]
+  before_action :set_user, only: %i[show confirm reset_password update_email]
 
   def index
     @filters = filter_params.to_h
@@ -22,10 +22,26 @@ class Admin::UsersController < Admin::BaseController
     redirect_to admin_user_path(@user), notice: "Sent password reset email to #{@user.email}."
   end
 
+  # Direct support correction, not the self-service change-of-email flow: skips
+  # reconfirmation so the address takes effect immediately instead of sitting in
+  # unconfirmed_email until a confirmation link is clicked.
+  def update_email
+    @user.skip_reconfirmation!
+    if @user.update(email_params)
+      redirect_to admin_user_path(@user), notice: "Updated email to #{@user.email}."
+    else
+      redirect_to admin_user_path(@user), alert: @user.errors.full_messages.to_sentence
+    end
+  end
+
   private
 
   def set_user
     @user = User.includes(subscription_seats: :subscription).find(params[:id])
+  end
+
+  def email_params
+    params.expect(user: [ :email ])
   end
 
   def filtered_users

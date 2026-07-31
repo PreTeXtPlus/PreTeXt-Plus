@@ -37,7 +37,12 @@
       <dl class="mt-4 space-y-3 text-sm text-gray-700">
         <div>
           <dt class="font-medium text-gray-500">Email</dt>
-          <dd><%= @user.email %></dd>
+          <dd>
+            <%= form_with model: @user, url: update_email_admin_user_path(@user), method: :patch, class: "mt-1 flex flex-wrap items-center gap-2" do |form| %>
+              <%= form.email_field :email, class: "rounded-md border border-gray-300 px-2.5 py-1.5 text-sm shadow-sm focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500" %>
+              <%= form.submit "Save email", class: "#{button_classes(color: "blue")} px-2.5 py-1 text-xs" %>
+            <% end %>
+          </dd>
         </div>
         <div>
           <dt class="font-medium text-gray-500">Name</dt>
