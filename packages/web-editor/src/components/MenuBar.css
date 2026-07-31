@@ -87,12 +87,7 @@
   background-color: #a32899;
   color: white;
   font-weight: 500;
-}
-
-@media (min-width: 640px) {
-  .pretext-plus-editor__read-only-label {
-    width: auto;
-  }
+  margin: 0 auto;
 }
 
 .pretext-plus-editor__button {
