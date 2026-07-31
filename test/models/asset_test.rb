@@ -47,4 +47,41 @@ class AssetTest < ActiveSupport::TestCase
     assert copied_asset.file.attached?
     assert_equal asset.file.blob, copied_asset.file.blob
   end
+
+  test "unsubscribed owner is capped at 100 total assets across all their projects" do
+    owner = users(:one)
+    project = Project.create!(user: owner, title: "Quota project")
+    remaining = owner.asset_quota - owner.assets.count
+    remaining.times { |n| project.assets.create!(ref: "cap-#{n}", kind: :authored, title: "A#{n}") }
+
+    assert_equal owner.asset_quota, owner.reload.assets.count
+
+    over = project.assets.build(ref: "cap-over", kind: :authored, title: "Over")
+    assert_not over.valid?
+    assert_match(/limit/i, over.errors[:base].to_sentence)
+  end
+
+  test "subscribed owner is not capped by asset count" do
+    owner = users(:subscribed)
+    project = Project.create!(user: owner, title: "Quota project")
+    101.times { |n| project.assets.create!(ref: "sub-#{n}", kind: :authored, title: "S#{n}") }
+
+    assert_equal 101, project.assets.count
+  end
+
+  test "asset quota follows the project owner's plan, not the collaborator's" do
+    owner = users(:one) # unsubscribed
+    project = Project.create!(user: owner, title: "Quota project")
+    remaining = owner.asset_quota - owner.assets.count
+    remaining.times { |n| project.assets.create!(ref: "collab-#{n}", kind: :authored, title: "A#{n}") }
+
+    # users(:subscribed) is an unrelated, subscribed account -- their own plan
+    # must not lift the cap on someone else's project.
+    over = project.assets.build(ref: "collab-over", kind: :authored, title: "Collab Over")
+    assert_not over.valid?
+  end
+
+  test "asset quota is not enforced on existing rows (grandfathering)" do
+    assert assets(:authored_one).valid?
+  end
 end

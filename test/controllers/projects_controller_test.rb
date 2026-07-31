@@ -519,6 +519,23 @@ class ProjectsControllerTest < ActionDispatch::IntegrationTest
     assert_redirected_to edit_project_path(copied)
   end
 
+  test "copy fails gracefully (not a 500) when it would exceed the requester's asset quota" do
+    requester = users(:two)
+    own_project = projects(:two) # requester's own project, padded up to their quota
+    remaining = requester.asset_quota - requester.assets.count
+    remaining.times { |n| own_project.assets.create!(ref: "pad-#{n}", kind: :authored, title: "Pad #{n}") }
+
+    sign_out :user
+    sign_in requester
+
+    assert_no_difference("Project.count") do
+      post copy_project_url(@project) # projects(:one), carries 2 assets to copy in
+    end
+
+    assert_redirected_to copy_project_path(@project)
+    assert_match(/asset limit/i, flash[:alert])
+  end
+
   test "preview is accessible without authentication" do
     sign_out :user  # sign out
     stub_preview_server do

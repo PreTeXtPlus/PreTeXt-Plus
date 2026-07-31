@@ -6,22 +6,22 @@ class UserTest < ActiveSupport::TestCase
     assert_equal("downcased@example.com", user.email)
   end
 
-  test "project_quota is 10_000 for admin" do
+  test "asset_quota is unlimited for admin" do
     user = users(:one)
     user.admin = true
-    assert_equal 10_000, user.project_quota
+    assert_equal Float::INFINITY, user.asset_quota
   end
 
-  test "project_quota is 10 for unsubscribed user" do
+  test "asset_quota is 100 for unsubscribed user" do
     user = users(:one)
     user.admin = false
     assert_not user.subscribed?
-    assert_equal 10, user.project_quota
+    assert_equal 100, user.asset_quota
   end
 
-  test "project_quota is 100 for subscribed user" do
+  test "asset_quota is unlimited for subscribed user" do
     user = users(:subscribed)
-    assert_equal 100, user.project_quota
+    assert_equal Float::INFINITY, user.asset_quota
   end
 
   test "has_subscriber_benefits? is true for admin" do
