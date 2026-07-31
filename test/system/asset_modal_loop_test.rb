@@ -15,6 +15,10 @@ class AssetModalLoopTest < ApplicationSystemTestCase
     fill_in "user_email", with: user.email
     fill_in "user_password", with: "password123"
     click_button "Sign in"
+    # Wait for the post-login navigation to land: `visit` doesn't queue behind
+    # an in-flight one, so without this the editor page can be replaced by the
+    # redirect that was already on its way.
+    assert_text "Signed in successfully.", wait: 10
 
     visit edit_project_path(project)
 
