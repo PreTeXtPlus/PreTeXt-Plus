@@ -1,4 +1,4 @@
-import type { ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { useEditorStore } from "../store/hooks";
 import StoreFeedbackLink from "./StoreFeedbackLink";
 import "./MenuBar.css";
@@ -12,7 +12,7 @@ export interface MenuBarProps {
   onCancelButton?: () => void;
   /** Label for the Cancel button.  Defaults to `"Cancel"`. */
   cancelButtonLabel?: string;
-  /** When true, the title field is read-only. */
+  /** When true, the title cannot be edited. */
   readOnly?: boolean;
   /**
    * When `false`, the Simple/Full preview mode toggle is hidden entirely.
@@ -28,6 +28,15 @@ const MenuBar = (props: MenuBarProps) => {
   const setShowLivePreview = useEditorStore((s) => s.setShowLivePreview);
   const title = useEditorStore((s) => s.title);
   const updateTitle = useEditorStore((s) => s.updateTitle);
+  const [editingTitle, setEditingTitle] = useState(false);
+  const titleInputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (editingTitle) {
+      titleInputRef.current?.focus();
+      titleInputRef.current?.select();
+    }
+  }, [editingTitle]);
 
   let previewModeToggle;
   if (props.showPreviewModeToggle === false) {
@@ -80,16 +89,37 @@ const MenuBar = (props: MenuBarProps) => {
   return (
     <div className="pretext-plus-editor__menu-bar">
       <div className="pretext-plus-editor__menu-left">
-        <label className="pretext-plus-editor__title-label">
-          Title{" "}
+        {editingTitle ? (
           <input
+            ref={titleInputRef}
             className="pretext-plus-editor__title-input"
             type="text"
+            aria-label="Title"
             value={title}
             onChange={(e) => updateTitle(e.target.value)}
-            readOnly={props.readOnly}
+            onBlur={() => setEditingTitle(false)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" || e.key === "Escape") {
+                setEditingTitle(false);
+              }
+            }}
           />
-        </label>
+        ) : (
+          <span className="pretext-plus-editor__title">
+            <span className="pretext-plus-editor__title-text">
+              {title || "Untitled"}
+            </span>
+            {!props.readOnly && (
+              <button
+                type="button"
+                className="pretext-plus-editor__title-edit"
+                onClick={() => setEditingTitle(true)}
+              >
+                edit
+              </button>
+            )}
+          </span>
+        )}
       </div>
       <div className="pretext-plus-editor__menu-right">
         {props.presence}

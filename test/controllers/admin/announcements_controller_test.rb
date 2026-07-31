@@ -125,6 +125,20 @@ class Admin::AnnouncementsControllerTest < ActionDispatch::IntegrationTest
     assert_not announcements(:unready).reload.published?
   end
 
+  test "update can flag an announcement for the homepage banner" do
+    sign_in @admin
+    patch admin_announcement_path(announcements(:published)),
+      params: { announcement: { title: "Updated", body: "Updated body.", show_on_homepage: true } }
+    assert announcements(:published).reload.show_on_homepage?
+  end
+
+  test "update can clear the homepage banner flag" do
+    sign_in @admin
+    patch admin_announcement_path(announcements(:homepage)),
+      params: { announcement: { title: "Updated", body: "Updated body.", show_on_homepage: false } }
+    assert_not announcements(:homepage).reload.show_on_homepage?
+  end
+
   test "update can mark a draft as ready to publish" do
     sign_in @admin
     patch admin_announcement_path(announcements(:unready)),

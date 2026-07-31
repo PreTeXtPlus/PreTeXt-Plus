@@ -52,6 +52,6 @@ class Admin::AnnouncementsController < Admin::BaseController
   private
 
   def announcement_params
-    params.require(:announcement).permit(:title, :body, :paid_subscribers_only, :draft)
+    params.require(:announcement).permit(:title, :body, :paid_subscribers_only, :draft, :show_on_homepage)
   end
 end

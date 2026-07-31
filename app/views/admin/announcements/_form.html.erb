@@ -26,6 +26,17 @@
   </div>
 
   <div class="flex items-center gap-3">
+    <%= form.check_box :show_on_homepage, class: "h-4 w-4 rounded border-gray-300 text-blue-600" %>
+    <%= form.label :show_on_homepage, class: "text-sm font-medium text-gray-700" do %>
+      Show a banner on the homepage
+      <span class="pl-2 text-xs text-gray-500 font-normal">
+        Once published, the homepage links visitors to this announcement by title.
+        Paid-subscribers-only announcements are never bannered.
+      </span>
+    <% end %>
+  </div>
+
+  <div class="flex items-center gap-3">
     <%= form.check_box :draft, class: "h-4 w-4 rounded border-gray-300 text-blue-600" %>
     <%= form.label :draft, class: "text-sm font-medium text-gray-700" do %>
       Work-in-progress draft
