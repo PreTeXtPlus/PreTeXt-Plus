@@ -17,6 +17,23 @@ module PublicationSettingsHelper
     end
   end
 
+  # A grid as the table the modal draws it as: [row label, [option per column]]. The cells
+  # come from the grid's own row and column lists rather than from the options in hand, so
+  # a cell whose option this level does not offer is a nil the table can leave blank --
+  # otherwise the columns after it would shift left and the whole row would read as
+  # answering the wrong questions.
+  #
+  # A row with no options left at all is dropped rather than rendered empty, and a grid
+  # left with no rows is dropped by the caller.
+  def publication_settings_grid(grid, options)
+    by_key = options.index_by(&:key)
+
+    grid.row_list.filter_map do |row_key, row_label|
+      cells = grid.columns.map { |column_key, _| by_key[grid.cell_key(row_key, column_key)] }
+      [ row_label, cells ] if cells.any?
+    end
+  end
+
   # The modal's heading. Names the thing being edited rather than the level, because
   # "Build settings for Print PDF" tells an author which of the three they have open and
   # "Output settings" does not.

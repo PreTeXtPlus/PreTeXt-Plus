@@ -127,17 +127,14 @@ class PublicationSettingsControllerTest < ActionDispatch::IntegrationTest
   end
 
   # One tab is not a choice. The panel and its note still render; only the strip goes.
-  # A PDF of a slideshow is the case: slides number no divisions and list no contents, so
-  # General empties out and only the PDF options are left.
+  # A reveal.js output is the case: it is in no format family, so General is all it has.
   test "a level reaching one family gets no tab strip" do
-    handout = projects(:slides).targets.create!(name: "Handout", kind: "pdf")
-
-    get edit_project_target_publication_settings_url(projects(:slides), handout),
+    get edit_project_target_publication_settings_url(projects(:slides), targets(:slides_deck)),
       headers: modal_headers
 
     assert_select "[role=tablist]", false
     assert_select "[role=tabpanel]", 1
-    assert_select "select[name='publication_settings[latex_sides]']"
+    assert_select "select[name='publication_settings[exercise_inline_hint]']"
   end
 
   # Whatever id the path carries, an author edits their own account -- the same rule
@@ -237,14 +234,63 @@ class PublicationSettingsControllerTest < ActionDispatch::IntegrationTest
     assert_redirected_to project_path(@project)
   end
 
-  # A slideshow numbers no divisions and pages itself, so its slides output has nothing to
-  # offer. An empty dialog would read as a bug.
-  test "an output with nothing to choose says so instead of showing an empty form" do
-    get edit_project_target_publication_settings_url(projects(:slides), targets(:slides_deck)),
+  # The long tails go behind a disclosure rather than into the panel: eighteen knowl
+  # switches ahead of the theme picker would bury it. They are still ordinary fields in the
+  # same form -- a <details> hides its contents without unmounting them -- so one collapsed
+  # and one open save together, which is the assertion that matters here.
+  test "a group's options are fields of the form, inside a closed disclosure" do
+    get edit_project_target_publication_settings_url(@project, targets(:one_web)),
       headers: modal_headers
 
-    assert_response :success
-    assert_select "form", false
-    assert_select "turbo-frame#modal", /no build settings/i
+    assert_select "details:not([open]) summary", text: /Knowls/
+    assert_select "form details select[name='publication_settings[knowl_theorem]']"
+    assert_select "form details table select[name='publication_settings[exercise_worksheet_solution]']"
+  end
+
+  # One disclosure, two tables: five margins in a row of labelled columns with no row
+  # headers, twelve header slots in a grid that has them. The margins table is the case
+  # where nothing on screen names a cell, so the field carries its own accessible name.
+  test "the printout disclosure holds both of its tables" do
+    get edit_project_publication_settings_url(@project), headers: modal_headers
+
+    assert_select "details summary", text: /Printout/
+    assert_select "input[name='publication_settings[worksheet_margin]']" \
+                  "[aria-label='Margin on all sides'][placeholder='0.75in']"
+    assert_select "input[name='publication_settings[first_page_header_left]']" \
+                  "[aria-label='First page header, left']"
+  end
+
+  # The numbering disclosure is anchored: it renders between division numbering and the
+  # table of contents, not at the foot of the panel with the others. Asserted on the
+  # rendered order, since that is the whole of what `after` is for.
+  test "the numbering disclosure renders under division numbering" do
+    get edit_project_publication_settings_url(@project), headers: modal_headers
+
+    panel = css_select("#publication-panel-general").first.to_html
+    positions = [ "publication_settings_division_numbering_level",
+                  "More numbering options",
+                  "publication_settings_toc_level" ].map { |mark| panel.index(mark) }
+
+    assert_equal positions.compact.sort, positions
+    assert_select "select[name='publication_settings[numbering_blocks_level]']"
+    assert_select "select[name='publication_settings[numbering_figures_distinct]']"
+    assert_select "select[name='publication_settings[numbering_blocks_distinct]']", false
+  end
+
+  test "a knowl and an exercise component save like any other option" do
+    patch project_publication_settings_url(@project),
+      params: { publication_settings: { knowl_theorem: "yes", exercise_inline_solution: "no" } }
+
+    assert_equal({ "knowl_theorem" => "yes", "exercise_inline_solution" => "no" },
+                 @project.reload.publication_settings)
+  end
+
+  # The one option PreTeXt.Plus writes a default for. Its empty choice has to name that
+  # default rather than PreTeXt's, which is the opposite value.
+  test "the embed button's empty choice names the default a build actually uses" do
+    get edit_project_publication_settings_url(@project), headers: modal_headers
+
+    assert_select "select[name='publication_settings[embed_button]'] option[value='']",
+                  text: /PreTeXt\.Plus default \(Offer an embed button\)/
   end
 end

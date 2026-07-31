@@ -1,0 +1,38 @@
+<%# The input for one option and nothing else -- no label, no help text. Three kinds,
+    decided by what the option accepts: a number to type, words to type, or a list to pick
+    from. Shared so that a setting laid out in a panel and the same setting in a table cell
+    cannot end up asking for different things.
+
+    Empty always means inherit, whichever control asks. A select says so in its blank
+    option, a field in its placeholder; `compact` is the version for a table cell or a
+    group row, where the sentence does not fit and goes on the title instead.
+
+    Locals: form, settings, option, and optionally `compact` and `label` -- the latter the
+    accessible name, needed only where nothing else supplies one, as in a cell of a table
+    with no row headers. %>
+<% compact = local_assigns.fetch(:compact, false) %>
+<% label = local_assigns[:label] %>
+<% sizing = compact ? "w-full px-1 py-1 text-xs" : "mt-1 w-full px-2 py-1.5 text-sm" %>
+<% classes = "#{sizing} rounded-md border border-gray-300 bg-white" %>
+
+<% if option.free_number? %>
+  <%= form.number_field option.key, value: settings.own(option.key),
+        in: option.choices.min..option.choices.max, step: 1,
+        placeholder: settings.blank_choice_label(option),
+        "aria-label": label, class: classes %>
+<% elsif option.free_text? %>
+  <%= form.text_field option.key, value: settings.own(option.key),
+        maxlength: option.choices.max_length,
+        placeholder: settings.placeholder_for(option),
+        title: settings.blank_choice_label(option),
+        "aria-label": label, class: classes %>
+<% else %>
+  <%= form.select option.key,
+        settings.select_choices_for(option),
+        { include_blank: compact ? settings.compact_blank_label(option)
+                                 : settings.blank_choice_label(option),
+          selected: settings.own(option.key) },
+        { "aria-label": label,
+          title: (settings.blank_choice_label(option) if compact),
+          class: classes } %>
+<% end %>

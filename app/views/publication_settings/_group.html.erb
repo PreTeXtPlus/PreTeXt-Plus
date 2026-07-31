@@ -1,0 +1,90 @@
+<%# A group of options behind a disclosure. Either a list of label-and-control rows, or
+    one or more tables where the options form a grid -- five kinds of exercise crossed with
+    four components, four printout bands crossed with three positions.
+
+    Closed by default and never `open`: these are the long tails of their families, and an
+    author who wants the theme picker should not have to scroll past eighteen knowl
+    switches to reach it. Nothing is unmounted -- a <details> keeps its fields in the DOM,
+    so a setting changed and then collapsed still saves. %>
+<details class="rounded-md border border-gray-200 bg-gray-50">
+  <%# The browser's own disclosure triangle, rather than one drawn here: it already turns
+      on open, and it is what a screen reader announces the state from. %>
+  <summary class="cursor-pointer rounded-md px-3 py-2 text-sm font-medium text-gray-800 hover:bg-gray-100">
+    <%= group.label %>
+  </summary>
+
+  <div class="border-t border-gray-200 bg-white px-3 py-3">
+    <% if group.note.present? %>
+      <p class="text-xs text-gray-500"><%= group.note %></p>
+    <% end %>
+
+    <% if group.grids? %>
+      <% group.grids.each do |grid| %>
+        <% rows = publication_settings_grid(grid, options) %>
+        <% next if rows.empty? %>
+
+        <% if grid.label.present? %>
+          <h3 class="mt-3 text-sm font-medium text-gray-800"><%= grid.label %></h3>
+        <% end %>
+        <% if grid.note.present? %>
+          <p class="mt-0.5 text-xs text-gray-500"><%= grid.note %></p>
+        <% end %>
+
+        <%# Wide for the modal on a narrow window, so it scrolls in its own box rather than
+            pushing the dialog sideways. %>
+        <div class="mt-2 overflow-x-auto">
+          <table class="w-full border-collapse text-left text-xs">
+            <thead>
+              <tr>
+                <% if grid.row_headers? %><td></td><% end %>
+                <% grid.columns.each do |_key, label| %>
+                  <th scope="col" class="px-1 pb-1 font-medium text-gray-600"><%= label %></th>
+                <% end %>
+              </tr>
+            </thead>
+            <tbody>
+              <% rows.each do |row_label, cells| %>
+                <tr>
+                  <% if grid.row_headers? %>
+                    <th scope="row" class="whitespace-nowrap py-1 pr-2 font-medium text-gray-800">
+                      <%= row_label %>
+                    </th>
+                  <% end %>
+                  <% cells.each do |option| %>
+                    <td class="px-1 py-1">
+                      <% if option %>
+                        <%# The row and column headers name the cell on screen; the option's
+                            own label is what a screen reader gets, since a control announced
+                            as "Hint" alone says nothing about which exercises. %>
+                        <%= render "publication_settings/control",
+                              form:, settings:, option:, compact: true, label: option.label %>
+                      <% else %>
+                        <%# A question PreTeXt does not ask of this row -- blocks have no
+                            counter to opt out of. A dash rather than nothing, so the gap
+                            reads as "not applicable" and not as a control that failed to
+                            render. Silent to a screen reader, which gets the empty cell. %>
+                        <span aria-hidden="true" class="text-gray-300">—</span>
+                      <% end %>
+                    </td>
+                  <% end %>
+                </tr>
+              <% end %>
+            </tbody>
+          </table>
+        </div>
+      <% end %>
+    <% else %>
+      <div class="mt-2 divide-y divide-gray-100">
+        <% options.each do |option| %>
+          <div class="flex items-center justify-between gap-3 py-1.5">
+            <%= form.label option.key, option.label, class: "text-sm text-gray-800" %>
+            <div class="w-48 shrink-0">
+              <%= render "publication_settings/control",
+                    form:, settings:, option:, compact: true %>
+            </div>
+          </div>
+        <% end %>
+      </div>
+    <% end %>
+  </div>
+</details>

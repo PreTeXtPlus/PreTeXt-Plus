@@ -1,0 +1,16 @@
+<%# One option laid out in a panel: label, control, and the sentence saying what it does.
+    Used for the options that stand on their own -- the ones inside a group are far more
+    numerous and far more alike, so _group.html.erb lays those out compactly instead. %>
+<div>
+  <%= form.label option.key, option.label, class: "block text-sm font-medium text-gray-800" %>
+
+  <% if (note = settings.unavailable_note(option)) %>
+    <p class="mt-1 text-sm text-gray-600"><%= note %></p>
+  <% else %>
+    <%= render "publication_settings/control", form:, settings:, option: %>
+  <% end %>
+
+  <% if option.help.present? %>
+    <p class="mt-1 text-xs text-gray-500"><%= option.help %></p>
+  <% end %>
+</div>
