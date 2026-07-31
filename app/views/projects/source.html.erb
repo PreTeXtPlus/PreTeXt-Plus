@@ -7,7 +7,7 @@
       (<%= link_to "Manage", @project, class: "text-blue-500 hover:font-semibold" %>).
       <% unless @project.private_visibility? %>
         Copy this link to share your project's source code with others:
-        <input type="text" class="w-full mt-2 p-1 text-sm text-gray-700 border border-gray-400 rounded" value="<%= share_source_project_url(@project) %>" readonly>
+        <input type="text" class="w-full mt-2 p-1 text-sm text-gray-700 border border-gray-400 rounded" value="<%= share_source_project_url(@project) %>" readonly onclick="this.select()" onfocus="this.select()">
       <% else %>
         This project is private. You can share the source code with others by
         <%= link_to "making it public", @project, class: "text-blue-500 hover:font-semibold" %>.
