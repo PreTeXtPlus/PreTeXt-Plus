@@ -167,20 +167,6 @@
       <% end %>
     </div>
 
-    <div class="border-b border-gray-200 p-5">
-      <p class="font-mono text-xs uppercase tracking-wider text-gray-500">Build settings</p>
-      <%# Opens over the drawer -- the modal's frame is in the layout, not in here, so
-          this panel is still underneath when it closes. %>
-      <%= link_to "Theme, pages and numbering",
-            edit_project_target_publication_settings_path(project, target),
-            data: { turbo_frame: "modal" },
-            class: "#{button_classes(color: "gray", outlined: true)} mt-2 inline-block px-3 py-2 text-sm" %>
-      <p class="mt-2 text-xs text-gray-500">
-        Anything set here applies to just this output, overriding the project's settings
-        and your account defaults. Settings take effect on the next build.
-      </p>
-    </div>
-
     <div class="p-5">
       <p class="font-mono text-xs uppercase tracking-wider text-gray-500">Settings</p>
       <%# _top, because both of these redirect to the dashboard: followed inside the frame
@@ -203,6 +189,17 @@
         Renaming changes only what you see here. This output stays
         <span class="font-mono"><%= target.slug %></span> in the public link and in
         <code>project.ptx</code>, so a link you have already shared keeps working.
+      </p>
+
+            <%# Opens over the drawer -- the modal's frame is in the layout, not in here, so
+          this panel is still underneath when it closes. %>
+      <%= link_to "Build settings",
+            edit_project_target_publication_settings_path(project, target),
+            data: { turbo_frame: "modal" },
+            class: "#{button_classes(color: "gray", outlined: true)} mt-2 inline-block px-3 py-2 text-sm" %>
+      <p class="mt-2 text-xs text-gray-500">
+        Anything set here applies to just this output, overriding the project's settings
+        and your account defaults. Settings take effect on the next build.
       </p>
 
       <%= button_to "Remove this output", project_target_path(project, target), method: :delete,
