@@ -1,0 +1,31 @@
+<%# The marketing homepage's announcement toast: the title of whatever announcement an
+    admin flagged for the homepage, and a link straight to it.
+
+    It sits in the flow above the hero rather than floating over it -- the hero's headline
+    is the first thing a visitor reads, and an overlay lands on top of it at every width
+    below lg. The hero's clearance under the fixed nav lives on #home itself, so removing
+    this element on dismiss leaves the page exactly as it looks without a banner.
+
+    Dismissal lasts for the pageview only; an admin retires the banner by unchecking
+    "Show a banner on the homepage" on the announcement. %>
+<div id="homepage-announcement" class="max-w-screen-xl px-4 pb-6 mx-auto">
+  <div role="status" class="flex items-center gap-4 px-5 py-4 bg-white border border-purple-200 rounded-lg shadow-sm dark:bg-gray-800 dark:border-purple-800">
+    <svg class="flex-shrink-0 w-7 h-7 text-purple-600 dark:text-purple-400" stroke-width="1.5" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><path d="M14 14V6M14 14L20.1023 17.487C20.5023 17.7156 21 17.4268 21 16.9661V3.03391C21 2.57321 20.5023 2.28439 20.1023 2.51296L14 6M14 14H7C4.79086 14 3 12.2091 3 10V10C3 7.79086 4.79086 6 7 6H14" stroke="currentColor" stroke-width="1.5"></path><path d="M7.75716 19.3001L7 14H11L11.6772 18.7401C11.8476 19.9329 10.922 21 9.71716 21C8.73186 21 7.8965 20.2755 7.75716 19.3001Z" stroke="currentColor" stroke-width="1.5"></path></svg>
+    <p class="flex-1 text-base font-medium text-gray-900 md:text-lg dark:text-white">
+      <%= announcement.title %>
+      <%# Inline rather than its own column so it reflows under a long title on a narrow
+          screen instead of squeezing the title into a sliver. %>
+      <%= link_to announcement_path(announcement),
+            class: "inline-flex items-center font-medium text-purple-600 whitespace-nowrap hover:text-purple-800 dark:text-purple-500 dark:hover:text-purple-400" do %>
+        Read more
+        <svg class="w-5 h-5 ml-1" fill="currentColor" viewBox="0 0 20 20" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><path fill-rule="evenodd" d="M12.293 5.293a1 1 0 011.414 0l4 4a1 1 0 010 1.414l-4 4a1 1 0 01-1.414-1.414L14.586 11H3a1 1 0 110-2h11.586l-2.293-2.293a1 1 0 010-1.414z" clip-rule="evenodd"></path></svg>
+      <% end %>
+    </p>
+    <button type="button"
+            onclick="this.closest('#homepage-announcement').remove()"
+            class="flex-shrink-0 p-1 text-gray-500 rounded-lg cursor-pointer hover:bg-gray-100 hover:text-gray-900 dark:hover:bg-gray-700 dark:hover:text-white"
+            aria-label="Dismiss announcement">
+      <svg class="w-5 h-5" width="24px" height="24px" stroke-width="1.5" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><path d="M6.75827 17.2426L12.0009 12M17.2435 6.75736L12.0009 12M12.0009 12L6.75827 6.75736M12.0009 12L17.2435 17.2426" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"></path></svg>
+    </button>
+  </div>
+</div>

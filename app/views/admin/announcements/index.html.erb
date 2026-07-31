@@ -31,6 +31,9 @@
             <% else %>
               <span class="rounded-full bg-blue-100 px-2.5 py-1 text-xs font-medium text-blue-800">Ready to publish</span>
             <% end %>
+            <% if announcement.show_on_homepage? && !announcement.paid_subscribers_only? %>
+              <span class="rounded-full bg-purple-100 px-2.5 py-1 text-xs font-medium text-purple-800">Homepage</span>
+            <% end %>
           </td>
           <td class="px-4 py-4 text-gray-700">
             <%= announcement.published_at ? local_time_tag(announcement.published_at, date_only: true) : "—" %>

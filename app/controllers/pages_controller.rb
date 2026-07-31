@@ -6,6 +6,7 @@ class PagesController < ApplicationController
       @start_writing_path = projects_path
     end
     @subscription_types = SubscriptionType.order(:order)
+    @homepage_announcement = Announcement.homepage_banner
     render layout: false
   end
 end

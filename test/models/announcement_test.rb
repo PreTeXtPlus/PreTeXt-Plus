@@ -59,6 +59,33 @@ class AnnouncementTest < ActiveSupport::TestCase
     assert Announcement.new(title: "Hello", body: "World").draft?
   end
 
+  test "homepage_banner returns the flagged published announcement" do
+    assert_equal announcements(:homepage), Announcement.homepage_banner
+  end
+
+  test "homepage_banner skips paid-subscribers-only announcements" do
+    assert_not_equal announcements(:paid_only_homepage), Announcement.homepage_banner
+  end
+
+  test "homepage_banner skips unpublished announcements" do
+    announcements(:homepage).destroy
+    assert_nil Announcement.homepage_banner
+  end
+
+  test "homepage_banner returns the most recently published of several flagged" do
+    announcements(:recent).update!(show_on_homepage: true)
+    assert_equal announcements(:recent), Announcement.homepage_banner
+  end
+
+  test "homepage_banner is nil when nothing is flagged" do
+    Announcement.update_all(show_on_homepage: false)
+    assert_nil Announcement.homepage_banner
+  end
+
+  test "new announcements default to no homepage banner" do
+    assert_not Announcement.new(title: "Hello", body: "World").show_on_homepage?
+  end
+
   test "publish! raises for draft announcements" do
     assert_raises(RuntimeError) do
       announcements(:unready).publish!

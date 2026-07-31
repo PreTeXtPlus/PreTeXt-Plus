@@ -28,3 +28,27 @@ unready:
   body: "This announcement is still a draft."
   published_at:
   draft: true
+
+homepage:
+  title: "Bannered Announcement"
+  body: "This announcement is bannered on the homepage."
+  published_at: <%= 3.hours.ago %>
+  show_on_homepage: true
+  draft: false
+
+# Newer than :homepage and also flagged, so a homepage_banner that ignored
+# paid_subscribers_only would pick this one and the test would notice.
+paid_only_homepage:
+  title: "Paid Bannered Announcement"
+  body: "This paid-only announcement is flagged for the homepage."
+  published_at: <%= 30.minutes.ago %>
+  paid_subscribers_only: true
+  show_on_homepage: true
+  draft: false
+
+unpublished_homepage:
+  title: "Unpublished Bannered Announcement"
+  body: "This unpublished announcement is flagged for the homepage."
+  published_at:
+  show_on_homepage: true
+  draft: false

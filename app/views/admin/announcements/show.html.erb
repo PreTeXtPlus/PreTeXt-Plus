@@ -11,6 +11,13 @@
   <% if @announcement.paid_subscribers_only? %>
     &mdash; <span class="font-medium text-amber-600">Paid subscribers only</span>
   <% end %>
+  <% if @announcement.show_on_homepage? %>
+    <% if @announcement.paid_subscribers_only? %>
+      &mdash; <span class="font-medium text-gray-500">Homepage banner suppressed (paid subscribers only)</span>
+    <% else %>
+      &mdash; <span class="font-medium text-purple-700">Homepage banner</span>
+    <% end %>
+  <% end %>
 <% end %>
 <% content_for :actions do %>
   <% unless @announcement.published? %>
