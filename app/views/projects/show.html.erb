@@ -26,6 +26,8 @@
 <% content_for :actions do %>
   <%= link_to "Write", edit_project_path(@project),
         class: "#{button_classes(color: "indigo")} px-3.5 py-2" %>
+  <%= button_to "Make copy", copy_project_path(@project),
+        class: "#{button_classes(color: "purple")} px-3.5 py-2" %>
   <%# Source, assets and a project.ptx -- opens directly in PreTeXt-CLI. %>
   <%= link_to "Download source", download_project_path(@project),
         class: "#{button_classes(color: "gray", outlined: true)} px-3.5 py-2",

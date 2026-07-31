@@ -516,7 +516,7 @@ class ProjectsControllerTest < ActionDispatch::IntegrationTest
       end
     end
     copy = Project.find_by!(title: "Copy of #{@project.title}", user: subbed_user)
-    assert_redirected_to edit_project_path(copy)
+    assert_redirected_to project_path(copy)
   end
 
   test "copy allows subscribed requester to copy another user's project" do
@@ -531,7 +531,7 @@ class ProjectsControllerTest < ActionDispatch::IntegrationTest
       end
     end
     copied = Project.find_by!(title: "Copy of #{other_project.title}", user: requester)
-    assert_redirected_to edit_project_path(copied)
+    assert_redirected_to project_path(copied)
   end
 
   test "copy duplicates divisions from the source project" do
@@ -577,7 +577,7 @@ class ProjectsControllerTest < ActionDispatch::IntegrationTest
     end
 
     copied = Project.find_by!(title: "Copy of #{other_project.title}", user: requester)
-    assert_redirected_to edit_project_path(copied)
+    assert_redirected_to project_path(copied)
   end
 
   test "copy fails gracefully (not a 500) when it would exceed the requester's asset quota" do
@@ -594,7 +594,7 @@ class ProjectsControllerTest < ActionDispatch::IntegrationTest
       post copy_project_url(@project) # projects(:one), carries 2 assets to copy in
     end
 
-    assert_redirected_to copy_project_path(@project)
+    assert_redirected_to projects_path
     assert_match(/asset limit/i, flash[:alert])
   end
 

@@ -7,10 +7,12 @@
       (<%= link_to "Manage", @project, class: "text-blue-500 hover:font-semibold" %>).
       <% unless @project.private_visibility? %>
         Copy this link to share your project's source code with others:
-        <input type="text" class="mt-2 block mx-auto max-w-full field-sizing-content p-1 text-sm text-gray-700 border border-gray-400 rounded" value="<%= share_source_project_url(@project) %>" readonly onclick="this.select()" onfocus="this.select()">
+        <input type="text" class="my-2 block mx-auto max-w-full field-sizing-content p-1 text-sm text-gray-700 border border-gray-400 rounded" value="<%= share_source_project_url(@project) %>" readonly onclick="this.select()" onfocus="this.select()">
+        Or you can <%= button_to "make a new copy", copy_project_path(@project), class: "text-purple-700 hover:font-semibold cursor-pointer", form_class: "inline" %>.
       <% else %>
         This project is private. You can share the source code with others by
-        <%= link_to "making it public", @project, class: "text-blue-500 hover:font-semibold" %>.
+        <%= link_to "making it public", @project, class: "text-blue-500 hover:font-semibold" %>,
+        or you can <%= button_to "make a new copy", copy_project_path(@project), class: "text-purple-700 hover:font-semibold cursor-pointer", form_class: "inline" %>.
       <% end %>
     <% else %>
       This is a read-only view of the source code for <%= @project.title %>.

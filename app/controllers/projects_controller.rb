@@ -163,11 +163,13 @@ class ProjectsController < ApplicationController
   # GET /projects/:project_id/share/copy
   def copy
     project_copy = @project.full_dup(current_user)
+    project_copy.html_source = nil  # don't copy deprecated quick build
+    project_copy.visibility = "private"  # don't copy visibility, which may be public
     if project_copy.save
-      redirect_to edit_project_path(project_copy)
+        redirect_to project_copy
     else
       alert = project_copy.errors.full_messages.to_sentence.presence || "Copy failed."
-      redirect_to copy_project_path(@project), alert: alert
+      redirect_to projects_path, alert: alert
     end
   end
 
