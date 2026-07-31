@@ -1,4 +1,8 @@
 class User < ApplicationRecord
+  # The top of the publisher-options chain: an author's defaults for every project they
+  # own. See Publication::Settings for how the three levels resolve.
+  include HasPublicationSettings
+
   devise :database_authenticatable, :recoverable, :rememberable, :validatable,
          :confirmable, :trackable
 

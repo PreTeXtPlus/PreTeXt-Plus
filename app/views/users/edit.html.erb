@@ -11,6 +11,17 @@
   </div>
 <% end %>
 
+<h2 class="text-2xl font-semibold mb-2 mt-20">Build settings</h2>
+
+<p class="text-sm text-gray-600">
+  Your defaults for how projects are built — theme, page size, and how deep division
+  numbering runs. Any project, or any single output, can override them.
+</p>
+
+<%= link_to "Edit build settings", edit_user_publication_settings_path(@user),
+      data: { turbo_frame: "modal" },
+      class: "#{button_classes(color: "gray", outlined: true)} mt-3 inline-block px-3.5 py-2" %>
+
 <h2 class="text-2xl font-semibold mb-2 mt-20">Subscription Status</h2>
 
 <%= render "subscriptions/status", user: @user %>

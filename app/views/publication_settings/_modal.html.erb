@@ -1,0 +1,109 @@
+<%# The publisher-options modal, for whichever of the three levels `settings.owner` is.
+    One partial for all of them: the levels differ in what they offer (an output shows only
+    the tabs its own format reaches) and in what the empty choice inherits, both of which
+    Publication::Settings has already worked out.
+
+    z-40 rather than the drawer's z-30, because an output's settings open from inside the
+    drawer and have to sit above it. %>
+<div data-controller="modal" class="fixed inset-0 z-40 flex items-center justify-center p-4">
+  <div class="absolute inset-0 bg-gray-900/40" data-action="click->modal#close"></div>
+
+  <div role="dialog" aria-modal="true" aria-labelledby="publication-settings-title"
+       class="relative flex max-h-full w-full max-w-lg flex-col overflow-y-auto rounded-lg bg-white shadow-xl">
+
+    <div class="flex items-start justify-between gap-4 border-b border-gray-200 p-5">
+      <div>
+        <h2 id="publication-settings-title" class="text-lg font-semibold">
+          <%= publication_settings_title(settings.owner) %>
+        </h2>
+        <p class="mt-1 text-xs text-gray-500"><%= publication_settings_scope_note(settings.owner) %></p>
+      </div>
+      <button type="button" data-action="modal#close" aria-label="Close"
+              class="cursor-pointer rounded-md px-2.5 py-1.5 text-sm text-gray-500 hover:bg-gray-100">✕</button>
+    </div>
+
+    <% families = settings.families %>
+    <% if families.any? %>
+      <%# _top for the reason the drawer's own forms use it: the redirect carries a flash,
+          which this frame would otherwise swallow along with the reopened drawer.
+
+          The tabs live inside the form, not around it: panels are hidden rather than
+          unmounted, so a change made on one tab saves along with a change made on
+          another. %>
+      <%= form_with url: publication_settings_path_for(settings.owner), method: :patch,
+            scope: :publication_settings, data: { turbo_frame: "_top" } do |form| %>
+        <div data-controller="tabs">
+          <%# One tab is not a choice, so an output that only one family reaches gets its
+              panel and its note without a tab strip above them. %>
+          <% if families.size > 1 %>
+            <div role="tablist" aria-label="Output formats"
+                 class="flex gap-1 border-b border-gray-200 px-5">
+              <% families.each_with_index do |(family, _options), index| %>
+                <button type="button" role="tab" id="publication-tab-<%= family.key %>"
+                        aria-controls="publication-panel-<%= family.key %>"
+                        aria-selected="<%= index.zero? %>" tabindex="<%= index.zero? ? 0 : -1 %>"
+                        data-tabs-target="tab"
+                        data-action="click->tabs#select keydown->tabs#navigate"
+                        class="cursor-pointer border-b-2 border-transparent px-3 py-2 text-sm font-medium
+                               text-gray-500 hover:text-gray-800
+                               aria-selected:border-indigo-600 aria-selected:text-indigo-700">
+                  <%= family.label %>
+                </button>
+              <% end %>
+            </div>
+          <% end %>
+
+          <% families.each_with_index do |(family, options), index| %>
+            <section role="tabpanel" id="publication-panel-<%= family.key %>"
+                     aria-labelledby="publication-tab-<%= family.key %>"
+                     data-tabs-target="panel" tabindex="0" <%= "hidden" unless index.zero? %>
+                     class="p-5">
+              <%# Which outputs this tab reaches. The question an author asks after a
+                  setting appears not to have worked is which format it was for. %>
+              <p class="text-xs text-gray-500"><%= family.note %></p>
+
+              <div class="mt-4 space-y-4">
+                <% options.each do |option| %>
+                  <div>
+                    <%= form.label option.key, option.label, class: "block text-sm font-medium text-gray-800" %>
+                    <%# The empty choice is how an override is cleared, and it names what
+                        would take over -- see Publication::Settings#blank_choice_label. %>
+                    <%= form.select option.key,
+                          option.select_choices_for(settings.document_type),
+                          { include_blank: settings.blank_choice_label(option),
+                            selected: settings.own(option.key) },
+                          class: "mt-1 w-full rounded-md border border-gray-300 bg-white px-2 py-1.5 text-sm" %>
+                    <% if option.help.present? %>
+                      <p class="mt-1 text-xs text-gray-500"><%= option.help %></p>
+                    <% end %>
+                  </div>
+                <% end %>
+              </div>
+            </section>
+          <% end %>
+        </div>
+
+        <div class="flex items-center justify-end gap-3 border-t border-gray-200 p-5">
+          <button type="button" data-action="modal#close"
+                  class="cursor-pointer rounded-md px-3 py-2 text-sm text-gray-600 hover:bg-gray-100">
+            Cancel
+          </button>
+          <%= form.submit "Save settings", class: "#{button_classes(color: "indigo")} px-3 py-2 text-sm" %>
+        </div>
+      <% end %>
+
+      <p class="border-t border-gray-200 px-5 py-4 text-xs text-gray-500">
+        These go into the publication file each build is given. Saving does not start a
+        build — the next one picks them up.
+      </p>
+    <% else %>
+      <%# Reachable: a slideshow numbers no divisions and pages itself, and reveal.js is in
+          no format family, so a slides output has nothing on offer at all. Better to say
+          so than to show an empty dialog. %>
+      <p class="p-5 text-sm text-gray-600">
+        There are no build settings to choose for this
+        <%= settings.owner.is_a?(Target) ? "output" : "document type" %> yet.
+      </p>
+    <% end %>
+  </div>
+</div>

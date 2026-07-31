@@ -476,7 +476,7 @@ three cases that the old `site?` collapsed into two:
 |---|---|---|
 | `website` | **View** — browse it | the whole output as a zip |
 | `pdf`, `revealjs`, `beamer` | **Open** — worth reading in a browser | the artifact itself |
-| `scorm`, `website_zip`, `epub`, `kindle`, `braille`, `latex` | — nothing worth opening | the artifact itself |
+| `scorm`, `epub`, `kindle`, `braille`, `latex` | — nothing worth opening | the artifact itself |
 
 A SCORM package is a zip you hand to an LMS, so an "Open" button on it was a download
 wearing a disguise; and "Download all" handing over a zip *containing* the PDF was never

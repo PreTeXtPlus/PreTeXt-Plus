@@ -68,12 +68,6 @@ class EntryPathDetectionTest < ActiveSupport::TestCase
     assert_equal "lms.zip", detect(target, %w[ lms.zip index.html chapter-1.html ])
   end
 
-  test "a zipped website behaves the same way" do
-    target = projects(:one).targets.create!(name: "offline", kind: "website_zip")
-
-    assert_equal "offline.zip", detect(target, %w[ offline.zip index.html ])
-  end
-
   # Same document, same PreTeXt format, opposite answers -- which is the whole reason the
   # kind is what gets stored.
   test "a website and a scorm package disagree despite both being html" do

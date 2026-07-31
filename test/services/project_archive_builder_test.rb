@@ -106,6 +106,62 @@ class ProjectArchiveBuilderTest < ActiveSupport::TestCase
     assert_no_match(/elsewhere|\.\.\/etc/, manifest)
   end
 
+  # Each target gets its own publication file, because publisher options resolve per
+  # output: two websites on one project may want different themes.
+  test "every target gets a publication file named for its slug" do
+    project = projects(:one)
+
+    contents = entries(ProjectArchiveBuilder.new(project).build)
+
+    project.targets.each do |target|
+      assert_includes contents.keys, "publication/#{target.slug}.ptx"
+    end
+    # Still there under the name PreTeXt falls back to, for a target added by hand to a
+    # downloaded copy.
+    assert_includes contents.keys, "publication/publication.ptx"
+  end
+
+  # The trap this whole layout turns on: @publication on a <target> resolves relative to
+  # the project's publication directory, not the project root (Target.publication_abspath
+  # in PreTeXtBook/pretext-cli). "publication/website.ptx" would send the CLI looking in
+  # publication/publication/ and fail every build.
+  test "a target's publication attribute is bare, not prefixed with the directory" do
+    manifest = ProjectArchiveBuilder.new(projects(:one)).project_ptx
+
+    assert_match(/<target [^>]*name="website"[^>]*publication="website\.ptx"/, manifest)
+    assert_no_match(%r{publication="publication/}, manifest)
+  end
+
+  test "options cannot override the publication file the builder just wrote" do
+    project = projects(:one)
+    project.targets.create!(name: "Sly", kind: "pdf", options: { "publication" => "../elsewhere.ptx" })
+
+    manifest = ProjectArchiveBuilder.new(project).project_ptx
+
+    assert_match(/<target [^>]*name="sly"[^>]*publication="sly\.ptx"/, manifest)
+    assert_no_match(/elsewhere\.ptx/, manifest)
+  end
+
+  # The three levels arriving where a build can actually see them.
+  test "a target's publication file holds the settings resolved through all three levels" do
+    project = projects(:one)
+    project.user.update!(publication_settings: { "theme" => "salem", "chunk_level" => "1" })
+    project.update!(publication_settings: { "division_numbering_level" => "2" })
+    targets(:one_instructor).update!(publication_settings: { "theme" => "denver" })
+
+    contents = entries(ProjectArchiveBuilder.new(project).build)
+
+    assert_match(/theme="salem"/, contents["publication/website.ptx"])
+    assert_match(/theme="denver"/, contents["publication/instructor-edition.ptx"])
+    # Everything not overridden is still inherited by both.
+    [ "publication/website.ptx", "publication/instructor-edition.ptx" ].each do |path|
+      assert_match(/<chunking level="1"\/>/, contents[path])
+      assert_match(/<divisions level="2"\/>/, contents[path])
+    end
+    # The fallback file is the project's own view: no output's override in it.
+    assert_match(/theme="salem"/, contents["publication/publication.ptx"])
+  end
+
   test "packs each asset with a file under source/external using its ref" do
     project = projects(:one)
     asset = assets(:image_one)

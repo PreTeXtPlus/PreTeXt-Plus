@@ -16,6 +16,9 @@ application.register("editor", EditorController)
 import ImportController from "./import_controller"
 application.register("import", ImportController)
 
+import ModalController from "./modal_controller"
+application.register("modal", ModalController)
+
 import NewProjectController from "./new_project_controller"
 application.register("new-project", NewProjectController)
 

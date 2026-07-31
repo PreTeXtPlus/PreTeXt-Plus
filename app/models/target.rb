@@ -8,6 +8,10 @@
 # into project.ptx verbatim and addresses the published output, so it is derived from the
 # name rather than typed, and then left alone.
 class Target < ApplicationRecord
+  # The last word on publisher options: whatever this output sets beats the project's and
+  # the owner's account defaults. See Publication::Settings.
+  include HasPublicationSettings
+
   belongs_to :project
   has_many :builds, dependent: :destroy
 
@@ -125,9 +129,10 @@ class Target < ApplicationRecord
   # Attributes ProjectArchiveBuilder derives from the row itself. `options` is free-form
   # data an author could eventually edit, and none of these may come from there: `name`
   # (the slug) and `output-dir` decide where the build server writes and which prefix the
-  # artifact job strips, and `output-filename` is what makes a single-file artifact
-  # findable.
-  RESERVED_ATTRIBUTES = %w[ name output-dir output-filename ].freeze
+  # artifact job strips, `output-filename` is what makes a single-file artifact findable,
+  # and `publication` points at the file the builder just wrote from this target's
+  # publisher options -- which is where an author changes any of that.
+  RESERVED_ATTRIBUTES = %w[ name output-dir output-filename publication ].freeze
 
   # Everything this target contributes to its <target> element in project.ptx: what the
   # kind emits, plus any per-target tuning in `options`. Keys are attribute names as the
