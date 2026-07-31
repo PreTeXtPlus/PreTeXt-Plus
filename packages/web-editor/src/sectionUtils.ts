@@ -61,13 +61,22 @@ const SECTION_TAGS: ReadonlySet<string> = new Set([
   "conclusion",
 ]);
 
-/** Every tag name recognised as a `DivisionType`. */
+/**
+ * Every tag name recognised as a `DivisionType` — broader than
+ * {@link SECTION_TAGS}, which lists only the tags a document *splits* at. The
+ * nested levels belong here: a division record can be any `DivisionType`, and
+ * a `<subsection>` whose tag went unrecognised is a division whose type and
+ * title can't be read back out of its own source.
+ */
 const ALL_DIVISION_TYPES: ReadonlySet<string> = new Set([
   "book",
   "article",
   "slideshow",
   "part",
   "chapter",
+  "subsection",
+  "subsubsection",
+  "paragraphs",
   ...SECTION_TAGS,
 ]);
 
@@ -214,16 +223,23 @@ export function updateDivisionTitle(
   return toXml(tree, XML_SERIALIZE_OPTIONS);
 }
 
-/** Create a new blank `<section>` as a `Division`. */
-export function createNewSection(title = "New Section"): DocumentSection {
+/**
+ * Create a new blank division as a `Division` — a `<section>` unless `type`
+ * says otherwise (a new child of a `<book>` has to be a chapter, say; see
+ * `defaultChildDivisionType`).
+ */
+export function createNewSection(
+  title = "New Section",
+  type: DivisionType = "section",
+): DocumentSection {
   const id = generateId();
-  const source = `<section xml:id="${id}">\n\t<title>${title}</title>\n\n\t<p>\n\n\t</p>\n\n</section>`;
+  const source = `<${type} xml:id="${id}">\n\t<title>${title}</title>\n\n\t<p>\n\n\t</p>\n\n</${type}>`;
   return {
     id,
     xmlId: id,
     title,
     source,
-    type: "section",
+    type,
     sourceFormat: "pretext",
   };
 }
@@ -1461,13 +1477,6 @@ export function canEmbedDivisionRefs(sourceFormat: SourceFormat): boolean {
  * position a `Division` within its parent's content — i.e. every
  * `DivisionType` plus the generic `division` alias.
  *
- * This is broader than {@link ALL_DIVISION_TYPES} (which lists only the
- * top-level, splittable section tags used by document splitting): a division
- * record can be *any* `DivisionType`, so the nested levels `subsection`,
- * `subsubsection` and `paragraphs` must be included here too — otherwise a
- * `<plus:subsection ref="..."/>` placeholder is not recognised and its child
- * division is wrongly shown as orphaned in the TOC.
- *
  * Asset placeholders (`<plus:image ref="..."/>`, `<plus:doenet ref="..."/>`)
  * share the same `<plus:* ref="..."/>` shape but are NOT divisions — they
  * reference project assets and must be excluded here, otherwise asset refs
@@ -1477,9 +1486,6 @@ export function canEmbedDivisionRefs(sourceFormat: SourceFormat): boolean {
 const DIVISION_REF_TAGS: ReadonlySet<string> = new Set([
   "division",
   ...ALL_DIVISION_TYPES,
-  "subsection",
-  "subsubsection",
-  "paragraphs",
 ]);
 
 const DIVISION_REF_TAG_ALTERNATION = Array.from(DIVISION_REF_TAGS).join("|");
@@ -2425,17 +2431,26 @@ export function normalizeDivisionsOnLoad(
     if (division.sourceFormat === "markdown") {
       // Markdown divisions keep their title (and other structural metadata)
       // in frontmatter; only backfill a blank title so the TOC doesn't show
-      // "Untitled" for content that already names itself.
-      if (!division.title) {
-        const mdTitle = extractMarkdownDivisionMetadata(division.source)?.title;
-        if (mdTitle) return { ...division, title: mdTitle };
+      // "Untitled" for content that already names itself — and the type, which
+      // hosts generally don't store either (see the pretext branch below).
+      const mdMeta = !division.title || !division.type
+        ? extractMarkdownDivisionMetadata(division.source)
+        : null;
+      if (mdMeta) {
+        return {
+          ...division,
+          title: division.title || mdMeta.title,
+          type: division.type || mdMeta.type,
+        };
       }
       return division;
     }
     if (division.sourceFormat === "latex") {
       // LaTeX divisions keep their title in the source header (the first-line
       // `\section{…}` or a `\title{…}` inside `\begin{section}`); backfill a
-      // blank title from there so the TOC doesn't show "Untitled".
+      // blank title from there so the TOC doesn't show "Untitled". There is no
+      // type to recover: a LaTeX division's PreTeXt type isn't represented in
+      // its source at all (it's applied when the conversion is tagged).
       if (!division.title) {
         const latexTitle = extractLatexDivisionTitle(division.source);
         if (latexTitle) return { ...division, title: latexTitle };
@@ -2463,8 +2478,18 @@ export function normalizeDivisionsOnLoad(
       };
     }
 
-    if (!division.title && meta?.title) {
-      return { ...division, title: meta.title };
+    // A PreTeXt division carries its type in its own source — the wrapper
+    // element's tag name — and hosts that derive it from there (the Rails app
+    // does) only bother for the root, leaving every other division typeless.
+    // Recover it here so the TOC can tell a chapter from a subsection: type
+    // drives the row's label, the `<plus:TYPE ref/>` placeholders written for
+    // it, and which types its children may be.
+    if (meta && ((!division.title && meta.title) || !division.type)) {
+      return {
+        ...division,
+        title: division.title || meta.title,
+        type: division.type || meta.type,
+      };
     }
     return division;
   });

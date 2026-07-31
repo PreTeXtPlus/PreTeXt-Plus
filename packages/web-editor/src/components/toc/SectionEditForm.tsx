@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { useRef } from "react";
 import type { SourceFormat } from "../../types/editor";
 import type { DivisionType } from "../../types/sections";
 import { slugifyTitle } from "../../sectionUtils";
@@ -40,13 +40,13 @@ const SectionEditForm = ({
   onCommit,
   onCancel,
 }: SectionEditFormProps) => {
-  const selectableTypes = getSelectableDivisionTypes(parentType);
+  const selectableTypes = getSelectableDivisionTypes(parentType, draft.type);
 
   // The root's own type dropdown offers article/book (the only two switch
   // targets so far) plus its current type when that's something else (e.g. a
   // pre-existing slideshow) — so the <select> always has a matching <option>
-  // and never silently mismatches what's actually stored (see the
-  // stale-`draft.type` note on the effect below).
+  // and never silently mismatches what's actually stored. Same guarantee
+  // `getSelectableDivisionTypes` gives every other division.
   const rootTypeOptions = SWITCHABLE_ROOT_TYPES.includes(draft.type)
     ? SWITCHABLE_ROOT_TYPES
     : [draft.type, ...SWITCHABLE_ROOT_TYPES];
@@ -58,21 +58,6 @@ const SectionEditForm = ({
   // overwriting it. Only relevant for `isNew`; an existing division's id is
   // never auto-derived from its title.
   const idFollowsTitle = useRef(isNew);
-
-  // If the parent's type changed (or this is an existing division whose type
-  // no longer fits its parent) the current draft type may not be one of the
-  // options below — the <select> can't reflect that (there's no matching
-  // <option>), so the browser silently displays the first option while
-  // `draft.type` is left stale. Snap the draft to a valid type so what's
-  // displayed always matches what Save will persist. The root has no parent
-  // to fall out of sync with — its own `rootTypeOptions` above already grows
-  // to include whatever it currently is, so it never needs this snap.
-  useEffect(() => {
-    if (isRoot) return;
-    if (selectableTypes.length > 0 && !selectableTypes.includes(draft.type)) {
-      onDraftChange({ ...draft, type: selectableTypes[0] });
-    }
-  }, [draft, isRoot, onDraftChange, selectableTypes]);
 
   return (
   <div className="pretext-plus-editor__toc-edit-form">

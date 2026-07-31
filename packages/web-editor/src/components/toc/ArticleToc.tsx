@@ -3,6 +3,7 @@ import type { Division } from "../../types/sections";
 import type { AssetKind } from "../../types/editor";
 import SectionItem from "./SectionItem";
 import DivisionMenu, { type DivisionMenuItem } from "./DivisionMenu";
+import { canContainDivisions } from "./types";
 
 import {
   assetEmbedCode,
@@ -315,6 +316,7 @@ const ArticleToc = ({ onOpenAssetPicker, hideAssets, readOnly }: ArticleTocProps
                     // All three source formats can hold a child ref placeholder — see
                     // canEmbedDivisionRefs / types/sections.ts — so this is always
                     // shown today, but stays gated for a future leaf-only format.
+                    // (A root type always allows children, so no type gate here.)
                     ...(canEmbedDivisionRefs(rootDivision.sourceFormat)
                       ? [
                           {
@@ -354,8 +356,11 @@ const ArticleToc = ({ onOpenAssetPicker, hideAssets, readOnly }: ArticleTocProps
                     },
                     // Add division, but only if the format can embed child refs —
                     // all three (PreTeXt/Markdown/LaTeX) do today; gated for a future
-                    // leaf-only format.
-                    ...(canEmbedDivisionRefs(node.division.sourceFormat)
+                    // leaf-only format — and only if the division's *type* can hold
+                    // divisions at all (an <exercises> or <glossary> can't, so there
+                    // would be no valid type to offer the new child).
+                    ...(canEmbedDivisionRefs(node.division.sourceFormat) &&
+                    canContainDivisions(node.division.type)
                       ? [
                           {
                             label: "Add new division",
@@ -431,7 +436,10 @@ const ArticleToc = ({ onOpenAssetPicker, hideAssets, readOnly }: ArticleTocProps
                             },
                           ]
                     }
-                    parentType={null}
+                    // Unplaced, but "Place in document" puts it directly under
+                    // the root — so the root's rules are the ones that apply,
+                    // and e.g. an article project never offers Part/Chapter.
+                    parentType={rootDivision?.type ?? null}
                   />
                   {isExpanded(orphan.xmlId) &&
                     subtree.map((node) => (

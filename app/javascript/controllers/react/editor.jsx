@@ -1112,7 +1112,7 @@ function EditorApp({ config }) {
       }
       projectAssets={projectAssets}
       projectUrl={projectUrl}
-      saveButtonLabel="Save"
+      saveButtonLabel="Save and manage"
       cancelButtonLabel="Cancel"
       onContentChange={onContentChange}
       onDivisionAdd={onDivisionAdd}
