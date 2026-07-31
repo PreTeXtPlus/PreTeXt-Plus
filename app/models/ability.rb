@@ -39,7 +39,7 @@ class Ability
       :editor_state,
       :update_editor_state
       ], Project, collaborations: { user_id: user.id }
-    # Copying and viewing source is allowed provied the project is not private.
+    # Copying and viewing source is allowed provided the project is not private.
     can [ :copy, :source ], Project do |project|
       !project.private_visibility?
     end
