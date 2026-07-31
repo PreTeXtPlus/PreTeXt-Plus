@@ -10,10 +10,15 @@
   <p>
     Last edited <%= time_ago_in_words(@project.source_updated_at) %> ago
   </p>
-  <%= form_with model: @project, method: :patch, class: "mt-2 flex items-center gap-2" do |form| %>
+  <%= form_with model: @project, method: :patch,
+        class: "mt-2 flex items-center gap-2",
+        data: { controller: "project-visibility",
+                project_visibility_published_count_value: @project.targets.where(published: true).count,
+                action: "submit->project-visibility#confirm" } do |form| %>
     <%= form.label :visibility, "Visibility on your public profile", class: "text-xs text-gray-600" %>
     <%= form.select :visibility, Project.visibilities.keys.map { |v| [ v.humanize, v ] },
-          {}, class: "rounded-md bg-white border border-gray-300 px-2 py-1 text-xs" %>
+          {}, { class: "rounded-md bg-white border border-gray-300 px-2 py-1 text-xs",
+                data: { project_visibility_target: "select" } } %>
     <%= form.submit "Update",
           class: "#{button_classes(color: "gray", outlined: true)} px-2 py-1 text-xs" %>
   <% end %>

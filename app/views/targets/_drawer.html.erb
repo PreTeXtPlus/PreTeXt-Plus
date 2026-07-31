@@ -110,9 +110,12 @@
               method: :patch, params: { published: false },
               class: "#{button_classes(color: "gray", outlined: true)} mt-3 px-3 py-2 text-sm" %>
       <% elsif target.current_build.present? %>
+        <% publish_data = target.project.private_visibility? ?
+             { turbo_confirm: "Publishing will make this project's visibility Unlisted (it's currently Private). Continue?" } :
+             {} %>
         <%= button_to "Publish this output", publish_project_target_path(project, target),
               method: :patch, params: { published: true },
-              class: "#{button_classes(color: "gray", outlined: true)} mt-2 px-3 py-2 text-sm" %>
+              class: "#{button_classes(color: "gray", outlined: true)} mt-2 px-3 py-2 text-sm", data: publish_data %>
         <p class="mt-2 text-xs text-gray-500">Publishing does not start a build — it exposes the one already built.</p>
       <% else %>
         <p class="mt-2 text-sm text-gray-600">Build this output before publishing it.</p>

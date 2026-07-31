@@ -19,5 +19,8 @@ application.register("import", ImportController)
 import NewProjectController from "./new_project_controller"
 application.register("new-project", NewProjectController)
 
+import ProjectVisibilityController from "./project_visibility_controller"
+application.register("project-visibility", ProjectVisibilityController)
+
 import TryitController from "./tryit_controller"
 application.register("tryit", TryitController)

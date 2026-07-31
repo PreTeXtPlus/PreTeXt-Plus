@@ -76,6 +76,12 @@ class Project < ApplicationRecord
   # targets are already present, which is how full_dup carries a project's own set over.
   before_create :build_default_target
 
+  # "Private" is supposed to mean nothing here is publicly reachable, so it has to take
+  # every published target down with it, not just stop listing the project. update_all
+  # because these are denormalized flags, not a change worth a callback chain per row
+  # (mirrors Target#sync_from_builds! using update_columns for the same reason).
+  after_update :unpublish_targets_if_private, if: :saved_change_to_visibility?
+
   def root_division
     divisions.find_by(is_root: true)
   end
@@ -263,6 +269,12 @@ class Project < ApplicationRecord
       return if targets.any?
 
       targets.build(**DEFAULT_TARGET)
+    end
+
+    def unpublish_targets_if_private
+      return unless private_visibility?
+
+      targets.where(published: true).update_all(published: false)
     end
 
     # Names the targets standing in the way rather than just refusing, because the author

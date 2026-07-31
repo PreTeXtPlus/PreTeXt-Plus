@@ -58,6 +58,11 @@ class Target < ApplicationRecord
 
   validate :kind_available_for_document_type
 
+  # Publishing exposes a public URL, which a "Private" project isn't supposed to have.
+  # Escalating rather than blocking keeps the Publish button working with no extra step
+  # -- the confirm dialog in the view is what gives the author a chance to back out first.
+  after_update :unlist_project_if_needed, if: :saved_change_to_published?
+
   default_scope { order(:position, :created_at) }
 
   # The four statuses that mean "the build server still owes us an answer". Authors do
@@ -284,6 +289,13 @@ class Target < ApplicationRecord
       return candidate if candidate.match?(/\A[a-z]/)
 
       [ kind.to_s.parameterize.presence || "target", candidate.presence ].compact.join("-")
+    end
+
+    def unlist_project_if_needed
+      return unless published?
+      return unless project.private_visibility?
+
+      project.update!(visibility: :unlisted)
     end
 
     # PreTeXt can only build slides from a <slideshow>, so a revealjs target on an article
