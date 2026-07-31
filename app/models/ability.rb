@@ -28,9 +28,8 @@ class Ability
       return
     end
 
-    # Manage projects except for [ :copy, :source ] for their own rule
+    # Manage projects
     can :manage, Project, user_id: user.id
-    cannot [ :copy, :source ], Project
     # Shared projects: a collaborator is a co-author, so they get everything the
     # owner has except destroying the project — that stays with whoever owns it.
     can [
@@ -40,10 +39,9 @@ class Ability
       :editor_state,
       :update_editor_state
       ], Project, collaborations: { user_id: user.id }
-
-    # Copying or viewing source requires a subscription (owner's or current user's).
+    # Copying and viewing source is allowed provied the project is not private.
     can [ :copy, :source ], Project do |project|
-      project.user.has_subscriber_benefits? || user.has_subscriber_benefits?
+      !project.private_visibility?
     end
 
     # Assets belonging to own projects (hash condition enables accessible_by scoping)

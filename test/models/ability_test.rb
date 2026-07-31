@@ -100,4 +100,26 @@ class AbilityTest < ActiveSupport::TestCase
     assert_includes accessible, projects(:one)
     assert_includes accessible, projects(:two)
   end
+
+  test "a basic requester cannot copy or view source of another basic user's private project" do
+    ability = Ability.new(users(:two))
+    project = projects(:one) # owned by user :one, neither side subscribed, defaults to private
+
+    assert project.private_visibility?
+    assert_not ability.can?(:copy, project)
+    assert_not ability.can?(:source, project)
+  end
+
+  test "a basic requester can copy or view source of another basic user's public or unlisted project" do
+    ability = Ability.new(users(:two))
+    project = projects(:one) # owned by user :one, neither side subscribed
+
+    project.visibility = :public
+    assert ability.can?(:copy, project)
+    assert ability.can?(:source, project)
+
+    project.visibility = :unlisted
+    assert ability.can?(:copy, project)
+    assert ability.can?(:source, project)
+  end
 end
