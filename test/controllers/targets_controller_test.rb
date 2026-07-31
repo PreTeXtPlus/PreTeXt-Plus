@@ -140,6 +140,9 @@ class TargetsControllerTest < ActionDispatch::IntegrationTest
   test "publishing from the drawer redraws the drawer with the public URL" do
     sign_in users(:two)
     target = targets(:two_web)
+    # Publishing on a private project redirects instead (see the escalation test below);
+    # unlisted keeps this test on the row/drawer turbo_stream path it means to exercise.
+    target.project.update!(visibility: :unlisted)
 
     patch publish_project_target_url(projects(:two), target),
           params: { published: true },
@@ -157,6 +160,7 @@ class TargetsControllerTest < ActionDispatch::IntegrationTest
   # would pop the drawer open on anyone who published from a row.
   test "publishing from a row does not open the drawer" do
     sign_in users(:two)
+    targets(:two_web).project.update!(visibility: :unlisted)
 
     patch publish_project_target_url(projects(:two), targets(:two_web)),
           params: { published: true },
@@ -302,6 +306,22 @@ class TargetsControllerTest < ActionDispatch::IntegrationTest
     assert_not target.reload.published?
   end
 
+  # Escalating visibility is a page-wide change (the heading pill, the profile listing),
+  # so it redirects to a full reload instead of the usual row/drawer turbo_stream update.
+  test "publishing on a private project redirects to a full reload instead of streaming the row" do
+    target = targets(:two_web)
+    sign_in users(:two)
+    assert target.project.private_visibility?
+
+    patch publish_project_target_url(projects(:two), target), params: { published: true },
+          headers: { "Accept" => "text/vnd.turbo-stream.html" }
+
+    assert_redirected_to project_url(projects(:two))
+    assert target.reload.published?
+    assert target.project.reload.unlisted_visibility?
+    assert_match(/now Unlisted/, flash[:notice])
+  end
+
   test "a target with nothing built cannot be published" do
     assert_nil @target.current_build_id
 
@@ -313,6 +333,7 @@ class TargetsControllerTest < ActionDispatch::IntegrationTest
 
   test "publishing swaps the row in place for a turbo request" do
     target = targets(:two_web)
+    target.project.update!(visibility: :unlisted)
     sign_in users(:two)
 
     patch publish_project_target_url(projects(:two), target), params: { published: true },
