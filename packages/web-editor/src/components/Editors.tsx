@@ -307,10 +307,6 @@ export interface editorProps {
    * where the viewer is not the document's author.
    */
   readOnly?: boolean;
-  /** If provided, a "Copy to a new project" button is rendered in the menu bar. */
-  onCopyButton?: () => void;
-  /** Label for the copy button.  Defaults to `"Copy to a new project"`. */
-  copyButtonLabel?: string;
 }
 
 // ── Helper: find the root division for a divisions pool ─────────────────────
@@ -1678,8 +1674,6 @@ const EditorsInner = (props: EditorsInnerProps) => {
           saveButtonLabel={props.saveButtonLabel}
           onCancelButton={props.onCancelButton}
           cancelButtonLabel={props.cancelButtonLabel}
-          onCopyButton={props.onCopyButton}
-          copyButtonLabel={props.copyButtonLabel}
           readOnly={props.readOnly}
           showPreviewModeToggle={false}
           presence={

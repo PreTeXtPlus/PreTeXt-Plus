@@ -47,8 +47,6 @@ function railsToReadOnlyState(json) {
  * @typedef {Object} SharedSourceConfig
  * @property {string} projectId
  * @property {string} sourceUrl - The `source.json` endpoint URL.
- * @property {string} copyUrl - The `POST share/copy` endpoint URL.
- * @property {string} [csrfToken]
  */
 
 /**
@@ -56,7 +54,7 @@ function railsToReadOnlyState(json) {
  * @returns {JSX.Element}
  */
 function SharedSourceApp({ config }) {
-  const { projectId, sourceUrl, copyUrl, csrfToken } = config;
+  const { projectId, sourceUrl } = config;
 
   const query = useQuery({
     queryKey: ["shared-source", projectId],
@@ -66,18 +64,6 @@ function SharedSourceApp({ config }) {
       return railsToReadOnlyState(await res.json());
     },
   });
-
-  // Reuses the exact same endpoint the old `button_to "Copy to a new
-  // project"` posted to; Rails redirects to the new project's edit page on
-  // success, or back here with a flash alert on failure -- following the
-  // final URL handles both without any bespoke response parsing here.
-  const handleCopy = async () => {
-    const res = await fetch(copyUrl, {
-      method: "POST",
-      headers: { Accept: "text/html", "X-CSRF-Token": csrfToken },
-    });
-    if (res.redirected) window.location.href = res.url;
-  };
 
   if (query.isPending) {
     return (
@@ -108,8 +94,6 @@ function SharedSourceApp({ config }) {
       projectAssets={state.projectAssets}
       hideAssets
       onContentChange={() => {}}
-      onCopyButton={handleCopy}
-      copyButtonLabel="Copy to a new project"
     />
   );
 }

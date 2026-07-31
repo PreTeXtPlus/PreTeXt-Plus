@@ -12,10 +12,6 @@ export interface MenuBarProps {
   onCancelButton?: () => void;
   /** Label for the Cancel button.  Defaults to `"Cancel"`. */
   cancelButtonLabel?: string;
-  /** If provided, a "Copy to a new project" button is rendered. */
-  onCopyButton?: () => void;
-  /** Label for the copy button.  Defaults to `"Copy to a new project"`. */
-  copyButtonLabel?: string;
   /** When true, the title field is read-only. */
   readOnly?: boolean;
   /**
@@ -111,14 +107,6 @@ const MenuBar = (props: MenuBarProps) => {
             onClick={props.onCancelButton}
           >
             {props.cancelButtonLabel || "Cancel"}
-          </button>
-        )}
-        {props.onCopyButton && (
-          <button
-            className="pretext-plus-editor__button pretext-plus-editor__button--copy"
-            onClick={props.onCopyButton}
-          >
-            {props.copyButtonLabel || "Copy to new project"}
           </button>
         )}
         <StoreFeedbackLink label="Give feedback" context="main-editor" />
