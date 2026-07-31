@@ -60,6 +60,7 @@ import {
   updateSectionMetadata,
   normalizeDivisionsOnLoad,
 } from "../sectionUtils";
+import { defaultChildDivisionType } from "./toc/types";
 import { buildProjectAssetView, makeUniqueAssetRef } from "../assetView";
 import { newRecordId } from "../recordId";
 import {
@@ -876,32 +877,38 @@ const EditorsInner = (props: EditorsInnerProps) => {
     startSectionEdit(activeDivision);
   };
 
-  // Adds a new PreTeXt section as the last child of `parentXmlId` (or
+  // Adds a new PreTeXt division as the last child of `parentXmlId` (or
   // unplaced, if `null`), then immediately opens its properties form flagged
   // `isNew` so the user can pick a different source format before the
   // division's first real edit — see SectionEditForm.
   const handleDivisionAdd = (parentXmlId: string | null) => {
-    const newDiv = createNewSection();
+    const parent = parentXmlId
+      ? divisions.find((d) => d.xmlId === parentXmlId)
+      : undefined;
+    // Start it out as a type the parent actually allows — a `<section>` under
+    // a `<book>` would be invalid the moment it's created, and would stay that
+    // way (placeholder included) if the author dismissed the form.
+    const newDiv = createNewSection(
+      undefined,
+      defaultChildDivisionType(parent?.type ?? null),
+    );
     // One transaction: the division's entry and the parent's `<plus:* ref/>`
     // placeholder pointing at it must reach peers together, or they briefly
     // render a reference to a division they don't have.
     collabTransact(() => {
       applyDivisionAdd(newDiv);
-      if (parentXmlId) {
-        const parent = divisions.find((d) => d.xmlId === parentXmlId);
-        if (parent) {
-          emitContentChange(
-            parent.xmlId,
-            insertDivisionRef(
-              parent.source,
-              newDiv.xmlId,
-              newDiv.type,
-              null,
-              parent.sourceFormat,
-            ),
+      if (parent) {
+        emitContentChange(
+          parent.xmlId,
+          insertDivisionRef(
+            parent.source,
+            newDiv.xmlId,
+            newDiv.type,
+            null,
             parent.sourceFormat,
-          );
-        }
+          ),
+          parent.sourceFormat,
+        );
       }
     });
     setActiveDivisionId(newDiv.xmlId);

@@ -24,6 +24,7 @@ import {
   updateLatexDivisionMetadata,
   splitLatexDocument,
   mergeLatexDocument,
+  normalizeDivisionsOnLoad,
 } from '../sectionUtils'
 import type { DocumentSection } from '../types/sections'
 
@@ -432,5 +433,90 @@ describe('latex divisions', () => {
     expect(merged).toContain('\\section{One}')
     expect(merged).toContain('\\section{Two}')
     expect(merged).toContain('\\end{document}')
+  })
+})
+
+// A division's type isn't a stored field — it's the wrapper element's tag
+// name — so hosts hand the editor records without one. Recovering it on load
+// is what lets the TOC label a row and restrict what its children may be.
+describe('normalizeDivisionsOnLoad type backfill', () => {
+  const root: DocumentSection = {
+    id: '1',
+    xmlId: 'bk',
+    title: 'Book',
+    type: 'book',
+    sourceFormat: 'pretext',
+    source: '<book xml:id="bk"><title>Book</title></book>',
+  }
+
+  /** A division as a host sends it: source and ids, no type. */
+  const untyped = (
+    xmlId: string,
+    source: string,
+    sourceFormat: DocumentSection['sourceFormat'] = 'pretext',
+  ) =>
+    ({ id: xmlId, xmlId, title: '', source, sourceFormat }) as DocumentSection
+
+  it('reads a pretext division type from its wrapper element', () => {
+    const [, chapter, sub] = normalizeDivisionsOnLoad(
+      [
+        root,
+        untyped('ch', '<chapter xml:id="ch"><title>One</title></chapter>'),
+        untyped(
+          'sub',
+          '<subsection xml:id="sub"><title>Deep</title></subsection>',
+        ),
+      ],
+      'bk',
+      'book',
+    )
+
+    expect(chapter.type).toBe('chapter')
+    expect(chapter.title).toBe('One')
+    expect(sub.type).toBe('subsection')
+  })
+
+  it('reads a markdown division type from its frontmatter', () => {
+    const [, md] = normalizeDivisionsOnLoad(
+      [
+        root,
+        untyped(
+          'ws',
+          '---\ndivision: worksheet\nxml:id: ws\n---\n\n# Practice\n',
+          'markdown',
+        ),
+      ],
+      'bk',
+      'book',
+    )
+
+    expect(md.type).toBe('worksheet')
+  })
+
+  it('never overrides a type the host did supply', () => {
+    const [, chapter] = normalizeDivisionsOnLoad(
+      [
+        root,
+        {
+          ...untyped('ch', '<section xml:id="ch"><title>One</title></section>'),
+          type: 'chapter',
+        },
+      ],
+      'bk',
+      'book',
+    )
+
+    expect(chapter.type).toBe('chapter')
+  })
+
+  it('leaves a latex division typeless — its source carries no type', () => {
+    const [, tex] = normalizeDivisionsOnLoad(
+      [root, untyped('tex', '\\section{Hello}\n\nbody', 'latex')],
+      'bk',
+      'book',
+    )
+
+    expect(tex.type).toBeUndefined()
+    expect(tex.title).toBe('Hello')
   })
 })
