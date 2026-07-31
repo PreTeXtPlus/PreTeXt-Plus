@@ -1,4 +1,8 @@
 class Project < ApplicationRecord
+  # Publisher options for every output of this project, overriding the owner's account
+  # defaults and overridden in turn by any one output. See Publication::Settings.
+  include HasPublicationSettings
+
   belongs_to :user
 
   # Collaborators (and pending invitations) die with the project; the users

@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_07_27_221129) do
+ActiveRecord::Schema[8.1].define(version: 2026_07_31_120000) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
   enable_extension "pgcrypto"
@@ -232,6 +232,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_07_27_221129) do
     t.text "html_source"
     t.boolean "is_template", default: false, null: false
     t.text "pretext_source"
+    t.jsonb "publication_settings", default: {}, null: false
     t.datetime "source_updated_at", default: -> { "CURRENT_TIMESTAMP" }, null: false
     t.text "template_description"
     t.string "title"
@@ -275,6 +276,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_07_27_221129) do
     t.jsonb "options", default: {}, null: false
     t.integer "position", default: 0, null: false
     t.uuid "project_id", null: false
+    t.jsonb "publication_settings", default: {}, null: false
     t.boolean "published", default: false, null: false
     t.string "slug", null: false
     t.datetime "updated_at", null: false
@@ -304,6 +306,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_07_27_221129) do
     t.string "last_sign_in_ip"
     t.string "name"
     t.uuid "privacy_id"
+    t.jsonb "publication_settings", default: {}, null: false
     t.datetime "remember_created_at"
     t.datetime "reset_password_sent_at"
     t.string "reset_password_token"

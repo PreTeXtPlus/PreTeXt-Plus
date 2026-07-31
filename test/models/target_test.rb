@@ -132,14 +132,22 @@ class TargetTest < ActiveSupport::TestCase
     assert_includes target.output_extensions, ".zip"
   end
 
-  test "a website is a site and a zipped website is not, though both emit html" do
+  test "a website is a site and a scorm package is not, though both emit html" do
     site = targets(:one_web)
-    zipped = projects(:one).targets.create!(name: "Offline copy", kind: "website_zip")
+    packaged = projects(:one).targets.create!(name: "LMS copy", kind: "scorm")
 
     assert site.site?
-    assert_not zipped.site?
+    assert_not packaged.site?
     assert_equal "html", site.manifest_attributes["format"]
-    assert_equal "html", zipped.manifest_attributes["format"]
+    assert_equal "html", packaged.manifest_attributes["format"]
+  end
+
+  # A website target already hands over its whole output as a zip, so the separate
+  # `website_zip` kind was a second output to name, build and publish for a file the first
+  # one already gives you. AbsorbWebsiteZipTargets converted the rows that had it.
+  test "there is no separate zipped-website kind" do
+    assert_not_includes Target::Catalog.slugs, "website_zip"
+    assert_not Target.new(project: projects(:one), name: "Offline", kind: "website_zip").valid?
   end
 
   # There is no way to spell an illegal combination, so there is nothing to validate:
@@ -161,7 +169,6 @@ class TargetTest < ActiveSupport::TestCase
     assert_equal %w[ website pdf revealjs beamer ], viewable
     assert_not_includes viewable, "scorm"
     assert_not_includes viewable, "epub"
-    assert_not_includes viewable, "website_zip"
   end
 
   test "every site is viewable without having to say so" do

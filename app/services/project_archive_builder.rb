@@ -9,7 +9,10 @@ require "stringio"
 # Layout produced:
 #   project.ptx                  -- manifest declaring every one of the project's
 #                                   targets, so one archive serves any build request
-#   publication/publication.ptx  -- declares the `external` asset directory
+#   publication/publication.ptx  -- the project's own publisher options; what a target
+#                                   added by hand to a downloaded copy would pick up
+#   publication/<slug>.ptx       -- one per target, holding that output's options
+#                                   resolved through account -> project -> output
 #   source/main.ptx              -- project.pretext_source, already a complete,
 #                                   standalone <pretext> document (docinfo + body,
 #                                   with every <plus:* ref/> placeholder resolved)
@@ -20,17 +23,9 @@ require "stringio"
 # default publication resolution (external dir relative to the main source file).
 # If the full server resolves images elsewhere, this is the one path to adjust.
 class ProjectArchiveBuilder
-  PUBLICATION_PTX = <<~XML.freeze
-    <?xml version="1.0" encoding="UTF-8"?>
-    <publication>
-      <source>
-        <directories external="external" generated="generated"/>
-      </source>
-      <html>
-        <resources host="cdn"/>
-      </html>
-    </publication>
-  XML
+  # Where per-target publication files go inside the archive. The directory is PreTeXt's
+  # default for <project @publication>, which is why nothing declares it.
+  PUBLICATION_DIR = "publication".freeze
 
   def initialize(project)
     @project = project
@@ -64,8 +59,17 @@ class ProjectArchiveBuilder
       zip.put_next_entry("project.ptx")
       zip.write(project_ptx)
 
-      zip.put_next_entry("publication/publication.ptx")
-      zip.write(PUBLICATION_PTX)
+      # The project's own options, under the name PreTeXt falls back to. Nothing in this
+      # archive points at it -- every target names its own file -- but a target someone
+      # adds by hand to a downloaded copy lands here, and should get the project's
+      # settings rather than PreTeXt's bare defaults.
+      zip.put_next_entry("#{PUBLICATION_DIR}/publication.ptx")
+      zip.write(publication_ptx(@project))
+
+      @project.targets.each do |target|
+        zip.put_next_entry("#{PUBLICATION_DIR}/#{publication_filename(target)}")
+        zip.write(publication_ptx(target))
+      end
 
       zip.put_next_entry("source/main.ptx")
       zip.write(@project.pretext_source.to_s)
@@ -87,13 +91,31 @@ class ProjectArchiveBuilder
     buffer
   end
 
+  # The publisher options for one project or one target, resolved through account ->
+  # project -> output and rendered as a publication file. Public so the settings modal can
+  # show an author exactly what a build will be handed.
+  def publication_ptx(owner)
+    PublicationFileBuilder.new(Publication::Settings.effective_for(owner)).to_xml
+  end
+
   private
+
+    # The target's publication file, named for the same slug everything else about it is.
+    #
+    # Bare, with no directory: @publication on a <target> resolves relative to the
+    # project's publication directory, not the project root (Target.publication_abspath in
+    # PreTeXtBook/pretext-cli). "publication/website.ptx" here would send the CLI looking
+    # in publication/publication/, and fail every build.
+    def publication_filename(target)
+      "#{target.slug}.ptx"
+    end
 
     # `manifest_attributes` is whatever the target's kind decided it emits (a SCORM
     # package contributes both format and compression), plus any per-target options. The
-    # two attributes named here are ours rather than the kind's: output-dir because
-    # FullBuildArtifactJob strips exactly this prefix, and output-filename because fixing
-    # it to the slug is what makes a single-file artifact's path knowable up front.
+    # three attributes named here are ours rather than the kind's: output-dir because
+    # FullBuildArtifactJob strips exactly this prefix, output-filename because fixing it
+    # to the slug is what makes a single-file artifact's path knowable up front, and
+    # publication because each target gets its own file (see publication_filename).
     #
     # @name is the target's slug, not its display name: this is what `pretext build <x>`
     # takes on a downloaded copy, and the schema will not accept "Instructor edition".
@@ -102,7 +124,8 @@ class ProjectArchiveBuilder
         "name" => target.slug
       }.merge(target.manifest_attributes).merge(
         "output-dir" => target.slug,
-        "output-filename" => target.output_filename
+        "output-filename" => target.output_filename,
+        "publication" => publication_filename(target)
       ).compact
 
       pairs = attributes.map { |key, value| %(#{key}="#{ERB::Util.html_escape(value)}") }

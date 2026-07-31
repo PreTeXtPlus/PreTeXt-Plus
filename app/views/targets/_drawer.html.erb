@@ -191,6 +191,17 @@
         <code>project.ptx</code>, so a link you have already shared keeps working.
       </p>
 
+            <%# Opens over the drawer -- the modal's frame is in the layout, not in here, so
+          this panel is still underneath when it closes. %>
+      <%= link_to "Build settings",
+            edit_project_target_publication_settings_path(project, target),
+            data: { turbo_frame: "modal" },
+            class: "#{button_classes(color: "gray", outlined: true)} mt-2 inline-block px-3 py-2 text-sm" %>
+      <p class="mt-2 text-xs text-gray-500">
+        Anything set here applies to just this output, overriding the project's settings
+        and your account defaults. Settings take effect on the next build.
+      </p>
+
       <%= button_to "Remove this output", project_target_path(project, target), method: :delete,
             form: { data: { turbo_frame: "_top" } },
             class: "mt-4 cursor-pointer text-sm text-red-700 hover:underline",

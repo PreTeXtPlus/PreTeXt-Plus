@@ -16,6 +16,9 @@ application.register("editor", EditorController)
 import ImportController from "./import_controller"
 application.register("import", ImportController)
 
+import ModalController from "./modal_controller"
+application.register("modal", ModalController)
+
 import NewProjectController from "./new_project_controller"
 application.register("new-project", NewProjectController)
 
@@ -24,6 +27,9 @@ application.register("project-visibility", ProjectVisibilityController)
 
 import SharedSourceController from "./shared_source_controller"
 application.register("shared-source", SharedSourceController)
+
+import TabsController from "./tabs_controller"
+application.register("tabs", TabsController)
 
 import TryitController from "./tryit_controller"
 application.register("tryit", TryitController)

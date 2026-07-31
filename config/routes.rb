@@ -77,7 +77,13 @@ Rails.application.routes.draw do
     passwords: "users/passwords",
     confirmations: "users/confirmations"
   }
-  resources :users, only: [ :new, :create, :edit, :update ]
+  resources :users, only: [ :new, :create, :edit, :update ] do
+    # Publisher options an author sets once and every project of theirs inherits. Nested
+    # under the user for the same route shape as the project and target versions -- one
+    # controller serves all three -- though like users#edit it always edits the signed-in
+    # account, whatever id the path carries.
+    resource :publication_settings, only: [ :edit, :update ]
+  end
   # The leading "@" keeps this off the plain top-level namespace (no bare
   # "/:username" to collide with "/tos", "/subscriptions", etc.) while reading as a
   # public handle, the way it does on most other sites.
@@ -102,11 +108,15 @@ Rails.application.routes.draw do
       get "download" => "projects#download", as: "download"
     end
     resources :collaborations, only: [ :create, :destroy ]
+    # Publisher options for every output of this project, overriding the owner's account
+    # defaults; the one on a target below overrides these in turn.
+    resource :publication_settings, only: [ :edit, :update ]
     resources :targets, only: [ :show, :create, :update, :destroy ] do
       member do
         patch "publish" => "targets#publish", as: "publish"
         patch "revert" => "targets#revert", as: "revert"
       end
+      resource :publication_settings, only: [ :edit, :update ]
       # Builds are always attempts at a target, so that is where they are created.
       resources :builds, only: [ :create ]
     end

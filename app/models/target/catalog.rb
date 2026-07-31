@@ -65,10 +65,11 @@ class Target
         emits: { "format" => "html" },
         site: true, extensions: %w[ .html ]),
 
-      Kind.build(:website_zip, label: "Website (zip download)",
-        emits: { "format" => "html", "compression" => "zip" },
-        extensions: %w[ .zip ]),
-
+      # There is no `website_zip` kind: a website target already hands over its whole
+      # output as a zip (see the download link in targets/_target.html.erb), so a second
+      # kind for it was one more output to name, build and publish for a file the first
+      # one already gives you. Removed in AbsorbWebsiteZipTargets, which converted the
+      # rows that had it.
       Kind.build(:scorm, label: "SCORM package (for an LMS)",
         emits: { "format" => "html", "compression" => "scorm" },
         extensions: %w[ .zip ]),

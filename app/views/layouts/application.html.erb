@@ -214,5 +214,11 @@
             </footer>
           </div>
         <% end %>
+
+    <%# Where the publisher-settings modal loads, from any page that offers it. In the
+        layout rather than on those pages because an output's settings open from inside
+        the target drawer, and a frame nested in the drawer would be emptied along with
+        it. Empty until something aims at it; the modal closes by emptying it again. %>
+    <%= turbo_frame_tag "modal" %>
   </body>
 </html>
