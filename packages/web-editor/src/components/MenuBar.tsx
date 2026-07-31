@@ -109,6 +109,9 @@ const MenuBar = (props: MenuBarProps) => {
             {props.cancelButtonLabel || "Cancel"}
           </button>
         )}
+        {props.readOnly && (
+          <span className="pretext-plus-editor__read-only-label">Read-only Mode</span>
+        )}
         <StoreFeedbackLink label="Give feedback" context="main-editor" />
         {previewModeToggle}
       </div>
