@@ -80,6 +80,16 @@
 }
 
 /* Button Styles */
+.pretext-plus-editor__read-only-label {
+  display: inline-block;
+  padding: 0.25rem 0.625rem;
+  border-radius: 3px;
+  background-color: #a32899;
+  color: white;
+  font-weight: 500;
+  margin: 0 auto;
+}
+
 .pretext-plus-editor__button {
   width: 100%;
   border-radius: 3px;

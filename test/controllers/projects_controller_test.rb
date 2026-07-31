@@ -449,8 +449,65 @@ class ProjectsControllerTest < ActionDispatch::IntegrationTest
     assert_response :success
   end
 
+  # ---- read-only source view (share/source) ----
+
+  test "source is viewable by a signed-in non-owner on an unlisted project" do
+    @project.update!(visibility: :unlisted)
+    sign_out :user
+    sign_in users(:subscribed)
+    get share_source_project_url(@project)
+    assert_response :success
+  end
+
+  test "source is viewable by a signed-in non-owner on a public project" do
+    @project.update!(visibility: :public)
+    sign_out :user
+    sign_in users(:subscribed)
+    get share_source_project_url(@project)
+    assert_response :success
+  end
+
+  test "source is denied for a signed-in non-owner on a private project" do
+    assert @project.private_visibility?
+    sign_out :user
+    sign_in users(:subscribed)
+    get share_source_project_url(@project)
+    assert_redirected_to projects_path
+    assert flash[:alert].present?
+  end
+
+  test "source is denied for an anonymous visitor even on a non-private project" do
+    @project.update!(visibility: :public)
+    sign_out :user
+    get share_source_project_url(@project)
+    assert_redirected_to projects_path
+    assert flash[:alert].present?
+  end
+
+  test "source.json returns the project's title and divisions for a signed-in non-owner on a public project" do
+    @project.update!(visibility: :public)
+    sign_out :user
+    sign_in users(:subscribed)
+    get share_source_project_url(@project, format: :json)
+    assert_response :success
+    json = JSON.parse(response.body)
+    assert_equal @project.title, json["title"]
+    assert_equal @project.divisions.count, json["divisions"].size
+  end
+
+  test "source.json is denied for a signed-in non-owner on a private project" do
+    assert @project.private_visibility?
+    sign_out :user
+    sign_in users(:subscribed)
+    get share_source_project_url(@project, format: :json)
+    assert_response :forbidden
+    json = JSON.parse(response.body)
+    assert json["errors"].present?
+  end
+
   test "copy creates a duplicate for subscriber" do
     subbed_user = users(:subscribed)
+    @project.update!(visibility: :public) # copy now requires the source to be non-private
     sign_out :user
     sign_in subbed_user
     stub_build_server do
@@ -465,6 +522,7 @@ class ProjectsControllerTest < ActionDispatch::IntegrationTest
   test "copy allows subscribed requester to copy another user's project" do
     requester = users(:subscribed)
     other_project = projects(:one)
+    other_project.update!(visibility: :public) # copy now requires the source to be non-private
     sign_out :user
     sign_in requester
     stub_build_server do
@@ -478,6 +536,7 @@ class ProjectsControllerTest < ActionDispatch::IntegrationTest
 
   test "copy duplicates divisions from the source project" do
     subbed_user = users(:subscribed)
+    @project.update!(visibility: :public) # copy now requires the source to be non-private
     sign_out :user
     sign_in subbed_user
     stub_build_server do
@@ -489,6 +548,7 @@ class ProjectsControllerTest < ActionDispatch::IntegrationTest
 
   test "copy gives the duplicated project its own independent assets" do
     subbed_user = users(:subscribed)
+    @project.update!(visibility: :public) # copy now requires the source to be non-private
     sign_out :user
     sign_in subbed_user
     stub_build_server do
@@ -507,6 +567,7 @@ class ProjectsControllerTest < ActionDispatch::IntegrationTest
     requester = users(:two)
     other_project = projects(:one)
     other_project.update_column(:user_id, owner.id)
+    other_project.update!(visibility: :public) # copy now requires the source to be non-private
 
     sign_out :user
     sign_in requester
@@ -524,6 +585,7 @@ class ProjectsControllerTest < ActionDispatch::IntegrationTest
     own_project = projects(:two) # requester's own project, padded up to their quota
     remaining = requester.asset_quota - requester.assets.count
     remaining.times { |n| own_project.assets.create!(ref: "pad-#{n}", kind: :authored, title: "Pad #{n}") }
+    @project.update!(visibility: :public) # copy now requires the source to be non-private
 
     sign_out :user
     sign_in requester
@@ -534,6 +596,19 @@ class ProjectsControllerTest < ActionDispatch::IntegrationTest
 
     assert_redirected_to copy_project_path(@project)
     assert_match(/asset limit/i, flash[:alert])
+  end
+
+  test "copy is denied for a signed-in non-owner, non-collaborator on a private project" do
+    assert @project.private_visibility?
+    sign_out :user
+    sign_in users(:subscribed)
+
+    assert_no_difference("Project.count") do
+      post copy_project_url(@project)
+    end
+
+    assert_redirected_to projects_path
+    assert flash[:alert].present?
   end
 
   test "preview is accessible without authentication" do

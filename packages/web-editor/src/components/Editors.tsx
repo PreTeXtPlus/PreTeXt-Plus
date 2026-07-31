@@ -299,6 +299,14 @@ export interface editorProps {
    * behavior is identical to previous versions.
    */
   collaboration?: CollabSession;
+
+  /**
+   * If true, the editor is read-only: Monaco is non-editable, the code-editor
+   * toolbar shows only "Display Full Source", and TOC structural actions
+   * (add/remove/edit/place a division) are hidden. Intended for a share view
+   * where the viewer is not the document's author.
+   */
+  readOnly?: boolean;
 }
 
 // ── Helper: find the root division for a divisions pool ─────────────────────
@@ -1517,9 +1525,12 @@ const EditorsInner = (props: EditorsInnerProps) => {
       // title, the Markdown frontmatter, the LaTeX `\section` header) and a
       // single click on them opens the division's properties form in the TOC.
       // The code editor only fires this when a locked leading line is actually
-      // present, so it's safe to wire up for all formats.
-      onRequestWrapperEdit={handleRequestWrapperEdit}
+      // present, so it's safe to wire up for all formats. Suppressed when
+      // read-only: that form isn't otherwise reachable, and this is a second
+      // entry point into it beyond the (already-hidden) TOC menus.
+      onRequestWrapperEdit={props.readOnly ? undefined : handleRequestWrapperEdit}
       hideAssets={props.hideAssets}
+      readOnly={props.readOnly}
     />
   );
 
@@ -1562,6 +1573,7 @@ const EditorsInner = (props: EditorsInnerProps) => {
       isCollapsed={isTocCollapsed}
       onToggleCollapse={() => setIsTocCollapsed((c) => !c)}
       hideAssets={props.hideAssets}
+      readOnly={props.readOnly}
       onOpenAssetPicker={
         props.projectAssets !== undefined
           ? (initialTab) => {
@@ -1662,6 +1674,7 @@ const EditorsInner = (props: EditorsInnerProps) => {
           saveButtonLabel={props.saveButtonLabel}
           onCancelButton={props.onCancelButton}
           cancelButtonLabel={props.cancelButtonLabel}
+          readOnly={props.readOnly}
           showPreviewModeToggle={false}
           presence={
             props.collaboration ? (

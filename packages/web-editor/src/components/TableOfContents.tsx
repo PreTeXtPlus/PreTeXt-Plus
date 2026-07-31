@@ -8,6 +8,8 @@ export interface TableOfContentsProps {
   onOpenAssetPicker?: (initialTab?: "add") => void;
   /** If true, hides all assets in the TOC and asset manager. */
   hideAssets?: boolean;
+  /** If true, hides every structural action (add/remove/edit/place a division). */
+  readOnly?: boolean;
 }
 
 /** TOC sidebar. ArticleToc reads divisions data from the editor store. */
@@ -16,6 +18,7 @@ const TableOfContents = ({
   onToggleCollapse,
   onOpenAssetPicker,
   hideAssets,
+  readOnly,
 }: TableOfContentsProps) => {
   if (isCollapsed) {
     return (
@@ -49,7 +52,7 @@ const TableOfContents = ({
           </button>
         </div>
       </div>
-       <ArticleToc onOpenAssetPicker={onOpenAssetPicker} hideAssets={hideAssets} />
+       <ArticleToc onOpenAssetPicker={onOpenAssetPicker} hideAssets={hideAssets} readOnly={readOnly} />
     </div>
   );
 };

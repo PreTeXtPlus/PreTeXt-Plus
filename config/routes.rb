@@ -136,7 +136,8 @@ Rails.application.routes.draw do
       post "doc/seed" => "project_docs#seed", as: "seed_doc"
       put "doc" => "project_docs#update"
       get "share" => "projects#share", as: "share"
-      get "share/source" => "projects#source", as: "share_source"
+      get "source" => "projects#source", as: "share_source"
+      get "share/source" => "projects#source", to: redirect("/projects/%{id}/source")
       post "share/copy" => "projects#copy", as: "copy"
       get "(*_)/external/:ref" => "assets#share", as: "share_asset"
       post "preview" => "projects#preview", as: "preview"

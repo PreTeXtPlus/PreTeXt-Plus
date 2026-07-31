@@ -12,6 +12,8 @@ export interface MenuBarProps {
   onCancelButton?: () => void;
   /** Label for the Cancel button.  Defaults to `"Cancel"`. */
   cancelButtonLabel?: string;
+  /** When true, the title field is read-only. */
+  readOnly?: boolean;
   /**
    * When `false`, the Simple/Full preview mode toggle is hidden entirely.
    * Defaults to showing the toggle.
@@ -85,6 +87,7 @@ const MenuBar = (props: MenuBarProps) => {
             type="text"
             value={title}
             onChange={(e) => updateTitle(e.target.value)}
+            readOnly={props.readOnly}
           />
         </label>
       </div>
@@ -105,6 +108,9 @@ const MenuBar = (props: MenuBarProps) => {
           >
             {props.cancelButtonLabel || "Cancel"}
           </button>
+        )}
+        {props.readOnly && (
+          <span className="pretext-plus-editor__read-only-label">Read-only Mode</span>
         )}
         <StoreFeedbackLink label="Give feedback" context="main-editor" />
         {previewModeToggle}

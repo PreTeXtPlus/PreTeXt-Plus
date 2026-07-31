@@ -82,6 +82,8 @@ const DivisionMenu = ({ items }: DivisionMenuProps) => {
     fn();
   };
 
+  if (items.length === 0) return null;
+
   return (
     <div ref={containerRef} className="pretext-plus-editor__toc-div-menu">
       <button
