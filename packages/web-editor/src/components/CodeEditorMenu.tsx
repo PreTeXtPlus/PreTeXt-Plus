@@ -43,6 +43,8 @@ interface CodeEditorMenuProps {
   /** Called when the user clicks "Display Full Source" to open the assembled-source modal. */
   onShowFullSource: () => void;
   hideAssets?: boolean;
+  /** When true, only "Display Full Source" is shown -- every editing action is hidden. */
+  readOnly?: boolean;
 }
 
 /** A single toolbar action, rendered either inline or inside the overflow dropdown. */
@@ -236,6 +238,7 @@ const CodeEditorMenu: React.FC<CodeEditorMenuProps> = ({
   onOpenAssets,
   hideAssets,
   onShowFullSource,
+  readOnly,
 }) => {
   const handleFormat = () => {
     try {
@@ -254,7 +257,9 @@ const CodeEditorMenu: React.FC<CodeEditorMenuProps> = ({
   };
 
   let actions: MenuAction[];
-  if (sourceFormat === "latex") {
+  if (readOnly) {
+    actions = [fullSourceAction];
+  } else if (sourceFormat === "latex") {
     actions = [
       ...(onConvertToPretext
         ? [

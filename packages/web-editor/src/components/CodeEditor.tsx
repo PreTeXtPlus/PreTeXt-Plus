@@ -1,6 +1,6 @@
 import { Editor } from "@monaco-editor/react";
 import { constrainedEditor } from "constrained-editor-plugin";
-import { useState, useRef, useEffect, forwardRef, useImperativeHandle } from "react";
+import { useState, useRef, useEffect, useMemo, forwardRef, useImperativeHandle } from "react";
 import type * as Y from "yjs";
 import type { Awareness } from "y-protocols/awareness";
 import { editorConfigs } from "./editorConfigs";
@@ -70,6 +70,8 @@ interface CodeEditorProps {
    */
   onRequestWrapperEdit?: () => void;
   hideAssets?: boolean;
+  /** When true, Monaco is non-editable and the toolbar shows only "Display Full Source". */
+  readOnly?: boolean;
   /**
    * When set, the editor model is bound to this shared `Y.Text` instead of
    * being driven by the `content` prop: keystrokes emit CRDT deltas, remote
@@ -92,8 +94,8 @@ export interface CodeEditorHandle {
   revealLine: (line: number) => void;
 }
 
-/** Static Monaco editor options shared across all instances of this component. */
-const options = {
+/** Base Monaco editor options shared across all instances of this component. */
+const baseOptions = {
   automaticLayout: true,
   minimap: { enabled: false },
   acceptSuggestionOnCommitCharacter: false,
@@ -132,6 +134,7 @@ const CodeEditor = forwardRef<CodeEditorHandle, CodeEditorProps>(({
   onShowFullSource,
   onRequestWrapperEdit,
   hideAssets,
+  readOnly,
   collab,
 }, ref) => {
   const editorRef = useRef<any>(null);
@@ -190,6 +193,10 @@ const CodeEditor = forwardRef<CodeEditorHandle, CodeEditorProps>(({
   const [canRedo, setCanRedo] = useState(false);
   const onRebuildRef = useRef(onRebuild);
   const onSaveRef = useRef(onSave);
+  const options = useMemo(
+    () => ({ ...baseOptions, readOnly: !!readOnly }),
+    [readOnly],
+  );
 
   useImperativeHandle(ref, () => ({
     insertAtCursor: (text: string) => {
@@ -707,6 +714,7 @@ const CodeEditor = forwardRef<CodeEditorHandle, CodeEditorProps>(({
         onOpenAssets={onOpenAssets}
         onShowFullSource={onShowFullSource}
         hideAssets={hideAssets}
+        readOnly={readOnly}
       />
       <div style={{ flex: 1 }}>
         <Editor

@@ -124,6 +124,15 @@
   background-color: #9ca3af;
 }
 
+.pretext-plus-editor__button--copy {
+  background-color: #7c3aed;
+  color: white;
+}
+
+.pretext-plus-editor__button--copy:hover {
+  background-color: #6d28d9;
+}
+
 .pretext-plus-editor__button:disabled {
   cursor: not-allowed;
   opacity: 0.6;

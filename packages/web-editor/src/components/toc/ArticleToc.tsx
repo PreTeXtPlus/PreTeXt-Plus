@@ -19,9 +19,11 @@ import { ASSET_KIND_LABELS, VISIBLE_ASSET_KINDS } from "../../assetKinds";
 export interface ArticleTocProps {
   onOpenAssetPicker?: (initialTab?: "add") => void;
   hideAssets?: boolean;
+  /** If true, hides every structural action (add/remove/edit/place a division). */
+  readOnly?: boolean;
 }
 
-const ArticleToc = ({ onOpenAssetPicker, hideAssets }: ArticleTocProps) => {
+const ArticleToc = ({ onOpenAssetPicker, hideAssets, readOnly }: ArticleTocProps) => {
   const divisions = useEditorStore((s) => s.divisions);
   const rootDivisionId = useEditorStore((s) => s.rootDivisionId);
   const activeDivisionId = useEditorStore((s) => s.activeDivisionId);
@@ -302,23 +304,27 @@ const ArticleToc = ({ onOpenAssetPicker, hideAssets }: ArticleTocProps) => {
             onDraftChange={setEditDraft}
             onEditCommit={commitSectionEdit}
             onEditCancel={cancelSectionEdit}
-            menuItems={[
-              {
-                label: "Edit properties",
-                onClick: () => startSectionEdit(rootDivision),
-              },
-              // All three source formats can hold a child ref placeholder — see
-              // canEmbedDivisionRefs / types/sections.ts — so this is always
-              // shown today, but stays gated for a future leaf-only format.
-              ...(canEmbedDivisionRefs(rootDivision.sourceFormat)
-                ? [
+            menuItems={
+              readOnly
+                ? []
+                : [
                     {
-                      label: "Add new division",
-                      onClick: () => addSection(rootDivision.xmlId),
+                      label: "Edit properties",
+                      onClick: () => startSectionEdit(rootDivision),
                     },
+                    // All three source formats can hold a child ref placeholder — see
+                    // canEmbedDivisionRefs / types/sections.ts — so this is always
+                    // shown today, but stays gated for a future leaf-only format.
+                    ...(canEmbedDivisionRefs(rootDivision.sourceFormat)
+                      ? [
+                          {
+                            label: "Add new division",
+                            onClick: () => addSection(rootDivision.xmlId),
+                          },
+                        ]
+                      : []),
                   ]
-                : []),
-            ]}
+            }
             isNew={editingId === rootDivision.xmlId && editingIsNew}
             isRoot
           />
@@ -338,32 +344,36 @@ const ArticleToc = ({ onOpenAssetPicker, hideAssets }: ArticleTocProps) => {
             onDraftChange={setEditDraft}
             onEditCommit={commitSectionEdit}
             onEditCancel={cancelSectionEdit}
-            menuItems={[
-              {
-                label: "Edit properties",
-                onClick: () => startSectionEdit(node.division),
-              },
-              // Add division, but only if the format can embed child refs —
-              // all three (PreTeXt/Markdown/LaTeX) do today; gated for a future
-              // leaf-only format.
-              ...(canEmbedDivisionRefs(node.division.sourceFormat)
-                ? [
+            menuItems={
+              readOnly
+                ? []
+                : [
                     {
-                      label: "Add new division",
-                      onClick: () => addSection(node.division.xmlId),
+                      label: "Edit properties",
+                      onClick: () => startSectionEdit(node.division),
+                    },
+                    // Add division, but only if the format can embed child refs —
+                    // all three (PreTeXt/Markdown/LaTeX) do today; gated for a future
+                    // leaf-only format.
+                    ...(canEmbedDivisionRefs(node.division.sourceFormat)
+                      ? [
+                          {
+                            label: "Add new division",
+                            onClick: () => addSection(node.division.xmlId),
+                          },
+                        ]
+                      : []),
+                    {
+                      label: "Remove from document",
+                      onClick: () => handleUnplace(node.division.xmlId, node.parentXmlId!),
+                    },
+                    {
+                      label: "Delete from project",
+                      onClick: () => handleDelete(node.division, node.parentXmlId),
+                      danger: true,
                     },
                   ]
-                : []),
-              {
-                label: "Remove from document",
-                onClick: () => handleUnplace(node.division.xmlId, node.parentXmlId!),
-              },
-              {
-                label: "Delete from project",
-                onClick: () => handleDelete(node.division, node.parentXmlId),
-                danger: true,
-              },
-            ]}
+            }
             isNew={editingId === node.division.xmlId && editingIsNew}
             parentType={getDivisionType(node.parentXmlId)}
           />
@@ -398,25 +408,29 @@ const ArticleToc = ({ onOpenAssetPicker, hideAssets }: ArticleTocProps) => {
                     onDraftChange={setEditDraft}
                     onEditCommit={commitSectionEdit}
                     onEditCancel={cancelSectionEdit}
-                    menuItems={[
-                      {
-                        label: "Edit properties",
-                        onClick: () => startSectionEdit(orphan),
-                      },
-                      {
-                        label: "Place in document",
-                        onClick: () => handlePlaceOrphan(orphan),
-                      },
-                      {
-                        label: "Insert at cursor",
-                        onClick: () => handleInsertAtCursor(orphan),
-                      },
-                      {
-                        label: "Delete from project",
-                        onClick: () => handleDelete(orphan, null),
-                        danger: true,
-                      },
-                    ]}
+                    menuItems={
+                      readOnly
+                        ? []
+                        : [
+                            {
+                              label: "Edit properties",
+                              onClick: () => startSectionEdit(orphan),
+                            },
+                            {
+                              label: "Place in document",
+                              onClick: () => handlePlaceOrphan(orphan),
+                            },
+                            {
+                              label: "Insert at cursor",
+                              onClick: () => handleInsertAtCursor(orphan),
+                            },
+                            {
+                              label: "Delete from project",
+                              onClick: () => handleDelete(orphan, null),
+                              danger: true,
+                            },
+                          ]
+                    }
                     parentType={null}
                   />
                   {isExpanded(orphan.xmlId) &&
@@ -434,21 +448,25 @@ const ArticleToc = ({ onOpenAssetPicker, hideAssets }: ArticleTocProps) => {
                         onDraftChange={setEditDraft}
                         onEditCommit={commitSectionEdit}
                         onEditCancel={cancelSectionEdit}
-                        menuItems={[
-                          {
-                            label: "Edit properties",
-                            onClick: () => startSectionEdit(node.division),
-                          },
-                          {
-                            label: "Insert at cursor",
-                            onClick: () => handleInsertAtCursor(node.division),
-                          },
-                          {
-                            label: "Delete from project",
-                            onClick: () => handleDelete(node.division, node.parentXmlId),
-                            danger: true,
-                          },
-                        ]}
+                        menuItems={
+                          readOnly
+                            ? []
+                            : [
+                                {
+                                  label: "Edit properties",
+                                  onClick: () => startSectionEdit(node.division),
+                                },
+                                {
+                                  label: "Insert at cursor",
+                                  onClick: () => handleInsertAtCursor(node.division),
+                                },
+                                {
+                                  label: "Delete from project",
+                                  onClick: () => handleDelete(node.division, node.parentXmlId),
+                                  danger: true,
+                                },
+                              ]
+                        }
                         parentType={getDivisionType(node.parentXmlId)}
                       />
                     ))}

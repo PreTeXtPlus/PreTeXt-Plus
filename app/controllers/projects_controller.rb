@@ -2,7 +2,7 @@ class ProjectsController < ApplicationController
   allow_unauthenticated_access only: %i[ share preview source ]
   require_unauthenticated_access only: %i[ tryit ]
   load_and_authorize_resource except: %i[ index new tryit preview feedback create_from_template create_from_import ]
-  skip_authorize_resource only: %i[ share copy ]
+  skip_authorize_resource only: %i[ share ]
   after_action :allow_iframe, only: :share
   rate_limit to: 25, within: 10.minutes, only: :preview,
              with: -> { render plain: "Preview limit reached. Please wait a few minutes and try again, or create an account to continue writing and save your work!", status: :too_many_requests },
@@ -154,6 +154,10 @@ class ProjectsController < ApplicationController
   end
 
   def source
+    respond_to do |format|
+      format.html
+      format.json
+    end
   end
 
   # GET /projects/:project_id/share/copy

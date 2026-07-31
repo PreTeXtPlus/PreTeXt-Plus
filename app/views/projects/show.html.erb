@@ -30,6 +30,11 @@
   <%= link_to "Download source", download_project_path(@project),
         class: "#{button_classes(color: "gray", outlined: true)} px-3.5 py-2",
         data: { turbo: false } %>
+  <% unless @project.private_visibility? %>
+    <%= link_to "Share source", share_source_project_path(@project),
+          class: "#{button_classes(color: "gray", outlined: true)} px-3.5 py-2",
+          data: { turbo: false } %>
+  <% end %>
 <% end %>
 
 <%# Subscribes the dashboard to this project's target rows. Build#mark! broadcasts here

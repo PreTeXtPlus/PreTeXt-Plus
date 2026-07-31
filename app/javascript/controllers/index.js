@@ -22,5 +22,8 @@ application.register("new-project", NewProjectController)
 import ProjectVisibilityController from "./project_visibility_controller"
 application.register("project-visibility", ProjectVisibilityController)
 
+import SharedSourceController from "./shared_source_controller"
+application.register("shared-source", SharedSourceController)
+
 import TryitController from "./tryit_controller"
 application.register("tryit", TryitController)

@@ -1,25 +1,38 @@
 <% content_for :title, "Source for #{@project.title}" %>
 <% content_for :full_screen_content do %>
-<div class="size-full md:flex md:flex-row">
-    <div class="w-full md:w-1/2 md:h-full p-5 flex flex-col">
-      <%= button_to "Copy to a new project",
-        copy_project_path(@project), method: :post,
-        form_class: "w-full h-[10%] sm:w-auto sm:inline-block",
-        class: "#{button_classes(color: "gray")} w-full text-center px-3.5 py-2.5" %>
-      <% if @project.user == current_user %>
-        <div class="p-3 w-full m-auto text-center text-sm text-gray-500">
-          You are the owner of this project
-          (<%= link_to "Manage", @project, class: "text-blue-500 hover:font-semibold" %>).
-        </div>
+<div class="flex size-full flex-1 flex-col min-h-0">
+  <div class="shrink-0 p-3 w-full text-center text-sm text-gray-500">
+    <% if @project.user == current_user %>
+      You are the owner of this project
+      (<%= link_to "Manage", @project, class: "text-blue-500 hover:font-semibold" %>).
+      <% unless @project.private_visibility? %>
+        Copy this link to share your project's source code with others:
+        <input type="text" class="w-full mt-2 p-1 text-sm text-gray-700 border rounded" value="<%= share_source_project_url(@project) %>" readonly>
+      <% else %>
+        This project is private. You can share the source code with others by
+        <%= link_to "making it public", @project, class: "text-blue-500 hover:font-semibold" %>.
       <% end %>
-      <h3 class="text-lg mt-5">PreTeXt XML source</h3>
-      <textarea class="size-full mt-2 bg-gray-100 font-mono text-gray-800 p-3 resize-none" readonly><%= @project.pretext_source %></textarea>
+    <% else %>
+      This is a read-only view of the source code for <%= @project.title %>.
+      You can <%= button_to "copy this project", copy_project_path(@project), class: "text-purple-700 hover:font-semibold cursor-pointer", form_class: "inline" %>
+      to your own account to edit it.
+    <% end %>
+  </div>
+  <div class="flex size-full flex-1 min-h-0"
+      data-controller="shared-source"
+      data-shared-source-project-id-value="<%= @project.id %>"
+      data-shared-source-source-url-value="<%= share_source_project_path(@project, format: :json) %>"
+      data-shared-source-copy-url-value="<%= copy_project_path(@project) %>"
+      data-turbo="false">
+    <div data-shared-source-target="root" class="w-full flex-1 min-h-0">
+      <div class="flex h-full items-center justify-center">
+        <div class="mx-5 text-center">
+          <p>
+            Loading…
+          </p>
+        </div>
+      </div>
     </div>
-    <div class="w-full md:w-1/2 h-screen md:h-full">
-      <%# Quick build. This is the one place the preview still earns its keep: a visitor
-          deciding whether to copy the project needs to see it without owning it. %>
-      <iframe id="<%= dom_id @project %>" src="<%= share_project_path(@project) %>"
-              class="size-full" title="Preview of <%= @project.title %>"></iframe>
-    </div>
+  </div>
 </div>
 <% end %>
