@@ -8,6 +8,8 @@ module ApplicationHelper
                   outlined: "bg-white border border-indigo-300 text-indigo-700 hover:bg-indigo-50" },
     "blue"   => { solid: "bg-blue-600 text-white hover:bg-blue-500",
                   outlined: "bg-white border border-blue-300 text-blue-700 hover:bg-blue-50" },
+    "purple"   => { solid: "bg-purple-600 text-white hover:bg-purple-500",
+                  outlined: "bg-white border border-purple-300 text-purple-700 hover:bg-purple-50" },
     "green"  => { solid: "bg-green-600 text-white hover:bg-green-500",
                   outlined: "bg-white border border-green-300 text-green-700 hover:bg-green-50" },
     "red"    => { solid: "bg-red-600 text-white hover:bg-red-500",
@@ -16,6 +18,8 @@ module ApplicationHelper
                   outlined: "bg-white border border-sky-300 text-sky-700 hover:bg-sky-50" },
     "yellow" => { solid: "bg-yellow-600 text-white hover:bg-yellow-500",
                   outlined: "bg-white border border-yellow-300 text-yellow-700 hover:bg-yellow-50" },
+    "orange" => { solid: "bg-orange-400 text-white hover:bg-orange-500",
+                  outlined: "bg-white border border-orange-300 text-orange-700 hover:bg-orange-50" },
     # gray is only ever a secondary/neutral action, never a dark filled button
     # (that would read as disabled), so "solid" here means a light fill.
     "gray"   => { solid: "bg-gray-100 text-gray-800 hover:bg-gray-50",
