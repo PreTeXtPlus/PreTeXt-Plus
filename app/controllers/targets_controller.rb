@@ -41,7 +41,17 @@ class TargetsController < ApplicationController
                          alert: "Build #{@target.name} before publishing it."
     end
 
+    was_private = @project.private_visibility?
     @target.update!(published: publishing)
+
+    # Publishing on a private project escalates it to Unlisted (see
+    # Target#unlist_project_if_needed) -- a page-wide change (the visibility pill in the
+    # heading, the profile listing), not just this row's, so it gets a full reload instead
+    # of the row/drawer-only turbo_stream update below.
+    if was_private && !@project.reload.private_visibility?
+      return redirect_to project_path(@project),
+                         notice: "#{@target.name} is now published. This project's visibility is now Unlisted."
+    end
 
     respond_to do |format|
       format.turbo_stream do

@@ -16,6 +16,33 @@ class ProjectTest < ActiveSupport::TestCase
     assert_not_includes Project.publicly_listed, projects(:one)
   end
 
+  test "setting a project private unpublishes all of its published targets" do
+    project = projects(:public_project)
+    target = targets(:public_project_web)
+    assert target.published?
+
+    project.update!(visibility: :private)
+
+    assert_not target.reload.published?
+  end
+
+  test "setting a project private with nothing published is a no-op" do
+    project = projects(:one)
+    assert_no_changes -> { targets(:one_web).reload.published? } do
+      project.update!(visibility: :private)
+    end
+  end
+
+  test "leaving a project private does not re-run the unpublish sweep" do
+    project = projects(:one)
+    target = targets(:one_web)
+    target.update_column(:published, true)
+
+    project.update!(title: "Renamed")
+
+    assert target.reload.published?
+  end
+
   test "an existing root division's source can be updated without resending its ref" do
     project = projects(:one)
     division = project.root_division

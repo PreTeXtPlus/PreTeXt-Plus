@@ -8,6 +8,34 @@ class TargetTest < ActiveSupport::TestCase
     assert_includes target.builds, builds(:failed)
   end
 
+  test "publishing on a private project escalates its visibility to unlisted" do
+    target = targets(:two_web)
+    assert target.project.private_visibility?
+
+    target.update!(published: true)
+
+    assert target.project.reload.unlisted_visibility?
+  end
+
+  test "publishing on an unlisted or public project leaves visibility untouched" do
+    target = targets(:public_project_web)
+    target.update!(published: false)
+    target.project.update_column(:visibility, :unlisted)
+
+    target.update!(published: true)
+
+    assert target.project.reload.unlisted_visibility?
+  end
+
+  test "unpublishing never changes project visibility" do
+    target = targets(:public_project_web)
+    assert target.project.public_visibility?
+
+    target.update!(published: false)
+
+    assert target.project.reload.public_visibility?
+  end
+
   test "name must be unique within a project but not across projects" do
     duplicate = Target.new(project: projects(:one), name: "Website", kind: "website")
     assert_not duplicate.valid?
