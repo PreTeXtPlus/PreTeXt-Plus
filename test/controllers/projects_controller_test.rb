@@ -190,6 +190,8 @@ class ProjectsControllerTest < ActionDispatch::IntegrationTest
     assert_equal asset.id, asset_json["id"]
     assert_equal share_asset_project_path(@project, ref: "diagram-two", format: "png"), asset_json["path"]
     assert_equal "png", asset_json["extension"]
+    assert_equal share_asset_thumbnail_project_path(@project, ref: "diagram-two", format: "png"),
+      asset_json["thumbnail_path"]
   end
 
   # --- Visibility ---

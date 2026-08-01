@@ -106,6 +106,8 @@
     </p>
   <% end %>
 
+  <%= render "projects/assets", project: @project %>
+
   <%= render "collaborations/panel", project: @project %>
 
   <%# html_source is no longer written for any project (see Project#enqueue_html_source_job,

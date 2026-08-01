@@ -25,6 +25,13 @@ class Asset < ApplicationRecord
   # protection.
   INLINE_OVERRIDE_CONTENT_TYPES = %w[ image/svg+xml ].freeze
 
+  # The bare filename extension of the attached file (no leading dot), or nil
+  # when there's no file. Shared by every URL helper below that needs to build
+  # a `share_asset*_path`, whose optional `:format` segment mirrors it.
+  def file_extension
+    file.filename.extension_without_delimiter.presence if file.attached?
+  end
+
   def url
     return "/image-not-found.svg" unless file.present?
 
@@ -36,6 +43,37 @@ class Asset < ApplicationRecord
     else
       file.url(expires_in: 1.hour)
     end
+  end
+
+  THUMBNAIL_SIZE = [ 200, 200 ].freeze
+
+  # Whether `thumbnail_url` has anything to show: no file, or a file type
+  # ActiveStorage can't raster a variant of, means no preview -- callers fall
+  # back to a generic file icon. Cheap (no processing), so it's safe to call
+  # from JSON rendering to decide whether to advertise a thumbnail path at
+  # all, without paying for `thumbnail_url`'s variant processing there.
+  def thumbnailable?
+    return false unless file.present?
+
+    blob = file.blob
+    INLINE_OVERRIDE_CONTENT_TYPES.include?(blob.content_type) || blob.variable?
+  end
+
+  # A small preview URL for the asset manager/editor list and the project
+  # dashboard, distinct from `url` (the full file, used for the actual
+  # `<image>` embed). Nil when `thumbnailable?` is false. SVGs are already
+  # tiny/vector, so they skip variant processing and reuse the full `url`
+  # directly; everything else is resized through a real ActiveStorage variant
+  # (processed synchronously here, so only call this where that cost is
+  # acceptable -- e.g. the dedicated thumbnail redirect action, not JSON
+  # rendering of a list).
+  def thumbnail_url
+    return nil unless thumbnailable?
+
+    blob = file.blob
+    return url if INLINE_OVERRIDE_CONTENT_TYPES.include?(blob.content_type)
+
+    file.variant(resize_to_limit: THUMBNAIL_SIZE).processed.url(expires_in: 1.hour)
   end
 
   private

@@ -151,6 +151,7 @@ Rails.application.routes.draw do
       get "share/source" => "projects#source", to: redirect("/projects/%{id}/source")
       post "share/copy" => "projects#copy", as: "copy"
       get "(*_)/external/:ref" => "assets#share", as: "share_asset"
+      get "(*_)/external/:ref/thumbnail" => "assets#share_thumbnail", as: "share_asset_thumbnail"
       post "preview" => "projects#preview", as: "preview"
       get "*/lunr-pretext-search-index.js", to: redirect("/ptx-search.js")
     end

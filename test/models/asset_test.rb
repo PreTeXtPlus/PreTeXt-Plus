@@ -84,4 +84,72 @@ class AssetTest < ActiveSupport::TestCase
   test "asset quota is not enforced on existing rows (grandfathering)" do
     assert assets(:authored_one).valid?
   end
+
+  test "thumbnailable? is false when no file is attached" do
+    assert_not assets(:authored_one).thumbnailable?
+  end
+
+  test "thumbnailable? is true for a variable raster image content type" do
+    asset = assets(:image_one)
+    asset.file.attach(
+      io: File.open(Rails.root.join("test/fixtures/files/test_image.png")),
+      filename: "test_image.png", content_type: "image/png"
+    )
+
+    assert asset.thumbnailable?
+  end
+
+  test "thumbnailable? is true for svg, which bypasses variant processing" do
+    asset = assets(:image_one)
+    asset.file.attach(
+      io: File.open(Rails.root.join("test/fixtures/files/test_image.svg")),
+      filename: "test_image.svg", content_type: "image/svg+xml"
+    )
+
+    assert asset.thumbnailable?
+  end
+
+  # Content type is declared at attach time, but ActiveStorage sniffs the
+  # actual bytes (via Marcel) rather than trusting it blindly -- so this has
+  # to be real non-image bytes, not real image bytes mislabeled.
+  test "thumbnailable? is false for a content type ActiveStorage can't raster a variant of" do
+    asset = assets(:image_one)
+    asset.file.attach(
+      io: StringIO.new("hello world"),
+      filename: "test.txt", content_type: "text/plain"
+    )
+
+    assert_not asset.thumbnailable?
+  end
+
+  test "thumbnail_url is nil when the asset isn't thumbnailable" do
+    assert_nil assets(:authored_one).thumbnail_url
+  end
+
+  test "thumbnail_url reuses the full url for svg instead of processing a variant" do
+    asset = assets(:image_one)
+    asset.file.attach(
+      io: File.open(Rails.root.join("test/fixtures/files/test_image.svg")),
+      filename: "test_image.svg", content_type: "image/svg+xml"
+    )
+
+    ActiveStorage::Current.url_options = { host: "example.com" }
+    travel_to Time.current do
+      assert_equal asset.url, asset.thumbnail_url
+    end
+  end
+
+  test "thumbnail_url returns a resized variant's url for a raster image" do
+    asset = assets(:image_one)
+    asset.file.attach(
+      io: File.open(Rails.root.join("test/fixtures/files/test_image.png")),
+      filename: "test_image.png", content_type: "image/png"
+    )
+
+    ActiveStorage::Current.url_options = { host: "example.com" }
+    url = asset.thumbnail_url
+
+    assert_not_nil url
+    assert_not_equal asset.url, url
+  end
 end
