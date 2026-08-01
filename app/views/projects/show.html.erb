@@ -108,6 +108,8 @@
 
   <%= render "collaborations/panel", project: @project %>
 
+  <%= render "projects/assets", project: @project %>
+
   <%# html_source is no longer written for any project (see Project#enqueue_html_source_job,
       removed); this only ever renders for projects that got one before the cutover. %>
   <% if @project.html_source.present? %>

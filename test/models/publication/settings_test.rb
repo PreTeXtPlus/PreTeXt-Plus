@@ -352,6 +352,20 @@ class Publication::SettingsTest < ActiveSupport::TestCase
     assert_nil settings.unavailable_note(option)
   end
 
+  # Regression test: a pasted-clipboard image's upload has no extension in its
+  # filename (see Asset#file_extension), so the cover choice's name has to
+  # come from the content type, matching what ProjectArchiveBuilder writes
+  # the file as -- not from the upload's own (missing) extension.
+  test "the cover offers an extensionless upload by its content-type-derived name" do
+    asset = assets(:image_one)
+    asset.file.attach(io: File.open(Rails.root.join("test/fixtures/files/test_image.png")),
+                      filename: "pasted-image-1234567890", content_type: "image/png")
+    settings = Publication::Settings.new(@project)
+    option = Publication::Catalog.find("epub_cover")
+
+    assert_equal [ "#{asset.ref}.png" ], settings.choices_for(option).map(&:first)
+  end
+
   # The tab still earns its place: an author who has never made an EPUB should learn a
   # cover is a thing they can set, and what to do about it.
   test "a project with no images keeps the cover, with what to do about it" do

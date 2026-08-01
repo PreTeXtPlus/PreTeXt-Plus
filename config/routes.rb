@@ -151,6 +151,7 @@ Rails.application.routes.draw do
       get "share/source" => "projects#source", to: redirect("/projects/%{id}/source")
       post "share/copy" => "projects#copy", as: "copy"
       get "(*_)/external/:ref" => "assets#share", as: "share_asset"
+      get "(*_)/external/:ref/thumbnail" => "assets#share_thumbnail", as: "share_asset_thumbnail"
       post "preview" => "projects#preview", as: "preview"
       get "*/lunr-pretext-search-index.js", to: redirect("/ptx-search.js")
     end
@@ -163,7 +164,7 @@ Rails.application.routes.draw do
   resources :asset_fetches, only: :create
   get "tryit" => "projects#tryit"
   post "tryit/preview" => "projects#preview", as: "tryit_preview"
-  get "(tryit)/external/icon" => redirect("/icon-small.png")
+  get "(tryit)/external/icon" => redirect("/icon.svg")
 
   get "up" => "rails/health#show", as: :rails_health_check
 

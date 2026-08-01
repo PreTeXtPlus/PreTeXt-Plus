@@ -16,6 +16,28 @@ class ProjectTest < ActiveSupport::TestCase
     assert_not_includes Project.publicly_listed, projects(:one)
   end
 
+  test "icon_asset is nil when the project has no icon asset" do
+    assert_nil projects(:one).icon_asset
+  end
+
+  test "icon_asset is nil when the icon asset row has no file attached" do
+    project = projects(:one)
+    project.assets.create!(ref: "icon", kind: :authored, title: "No File", source: "")
+
+    assert_nil project.icon_asset
+  end
+
+  test "icon_asset returns the asset when the project has its own file-backed icon" do
+    project = projects(:one)
+    icon = project.assets.create!(ref: "icon", kind: :file, title: "My Icon")
+    icon.file.attach(
+      io: File.open(Rails.root.join("test/fixtures/files/test_image.png")),
+      filename: "test_image.png", content_type: "image/png"
+    )
+
+    assert_equal icon, project.icon_asset
+  end
+
   test "setting a project private unpublishes all of its published targets" do
     project = projects(:public_project)
     target = targets(:public_project_web)

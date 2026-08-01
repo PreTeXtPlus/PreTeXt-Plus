@@ -373,8 +373,20 @@ const AssetManagerModal = ({
             onClick={onOpen}
             title={row.status === "unlinked" ? "No asset for this reference — click to link or create one" : "Edit asset"}
           >
-            <span className="pretext-plus-editor__am-row-name">{row.asset?.title ?? row.ref}</span>
-            <span className="pretext-plus-editor__am-row-ref">{row.ref}</span>
+            {(row.asset?.thumbnailUrl ?? row.asset?.url) && (
+              <img
+                className="pretext-plus-editor__am-row-thumb"
+                src={row.asset?.thumbnailUrl ?? row.asset?.url}
+                alt=""
+              />
+            )}
+            <span className="pretext-plus-editor__am-row-text">
+              <span className="pretext-plus-editor__am-row-name">{row.asset?.title ?? row.ref}</span>
+              <span className="pretext-plus-editor__am-row-ref">
+                {row.ref}
+                {row.asset?.contentType && ` · ${row.asset.contentType}`}
+              </span>
+            </span>
           </button>
           {row.status === "unlinked" && (
             <span className="pretext-plus-editor__am-status pretext-plus-editor__am-status--warn" title="No asset for this reference">

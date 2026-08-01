@@ -28,6 +28,10 @@
  * @property {string} [source]
  * @property {string} [path] - Fetchable share URL; present only when a file is attached.
  * @property {string} [extension] - Present only when a file is attached.
+ * @property {string} [thumbnail_path] - Fetchable small-preview URL; present only when the
+ *   attached file can be thumbnailed (see Asset#thumbnailable?).
+ * @property {string} [content_type] - The attached file's MIME type; present only when a
+ *   file is attached.
  */
 
 /**
@@ -95,12 +99,18 @@ export function railsDivisionToEditor(d, rootMeta) {
 // `Asset`, its `id` IS the identity the web-editor keys on directly -- no more
 // project-asset-vs-library-asset split, and nothing extra to carry alongside it.
 //
-// An asset still carries two distinct file references, and they must not be
+// An asset still carries three distinct file references, and they must not be
 // confused:
 //
 //  * `url` -- `path`, Rails' `share_asset_project_path` redirect. A real,
-//    fetchable URL. Used ONLY for the editor's own UI: the live thumbnail
-//    `<img src>` in the Asset Manager / "Edit asset" dialog.
+//    fetchable URL to the full file. Used ONLY for the editor's own UI: the
+//    "Edit asset" dialog's live preview, and as a fallback thumbnail when
+//    `thumbnailUrl` is unavailable.
+//
+//  * `thumbnailUrl` -- `thumbnail_path`, Rails' `share_asset_thumbnail_project_path`
+//    redirect to a small resized variant. A real, fetchable URL, present only
+//    when the file is thumbnailable (see Asset#thumbnailable?). Used for the
+//    asset list's `<img src>` in the Asset Manager.
 //
 //  * `fileRef` -- a bare `<ref>.<ext>` external-asset filename. This is what the
 //    web-editor emits as the `<image source="...">` attribute in any assembled
@@ -144,15 +154,18 @@ export function railsAssetToEditor(a) {
     kind: "image",
     source: a.source ?? undefined,
     url: a.path ?? undefined,
+    thumbnailUrl: a.thumbnail_path ?? undefined,
+    extension: a.extension ?? undefined,
+    contentType: a.content_type ?? undefined,
     isFile: Boolean(a.path),
     fileRef: fileRefFor(a, a.ref),
   };
 }
 
 // Strip a host project-asset record down to the bare web-editor Asset shape.
-// `url` is the real thumbnail URL (asset-manager UI); `fileRef` is the bare
-// `<ref>.<ext>` filename the web-editor emits as `<image source>` -- see
-// railsAssetToEditor for why the two must stay distinct.
+// `url`/`thumbnailUrl` are the real file URLs (asset-manager UI); `fileRef` is
+// the bare `<ref>.<ext>` filename the web-editor emits as `<image source>` --
+// see railsAssetToEditor for why these must stay distinct.
 /**
  * @param {Asset} rec
  * @returns {Asset}
@@ -165,6 +178,9 @@ export function toEditorAsset(rec) {
     kind: rec.kind,
     source: rec.source,
     url: rec.url,
+    thumbnailUrl: rec.thumbnailUrl,
+    extension: rec.extension,
+    contentType: rec.contentType,
     fileRef: rec.fileRef,
     // Recomputed from `url` rather than carried on `rec`, same reasoning as
     // railsAssetToEditor: file-backed-ness is a property of the attachment,

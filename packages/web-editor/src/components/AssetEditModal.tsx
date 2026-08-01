@@ -189,6 +189,9 @@ const AssetEditModal = ({
 
                 {canReplace && (
                   <div className="pretext-plus-editor__am-replace-row">
+                    <span className="pretext-plus-editor__am-row-ref">
+                      {asset?.contentType && `${asset.contentType}`}
+                    </span>
                     <button
                       type="button"
                       className="pretext-plus-editor__am-action-btn"

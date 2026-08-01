@@ -43,13 +43,23 @@ export interface Asset {
    */
   isFile?: boolean;
   /**
-   * Publicly accessible URL used as the asset-manager thumbnail
-   * (`<img src={url}>`). Its filename extension (if any) is also used, as a
-   * fallback after {@link fileRef}, to determine the extension appended to
-   * `ref` for the generated `<image source="...">` attribute. The URL itself
-   * (e.g. a UUID-based storage key) is never written into the document.
+   * Publicly accessible URL for the asset's full file, used for the "edit
+   * asset" preview (`<img src={url}>`) and as the fallback thumbnail source
+   * when {@link thumbnailUrl} isn't available. Its filename extension (if
+   * any) is also used, as a fallback after {@link fileRef}, to determine the
+   * extension appended to `ref` for the generated `<image source="...">`
+   * attribute. The URL itself (e.g. a UUID-based storage key) is never
+   * written into the document.
    */
   url?: string;
+  /**
+   * A small resized preview of the file, distinct from {@link url} (the full
+   * file). Used for the asset list's `<img src>` in the asset manager and
+   * table of contents. Undefined when no preview is possible (no file, or a
+   * file type that can't be rastered) — callers should fall back to
+   * {@link url} or a generic icon.
+   */
+  thumbnailUrl?: string;
   /**
    * The server-assigned storage filename for a file-backed asset (e.g. a
    * UUID-based key). Its extension, if present, is used to build the
@@ -60,7 +70,16 @@ export interface Asset {
    * Only meaningful when {@link isFile} is true.
    */
   fileRef?: string;
-  /** Mime type for the asset, if applicable.  Used for hints only. */
+  /**
+   * The bare filename extension of the attached file (no leading dot, e.g.
+   * `"png"`), or undefined for a non-file asset. Shown alongside
+   * {@link contentType} in the asset list as a quick-glance filetype hint.
+   */
+  extension?: string;
+  /**
+   * The attached file's MIME type (e.g. `"image/png"`), or undefined for a
+   * non-file asset. Shown alongside {@link extension} in the asset list.
+   */
   contentType?: string;
 }
 

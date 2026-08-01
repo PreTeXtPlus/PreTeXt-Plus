@@ -12,48 +12,19 @@ import type { Asset, AssetKind } from "./types/editor";
 /** Produces the PreTeXt markup for one resolved asset. */
 type AssetTransform = (asset: Asset, ref: string, width?: string) => string;
 
-/** Maps image MIME types to a file extension, used when neither `fileRef` nor `url` carries one. */
-const EXTENSION_BY_CONTENT_TYPE: Record<string, string> = {
-  "image/png": "png",
-  "image/jpeg": "jpg",
-  "image/gif": "gif",
-  "image/svg+xml": "svg",
-  "image/webp": "webp",
-  "image/bmp": "bmp",
-  "image/tiff": "tiff",
-};
-
-/** Pulls a bare extension (no dot) off the path portion of a filename or URL. */
-function extensionOf(value: string): string | undefined {
-  const path = value.split(/[?#]/)[0];
-  return /\.([a-zA-Z0-9]+)$/.exec(path)?.[1];
-}
-
-/**
- * The file extension for a file-backed image asset, preferring whatever
- * extension is already present on `fileRef`/`url` and falling back to a
- * guess from `contentType`.
- */
-function assetExtension(asset: Asset): string | undefined {
-  return (
-    (asset.fileRef && extensionOf(asset.fileRef)) ||
-    (asset.url && extensionOf(asset.url)) ||
-    (asset.contentType && EXTENSION_BY_CONTENT_TYPE[asset.contentType])
-  );
-}
-
 /**
  * `<image>` markup for an image asset.
  *
- * File-based assets (`isFile`) get a `source` attribute built from the
- * placeholder's own `ref` plus a file extension — e.g. `<plus:image
- * ref="euler-painting"/>` with a PNG upload emits `source="euler-painting.png"`.
- * The extension is read off `asset.fileRef`/`asset.url` when one is present
- * there, or guessed from `asset.contentType` otherwise; the asset's
- * server-assigned `fileRef`/`url` value itself (e.g. a UUID-based storage
- * key) is never written into the document. Non-file assets carry no
- * `source` attribute at all; they're defined entirely by their authored
- * `source` content (e.g. a hand-written `<asymptote>`/`<latex-image>` body).
+ * File-based assets (`isFile`) get a `source` attribute set to the asset's
+ * own `fileRef` -- the server-computed "ref.ext" filename (the placeholder's
+ * `ref` plus an extension inferred from the file's content type; see
+ * `Asset#external_filename` server-side). The server is the single source of
+ * truth for this filename everywhere it's used -- this document, the
+ * download archive's `external/` directory, and EPUB cover selection all
+ * derive it the same way, so there's nothing left to guess or reconstruct
+ * here. Non-file assets carry no `source` attribute at all; they're defined
+ * entirely by their authored `source` content (e.g. a hand-written
+ * `<asymptote>`/`<latex-image>` body).
  *
  * `asset.source` is the user-authored inner XML (`<shortdescription>`,
  * `<description>`, etc.) and is inserted verbatim as the element's children.
@@ -67,9 +38,8 @@ function transformImageAsset(asset: Asset, ref: string, width?: string): string 
   if (asset.isFile && !asset.fileRef && !asset.url) {
     return `<!-- image asset "${ref}" is marked as file-based but has no fileRef or url -->`;
   }
-  const ext = asset.isFile ? assetExtension(asset) : undefined;
   const sourceAttr = asset.isFile
-    ? ` source="${escapeAttribute(ext ? `${ref}.${ext}` : ref)}"`
+    ? ` source="${escapeAttribute(asset.fileRef || ref)}"`
     : "";
   const widthAttr = width ? ` width="${escapeAttribute(width)}"` : "";
   const inner = asset.source?.trim();

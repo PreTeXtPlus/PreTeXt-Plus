@@ -49,6 +49,34 @@ class AssetsControllerTest < ActionDispatch::IntegrationTest
     assert_match %r{/rails/active_storage/}, response.location
   end
 
+  test "share_thumbnail redirects to a resized variant URL for the owner" do
+    asset = asset_with_file
+
+    get share_asset_thumbnail_project_path(@project, ref: asset.ref, format: "png")
+
+    assert_response :redirect
+    assert_match %r{/rails/active_storage/}, response.location
+  end
+
+  test "share_thumbnail redirects when signed out entirely" do
+    asset = asset_with_file
+
+    sign_out @user
+
+    get share_asset_thumbnail_project_path(@project, ref: asset.ref, format: "png")
+
+    assert_response :redirect
+    assert_match %r{/rails/active_storage/}, response.location
+  end
+
+  test "share_thumbnail 404s for an asset with no thumbnailable file" do
+    asset = assets(:authored_one)
+
+    get share_asset_thumbnail_project_path(@project, ref: asset.ref)
+
+    assert_response :not_found
+  end
+
   test "file redirects to the asset's current file URL for the owner" do
     asset = asset_with_file
 

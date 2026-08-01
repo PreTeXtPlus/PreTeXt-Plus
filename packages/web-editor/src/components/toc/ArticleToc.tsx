@@ -541,9 +541,9 @@ const ArticleToc = ({ onOpenAssetPicker, hideAssets, readOnly }: ArticleTocProps
                                 duplicatingRef === row.ref ? "pretext-plus-editor__toc-asset-item--busy" : "",
                               ].filter(Boolean).join(" ")}
                             >
-                              {row.asset?.url ? (
+                              {(row.asset?.thumbnailUrl || row.asset?.url) ? (
                                 <img
-                                  src={row.asset.url}
+                                  src={row.asset?.thumbnailUrl || row.asset.url}
                                   className="pretext-plus-editor__toc-asset-img"
                                   onClick={() => openAssetRow(row)}
                                 />
@@ -576,6 +576,7 @@ const ArticleToc = ({ onOpenAssetPicker, hideAssets, readOnly }: ArticleTocProps
                                     : row.status === "unused"
                                       ? `${row.ref} — not placed`
                                       : row.ref}
+                                  {row.asset?.contentType && ` · ${row.asset.contentType}`}
                                 </span>
                               </button>
                               <div className="pretext-plus-editor__toc-actions">

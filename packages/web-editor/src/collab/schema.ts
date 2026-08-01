@@ -10,7 +10,8 @@
  *   merge.
  * - `doc.getMap("assets")`: key → `Y.Map` entry per project asset, keyed by the
  *   asset's record id. Metadata only (`ref`, `kind`, `title`, `source`, `url`,
- *   `fileRef`, `isFile`), all last-writer-wins — an asset's *bytes* stay with
+ *   `thumbnailUrl`, `extension`, `contentType`, `fileRef`, `isFile`), all
+ *   last-writer-wins — an asset's *bytes* stay with
  *   the host, since the doc is replicated to every peer and persisted as an
  *   append-only update log. The uploader therefore writes its entry only once
  *   the host has stored the file and handed back a URL; every other peer learns
@@ -154,6 +155,9 @@ const ASSET_FIELDS = [
   "title",
   "source",
   "url",
+  "thumbnailUrl",
+  "extension",
+  "contentType",
   "fileRef",
   "isFile",
 ] as const;
@@ -211,6 +215,9 @@ export const assetEntryToSnapshot = (
   title: String(entry.get("title") ?? ""),
   source: entry.get("source") as string | undefined,
   url: entry.get("url") as string | undefined,
+  thumbnailUrl: entry.get("thumbnailUrl") as string | undefined,
+  extension: entry.get("extension") as string | undefined,
+  contentType: entry.get("contentType") as string | undefined,
   fileRef: entry.get("fileRef") as string | undefined,
   isFile: entry.get("isFile") as boolean | undefined,
 });

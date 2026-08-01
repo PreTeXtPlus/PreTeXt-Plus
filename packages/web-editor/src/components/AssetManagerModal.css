@@ -63,8 +63,27 @@
   flex: 1;
   min-width: 0;
   display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 0.5rem;
+  overflow: hidden;
+}
+
+.pretext-plus-editor__am-row-thumb {
+  flex-shrink: 0;
+  width: 32px;
+  height: 32px;
+  border-radius: 4px;
+  object-fit: cover;
+  background: #f1f5f9;
+  border: 1px solid #e2e8f0;
+}
+
+.pretext-plus-editor__am-row-text {
+  display: flex;
   flex-direction: column;
   gap: 2px;
+  min-width: 0;
   overflow: hidden;
 }
 
@@ -262,6 +281,8 @@
 .pretext-plus-editor__am-replace-row {
   display: flex;
   justify-content: flex-end;
+  align-items: center;
+  gap: 0.5rem;
   margin: 0 0 0.5rem;
 }
 
