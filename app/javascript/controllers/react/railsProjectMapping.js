@@ -30,6 +30,8 @@
  * @property {string} [extension] - Present only when a file is attached.
  * @property {string} [thumbnail_path] - Fetchable small-preview URL; present only when the
  *   attached file can be thumbnailed (see Asset#thumbnailable?).
+ * @property {string} [content_type] - The attached file's MIME type; present only when a
+ *   file is attached.
  */
 
 /**
@@ -153,6 +155,8 @@ export function railsAssetToEditor(a) {
     source: a.source ?? undefined,
     url: a.path ?? undefined,
     thumbnailUrl: a.thumbnail_path ?? undefined,
+    extension: a.extension ?? undefined,
+    contentType: a.content_type ?? undefined,
     isFile: Boolean(a.path),
     fileRef: fileRefFor(a, a.ref),
   };
@@ -175,6 +179,8 @@ export function toEditorAsset(rec) {
     source: rec.source,
     url: rec.url,
     thumbnailUrl: rec.thumbnailUrl,
+    extension: rec.extension,
+    contentType: rec.contentType,
     fileRef: rec.fileRef,
     // Recomputed from `url` rather than carried on `rec`, same reasoning as
     // railsAssetToEditor: file-backed-ness is a property of the attachment,

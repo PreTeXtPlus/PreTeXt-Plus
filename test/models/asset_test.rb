@@ -21,6 +21,21 @@ class AssetTest < ActiveSupport::TestCase
     assert_equal "/image-not-found.svg", asset.url
   end
 
+  test "file_content_type returns the attached file's MIME type" do
+    asset = assets(:image_one)
+    asset.file.attach(
+      io: File.open(Rails.root.join("test/fixtures/files/test_image.png")),
+      filename: "test_image.png",
+      content_type: "image/png"
+    )
+
+    assert_equal "image/png", asset.file_content_type
+  end
+
+  test "file_content_type is nil when no file is attached" do
+    assert_nil assets(:authored_one).file_content_type
+  end
+
   test "ref must be unique among divisions in the same project" do
     project = projects(:one)
     Division.create!(project: project, ref: "taken_ref", source_format: :pretext, is_root: false)

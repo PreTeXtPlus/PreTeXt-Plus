@@ -70,7 +70,16 @@ export interface Asset {
    * Only meaningful when {@link isFile} is true.
    */
   fileRef?: string;
-  /** Mime type for the asset, if applicable.  Used for hints only. */
+  /**
+   * The bare filename extension of the attached file (no leading dot, e.g.
+   * `"png"`), or undefined for a non-file asset. Shown alongside
+   * {@link contentType} in the asset list as a quick-glance filetype hint.
+   */
+  extension?: string;
+  /**
+   * The attached file's MIME type (e.g. `"image/png"`), or undefined for a
+   * non-file asset. Shown alongside {@link extension} in the asset list.
+   */
   contentType?: string;
 }
 

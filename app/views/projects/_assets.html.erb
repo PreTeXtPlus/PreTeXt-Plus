@@ -24,6 +24,9 @@
         <% end %>
         <%= tag.span class: "w-full truncate text-xs text-gray-700" do %>
           <%= asset.title %><br><span class="font-mono"><%= asset.ref %></span>
+          <% if asset.file.attached? %>
+            <br><span class="font-mono text-gray-400"><%= [ asset.file_extension&.upcase, asset.file_content_type ].compact.join(" · ") %></span>
+          <% end %>
         <% end %>
       </li>
     <% end %>

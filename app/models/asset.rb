@@ -32,6 +32,12 @@ class Asset < ApplicationRecord
     file.filename.extension_without_delimiter.presence if file.attached?
   end
 
+  # The attached file's MIME type (e.g. "image/png"), or nil when there's no
+  # file. Delegates through the attachment proxy to the blob.
+  def file_content_type
+    file.content_type if file.attached?
+  end
+
   def url
     return "/image-not-found.svg" unless file.present?
 

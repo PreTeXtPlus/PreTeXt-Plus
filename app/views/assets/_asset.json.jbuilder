@@ -12,6 +12,7 @@ if asset.file.attached?
   # the comments in projects_controller.rb / project.rb).
   json.path share_asset_project_path(asset.project, ref: asset.ref, format: extension)
   json.extension extension
+  json.content_type asset.file_content_type
   # `thumbnail_path`: a small resized preview redirect, distinct from `path`
   # above -- used for the asset list's `<img src>` (editor's asset manager,
   # project dashboard) rather than the full file. Only set when a preview is
