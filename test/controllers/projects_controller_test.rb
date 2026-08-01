@@ -641,11 +641,44 @@ class ProjectsControllerTest < ActionDispatch::IntegrationTest
 
   test "PreTeXt's built-in logo redirects under both the preview and share asset prefixes" do
     get "/projects/#{@project.id}/preview/external/icon.svg"
-    assert_redirected_to "/icon-small.png"
+    assert_redirected_to "/icon.svg"
 
     sign_out @user
     get "/projects/#{@project.id}/share/external/icon.svg"
-    assert_redirected_to "/icon-small.png"
+    assert_redirected_to "/icon.svg"
+  end
+
+  test "a project's own icon asset is served instead of PreTeXt's built-in logo" do
+    icon = @project.assets.create!(ref: "icon", kind: :file, title: "My Icon")
+    icon.file.attach(
+      io: File.open(Rails.root.join("test/fixtures/files/test_image.png")),
+      filename: "test_image.png", content_type: "image/png"
+    )
+
+    get "/projects/#{@project.id}/share/external/icon.svg"
+
+    assert_response :redirect
+    assert_no_match %r{/icon\.svg\z}, response.location
+    assert_match %r{/rails/active_storage/}, response.location
+  end
+
+  test "an icon asset row with no file attached still falls back to PreTeXt's built-in logo" do
+    @project.assets.create!(ref: "icon", kind: :authored, title: "No File", source: "")
+
+    get "/projects/#{@project.id}/share/external/icon.svg"
+
+    assert_redirected_to "/icon.svg"
+  end
+
+  # The id-less "Try it!" flow has no persisted Project to query an icon asset
+  # against, so this is a bare route-level redirect (config/routes.rb) rather
+  # than going through AssetsController#share at all.
+  test "the tryit flow's built-in logo redirects under both the bare and tryit-prefixed paths" do
+    get "/external/icon"
+    assert_redirected_to "/icon.svg"
+
+    get "/tryit/external/icon"
+    assert_redirected_to "/icon.svg"
   end
 
   test "preview returns bad_gateway when build server connection fails" do

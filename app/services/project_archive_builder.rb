@@ -81,9 +81,16 @@ class ProjectArchiveBuilder
         zip.write(asset.file.download)
       end
 
-      unless @project.assets.find_by(ref: "icon").present?
-        zip.put_next_entry("source/external/icon.png")
-        zip.write(File.read Rails.root.join("public", "icon-small.png"))
+      # Both extensions: new projects' docinfo points at icon.svg, but a
+      # project created before that default changed still has icon.png
+      # baked into its own persisted docinfo (docinfo is only ever set from
+      # the current template at creation time, never regenerated), so
+      # either reference has to resolve without a data migration.
+      unless @project.icon_asset
+        %w[ svg png ].each do |ext|
+          zip.put_next_entry("source/external/icon.#{ext}")
+          zip.write(File.read Rails.root.join("public", "icon.#{ext}"))
+        end
       end
     end
     buffer.rewind

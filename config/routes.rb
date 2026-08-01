@@ -164,7 +164,7 @@ Rails.application.routes.draw do
   resources :asset_fetches, only: :create
   get "tryit" => "projects#tryit"
   post "tryit/preview" => "projects#preview", as: "tryit_preview"
-  get "(tryit)/external/icon" => redirect("/icon-small.png")
+  get "(tryit)/external/icon" => redirect("/icon.svg")
 
   get "up" => "rails/health#show", as: :rails_health_check
 
