@@ -233,8 +233,9 @@ module Publication
     private
 
       # The project's uploaded images, as [filename, title] -- the filename being the
-      # asset's own name in the external directory, which is what PreTeXt resolves an EPUB
-      # cover against, and what ProjectArchiveBuilder writes it as.
+      # asset's own name in the external directory (Asset#external_filename), which is
+      # what PreTeXt resolves an EPUB cover against, and what ProjectArchiveBuilder writes
+      # it as.
       #
       # Empty at the account level, which has no project: the cover is a choice among a
       # particular project's images, so there is nothing to default across projects.
@@ -244,8 +245,7 @@ module Publication
         project.assets.with_attached_file.filter_map do |asset|
           next unless asset.file.attached? && asset.file.content_type.to_s.start_with?("image/")
 
-          [ "#{asset.ref}#{asset.file.filename.extension_with_delimiter}",
-            asset.title.presence || asset.ref ]
+          [ asset.external_filename, asset.title.presence || asset.ref ]
         end
       end
 

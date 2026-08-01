@@ -576,6 +576,7 @@ const ArticleToc = ({ onOpenAssetPicker, hideAssets, readOnly }: ArticleTocProps
                                     : row.status === "unused"
                                       ? `${row.ref} — not placed`
                                       : row.ref}
+                                  {row.asset?.contentType && ` · ${row.asset.contentType}`}
                                 </span>
                               </button>
                               <div className="pretext-plus-editor__toc-actions">

@@ -177,4 +177,25 @@ class ProjectArchiveBuilderTest < ActiveSupport::TestCase
     assert_includes contents.keys, path
     assert_equal asset.file.download, contents[path]
   end
+
+  # Regression test: a pasted-clipboard image arrives with an extensionless
+  # filename (see Asset#file_extension), so the archive's entry name has to
+  # come from the content type, not the upload -- otherwise the zip's
+  # external/ file wouldn't match the extension the assembled document's
+  # <image source="ref.ext"> was built with (see assetTransforms.ts).
+  test "packs an asset with an extensionless upload under source/external using its content type" do
+    project = projects(:one)
+    asset = assets(:image_one)
+    asset.file.attach(
+      io: File.open(Rails.root.join("test/fixtures/files/test_image.png")),
+      filename: "pasted-image-1234567890",
+      content_type: "image/png"
+    )
+
+    contents = entries(ProjectArchiveBuilder.new(project).build)
+
+    path = "source/external/#{asset.ref}.png"
+    assert_includes contents.keys, path
+    assert_equal asset.file.download, contents[path]
+  end
 end

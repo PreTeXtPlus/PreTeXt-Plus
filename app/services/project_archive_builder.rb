@@ -77,8 +77,7 @@ class ProjectArchiveBuilder
       @project.assets.each do |asset|
         next unless asset.file.attached?
 
-        ext = asset.file.filename.extension_with_delimiter
-        zip.put_next_entry("source/external/#{asset.ref}#{ext}")
+        zip.put_next_entry("source/external/#{asset.external_filename}")
         zip.write(asset.file.download)
       end
 

@@ -383,8 +383,7 @@ const AssetManagerModal = ({
             <span className="pretext-plus-editor__am-row-text">
               <span className="pretext-plus-editor__am-row-name">{row.asset?.title ?? row.ref}</span>
               <span className="pretext-plus-editor__am-row-ref">
-                {row.ref} · 
-                {row.asset?.extension ? ` ${row.asset.extension.toUpperCase()}` : " (no ext)"}
+                {row.ref}
                 {row.asset?.contentType && ` · ${row.asset.contentType}`}
               </span>
             </span>

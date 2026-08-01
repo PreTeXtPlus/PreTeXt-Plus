@@ -190,8 +190,7 @@ const AssetEditModal = ({
                 {canReplace && (
                   <div className="pretext-plus-editor__am-replace-row">
                     <span className="pretext-plus-editor__am-row-ref">
-                      {asset?.extension ? ` ${asset.extension.toUpperCase()}` : " (no ext)"}
-                      {asset?.contentType && ` · ${asset.contentType}`}
+                      {asset?.contentType && `${asset.contentType}`}
                     </span>
                     <button
                       type="button"

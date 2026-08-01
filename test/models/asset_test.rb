@@ -1,7 +1,7 @@
 require "test_helper"
 
 class AssetTest < ActiveSupport::TestCase
-  test "url returns the attached file's url when a file is attached" do
+  test "url returns the attached file's url, named after the asset's ref rather than the upload" do
     asset = assets(:image_one)
     asset.file.attach(
       io: File.open(Rails.root.join("test/fixtures/files/test_image.png")),
@@ -11,7 +11,7 @@ class AssetTest < ActiveSupport::TestCase
 
     ActiveStorage::Current.url_options = { host: "example.com" }
     travel_to Time.current do
-      assert_equal asset.file.url(expires_in: 1.hour), asset.url
+      assert_equal asset.file.url(expires_in: 1.hour, filename: asset.external_filename), asset.url
     end
   end
 
@@ -34,6 +34,54 @@ class AssetTest < ActiveSupport::TestCase
 
   test "file_content_type is nil when no file is attached" do
     assert_nil assets(:authored_one).file_content_type
+  end
+
+  test "file_extension is inferred from content_type even when the uploaded filename has none" do
+    asset = assets(:image_one)
+    # Mirrors a pasted clipboard image: the web-editor renames the file to a
+    # bare, extensionless placeholder before it ever reaches the server (see
+    # AssetManagerModal's namePastedImageFile), so the filename can't be
+    # trusted -- only the real content type can.
+    asset.file.attach(
+      io: File.open(Rails.root.join("test/fixtures/files/test_image.png")),
+      filename: "pasted-image-1234567890", content_type: "image/png"
+    )
+
+    assert_equal "png", asset.file_extension
+  end
+
+  test "file_extension is nil for a content type with no known extension mapping" do
+    asset = assets(:image_one)
+    asset.file.attach(
+      io: StringIO.new("hello world"),
+      filename: "test.txt", content_type: "text/plain"
+    )
+
+    assert_nil asset.file_extension
+  end
+
+  test "external_filename is ref.ext, ignoring the uploaded filename" do
+    asset = assets(:image_one)
+    asset.file.attach(
+      io: File.open(Rails.root.join("test/fixtures/files/test_image.png")),
+      filename: "pasted-image-1234567890", content_type: "image/png"
+    )
+
+    assert_equal "#{asset.ref}.png", asset.external_filename
+  end
+
+  test "external_filename falls back to the bare ref when the content type has no known extension" do
+    asset = assets(:image_one)
+    asset.file.attach(
+      io: StringIO.new("hello world"),
+      filename: "test.txt", content_type: "text/plain"
+    )
+
+    assert_equal asset.ref, asset.external_filename
+  end
+
+  test "external_filename is nil when no file is attached" do
+    assert_nil assets(:authored_one).external_filename
   end
 
   test "ref must be unique among divisions in the same project" do
