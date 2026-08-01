@@ -105,7 +105,7 @@ export async function renderPreviewHtml(
 ): Promise<PreviewRender> {
   const { renderHtml } = await loadRenderer();
   const { html, sourceMap } = await renderHtml({
-    cssTheme: "greeley",
+    cssTheme: "default-modern",
     sourcePath: PREVIEW_SOURCE_PATH,
     projectDir: "/source",
     sourceContent: source,
