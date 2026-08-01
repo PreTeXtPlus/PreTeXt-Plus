@@ -52,7 +52,9 @@ class PublicationFileBuilder
     def attributes_by_path
       settings.each_with_object(starting_attributes) do |(key, value), paths|
         option = Publication::Catalog.find(key)
-        next if option.nil?
+        # element is nil for an option with nowhere in the file to live -- the live
+        # preview theme, which only ever reaches the editor's own WASM renderer.
+        next if option.nil? || option.element.nil?
 
         (paths[option.element] ||= {})[option.attribute] = value
       end

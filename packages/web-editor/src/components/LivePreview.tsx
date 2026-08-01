@@ -57,6 +57,12 @@ interface LivePreviewProps {
    * on every keystroke and must *not* rebuild.
    */
   divisionId?: string;
+  /**
+   * PreTeXt HTML theme the local render uses (see `LocalRenderOptions.cssTheme`
+   * in wasmPreview.ts). Independent of a built site's own theme setting — the
+   * preview never goes through a build. Omit to fall back to PreTeXt's default.
+   */
+  previewTheme?: string;
 }
 
 export interface LivePreviewHandle {
@@ -192,7 +198,7 @@ function dismissBrowserTip(): void {
 }
 
 const LivePreview = forwardRef<LivePreviewHandle, LivePreviewProps>(
-  ({ content, title, onRebuild, onSyncToSource, divisionId }, ref) => {
+  ({ content, title, onRebuild, onSyncToSource, divisionId, previewTheme }, ref) => {
     const [isRebuilding, setIsRebuilding] = useState(false);
     const [browserTipDismissed, setBrowserTipDismissed] = useState(
       isBrowserTipDismissed,
@@ -248,7 +254,7 @@ const LivePreview = forwardRef<LivePreviewHandle, LivePreviewProps>(
 
       if (renderLocally) {
         const token = ++renderToken.current;
-        renderPreviewHtml(source)
+        renderPreviewHtml(source, { cssTheme: previewTheme })
           .then(({ html, sourceMap }) => {
             if (token !== renderToken.current) {
               return;
@@ -277,7 +283,7 @@ const LivePreview = forwardRef<LivePreviewHandle, LivePreviewProps>(
         postToIframe(url, data, "livePreview");
       };
       onRebuild?.(source, previewTitle, postHelper);
-    }, [content, title, onRebuild, renderLocally]);
+    }, [content, title, onRebuild, renderLocally, previewTheme]);
 
     // Rebuild when the preview opens, and whenever the author switches to a
     // different division — otherwise the page on screen belongs to the

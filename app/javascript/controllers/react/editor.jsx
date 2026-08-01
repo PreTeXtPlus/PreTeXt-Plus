@@ -36,6 +36,7 @@ import {
  * @property {string} [document_type]
  * @property {RailsDivision[]} [divisions]
  * @property {RailsAsset[]} [assets]
+ * @property {string} [preview_theme]
  */
 
 /**
@@ -50,6 +51,7 @@ import {
  * @property {EditorDivision[]} divisions
  * @property {Asset[]} [projectAssets]
  * @property {string} [rootDivisionId]
+ * @property {string} [previewTheme]
  */
 
 // ---------------------------------------------------------------------------
@@ -146,6 +148,9 @@ function railsToEditorState(json) {
     // Real-time collaboration flag + the identity shown on remote cursors.
     collaborative: json.collaborative === true,
     editorUser: json.editor_user ?? null,
+    // The theme the live preview renders with -- independent of any build-time
+    // theme setting, since the preview never goes through a build.
+    previewTheme: json.preview_theme || "default-modern",
   };
 }
 
@@ -1101,6 +1106,7 @@ function EditorApp({ config }) {
       projectType={state.projectType}
       divisions={state.divisions}
       rootDivisionId={state.rootDivisionId}
+      previewTheme={state.previewTheme}
       collaboration={
         provider
           ? {

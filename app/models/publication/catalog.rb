@@ -47,6 +47,15 @@ module Publication
       Family.build(:general, label: "General",
         note: "Applies to every output of this document."),
 
+      # formats: [] rather than nil, so this never shows at the Target level: Catalog.for
+      # only consults affects? when target_kind is present, and an empty list matches no
+      # target_kind at all. It still shows at the User and Project levels, where
+      # target_kind is nil and Catalog.for skips the affects? check entirely -- the live
+      # preview belongs to the document being edited, not to any one built output.
+      Family.build(:preview, label: "Preview",
+        note: "Applies only to the live preview in the editor, not to any built output.",
+        formats: []),
+
       Family.build(:html, label: "HTML",
         note: "Applies to website and SCORM outputs.",
         formats: %w[ website scorm ]),
@@ -120,8 +129,11 @@ module Publication
 
     # `key`       -- our storage key, and the form field name. Ours, not PreTeXt's, so
     #                that an option moving in the publication file is not a data change.
-    # `element`   -- path of elements under <publication>, outermost first.
-    # `attribute` -- the attribute on that element which carries the value.
+    # `element`   -- path of elements under <publication>, outermost first. nil for an
+    #                option with nowhere in the file to live -- the live preview theme,
+    #                which PublicationFileBuilder skips for exactly that reason.
+    # `attribute` -- the attribute on that element which carries the value. nil along
+    #                with `element`.
     # `family`    -- which of FAMILIES it belongs to, which decides both its tab and the
     #                outputs it affects.
     # `group`     -- the GROUPS key it is shown under, or nil to sit in the panel itself.
@@ -194,10 +206,12 @@ module Publication
     #                all sides, and a placeholder is the better place for the first.
     Option = Data.define(:key, :label, :help, :element, :attribute, :family, :choices,
                          :default_label, :group, :applied_default, :hint) do
-      def self.build(key, label:, element:, attribute:, family:, choices:, help: nil,
-                     default_label: nil, group: nil, applied_default: nil, hint: nil)
-        new(key: key.to_s, label: label, help: help, element: element.map(&:to_s).freeze,
-            attribute: attribute.to_s, family: family.to_s, choices: choices.freeze,
+      def self.build(key, label:, family:, choices:, element: nil, attribute: nil,
+                     help: nil, default_label: nil, group: nil, applied_default: nil,
+                     hint: nil)
+        new(key: key.to_s, label: label, help: help,
+            element: element&.map(&:to_s)&.freeze, attribute: attribute&.to_s,
+            family: family.to_s, choices: choices.freeze,
             default_label: default_label, group: group&.to_s,
             applied_default: applied_default, hint: hint)
       end
@@ -730,6 +744,17 @@ module Publication
       *EXERCISE_COMPONENT_OPTIONS,
       *PRINTOUT_MARGIN_OPTIONS,
       *PRINTOUT_TEXT_OPTIONS,
+
+      # No element/attribute: this never reaches a publication file. It picks the theme
+      # the *editor's* live preview renders with, which PreTeXt.Plus's WASM renderer
+      # applies directly rather than through a build -- see PublicationFileBuilder,
+      # which skips any option with no element.
+      Option.build(:preview_theme,
+        label: "Live preview theme",
+        help: "The look of the editor's own live preview. Independent of the HTML " \
+              "Theme which may be customized for each output.",
+        family: :preview,
+        choices: THEMES),
 
       Option.build(:theme,
         label: "Theme",

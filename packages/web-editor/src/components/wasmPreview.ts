@@ -38,6 +38,12 @@ export const PREVIEW_SOURCE_PATH = "/source/main.ptx";
 interface LocalRenderOptions {
   /** Light/dark theme for the rendered page; omit for its native behaviour. */
   theme?: "light" | "dark" | "system";
+  /**
+   * PreTeXt HTML theme (colors, fonts, page furniture) to render with, e.g.
+   * "denver" or "salem" — unrelated to `theme` above, which only controls
+   * light/dark. Omit to fall back to PreTeXt's own default.
+   */
+  cssTheme?: string;
 }
 
 /** A rendered page plus the map that ties its elements back to the source. */
@@ -105,7 +111,7 @@ export async function renderPreviewHtml(
 ): Promise<PreviewRender> {
   const { renderHtml } = await loadRenderer();
   const { html, sourceMap } = await renderHtml({
-    cssTheme: "greeley",
+    cssTheme: options.cssTheme ?? "default-modern",
     sourcePath: PREVIEW_SOURCE_PATH,
     projectDir: "/source",
     sourceContent: source,

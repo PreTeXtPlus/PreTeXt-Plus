@@ -66,7 +66,21 @@ class PublicationSettingsControllerTest < ActionDispatch::IntegrationTest
   test "a project's modal offers every format's tab" do
     get edit_project_publication_settings_url(@project), headers: modal_headers
 
-    %w[ general html pdf braille ].each { |family| assert_select "#publication-tab-#{family}" }
+    %w[ general preview html pdf braille ].each { |family| assert_select "#publication-tab-#{family}" }
+  end
+
+  # The live preview belongs to the document being edited, never to one output, so it has
+  # no place on a target's own modal even though a website reaches every other tab a
+  # target can.
+  test "the preview tab shows on a project's modal but never on an output's" do
+    get edit_project_publication_settings_url(@project), headers: modal_headers
+    assert_select "#publication-tab-preview"
+    assert_select "select[name='publication_settings[preview_theme]']"
+
+    get edit_project_target_publication_settings_url(@project, targets(:one_web)),
+      headers: modal_headers
+    assert_select "#publication-tab-preview", false
+    assert_select "select[name='publication_settings[preview_theme]']", false
   end
 
   # A braille page size is a number to type, not a list to pick from, and empty still

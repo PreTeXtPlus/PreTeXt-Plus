@@ -175,6 +175,13 @@ export interface editorProps {
   rootDivisionId?: string;
 
   /**
+   * PreTeXt HTML theme the live preview renders with (e.g. "denver"). Distinct
+   * from any build-time theme setting the host may have — the preview never
+   * goes through a build. Omitted falls back to PreTeXt's own default.
+   */
+  previewTheme?: string;
+
+  /**
    * The `xmlId` of the division currently open for editing (controlled).
    * When omitted the editor tracks active division internally (uncontrolled).
    */
@@ -1552,6 +1559,7 @@ const EditorsInner = (props: EditorsInnerProps) => {
         onRebuild={props.onPreviewRebuild}
         onSyncToSource={handleSyncToSource}
         divisionId={activeDivision?.xmlId}
+        previewTheme={props.previewTheme}
       />
     );
     // For now, we disable the visual editor.  This might come back in a later version:

@@ -140,6 +140,14 @@ class PublicationFileBuilderTest < ActiveSupport::TestCase
     assert_equal xml({}), xml("retired_option" => "whatever")
   end
 
+  # preview_theme is a real, catalog-known option -- unlike the retired key above -- but it
+  # has no element/attribute because it never reaches a publication file: it only picks the
+  # theme the editor's own WASM renderer uses. A build must come out identical whether or
+  # not an author has set it.
+  test "the live preview theme is not written to the publication file" do
+    assert_equal xml({}), xml("preview_theme" => "tacoma")
+  end
+
   test "symbol keys resolve the same as string ones" do
     assert_equal xml("theme" => "salem"), xml(theme: "salem")
   end

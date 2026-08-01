@@ -114,9 +114,22 @@ class Publication::SettingsTest < ActiveSupport::TestCase
   test "an output drops the tabs its format does not reach" do
     def families_of(owner) = Publication::Settings.new(owner).families.map { |family, _| family.key }
 
-    assert_equal %w[ general html pdf epub braille ], families_of(@project)
+    assert_equal %w[ general preview html pdf epub braille ], families_of(@project)
     assert_equal %w[ general html ], families_of(targets(:one_web))
     assert_equal %w[ general pdf ], families_of(targets(:one_print))
+  end
+
+  # The live preview belongs to the document being edited, not to any one built output, so
+  # its tab shows at the account and project levels -- where target_kind is nil and
+  # Catalog.for skips the affects? check entirely -- and at neither output below, whatever
+  # format either one is.
+  test "the preview tab shows at the account and project levels but never at an output" do
+    def families_of(owner) = Publication::Settings.new(owner).families.map { |family, _| family.key }
+
+    assert_includes families_of(@user), "preview"
+    assert_includes families_of(@project), "preview"
+    assert_not_includes families_of(targets(:one_web)), "preview"
+    assert_not_includes families_of(targets(:one_print)), "preview"
   end
 
   # Groups are how a panel stays readable: the handful of settings an author came for sit

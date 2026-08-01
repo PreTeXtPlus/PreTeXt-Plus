@@ -40,10 +40,17 @@ outputs they reach. One declaration, because they are the same question: an auth
 | Family | Reaches (`Target::Catalog` slugs) |
 |---|---|
 | General | every output |
+| Preview | none — the editor's own live preview, never a built output |
 | HTML | `website`, `scorm` |
 | PDF | `pdf`, `latex` |
 | EPUB | `epub`, `kindle` |
 | Braille | `braille` |
+
+Preview's `formats: []` is what keeps it off the Target-level modal: `Catalog.for` only
+checks `affects?(target_kind)` when `target_kind` is present, i.e. at a Target, and an
+empty list matches no `target_kind` at all. At the User and Project levels `target_kind`
+is nil and that check is skipped entirely, so the tab still shows there — which is where
+an author is standing when editing, the only place the live preview exists.
 
 | Key | Family | Publication path | Values |
 |---|---|---|---|
@@ -54,6 +61,7 @@ outputs they reach. One declaration, because they are the same question: an auth
 | `exercise_{type}_{part}` × 20 | General | `common/exercise-{type}/@{part}` | `yes` (PreTeXt's default), `no` |
 | `worksheet_{margin,top,right,bottom,left}` | General | `common/worksheet/@{side}` | a length, e.g. `0.75in` (PreTeXt's default for `margin`; a side falls back to `margin`) |
 | `{band}_{position}` × 12 | General | `common/worksheet/{band}/@{position}` | one line of text; empty by default |
+| `preview_theme` | Preview | *(none — read by the editor's WASM renderer, never written to a publication file)* | `default-modern` (fallback when unset), `denver`, `tacoma`, `salem`, `greeley`, `boulder` |
 | `theme` | HTML | `html/css/@theme` | `default-modern` (PreTeXt's default), `denver`, `tacoma`, `salem`, `greeley`, `boulder` |
 | `dark_mode` | HTML | `html/css/@provide-dark-mode` | `yes` (PreTeXt's default), `no` |
 | `chunk_level` | HTML | `common/chunking/@level` | book `0`–`3`, article `0`–`2` |
@@ -319,7 +327,9 @@ Three things that look like details and are not:
 
 - **Staleness is not tracked.** Changing a setting does not flip an output to "Out of
   date"; it takes effect on the next build. The drawer and the modal both say so.
-- The editor's live preview keeps its own styling — it does not honour the theme.
+- The editor's live preview does not honour the `theme` build option — it has its own,
+  separate `preview_theme` setting (Preview tab), since the preview never goes through a
+  build.
 - No free-form publication file editing.
 
 ## Unverified against a real build
