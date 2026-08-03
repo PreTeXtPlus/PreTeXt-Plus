@@ -21,8 +21,9 @@ class Asset < ApplicationRecord
   # file is only ever rendered via `<img src>` in the asset manager/editor,
   # which never executes embedded scripts, so it's safe to bypass that
   # default here. Scoped to this method (rather than the app-wide Rails
-  # config) so other blob URLs, e.g. build output, keep the default
-  # protection.
+  # config) rather than changing the default for every blob URL app-wide.
+  # See ServesBuildFiles::INLINE_OVERRIDE_CONTENT_TYPES for the same override
+  # applied to build output.
   INLINE_OVERRIDE_CONTENT_TYPES = %w[ image/svg+xml ].freeze
 
   # Recognized image content types and the extension each maps to. Matches

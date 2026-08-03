@@ -7,6 +7,14 @@
 module ServesBuildFiles
   extend ActiveSupport::Concern
 
+  # Rails forces SVGs to download rather than display inline by default, since an SVG
+  # can carry a <script> (a stored-XSS precaution) -- see Asset::INLINE_OVERRIDE_CONTENT_TYPES
+  # for the same override applied to uploaded assets. Build output already runs
+  # unrestricted author JavaScript inline (the html branch below, and the whole point of
+  # PublishedController), so an embedded SVG's script is no new capability; without this,
+  # an <img src="diagram.svg"> in built output downloads instead of rendering.
+  INLINE_OVERRIDE_CONTENT_TYPES = %w[ image/svg+xml ].freeze
+
   private
 
     # `disposition: "attachment"` is how a single-file output (a PDF, a SCORM package) is
@@ -63,12 +71,22 @@ module ServesBuildFiles
           file_cache_key(build, bf.relative_path),
           {
             content_type: bf.blob.content_type,
-            blob_url: rails_blob_url(bf.blob),
+            blob_url: blob_inline_url(bf.blob),
             blob_download_url: rails_blob_url(bf.blob, disposition: "attachment"),
             blob_key: bf.blob.key
           },
           unless_exist: true
         )
       end
+    end
+
+    # Bypasses Blob#url's forced-binary/forced-attachment logic for content types in
+    # INLINE_OVERRIDE_CONTENT_TYPES by calling the storage service directly, the same way
+    # Asset#url does for uploaded assets.
+    def blob_inline_url(blob)
+      return rails_blob_url(blob) unless INLINE_OVERRIDE_CONTENT_TYPES.include?(blob.content_type)
+
+      blob.service.url(blob.key, expires_in: ActiveStorage.service_urls_expire_in,
+        filename: blob.filename, content_type: blob.content_type, disposition: :inline)
     end
 end
