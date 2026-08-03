@@ -149,18 +149,66 @@ module Publication
     # What a good answer looks like is the option's `hint`, not the kind's: the four sides
     # of a printout margin accept exactly what "all sides" accepts and default to something
     # else entirely, so one hint for the shape would be wrong about four of the five.
-    FreeText = Data.define(:pattern, :max_length)
+    #
+    # `guidance` is the shape said in words, for telling an author what was wrong with what
+    # they typed. `normalizer` is the chance to read a value the way it was plainly meant
+    # before the pattern judges it -- see CANONICAL_LENGTH.
+    FreeText = Data.define(:pattern, :max_length, :guidance, :normalizer) do
+      def self.build(pattern:, max_length:, guidance:, normalizer: nil)
+        new(pattern:, max_length:, guidance:, normalizer:)
+      end
 
-    # A length both consumers understand. The same string is written into a browser's page
-    # margins and into LaTeX's \newgeometry, so the units are the intersection of CSS and
-    # TeX -- which rules out px and rem, legal in one and meaningless in the other.
-    LENGTH = FreeText.new(pattern: /\A\d+(\.\d+)?(in|cm|mm|pt|pc|em|ex)\z/, max_length: 12)
+      # What the author typed, read the way they plainly meant it. A kind with no
+      # normalizer stores what it was given, and so does a value the normalizer cannot make
+      # sense of -- which then fails the pattern and is reported back as it was typed.
+      def normalize(value)
+        return value if normalizer.nil?
+
+        normalizer.call(value).presence || value
+      end
+    end
+
+    # The units a length may carry. Both consumers have to understand it: the same string is
+    # written into a browser's page margins and into LaTeX's \newgeometry, so this is the
+    # intersection of CSS and TeX -- which rules out px and rem, legal in one and
+    # meaningless in the other.
+    LENGTH_UNITS = %w[ in cm mm pt pc em ex ].freeze
+
+    # The shapes of "a number, and maybe a unit" we can read without guessing at intent: a
+    # missing leading zero (".25"), a space or a capital around the unit ("0.25 IN"), or no
+    # unit at all.
+    TYPED_LENGTH = /\A\s*(\d*)(?:\.(\d*))?\s*([a-zA-Z]*)\s*\z/
+
+    # ".25" is a length an author means and neither LaTeX nor CSS reads, and refusing it
+    # teaches nothing that writing "0.25in" back to them does not. A bare number takes
+    # inches, which is the unit PreTeXt's own 0.75in default is in -- and the only guess
+    # here, which is why an unreadable unit is left alone to be refused rather than
+    # coerced into one we invented.
+    #
+    # nil for anything this cannot read, which FreeText#normalize reads as "store what
+    # they typed".
+    CANONICAL_LENGTH = ->(value) do
+      whole, fraction, unit = value.match(TYPED_LENGTH)&.captures
+      next nil if whole.nil?
+
+      unit = unit.downcase
+      next nil unless unit.empty? || LENGTH_UNITS.include?(unit)
+
+      number = fraction.present? ? "#{whole.presence || '0'}.#{fraction}" : whole.presence
+      "#{number}#{unit.presence || 'in'}" if number
+    end
+
+    LENGTH = FreeText.build(pattern: /\A\d+(\.\d+)?(in|cm|mm|pt|pc|em|ex)\z/, max_length: 12,
+                            guidance: "a length with its unit, like 0.75in or 2cm",
+                            normalizer: CANONICAL_LENGTH)
 
     # Words for the corner of a printed page. They travel as a data-* attribute that
     # PreTeXt's own JavaScript prints in the margin, so this permits one line of anything
     # but angle brackets -- which cannot be meant in a header and which the value would
     # pass through an HTML attribute carrying.
-    PRINTOUT_TEXT = FreeText.new(pattern: /\A[^<>\r\n]*\z/, max_length: 100)
+    PRINTOUT_TEXT = FreeText.build(pattern: /\A[^<>\r\n]*\z/, max_length: 100,
+                                   guidance: "one line of text, without < or >, of at " \
+                                             "most 100 characters")
 
     # An option whose list is the project's own uploaded images -- the EPUB cover, which
     # PreTeXt resolves against the external directory, exactly where ProjectArchiveBuilder
@@ -253,6 +301,35 @@ module Publication
         return "#{value} #{choices.unit}" if free_number?
 
         choices_for(document_type).to_h[value] || value
+      end
+
+      # The value as it will be stored: what the author typed, read the way they plainly
+      # meant it. Only a typed option has anything to fix -- a select submits one of its own
+      # values or nothing -- and only a length has a normalizer so far, which turns ".25"
+      # into the "0.25in" that both LaTeX and CSS can read.
+      #
+      # Here rather than in the validation, because what is stored and what is checked have
+      # to be the same string: an option that permitted ".25" and wrote it into a
+      # publication file unchanged would only move the failure to the build.
+      def normalize(value)
+        value = value.to_s.strip
+        free_text? ? choices.normalize(value) : value
+      end
+
+      # The shape of an answer this option accepts, in words, for telling an author what
+      # was wrong with the one they gave. The list options need no such sentence -- a
+      # select cannot submit anything but its own values unless the form was hand-rolled --
+      # so theirs says only that.
+      def guidance
+        if free_number?
+          "a whole number from #{choices.min} to #{choices.max}"
+        elsif free_text?
+          choices.guidance
+        elsif project_scoped?
+          "the name of an image uploaded to this project"
+        else
+          "one of the offered choices"
+        end
       end
 
       # Whether this option accepts the value at all. The single check validation makes,
@@ -623,7 +700,7 @@ module Publication
         #       "and these are their page setup.",
         grids: [
           Grid.build(label: "Margins",
-            note: "A length with its unit (e.g. 0.75in, 2cm). A length in a specific side overrides \"All Sides\" for that side.",
+            note: "A length with its unit (e.g. 0.75in, 2cm); a number on its own is inches. A length in a specific side overrides \"All Sides\" for that side.",
             key_prefix: :worksheet,
             columns: PRINTOUT_MARGINS.map { |key, label, _| [ key, label ] }),
 

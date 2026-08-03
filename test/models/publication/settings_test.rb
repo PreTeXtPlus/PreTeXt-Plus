@@ -224,6 +224,66 @@ class Publication::SettingsTest < ActiveSupport::TestCase
     assert_match(/margin on all sides/, @project.errors.full_messages.to_sentence)
   end
 
+  # What an author types and what LaTeX reads are not quite the same language: ".25" and
+  # "0.25 IN" are lengths anyone would recognize and neither \newgeometry nor CSS will
+  # take. They are stored as the length that was meant rather than refused, since refusing
+  # them teaches nothing that writing the value back does not.
+  test "a margin is stored as the length an author meant by it" do
+    {
+      ".25"     => "0.25in",
+      "0.25"    => "0.25in",
+      "3"       => "3in",
+      "0.5 CM"  => "0.5cm",
+      "  2mm  " => "2mm",
+      "0.75in"  => "0.75in"
+    }.each do |typed, stored|
+      @project.publication_settings = { "worksheet_margin" => typed }
+
+      assert_equal stored, @project.publication_settings["worksheet_margin"], typed
+      assert @project.valid?, typed
+    end
+  end
+
+  # The unit is the one guess here -- a bare number takes inches, which is the unit
+  # PreTeXt's own 0.75in default is in. A unit the author did write and we cannot use is
+  # not guessed at: it is kept as typed and refused, so the alert quotes what they typed.
+  test "a margin in units neither LaTeX nor CSS shares is kept as typed and refused" do
+    %w[ 1px 2rem 1inch -1in ].each do |typed|
+      @project.publication_settings = { "worksheet_margin" => typed }
+
+      assert_equal typed, @project.publication_settings["worksheet_margin"]
+      assert_not @project.valid?, typed
+    end
+  end
+
+  # A modal saves every setting of a level at once, so one value it cannot take is a reason
+  # to keep that setting as it was -- not to drop the changes made beside it.
+  test "merging settings keeps what it can and answers with what it could not" do
+    @project.update!(publication_settings: { "worksheet_margin" => "1in" })
+
+    saved, refused = @project.merge_publication_settings(
+      "worksheet_margin" => "1 furlong", "theme" => "salem"
+    )
+
+    assert saved
+    assert_equal [ [ Publication::Catalog.find("worksheet_margin"), "1 furlong" ] ], refused
+    assert_equal({ "worksheet_margin" => "1in", "theme" => "salem" },
+                 @project.reload.publication_settings)
+  end
+
+  # A setting stored before the catalog stopped permitting it would otherwise make the
+  # level unsaveable: every save would fail on a value the author cannot even see, let
+  # alone fix. It is dropped instead, and not reported -- they did not submit it.
+  test "merging drops a stored value the catalog no longer permits, silently" do
+    @project.update_column(:publication_settings, { "theme" => "brooklyn", "chunk_level" => "1" })
+
+    saved, refused = @project.reload.merge_publication_settings("chunk_level" => "2")
+
+    assert saved
+    assert_empty refused
+    assert_equal({ "chunk_level" => "2" }, @project.reload.publication_settings)
+  end
+
   # A header is words an author picks, so it is bounded by a shape rather than a list. The
   # one thing ruled out is angle brackets: they cannot be meant in a page header, and the
   # value passes through an HTML attribute on its way to being printed.
