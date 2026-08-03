@@ -12,9 +12,11 @@ import {
   describePreviewError,
   findEntryById,
   findEntryForLine,
+  findWellformednessErrorLine,
   isLocalPreviewAvailable,
   renderPreviewHtml,
 } from "./wasmPreview";
+import type { PreviewLineMap } from "./previewSync";
 import type { PtxSourceMap, SourceMapEntry } from "@pretextbook/pretext-html";
 
 interface LivePreviewProps {
@@ -57,6 +59,13 @@ interface LivePreviewProps {
    * on every keystroke and must *not* rebuild.
    */
   divisionId?: string;
+  /**
+   * Translates lines between the editor buffer and the assembled document
+   * that is actually rendered. Used to report a well-formedness error's line
+   * number in terms of what the author sees in Monaco, rather than the
+   * assembled document's own line count.
+   */
+  previewLineMap?: PreviewLineMap | null;
 }
 
 export interface LivePreviewHandle {
@@ -192,7 +201,10 @@ function dismissBrowserTip(): void {
 }
 
 const LivePreview = forwardRef<LivePreviewHandle, LivePreviewProps>(
-  ({ content, title, onRebuild, onSyncToSource, divisionId }, ref) => {
+  (
+    { content, title, onRebuild, onSyncToSource, divisionId, previewLineMap },
+    ref,
+  ) => {
     const [isRebuilding, setIsRebuilding] = useState(false);
     const [browserTipDismissed, setBrowserTipDismissed] = useState(
       isBrowserTipDismissed,
@@ -262,7 +274,12 @@ const LivePreview = forwardRef<LivePreviewHandle, LivePreviewProps>(
               return;
             }
             // Keep whatever is already on screen; only report the failure.
-            setError(describePreviewError(err));
+            const assembledLine = findWellformednessErrorLine(source);
+            const editorLine =
+              assembledLine !== undefined
+                ? previewLineMap?.toEditor(assembledLine)
+                : undefined;
+            setError(describePreviewError(err, editorLine));
           })
           .finally(() => {
             if (token === renderToken.current) {
@@ -277,7 +294,7 @@ const LivePreview = forwardRef<LivePreviewHandle, LivePreviewProps>(
         postToIframe(url, data, "livePreview");
       };
       onRebuild?.(source, previewTitle, postHelper);
-    }, [content, title, onRebuild, renderLocally]);
+    }, [content, title, onRebuild, renderLocally, previewLineMap]);
 
     // Rebuild when the preview opens, and whenever the author switches to a
     // different division — otherwise the page on screen belongs to the
