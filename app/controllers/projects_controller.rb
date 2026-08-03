@@ -1,7 +1,7 @@
 class ProjectsController < ApplicationController
   allow_unauthenticated_access only: %i[ share preview source ]
   require_unauthenticated_access only: %i[ tryit ]
-  load_and_authorize_resource except: %i[ index new tryit preview feedback create_from_template create_from_import ]
+  load_and_authorize_resource except: %i[ index owned shared new tryit preview feedback create_from_template create_from_import ]
   skip_authorize_resource only: %i[ share ]
   after_action :allow_iframe, only: :share
   rate_limit to: 25, within: 10.minutes, only: :preview,
@@ -13,9 +13,23 @@ class ProjectsController < ApplicationController
     # Each row renders a chip per target, and every chip's state reads both build
     # pointers. Without eager loading that is two queries per target per project; with
     # it, and because Target#state touches nothing else, the page is a fixed handful.
-    @projects = Project.where(user: current_user).includes(targets: [ :current_build, :latest_build ])
+    #
+    # limit(6), not 5: fetching one extra lets the view tell "more than 5 exist" from
+    # the same result set, without a second COUNT query just to decide whether to show
+    # the "Show more" link.
+    @projects = Project.where(user: current_user).includes(targets: [ :current_build, :latest_build ]).limit(6)
     # Shared projects render the identical row, so they need the identical eager load.
-    @shared_projects = current_user.shared_projects.includes(targets: [ :current_build, :latest_build ])
+    @shared_projects = current_user.shared_projects.includes(targets: [ :current_build, :latest_build ]).limit(6)
+  end
+
+  # GET /projects/owned
+  def owned
+    @projects = Project.where(user: current_user).includes(targets: [ :current_build, :latest_build ]).page(params[:page]).per(20)
+  end
+
+  # GET /projects/shared
+  def shared
+    @projects = current_user.shared_projects.includes(targets: [ :current_build, :latest_build ]).page(params[:page]).per(20)
   end
 
   # GET /projects/1 or /projects/1.json

@@ -26,14 +26,22 @@
 <% end %>
 
 <div id="projects" class="min-w-full space-y-5">
-    <% if @projects.any? %>
-      <%= render partial: "card", collection: @projects, as: :project %>
+    <% owned = @projects.first(5) %>
+    <% if owned.any? %>
+      <%= render partial: "card", collection: owned, as: :project %>
+      <% if @projects.size > 5 %>
+        <%= link_to "Show more →", owned_projects_path, class: "#{button_classes(color: "gray", outlined: true)} px-3 py-2 text-sm" %>
+      <% end %>
     <% else %>
       <p class="text-center my-10">No projects found.</p>
     <% end %>
 
-    <% if @shared_projects.any? %>
+    <% shared = @shared_projects.first(5) %>
+    <% if shared.any? %>
       <h2 class="text-2xl mt-10">Shared with me</h2>
-      <%= render partial: "card", collection: @shared_projects, as: :project, locals: { shared: true } %>
+      <%= render partial: "card", collection: shared, as: :project, locals: { shared: true } %>
+      <% if @shared_projects.size > 5 %>
+        <%= link_to "Show more →", shared_projects_path, class: "#{button_classes(color: "gray", outlined: true)} px-3 py-2 text-sm" %>
+      <% end %>
     <% end %>
   </div>
