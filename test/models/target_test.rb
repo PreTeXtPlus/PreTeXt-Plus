@@ -52,13 +52,32 @@ class TargetTest < ActiveSupport::TestCase
     assert_equal "Print run", projects(:one).targets.create!(name: "  Print run  ", kind: "pdf").name
   end
 
-  # An author who left the name blank made one mistake; the flash used to report it three
-  # times, twice about a field the form does not have.
-  test "a nameless target reports only the missing name" do
-    target = Target.new(project: projects(:one), kind: "pdf")
+  # The dashboard's add-output form labels the field "Name (optional)" -- an author who
+  # skips it still gets a row that reads as something, keyed off the kind they picked.
+  test "a target left nameless is named after its kind" do
+    target = projects(:one).targets.create!(kind: "pdf")
+
+    assert_equal "PDF", target.name
+  end
+
+  # Two nameless PDFs in one project can't collide any more than two typed-out "PDF"s
+  # could -- the generated name goes through the same case-insensitive dedupe.
+  test "two nameless targets of the same kind get distinct generated names" do
+    first = projects(:one).targets.create!(kind: "pdf")
+    second = projects(:one).targets.create!(kind: "pdf")
+
+    assert_equal "PDF", first.name
+    assert_equal "PDF 2", second.name
+  end
+
+  # A blank kind humanizes to nothing to generate a name from (unlike an invalid-but-
+  # nonblank one, which still yields something readable), so the presence validation is
+  # still what an author sees for the name field.
+  test "a target with a blank kind and no name still gets a required-name error" do
+    target = Target.new(project: projects(:one), kind: "")
 
     assert_not target.valid?
-    assert_equal [ "Name can't be blank" ], target.errors.full_messages
+    assert_includes target.errors[:name], "can't be blank"
   end
 
   # The decision that shapes the schema: the *slug* is the unique key, not `kind`,

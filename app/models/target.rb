@@ -58,6 +58,7 @@ class Target < ApplicationRecord
   validates :slug, presence: true, format: REF_REGEX, uniqueness: { scope: :project_id },
                    if: -> { name.present? }
 
+  before_validation :generate_default_name, on: :create
   before_validation :assign_slug, on: :create
 
   validate :kind_available_for_document_type
@@ -264,6 +265,30 @@ class Target < ApplicationRecord
   end
 
   private
+
+    # Backs the "Name (optional)" field on the dashboard's add-output form: an author who
+    # doesn't care to type one still gets a row that reads as something instead of hitting
+    # the presence validation below. Runs before assign_slug, which needs a name to derive
+    # from.
+    #
+    # Keyed off kind_label rather than a placeholder like "Untitled" so the generated name
+    # still says what the output is, and deduplicated the same way assign_slug dedupes
+    # slugs -- except the uniqueness this backstops is case-insensitive, so the check here
+    # has to be too.
+    def generate_default_name
+      return if name.present?
+
+      base = kind_label
+      return if base.blank?
+
+      candidate = base
+      suffix = 2
+      while project&.targets&.exists?([ "LOWER(name) = ?", candidate.downcase ])
+        candidate = "#{base} #{suffix}"
+        suffix += 1
+      end
+      self.name = candidate
+    end
 
     # Assigned once, at creation, and never recomputed: the slug is in a public URL and in
     # `pretext build <slug>` on a downloaded copy, so renaming an output on the dashboard

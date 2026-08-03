@@ -73,13 +73,13 @@
       <summary class="cursor-pointer text-sm text-gray-600">+ Add an output</summary>
       <%= form_with model: [ @project, Target.new ], class: "mt-4 flex flex-wrap items-end gap-3" do |form| %>
         <div>
-          <%= form.label :name, "Name", class: "block text-xs text-gray-600" %>
-          <%= form.text_field :name, placeholder: "Print PDF", required: true,
+          <%= form.label :kind, "Output format", class: "block text-xs text-gray-600" %>
+          <%= form.select :kind, target_kind_options(@project), {},
                 class: "mt-1 rounded-md border border-gray-300 px-2 py-1.5 text-sm" %>
         </div>
         <div>
-          <%= form.label :kind, "Output format", class: "block text-xs text-gray-600" %>
-          <%= form.select :kind, target_kind_options(@project), {},
+          <%= form.label :name, "Name (optional)", class: "block text-xs text-gray-600" %>
+          <%= form.text_field :name, placeholder: "Print PDF", required: false,
                 class: "mt-1 rounded-md border border-gray-300 px-2 py-1.5 text-sm" %>
         </div>
         <%= form.submit "Add output",
