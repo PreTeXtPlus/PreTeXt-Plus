@@ -87,8 +87,61 @@ class PublicationSettingsControllerTest < ActionDispatch::IntegrationTest
 
     patch project_publication_settings_url(@project),
       params: { publication_settings: { braille_page_width: "-4" } }
-    assert_match(/cells per line/, flash[:alert])
+    assert_match(/Cells per line/, flash[:alert])
     assert_equal "32", @project.reload.publication_settings["braille_page_width"]
+  end
+
+  # The modal holds every setting of a level and saves them together, so an all-or-nothing
+  # write means one mistyped margin costs an author the changes they made beside it -- and
+  # costs them silently, since the modal is gone by the time they read the alert. Each
+  # value stands or falls on its own instead.
+  test "one value this level cannot accept does not cost the author the rest" do
+    @project.update!(publication_settings: { "worksheet_margin" => "1in" })
+
+    patch project_publication_settings_url(@project),
+      params: { publication_settings: { worksheet_margin: "1 furlong", theme: "salem",
+                                        chunk_level: "2" } }
+
+    assert_equal({ "worksheet_margin" => "1in", "theme" => "salem", "chunk_level" => "2" },
+                 @project.reload.publication_settings)
+  end
+
+  # And says which setting was left alone, what would not go in it, and what one looks
+  # like: the modal is closed by the time this is read, so the sentence is the whole of
+  # what an author has to go back in with.
+  test "the alert names the refused setting and the shape of a good answer" do
+    patch project_publication_settings_url(@project),
+      params: { publication_settings: { worksheet_top: "1 furlong", theme: "salem" } }
+
+    assert_match(/Saved everything else/, flash[:alert])
+    assert_match(/Top margin is unchanged: “1 furlong” is not a length with its unit/,
+                 flash[:alert])
+    assert_equal({ "theme" => "salem" }, @project.reload.publication_settings)
+  end
+
+  # A refused value leaves the setting as it was rather than clearing it: a typo is not an
+  # instruction to inherit, and the level above taking over is exactly the surprise an
+  # author would not think to look for.
+  test "a refused value keeps what the level had rather than clearing it" do
+    @target.update!(publication_settings: { "theme" => "denver" })
+
+    patch project_target_publication_settings_url(@project, @target),
+      params: { publication_settings: { theme: "not-a-theme" } }
+
+    assert_equal "denver", @target.reload.publication_settings["theme"]
+  end
+
+  # A margin is typed, and the two ways it is typed wrong are a missing leading zero and a
+  # missing unit. Both are values an author means; writing back what they meant beats an
+  # alert that sends them into the modal to add a character.
+  test "a margin typed as a bare or bare-headed number is saved as a length" do
+    patch project_publication_settings_url(@project),
+      params: { publication_settings: { worksheet_margin: ".25", worksheet_left: "1",
+                                        worksheet_right: "0.5 CM" } }
+
+    assert_equal({ "worksheet_margin" => "0.25in", "worksheet_left" => "1in",
+                   "worksheet_right" => "0.5cm" }, @project.reload.publication_settings)
+    assert_equal "Saved.", flash[:notice]
   end
 
   # The EPUB tab appears once the project has an image to be a cover, and the picker

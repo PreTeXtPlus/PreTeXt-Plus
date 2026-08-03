@@ -11,16 +11,49 @@ module HasPublicationSettings
 
   included do
     # Blank values mean "inherit", and keys the catalog no longer offers mean nothing at
-    # all, so neither is worth storing. Doing it here rather than in the controller keeps
-    # the column clean whatever writes to it -- including Project#full_dup, which copies
-    # attributes wholesale, and the console.
+    # all, so neither is worth storing. What is left is put in the form the option stores it
+    # in, which for a length is what turns a typed ".25" into "0.25in". Doing all of it here
+    # rather than in the controller keeps the column clean whatever writes to it --
+    # including Project#full_dup, which copies attributes wholesale, and the console.
     normalizes :publication_settings, with: ->(settings) do
-      (settings || {}).to_h.stringify_keys
-        .select { |key, value| Publication::Catalog.find(key) && value.present? }
-        .transform_values(&:to_s)
+      (settings || {}).to_h.stringify_keys.filter_map do |key, value|
+        option = Publication::Catalog.find(key)
+        next unless option
+
+        normalized = option.normalize(value)
+        [ key, normalized ] if normalized.present?
+      end.to_h
     end
 
     validate :publication_settings_are_offered
+  end
+
+  # Saves as much of a submitted set of settings as this level can accept, and answers with
+  # what it had to refuse, as [option, value] pairs.
+  #
+  # An author edits every setting of a level in one modal and saves them together, so an
+  # all-or-nothing write means one mistyped margin costs them the nine changes they made
+  # beside it -- and costs them silently, since the modal is gone by the time they read why.
+  # Each value stands or falls on its own instead: the rest is saved, and a refused key
+  # keeps whatever this level had before rather than being cleared by a typo.
+  #
+  # Settings this level already held are checked too, and dropped if they no longer pass.
+  # That only happens when the catalog stops permitting something already stored, and
+  # dropping it is what keeps such a level saveable at all; it is not reported, because the
+  # author did not submit it.
+  def merge_publication_settings(submitted)
+    submitted = submitted.to_h.stringify_keys
+    previous = publication_settings
+    self.publication_settings = previous.merge(submitted)
+
+    accepted = publication_settings.select { |key, value| Publication::Catalog.find(key).permits?(value) }
+    refused = publication_settings.except(*accepted.keys)
+    restored = previous.slice(*refused.keys)
+                       .select { |key, value| Publication::Catalog.find(key).permits?(value) }
+
+    self.publication_settings = accepted.merge(restored)
+
+    [ save, refused.slice(*submitted.keys).map { |key, value| [ Publication::Catalog.find(key), value ] } ]
   end
 
   private

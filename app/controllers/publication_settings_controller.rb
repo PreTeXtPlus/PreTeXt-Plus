@@ -21,10 +21,18 @@ class PublicationSettingsController < ApplicationController
     # Merged, not replaced: the form only submits the options the modal offered, and a
     # book-turned-article should not silently lose a setting the modal no longer shows.
     # Blank values are how the form says "inherit"; HasPublicationSettings drops them.
-    if @owner.update(publication_settings: @owner.publication_settings.merge(submitted_settings))
-      redirect_to return_path, notice: "Saved."
-    else
+    #
+    # Merged one setting at a time, too: a modal holds every option of a level, and a value
+    # this level cannot accept is a reason to keep that one setting as it was, not a reason
+    # to throw away the other changes the author made in the same visit.
+    saved, refused = @owner.merge_publication_settings(submitted_settings)
+
+    if !saved
       redirect_to return_path, alert: @owner.errors.full_messages.to_sentence
+    elsif refused.any?
+      redirect_to return_path, alert: refused_alert(refused)
+    else
+      redirect_to return_path, notice: "Saved."
     end
   end
 
@@ -53,6 +61,18 @@ class PublicationSettingsController < ApplicationController
       params.fetch(:publication_settings, {})
             .permit(*Publication::Catalog.keys)
             .to_h
+    end
+
+    # What did not save, and only that -- everything else already has by the time this is
+    # read, so a message about the save as a whole would be wrong. Each line names the
+    # setting left alone, the value that could not be stored, and what one looks like: the
+    # modal is closed by now, so this sentence is all the author has to go back in with.
+    def refused_alert(refused)
+      unsaved = refused.map do |option, value|
+        "#{option.label} is unchanged: “#{value}” is not #{option.guidance}."
+      end
+
+      [ "Saved everything else.", *unsaved ].join(" ")
     end
 
     # Back to the page the modal opened over, with the drawer reopened when it was an
