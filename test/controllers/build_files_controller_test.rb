@@ -59,6 +59,21 @@ class BuildFilesControllerTest < ActionDispatch::IntegrationTest
     assert_match "Chapter One", response.body
   end
 
+  # An SVG referenced as an <img> inside built output (a diagram, a figure) has to
+  # display, not download -- see ServesBuildFiles::INLINE_OVERRIDE_CONTENT_TYPES.
+  test "svg is served inline so it displays as an image" do
+    attach("figure.svg", File.read(Rails.root.join("test/fixtures/files/test_image.svg")), "image/svg+xml")
+
+    get build_file_url(@build, "figure.svg")
+    assert_response :redirect
+
+    follow_redirect!
+
+    assert_response :success
+    assert_equal "image/svg+xml", response.media_type
+    assert_match(/\Ainline/, response.headers["Content-Disposition"])
+  end
+
   test "a build's files stay login-only even when the target is published" do
     attach("index.html", "<h1>Chapter One</h1>", "text/html")
     targets(:two_web).update!(published: true)
