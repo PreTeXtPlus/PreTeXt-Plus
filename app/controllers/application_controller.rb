@@ -33,10 +33,29 @@ class ApplicationController < ActionController::Base
 
   def redirect_to_cdn_url(url)
     response.headers["Cache-Control"] = "no-store, private"
-    redirect_to url, allow_other_host: true
+    redirect_to cdn_asset_url(url), allow_other_host: true
   end
 
   private
+
+  # Swaps a DigitalOcean Spaces origin host for the Spaces CDN's custom
+  # subdomain, leaving path and query (which carries the presigned signature)
+  # untouched -- DO's CDN forwards presigned requests to the origin and
+  # validates them there, as long as the URL is virtual-hosted-style (which
+  # storage.yml already produces, since force_path_style is never set). A
+  # no-op when spaces_cdn_host isn't configured, or the URL isn't a Spaces
+  # origin URL (e.g. the local "/icon.svg" and "/image-not-found.svg"
+  # fallback paths).
+  def cdn_asset_url(url)
+    cdn_host = Rails.application.config.x.spaces_cdn_host.presence
+    return url unless cdn_host
+
+    uri = URI.parse(url)
+    return url unless uri.host&.end_with?(".digitaloceanspaces.com")
+
+    uri.host = cdn_host
+    uri.to_s
+  end
 
   def authenticated?
     user_signed_in?

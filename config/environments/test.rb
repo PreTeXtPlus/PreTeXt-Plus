@@ -44,6 +44,10 @@ Rails.application.configure do
   # suite actually tests. Integration tests reach it with `host! "pub.example.com"`.
   config.x.published_url_options = { host: "pub.example.com" }
 
+  # Exercise the Spaces CDN host rewrite (see production.rb and
+  # ApplicationController#redirect_to_cdn_url) rather than leaving it unset.
+  config.x.spaces_cdn_host = "cdn.example.com"
+
   # Print deprecation notices to the stderr.
   config.active_support.deprecation = :stderr
 
