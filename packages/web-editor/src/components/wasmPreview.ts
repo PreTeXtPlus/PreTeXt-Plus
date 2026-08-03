@@ -148,14 +148,54 @@ export function findEntryById(
 }
 
 /**
+ * Best-effort line number for a well-formedness failure.
+ *
+ * libxslt discards libxml2's own parse errors (which do carry a line number)
+ * to the console rather than the thrown error — see {@link describePreviewError}
+ * — so this recovers one independently via the browser's own XML parser,
+ * which reports exactly the same well-formedness violations (unclosed or
+ * mismatched tags, stray `&`, etc.) with a line number in its native
+ * `parsererror` output. Neither parser resolves undefined named entities
+ * without a DTD, so the two should never disagree about what counts as
+ * malformed.
+ *
+ * Returns `undefined` when `source` parses cleanly — meaning the actual
+ * failure was something else, e.g. a well-formed document that failed the
+ * XSLT transform — or when a `parsererror` was found but no line number could
+ * be parsed out of it.
+ */
+export function findWellformednessErrorLine(source: string): number | undefined {
+  const doc = new DOMParser().parseFromString(source, "application/xml");
+  const parserError = doc.querySelector("parsererror");
+  const text = parserError?.textContent;
+  if (!text) return undefined;
+  // Chromium: "error on line 7 at column 12: ...". Firefox: "... Line Number
+  // 7, Column 12:". jsdom (used under test): "7:12: unexpected close tag.".
+  const labeled = text.match(/line\s*(?:number)?\D{0,3}(\d+)/i);
+  if (labeled) return Number(labeled[1]);
+  const bare = text.match(/^(\d+):\d+:/);
+  return bare ? Number(bare[1]) : undefined;
+}
+
+/**
  * Turn a render failure into something worth showing an author.
  *
  * libxslt reports parse errors on the console rather than in the thrown
  * error, so the message is often generic; the common authoring case (a
  * malformed document mid-edit) is worth naming explicitly rather than
  * surfacing "PreTeXt XSLT transform failed".
+ *
+ * `line`, when given, comes from {@link findWellformednessErrorLine} and is
+ * already known to be a well-formedness failure — the friendly message is
+ * shown regardless of what `error`'s own text says.
  */
-export function describePreviewError(error: unknown): string {
+export function describePreviewError(error: unknown, line?: number): string {
+  if (line !== undefined) {
+    return (
+      `Could not build the preview: the document is not well-formed XML ` +
+      `(near line ${line}) — check for an unclosed or mismatched tag.`
+    );
+  }
   const message =
     error instanceof Error ? error.message : String(error ?? "Unknown error");
   if (/transform failed/i.test(message)) {

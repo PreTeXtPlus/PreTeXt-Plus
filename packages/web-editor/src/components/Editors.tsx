@@ -1552,6 +1552,7 @@ const EditorsInner = (props: EditorsInnerProps) => {
         onRebuild={props.onPreviewRebuild}
         onSyncToSource={handleSyncToSource}
         divisionId={activeDivision?.xmlId}
+        previewLineMap={previewLineMap}
       />
     );
     // For now, we disable the visual editor.  This might come back in a later version:
