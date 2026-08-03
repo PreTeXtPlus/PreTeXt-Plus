@@ -1,8 +1,0 @@
-{
-  "permissions": {
-    "allow": [
-      "Bash",
-      "Bash(node /tmp/claude-1000/-workspaces-PreTeXt-Plus/11ea3b74-8731-40d4-bdfb-78ce45ed1b95/scratchpad/verify.js)"
-    ]
-  }
-}
