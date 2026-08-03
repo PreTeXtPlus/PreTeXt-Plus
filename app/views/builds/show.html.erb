@@ -41,7 +41,7 @@
           target: "_blank", rel: "noopener", data: { turbo: false } %>
   <% end %>
   <% if @build.zip.attached? %>
-    <%= link_to "Download zip", rails_blob_path(@build.zip, disposition: "attachment"),
+    <%= link_to "Download zip", build_zip_path(@build),
           class: "#{button_classes(color: "gray", outlined: true)} px-3 py-2 text-sm",
           data: { turbo: false } %>
   <% end %>

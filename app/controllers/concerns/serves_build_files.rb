@@ -72,7 +72,7 @@ module ServesBuildFiles
           {
             content_type: bf.blob.content_type,
             blob_url: blob_inline_url(bf.blob),
-            blob_download_url: rails_blob_url(bf.blob, disposition: "attachment"),
+            blob_download_url: bf.blob.url(disposition: "attachment"),
             blob_key: bf.blob.key
           },
           unless_exist: true
@@ -80,11 +80,13 @@ module ServesBuildFiles
       end
     end
 
-    # Bypasses Blob#url's forced-binary/forced-attachment logic for content types in
-    # INLINE_OVERRIDE_CONTENT_TYPES by calling the storage service directly, the same way
-    # Asset#url does for uploaded assets.
+    # Calls the storage service directly (as Asset#url does) rather than going through
+    # rails_blob_url, whose redirect route would land on the app's own host -- one hop
+    # too many for redirect_to_cdn_url to rewrite to the Spaces CDN subdomain. This also
+    # bypasses Blob#url's forced-binary/forced-attachment logic for content types in
+    # INLINE_OVERRIDE_CONTENT_TYPES, the same way Asset#url does for uploaded assets.
     def blob_inline_url(blob)
-      return rails_blob_url(blob) unless INLINE_OVERRIDE_CONTENT_TYPES.include?(blob.content_type)
+      return blob.url unless INLINE_OVERRIDE_CONTENT_TYPES.include?(blob.content_type)
 
       blob.service.url(blob.key, expires_in: ActiveStorage.service_urls_expire_in,
         filename: blob.filename, content_type: blob.content_type, disposition: :inline)
