@@ -14,6 +14,15 @@ class BuildFilesController < ApplicationController
     serve_build_file(@build, params[:relative_path], disposition: requested_disposition)
   end
 
+  # A site's "Download" is the whole output directory, zipped, rather than a single
+  # build file -- see #show for that case. Its own action (rather than reusing #show)
+  # since the zip is attached directly to the build, not stored as a BuildFile.
+  def zip
+    raise ActiveRecord::RecordNotFound unless @build.zip.attached?
+
+    redirect_to_cdn_url @build.zip.url(disposition: "attachment")
+  end
+
   private
 
     # Only "attachment" is honoured, and only as an exact match: anything else falls back

@@ -32,9 +32,12 @@ class BuildFilesControllerTest < ActionDispatch::IntegrationTest
     attach("print.pdf", "%PDF-1.4", "application/pdf")
 
     get build_file_url(@build, "print.pdf", disposition: "attachment")
-
     assert_response :redirect
-    assert_match(/disposition=attachment/, response.location)
+
+    follow_redirect!
+
+    assert_response :success
+    assert_match(/\Aattachment/, response.headers["Content-Disposition"])
   end
 
   # An html artifact -- a reveal.js deck, or a page inside a package -- must still
@@ -43,9 +46,12 @@ class BuildFilesControllerTest < ActionDispatch::IntegrationTest
     attach("deck.html", "<h1>Slides</h1>", "text/html")
 
     get build_file_url(@build, "deck.html", disposition: "attachment")
-
     assert_response :redirect
-    assert_match(/disposition=attachment/, response.location)
+
+    follow_redirect!
+
+    assert_response :success
+    assert_match(/\Aattachment/, response.headers["Content-Disposition"])
   end
 
   # The parameter selects between two fixed behaviours and is never passed through, so it
@@ -83,5 +89,25 @@ class BuildFilesControllerTest < ActionDispatch::IntegrationTest
 
     assert_response :redirect
     assert_no_match "Chapter One", response.body
+  end
+
+  # What a site's "Download" links to: the whole output directory, zipped, rather than
+  # a single build file.
+  test "zip hands over the build's attached zip as an attachment" do
+    @build.zip.attach(io: StringIO.new("PK\x03\x04"), filename: "site.zip", content_type: "application/zip")
+
+    get build_zip_url(@build)
+    assert_response :redirect
+
+    follow_redirect!
+
+    assert_response :success
+    assert_match(/\Aattachment/, response.headers["Content-Disposition"])
+  end
+
+  test "zip 404s when the build has no zip attached" do
+    get build_zip_url(@build)
+
+    assert_response :not_found
   end
 end

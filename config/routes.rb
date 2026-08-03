@@ -161,6 +161,7 @@ Rails.application.routes.draw do
   # Deprecated asset share link (used by old builds to serve up assets).
   get "share_assets/external/:id" => "assets#file", as: "share_asset_file"
   get "builds/:build_id/files(/*relative_path)", to: "build_files#show", as: "build_file", format: false
+  get "builds/:build_id/zip", to: "build_files#zip", as: "build_zip"
   resources :asset_fetches, only: :create
   get "tryit" => "projects#tryit"
   post "tryit/preview" => "projects#preview", as: "tryit_preview"

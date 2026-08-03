@@ -67,7 +67,7 @@
     <%# A site has no single file to hand over, so its download is the whole output. %>
     <% if target.site? && target.current_build&.zip&.attached? %>
       <%= link_to "Download",
-            rails_blob_path(target.current_build.zip, disposition: "attachment"),
+            build_zip_path(target.current_build),
             class: "#{button_classes(color: "gray", outlined: true)} px-2.5 py-1.5 text-sm",
             data: { turbo: false } %>
     <% end %>
