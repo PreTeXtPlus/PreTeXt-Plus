@@ -71,6 +71,15 @@ class DrawerLiveUpdateTest < ApplicationSystemTestCase
 
     log_box = "##{ActionView::RecordIdentifier.dom_id(@target, :drawer)} pre"
     assert_selector log_box, wait: 10
+
+    # projects/show.html.erb renders this frame with both content and a src, which Turbo
+    # answers with one unconditional, non-morph self-fetch (see the comment there). Setting
+    # the scroll position before that settles is a race: if it lands after we grab
+    # window.__logBox below, it silently replaces the very node we scrolled with a fresh
+    # one at scrollTop 0, and this test would be checking the wrong reload entirely.
+    # Waiting for `complete` pins us to *after* that fetch, so what's left to provoke is
+    # the one the test is actually about: the broadcast-triggered reload.
+    assert_selector "turbo-frame#drawer[complete]", wait: 10
     page.execute_script("document.querySelector('#{log_box}').scrollTop = 200")
     page.execute_script("window.__logBox = document.querySelector('#{log_box}')")
 
