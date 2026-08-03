@@ -24,6 +24,12 @@ Rails.application.configure do
   # Store uploaded files on the local file system (see config/storage.yml for options).
   config.active_storage.service = :digitalocean
 
+  # DigitalOcean Spaces CDN custom subdomain fronting the digitalocean storage
+  # service above. ApplicationController#redirect_to_cdn_url rewrites presigned
+  # Spaces origin URLs to this host before redirecting -- see that method for why
+  # storage.yml itself still points at the origin rather than this host.
+  config.x.spaces_cdn_host = "cdn.pretext.plus"
+
   # Assume all access to the app is happening through a SSL-terminating reverse proxy.
   # config.assume_ssl = true
 
