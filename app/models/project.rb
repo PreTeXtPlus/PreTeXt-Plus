@@ -57,6 +57,10 @@ class Project < ApplicationRecord
   # start from) and still counts against their quota.
   scope :templates, -> { where(is_template: true) }
 
+  scope :accessible_to, ->(user) {
+    where(user: user).or(where(id: user.shared_projects.select(:id)))
+  }
+
   default_scope { order(updated_at: :desc) }
 
   # Attributes a build actually consumes. Changing any of them makes every built target
@@ -110,6 +114,15 @@ class Project < ApplicationRecord
   def editable_by?(other_user)
     return false if other_user.nil?
     other_user == user || collaborators.include?(other_user)
+  end
+
+  # How `user` relates to this project, for display purposes -- nil if they have
+  # no access at all (editable_by? is the authorization question; this is "which
+  # label do we show them").
+  def access(user)
+    return nil if user.nil?
+    return :owned if user_id == user.id
+    :shared if collaborators.include?(user)
   end
 
   # Real-time collaborative editing is on whenever anyone besides the owner

@@ -25,7 +25,30 @@
   <%= link_to "+ New project", new_project_path, class: "#{button_classes(color: "green")} inline-flex items-center gap-2 px-4 py-2", data: { turbo: false } %>
 <% end %>
 
+<%= form_with url: projects_path, method: :get, local: true, class: "mb-6" do |form| %>
+  <div class="flex flex-wrap gap-2">
+    <%= form.label :q, "Search by title", class: "sr-only" %>
+    <%= form.text_field :q, value: @query, placeholder: "Search by title…",
+          class: "w-full max-w-md rounded-md border border-gray-300 px-3 py-2 text-sm" %>
+    <%= form.submit "Search", class: "#{button_classes(color: "gray", outlined: true)} px-3.5 py-2 text-sm" %>
+    <% if @query.present? %>
+      <%= link_to "Clear", projects_path, class: "#{button_classes(color: "gray")} px-3.5 py-2 text-sm" %>
+    <% end %>
+  </div>
+<% end %>
+
 <div id="projects" class="min-w-full space-y-5">
+  <% if @query.present? %>
+    <h2 class="text-2xl">Search results for "<%= @query %>"</h2>
+    <% if @results.any? %>
+      <%= render partial: "card", collection: @results, as: :project %>
+      <div class="text-center">
+        <%= paginate @results %>
+      </div>
+    <% else %>
+      <p class="text-center my-10">No projects matched "<%= @query %>".</p>
+    <% end %>
+  <% else %>
     <% owned = @projects.first(5) %>
     <% if owned.any? %>
       <%= render partial: "card", collection: owned, as: :project %>
@@ -50,4 +73,5 @@
     <% else %>
       <p class="text-center text-gray-800 my-10">No shared projects found.</p>
     <% end %>
-  </div>
+  <% end %>
+</div>
