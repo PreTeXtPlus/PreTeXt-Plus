@@ -1,10 +1,18 @@
-<% content_for :title, "Shared with me" %>
-<% content_for :heading, "Shared with me" %>
+<% content_for :title, "Projects shared with me" %>
+<% content_for :heading do %>
+  Projects shared with me
+  <% if @projects.total_pages > 1 %>
+    <span class="text-sm text-gray-500">Page <%= params[:page] || 1 %> of <%= @projects.total_pages %></span>
+  <% end %>
+<% end %>
 <% content_for :actions do %>
   <%= link_to "Back to dashboard", projects_path, class: "#{button_classes(color: "gray")} px-3.5 py-2" %>
 <% end %>
 
 <div class="min-w-full space-y-5">
+  <div class="text-center">
+    <%= paginate @projects %>
+  </div>
   <% if @projects.any? %>
     <%= render partial: "card", collection: @projects, as: :project, locals: { shared: true } %>
   <% else %>

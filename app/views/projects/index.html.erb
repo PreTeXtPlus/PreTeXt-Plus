@@ -19,7 +19,7 @@
   </div>
 <% end %>
 <% content_for :heading do %>
-  Projects
+  Projects Dashboard
 <% end %>
 <% content_for :actions do %>
   <%= link_to "+ New project", new_project_path, class: "#{button_classes(color: "green")} inline-flex items-center gap-2 px-4 py-2", data: { turbo: false } %>
@@ -30,18 +30,24 @@
     <% if owned.any? %>
       <%= render partial: "card", collection: owned, as: :project %>
       <% if @projects.size > 5 %>
-        <%= link_to "Show more →", owned_projects_path, class: "#{button_classes(color: "gray", outlined: true)} px-3 py-2 text-sm" %>
+        <div class="flex justify-center my-4">
+          <%= link_to "Show more projects →", owned_projects_path, class: "#{button_classes(color: "gray", outlined: true)} px-3 py-2 text-sm" %>
+        </div>
       <% end %>
     <% else %>
       <p class="text-center my-10">No projects found.</p>
     <% end %>
 
     <% shared = @shared_projects.first(5) %>
+    <h2 class="text-2xl mt-10">Shared with me</h2>
     <% if shared.any? %>
-      <h2 class="text-2xl mt-10">Shared with me</h2>
       <%= render partial: "card", collection: shared, as: :project, locals: { shared: true } %>
       <% if @shared_projects.size > 5 %>
-        <%= link_to "Show more →", shared_projects_path, class: "#{button_classes(color: "gray", outlined: true)} px-3 py-2 text-sm" %>
+        <div class="flex justify-center my-4">
+          <%= link_to "Show more shared projects →", shared_projects_path, class: "#{button_classes(color: "gray", outlined: true)} px-3 py-2 text-sm" %>
+        </div>
       <% end %>
+    <% else %>
+      <p class="text-center text-gray-800 my-10">No shared projects found.</p>
     <% end %>
   </div>

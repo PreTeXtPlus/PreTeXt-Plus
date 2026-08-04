@@ -26,3 +26,43 @@
     display: flex;
   }
 }
+
+.pagination {
+  display: flex;
+  justify-content: center;
+  margin-top: 0.5rem;
+  margin-bottom: 0.5rem;
+  padding-top: 0.5rem;
+  padding-bottom: 0.5rem;
+  gap: 10px;
+}
+
+.pagination {
+  -webkit-user-select: none; /* Safari */
+  -ms-user-select: none;     /* IE 10 and IE 11 */
+  user-select: none; 
+}
+
+.pagination span a {
+  display: inline-block;
+  font-size: 0.875rem;
+  padding: 3px 10px;
+  min-width: 2rem;
+  border-radius: 5px;
+  background-color: #f8f8f8;
+  color: #777;
+}
+
+.pagination span:hover a {
+  background-color: #eee;
+  color: #333;
+}
+
+.pagination span.current {
+  font-size: 0.875rem;
+  padding: 3px 10px;
+  min-width: 2rem;
+  border-radius: 5px;
+  background-color: #eee;
+  color: #333;
+}
