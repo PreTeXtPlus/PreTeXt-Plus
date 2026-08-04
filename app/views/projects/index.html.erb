@@ -26,10 +26,10 @@
 <% end %>
 
 <%= form_with url: projects_path, method: :get, local: true, class: "mb-6" do |form| %>
-  <div class="flex flex-wrap gap-2">
+  <div class="mx-auto flex max-w-xl flex-wrap items-center justify-center gap-2 my-4">
     <%= form.label :q, "Search by title", class: "sr-only" %>
     <%= form.text_field :q, value: @query, placeholder: "Search by title…",
-          class: "w-full max-w-md rounded-md border border-gray-300 px-3 py-2 text-sm" %>
+          class: "min-w-0 flex-1 rounded-md border border-gray-300 px-3 py-2 text-sm" %>
     <%= form.submit "Search", class: "#{button_classes(color: "gray", outlined: true)} px-3.5 py-2 text-sm" %>
     <% if @query.present? %>
       <%= link_to "Clear", projects_path, class: "#{button_classes(color: "gray")} px-3.5 py-2 text-sm" %>
