@@ -13,6 +13,49 @@ class ProjectsControllerTest < ActionDispatch::IntegrationTest
     assert_response :success
   end
 
+  test "should get owned" do
+    get owned_projects_url
+    assert_response :success
+  end
+
+  test "should get shared" do
+    get shared_projects_url
+    assert_response :success
+  end
+
+  test "index has no show-more link when 5 or fewer owned projects exist" do
+    get projects_url
+    assert_response :success
+    assert_select "a[href=?]", owned_projects_path, count: 0
+  end
+
+  test "index shows a show-more link once there are 6 or more owned projects" do
+    4.times { |n| Project.create!(user: @user, title: "Extra Owned #{n}") }
+    get projects_url
+    assert_response :success
+    assert_select "a[href=?]", owned_projects_path
+  end
+
+  test "index has no show-more link when 5 or fewer shared projects exist" do
+    sign_out :user
+    sign_in users(:two)
+    get projects_url
+    assert_response :success
+    assert_select "a[href=?]", shared_projects_path, count: 0
+  end
+
+  test "index shows a show-more link once there are 6 or more shared projects" do
+    sign_out :user
+    sign_in users(:two)
+    5.times do |n|
+      project = Project.create!(user: @user, title: "Extra Shared #{n}")
+      project.collaborations.create!(user: users(:two), invited_email: users(:two).email, accepted_at: Time.current)
+    end
+    get projects_url
+    assert_response :success
+    assert_select "a[href=?]", shared_projects_path
+  end
+
   test "should get new" do
     get new_project_url
     assert_response :success

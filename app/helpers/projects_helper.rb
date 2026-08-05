@@ -10,6 +10,10 @@ module ProjectsHelper
     tag.span(label, class: "inline-flex items-center rounded-full px-2.5 py-1 text-xs font-semibold #{classes}")
   end
 
+  def project_shared_pill
+    tag.span("Shared", class: "inline-flex items-center rounded-full px-2.5 py-1 text-xs font-semibold bg-indigo-100 text-indigo-800")
+  end
+
   # Accepts either a project (whose root division's format is looked up) or the raw
   # source_format string the new-project form uses before a division exists yet --
   # #try keeps the lookup nil, rather than an error, when project is that string.

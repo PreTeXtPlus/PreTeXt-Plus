@@ -134,6 +134,8 @@ Rails.application.routes.draw do
       end
     end
     collection do
+      get "owned"
+      get "shared"
       post "from_template/:template_id" => "projects#create_from_template", as: "create_from_template"
       post "import" => "projects#create_from_import", as: "create_from_import"
       post "feedback" => "projects#feedback", as: "feedback"

@@ -1,7 +1,7 @@
 <%# One project row on the projects index. Pass shared: true for the "Shared
     with me" list, which names the owner instead of offering owner-only
     affordances. %>
-<% shared = local_assigns.fetch(:shared, false) %>
+<% shared = local_assigns.fetch(:shared) { project.access(current_user) == :shared } %>
 <div class="m-3 rounded-xl bg-white p-4 ring-2 ring-gray-100 hover:ring-indigo-200">
   <% if project.is_template? %>
     <div class="mt-1 text-sm text-amber-800 bg-amber-50 rounded-md sm:p-2">
@@ -18,6 +18,7 @@
     <h3 class="flex items-center gap-2 text-lg font-medium">
       <%= link_to project.title, project, class: "hover:underline", data: { turbo: false } %>
       <%= project_visibility_pill(project) %>
+      <%= project_shared_pill if shared %>
     </h3>
 
     <%# The whole status report for this project at a glance: one chip per output,

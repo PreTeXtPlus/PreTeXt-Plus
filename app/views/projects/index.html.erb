@@ -3,11 +3,11 @@
   <div class="mx-auto w-full lg:w-2/3 mt-2 py-2">
     <div class="rounded-md border border-gray-200 bg-white px-4 py-2 text-gray-900 text-sm">
       <p>
-        Thanks for using <span class="font-semibold">PreTeXt.Plus</span>!
-        We created this service so anyone can use the free and open-source PreTeXt project to create high-quality and accessible
-        scholarly documents. If you'd like to support us, please consider becoming a sustaining subscriber, which helps us fund
-        development and keep the service running for everyone. As a sustaining subscriber, you'll also get access to exclusive
-        features and early access to new tools.
+        Thanks for using <span class="font-semibold">PreTeXt.Plus</span>! We created this service so anyone can use the
+        <a href="https://pretextbook.org" target="_blank" class="text-blue-600 hover:underline">free and open-source PreTeXt project</a>
+        to create high-quality and accessible scholarly STEM documents. If you'd like to support us, please consider becoming a sustaining
+        subscriber, which helps us fund development and keep the service running for everyone. As a sustaining subscriber, you'll also get
+        access to exclusive features and early access to new tools.
       </p>
       <div class="mt-4 flex gap-4 items-center justify-center">
         <span class="font-semibold">Support PreTeXt.Plus development:</span>
@@ -19,21 +19,58 @@
   </div>
 <% end %>
 <% content_for :heading do %>
-  Projects
+  Projects Dashboard
 <% end %>
 <% content_for :actions do %>
   <%= link_to "+ New project", new_project_path, class: "#{button_classes(color: "green")} inline-flex items-center gap-2 px-4 py-2", data: { turbo: false } %>
 <% end %>
+<% content_for :header_content do %>
+  <%= form_with url: projects_path, method: :get, local: true, class: "w-auto lg:mx-4 flex flex-wrap items-center justify-center gap-2" do |form| %>
+    <%= form.label :q, "Search by title", class: "sr-only" %>
+    <%= form.text_field :q, value: @query, placeholder: "Search all projects by title...",
+          class: "min-w-0 flex-1 rounded-md border border-gray-300 px-3 py-2 text-sm bg-white" %>
+    <%= form.submit "Search", class: "#{button_classes(color: "gray", outlined: true)} px-3.5 py-2 text-sm" %>
+    <% if @query.present? %>
+      <%= link_to "Clear", projects_path, class: "#{button_classes(color: "gray")} px-3.5 py-2 text-sm" %>
+    <% end %>
+  <% end %>
+<% end %>
 
 <div id="projects" class="min-w-full space-y-5">
-    <% if @projects.any? %>
-      <%= render partial: "card", collection: @projects, as: :project %>
+  <% if @query.present? %>
+    <h2 class="text-2xl">Search results for "<%= @query %>"</h2>
+    <% if @results.any? %>
+      <%= render partial: "card", collection: @results, as: :project %>
+      <div class="text-center">
+        <%= paginate @results %>
+      </div>
+    <% else %>
+      <p class="text-center my-10">No projects matched "<%= @query %>".</p>
+    <% end %>
+  <% else %>
+    <% owned = @projects.first(5) %>
+    <% if owned.any? %>
+      <%= render partial: "card", collection: owned, as: :project %>
+      <% if @projects.size > 5 %>
+        <div class="flex justify-center my-4">
+          <%= link_to "Show more projects →", owned_projects_path, class: "#{button_classes(color: "gray", outlined: true)} px-3 py-2 text-sm" %>
+        </div>
+      <% end %>
     <% else %>
       <p class="text-center my-10">No projects found.</p>
     <% end %>
 
-    <% if @shared_projects.any? %>
-      <h2 class="text-2xl mt-10">Shared with me</h2>
-      <%= render partial: "card", collection: @shared_projects, as: :project, locals: { shared: true } %>
+    <% shared = @shared_projects.first(5) %>
+    <h2 class="text-2xl mt-10">Shared with me</h2>
+    <% if shared.any? %>
+      <%= render partial: "card", collection: shared, as: :project, locals: { shared: true } %>
+      <% if @shared_projects.size > 5 %>
+        <div class="flex justify-center my-4">
+          <%= link_to "Show more shared projects →", shared_projects_path, class: "#{button_classes(color: "gray", outlined: true)} px-3 py-2 text-sm" %>
+        </div>
+      <% end %>
+    <% else %>
+      <p class="text-center text-gray-800 my-10">No shared projects found.</p>
     <% end %>
-  </div>
+  <% end %>
+</div>
