@@ -21,6 +21,10 @@ class Ability
     end
     can :unsubscribe, Announcement
 
+    can [ :source ], Project do |project|
+      !project.private_visibility?
+    end
+
     return if user.nil?
 
     if user.admin?
@@ -40,7 +44,7 @@ class Ability
       :update_editor_state
       ], Project, collaborations: { user_id: user.id }
     # Copying and viewing source is allowed provided the project is not private.
-    can [ :copy, :source ], Project do |project|
+    can [ :copy ], Project do |project|
       !project.private_visibility?
     end
 
