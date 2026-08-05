@@ -522,12 +522,11 @@ class ProjectsControllerTest < ActionDispatch::IntegrationTest
     assert flash[:alert].present?
   end
 
-  test "source is denied for an anonymous visitor even on a non-private project" do
+  test "source is allowed for an anonymous visitor for a non-private project" do
     @project.update!(visibility: :public)
     sign_out :user
     get share_source_project_url(@project)
-    assert_redirected_to projects_path
-    assert flash[:alert].present?
+    assert_response :success
   end
 
   test "source.json returns the project's title and divisions for a signed-in non-owner on a public project" do

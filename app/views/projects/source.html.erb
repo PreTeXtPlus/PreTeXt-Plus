@@ -14,8 +14,12 @@
         <%= link_to "making it public", @project, class: "text-blue-500 hover:font-semibold" %>,
         or you can <%= button_to "make a new copy", copy_project_path(@project), class: "text-purple-700 hover:font-semibold cursor-pointer", form_class: "inline" %>.
       <% end %>
+    <% elsif current_user.blank? %>
+      This is a read-only view of the source code for this project.
+      You can <%= link_to "sign in", new_user_session_path, class: "text-blue-500 hover:font-semibold" %>
+      to copy this project to your own account and edit it.
     <% else %>
-      This is a read-only view of the source code for <%= @project.title %>.
+      This is a read-only view of the source code for this project.
       You can <%= button_to "copy this project", copy_project_path(@project), class: "text-purple-700 hover:font-semibold cursor-pointer", form_class: "inline" %>
       to your own account to edit it.
     <% end %>
