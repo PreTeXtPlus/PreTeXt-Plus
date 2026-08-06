@@ -13,7 +13,13 @@ class SubscriptionType < ApplicationRecord
   def stripe_price
     return nil if stripe_price_id.blank? || Rails.env.test?
     return mock_stripe_price if Rails.env.development?
-    Stripe::Price.retrieve(stripe_price_id)
+
+    data = Rails.cache.fetch("subscription_type/stripe_price/#{stripe_price_id}", expires_in: 1.hour) do
+      price = Stripe::Price.retrieve(stripe_price_id)
+      { unit_amount: price.unit_amount, interval: price.recurring&.interval }
+    end
+
+    build_price_struct(data[:unit_amount], data[:interval])
   end
 
   def price
@@ -38,9 +44,13 @@ class SubscriptionType < ApplicationRecord
   end
 
   private
+    def build_price_struct(unit_amount, interval)
+      recurring = Struct.new(:interval).new(interval)
+      Struct.new(:unit_amount, :recurring).new(unit_amount, recurring)
+    end
+
     def mock_stripe_price
-      recurring = Struct.new(:interval).new("month")
-      Struct.new(:unit_amount, :recurring).new(999, recurring)
+      build_price_struct(999, "month")
     end
 
     def normalize_orders
