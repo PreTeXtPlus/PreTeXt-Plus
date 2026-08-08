@@ -1,3 +1,7 @@
 <docinfo>
-    <brandlogo source="icon.svg" />
+<!-- Edit this blurb to change the summary that appears in search and social -->
+<blurb>
+    A document authored using PreTeXt.Plus, the hosted platform for authoring
+    using the free and open source PreTeXt markup language.
+</blurb>
 </docinfo>

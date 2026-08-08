@@ -14,6 +14,9 @@ class PublicationFileBuilder
   # source/directories: the archive puts assets in source/external, which is where PreTeXt
   # resolves `external` relative to the main source file. html/resources: the built site
   # loads its JavaScript and CSS from the PreTeXt CDN rather than carrying its own copy.
+  # html/brandlogo: every build gets a brandlogo pointed at the archive's icon.svg --
+  # ProjectArchiveBuilder writes that path whenever a project has no uploaded icon of its
+  # own (see its icon_asset fallback), matching what default_docs/docinfo.xml used to set.
   #
   # Author options merge *onto* this, so an option may extend one of these elements (a
   # theme lands on html/css, alongside html/resources) but the attributes here are not
@@ -24,7 +27,8 @@ class PublicationFileBuilder
   # button off overrides one. Anything an author may change belongs there, not here.
   BASE = {
     %w[ source directories ] => { "external" => "external", "generated" => "generated" },
-    %w[ html resources ] => { "host" => "cdn" }
+    %w[ html resources ] => { "host" => "cdn" },
+    %w[ html brandlogo ] => { "source" => "icon.svg" }
   }.freeze
 
   # `settings` is the merged hash from Publication::Settings -- our own keys, not PreTeXt's.
