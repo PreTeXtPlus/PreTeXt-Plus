@@ -5,13 +5,15 @@ class PublicationFileBuilderTest < ActiveSupport::TestCase
     PublicationFileBuilder.new(settings).to_xml
   end
 
-  # These two elements are not the author's to choose and not the catalog's to offer:
-  # source/directories is where the archive actually puts assets, and html/resources is
-  # what makes a built site load PreTeXt's JavaScript. A file missing either builds wrong.
+  # These elements are not the author's to choose and not the catalog's to offer:
+  # source/directories is where the archive actually puts assets, html/resources is
+  # what makes a built site load PreTeXt's JavaScript, and html/brandlogo points every
+  # build at the archive's icon. A file missing any of these builds wrong.
   test "the elements a build depends on are in every file" do
     [ {}, { "theme" => "salem" } ].each do |settings|
       assert_match(/<directories external="external" generated="generated"\/>/, xml(settings))
       assert_match(/<resources host="cdn"\/>/, xml(settings))
+      assert_match(/<brandlogo source="icon.svg"\/>/, xml(settings))
     end
   end
 
@@ -46,7 +48,10 @@ class PublicationFileBuilderTest < ActiveSupport::TestCase
     result = xml("theme" => "salem")
 
     assert_equal 1, result.scan("<html ").length
-    assert_match(%r{<html [^>]*>\s*<resources host="cdn"/>\s*<css theme="salem"/>\s*</html>}, result)
+    assert_match(
+      %r{<html [^>]*>\s*<resources host="cdn"/>\s*<brandlogo source="icon.svg"/>\s*<css theme="salem"/>\s*</html>},
+      result
+    )
   end
 
   # Same hazard one level down: theme and dark mode are two attributes of one <css>, and
@@ -66,6 +71,7 @@ class PublicationFileBuilderTest < ActiveSupport::TestCase
         </source>
         <html embed-button="yes">
           <resources host="cdn"/>
+          <brandlogo source="icon.svg"/>
         </html>
       </publication>
     XML
