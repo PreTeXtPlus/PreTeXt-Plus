@@ -33,6 +33,22 @@ class PublicationFileBuilderTest < ActiveSupport::TestCase
     assert_match(%r{<latex print="yes" sides="two"/>}, result)
   end
 
+  # $components-fenced reads source/version/@include and splits it on spaces.
+  test "version components land under source" do
+    assert_match(%r{<version include="instructor solutions"/>},
+                 xml("version" => "instructor solutions"))
+  end
+
+  # The marker exists because these are three different builds, and the middle one cannot
+  # be stored as an empty value: a blank setting is how a level says "inherit". PreTeXt
+  # reads an absent @include as "keep every marked part" and an empty one as "keep none",
+  # so writing the marker through as its own text would silently mean the wrong document.
+  test "the empty marker is written as an empty attribute, not as itself" do
+    assert_match(%r{<version include=""/>}, xml("version" => Publication::Catalog::EMPTY_MARKER))
+    assert_no_match(/none/, xml("version" => Publication::Catalog::EMPTY_MARKER))
+    assert_no_match(/<version/, xml({}))
+  end
+
   test "the epub and braille options land at their own paths" do
     result = xml("epub_cover" => "front.png",
                  "braille_page_width" => "32", "braille_page_height" => "28")

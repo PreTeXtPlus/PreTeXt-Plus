@@ -57,10 +57,16 @@ class PublicationSettingsController < ApplicationController
 
     # Only the catalog's own keys, so a hand-rolled form cannot add a fourth. Values are
     # checked against the catalog by HasPublicationSettings, not here.
+    #
+    # The empty_keys are the companion checkboxes -- form controls rather than settings,
+    # which is why they are permitted here and gone by the time this returns: the catalog
+    # folds each into the setting it belongs to.
     def submitted_settings
-      params.fetch(:publication_settings, {})
-            .permit(*Publication::Catalog.keys)
-            .to_h
+      submitted = params.fetch(:publication_settings, {})
+                        .permit(*Publication::Catalog.keys, *Publication::Catalog.empty_keys)
+                        .to_h
+
+      Publication::Catalog.fold_empty_choices(submitted)
     end
 
     # What did not save, and only that -- everything else already has by the time this is

@@ -21,11 +21,23 @@
         placeholder: settings.blank_choice_label(option),
         "aria-label": label, class: classes %>
 <% elsif option.free_text? %>
-  <%= form.text_field option.key, value: settings.own(option.key),
+  <%= form.text_field option.key, value: settings.own_text(option),
         maxlength: option.choices.max_length,
         placeholder: settings.placeholder_for(option),
         title: settings.blank_choice_label(option),
         "aria-label": label, class: classes %>
+
+  <%# The third state, for an option that has one: empty is not the same as unset, and an
+      empty field already means unset. Only where there is room for it -- a table cell has
+      none, and no option that offers this is laid out in one. The box only takes effect
+      when the field is empty, which is what the note says and what the catalog enforces. %>
+  <% if option.empty_allowed? && !compact %>
+    <label class="mt-2 flex items-start gap-2 text-sm text-gray-800">
+      <%= form.check_box option.empty_key, { checked: settings.empty_chosen?(option),
+            class: "mt-0.5 rounded border-gray-300" }, "1", "0" %>
+      <span><%= option.empty_label %></span>
+    </label>
+  <% end %>
 <% else %>
   <%= form.select option.key,
         settings.select_choices_for(option),

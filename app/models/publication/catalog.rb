@@ -202,6 +202,40 @@ module Publication
                             guidance: "a length with its unit, like 0.75in or 2cm",
                             normalizer: CANONICAL_LENGTH)
 
+    # The names an author may have hung on their source, for $components-fenced. PreTeXt
+    # splits the list on spaces and fences each name between "|" characters before matching
+    # it against an element's @component, so a name carrying either would match nothing, or
+    # match something else -- which is why this is a pattern rather than free text. The rest
+    # of what it allows is deliberately narrow: a component name is a label an author
+    # invents to write in two places, and nothing here is worth spelling with punctuation.
+    COMPONENT_NAME = /[A-Za-z0-9][A-Za-z0-9._-]*/
+
+    # What a level stores to mean "write this attribute empty".
+    #
+    # PreTeXt has settings whose empty value says something, and does not say it by being
+    # absent: a version of `@include=""` fences to "||" and so matches no component at all,
+    # while an unset version includes the whole document. An empty setting here is already
+    # spoken for -- it is how every level says "inherit" -- so the intent needs a stored
+    # value of its own, and Option#written_value turns it back into "" on the way out.
+    #
+    # Parentheses are the point: they keep this from colliding with anything an option
+    # that offers it would otherwise accept (a component may not contain one), so no
+    # author can type the marker by accident and mean something else.
+    EMPTY_MARKER = "(none)".freeze
+
+    # A list of component names. The empty list is not spelled here -- it is EMPTY_MARKER,
+    # offered as the checkbox beside the field rather than as something to type.
+    COMPONENT_LIST = FreeText.build(
+      pattern: /\A#{COMPONENT_NAME}( #{COMPONENT_NAME})*\z/,
+      max_length: 200,
+      guidance: "a list of component names separated by spaces, each made of letters, " \
+                "digits, hyphens, underscores or dots",
+      # Commas are how a list of anything is written everywhere else, and an author who
+      # types "instructor, solutions" means the two components they named. Spaces are what
+      # PreTeXt splits on, so that is what gets stored.
+      normalizer: ->(value) { value.tr(",", " ").squish }
+    )
+
     # Words for the corner of a printed page. They travel as a data-* attribute that
     # PreTeXt's own JavaScript prints in the margin, so this permits one line of anything
     # but angle brackets -- which cannot be meant in a header and which the value would
@@ -240,14 +274,39 @@ module Publication
     #                the field's placeholder, and not the same thing as default_label:
     #                a printout side accepts "0.75in" and defaults to the margin set for
     #                all sides, and a placeholder is the better place for the first.
+    # `empty_label` -- what writing the attribute *empty* does, for the one kind of option
+    #                where that is a third thing rather than the absence of a setting. Its
+    #                presence is what puts a checkbox beside the field; see EMPTY_MARKER,
+    #                and empty_key for the box's own name in the form.
     Option = Data.define(:key, :label, :help, :element, :attribute, :family, :choices,
-                         :default_label, :group, :applied_default, :hint) do
+                         :default_label, :group, :applied_default, :hint, :empty_label) do
       def self.build(key, label:, element:, attribute:, family:, choices:, help: nil,
-                     default_label: nil, group: nil, applied_default: nil, hint: nil)
+                     default_label: nil, group: nil, applied_default: nil, hint: nil,
+                     empty_label: nil)
         new(key: key.to_s, label: label, help: help, element: element.map(&:to_s).freeze,
             attribute: attribute.to_s, family: family.to_s, choices: choices.freeze,
             default_label: default_label, group: group&.to_s,
-            applied_default: applied_default, hint: hint)
+            applied_default: applied_default, hint: hint, empty_label: empty_label)
+      end
+
+      # Whether this option can be set to "write the attribute empty" at all -- which is
+      # what the checkbox beside its field asks, and what EMPTY_MARKER stores.
+      def empty_allowed?
+        empty_label.present?
+      end
+
+      # The checkbox's name in the form. Deliberately not a key of its own in the catalog:
+      # the box and the field are two controls for one setting, and one setting is what
+      # gets stored. Catalog.fold_empty_choices puts them back together.
+      def empty_key
+        "#{key}_empty"
+      end
+
+      # The value as the publication file spells it. The same string for everything but a
+      # chosen EMPTY_MARKER, which is the whole reason the marker exists: PreTeXt reads
+      # meaning into an empty attribute that our storage cannot hold as an empty value.
+      def written_value(value)
+        value == EMPTY_MARKER ? "" : value
       end
 
       # Whose default takes over when no level has set this, worded for the empty choice.
@@ -298,6 +357,7 @@ module Publication
       # other than a bare "1". A free number carries its unit, which is the whole
       # difference between "40" and "40 cells".
       def label_for(value, document_type)
+        return empty_label if value == EMPTY_MARKER && empty_allowed?
         return "#{value} #{choices.unit}" if free_number?
 
         choices_for(document_type).to_h[value] || value
@@ -340,6 +400,10 @@ module Publication
       # type: a book that becomes an article keeps its level-4 numbering setting, PreTeXt
       # clamps it, and re-saving something unrelated should not fail on it.
       def permits?(value)
+        # The marker is not something an author typed -- it is the checkbox beside the
+        # field, offered only where this is true -- so there is no pattern to hold it to.
+        return true if value == EMPTY_MARKER && empty_allowed?
+
         if free_number?
           value.match?(/\A\d+\z/) && value.to_i.between?(choices.min, choices.max)
         elsif free_text?
@@ -803,6 +867,26 @@ module Publication
         element: %w[ common tableofcontents ], attribute: "level", family: :general,
         choices: TOC_LEVELS),
 
+      # $components-fenced. The one option here whose choices are the author's own words
+      # rather than a list anything could offer: a component is a name they put on elements
+      # of their source, and only that source knows which names exist. Its natural home is
+      # an output -- one project, built twice, is what versioning is for -- but it is an
+      # ordinary option at all three levels, since a project of only instructor material
+      # can reasonably say so once.
+      Option.build(:version,
+        label: "Version components",
+        help: "Builds only the parts of your source marked with these component names, " \
+              "plus everything unmarked. Separate several with spaces. Leave this empty " \
+              "to build the whole document.",
+        element: %w[ source version ], attribute: "include", family: :general,
+        default_label: "The whole document",
+        hint: "instructor solutions",
+        # Dropping every marked part is the student edition of a book whose instructor
+        # material is marked, which is the most useful thing versioning does and the one
+        # thing an empty field cannot ask for -- see EMPTY_MARKER.
+        empty_label: "Leave out every marked part",
+        choices: COMPONENT_LIST),
+
       *NUMBERING_OPTIONS,
       *EXERCISE_COMPONENT_OPTIONS,
       *PRINTOUT_MARGIN_OPTIONS,
@@ -887,6 +971,28 @@ module Publication
 
       def keys
         OPTIONS.keys
+      end
+
+      # The names of the companion checkboxes, for the controller's strong parameters.
+      # They are form controls rather than settings -- fold_empty_choices turns them back
+      # into the setting they belong to before anything is stored.
+      def empty_keys
+        all.select(&:empty_allowed?).map(&:empty_key)
+      end
+
+      # Folds each companion checkbox into the setting it belongs to, and drops it.
+      #
+      # A checked box means EMPTY_MARKER, but only where the field beside it came in
+      # blank. Text an author typed is what they meant, and a box left checked from a
+      # previous visit should not silently discard it -- so the field wins whenever it has
+      # anything in it, which is also what makes unchecking the box the way back out.
+      def fold_empty_choices(submitted)
+        submitted = submitted.to_h.stringify_keys
+
+        all.select(&:empty_allowed?).each_with_object(submitted) do |option, settings|
+          checked = settings.delete(option.empty_key) == "1"
+          settings[option.key] = EMPTY_MARKER if checked && settings[option.key].blank?
+        end
       end
 
       # The defaults PreTeXt.Plus writes itself, as [option, value]. Every publication file
