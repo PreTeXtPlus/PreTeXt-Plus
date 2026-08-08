@@ -32,12 +32,19 @@ class BuildsControllerTest < ActionDispatch::IntegrationTest
   end
 
   test "starting a build enqueues it" do
+    # Fixtures already leave user one at their non-subscriber cap of 1 (two builds in
+    # flight on one_web); admin so this build starts immediately rather than queuing --
+    # queuing on start is its own scenario below, this test is about the enqueue.
+    @user.update!(admin: true)
+
     assert_enqueued_with(job: FullBuildJob) do
       post project_target_builds_url(@project, @target)
     end
   end
 
   test "a turbo_stream request swaps the row in place instead of navigating" do
+    @user.update!(admin: true) # see "starting a build enqueues it"
+
     post project_target_builds_url(@project, @target),
          headers: { "Accept" => "text/vnd.turbo-stream.html" }
 
@@ -50,6 +57,8 @@ class BuildsControllerTest < ActionDispatch::IntegrationTest
   # Rebuilding from the drawer used to update only the row behind it, leaving the drawer
   # showing the old state and a Rebuild button for a build already running.
   test "rebuilding from the drawer redraws the drawer too" do
+    @user.update!(admin: true) # see "starting a build enqueues it"
+
     post project_target_builds_url(@project, @target),
          headers: { "Turbo-Frame" => "drawer" },
          as: :turbo_stream
@@ -85,20 +94,24 @@ class BuildsControllerTest < ActionDispatch::IntegrationTest
     assert flash[:alert].present?
   end
 
-  # Two independent bounds on build spend. Fixtures already leave user one with two
-  # in-flight builds on one_web, so the cap bites on the second new build.
-  test "a user may not exceed the concurrent build cap" do
+  # Fixtures already leave user one with two in-flight builds on one_web -- already over
+  # a non-subscriber's cap of 1 -- so the cap bites on the very first new build. "Bites"
+  # means queues, not refuses.
+  test "a build beyond the concurrency cap is queued instead of rejected" do
     in_flight = Build.where(project_id: @user.project_ids,
                             status: Build.statuses.values_at(*Target::IN_FLIGHT)).count
     assert_equal 2, in_flight, "fixtures should leave exactly two builds in flight"
+    assert_equal 1, @user.max_concurrent_builds, "a non-subscriber's cap is 1"
 
-    post project_target_builds_url(@project, @target)
-    assert_redirected_to project_url(@project)
-
-    assert_no_difference("Build.count") do
-      post project_target_builds_url(@project, @target)
+    assert_difference("Build.count", 1) do
+      assert_no_enqueued_jobs(only: FullBuildJob) do
+        post project_target_builds_url(@project, @target)
+      end
     end
-    assert_match(/builds running/, flash[:alert])
+
+    assert_redirected_to project_url(@project)
+    assert @target.reload.latest_build.queued?
+    assert_match(/queued/i, flash[:notice])
   end
 
   test "the concurrency cap counts only the current user's builds" do
@@ -107,6 +120,90 @@ class BuildsControllerTest < ActionDispatch::IntegrationTest
     assert_difference("Build.count") do
       post project_target_builds_url(projects(:two), targets(:two_web))
     end
+  end
+
+  # Same 5-vs-1 split as Project#collaborator_limit, proven end to end through the real
+  # build-starting path rather than just against User#max_concurrent_builds directly.
+  test "a subscriber may run more than one build at once" do
+    sign_in users(:subscribed)
+    project = projects(:public_project)
+    first = project.targets.first
+    second = project.targets.create!(kind: "pdf")
+
+    post project_target_builds_url(project, first)
+    post project_target_builds_url(project, second)
+
+    assert first.reload.latest_build.pending?
+    assert second.reload.latest_build.pending?,
+      "a non-subscriber's second build would have queued behind the first"
+  end
+
+  # ---- build_all ----
+  #
+  # one_web is already building; one_instructor and one_print have never been built.
+
+  test "build_all starts as many candidates as fit and queues the rest" do
+    # Resolving both baseline in-flight builds opens the non-subscriber's one slot, so
+    # the first never-built target in position order (one_instructor) starts and the
+    # second (one_print) queues.
+    builds(:one).mark!(:success)
+    builds(:in_progress).mark!(:success)
+
+    assert_difference("Build.count", 2) do
+      post build_all_project_builds_url(@project)
+    end
+
+    assert_redirected_to project_url(@project)
+    assert_match(/Started 1 build now/, flash[:notice])
+    assert_match(/1 more is queued/, flash[:notice])
+    assert targets(:one_instructor).reload.latest_build.pending?
+    assert targets(:one_print).reload.latest_build.queued?
+  end
+
+  test "build_all queues everything when no slot is free" do
+    # Fixtures already leave two builds in flight -- over a non-subscriber's cap of 1.
+    assert_difference("Build.count", 2) do
+      assert_no_enqueued_jobs(only: FullBuildJob) do
+        post build_all_project_builds_url(@project)
+      end
+    end
+
+    assert_match(/Started 0 builds now/, flash[:notice])
+    assert targets(:one_instructor).reload.latest_build.queued?
+    assert targets(:one_print).reload.latest_build.queued?
+  end
+
+  test "build_all does nothing when nothing is unbuilt or outdated" do
+    sign_in users(:two) # two_web's only build failed -- neither never nor stale
+
+    assert_no_difference("Build.count") do
+      post build_all_project_builds_url(projects(:two))
+    end
+
+    assert_redirected_to project_url(projects(:two))
+    assert_match(/already built/i, flash[:alert])
+  end
+
+  test "build_all targets stale outputs once nothing is unbuilt" do
+    sign_in users(:two)
+    builds(:failed).destroy!
+    projects(:two).update_column(:source_updated_at, 1.hour.ago)
+    assert_equal :stale, targets(:two_web).reload.state
+
+    assert_difference("Build.count", 1) do
+      post build_all_project_builds_url(projects(:two))
+    end
+
+    assert_match(/Started 1 build now/, flash[:notice])
+  end
+
+  test "cannot build_all another user's project" do
+    assert_no_difference("Build.count") do
+      post build_all_project_builds_url(projects(:two))
+    end
+
+    assert_redirected_to projects_path
+    assert flash[:alert].present?
   end
 
   test "the build log page is reachable and shows the log" do

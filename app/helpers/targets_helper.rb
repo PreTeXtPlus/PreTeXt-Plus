@@ -6,6 +6,7 @@ module TargetsHelper
     current:  [ "Current",     "bg-green-100 text-green-800" ],
     stale:    [ "Out of date", "bg-amber-100 text-amber-900" ],
     building: [ "Building",    "bg-sky-100 text-sky-800" ],
+    queued:   [ "Queued",      "bg-sky-50 text-sky-700" ],
     failed:   [ "Failed",      "bg-red-100 text-red-800" ],
     # Grey rather than red: the author stopped it on purpose, and nothing is wrong.
     canceled: [ "Canceled",    "bg-gray-100 text-gray-700" ],
@@ -14,6 +15,7 @@ module TargetsHelper
 
   STATE_STRIPE = {
     current: "border-l-green-600", stale: "border-l-amber-500", building: "border-l-sky-500",
+    queued: "border-l-sky-300",
     failed: "border-l-red-500", canceled: "border-l-gray-400", never: "border-l-gray-300"
   }.freeze
 
@@ -79,7 +81,8 @@ module TargetsHelper
     label, classes =
       if build.failed? then [ "Failed", "bg-red-100 text-red-800" ]
       elsif build.canceled? then [ "Canceled", "bg-gray-100 text-gray-700" ]
-      elsif build.in_flight? then [ "Building", "bg-sky-100 text-sky-800" ]
+      elsif build.queued? then [ "Queued", "bg-sky-50 text-sky-700" ]
+      elsif build.unresolved? then [ "Building", "bg-sky-100 text-sky-800" ]
       elsif build.id == target.current_build_id then [ "Live", "bg-green-100 text-green-800" ]
       else [ "Superseded", "bg-gray-100 text-gray-700" ]
       end
@@ -91,12 +94,18 @@ module TargetsHelper
   # "Built 2 hours ago", plus the second line that keeps a failed rebuild honest about
   # what readers are actually seeing.
   def target_timing(target)
-    return tag.span("Added #{time_ago_in_words(target.created_at)} ago") if target.current_build.nil?
+    if target.current_build.nil?
+      return tag.span("Waiting for a build slot") if target.state == :queued
+
+      return tag.span("Added #{time_ago_in_words(target.created_at)} ago")
+    end
 
     built = tag.span("Built #{time_ago_in_words(target.last_built_at)} ago")
     case target.state
     when :stale
       built + tag.span("Source has changed since", class: "block text-amber-700")
+    when :queued
+      built + tag.span("Waiting for a build slot", class: "block text-gray-500")
     when :failed
       tag.span("Readers see the build from #{time_ago_in_words(target.last_built_at)} ago") +
         tag.span("The most recent build failed", class: "block text-red-700")
@@ -106,5 +115,15 @@ module TargetsHelper
     else
       built
     end
+  end
+
+  # The dashboard's bulk-build button label, or nil when nothing qualifies -- mirrors
+  # Target.bulk_build_candidates so the label can never promise a target it wouldn't
+  # actually build.
+  def bulk_build_label(targets)
+    candidates = Target.bulk_build_candidates(targets)
+    return nil if candidates.empty?
+
+    candidates.first.state == :never ? "Build all" : "Rebuild outdated"
   end
 end

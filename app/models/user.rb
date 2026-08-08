@@ -81,6 +81,14 @@ class User < ApplicationRecord
     100
   end
 
+  # How many builds this user may have actually running at once, across every project
+  # they own or collaborate on -- see Build.slot_available?. A container on the build
+  # server is a real, per-minute cost, so this is a cost bound like target_quota rather
+  # than a plan feature; same shape as collaborator_limit for the same reason.
+  def max_concurrent_builds
+    has_subscriber_benefits? ? 5 : 1
+  end
+
   def has_subscriber_benefits?
     subscribed? || admin
   end

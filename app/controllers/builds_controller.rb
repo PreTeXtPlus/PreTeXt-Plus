@@ -1,17 +1,22 @@
 class BuildsController < ApplicationController
   load_and_authorize_resource :project
-  load_and_authorize_resource :build, through: :project, except: :create
+  # build_all is a collection action with no :id in the URL -- CanCan's default
+  # member-vs-collection convention would otherwise try Build.find(nil) for it, the
+  # same reason :create is already excluded.
+  load_and_authorize_resource :build, through: :project, except: [ :create, :build_all ]
 
   before_action :set_target, only: :create
 
   # A build occupies a container on the build server for minutes at a time, so the cost
-  # of this endpoint is real and does not scale with how careful the caller is. Two
-  # independent bounds: a burst limit here, and a cap on how many builds one user may
-  # have running at once (see #within_concurrency_cap?).
+  # of this endpoint is real and does not scale with how careful the caller is. build_all
+  # is one request no matter how many builds it starts, so it counts as a single hit here
+  # against a lower limit. There is no separate cap on total builds requested: past the
+  # author's own concurrent-build limit they queue (see Build#slot_available?,
+  # User#max_concurrent_builds) rather than being refused.
   rate_limit to: 20, within: 1.hour, only: :create,
-             with: -> { reject_build("You've started a lot of builds recently. Please wait a few minutes and try again.") }
-
-  MAX_CONCURRENT_BUILDS = 3
+             with: -> { reject_build("You've queued a lot of builds recently. Please wait a few minutes and try again.") }
+  rate_limit to: 5, within: 1.hour, only: :build_all,
+             with: -> { reject_build("You've queued a lot of builds recently. Please wait a few minutes and try again.") }
 
   def show
   end
@@ -24,8 +29,8 @@ class BuildsController < ApplicationController
 
   # Stops a build that is still in flight, on the build server as well as here. Offered
   # wherever a build reads as Building, because a wrong target or a runaway build
-  # otherwise holds one of the author's MAX_CONCURRENT_BUILDS slots for the full
-  # BUILD_TIMEOUT.
+  # otherwise holds one of the author's limited concurrent-build slots (see
+  # User#max_concurrent_builds) for the full BUILD_TIMEOUT.
   def cancel
     result = BuildCanceller.new(@build).cancel!
     redirect_to project_target_path(@project, @build.target),
@@ -33,48 +38,59 @@ class BuildsController < ApplicationController
   end
 
   def create
-    return reject_build("You already have #{MAX_CONCURRENT_BUILDS} builds running. Wait for one to finish.") unless within_concurrency_cap?
+    @build = queue_or_start_build(@target)
+    # The row *is* the progress indicator: swap it into its building (or queued) state
+    # in place rather than navigating to a page whose only job is to say so.
+    respond_to do |format|
+      format.turbo_stream do
+        @target.reload
+        streams = [ turbo_stream.replace(
+          ActionView::RecordIdentifier.dom_id(@target),
+          partial: "targets/target", locals: { target: @target }
+        ) ]
 
-    # project is set explicitly rather than left to Build's before_validation, because
-    # cancancan authorizes against build.project and `new` does not run validations.
-    @build = @target.builds.new(project: @project)
-    authorize! :create, @build
-
-    if @build.save
-      FullBuildJob.perform_later(@build)
-      # The row *is* the progress indicator: swap it into its building state in place
-      # rather than navigating to a page whose only job is to say "queued".
-      respond_to do |format|
-        format.turbo_stream do
-          @target.reload
-          streams = [ turbo_stream.replace(
-            ActionView::RecordIdentifier.dom_id(@target),
-            partial: "targets/target", locals: { target: @target }
-          ) ]
-
-          # Rebuilding from the drawer has to redraw the drawer too, or it keeps showing
-          # the old state and a Rebuild button for a build already running. Guarded on
-          # the frame id for the same reason as targets#publish: the dashboard carries
-          # an empty "drawer" frame, and an unguarded update would pop the drawer open
-          # on anyone who rebuilt from a row.
-          #
-          # update, not replace: replace swaps the <turbo-frame> element itself, and with
-          # it the src Turbo set when the drawer was opened -- which is the very thing
-          # Target#broadcast_drawer asks the frame to reload. A drawer that started its
-          # own build would then sit on "Building" for good, deaf to the broadcast that
-          # says the build finished, while the row behind it updated normally.
-          if turbo_frame_request_id == "drawer"
-            streams << turbo_stream.update("drawer",
-              partial: "targets/drawer", locals: { project: @project, target: @target })
-          end
-
-          render turbo_stream: streams
+        # Rebuilding from the drawer has to redraw the drawer too, or it keeps showing
+        # the old state and a Rebuild button for a build already running. Guarded on
+        # the frame id for the same reason as targets#publish: the dashboard carries
+        # an empty "drawer" frame, and an unguarded update would pop the drawer open
+        # on anyone who rebuilt from a row.
+        #
+        # update, not replace: replace swaps the <turbo-frame> element itself, and with
+        # it the src Turbo set when the drawer was opened -- which is the very thing
+        # Target#broadcast_drawer asks the frame to reload. A drawer that started its
+        # own build would then sit on "Building" for good, deaf to the broadcast that
+        # says the build finished, while the row behind it updated normally.
+        if turbo_frame_request_id == "drawer"
+          streams << turbo_stream.update("drawer",
+            partial: "targets/drawer", locals: { project: @project, target: @target })
         end
-        format.html { redirect_to project_path(@project), notice: "Building #{@target.name}." }
+
+        render turbo_stream: streams
       end
-    else
-      reject_build(@build.errors.full_messages.to_sentence)
+      format.html do
+        message = @build.pending? ? "Building #{@target.name}." :
+                    "#{@target.name} is queued -- it will start once a build slot frees up."
+        redirect_to project_path(@project), notice: message
+      end
     end
+  end
+
+  # The dashboard's bulk action. Never rejects for being over the concurrency cap --
+  # every candidate either starts now or joins the queue, in the same order
+  # Target.bulk_build_candidates returns them, so an author seeing several never-built
+  # rows above a "Build all" click can trust the top ones start first.
+  def build_all
+    candidates = Target.bulk_build_candidates(@project.targets.includes(:current_build, :latest_build).to_a)
+    return reject_build("Everything is already built and up to date.") if candidates.empty?
+
+    results = candidates.map { |target| queue_or_start_build(target) }
+    started = results.count(&:pending?)
+    waiting = results.size - started
+
+    message = +"Started #{started} #{"build".pluralize(started)} now."
+    message << " #{waiting} more #{waiting == 1 ? "is" : "are"} queued and will start as slots free up." if waiting.positive?
+
+    redirect_to project_path(@project), notice: message
   end
 
   def destroy
@@ -90,9 +106,16 @@ class BuildsController < ApplicationController
       authorize! :read, @target
     end
 
-    def within_concurrency_cap?
-      Build.where(project_id: current_user.project_ids,
-                  status: Build.statuses.values_at(*Target::IN_FLIGHT)).count < MAX_CONCURRENT_BUILDS
+    # Whether to start now or queue depends on Build.slot_available? at the moment this
+    # particular target is claimed, not on a count taken once up front -- so a bulk
+    # request fills exactly as many slots as actually exist, one real save at a time,
+    # with no separate bookkeeping to keep in sync with the database.
+    def queue_or_start_build(target)
+      build = target.builds.new(project: @project,
+                                 status: Build.slot_available?(current_user) ? :pending : :queued)
+      authorize! :create, build
+      FullBuildJob.perform_later(build) if build.save && build.pending?
+      build
     end
 
     # Turbo follows a redirect from a turbo_stream request as a full visit, so the flash

@@ -12,7 +12,13 @@ class TargetsController < ApplicationController
   # the document and only a reload brought anything back. Answering with the dashboard,
   # drawer already open, means close always lands on the project.
   def show
-    render "projects/show" unless turbo_frame_request_id == "drawer"
+    return if turbo_frame_request_id == "drawer"
+
+    # Rendering projects/show here means it needs what ProjectsController#show gives
+    # that template -- see the comment there on why this is preloaded rather than left
+    # to N+1 per row.
+    @targets = @project.targets.includes(:current_build, :latest_build).to_a
+    render "projects/show"
   end
 
   def create

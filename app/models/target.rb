@@ -74,6 +74,13 @@ class Target < ApplicationRecord
   # not care which -- they all present as Building; the distinction belongs in the log.
   IN_FLIGHT = %w[ pending in_progress sent_to_server received_from_server ].freeze
 
+  # IN_FLIGHT plus queued: everything that hasn't reached an outcome yet, whether the
+  # build server owes us an answer or we haven't sent it there yet. Used wherever "don't
+  # treat this as done, and don't garbage-collect it" matters more than whether it's
+  # using a concurrency slot -- prune_builds! and Build#unresolved? both mean this, not
+  # IN_FLIGHT itself.
+  UNRESOLVED = (IN_FLIGHT + %w[ queued ]).freeze
+
   # How many successful builds a target retains. Two, not one, is what makes "Restore
   # previous build" possible: the one readers see, and the one to fall back to. Anything
   # deeper is dead weight -- nothing in the app reads past these -- and each successful
@@ -169,12 +176,29 @@ class Target < ApplicationRecord
   # many targets costs a fixed number of queries.
   def state
     return :never if latest_build.nil?
+    return :queued if latest_build.queued?
     return :building if building?
     return :failed if latest_build.failed?
     return :canceled if latest_build.canceled?
     return :never if current_build.nil?
 
     stale? ? :stale : :current
+  end
+
+  def cancelable?
+    [ :building, :queued ].include?(state)
+  end
+
+  # What "Build all" / "Rebuild outdated" queues right now, given a project's
+  # (preloaded) targets. :never wins over :stale even when both exist -- a target no
+  # one has tried to build is the more urgent gap. :building, :queued, :failed, and
+  # :canceled never qualify; those keep the per-row Rebuild button. [] when neither
+  # applies, so callers never have to nil-check before iterating.
+  def self.bulk_build_candidates(targets)
+    never_built_targets = targets.select { |t| t.state == :never }
+    return never_built_targets if never_built_targets.any?
+
+    targets.select { |t| t.state == :stale }
   end
 
   # The drawer's history table: recent attempts, newest first.
@@ -258,7 +282,7 @@ class Target < ApplicationRecord
   # exceptions to reason about.
   def prune_builds!
     keep_ids = builds.where(status: :success).order(created_at: :desc).limit(KEPT_SUCCESSES).ids
-    keep_ids |= builds.where(status: IN_FLIGHT).ids
+    keep_ids |= builds.where(status: UNRESOLVED).ids
     keep_ids |= builds.order(created_at: :desc).limit(1).ids
 
     builds.where.not(id: keep_ids).destroy_all

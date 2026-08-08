@@ -15,14 +15,15 @@
   <%= build_history_pill(@build, @build.target) %>
 <% end %>
 
-<%# in_flight?, not "not success and not failed": a canceled build is finished too, and
-    this banner used to tell its reader it was still running. %>
-<% if @build.in_flight? %>
+<% if @build.unresolved? %>
   <div class="mt-4 flex flex-wrap items-center gap-3 rounded-lg border border-sky-200 bg-sky-50 p-3 text-sm text-sky-900">
-    <span>This build is still running.</span>
-    <%= button_to "Check the server", check_status_project_build_path(@project, @build),
-          class: "#{button_classes(color: "sky", outlined: true)} px-2 py-1 text-xs" %>
-    <%= button_to "Cancel it", cancel_project_build_path(@project, @build),
+    <span><%= @build.queued? ? "This build is queued, waiting for a free slot." : "This build is still running." %></span>
+    <%# Nothing to check on the server for a build that was never sent there. %>
+    <% unless @build.queued? %>
+      <%= button_to "Check server", check_status_project_build_path(@project, @build),
+            class: "#{button_classes(color: "sky", outlined: true)} px-2 py-1 text-xs" %>
+    <% end %>
+    <%= button_to "Cancel", cancel_project_build_path(@project, @build),
           class: "#{button_classes(color: "sky", outlined: true)} px-2 py-1 text-xs",
           data: { turbo_confirm: "Stop this build? Nothing that is already published changes." } %>
   </div>
