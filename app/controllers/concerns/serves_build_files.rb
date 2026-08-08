@@ -20,20 +20,17 @@ module ServesBuildFiles
     # `disposition: "attachment"` is how a single-file output (a PDF, a SCORM package) is
     # downloaded as itself rather than browsed. It redirects to storage like any other
     # non-html file, so a large package never occupies a web worker.
-    #
-    # blob_download_url may be missing from an entry cached before it was stored; falling
-    # back to the inline URL serves the same bytes, just without the attachment header.
     def serve_build_file(build, relative_path, disposition: "inline")
       file_data = cached_file_data(build, relative_path)
       raise ActiveRecord::RecordNotFound unless file_data
 
       if disposition == "attachment"
-        redirect_to_cdn_url(file_data[:blob_download_url] || file_data[:blob_url])
+        redirect_to_cdn_url blob_signed_url(file_data, disposition: "attachment")
       elsif file_data[:content_type] == "text/html"
         content = ActiveStorage::Blob.service.download(file_data[:blob_key])
         send_data content, type: "text/html", disposition: "inline"
       else
-        redirect_to_cdn_url file_data[:blob_url]
+        redirect_to_cdn_url blob_signed_url(file_data, disposition: "inline")
       end
     end
 
@@ -63,6 +60,12 @@ module ServesBuildFiles
       "build/#{build.id}/file/#{relative_path}"
     end
 
+    # Only stable attributes are cached -- never a signed URL. A signed URL is only
+    # valid for ActiveStorage.service_urls_expire_in (5 minutes by default), but this
+    # cache entry itself lives far longer (indefinitely, until evicted), so a URL baked
+    # in at population time would go on being handed out -- and failing storage with
+    # "Request has expired" -- long after it stopped working. blob_signed_url mints a
+    # fresh one on every request instead.
     def populate_build_file_cache(build)
       build.build_files.with_attached_blob.each do |bf|
         next unless bf.blob.attached?
@@ -71,8 +74,7 @@ module ServesBuildFiles
           file_cache_key(build, bf.relative_path),
           {
             content_type: bf.blob.content_type,
-            blob_url: blob_inline_url(bf.blob),
-            blob_download_url: bf.blob.url(disposition: "attachment"),
+            filename: bf.blob.filename.to_s,
             blob_key: bf.blob.key
           },
           unless_exist: true
@@ -80,15 +82,26 @@ module ServesBuildFiles
       end
     end
 
-    # Calls the storage service directly (as Asset#url does) rather than going through
+    # Signs a URL straight from the cached key/filename/content_type, via an unpersisted
+    # Blob -- key/filename/content_type are plain attributes, so #url needs no query
+    # beyond the cache read that supplied them.
+    #
+    # #url is called directly (as Asset#url does) rather than going through
     # rails_blob_url, whose redirect route would land on the app's own host -- one hop
-    # too many for redirect_to_cdn_url to rewrite to the Spaces CDN subdomain. This also
-    # bypasses Blob#url's forced-binary/forced-attachment logic for content types in
-    # INLINE_OVERRIDE_CONTENT_TYPES, the same way Asset#url does for uploaded assets.
-    def blob_inline_url(blob)
-      return blob.url unless INLINE_OVERRIDE_CONTENT_TYPES.include?(blob.content_type)
+    # too many for redirect_to_cdn_url to rewrite to the Spaces CDN subdomain.
+    def blob_signed_url(file_data, disposition:)
+      blob = ActiveStorage::Blob.new(key: file_data[:blob_key], filename: file_data[:filename],
+        content_type: file_data[:content_type])
 
-      blob.service.url(blob.key, expires_in: ActiveStorage.service_urls_expire_in,
-        filename: blob.filename, content_type: blob.content_type, disposition: :inline)
+      # Bypasses Blob#url's forced-binary/forced-attachment logic for content types in
+      # INLINE_OVERRIDE_CONTENT_TYPES, the same way Asset#url does for uploaded assets --
+      # but only when inline was actually requested, so an explicit "attachment" for one
+      # of these types (still forced attachment by Blob#url below) is unaffected.
+      if disposition == "inline" && INLINE_OVERRIDE_CONTENT_TYPES.include?(blob.content_type)
+        return blob.service.url(blob.key, expires_in: ActiveStorage.service_urls_expire_in,
+          filename: blob.filename, content_type: blob.content_type, disposition: :inline)
+      end
+
+      blob.url(disposition: disposition)
     end
 end
