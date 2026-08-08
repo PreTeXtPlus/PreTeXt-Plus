@@ -144,6 +144,91 @@ class PublicationSettingsControllerTest < ActionDispatch::IntegrationTest
     assert_equal "Saved.", flash[:notice]
   end
 
+  # Components are separated by spaces because that is what PreTeXt splits on, but a list
+  # is written with commas everywhere else and an author who types them means the same
+  # thing. What gets stored is what the publication file needs.
+  test "version components typed as a comma-separated list are saved space-separated" do
+    patch project_target_publication_settings_url(@project, @target),
+      params: { publication_settings: { version: " instructor,  solutions " } }
+
+    assert_equal "instructor solutions", @target.reload.publication_settings["version"]
+    assert_equal "Saved.", flash[:notice]
+  end
+
+  # A name carrying a space or a "|" would break PreTeXt's fencing, so the pattern is a
+  # boundary rather than a nicety -- and the setting keeps whatever it had.
+  test "a version component that would break the fencing is refused" do
+    @target.update!(publication_settings: { "version" => "instructor" })
+
+    patch project_target_publication_settings_url(@project, @target),
+      params: { publication_settings: { version: "instructor|solutions" } }
+
+    assert_equal "instructor", @target.reload.publication_settings["version"]
+    assert_match(/version components/i, flash[:alert])
+  end
+
+  # The checkbox beside the field is the third state: empty is not unset, and an empty
+  # field already means unset. What gets stored is the marker standing for the box.
+  test "checking the empty box with an empty field stores the marker" do
+    patch project_target_publication_settings_url(@project, @target),
+      params: { publication_settings: { version: "", version_empty: "1" } }
+
+    assert_equal Publication::Catalog::EMPTY_MARKER,
+                 @target.reload.publication_settings["version"]
+  end
+
+  # Text an author typed is what they meant. A box left checked from a previous visit must
+  # not silently discard it -- so the field wins whenever it has anything in it.
+  test "a typed list wins over a checked empty box" do
+    patch project_target_publication_settings_url(@project, @target),
+      params: { publication_settings: { version: "instructor", version_empty: "1" } }
+
+    assert_equal "instructor", @target.reload.publication_settings["version"]
+  end
+
+  # And unchecking it is the way back out, to inheriting rather than to an empty version.
+  test "clearing the field and the box goes back to inheriting" do
+    @target.update!(publication_settings: { "version" => Publication::Catalog::EMPTY_MARKER })
+
+    patch project_target_publication_settings_url(@project, @target),
+      params: { publication_settings: { version: "", version_empty: "0" } }
+
+    assert_not_includes @target.reload.publication_settings.keys, "version"
+  end
+
+  # The box is a form control, not a setting, so it must not survive as one -- a stored
+  # "version_empty" would be a key the catalog cannot place and the writer would drop.
+  test "the checkbox is not stored as a setting of its own" do
+    patch project_target_publication_settings_url(@project, @target),
+      params: { publication_settings: { version: "", version_empty: "1" } }
+
+    assert_not_includes @target.reload.publication_settings.keys, "version_empty"
+  end
+
+  # Round-tripping: the field renders empty rather than showing the marker as though it
+  # were typed, which would turn it into a component by that name on the next save.
+  test "the modal shows the box checked and the field empty" do
+    @target.update!(publication_settings: { "version" => Publication::Catalog::EMPTY_MARKER })
+
+    get edit_project_target_publication_settings_url(@project, @target), headers: modal_headers
+
+    assert_select "input[type=checkbox][name='publication_settings[version_empty]'][checked]"
+    assert_select "input[name='publication_settings[version]']" do |input|
+      assert_equal "", input.first["value"].to_s
+    end
+  end
+
+  # An inherited empty version reads as what it does, not as the marker that stores it.
+  test "an inherited empty version is named in the blank choice" do
+    @project.update!(publication_settings: { "version" => Publication::Catalog::EMPTY_MARKER })
+
+    get edit_project_target_publication_settings_url(@project, @target), headers: modal_headers
+
+    assert_select "input[name='publication_settings[version]']" do |input|
+      assert_match(/Leave out every marked part \(from this project\)/, input.first["title"])
+    end
+  end
+
   # The EPUB tab appears once the project has an image to be a cover, and the picker
   # offers it under the name the archive writes it as.
   test "the cover picker offers the project's own images" do

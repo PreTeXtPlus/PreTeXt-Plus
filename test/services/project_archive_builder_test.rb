@@ -18,7 +18,77 @@ class ProjectArchiveBuilderTest < ActiveSupport::TestCase
 
     assert_includes contents.keys, "project.ptx"
     assert_includes contents.keys, "publication/publication.ptx"
-    assert_equal "<pretext><article/></pretext>", contents["source/main.ptx"]
+    assert_includes contents["source/main.ptx"], "<article/>"
+  end
+
+  # PreTeXt reads the external directory from docinfo as of 2026-07-30, so the archive has
+  # to say in the source itself where `build` put the assets. An author never types this.
+  test "the shipped source declares the external directory in its docinfo" do
+    project = projects(:one)
+    project.update_column(:pretext_source, "<pretext><article/></pretext>")
+
+    source = Nokogiri::XML(ProjectArchiveBuilder.new(project).main_ptx)
+
+    assert_equal "external", source.at_xpath("/pretext/docinfo/directories/@external").value
+  end
+
+  # A docinfo the author already has is added to, not replaced: everything in it is theirs.
+  test "an existing docinfo keeps its contents" do
+    project = projects(:one)
+    project.update_column(:pretext_source, <<~XML)
+      <pretext>
+        <docinfo>
+          <macros>\\newcommand{\\Z}{\\mathbb Z}</macros>
+        </docinfo>
+        <article/>
+      </pretext>
+    XML
+
+    source = Nokogiri::XML(ProjectArchiveBuilder.new(project).main_ptx)
+
+    assert_equal 1, source.xpath("/pretext/docinfo").length
+    assert_equal "external", source.at_xpath("/pretext/docinfo/directories/@external").value
+    assert_equal "\\newcommand{\\Z}{\\mathbb Z}", source.at_xpath("/pretext/docinfo/macros").text
+  end
+
+  # The value is where `build` actually writes assets, not a preference. A project whose
+  # docinfo pointed somewhere else would build with every image missing.
+  test "a docinfo naming another external directory is corrected" do
+    project = projects(:one)
+    project.update_column(:pretext_source, <<~XML)
+      <pretext>
+        <docinfo><directories external="images" data="data"/></docinfo>
+        <article/>
+      </pretext>
+    XML
+
+    source = Nokogiri::XML(ProjectArchiveBuilder.new(project).main_ptx)
+
+    assert_equal 1, source.xpath("/pretext/docinfo/directories").length
+    assert_equal "external", source.at_xpath("/pretext/docinfo/directories/@external").value
+    # Only @external is ours; a data directory is the author's own business.
+    assert_equal "data", source.at_xpath("/pretext/docinfo/directories/@data").value
+  end
+
+  # PreTeXt reads whitespace inside <pre> and friends, so packing a document must not
+  # reformat one. Only the docinfo declaration is allowed to differ.
+  test "the author's own markup is passed through unchanged" do
+    project = projects(:one)
+    body = "<article>\n<p>Some <em>text</em> here.</p>\n<pre>  indented\n    lines</pre>\n</article>"
+    project.update_column(:pretext_source, "<pretext>#{body}</pretext>")
+
+    source = ProjectArchiveBuilder.new(project).main_ptx
+
+    assert_includes source, body
+  end
+
+  # Malformed source fails the build whatever we do, and it fails more usefully as the
+  # author's own text than as whatever a recovering parser made of it.
+  test "source that will not parse is passed through untouched" do
+    project = projects(:one)
+    project.update_column(:pretext_source, "not xml at all")
+
+    assert_equal "not xml at all", ProjectArchiveBuilder.new(project).main_ptx
   end
 
   # The manifest lists every target, so one archive serves any build request and a

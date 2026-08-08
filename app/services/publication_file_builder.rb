@@ -58,7 +58,10 @@ class PublicationFileBuilder
         option = Publication::Catalog.find(key)
         next if option.nil?
 
-        (paths[option.element] ||= {})[option.attribute] = value
+        # written_value, not value: an option may be set to "write this attribute empty",
+        # which our storage holds as a marker because a blank setting already means
+        # "inherit". See Publication::Catalog::EMPTY_MARKER.
+        (paths[option.element] ||= {})[option.attribute] = option.written_value(value)
       end
     end
 

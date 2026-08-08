@@ -51,6 +51,20 @@ module Publication
       owner.publication_settings[key.to_s]
     end
 
+    # Whether this level itself has chosen "write the attribute empty" -- the state of the
+    # checkbox beside the field, and the reason the field renders blank when it is on: what
+    # is stored is a marker standing for the box, not text an author typed.
+    def empty_chosen?(option)
+      option.empty_allowed? && own(option.key) == Catalog::EMPTY_MARKER
+    end
+
+    # What this level's own value puts in a text field, which is nothing when what it holds
+    # is the marker. Otherwise the field would show "(none)" as though it were typed, and
+    # saving unchanged would turn it into a component by that name.
+    def own_text(option)
+      own(option.key) unless empty_chosen?(option)
+    end
+
     # What this option would be if this level said nothing: the value and the name of the
     # level it comes from, or nil when nothing above sets it either. This is what lets the
     # blank choice read "Inherit — Salem (from your account)" instead of just "Inherit".

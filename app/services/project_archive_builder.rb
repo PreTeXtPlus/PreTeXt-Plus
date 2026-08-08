@@ -1,5 +1,6 @@
 require "zip"
 require "stringio"
+require "nokogiri"
 
 # Packs a Project into an in-memory PreTeXt-CLI project archive (a zip) for the
 # build server (pretext-plus-build-full), which runs a real `pretext build`
@@ -15,17 +16,24 @@ require "stringio"
 #                                   resolved through account -> project -> output
 #   source/main.ptx              -- project.pretext_source, already a complete,
 #                                   standalone <pretext> document (docinfo + body,
-#                                   with every <plus:* ref/> placeholder resolved)
+#                                   with every <plus:* ref/> placeholder resolved),
+#                                   plus the external-directory declaration below
 #   source/external/<ref>.<ext>  -- each project asset, matching the bare
 #                                   `<image source="<ref>.<ext>">` the editor emits
 #
-# NOTE: the external-directory placement (source/external) follows PreTeXt's
-# default publication resolution (external dir relative to the main source file).
-# If the full server resolves images elsewhere, this is the one path to adjust.
+# NOTE: the external-directory placement (source/external) is declared to PreTeXt by
+# main_ptx below. If the full server resolves images elsewhere, that is the one
+# value to adjust.
 class ProjectArchiveBuilder
   # Where per-target publication files go inside the archive. The directory is PreTeXt's
   # default for <project @publication>, which is why nothing declares it.
   PUBLICATION_DIR = "publication".freeze
+
+  # The directory, relative to source/main.ptx, that a project's assets are packed into --
+  # and so the value main_ptx declares to PreTeXt. One constant because `build` writing
+  # assets somewhere else than the document says to look is a silent failure: every image
+  # simply goes missing from the output.
+  EXTERNAL_DIR = "external".freeze
 
   def initialize(project)
     @project = project
@@ -72,12 +80,12 @@ class ProjectArchiveBuilder
       end
 
       zip.put_next_entry("source/main.ptx")
-      zip.write(@project.pretext_source.to_s)
+      zip.write(main_ptx)
 
       @project.assets.each do |asset|
         next unless asset.file.attached?
 
-        zip.put_next_entry("source/external/#{asset.external_filename}")
+        zip.put_next_entry("source/#{EXTERNAL_DIR}/#{asset.external_filename}")
         zip.write(asset.file.download)
       end
 
@@ -88,13 +96,42 @@ class ProjectArchiveBuilder
       # either reference has to resolve without a data migration.
       unless @project.icon_asset
         %w[ svg png ].each do |ext|
-          zip.put_next_entry("source/external/icon.#{ext}")
+          zip.put_next_entry("source/#{EXTERNAL_DIR}/icon.#{ext}")
           zip.write(File.read Rails.root.join("public", "icon.#{ext}"))
         end
       end
     end
     buffer.rewind
     buffer
+  end
+
+  # The author's document as the archive ships it: their own <pretext>, with the external
+  # directory declared inside <docinfo>.
+  #
+  # That declaration used to be ours to write into every publication file. PreTeXt moved it
+  # into docinfo on 2026-07-30 (publisher-variables.xsl, $external-directory-source) on the
+  # grounds that a different directory of files is a different document -- true of documents
+  # in general, and not true here: the directory is wherever `build` above put the assets,
+  # which is EXTERNAL_DIR and nothing else.
+  #
+  # So it is written onto a copy at pack time rather than into the docinfo an author edits.
+  # They neither have to add it nor can break it by deleting it, and one already there is
+  # overwritten rather than honored -- a project whose docinfo said "images" would build
+  # with every image missing, which is not a preference worth preserving.
+  #
+  # Source we cannot parse is passed through untouched. It will fail the build either way,
+  # and it fails more usefully as the author's own text than as whatever we recovered.
+  def main_ptx
+    source = @project.pretext_source.to_s
+    document = Nokogiri::XML(source)
+    return source if document.root.nil?
+
+    declare_external_directory(document)
+    document.encoding = "UTF-8"
+    # AS_XML without FORMAT: libxml2's pretty-printer reindents any element whose children
+    # are all elements, and PreTeXt reads whitespace inside some of them. The only bytes
+    # that change are the ones added below.
+    document.to_xml(save_with: Nokogiri::XML::Node::SaveOptions::AS_XML)
   end
 
   # The publisher options for one project or one target, resolved through account ->
@@ -105,6 +142,19 @@ class ProjectArchiveBuilder
   end
 
   private
+
+    # Puts `directories/@external` inside `<docinfo>`, adding whichever of the two elements
+    # the document is missing. <docinfo> goes first among <pretext>'s children, which is
+    # where the schema wants it and where the editor already writes it.
+    def declare_external_directory(document)
+      docinfo = document.root.at_xpath("./docinfo") ||
+        document.root.prepend_child("\n  <docinfo>\n  </docinfo>").last
+
+      directories = docinfo.at_xpath("./directories") ||
+        docinfo.prepend_child("\n    <directories/>").last
+
+      directories["external"] = EXTERNAL_DIR
+    end
 
     # The target's publication file, named for the same slug everything else about it is.
     #

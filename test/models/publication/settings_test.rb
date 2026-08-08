@@ -147,7 +147,7 @@ class Publication::SettingsTest < ActiveSupport::TestCase
 
     order = settings.sections(general).map { |s| s.group? ? s.group.key : s.option.key }
 
-    assert_equal %w[ division_numbering_level numbering toc_level
+    assert_equal %w[ division_numbering_level numbering toc_level version
                      exercise_components printout ], order
   end
 
@@ -506,9 +506,10 @@ class Publication::SettingsTest < ActiveSupport::TestCase
     families = Publication::Settings.new(targets(:slides_deck)).families
 
     assert_equal %w[ general ], families.map { |family, _| family.key }
-    assert families.first.last.all?(&:group),
-           "a slideshow's General tab is groups only -- it numbers no divisions and lists " \
-           "no contents, so both loose options drop"
+    loose = families.first.last.reject(&:group).map(&:key)
+    assert_equal %w[ version ], loose,
+                 "a slideshow numbers no divisions and lists no contents, so both " \
+                 "structure-bound loose options drop -- but any document can be versioned"
   end
 
   # Both level options are bounded by the document's own structure: a book numbers one
