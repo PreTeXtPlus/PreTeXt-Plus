@@ -187,6 +187,9 @@ class ProjectTest < ActiveSupport::TestCase
   test "full_dup copies target configuration but no build history" do
     original = projects(:two)
     assert original.targets.first.update(published: true)
+    # two_web carries both denormalized pointers -- current_build_id (a success) and
+    # latest_build_id (a later failure) -- so this exercises both.
+    assert original.targets.first.latest_build_id.present?
 
     copy = original.full_dup(users(:one))
     assert copy.save
@@ -195,6 +198,12 @@ class ProjectTest < ActiveSupport::TestCase
     copy.targets.each do |target|
       assert_not target.published?, "a copy must not inherit the original's public URLs"
       assert_nil target.current_build_id
+      # A stale latest_build_id would point a fresh target at a build that belongs to
+      # the *original* project -- cancel, the log page, and everything else scoped to
+      # this copy's project_id would 404 trying to find it.
+      assert_nil target.latest_build_id
+      assert_nil target.last_built_at
+      assert_equal :never, target.state
       assert_empty target.builds
     end
   end
