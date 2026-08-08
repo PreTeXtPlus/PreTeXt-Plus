@@ -139,10 +139,13 @@ class BuildTest < ActiveSupport::TestCase
   # Advancing the queue is not a separate mechanism -- it happens inside mark!, the one
   # place every status transition already passes through, so no transition site can
   # forget to check whether a slot just opened up. Fixtures leave user one with two
-  # builds already in flight on one_web (pending + in_progress), one slot short of
-  # Build::MAX_CONCURRENT.
+  # builds already in flight on one_web (pending + in_progress) -- already at, and over,
+  # a non-subscriber's cap of 1 (User#max_concurrent_builds) -- so most of these first
+  # resolve builds(:in_progress), leaving only builds(:one) occupying the user's one
+  # slot, so that resolving it in turn is what opens the slot the test is about.
 
   test "mark!(:success) promotes the oldest queued build for the same user" do
+    builds(:in_progress).mark!(:success)
     queued = targets(:one_print).builds.create!(status: :queued, created_at: 10.minutes.ago)
 
     assert_enqueued_with(job: FullBuildJob, args: [ queued ]) do
@@ -156,6 +159,7 @@ class BuildTest < ActiveSupport::TestCase
   # to search the same way, or a queued build on a quieter project would starve forever
   # behind a busy one.
   test "promotion looks across every project the user owns, not just the one that just finished" do
+    builds(:in_progress).mark!(:success)
     queued = targets(:slides_deck).builds.create!(status: :queued, created_at: 5.minutes.ago)
 
     assert_enqueued_with(job: FullBuildJob, args: [ queued ]) do
@@ -166,6 +170,7 @@ class BuildTest < ActiveSupport::TestCase
   end
 
   test "promotion picks the oldest queued build first" do
+    builds(:in_progress).mark!(:success)
     older = targets(:one_print).builds.create!(status: :queued, created_at: 20.minutes.ago)
     newer = targets(:one_instructor).builds.create!(status: :queued, created_at: 5.minutes.ago)
 
@@ -191,10 +196,12 @@ class BuildTest < ActiveSupport::TestCase
     end
   end
 
-  # Fixtures leave one slot open, so cancelling a build that was never occupying one
-  # can still trigger a promotion -- it's the cap being checked fresh, not the
-  # cancellation itself, that decides.
+  # A slot freed by resolving both baseline in-flight builds first, so cancelling a
+  # build that was never occupying one can still trigger a promotion -- it's the cap
+  # being checked fresh, not the cancellation itself, that decides.
   test "cancelling a queued build can promote another queued build if a slot is actually free" do
+    builds(:one).mark!(:success)
+    builds(:in_progress).mark!(:success)
     first_in_queue = targets(:one_print).builds.create!(status: :queued, created_at: 10.minutes.ago)
     second_in_queue = targets(:one_instructor).builds.create!(status: :queued, created_at: 5.minutes.ago)
 
@@ -204,7 +211,7 @@ class BuildTest < ActiveSupport::TestCase
   end
 
   test "cancelling a queued build does not promote another when no slot is free" do
-    targets(:one_print).builds.create!(status: :pending) # fills the cap: 3 now in flight
+    # Fixtures already leave two builds in flight -- over a non-subscriber's cap of 1.
     first_in_queue = targets(:one_instructor).builds.create!(status: :queued, created_at: 10.minutes.ago)
     second_in_queue = targets(:slides_deck).builds.create!(status: :queued, created_at: 5.minutes.ago)
 

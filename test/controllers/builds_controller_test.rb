@@ -32,12 +32,19 @@ class BuildsControllerTest < ActionDispatch::IntegrationTest
   end
 
   test "starting a build enqueues it" do
+    # Fixtures already leave user one at their non-subscriber cap of 1 (two builds in
+    # flight on one_web); admin so this build starts immediately rather than queuing --
+    # queuing on start is its own scenario below, this test is about the enqueue.
+    @user.update!(admin: true)
+
     assert_enqueued_with(job: FullBuildJob) do
       post project_target_builds_url(@project, @target)
     end
   end
 
   test "a turbo_stream request swaps the row in place instead of navigating" do
+    @user.update!(admin: true) # see "starting a build enqueues it"
+
     post project_target_builds_url(@project, @target),
          headers: { "Accept" => "text/vnd.turbo-stream.html" }
 
@@ -50,6 +57,8 @@ class BuildsControllerTest < ActionDispatch::IntegrationTest
   # Rebuilding from the drawer used to update only the row behind it, leaving the drawer
   # showing the old state and a Rebuild button for a build already running.
   test "rebuilding from the drawer redraws the drawer too" do
+    @user.update!(admin: true) # see "starting a build enqueues it"
+
     post project_target_builds_url(@project, @target),
          headers: { "Turbo-Frame" => "drawer" },
          as: :turbo_stream
@@ -85,26 +94,23 @@ class BuildsControllerTest < ActionDispatch::IntegrationTest
     assert flash[:alert].present?
   end
 
-  # Fixtures already leave user one with two in-flight builds on one_web, so the cap
-  # bites on the second new build -- but "bites" now means queues, not refuses.
+  # Fixtures already leave user one with two in-flight builds on one_web -- already over
+  # a non-subscriber's cap of 1 -- so the cap bites on the very first new build. "Bites"
+  # means queues, not refuses.
   test "a build beyond the concurrency cap is queued instead of rejected" do
     in_flight = Build.where(project_id: @user.project_ids,
                             status: Build.statuses.values_at(*Target::IN_FLIGHT)).count
     assert_equal 2, in_flight, "fixtures should leave exactly two builds in flight"
+    assert_equal 1, @user.max_concurrent_builds, "a non-subscriber's cap is 1"
 
-    post project_target_builds_url(@project, @target)
-    assert_redirected_to project_url(@project)
-    assert_match(/Building/, flash[:notice])
-
-    other_target = targets(:one_instructor)
     assert_difference("Build.count", 1) do
       assert_no_enqueued_jobs(only: FullBuildJob) do
-        post project_target_builds_url(@project, other_target)
+        post project_target_builds_url(@project, @target)
       end
     end
 
     assert_redirected_to project_url(@project)
-    assert other_target.reload.latest_build.queued?
+    assert @target.reload.latest_build.queued?
     assert_match(/queued/i, flash[:notice])
   end
 
@@ -116,13 +122,33 @@ class BuildsControllerTest < ActionDispatch::IntegrationTest
     end
   end
 
+  # Same 5-vs-1 split as Project#collaborator_limit, proven end to end through the real
+  # build-starting path rather than just against User#max_concurrent_builds directly.
+  test "a subscriber may run more than one build at once" do
+    sign_in users(:subscribed)
+    project = projects(:public_project)
+    first = project.targets.first
+    second = project.targets.create!(kind: "pdf")
+
+    post project_target_builds_url(project, first)
+    post project_target_builds_url(project, second)
+
+    assert first.reload.latest_build.pending?
+    assert second.reload.latest_build.pending?,
+      "a non-subscriber's second build would have queued behind the first"
+  end
+
   # ---- build_all ----
   #
   # one_web is already building; one_instructor and one_print have never been built.
-  # Fixtures leave user one one slot short of the cap, so the first never-built target
-  # in position order (one_instructor) starts and the second (one_print) queues.
 
   test "build_all starts as many candidates as fit and queues the rest" do
+    # Resolving both baseline in-flight builds opens the non-subscriber's one slot, so
+    # the first never-built target in position order (one_instructor) starts and the
+    # second (one_print) queues.
+    builds(:one).mark!(:success)
+    builds(:in_progress).mark!(:success)
+
     assert_difference("Build.count", 2) do
       post build_all_project_builds_url(@project)
     end
@@ -135,8 +161,7 @@ class BuildsControllerTest < ActionDispatch::IntegrationTest
   end
 
   test "build_all queues everything when no slot is free" do
-    targets(:one_web).builds.create!(project: @project, status: :pending) # fills the cap: 3 in flight
-
+    # Fixtures already leave two builds in flight -- over a non-subscriber's cap of 1.
     assert_difference("Build.count", 2) do
       assert_no_enqueued_jobs(only: FullBuildJob) do
         post build_all_project_builds_url(@project)

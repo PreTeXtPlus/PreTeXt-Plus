@@ -10,8 +10,9 @@ class BuildsController < ApplicationController
   # A build occupies a container on the build server for minutes at a time, so the cost
   # of this endpoint is real and does not scale with how careful the caller is. build_all
   # is one request no matter how many builds it starts, so it counts as a single hit here
-  # against a lower limit. There is no separate cap on total builds requested: past
-  # MAX_CONCURRENT they queue (see Build#slot_available?) rather than being refused.
+  # against a lower limit. There is no separate cap on total builds requested: past the
+  # author's own concurrent-build limit they queue (see Build#slot_available?,
+  # User#max_concurrent_builds) rather than being refused.
   rate_limit to: 20, within: 1.hour, only: :create,
              with: -> { reject_build("You've queued a lot of builds recently. Please wait a few minutes and try again.") }
   rate_limit to: 5, within: 1.hour, only: :build_all,
@@ -28,8 +29,8 @@ class BuildsController < ApplicationController
 
   # Stops a build that is still in flight, on the build server as well as here. Offered
   # wherever a build reads as Building, because a wrong target or a runaway build
-  # otherwise holds one of the author's Build::MAX_CONCURRENT slots for the full
-  # BUILD_TIMEOUT.
+  # otherwise holds one of the author's limited concurrent-build slots (see
+  # User#max_concurrent_builds) for the full BUILD_TIMEOUT.
   def cancel
     result = BuildCanceller.new(@build).cancel!
     redirect_to project_target_path(@project, @build.target),

@@ -13,28 +13,24 @@ class Build < ApplicationRecord
   # hunting through a log for an error that isn't there.
   #
   # `queued` is not terminal and not in Target::IN_FLIGHT: it means this build was
-  # created but deliberately not sent to FullBuildJob yet, because the author already
-  # had MAX_CONCURRENT builds running. It waits here -- not counting against the cap
-  # it's waiting on -- until promote_next_queued_build! (see #mark!) hands it a slot.
+  # created but deliberately not sent to FullBuildJob yet, because the author was
+  # already at their concurrent-build limit (see User#max_concurrent_builds). It waits
+  # here -- not counting against the cap it's waiting on -- until promote_next_queued_build!
+  # (see #mark!) hands it a slot.
   enum :status, { pending: 0, in_progress: 1, success: 2, failed: 3, sent_to_server: 4,
                   received_from_server: 5, canceled: 6, queued: 7 },
        default: :pending, validate: true
 
   default_scope { order(created_at: :desc) }
 
-  # How many builds one author may have actually running at once, across every project
-  # they own or collaborate on. A container on the build server is a real, per-minute
-  # cost that does not shrink just because the author was careful about requesting it --
-  # this is the bound that protects that cost. Builds requested beyond it queue instead
-  # of being refused; see #slot_available? and Build#mark!'s promote_next_queued_build!.
-  MAX_CONCURRENT = 3
-
   def self.in_flight_count(user)
     where(project_id: user.project_ids, status: statuses.values_at(*Target::IN_FLIGHT)).count
   end
 
+  # Builds requested beyond the user's limit queue instead of being refused; see
+  # Build#mark!'s promote_next_queued_build!.
   def self.slot_available?(user)
-    in_flight_count(user) < MAX_CONCURRENT
+    in_flight_count(user) < user.max_concurrent_builds
   end
 
   # pretext-cli logs through click, which colours its level labels, so what arrives in a
