@@ -33,7 +33,7 @@
             that isn't running, or stop the one that is. _top for the same reason as the
             settings buttons below -- the redirect carries a flash, which a frame swap
             would swallow along with the "it may still be running" case. %>
-        <% if target.state == :building %>
+        <% if target.cancelable? %>
           <%= button_to "Cancel build", cancel_project_build_path(project, target.latest_build),
                 form: { data: { turbo_frame: "_top" } },
                 class: "#{button_classes(color: "gray", outlined: true)} px-2.5 py-1.5 text-sm",

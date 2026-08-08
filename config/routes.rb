@@ -132,6 +132,11 @@ Rails.application.routes.draw do
         post "check_status" => "builds#check_status", as: "check_status"
         post "cancel" => "builds#cancel", as: "cancel"
       end
+      # The dashboard's one bulk action. Project-scoped, not target-scoped -- unlike
+      # every other build trigger, this one doesn't start from a single target.
+      collection do
+        post "build_all" => "builds#build_all", as: "build_all"
+      end
     end
     collection do
       get "owned"

@@ -103,6 +103,24 @@ class ProjectsControllerTest < ActionDispatch::IntegrationTest
     assert_select "a[href=?]", share_project_path(@project)
   end
 
+  # one_instructor and one_print have never been built.
+  test "show offers Build all when a target has never been built" do
+    get project_url(@project)
+
+    assert_response :success
+    assert_match "Build all", response.body
+  end
+
+  test "show has no bulk button when every target already needs individual attention" do
+    sign_in users(:two) # two_web's only build failed -- neither never nor stale
+
+    get project_url(projects(:two))
+
+    assert_response :success
+    assert_no_match "Build all", response.body
+    assert_no_match "Rebuild outdated", response.body
+  end
+
   test "should get edit" do
     get edit_project_url(@project)
     assert_response :success

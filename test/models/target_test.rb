@@ -303,13 +303,13 @@ class TargetTest < ActiveSupport::TestCase
     assert_not target.building?
   end
 
-  test "a canceled build is no longer in flight" do
+  test "a canceled build is no longer unresolved" do
     build = builds(:in_progress)
-    assert build.in_flight?
+    assert build.unresolved?
 
     build.mark!(:canceled)
 
-    assert_not build.reload.in_flight?
+    assert_not build.reload.unresolved?
   end
 
   test "state is current when the successful build is newer than the last source edit" do
@@ -330,6 +330,48 @@ class TargetTest < ActiveSupport::TestCase
 
     assert_equal :stale, target.reload.state
     assert target.stale?
+  end
+
+  # queued is not in IN_FLIGHT -- a build waiting for a slot has not been sent to the
+  # build server -- so state has to check for it explicitly, ahead of #building?.
+  test "state is queued when the latest build is waiting for a slot" do
+    target = targets(:one_print)
+    target.builds.create!(status: :queued)
+
+    assert_equal :queued, target.reload.state
+    assert_not target.building?
+  end
+
+  # ---- bulk_build_candidates ----
+
+  test "bulk_build_candidates prefers never-built targets over stale ones" do
+    never = targets(:one_print)
+    stale = targets(:one_instructor)
+    build = stale.builds.create!(created_at: 2.days.ago)
+    build.mark!(:success)
+    projects(:one).update_column(:source_updated_at, 1.hour.ago)
+    stale.reload
+
+    assert_equal :stale, stale.state
+    assert_equal [ never ], Target.bulk_build_candidates([ never, stale ])
+  end
+
+  test "bulk_build_candidates returns stale targets once nothing is unbuilt" do
+    stale = targets(:one_instructor)
+    build = stale.builds.create!(created_at: 2.days.ago)
+    build.mark!(:success)
+    projects(:one).update_column(:source_updated_at, 1.hour.ago)
+    stale.reload
+
+    assert_equal [ stale ], Target.bulk_build_candidates([ stale ])
+  end
+
+  test "bulk_build_candidates is empty when nothing is unbuilt or outdated" do
+    assert_empty Target.bulk_build_candidates([ targets(:one_web), targets(:two_web) ])
+  end
+
+  test "bulk_build_candidates is empty for no targets" do
+    assert_empty Target.bulk_build_candidates([])
   end
 
   # ---- current_build bookkeeping ----
@@ -414,6 +456,18 @@ class TargetTest < ActiveSupport::TestCase
     # Older than every kept success, but the build server still owes its callback an
     # answer, so the row has to be there to receive it.
     assert Build.exists?(in_flight.id)
+  end
+
+  test "pruning never removes a queued build" do
+    target = targets(:one_print)
+    queued = target.builds.create!(created_at: 4.days.ago, status: :queued)
+    3.times { |i| target.builds.create!(created_at: (3 - i).days.ago, status: :success) }
+    target.sync_from_builds!
+
+    target.prune_builds!
+
+    # Older than every kept success, but it hasn't even had its turn yet.
+    assert Build.exists?(queued.id)
   end
 
   test "previous_successful_build is the fallback, not the current build" do

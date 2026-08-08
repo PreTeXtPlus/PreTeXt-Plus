@@ -46,21 +46,30 @@
   <div class="mt-8 flex flex-wrap items-center justify-between gap-3">
     <h2 class="font-mono text-xs font-semibold uppercase tracking-widest text-gray-500">
       Outputs
-      (<%= @project.targets.size %>/<%= @project.user.target_quota %>)
+      (<%= @targets.size %>/<%= @project.user.target_quota %>)
     </h2>
-    <%# Beside the outputs rather than up with Write and Download, because that is what
-        these settings change: how every output of this project gets built. Each output
-        can still overrule them from its own drawer. %>
-    <%= link_to "Build settings", edit_project_publication_settings_path(@project),
-          data: { turbo_frame: "modal" },
-          class: "#{button_classes(color: "gray", outlined: true)} px-3 py-1.5 text-sm" %>
+    <div class="flex items-center gap-2">
+      <%# Only ever appears when something needs it -- everything :never or :stale --
+          so it reads as urgent (filled, indigo) the same way an individual row's
+          Build/Rebuild button does once it starts emphasizing itself. %>
+      <% if (bulk_label = bulk_build_label(@targets)).present? %>
+        <%= button_to bulk_label, build_all_project_builds_path(@project),
+              class: "#{button_classes(color: "indigo")} px-3 py-1.5 text-sm" %>
+      <% end %>
+      <%# Beside the outputs rather than up with Write and Download, because that is what
+          these settings change: how every output of this project gets built. Each output
+          can still overrule them from its own drawer. %>
+      <%= link_to "Build settings", edit_project_publication_settings_path(@project),
+            data: { turbo_frame: "modal" },
+            class: "#{button_classes(color: "gray", outlined: true)} px-3 py-1.5 text-sm" %>
+    </div>
   </div>
 
   <div id="targets" class="mt-3 flex flex-col gap-2">
-    <%= render @project.targets %>
+    <%= render @targets %>
   </div>
 
-  <% if @project.targets.empty? %>
+  <% if @targets.empty? %>
     <p class="rounded-lg border border-dashed border-gray-300 p-6 text-center text-gray-600">
       This project has no outputs yet.
     </p>

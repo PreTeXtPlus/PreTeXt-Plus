@@ -72,10 +72,12 @@
             data: { turbo: false } %>
     <% end %>
 
-    <% if state == :building %>
+    <% if target.cancelable? %>
       <%# A build holds one of the author's concurrent slots for up to BUILD_TIMEOUT, so
-          the row that says it is running is also where it can be stopped. %>
-      <span class="text-sm text-gray-400">Building…</span>
+          the row that says it is running is also where it can be stopped. A queued build
+          holds no slot yet, but is stopped the same way -- BuildCanceller marks it
+          canceled locally with nothing to tell the server, since it was never sent. %>
+      <span class="text-sm text-gray-400"><%= state == :queued ? "Queued…" : "Building…" %></span>
       <%= button_to "Cancel", cancel_project_build_path(target.project, target.latest_build),
             class: "#{button_classes(color: "gray", outlined: true)} px-2.5 py-1.5 text-sm",
             data: { turbo_confirm: "Stop this build? Nothing that is already published changes." } %>
