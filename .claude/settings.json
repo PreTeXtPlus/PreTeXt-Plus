@@ -1,9 +1,0 @@
-{
-  "permissions": {
-    "allow": [
-      "Bash(ruby -c)",
-      "Bash(ruby -c /tmp/home_compiled.rb)",
-      "Bash(ruby -c /tmp/subs_compiled.rb)"
-    ]
-  }
-}
