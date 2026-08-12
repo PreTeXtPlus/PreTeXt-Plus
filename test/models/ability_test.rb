@@ -110,6 +110,38 @@ class AbilityTest < ActiveSupport::TestCase
     assert_not ability.can?(:source, project)
   end
 
+  test "build_all follows the project owner's subscription, not the collaborator's" do
+    project = projects(:one) # owner :one (unsubscribed), collaborator :two (unsubscribed)
+
+    assert_not Ability.new(project.user).can?(:build_all, project)
+    assert_not Ability.new(users(:two)).can?(:build_all, project)
+
+    project.update!(user: users(:subscribed))
+
+    assert Ability.new(project.user).can?(:build_all, project)
+    assert Ability.new(users(:two)).can?(:build_all, project),
+      "collaborator should get build_all once the OWNER is subscribed"
+  end
+
+  test "a subscribed collaborator does not unlock build_all on an unsubscribed owner's project" do
+    project = projects(:one)
+    # Swap the collaborator fixture to be the subscribed user while the owner stays
+    # unsubscribed -- proves the check reads the owner's plan, not the actor's.
+    collaborations(:accepted).update!(user: users(:subscribed))
+
+    assert_not Ability.new(users(:subscribed)).can?(:build_all, project)
+  end
+
+  test "an admin can build_all regardless of subscription" do
+    project = projects(:one)
+    assert_not project.user.subscribed?
+
+    admin = users(:two)
+    admin.update!(admin: true)
+
+    assert Ability.new(admin).can?(:build_all, project)
+  end
+
   test "a basic requester can copy or view source of another basic user's public or unlisted project" do
     ability = Ability.new(users(:two))
     project = projects(:one) # owned by user :one, neither side subscribed

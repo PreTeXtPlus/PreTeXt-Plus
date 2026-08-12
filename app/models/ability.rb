@@ -48,6 +48,18 @@ class Ability
       !project.private_visibility?
     end
 
+    # Build all is a paid convenience, not a cost bound like max_concurrent_builds -- it
+    # triggers the same per-target builds a user could start one row at a time, still
+    # capped by the existing concurrency limit either way. Shared with collaborators the
+    # same way target_quota is: what a project may do follows the OWNER's plan, not
+    # whoever clicks the button. The `cannot` is required, same reason as the Target
+    # quota rule below: a block returning false doesn't *match*, so without it CanCan
+    # would fall back to :manage and let the owner through unconditionally.
+    cannot :build_all, Project
+    can :build_all, Project do |project|
+      project.editable_by?(user) && project.user.subscribed?
+    end
+
     # Assets belonging to own projects (hash condition enables accessible_by scoping)
     can :manage, Asset, project: { user_id: user.id }
     can :manage, Asset, project: { collaborations: { user_id: user.id } }

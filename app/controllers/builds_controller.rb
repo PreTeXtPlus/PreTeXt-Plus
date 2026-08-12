@@ -80,6 +80,13 @@ class BuildsController < ApplicationController
   # Target.bulk_build_candidates returns them, so an author seeing several never-built
   # rows above a "Build all" click can trust the top ones start first.
   def build_all
+    # load_and_authorize_resource :project (above) always authorizes :show for this
+    # controller -- :project is a "parent" resource here (BuildsController's own is
+    # :build), and CanCan authorizes parent resources against parent_action (:show by
+    # default) rather than the actual action name. So the subscription gate on
+    # :build_all (see Ability) needs its own explicit check, same as :create's manual
+    # authorize! in set_target and queue_or_start_build below.
+    authorize! :build_all, @project
     candidates = Target.bulk_build_candidates(@project.targets.includes(:current_build, :latest_build).to_a)
     return reject_build("Everything is already built and up to date.") if candidates.empty?
 

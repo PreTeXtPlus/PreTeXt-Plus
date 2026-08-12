@@ -53,8 +53,15 @@
           so it reads as urgent (filled, indigo) the same way an individual row's
           Build/Rebuild button does once it starts emphasizing itself. %>
       <% if (bulk_label = bulk_build_label(@targets)).present? %>
-        <%= button_to bulk_label, build_all_project_builds_path(@project),
-              class: "#{button_classes(color: "indigo")} px-3 py-1.5 text-sm" %>
+        <% if can?(:build_all, @project) %>
+          <%= button_to bulk_label, build_all_project_builds_path(@project),
+                class: "#{button_classes(color: "indigo")} px-3 py-1.5 text-sm" %>
+        <% elsif @project.user == current_user %>
+          <p class="text-sm text-gray-500">
+            <%= link_to "Subscribe", subscriptions_path, class: "text-blue-600 hover:underline" %>
+            to enable one-click bulk builds!
+          </p>
+        <% end %>
       <% end %>
       <%# Beside the outputs rather than up with Write and Download, because that is what
           these settings change: how every output of this project gets built. Each output

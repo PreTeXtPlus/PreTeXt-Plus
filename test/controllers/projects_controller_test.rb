@@ -103,12 +103,24 @@ class ProjectsControllerTest < ActionDispatch::IntegrationTest
     assert_select "a[href=?]", share_project_path(@project)
   end
 
-  # one_instructor and one_print have never been built.
-  test "show offers Build all when a target has never been built" do
+  # one_instructor and one_print have never been built. Build all is a subscriber
+  # feature (see Ability#build_all), so a subscribed owner sees the button...
+  test "show offers Build all when the owner is subscribed and a target has never been built" do
+    subscription_seats(:one).update!(user: @user)
+
     get project_url(@project)
 
     assert_response :success
     assert_match "Build all", response.body
+  end
+
+  # ...and an unsubscribed owner sees a Subscribe upsell in its place instead.
+  test "show offers a Subscribe upsell instead of Build all when the owner is not subscribed" do
+    get project_url(@project)
+
+    assert_response :success
+    assert_no_match "Build all", response.body
+    assert_match "Subscribe", response.body
   end
 
   test "show has no bulk button when every target already needs individual attention" do

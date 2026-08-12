@@ -140,14 +140,16 @@ class BuildsControllerTest < ActionDispatch::IntegrationTest
 
   # ---- build_all ----
   #
+  # A subscriber-only feature (see Ability#build_all), so every scenario below runs as a
+  # subscribed owner unless the test is specifically about the subscription gate itself.
   # one_web is already building; one_instructor and one_print have never been built.
 
   test "build_all starts as many candidates as fit and queues the rest" do
-    # Resolving both baseline in-flight builds opens the non-subscriber's one slot, so
-    # the first never-built target in position order (one_instructor) starts and the
-    # second (one_print) queues.
-    builds(:one).mark!(:success)
-    builds(:in_progress).mark!(:success)
+    subscription_seats(:one).update!(user: @user)
+    # Fixtures leave two builds in flight; pad to four so exactly one of the
+    # subscriber's five concurrent-build slots is free -- the first never-built target
+    # in position order (one_instructor) starts and the second (one_print) queues.
+    2.times { Build.create!(project: @project, target: targets(:one_web), status: :in_progress) }
 
     assert_difference("Build.count", 2) do
       post build_all_project_builds_url(@project)
@@ -161,7 +163,11 @@ class BuildsControllerTest < ActionDispatch::IntegrationTest
   end
 
   test "build_all queues everything when no slot is free" do
-    # Fixtures already leave two builds in flight -- over a non-subscriber's cap of 1.
+    subscription_seats(:one).update!(user: @user)
+    # Fixtures leave two builds in flight; pad to five so the subscriber's cap is
+    # already full before build_all runs.
+    3.times { Build.create!(project: @project, target: targets(:one_web), status: :in_progress) }
+
     assert_difference("Build.count", 2) do
       assert_no_enqueued_jobs(only: FullBuildJob) do
         post build_all_project_builds_url(@project)
@@ -174,6 +180,7 @@ class BuildsControllerTest < ActionDispatch::IntegrationTest
   end
 
   test "build_all does nothing when nothing is unbuilt or outdated" do
+    subscription_seats(:one).update!(user: users(:two))
     sign_in users(:two) # two_web's only build failed -- neither never nor stale
 
     assert_no_difference("Build.count") do
@@ -185,6 +192,7 @@ class BuildsControllerTest < ActionDispatch::IntegrationTest
   end
 
   test "build_all targets stale outputs once nothing is unbuilt" do
+    subscription_seats(:one).update!(user: users(:two))
     sign_in users(:two)
     builds(:failed).destroy!
     projects(:two).update_column(:source_updated_at, 1.hour.ago)
@@ -204,6 +212,29 @@ class BuildsControllerTest < ActionDispatch::IntegrationTest
 
     assert_redirected_to projects_path
     assert flash[:alert].present?
+  end
+
+  test "build_all is refused for a non-subscribed owner" do
+    assert_not @project.user.subscribed?
+
+    assert_no_difference("Build.count") do
+      post build_all_project_builds_url(@project)
+    end
+
+    assert_redirected_to projects_path
+    assert flash[:alert].present?
+  end
+
+  test "a collaborator can build_all once the project owner is subscribed" do
+    subscription_seats(:one).update!(user: @user) # @user (one) owns @project
+    sign_in users(:two) # accepted collaborator on @project
+
+    assert_difference("Build.count", 2) do
+      post build_all_project_builds_url(@project)
+    end
+
+    assert_redirected_to project_url(@project)
+    assert_match(/Started/, flash[:notice])
   end
 
   test "the build log page is reachable and shows the log" do
