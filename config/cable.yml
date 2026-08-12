@@ -25,3 +25,19 @@ production:
       writing: cable
   polling_interval: 0.1.seconds
   message_retention: 1.day
+  # Seconds to wait before each attempt to reconnect the listener thread to the
+  # cable database. The default is `1`, which solid_cable expands to `[0]`: one
+  # retry, immediately, no backoff. Spend that on a database that is still coming
+  # back and the thread stops for good --
+  #
+  #   rescue *CONNECTION_ERRORS
+  #     retry if retry_connecting?   # false once the attempts are used up
+  #   end
+  #
+  # -- and a listener thread that has stopped takes every broadcast in that
+  # process with it, silently and permanently, while HTTP keeps serving. That is
+  # the August 2026 collaboration outage, and a few seconds of managed-database
+  # failover is all it takes to reproduce. This rides out just over a minute of it.
+  # Note the ceiling is real: past this the process still needs a restart, which is
+  # what /up/cable is for (see CableHealthController).
+  reconnect_attempts: [ 0, 1, 2, 4, 8, 16, 32 ]
