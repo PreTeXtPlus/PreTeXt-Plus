@@ -41,6 +41,14 @@ class BuildCallbacksController < ApplicationController
       build.mark!(:failed, log: inline_log(payload))
       fetch_full_log_later(build, payload)
       Rails.logger.error("Build #{build.id} failed on build server: #{payload["log_tail"] || body}")
+    else
+      # Nothing recorded and nothing broadcast, so the row goes on saying Building: the
+      # symptom of a status word drifting apart from the two this understands is a build
+      # that finishes everywhere except on the author's dashboard. Diff against notify.py's
+      # _build_payload if this ever shows up. BuildRecheckJob is what recovers the build.
+      Rails.logger.warn("Build callback for build #{build.id} carried status " \
+                        "#{payload["status"].inspect}, which is neither \"success\" nor " \
+                        "\"failed\" -- nothing was recorded.")
     end
 
     head :ok

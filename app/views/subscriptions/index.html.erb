@@ -2,6 +2,10 @@
 <% content_for :subscription_notice do %><!-- no subscribe nudge on subscriptions pages --><% end %>
 <% content_for :heading, "Manage Subscription Plans" %>
 <% content_for :actions do %>
+  <%= link_to "mailto:requestdemo@pretext.plus?subject=PreTeXt.Plus%20Demonstration%20Request",
+        class: "#{button_classes(color: "gray", outlined: true)} inline-flex select-none items-center gap-2 ml-1 px-4 py-2 my-1 text-sm" do %>
+    Request a Demo
+  <% end %>
   <% if @subscriptions.any? %>
     <%= link_to current_user.payment_processor.billing_portal.url, class: "#{button_classes(color: "gray", outlined: true)} inline-flex select-none items-center gap-2 ml-1 px-4 py-2 my-1 text-sm" do %>
       Manage payment info

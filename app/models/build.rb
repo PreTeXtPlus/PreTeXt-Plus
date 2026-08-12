@@ -57,6 +57,15 @@ class Build < ApplicationRecord
     Target::IN_FLIGHT.include?(status)
   end
 
+  # Hands a pending build to the build server and, because everything after that reaches
+  # the dashboard by being pushed to it and a push has no receipt, schedules the one thing
+  # that goes back and looks. Called wherever a build actually starts (fresh or promoted
+  # out of the queue), so every pending build gets both.
+  def start!
+    FullBuildJob.perform_later(self)
+    BuildRecheckJob.set(wait: BuildRecheckJob::RECHECK_AFTER).perform_later(self)
+  end
+
   # The only way a build's status should ever change.
   #
   # Every transition used to be a bare update_column, which skips callbacks -- fine while
@@ -110,6 +119,6 @@ class Build < ApplicationRecord
       return unless next_up
 
       next_up.mark!(:pending)
-      FullBuildJob.perform_later(next_up)
+      next_up.start!
     end
 end

@@ -6,21 +6,33 @@ require "net/http"
 # server. Triggered by BuildCallbacksController once the server reports success;
 # artifact_url is the download URL the callback handed us. Each zip entry becomes
 # a BuildFile, and the whole zip is attached for download.
+#
+# This is the job that ends a build, and the dashboard reflects that: `success` from the
+# build server only moves a build to `received_from_server`, which Target::IN_FLIGHT still
+# counts as Building. So a build whose import never finishes reads as a build that never
+# finished -- see BuildRecheckJob, which is what notices.
 class FullBuildArtifactJob < ApplicationJob
   queue_as :default
+
+  # A whole site's zip, not a status blob, so it gets its own ceiling rather than
+  # FullBuildServer's default. Long enough for a large book over a slow link; finite
+  # because the alternative is what this constant was added to fix -- a build server that
+  # accepts the connection and then goes quiet used to hang this job (and the row that
+  # says Building) for as long as the process lived.
+  ARTIFACT_READ_TIMEOUT = 120
+
+  # Appended rather than written over the log: what the callback left there is the CLI's
+  # own output, which is the part an author can act on. This says why a build whose log
+  # ends in "Success!" is nonetheless showing as failed.
+  TIMEOUT_LOG = "Couldn't download the finished output from the build server (timed out). " \
+                "The build itself completed -- please try building again.".freeze
 
   def perform(build, artifact_url)
     # Cancelled as well as already-imported: a cancel can land while the artifact is
     # downloading, and finishing the import would republish output nobody is waiting for.
     return if build.success? || build.canceled?
 
-    uri = URI.parse(artifact_url)
-    request = Net::HTTP::Get.new(uri)
-    request["Authorization"] = "Bearer #{Rails.application.credentials.dig(:full_build, :token)}"
-
-    response = Net::HTTP.start(uri.host, uri.port, use_ssl: uri.scheme == "https") do |http|
-      http.request(request)
-    end
+    response = FullBuildServer.get(artifact_url, read_timeout: ARTIFACT_READ_TIMEOUT)
 
     unless response.is_a?(Net::HTTPSuccess)
       build.mark!(:failed)
@@ -63,6 +75,12 @@ class FullBuildArtifactJob < ApplicationJob
     # A new success is the one moment history grows, so it is also when the retention
     # window (Target::KEPT_SUCCESSES) is enforced -- no scheduled sweep to forget about.
     build.target.prune_builds!
+  rescue Net::OpenTimeout, Net::ReadTimeout => e
+    # Not re-raised, unlike everything below: a retry against a build server that has
+    # already stopped answering buys nothing, and the point of catching this at all is
+    # that the row stops saying Building.
+    build.mark!(:failed, log: [ build.log, TIMEOUT_LOG ].compact_blank.join("\n\n"))
+    Rails.logger.warn("Artifact fetch for build #{build.id} timed out (#{e.class}).")
   rescue => e
     build.mark!(:failed)
     raise e

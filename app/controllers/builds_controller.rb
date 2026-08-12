@@ -114,7 +114,7 @@ class BuildsController < ApplicationController
       build = target.builds.new(project: @project,
                                  status: Build.slot_available?(current_user) ? :pending : :queued)
       authorize! :create, build
-      FullBuildJob.perform_later(build) if build.save && build.pending?
+      build.start! if build.save && build.pending?
       build
     end
 
