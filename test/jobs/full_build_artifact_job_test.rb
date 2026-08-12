@@ -71,6 +71,34 @@ class FullBuildArtifactJobTest < ActiveJob::TestCase
     assert build.reload.failed?
   end
 
+  # This request used to have no timeout at all, so a build server that accepted the
+  # connection and then went quiet hung the job -- and, because `success` from the server
+  # only means `received_from_server`, left the dashboard row saying Building for good.
+  test "a build server that stops answering fails the build instead of hanging" do
+    build.mark!(:received_from_server, log: "Success!  Built requested target(s) without errors.")
+
+    Net::HTTP.stub(:start, ->(*_args, **_kw) { raise Net::ReadTimeout }) do
+      assert_nothing_raised { FullBuildArtifactJob.perform_now(build, ARTIFACT_URL) }
+    end
+
+    assert build.reload.failed?
+    assert_match(/Success!/, build.log, "the CLI's own log is the part an author can act on")
+    assert_match(/timed out/, build.log)
+  end
+
+  test "the artifact download is given longer than an ordinary build server call" do
+    passed = nil
+    Net::HTTP.stub(:start, ->(*_args, **kwargs) {
+      passed = kwargs
+      http_response(Net::HTTPOK, "200", fake_zip("index.html" => "<html>home</html>"))
+    }) do
+      FullBuildArtifactJob.perform_now(build, ARTIFACT_URL)
+    end
+
+    assert_equal FullBuildArtifactJob::ARTIFACT_READ_TIMEOUT, passed[:read_timeout]
+    assert_equal FullBuildServer::TIMEOUTS[:open_timeout], passed[:open_timeout]
+  end
+
   test "marks build failed and re-raises on error" do
     Net::HTTP.stub(:start, ->(*_args, **_kw) { raise "network error" }) do
       assert_raises(RuntimeError) { FullBuildArtifactJob.perform_now(build, ARTIFACT_URL) }

@@ -42,6 +42,9 @@ class BuildsController < ApplicationController
 
     if @build.save
       FullBuildJob.perform_later(@build)
+      # Everything after this point reaches the dashboard by being pushed to it, and a
+      # push has no receipt. This is the one thing that goes back and looks; see the job.
+      BuildRecheckJob.set(wait: BuildRecheckJob::RECHECK_AFTER).perform_later(@build)
       # The row *is* the progress indicator: swap it into its building state in place
       # rather than navigating to a page whose only job is to say "queued".
       respond_to do |format|

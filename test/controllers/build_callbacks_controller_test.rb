@@ -84,6 +84,19 @@ class BuildCallbacksControllerTest < ActionDispatch::IntegrationTest
     assert_equal "(No log returned from server.)", @build.reload.log
   end
 
+  # A status word we do not understand records nothing, which on the dashboard looks
+  # exactly like a build that never finished. It must at least leave a trace saying so.
+  test "a status the server has invented is acknowledged, logged, and changes nothing" do
+    logged = []
+    Rails.logger.stub(:warn, ->(message) { logged << message }) do
+      post_callback(success_payload("status" => "completed"))
+    end
+
+    assert_response :success
+    assert @build.reload.in_progress?
+    assert_match(/"completed"/, logged.join("\n"))
+  end
+
   test "a callback for a canceled build is acknowledged but changes nothing" do
     @build.mark!(:canceled, log: "Build canceled.")
 

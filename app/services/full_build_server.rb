@@ -12,6 +12,8 @@ require "net/http"
 module FullBuildServer
   # Generous enough for a log endpoint reading a value out of Redis, short enough that a
   # wedged build server cannot hold a queue slot (or a webhook response) open for minutes.
+  # Overridable per call, because one caller -- the artifact download -- is reading a whole
+  # site's zip rather than a value, and its ceiling belongs with it (FullBuildArtifactJob).
   TIMEOUTS = { open_timeout: 5, read_timeout: 15 }.freeze
 
   module_function
@@ -30,20 +32,21 @@ module FullBuildServer
     URI.join("https://#{host}", path.to_s).to_s
   end
 
-  def get(path)
-    request(Net::HTTP::Get, path)
+  def get(path, **timeouts)
+    request(Net::HTTP::Get, path, **timeouts)
   end
 
-  def post(path)
-    request(Net::HTTP::Post, path)
+  def post(path, **timeouts)
+    request(Net::HTTP::Post, path, **timeouts)
   end
 
-  def request(request_class, path)
+  def request(request_class, path, **timeouts)
     uri = URI.parse(url_for(path))
     http_request = request_class.new(uri)
     http_request["Authorization"] = "Bearer #{token}"
 
-    Net::HTTP.start(uri.host, uri.port, use_ssl: uri.scheme == "https", **TIMEOUTS) do |http|
+    Net::HTTP.start(uri.host, uri.port, use_ssl: uri.scheme == "https",
+                    **TIMEOUTS.merge(timeouts)) do |http|
       http.request(http_request)
     end
   end
