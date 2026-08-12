@@ -133,6 +133,12 @@ class Project < ApplicationRecord
     collaborations.any?
   end
 
+  # Whether a website output has ever built successfully -- what makes the legacy quick
+  # preview safe to retire, since the author now has a real replacement.
+  def html_built?
+    targets.any? { |t| t.site? && t.current_build_id }
+  end
+
   # Drop the shared doc and its update log. Called when the last collaboration
   # is removed: from then on the owner edits solo (non-collaborative autosave
   # writes divisions directly, leaving a persisted doc stale), so the doc is

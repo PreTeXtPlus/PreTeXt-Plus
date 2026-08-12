@@ -113,12 +113,19 @@
   <%# html_source is no longer written for any project (see Project#enqueue_html_source_job,
       removed); this only ever renders for projects that got one before the cutover. %>
   <% if @project.html_source.present? %>
-    <p class="mt-8 text-xs text-gray-500">
-      This project has a legacy <%= link_to "quick-preview link", share_project_path(@project),
-            class: "text-blue-600 hover:underline", target: "_blank", rel: "noopener" %>.
-      This link will stop working after November 1, 2026 — build and publish a website for future
-      access.
-    </p>
+    <div class="mt-8 flex items-center justify-between gap-3">
+      <p class="text-xs text-gray-500">
+        This project has a legacy <%= link_to "quick-preview link", share_project_path(@project),
+              class: "text-blue-600 hover:underline", target: "_blank", rel: "noopener" %>.
+        This link will stop working after November 1, 2026 — build and publish a website for future
+        access.
+      </p>
+      <% if @project.html_built? && can?(:destroy_html_source, @project) %>
+        <%= button_to "Delete this link", destroy_html_source_project_path(@project), method: :delete,
+              class: "shrink-0 cursor-pointer rounded-md px-2 py-1 text-xs text-red-700 hover:bg-red-50",
+              data: { turbo_confirm: "Delete the legacy quick-preview link? This cannot be undone." } %>
+      <% end %>
+    </div>
   <% end %>
 
   <div class="mt-8 flex items-center justify-between border-t border-gray-200 pt-5">

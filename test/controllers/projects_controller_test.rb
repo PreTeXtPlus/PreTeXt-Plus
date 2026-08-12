@@ -103,6 +103,49 @@ class ProjectsControllerTest < ActionDispatch::IntegrationTest
     assert_select "a[href=?]", share_project_path(@project)
   end
 
+  # ---- deleting the legacy quick preview ----
+
+  test "show has no delete-link button when no website has built yet" do
+    @project.update_column(:html_source, "<h1>quick build</h1>")
+
+    get project_url(@project)
+
+    assert_response :success
+    assert_select "form[action=?]", destroy_html_source_project_path(@project), count: 0
+  end
+
+  test "show has a delete-link button once a website has built" do
+    @project.update_column(:html_source, "<h1>quick build</h1>")
+    @project.targets.first.builds.create!.mark!(:success)
+
+    get project_url(@project)
+
+    assert_response :success
+    assert_select "form[action=?]", destroy_html_source_project_path(@project)
+  end
+
+  test "destroy_html_source clears html_source and redirects back to the project" do
+    @project.update_column(:html_source, "<h1>quick build</h1>")
+    @project.targets.first.builds.create!.mark!(:success)
+
+    delete destroy_html_source_project_url(@project)
+
+    assert_redirected_to project_url(@project)
+    assert_nil @project.reload.html_source
+  end
+
+  test "a collaborator cannot delete the legacy quick preview" do
+    sign_out :user
+    sign_in users(:two) # collaborates on projects(:one), per collaborations.yml
+    @project.update_column(:html_source, "<h1>quick build</h1>")
+    @project.targets.first.builds.create!.mark!(:success)
+
+    delete destroy_html_source_project_url(@project)
+
+    assert_redirected_to projects_path
+    assert_equal "<h1>quick build</h1>", @project.reload.html_source
+  end
+
   test "should get edit" do
     get edit_project_url(@project)
     assert_response :success

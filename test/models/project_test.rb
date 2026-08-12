@@ -158,6 +158,26 @@ class ProjectTest < ActiveSupport::TestCase
     assert_equal "website", target.kind
   end
 
+  # ---- html_built? ----
+
+  test "html_built? is false when no website target has ever built" do
+    project = projects(:one)
+    assert project.targets.any?(&:site?)
+    assert_not project.html_built?
+  end
+
+  test "html_built? is true once a website target has a successful build" do
+    assert projects(:two).html_built?
+  end
+
+  test "html_built? ignores a successfully built target that is not a website" do
+    project = projects(:slides)
+    target = project.targets.find { |t| t.kind == "revealjs" }
+    target.builds.create!.mark!(:success)
+
+    assert_not project.reload.html_built?
+  end
+
   # The trap this guard exists for: Rails does not re-validate children when the parent
   # changes, so without an explicit check on Project a slideshow could become an article
   # while keeping a reveal.js target that can never build again.
