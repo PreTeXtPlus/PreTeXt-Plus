@@ -273,6 +273,11 @@ const AssetEditModal = ({
                   onChange={(e) => setShortDescriptionValue(e.target.value)}
                   disabled={busy}
                 />
+                {!shortDescriptionValue.trim() && (
+                  <p className="pretext-plus-editor__am-warning">
+                    ⚠ A short description is required for accessibility.
+                  </p>
+                )}
               </>
             )}
 

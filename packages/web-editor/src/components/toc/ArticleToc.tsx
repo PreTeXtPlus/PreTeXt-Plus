@@ -538,6 +538,9 @@ const ArticleToc = ({ onOpenAssetPicker, hideAssets, readOnly }: ArticleTocProps
                                 "pretext-plus-editor__toc-asset-item",
                                 row.status === "unlinked" ? "pretext-plus-editor__toc-asset-item--unlinked" : "",
                                 row.status === "unused" ? "pretext-plus-editor__toc-asset-item--unused" : "",
+                                row.asset && row.kind === "image" && !row.asset.shortDescription?.trim()
+                                  ? "pretext-plus-editor__toc-asset-item--missing-short-description"
+                                  : "",
                                 duplicatingRef === row.ref ? "pretext-plus-editor__toc-asset-item--busy" : "",
                               ].filter(Boolean).join(" ")}
                             >

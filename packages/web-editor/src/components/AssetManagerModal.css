@@ -566,6 +566,15 @@
   font-size: 0.83rem;
 }
 
+.pretext-plus-editor__am-warning {
+  margin: 0;
+  padding: 0.4rem 0.6rem;
+  background: #fef3c7;
+  color: #92400e;
+  border-radius: 4px;
+  font-size: 0.83rem;
+}
+
 /* ── Tab count badge (shared) ────────────────────── */
 .pretext-plus-editor__asset-tab-count {
   display: inline-flex;
