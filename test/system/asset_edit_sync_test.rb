@@ -20,9 +20,9 @@ class AssetEditSyncTest < ApplicationSystemTestCase
 
     fill_in "am-edit-title", with: "Euler Portrait"
     fill_in "am-edit-ref", with: "euler-portrait"
-    within("[aria-label^='Edit asset']") { click_button "Save" }
+    within("[aria-label^='Manage asset']") { click_button "Save" }
 
-    assert_no_selector "[aria-label^='Edit asset']", wait: 10
+    assert_no_selector "[aria-label^='Manage asset']", wait: 10
 
     assert_asset_eventually(ref: "euler-portrait", title: "Euler Portrait")
   end
@@ -38,9 +38,9 @@ class AssetEditSyncTest < ApplicationSystemTestCase
       first(".view-line").click
     end
     page.send_keys "<description>A portrait</description>"
-    within("[aria-label^='Edit asset']") { click_button "Save" }
+    within("[aria-label^='Manage asset']") { click_button "Save" }
 
-    assert_no_selector "[aria-label^='Edit asset']", wait: 10
+    assert_no_selector "[aria-label^='Manage asset']", wait: 10
 
     assert_asset_eventually(source: "<description>A portrait</description>")
   end
@@ -49,9 +49,9 @@ class AssetEditSyncTest < ApplicationSystemTestCase
     open_asset_editor_for(@asset.ref)
 
     fill_in "am-edit-short-description", with: "A portrait of Euler"
-    within("[aria-label^='Edit asset']") { click_button "Save" }
+    within("[aria-label^='Manage asset']") { click_button "Save" }
 
-    assert_no_selector "[aria-label^='Edit asset']", wait: 10
+    assert_no_selector "[aria-label^='Manage asset']", wait: 10
 
     assert_asset_eventually(short_description: "A portrait of Euler")
   end
@@ -104,7 +104,7 @@ class AssetEditSyncTest < ApplicationSystemTestCase
       find(".pretext-plus-editor__am-doc-row", text: ref, wait: 10)
         .find("button.pretext-plus-editor__am-row-info").click
 
-      assert_selector "[aria-label^='Edit asset']", wait: 10
+      assert_selector "[aria-label^='Manage asset']", wait: 10
     end
 
     # The save is a PATCH the browser fires after the modal closes, so the row

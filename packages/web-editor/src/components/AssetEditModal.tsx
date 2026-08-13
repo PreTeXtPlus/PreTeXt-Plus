@@ -166,10 +166,10 @@ const AssetEditModal = ({
         className="pretext-plus-editor__dialog"
         role="dialog"
         aria-modal="true"
-        aria-label={`Edit asset ${asset.title}`}
+        aria-label={`Manage asset ${asset.title}`}
       >
         <div className="pretext-plus-editor__dialog-header">
-          <h2 className="pretext-plus-editor__dialog-title">Edit asset</h2>
+          <h2 className="pretext-plus-editor__dialog-title">Manage asset</h2>
           <button
             type="button"
             className="pretext-plus-editor__dialog-close"
@@ -275,7 +275,7 @@ const AssetEditModal = ({
             )}
 
             <label className="pretext-plus-editor__dialog-label">
-              Asset content
+              Additional source
               <span className="pretext-plus-editor__dialog-helper-copy">
                 Inserted verbatim inside the generated <code>{`<${KIND_TAG[asset.kind]}>`}</code> element
                 — e.g. <code>{"<description>...</description>"}</code>.

@@ -239,7 +239,7 @@ const ArticleToc = ({ onOpenAssetPicker, hideAssets, readOnly }: ArticleTocProps
   const assetMenuItems = (row: AssetRow): DivisionMenuItem[] => {
     const items: DivisionMenuItem[] = [
       {
-        label: row.status === "unlinked" ? "Link / create asset" : "Edit asset",
+        label: row.status === "unlinked" ? "Link / create asset" : "Manage asset",
         onClick: () => openAssetRow(row),
       },
       {
@@ -564,7 +564,7 @@ const ArticleToc = ({ onOpenAssetPicker, hideAssets, readOnly }: ArticleTocProps
                                 title={
                                   row.status === "unlinked"
                                     ? "No asset for this reference — click to link or create one"
-                                    : "Edit asset"
+                                    : "Manage asset"
                                 }
                               >
                                 <span className="pretext-plus-editor__toc-asset-label">

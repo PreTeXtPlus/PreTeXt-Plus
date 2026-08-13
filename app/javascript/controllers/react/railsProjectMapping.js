@@ -106,7 +106,7 @@ export function railsDivisionToEditor(d, rootMeta) {
 //
 //  * `url` -- `path`, Rails' `share_asset_project_path` redirect. A real,
 //    fetchable URL to the full file. Used ONLY for the editor's own UI: the
-//    "Edit asset" dialog's live preview, and as a fallback thumbnail when
+//    "Manage asset" dialog's live preview, and as a fallback thumbnail when
 //    `thumbnailUrl` is unavailable.
 //
 //  * `thumbnailUrl` -- `thumbnail_path`, Rails' `share_asset_thumbnail_project_path`

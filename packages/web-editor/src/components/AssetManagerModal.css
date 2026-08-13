@@ -251,27 +251,6 @@
   white-space: nowrap;
 }
 
-/* Add-success panel */
-.pretext-plus-editor__am-success {
-  padding: 1rem;
-  display: flex;
-  flex-direction: column;
-}
-
-.pretext-plus-editor__am-success-title {
-  font-size: 0.95rem;
-  font-weight: 600;
-  color: #047857;
-  margin: 0 0 0.35rem;
-}
-
-.pretext-plus-editor__am-success-actions {
-  display: flex;
-  justify-content: flex-end;
-  gap: 0.5rem;
-  margin-top: 0.5rem;
-}
-
 /* Resolve-mode hint */
 .pretext-plus-editor__am-resolve-hint {
   padding: 0 0.5rem 0.5rem;
