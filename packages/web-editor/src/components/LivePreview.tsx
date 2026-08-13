@@ -164,51 +164,12 @@ function defaultPreviewToLight(): void {
   }
 }
 
-/** localStorage key backing {@link isBrowserTipDismissed}. */
-const BROWSER_TIP_DISMISSED_KEY = "pretext-plus-editor:browser-tip-dismissed";
-
-/**
- * Has the author already dismissed the "use Chrome for a faster
- * preview" tip?
- *
- * This banner only shows up for authors on a browser without WebAssembly JSPI
- * (see isLocalPreviewAvailable above) — Firefox and Safari, as of this
- * writing — who are therefore paying for a server round-trip on every
- * rebuild. It's worth suggesting Chromium, but only once per author per session,
- * not once per page load.
- *
- * We don't persist this across sessions in case the author forgets and comes back to
- * a non-Chromium browser later, but we do persist it across page reloads so the
- * tip doesn't reappear every time the author hits Ctrl+Enter.
- */
-function isBrowserTipDismissed(): boolean {
-  // Check if the tip is dismissed in the current session.
-  try {
-    const dismissed = sessionStorage.getItem(BROWSER_TIP_DISMISSED_KEY);
-    if (dismissed === "true") {
-      return true;
-    }
-  } catch {
-    // Storage unavailable (private mode, blocked cookies). The tip will
-    // reappear on every page load, which is fine.
-  }
-  return false;
-}
-
-/** TODO(you): record that the author dismissed the tip, per the same call. */
-function dismissBrowserTip(): void {
-  // TODO(you): persist (or record in-session) that the tip was dismissed.
-}
-
 const LivePreview = forwardRef<LivePreviewHandle, LivePreviewProps>(
   (
     { content, title, onRebuild, onSyncToSource, divisionId, previewLineMap },
     ref,
   ) => {
     const [isRebuilding, setIsRebuilding] = useState(false);
-    const [browserTipDismissed, setBrowserTipDismissed] = useState(
-      isBrowserTipDismissed,
-    );
     // The last render that succeeded. Kept across failures so a transient
     // typo does not blank the panel and lose the author's place.
     const [previewHtml, setPreviewHtml] = useState<string | null>(null);
@@ -235,7 +196,7 @@ const LivePreview = forwardRef<LivePreviewHandle, LivePreviewProps>(
     // Only engines without JSPI ever reach the server path (see renderLocally
     // above), so this is exactly the "your browser is using the slower remote
     // build" case worth mentioning.
-    const showBrowserTip = !renderLocally && !browserTipDismissed;
+    const showBrowserTip = !renderLocally;
 
     const preview = useCallback(() => {
       const source = content;
@@ -455,19 +416,9 @@ const LivePreview = forwardRef<LivePreviewHandle, LivePreviewProps>(
               aria-live="polite"
             >
               <span className="pretext-plus-editor__browser-tip-text">
-                Previews refresh much faster and have two-way sync in
-                Chrome-based browsers.
+                Tip: Previews refresh much faster and have two-way sync in
+                Chromium-based browsers like Chrome or Edge.
               </span>
-              <button
-                className="pretext-plus-editor__browser-tip-dismiss"
-                onClick={() => {
-                  setBrowserTipDismissed(true);
-                  dismissBrowserTip();
-                }}
-                aria-label="Dismiss browser suggestion"
-              >
-                ×
-              </button>
             </div>
           )}
         </div>
