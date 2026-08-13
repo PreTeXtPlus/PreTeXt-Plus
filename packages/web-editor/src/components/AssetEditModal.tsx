@@ -281,7 +281,7 @@ const AssetEditModal = ({
               </>
             )}
 
-            <details>
+            <details class="pretext-plus-editor__advanced-details">
               <summary>Advanced</summary>
               <label className="pretext-plus-editor__dialog-label">
                 Additional source

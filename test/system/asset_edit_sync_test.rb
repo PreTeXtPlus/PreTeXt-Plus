@@ -33,6 +33,7 @@ class AssetEditSyncTest < ApplicationSystemTestCase
     # The content editor is Monaco, which only accepts keystrokes once its
     # hidden textarea has focus -- and it only takes focus from a click on a
     # concrete `.view-line`, never the `.view-lines` container.
+    find("details.pretext-plus-editor__advanced-details").click
     within(".pretext-plus-editor__am-edit-editor") do
       assert_selector ".view-line", wait: 10
       first(".view-line").click
