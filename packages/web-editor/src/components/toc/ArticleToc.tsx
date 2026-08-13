@@ -80,7 +80,7 @@ const ArticleToc = ({ onOpenAssetPicker, hideAssets, readOnly }: ArticleTocProps
     rows: assetView.filter((r) => r.kind === kind),
   })).filter((g) => g.rows.length > 0);
 
-  const [assetsExpanded, setAssetsExpanded] = useState(false);
+  const [assetsExpanded, setAssetsExpanded] = useState(true);
 
   // The ref of the asset currently being duplicated, so its row can show a
   // spinner. Duplicate re-fetches and re-uploads the bytes (a network
