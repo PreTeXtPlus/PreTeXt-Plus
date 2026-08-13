@@ -80,7 +80,7 @@ const ArticleToc = ({ onOpenAssetPicker, hideAssets, readOnly }: ArticleTocProps
     rows: assetView.filter((r) => r.kind === kind),
   })).filter((g) => g.rows.length > 0);
 
-  const [assetsExpanded, setAssetsExpanded] = useState(false);
+  const [assetsExpanded, setAssetsExpanded] = useState(true);
 
   // The ref of the asset currently being duplicated, so its row can show a
   // spinner. Duplicate re-fetches and re-uploads the bytes (a network
@@ -239,7 +239,7 @@ const ArticleToc = ({ onOpenAssetPicker, hideAssets, readOnly }: ArticleTocProps
   const assetMenuItems = (row: AssetRow): DivisionMenuItem[] => {
     const items: DivisionMenuItem[] = [
       {
-        label: row.status === "unlinked" ? "Link / create asset" : "Edit asset",
+        label: row.status === "unlinked" ? "Link / create asset" : "Manage asset",
         onClick: () => openAssetRow(row),
       },
       {
@@ -538,6 +538,9 @@ const ArticleToc = ({ onOpenAssetPicker, hideAssets, readOnly }: ArticleTocProps
                                 "pretext-plus-editor__toc-asset-item",
                                 row.status === "unlinked" ? "pretext-plus-editor__toc-asset-item--unlinked" : "",
                                 row.status === "unused" ? "pretext-plus-editor__toc-asset-item--unused" : "",
+                                row.asset && row.kind === "image" && !row.asset.shortDescription?.trim()
+                                  ? "pretext-plus-editor__toc-asset-item--missing-short-description"
+                                  : "",
                                 duplicatingRef === row.ref ? "pretext-plus-editor__toc-asset-item--busy" : "",
                               ].filter(Boolean).join(" ")}
                             >
@@ -564,7 +567,7 @@ const ArticleToc = ({ onOpenAssetPicker, hideAssets, readOnly }: ArticleTocProps
                                 title={
                                   row.status === "unlinked"
                                     ? "No asset for this reference — click to link or create one"
-                                    : "Edit asset"
+                                    : "Manage asset"
                                 }
                               >
                                 <span className="pretext-plus-editor__toc-asset-label">

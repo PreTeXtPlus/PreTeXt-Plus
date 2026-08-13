@@ -869,12 +869,13 @@ function EditorApp({ config }) {
   );
 
   // Persists an edit to an existing asset made through the web-editor's asset
-  // editor -- its `ref`, its `title`, and its authored `source` (an image's
-  // <shortdescription>/<description> XML).  Also the commit step of Duplicate
-  // and Replace, which upload a file first and then give the resulting asset
-  // its real ref/title/source.
+  // editor -- its `ref`, its `title`, its authored `source` (e.g. an image's
+  // <description> XML), and its `short_description` (an image's plain-text
+  // alt description, auto-rendered as <shortdescription>).  Also the commit
+  // step of Duplicate and Replace, which upload a file first and then give
+  // the resulting asset its real ref/title/source/short_description.
   //
-  // All three fields go every time, keyed by `id` (the UUID, stable across
+  // All fields go every time, keyed by `id` (the UUID, stable across
   // renames -- never `ref`, which is the thing being changed).  `ref`
   // especially: it is the name `<plus:* ref="..."/>` placeholders resolve
   // against, the `<image source="ref.ext">` the assembled pretext_source
@@ -883,8 +884,10 @@ function EditorApp({ config }) {
   // -- meant a rename showed correctly in the editor while every build and
   // published page still looked the asset up under its old name.
   //
-  // JSON.stringify drops undefined values, so an asset that arrives without a
-  // title or ref simply leaves that column alone rather than nulling it.
+  // `source`/`short_description` fall back to "" (rather than being left
+  // `undefined`, which JSON.stringify would drop) so clearing either field in
+  // the editor persists the blank value instead of leaving the column
+  // untouched.
   const onAssetUpdate = useCallback(
     async (asset) => {
       await patchProjectJson({
@@ -893,6 +896,7 @@ function EditorApp({ config }) {
           ref: asset.ref,
           title: asset.title,
           source: asset.source ?? "",
+          short_description: asset.shortDescription ?? "",
         } ],
       });
       invalidateAssetQueries();

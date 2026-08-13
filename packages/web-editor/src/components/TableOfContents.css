@@ -613,6 +613,11 @@
   color: #b45309;
 }
 
+.pretext-plus-editor__toc-asset-item--missing-short-description
+  .pretext-plus-editor__toc-asset-filename {
+  color: #b45309;
+}
+
 .pretext-plus-editor__toc-asset-item {
   display: flex;
   align-items: center;

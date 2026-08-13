@@ -156,9 +156,6 @@ const AssetManagerModal = ({
   // Row whose Duplicate round-trip (fetch + re-upload) is in flight (keyed by `kind:ref`).
   const [duplicatingKey, setDuplicatingKey] = useState<string | null>(null);
 
-  // Success panel shown after a normal-mode add (asset added + embed copied).
-  const [addedAsset, setAddedAsset] = useState<Asset | null>(null);
-
   // Stash a picked/dropped file for preview; the actual upload is deferred
   // until the user confirms via "Add to Project". `title` defaults to the
   // filename, but callers can override it — a pasted image's filename is a
@@ -212,9 +209,6 @@ const AssetManagerModal = ({
           const file = item.getAsFile();
           if (file) {
             e.preventDefault();
-            // Clear the prior success panel (if any) — the newly staged
-            // upload should show, not a stale "added" confirmation.
-            setAddedAsset(null);
             setTab("add");
             setAddKind("image");
             setImageTab("upload");
@@ -236,7 +230,10 @@ const AssetManagerModal = ({
   // Replace mode swaps it in for `replaceTarget`. Resolve mode binds it to the
   // placeholder being resolved (rewriting that placeholder's ref). Otherwise
   // (normal add) it's dropped in the pool, its embed code is copied, and the
-  // success panel is shown so the user can paste it where they want it.
+  // user is handed off to the standalone asset editor -- same as opening an
+  // existing row (AssetManagerModal's own onOpen, below) -- so they can set
+  // its title/short description right away instead of stopping at a
+  // confirmation screen.
   const commitAsset = (asset: Asset) => {
     if (replaceTarget) {
       onReplaceAsset(replaceTarget, asset);
@@ -249,8 +246,11 @@ const AssetManagerModal = ({
       onClose();
       return;
     }
-    if (asset.ref) navigator.clipboard.writeText(embedFor(asset.kind, asset.ref)).catch(() => {});
-    setAddedAsset(asset);
+    if (asset.ref) {
+      navigator.clipboard.writeText(embedFor(asset.kind, asset.ref)).catch(() => {});
+      openAssetEditor(asset.kind, asset.ref);
+    }
+    onClose();
   };
 
   const handleCopy = (kind: AssetKind, ref: string) => {
@@ -371,7 +371,7 @@ const AssetManagerModal = ({
             type="button"
             className="pretext-plus-editor__am-row-info pretext-plus-editor__am-row-info--btn"
             onClick={onOpen}
-            title={row.status === "unlinked" ? "No asset for this reference — click to link or create one" : "Edit asset"}
+            title={row.status === "unlinked" ? "No asset for this reference — click to link or create one" : "Manage asset"}
           >
             {(row.asset?.thumbnailUrl ?? row.asset?.url) && (
               <img
@@ -404,7 +404,7 @@ const AssetManagerModal = ({
               className="pretext-plus-editor__am-action-btn"
               onClick={onOpen}
             >
-              {row.status === "unlinked" ? "Link / create" : "Edit"}
+              {row.status === "unlinked" ? "Link / create" : "Manage"}
             </button>
             <button
               type="button"
@@ -479,46 +479,6 @@ const AssetManagerModal = ({
       </div>
     );
   };
-
-  // ── Success panel after a normal-mode add ─────────────────────────────────
-  const renderAddedSuccess = (asset: Asset) => (
-    <div className="pretext-plus-editor__am-success">
-      <p className="pretext-plus-editor__am-success-title">
-        ✓ Added “{asset.title}” — embed code copied to clipboard
-      </p>
-      <p className="pretext-plus-editor__dialog-helper-copy">
-        It now appears in the Assets list. Paste this where you want it to appear:
-      </p>
-      {asset.ref && (
-        <div className="pretext-plus-editor__am-embed-row">
-          <code className="pretext-plus-editor__am-embed-code">{embedFor(asset.kind, asset.ref)}</code>
-          <button
-            type="button"
-            className={`pretext-plus-editor__am-action-btn${copiedKey === `${asset.kind}:${asset.ref}` ? " pretext-plus-editor__am-action-btn--done" : ""}`}
-            onClick={() => handleCopy(asset.kind, asset.ref!)}
-          >
-            {copiedKey === `${asset.kind}:${asset.ref}` ? "Copied!" : "Copy again"}
-          </button>
-        </div>
-      )}
-      <div className="pretext-plus-editor__am-success-actions">
-        <button
-          type="button"
-          className="pretext-plus-editor__dialog-button pretext-plus-editor__dialog-button--secondary"
-          onClick={() => { setAddedAsset(null); setAddKind(null); setTab("add"); }}
-        >
-          Add another
-        </button>
-        <button
-          type="button"
-          className="pretext-plus-editor__dialog-button"
-          onClick={() => { setAddedAsset(null); setTab("in-document"); }}
-        >
-          Done
-        </button>
-      </div>
-    </div>
-  );
 
   // ── "Add Asset" tab ────────────────────────────────────────────────────────
   const renderKindPicker = () => (
@@ -842,43 +802,35 @@ const AssetManagerModal = ({
               </button>
             </div>
 
-            {addedAsset ? (
-              <div className="pretext-plus-editor__dialog-content pretext-plus-editor__dialog-content--single">
-                {renderAddedSuccess(addedAsset)}
-              </div>
-            ) : (
-              <>
-                <div className="pretext-plus-editor__dialog-tab-bar">
-                  <button
-                    type="button"
-                    className={`pretext-plus-editor__dialog-tab${tab === "in-document" ? " pretext-plus-editor__dialog-tab--active" : ""}`}
-                    onClick={() => setTab("in-document")}
-                  >
-                    Assets
-                    {assetView.length > 0 && (
-                      <span className="pretext-plus-editor__asset-tab-count">{assetView.length}</span>
-                    )}
-                  </button>
-                  <button
-                    type="button"
-                    className={`pretext-plus-editor__dialog-tab${tab === "add" ? " pretext-plus-editor__dialog-tab--active" : ""}`}
-                    onClick={() => { setTab("add"); setAddKind(null); }}
-                  >
-                    Add Asset
-                  </button>
-                </div>
+            <div className="pretext-plus-editor__dialog-tab-bar">
+              <button
+                type="button"
+                className={`pretext-plus-editor__dialog-tab${tab === "in-document" ? " pretext-plus-editor__dialog-tab--active" : ""}`}
+                onClick={() => setTab("in-document")}
+              >
+                Assets
+                {assetView.length > 0 && (
+                  <span className="pretext-plus-editor__asset-tab-count">{assetView.length}</span>
+                )}
+              </button>
+              <button
+                type="button"
+                className={`pretext-plus-editor__dialog-tab${tab === "add" ? " pretext-plus-editor__dialog-tab--active" : ""}`}
+                onClick={() => { setTab("add"); setAddKind(null); }}
+              >
+                Add Asset
+              </button>
+            </div>
 
-                <div className="pretext-plus-editor__dialog-content pretext-plus-editor__dialog-content--single">
-                  {tab === "in-document"
-                    ? renderInDocument()
-                    : addKind === null
-                      ? renderKindPicker()
-                      : addKind === "image"
-                        ? renderImageAdd(true)
-                        : renderDoenetAdd(true)}
-                </div>
-              </>
-            )}
+            <div className="pretext-plus-editor__dialog-content pretext-plus-editor__dialog-content--single">
+              {tab === "in-document"
+                ? renderInDocument()
+                : addKind === null
+                  ? renderKindPicker()
+                  : addKind === "image"
+                    ? renderImageAdd(true)
+                    : renderDoenetAdd(true)}
+            </div>
 
             <div className="pretext-plus-editor__dialog-actions">
               <button
@@ -888,8 +840,8 @@ const AssetManagerModal = ({
               >
                 Close
               </button>
-              {!addedAsset && tab === "add" && addKind === "image" && imageTab === "url" && renderUrlAddAction()}
-              {!addedAsset && tab === "add" && addKind === "image" && imageTab === "upload" && onUpload && renderUploadAddAction()}
+              {tab === "add" && addKind === "image" && imageTab === "url" && renderUrlAddAction()}
+              {tab === "add" && addKind === "image" && imageTab === "upload" && onUpload && renderUploadAddAction()}
             </div>
           </>
         )}

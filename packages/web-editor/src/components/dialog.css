@@ -103,6 +103,8 @@
   margin: 0;
   color: #64748b;
   font-size: 0.78rem;
+  display: block;
+  font-weight: 400;
 }
 
 .pretext-plus-editor__dialog-label {

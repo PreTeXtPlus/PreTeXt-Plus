@@ -53,6 +53,36 @@ describe('resolveAssetRef', () => {
     expect(resolveAssetRef('image', 'euler-painting', [asset])).toBe('<image/>')
   })
 
+  it('renders shortDescription as a leading <shortdescription> element', () => {
+    const asset: Asset = { ...baseAsset, shortDescription: 'A portrait of Euler' }
+    expect(resolveAssetRef('image', 'euler-painting', [asset])).toBe(
+      '<image>\n<shortdescription>A portrait of Euler</shortdescription>\n</image>',
+    )
+  })
+
+  it('places shortdescription before authored source content', () => {
+    const asset: Asset = {
+      ...baseAsset,
+      shortDescription: 'A portrait of Euler',
+      source: '<description>x</description>',
+    }
+    expect(resolveAssetRef('image', 'euler-painting', [asset])).toBe(
+      '<image>\n<shortdescription>A portrait of Euler</shortdescription>\n<description>x</description>\n</image>',
+    )
+  })
+
+  it('XML-escapes shortDescription text content', () => {
+    const asset: Asset = { ...baseAsset, shortDescription: 'A & B < C > D' }
+    expect(resolveAssetRef('image', 'euler-painting', [asset])).toBe(
+      '<image>\n<shortdescription>A &amp; B &lt; C &gt; D</shortdescription>\n</image>',
+    )
+  })
+
+  it('ignores a blank/whitespace-only shortDescription', () => {
+    const asset: Asset = { ...baseAsset, shortDescription: '   ' }
+    expect(resolveAssetRef('image', 'euler-painting', [asset])).toBe('<image/>')
+  })
+
   it('falls back to an XML comment when no matching asset is found', () => {
     expect(resolveAssetRef('image', 'missing-ref', [])).toBe(
       '<!-- missing asset: image missing-ref -->',

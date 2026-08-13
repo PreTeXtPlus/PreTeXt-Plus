@@ -990,6 +990,7 @@ const EditorsInner = (props: EditorsInnerProps) => {
       ref: newRef,
       title: `${asset.title} (copy)`,
       source: asset.source,
+      shortDescription: asset.shortDescription,
     };
     await props.onAssetUpdate?.(copy);
     addAssetToPool(copy);
@@ -1009,6 +1010,7 @@ const EditorsInner = (props: EditorsInnerProps) => {
       ref: oldAsset.ref,
       title: oldAsset.title,
       source: oldAsset.source,
+      shortDescription: oldAsset.shortDescription,
     };
     // Drop the old asset *before* handing its ref to the replacement, and do
     // both against the host before touching the pool. Two reasons, one per

@@ -68,6 +68,7 @@ const AssetEditModal = ({
   const [titleValue, setTitleValue] = useState(asset.title);
   const [refValue, setRefValue] = useState(prevRef);
   const [sourceValue, setSourceValue] = useState(asset.source ?? "");
+  const [shortDescriptionValue, setShortDescriptionValue] = useState(asset.shortDescription ?? "");
   const [isSaving, setIsSaving] = useState(false);
   const [isDuplicating, setIsDuplicating] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -120,7 +121,16 @@ const AssetEditModal = ({
     setError(null);
     setIsSaving(true);
     try {
-      await onSave({ ...asset, title: titleValue.trim() || ref, ref, source: sourceValue }, prevRef);
+      await onSave(
+        {
+          ...asset,
+          title: titleValue.trim() || ref,
+          ref,
+          source: sourceValue,
+          shortDescription: shortDescriptionValue.trim() || undefined,
+        },
+        prevRef,
+      );
       onClose();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to save asset.");
@@ -156,10 +166,10 @@ const AssetEditModal = ({
         className="pretext-plus-editor__dialog"
         role="dialog"
         aria-modal="true"
-        aria-label={`Edit asset ${asset.title}`}
+        aria-label={`Manage asset ${asset.title}`}
       >
         <div className="pretext-plus-editor__dialog-header">
-          <h2 className="pretext-plus-editor__dialog-title">Edit asset</h2>
+          <h2 className="pretext-plus-editor__dialog-title">Manage asset</h2>
           <button
             type="button"
             className="pretext-plus-editor__dialog-close"
@@ -170,6 +180,19 @@ const AssetEditModal = ({
           </button>
         </div>
 
+        <div className="pretext-plus-editor__am-embed-row">
+          <label className="pretext-plus-editor__dialog-label">Copy/paste this code to embed in your document:</label>
+          <button
+            type="button"
+            className={`pretext-plus-editor__am-action-btn${copied ? " pretext-plus-editor__am-action-btn--done" : ""}`}
+            onClick={handleCopy}
+            title="Copy embed code to clipboard"
+          >
+            {copied ? "Copied!" : "Copy"}
+          </button>
+          <code className="pretext-plus-editor__am-embed-code">{embedCode}</code>
+        </div>
+
         <div
           ref={contentRef}
           className="pretext-plus-editor__dialog-content pretext-plus-editor__dialog-content--single pretext-plus-editor__am-edit-content"
@@ -178,6 +201,7 @@ const AssetEditModal = ({
             <div className="pretext-plus-editor__am-edit-grid">
               {/* Left column: preview, replace, embed code */}
               <div className="pretext-plus-editor__am-edit-col">
+              <label className="pretext-plus-editor__dialog-label">Asset preview:</label>
                 {showPreview && (
                   <img
                     src={asset.url}
@@ -230,40 +254,57 @@ const AssetEditModal = ({
                   Used in the embed code. Changing it updates every reference to this
                   asset already in your document.
                 </p>
-
-                <div className="pretext-plus-editor__am-embed-row">
-                  <code className="pretext-plus-editor__am-embed-code">{embedCode}</code>
-                  <button
-                    type="button"
-                    className={`pretext-plus-editor__am-action-btn${copied ? " pretext-plus-editor__am-action-btn--done" : ""}`}
-                    onClick={handleCopy}
-                    title="Copy embed code to clipboard"
-                  >
-                    {copied ? "Copied!" : "Copy embed code"}
-                  </button>
-                </div>
               </div>
             </div>
 
-            <label className="pretext-plus-editor__dialog-label">Asset content</label>
-            <p className="pretext-plus-editor__dialog-helper-copy">
-              Inserted verbatim inside the generated <code>{`<${KIND_TAG[asset.kind]}>`}</code> element
-              — e.g. <code>{"<shortdescription>...</shortdescription>"}</code>.
-            </p>
-            <div
-              className="pretext-plus-editor__dialog-editor pretext-plus-editor__am-edit-editor"
-              style={{ height: editorHeight }}
-            >
-              <Editor
-                options={{ ...editorOptions, readOnly: busy }}
-                height="100%"
-                language="xml"
-                value={sourceValue}
-                onMount={handleEditorMount}
-                onChange={(value) => setSourceValue(value ?? "")}
-              />
-            </div>
-            {error && <p className="pretext-plus-editor__am-error">{error}</p>}
+            {asset.kind === "image" && (
+              <>
+                <label className="pretext-plus-editor__dialog-label" htmlFor="am-edit-short-description">
+                  Short description (Alt text)
+                  <span className="pretext-plus-editor__dialog-helper-copy">
+                    A brief plaintext description of the image for accessibility.
+                  </span>
+                </label>
+                <input
+                  id="am-edit-short-description"
+                  type="text"
+                  className="pretext-plus-editor__am-input"
+                  value={shortDescriptionValue}
+                  onChange={(e) => setShortDescriptionValue(e.target.value)}
+                  disabled={busy}
+                />
+                {!shortDescriptionValue.trim() && (
+                  <p className="pretext-plus-editor__am-warning">
+                    ⚠ A short description is required for accessibility.
+                  </p>
+                )}
+              </>
+            )}
+
+            <details className="pretext-plus-editor__advanced-details">
+              <summary>Advanced</summary>
+              <label className="pretext-plus-editor__dialog-label">
+                Additional source
+                <span className="pretext-plus-editor__dialog-helper-copy">
+                  Inserted verbatim inside the generated <code>{`<${KIND_TAG[asset.kind]}>`}</code> element
+                  — e.g. <code>{"<description>...</description>"}</code>.
+                </span>
+              </label>
+              <div
+                className="pretext-plus-editor__dialog-editor pretext-plus-editor__am-edit-editor"
+                style={{ height: editorHeight }}
+              >
+                <Editor
+                  options={{ ...editorOptions, readOnly: busy }}
+                  height="100%"
+                  language="xml"
+                  value={sourceValue}
+                  onMount={handleEditorMount}
+                  onChange={(value) => setSourceValue(value ?? "")}
+                />
+              </div>
+              {error && <p className="pretext-plus-editor__am-error">{error}</p>}
+            </details>
           </div>
         </div>
 
