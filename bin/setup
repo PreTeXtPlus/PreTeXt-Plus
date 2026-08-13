@@ -19,18 +19,6 @@ FileUtils.chdir APP_ROOT do
   # bump), which then blow up later when Rails actually requires them.
   system! "bundle install"
 
-  # On a freshly created devcontainer, `bundle install` has occasionally
-  # finished compiling a gem's native extension (e.g. bigdecimal/json right
-  # after a version bump) just *after* Bundler decided the gem was usable,
-  # so it gets marked "missing extensions" and excluded. `bundle install`
-  # itself reports success in that case; the failure only shows up later,
-  # e.g. mid `db:prepare` below. Force the same activation check Rails will
-  # do, right here, so we can retry before moving on.
-  system("bundle", "exec", "ruby", "-e", "") or begin
-    puts "\n== Gems installed with broken native extensions, retrying =="
-    system! "bundle install"
-  end
-
   # puts "\n== Copying sample files =="
   # unless File.exist?("config/database.yml")
   #   FileUtils.cp "config/database.yml.sample", "config/database.yml"
@@ -40,7 +28,18 @@ FileUtils.chdir APP_ROOT do
   system! "npm install"
 
   puts "\n== Preparing database =="
-  system! "bin/rails db:prepare"
+  4.times do |attempt|
+    if system("bin/rails db:prepare")
+      break
+    elsif attempt < 3
+      puts "\n== Possible issue with gems installed with broken native extensions, retrying =="
+      system "rm -rf tmp/cache/bootsnap"
+      system "bundle pristine"
+    else
+      puts "\n== Failed to prepare database after multiple attempts =="
+      exit 1
+    end
+  end
   system! "bin/rails db:reset" if ARGV.include?("--reset")
 
   puts "\n== Removing old logs and tempfiles =="
