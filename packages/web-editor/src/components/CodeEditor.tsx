@@ -4,6 +4,8 @@ import { useState, useRef, useEffect, useMemo, forwardRef, useImperativeHandle }
 import type * as Y from "yjs";
 import type { Awareness } from "y-protocols/awareness";
 import { editorConfigs } from "./editorConfigs";
+import { usePretextDiagnostics } from "./editorConfigs/usePretextDiagnostics";
+import type { PretextValidationInput } from "./editorConfigs/pretextDiagnostics";
 import CodeEditorMenu from "./CodeEditorMenu";
 import { MonacoCollabBinding } from "../collab/monacoBinding";
 import { installEditGuard } from "../collab/editGuard";
@@ -82,6 +84,17 @@ interface CodeEditorProps {
    * `src/collab/editGuard.ts`.
    */
   collab?: CodeEditorCollab;
+  /**
+   * Texts for a PreTeXt schema lint pass: the buffer, and the assembled
+   * document built from it. Omit for non-PreTeXt formats (or to turn linting
+   * off) and any existing markers are cleared.
+   *
+   * Passed in rather than derived here because only `Editors` can assemble the
+   * document — see `editorConfigs/pretextDiagnostics.ts` for why the buffer
+   * alone cannot be validated. Memoize it; a new object identity each render
+   * would restart the debounce forever and never lint.
+   */
+  pretextValidation?: PretextValidationInput;
 }
 
 /** Imperative handle exposed via `forwardRef` for programmatic control. */
@@ -135,6 +148,7 @@ const CodeEditor = forwardRef<CodeEditorHandle, CodeEditorProps>(({
   onRequestWrapperEdit,
   hideAssets,
   readOnly,
+  pretextValidation,
   collab,
 }, ref) => {
   const editorRef = useRef<any>(null);
@@ -191,6 +205,10 @@ const CodeEditor = forwardRef<CodeEditorHandle, CodeEditorProps>(({
   const isProgrammaticUpdateRef = useRef(false);
   const [canUndo, setCanUndo] = useState(false);
   const [canRedo, setCanRedo] = useState(false);
+  // Monaco arrives asynchronously (the loader fetches it), so effects that
+  // need the editor instance have to wait for it. The refs alone can't say
+  // when that happened — they don't re-render.
+  const [isEditorMounted, setIsEditorMounted] = useState(false);
   const onRebuildRef = useRef(onRebuild);
   const onSaveRef = useRef(onSave);
   const options = useMemo(
@@ -269,6 +287,13 @@ const CodeEditor = forwardRef<CodeEditorHandle, CodeEditorProps>(({
     applyConstraints();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sourceFormat]);
+
+  usePretextDiagnostics(
+    monacoRef,
+    editorRef,
+    sourceFormat === "pretext" ? pretextValidation : undefined,
+    isEditorMounted,
+  );
 
   useEffect(() => {
     return () => {
@@ -655,6 +680,7 @@ const CodeEditor = forwardRef<CodeEditorHandle, CodeEditorProps>(({
 
     applyConstraints();
     rebindCollab();
+    setIsEditorMounted(true);
   };
 
   /**

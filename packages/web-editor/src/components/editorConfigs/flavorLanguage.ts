@@ -200,7 +200,8 @@ const toMonacoMarker = (monaco: any, diagnostic: LspDiagnostic) => ({
   severity: mapSeverity(monaco, diagnostic.severity),
 });
 
-const mapSeverity = (monaco: any, severity: number | undefined) => {
+/** Exported for `pretextDiagnostics.ts`, which publishes markers of its own. */
+export const mapSeverity = (monaco: any, severity: number | undefined) => {
   const severities = monaco.MarkerSeverity;
   switch (severity) {
     case 1: // LSP Error

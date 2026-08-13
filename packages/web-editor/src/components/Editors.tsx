@@ -1342,6 +1342,24 @@ const EditorsInner = (props: EditorsInnerProps) => {
         )
       : undefined;
 
+  // The same assembled document also feeds PreTeXt schema linting, which
+  // cannot validate the raw buffer — it is one division, full of
+  // `<plus:* ref/>` placeholders in an undeclared namespace. See
+  // `editorConfigs/pretextDiagnostics.ts`.
+  //
+  // Memoised on the two strings so the object identity only changes when the
+  // text does: `CodeEditor` debounces on that identity, and a fresh object
+  // every render would postpone the lint forever.
+  const pretextValidation = useMemo(
+    () =>
+      activeDivisionFormat === "pretext" &&
+      divisionActiveSource &&
+      previewContent
+        ? { editorSource: divisionActiveSource, assembledDocument: previewContent }
+        : undefined,
+    [activeDivisionFormat, divisionActiveSource, previewContent],
+  );
+
   // ── Preview rebuild helpers ──────────────────────────────────────────────
   // The full preview no longer needs a host-provided build server: when the
   // browser supports WebAssembly JSPI it renders in-page via
@@ -1498,6 +1516,7 @@ const EditorsInner = (props: EditorsInnerProps) => {
       ref={codeEditorRef}
       content={divisionActiveSource}
       sourceFormat={activeDivisionFormat}
+      pretextValidation={pretextValidation}
       collab={
         props.collaboration && bridge && activeCollabText && activeDivision
           ? {

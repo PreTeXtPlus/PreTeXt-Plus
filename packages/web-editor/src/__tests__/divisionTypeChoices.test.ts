@@ -31,7 +31,13 @@ describe("ALLOWED_CHILD_DIVISION_TYPES", () => {
       article: 6,
       slideshow: 6,
       part: 5,
+      // Front and back matter sit at the part level: they are a book's direct
+      // children, and backmatter holds appendices.
+      frontmatter: 5,
+      backmatter: 5,
       chapter: 4,
+      // An appendix divides like a chapter, so it ranks with one.
+      appendix: 4,
       section: 3,
       subsection: 2,
       subsubsection: 1,
@@ -165,7 +171,10 @@ describe("defaultChildDivisionType", () => {
 // one) or with a tag outside DivisionType. None of these lookups may throw,
 // and none may pretend to know a rule they don't have.
 describe("types the editor doesn't know", () => {
-  const unknown = "appendix" as DivisionType;
+  // A real PreTeXt element that is not a division the editor models. It used
+  // to be `appendix`, until imports started producing those — see
+  // `importDivisionTags.test.ts`.
+  const unknown = "titlepage" as DivisionType;
 
   it("treats a missing or unknown parent type as unrestricted", () => {
     for (const parent of [undefined, null, unknown]) {

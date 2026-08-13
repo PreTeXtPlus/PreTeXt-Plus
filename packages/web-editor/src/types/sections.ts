@@ -46,7 +46,23 @@ export type DivisionType =
   | "glossary"
   | "solutions"
   | "reading-questions"
-  | "paragraphs";
+  | "paragraphs"
+  // Front and back matter. A book imported by `@pretextbook/import` splits at
+  // these too, so the editor has to at least *recognise* them — a
+  // `<plus:preface ref="…"/>` it cannot parse is a division record with
+  // nothing pointing at it, which the TOC shows as orphaned. They are
+  // deliberately absent from `SECTION_TAGS` in `sectionUtils.ts`: the editor's
+  // own splitter does not cut a pasted document at them.
+  | "frontmatter"
+  | "preface"
+  | "acknowledgement"
+  | "dedication"
+  | "biography"
+  | "contributors"
+  | "backmatter"
+  | "appendix"
+  | "index"
+  | "colophon";
 
 /**
  * A single division record, as stored in the host database and passed to
