@@ -67,6 +67,15 @@ const SECTION_TAGS: ReadonlySet<string> = new Set([
  * nested levels belong here: a division record can be any `DivisionType`, and
  * a `<subsection>` whose tag went unrecognised is a division whose type and
  * title can't be read back out of its own source.
+ *
+ * This set is also the *inbound* contract with `@pretextbook/import`, whose
+ * `PRETEXT_DIVISION_TAGS` decides which divisions an import splits into their
+ * own records. Whatever it splits at, it emits a `<plus:TAG ref="…"/>`
+ * placeholder for, and a tag missing from here is one
+ * {@link parseDivisionRefs} skips — leaving a real division record that no
+ * parent points at, which the TOC reports as orphaned. The front/back matter
+ * entries below exist for exactly that reason; `importDivisionTags.test.ts`
+ * pins the two lists together.
  */
 const ALL_DIVISION_TYPES: ReadonlySet<string> = new Set([
   "book",
@@ -77,6 +86,18 @@ const ALL_DIVISION_TYPES: ReadonlySet<string> = new Set([
   "subsection",
   "subsubsection",
   "paragraphs",
+  // Front and back matter — recognised as divisions, but not split at by this
+  // editor's own document splitter, so deliberately not in SECTION_TAGS.
+  "frontmatter",
+  "preface",
+  "acknowledgement",
+  "dedication",
+  "biography",
+  "contributors",
+  "backmatter",
+  "appendix",
+  "index",
+  "colophon",
   ...SECTION_TAGS,
 ]);
 

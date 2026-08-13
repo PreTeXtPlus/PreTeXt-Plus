@@ -110,3 +110,6 @@ export type {
   DocinfoEditorCloseValue,
 } from "./components/DocinfoEditor";
 export { postToIframe } from "./components/postToIframe";
+// PreTeXt diagnostics fetch their RELAX NG grammar from jsDelivr by default;
+// a host that needs to self-host (offline use, a strict CSP) redirects it.
+export { setPretextSchemaUrl } from "./components/editorConfigs/pretextSchema";
