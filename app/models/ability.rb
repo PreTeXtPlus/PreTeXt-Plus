@@ -34,8 +34,9 @@ class Ability
 
     # Manage projects
     can :manage, Project, user_id: user.id
-    # Shared projects: a collaborator is a co-author, so they get everything the
-    # owner has except destroying the project — that stays with whoever owns it.
+    # Shared projects: a collaborator is a co-author, so they get everything the owner
+    # has except destroying the project or changing its visibility — those stay with
+    # whoever owns it.
     can [
       :read,
       :update,

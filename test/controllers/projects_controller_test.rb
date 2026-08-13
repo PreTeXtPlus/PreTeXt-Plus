@@ -133,6 +133,29 @@ class ProjectsControllerTest < ActionDispatch::IntegrationTest
     assert_no_match "Rebuild outdated", response.body
   end
 
+  test "show carries a Shared pill for a collaborator, not for the owner" do
+    get project_url(@project)
+    assert_response :success
+    assert_no_match "Shared", response.body
+
+    sign_in users(:two) # accepted collaborator on @project (see collaborations.yml)
+    get project_url(@project)
+
+    assert_response :success
+    assert_match "Shared", response.body
+  end
+
+  test "a collaborator sees nothing once the project is at its target quota" do
+    (@user.target_quota - @project.targets.count).times { |i| @project.targets.create!(name: "Extra #{i}", kind: "website") }
+
+    sign_in users(:two) # accepted collaborator on @project
+    get project_url(@project)
+
+    assert_response :success
+    assert_no_match "reached", response.body
+    assert_no_match "+ Add an output", response.body
+  end
+
   test "should get edit" do
     get edit_project_url(@project)
     assert_response :success
@@ -282,6 +305,19 @@ class ProjectsControllerTest < ActionDispatch::IntegrationTest
     patch project_url(other_project), params: { project: { visibility: "public" } }
     assert_redirected_to projects_path
     assert other_project.reload.private_visibility?
+  end
+
+  test "collaborator can update the project but not its visibility" do
+    sign_out :user
+    sign_in users(:two) # accepted collaborator on @project
+    assert @project.private_visibility?
+
+    patch project_url(@project), params: { project: { title: "Edited by collaborator", visibility: "public" } }
+
+    assert_redirected_to project_url(@project)
+    @project.reload
+    assert_equal "Edited by collaborator", @project.title
+    assert @project.private_visibility?
   end
 
   # --- Divisions (nested attributes; the /divisions endpoint was removed) ---

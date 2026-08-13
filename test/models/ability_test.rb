@@ -10,6 +10,14 @@ class AbilityTest < ActiveSupport::TestCase
     assert_not ability.can?(:destroy, project)
   end
 
+  test "only the owner can change a shared project's visibility" do
+    project = projects(:one)
+
+    assert Ability.new(project.user).can?(:update_visibility, project)
+    assert_not Ability.new(users(:two)).can?(:update_visibility, project), # accepted collaborator
+      "collaborator should not be able to change visibility"
+  end
+
   test "an unclaimed invitation grants nothing, even to the account it names" do
     project = projects(:team)
     user = users(:one)

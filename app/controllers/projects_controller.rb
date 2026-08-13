@@ -118,6 +118,12 @@ class ProjectsController < ApplicationController
 
   # PATCH/PUT /projects/1 or /projects/1.json
   def update
+    # Visibility stays with the owner even though the rest of :update is shared with
+    # collaborators (see Ability) -- dropped here rather than in project_params, which
+    # load_and_authorize_resource also uses to build a brand-new project on :create,
+    # before @project.user is ever assigned.
+    params[:project]&.delete(:visibility) if cannot?(:update_visibility, @project)
+
     respond_to do |format|
       if @project.update(project_params)
         format.json { render :show, status: :ok, location: @project }
