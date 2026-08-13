@@ -180,6 +180,19 @@ const AssetEditModal = ({
           </button>
         </div>
 
+        <div className="pretext-plus-editor__am-embed-row">
+          <label className="pretext-plus-editor__dialog-label">Copy/paste this code to embed in your document:</label>
+          <button
+            type="button"
+            className={`pretext-plus-editor__am-action-btn${copied ? " pretext-plus-editor__am-action-btn--done" : ""}`}
+            onClick={handleCopy}
+            title="Copy embed code to clipboard"
+          >
+            {copied ? "Copied!" : "Copy"}
+          </button>
+          <code className="pretext-plus-editor__am-embed-code">{embedCode}</code>
+        </div>
+
         <div
           ref={contentRef}
           className="pretext-plus-editor__dialog-content pretext-plus-editor__dialog-content--single pretext-plus-editor__am-edit-content"
@@ -188,6 +201,7 @@ const AssetEditModal = ({
             <div className="pretext-plus-editor__am-edit-grid">
               {/* Left column: preview, replace, embed code */}
               <div className="pretext-plus-editor__am-edit-col">
+              <label className="pretext-plus-editor__dialog-label">Asset preview:</label>
                 {showPreview && (
                   <img
                     src={asset.url}
@@ -240,18 +254,6 @@ const AssetEditModal = ({
                   Used in the embed code. Changing it updates every reference to this
                   asset already in your document.
                 </p>
-
-                <div className="pretext-plus-editor__am-embed-row">
-                  <code className="pretext-plus-editor__am-embed-code">{embedCode}</code>
-                  <button
-                    type="button"
-                    className={`pretext-plus-editor__am-action-btn${copied ? " pretext-plus-editor__am-action-btn--done" : ""}`}
-                    onClick={handleCopy}
-                    title="Copy embed code to clipboard"
-                  >
-                    {copied ? "Copied!" : "Copy embed code"}
-                  </button>
-                </div>
               </div>
             </div>
 
@@ -274,27 +276,30 @@ const AssetEditModal = ({
               </>
             )}
 
-            <label className="pretext-plus-editor__dialog-label">
-              Additional source
-              <span className="pretext-plus-editor__dialog-helper-copy">
-                Inserted verbatim inside the generated <code>{`<${KIND_TAG[asset.kind]}>`}</code> element
-                — e.g. <code>{"<description>...</description>"}</code>.
-              </span>
-            </label>
-            <div
-              className="pretext-plus-editor__dialog-editor pretext-plus-editor__am-edit-editor"
-              style={{ height: editorHeight }}
-            >
-              <Editor
-                options={{ ...editorOptions, readOnly: busy }}
-                height="100%"
-                language="xml"
-                value={sourceValue}
-                onMount={handleEditorMount}
-                onChange={(value) => setSourceValue(value ?? "")}
-              />
-            </div>
-            {error && <p className="pretext-plus-editor__am-error">{error}</p>}
+            <details>
+              <summary>Advanced</summary>
+              <label className="pretext-plus-editor__dialog-label">
+                Additional source
+                <span className="pretext-plus-editor__dialog-helper-copy">
+                  Inserted verbatim inside the generated <code>{`<${KIND_TAG[asset.kind]}>`}</code> element
+                  — e.g. <code>{"<description>...</description>"}</code>.
+                </span>
+              </label>
+              <div
+                className="pretext-plus-editor__dialog-editor pretext-plus-editor__am-edit-editor"
+                style={{ height: editorHeight }}
+              >
+                <Editor
+                  options={{ ...editorOptions, readOnly: busy }}
+                  height="100%"
+                  language="xml"
+                  value={sourceValue}
+                  onMount={handleEditorMount}
+                  onChange={(value) => setSourceValue(value ?? "")}
+                />
+              </div>
+              {error && <p className="pretext-plus-editor__am-error">{error}</p>}
+            </details>
           </div>
         </div>
 
