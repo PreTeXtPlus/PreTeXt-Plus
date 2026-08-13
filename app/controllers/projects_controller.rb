@@ -200,6 +200,14 @@ class ProjectsController < ApplicationController
     end
   end
 
+  # DELETE /projects/1/html_source
+  # Retires the legacy quick-preview blob once the author has a real website built to
+  # replace it.
+  def destroy_html_source
+    @project.update!(html_source: nil)
+    redirect_to @project, notice: "Removed the legacy quick-preview link.", status: :see_other
+  end
+
   def preview
     require "uri"
     require "net/http"

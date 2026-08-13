@@ -152,6 +152,7 @@ Rails.application.routes.draw do
       get "source" => "projects#source", as: "share_source"
       get "share/source" => "projects#source", to: redirect("/projects/%{id}/source")
       post "share/copy" => "projects#copy", as: "copy"
+      delete "html_source" => "projects#destroy_html_source", as: "destroy_html_source"
       get "(*_)/external/:ref" => "assets#share", as: "share_asset"
       get "(*_)/external/:ref/thumbnail" => "assets#share_thumbnail", as: "share_asset_thumbnail"
       post "preview" => "projects#preview", as: "preview"
