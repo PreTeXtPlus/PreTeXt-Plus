@@ -6,7 +6,7 @@
  * {@link ASSET_TRANSFORMS} — nothing else in the resolution pipeline
  * (`resolveAssetRef` in sectionUtils.ts) needs to change.
  */
-import { escapeAttribute } from "./xmlUtils";
+import { escapeAttribute, escapeText } from "./xmlUtils";
 import type { Asset, AssetKind } from "./types/editor";
 
 /** Produces the PreTeXt markup for one resolved asset. */
@@ -26,8 +26,10 @@ type AssetTransform = (asset: Asset, ref: string, width?: string) => string;
  * entirely by their authored `source` content (e.g. a hand-written
  * `<asymptote>`/`<latex-image>` body).
  *
- * `asset.source` is the user-authored inner XML (`<shortdescription>`,
- * `<description>`, etc.) and is inserted verbatim as the element's children.
+ * `asset.shortDescription` (plain text) is auto-rendered as a `<shortdescription>`
+ * element and always placed first, per PreTeXt's accessibility convention.
+ * `asset.source` is separate user-authored inner XML (e.g. `<description>`)
+ * and is inserted verbatim after it as the element's remaining children.
  *
  * `width` comes from the placeholder's own `width="..."` attribute (e.g.
  * `<plus:image ref="..." width="50%"/>`) rather than from the asset itself,
@@ -42,7 +44,11 @@ function transformImageAsset(asset: Asset, ref: string, width?: string): string 
     ? ` source="${escapeAttribute(asset.fileRef || ref)}"`
     : "";
   const widthAttr = width ? ` width="${escapeAttribute(width)}"` : "";
-  const inner = asset.source?.trim();
+  const shortDescription = asset.shortDescription?.trim();
+  const shortDescriptionTag = shortDescription
+    ? `<shortdescription>${escapeText(shortDescription)}</shortdescription>`
+    : "";
+  const inner = [ shortDescriptionTag, asset.source?.trim() ].filter(Boolean).join("\n");
   return inner
     ? `<image${sourceAttr}${widthAttr}>\n${inner}\n</image>`
     : `<image${sourceAttr}${widthAttr}/>`;

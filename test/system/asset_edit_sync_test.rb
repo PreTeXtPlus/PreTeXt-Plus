@@ -37,12 +37,23 @@ class AssetEditSyncTest < ApplicationSystemTestCase
       assert_selector ".view-line", wait: 10
       first(".view-line").click
     end
-    page.send_keys "<shortdescription>A portrait</shortdescription>"
+    page.send_keys "<description>A portrait</description>"
     within("[aria-label^='Edit asset']") { click_button "Save" }
 
     assert_no_selector "[aria-label^='Edit asset']", wait: 10
 
-    assert_asset_eventually(source: "<shortdescription>A portrait</shortdescription>")
+    assert_asset_eventually(source: "<description>A portrait</description>")
+  end
+
+  test "editing an asset's short description persists it" do
+    open_asset_editor_for(@asset.ref)
+
+    fill_in "am-edit-short-description", with: "A portrait of Euler"
+    within("[aria-label^='Edit asset']") { click_button "Save" }
+
+    assert_no_selector "[aria-label^='Edit asset']", wait: 10
+
+    assert_asset_eventually(short_description: "A portrait of Euler")
   end
 
   test "replacing an asset's file hands the replacement the old asset's id" do

@@ -289,10 +289,15 @@ describe("CollabBridge", () => {
     expect(remote?.id).toBe("asset-1");
     expect(remote?.fileRef).toBe("diagram.png");
 
-    bridgeA.localAssetUpdate({ ...asset, source: "<shortdescription>d</shortdescription>" });
+    bridgeA.localAssetUpdate({ ...asset, source: "<description>d</description>" });
     expect(
       storeB.store.getState().projectAssets?.find((a) => a.ref === "diagram")?.source,
-    ).toContain("shortdescription");
+    ).toContain("description");
+
+    bridgeA.localAssetUpdate({ ...asset, shortDescription: "A diagram of the process" });
+    expect(
+      storeB.store.getState().projectAssets?.find((a) => a.ref === "diagram")?.shortDescription,
+    ).toBe("A diagram of the process");
 
     bridgeA.localAssetRemove(asset);
     expect(storeB.store.getState().projectAssets ?? []).toHaveLength(0);

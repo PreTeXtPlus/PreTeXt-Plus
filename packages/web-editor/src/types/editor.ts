@@ -26,12 +26,20 @@ export interface Asset {
   /** The kind of asset — determines the tag inserted into the document. */
   kind: AssetKind;
   /**
-   * User-authored inner XML for the asset's PreTeXt element — e.g.
-   * `<shortdescription>...</shortdescription>` and `<description>...</description>`
-   * for an image, or an activity's body for a Doenet interactive. Inserted
-   * verbatim as the children of the generated element.
+   * User-authored inner XML for the asset's PreTeXt element — e.g. a
+   * `<description>...</description>` block for an image, or an activity's
+   * body for a Doenet interactive. Inserted verbatim as the children of the
+   * generated element, after any auto-generated `<shortdescription>` (see
+   * {@link shortDescription}).
    */
   source?: string;
+  /**
+   * Plain-text alt description for an image, rendered as a `<shortdescription>`
+   * element that's auto-generated (and XML-escaped) as the first child of the
+   * `<image>` element — distinct from {@link source}, which is raw,
+   * user-authored XML. Only meaningful for `kind: "image"`.
+   */
+  shortDescription?: string;
   /**
    * Whether this asset is backed by an uploaded/fetched file rather than
    * being defined purely by `source`. File-based image assets emit a

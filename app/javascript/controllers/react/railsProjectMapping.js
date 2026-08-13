@@ -26,6 +26,8 @@
  * @property {"file"|"authored"} [kind]
  * @property {string} [title]
  * @property {string} [source]
+ * @property {string} [short_description] - Plain-text image alt description; rendered as
+ *   `<shortdescription>` in the assembled PreTeXt.
  * @property {string} [path] - Fetchable share URL; present only when a file is attached.
  * @property {string} [extension] - Present only when a file is attached.
  * @property {string} [thumbnail_path] - Fetchable small-preview URL; present only when the
@@ -153,6 +155,7 @@ export function railsAssetToEditor(a) {
     title: a.title,
     kind: "image",
     source: a.source ?? undefined,
+    shortDescription: a.short_description ?? undefined,
     url: a.path ?? undefined,
     thumbnailUrl: a.thumbnail_path ?? undefined,
     extension: a.extension ?? undefined,
@@ -177,6 +180,7 @@ export function toEditorAsset(rec) {
     title: rec.title,
     kind: rec.kind,
     source: rec.source,
+    shortDescription: rec.shortDescription,
     url: rec.url,
     thumbnailUrl: rec.thumbnailUrl,
     extension: rec.extension,
