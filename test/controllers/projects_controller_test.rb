@@ -103,6 +103,59 @@ class ProjectsControllerTest < ActionDispatch::IntegrationTest
     assert_select "a[href=?]", share_project_path(@project)
   end
 
+  # one_instructor and one_print have never been built. Build all is a subscriber
+  # feature (see Ability#build_all), so a subscribed owner sees the button...
+  test "show offers Build all when the owner is subscribed and a target has never been built" do
+    subscription_seats(:one).update!(user: @user)
+
+    get project_url(@project)
+
+    assert_response :success
+    assert_match "Build all", response.body
+  end
+
+  # ...and an unsubscribed owner sees a Subscribe upsell in its place instead.
+  test "show offers a Subscribe upsell instead of Build all when the owner is not subscribed" do
+    get project_url(@project)
+
+    assert_response :success
+    assert_no_match "Build all", response.body
+    assert_match "Subscribe", response.body
+  end
+
+  test "show has no bulk button when every target already needs individual attention" do
+    sign_in users(:two) # two_web's only build failed -- neither never nor stale
+
+    get project_url(projects(:two))
+
+    assert_response :success
+    assert_no_match "Build all", response.body
+    assert_no_match "Rebuild outdated", response.body
+  end
+
+  test "show carries a Shared pill for a collaborator, not for the owner" do
+    get project_url(@project)
+    assert_response :success
+    assert_no_match "Shared", response.body
+
+    sign_in users(:two) # accepted collaborator on @project (see collaborations.yml)
+    get project_url(@project)
+
+    assert_response :success
+    assert_match "Shared", response.body
+  end
+
+  test "a collaborator sees nothing once the project is at its target quota" do
+    (@user.target_quota - @project.targets.count).times { |i| @project.targets.create!(name: "Extra #{i}", kind: "website") }
+
+    sign_in users(:two) # accepted collaborator on @project
+    get project_url(@project)
+
+    assert_response :success
+    assert_no_match "reached", response.body
+    assert_no_match "+ Add an output", response.body
+  end
+
   test "should get edit" do
     get edit_project_url(@project)
     assert_response :success
@@ -252,6 +305,19 @@ class ProjectsControllerTest < ActionDispatch::IntegrationTest
     patch project_url(other_project), params: { project: { visibility: "public" } }
     assert_redirected_to projects_path
     assert other_project.reload.private_visibility?
+  end
+
+  test "collaborator can update the project but not its visibility" do
+    sign_out :user
+    sign_in users(:two) # accepted collaborator on @project
+    assert @project.private_visibility?
+
+    patch project_url(@project), params: { project: { title: "Edited by collaborator", visibility: "public" } }
+
+    assert_redirected_to project_url(@project)
+    @project.reload
+    assert_equal "Edited by collaborator", @project.title
+    assert @project.private_visibility?
   end
 
   # --- Divisions (nested attributes; the /divisions endpoint was removed) ---

@@ -5,22 +5,25 @@
 <% content_for :heading do %>
   <%= @project.title %>
   <%= project_visibility_pill(@project) %>
+  <%= project_shared_pill if @project.access(current_user) == :shared %>
 <% end %>
 <% content_for :subtitle do %>
   <p>
     Last edited <%= time_ago_in_words(@project.source_updated_at) %> ago
   </p>
-  <%= form_with model: @project, method: :patch,
-        class: "mt-2 flex items-center gap-2",
-        data: { controller: "project-visibility",
-                project_visibility_published_count_value: @project.targets.where(published: true).count,
-                action: "submit->project-visibility#confirm" } do |form| %>
-    <%= form.label :visibility, "Visibility on your public profile", class: "text-xs text-gray-600" %>
-    <%= form.select :visibility, Project.visibilities.keys.map { |v| [ v.humanize, v ] },
-          {}, { class: "rounded-md bg-white border border-gray-300 px-2 py-1 text-xs",
-                data: { project_visibility_target: "select" } } %>
-    <%= form.submit "Update",
-          class: "#{button_classes(color: "gray", outlined: true)} px-2 py-1 text-xs" %>
+  <% if can? :update_visibility, @project %>
+    <%= form_with model: @project, method: :patch,
+          class: "mt-2 flex items-center gap-2",
+          data: { controller: "project-visibility",
+                  project_visibility_published_count_value: @project.targets.where(published: true).count,
+                  action: "submit->project-visibility#confirm" } do |form| %>
+      <%= form.label :visibility, "Visibility on your public profile", class: "text-xs text-gray-600" %>
+      <%= form.select :visibility, Project.visibilities.keys.map { |v| [ v.humanize, v ] },
+            {}, { class: "rounded-md bg-white border border-gray-300 px-2 py-1 text-xs",
+                  data: { project_visibility_target: "select" } } %>
+      <%= form.submit "Update",
+            class: "#{button_classes(color: "gray", outlined: true)} px-2 py-1 text-xs" %>
+    <% end %>
   <% end %>
 <% end %>
 <% content_for :actions do %>
@@ -46,21 +49,37 @@
   <div class="mt-8 flex flex-wrap items-center justify-between gap-3">
     <h2 class="font-mono text-xs font-semibold uppercase tracking-widest text-gray-500">
       Outputs
-      (<%= @project.targets.size %>/<%= @project.user.target_quota %>)
+      (<%= @targets.size %>/<%= @project.user.target_quota %>)
     </h2>
-    <%# Beside the outputs rather than up with Write and Download, because that is what
-        these settings change: how every output of this project gets built. Each output
-        can still overrule them from its own drawer. %>
-    <%= link_to "Build settings", edit_project_publication_settings_path(@project),
-          data: { turbo_frame: "modal" },
-          class: "#{button_classes(color: "gray", outlined: true)} px-3 py-1.5 text-sm" %>
+    <div class="flex items-center gap-2">
+      <%# Only ever appears when something needs it -- everything :never or :stale --
+          so it reads as urgent (filled, indigo) the same way an individual row's
+          Build/Rebuild button does once it starts emphasizing itself. %>
+      <% if (bulk_label = bulk_build_label(@targets)).present? %>
+        <% if can?(:build_all, @project) %>
+          <%= button_to bulk_label, build_all_project_builds_path(@project),
+                class: "#{button_classes(color: "indigo")} px-3 py-1.5 text-sm" %>
+        <% elsif @project.user == current_user %>
+          <p class="text-sm text-gray-500">
+            <%= link_to "Subscribe", subscriptions_path, class: "text-blue-600 hover:underline" %>
+            to enable one-click bulk builds!
+          </p>
+        <% end %>
+      <% end %>
+      <%# Beside the outputs rather than up with Write and Download, because that is what
+          these settings change: how every output of this project gets built. Each output
+          can still overrule them from its own drawer. %>
+      <%= link_to "Build settings", edit_project_publication_settings_path(@project),
+            data: { turbo_frame: "modal" },
+            class: "#{button_classes(color: "gray", outlined: true)} px-3 py-1.5 text-sm" %>
+    </div>
   </div>
 
   <div id="targets" class="mt-3 flex flex-col gap-2">
-    <%= render @project.targets %>
+    <%= render @targets %>
   </div>
 
-  <% if @project.targets.empty? %>
+  <% if @targets.empty? %>
     <p class="rounded-lg border border-dashed border-gray-300 p-6 text-center text-gray-600">
       This project has no outputs yet.
     </p>
@@ -89,19 +108,15 @@
         Name is a frieldy name for the output, like "Print PDF" or  "Instructor edition".  Several outputs may be of the same output format — a student and an instructor website, say.
       </p>
     </details>
-  <% else %>
+  <% elsif @project.user == current_user %>
     <%# The limit is the OWNER's, since that is whose plan the quota follows (see
-        Ability). On a shared project a collaborator therefore cannot lift it by
-        subscribing themselves, so they are told who can rather than sold to. %>
+        Ability). A collaborator can't lift it by subscribing themselves, so -- like
+        the build_all upsell above -- they see nothing here rather than being sold to
+        or sent to ask the owner. %>
     <p class="mt-3 text-sm text-gray-500">
-      <% if @project.user == current_user %>
-        You've reached the maximum of <%= @project.user.target_quota %> outputs for this project.
-        <% unless current_user.subscribed? %>
-          <%= link_to "Subscribe", subscriptions_path, class: "text-blue-600 hover:underline" %> to increase this limit.
-        <% end %>
-      <% else %>
-        This project has reached its maximum <%= @project.user.target_quota %> outputs.
-        Only its owner, <%= @project.user.name_with_email %>, can raise it.
+      You've reached the maximum of <%= @project.user.target_quota %> outputs for this project.
+      <% unless current_user.subscribed? %>
+        <%= link_to "Subscribe", subscriptions_path, class: "text-blue-600 hover:underline" %> to increase this limit.
       <% end %>
     </p>
   <% end %>

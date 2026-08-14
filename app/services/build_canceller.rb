@@ -29,7 +29,7 @@ class BuildCanceller
   end
 
   def cancel!
-    unless @build.in_flight?
+    unless @build.unresolved?
       return Result.new(ok: false, message: "That build has already finished.")
     end
 

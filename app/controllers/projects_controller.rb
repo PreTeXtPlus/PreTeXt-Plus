@@ -46,7 +46,13 @@ class ProjectsController < ApplicationController
   end
 
   # GET /projects/1 or /projects/1.json
+  # Preloaded rather than left to render on @project.targets: index/owned/shared
+  # already eager-load current_build/latest_build for the same reason, and the
+  # dashboard's bulk-build button (bulk_build_label) needs every row's state anyway to
+  # decide whether to show itself. TargetsController#show preloads the same way before
+  # rendering this same template from behind the drawer.
   def show
+    @targets = @project.targets.includes(:current_build, :latest_build).to_a
   end
 
   # GET /projects/new
@@ -112,6 +118,12 @@ class ProjectsController < ApplicationController
 
   # PATCH/PUT /projects/1 or /projects/1.json
   def update
+    # Visibility stays with the owner even though the rest of :update is shared with
+    # collaborators (see Ability) -- dropped here rather than in project_params, which
+    # load_and_authorize_resource also uses to build a brand-new project on :create,
+    # before @project.user is ever assigned.
+    params[:project]&.delete(:visibility) if cannot?(:update_visibility, @project)
+
     respond_to do |format|
       if @project.update(project_params)
         format.json { render :show, status: :ok, location: @project }

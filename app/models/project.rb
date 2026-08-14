@@ -186,10 +186,14 @@ class Project < ApplicationRecord
     end
     duplicate.title = "Copy of #{title}"
     # Carry the target *configuration* but none of its build history, and never the
-    # published flag -- a copy is not entitled to the original's public URLs.
+    # published flag -- a copy is not entitled to the original's public URLs. All three
+    # denormalized build pointers have to go: leaving latest_build_id behind (as this
+    # once did) points a fresh, build-less target at the *original* project's build --
+    # cancel, the log page, and every other build-scoped route then 404 for it, because
+    # that build's project_id is the original's, not the copy's.
     targets.each do |target|
       duplicate.targets.build(
-        target.dup.attributes.except("current_build_id", "last_built_at", "published")
+        target.dup.attributes.except("current_build_id", "latest_build_id", "last_built_at", "published")
       )
     end
     divisions.each do |division|
