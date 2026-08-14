@@ -7,18 +7,8 @@ class AssetsControllerTest < ActionDispatch::IntegrationTest
     sign_in @user
   end
 
-  def asset_with_file
-    asset = assets(:image_one)
-    asset.file.attach(
-      io: File.open(Rails.root.join("test/fixtures/files/test_image.png")),
-      filename: "test_image.png",
-      content_type: "image/png"
-    )
-    asset
-  end
-
   test "share redirects to the asset's current file URL when signed in as the owner" do
-    asset = asset_with_file
+    asset = assets(:image_one)
 
     get share_asset_project_path(@project, ref: asset.ref, format: "png")
 
@@ -27,7 +17,7 @@ class AssetsControllerTest < ActionDispatch::IntegrationTest
   end
 
   test "share redirects to the asset's current file URL when signed out entirely" do
-    asset = asset_with_file
+    asset = assets(:image_one)
 
     sign_out @user
 
@@ -38,7 +28,7 @@ class AssetsControllerTest < ActionDispatch::IntegrationTest
   end
 
   test "share redirects to the asset's current file URL for a signed-in non-owner" do
-    asset = asset_with_file
+    asset = assets(:image_one)
 
     sign_out @user
     sign_in users(:two)
@@ -50,7 +40,7 @@ class AssetsControllerTest < ActionDispatch::IntegrationTest
   end
 
   test "share_thumbnail redirects to a resized variant URL for the owner" do
-    asset = asset_with_file
+    asset = assets(:image_one)
 
     get share_asset_thumbnail_project_path(@project, ref: asset.ref, format: "png")
 
@@ -59,7 +49,7 @@ class AssetsControllerTest < ActionDispatch::IntegrationTest
   end
 
   test "share_thumbnail redirects when signed out entirely" do
-    asset = asset_with_file
+    asset = assets(:image_one)
 
     sign_out @user
 
@@ -78,7 +68,7 @@ class AssetsControllerTest < ActionDispatch::IntegrationTest
   end
 
   test "file redirects to the asset's current file URL for the owner" do
-    asset = asset_with_file
+    asset = assets(:image_one)
 
     get share_asset_file_path(asset, format: "png")
 
@@ -87,7 +77,7 @@ class AssetsControllerTest < ActionDispatch::IntegrationTest
   end
 
   test "file denies access to another user's asset" do
-    asset = asset_with_file
+    asset = assets(:image_one)
 
     sign_out @user
     # The subscribed user neither owns nor collaborates on this asset's
@@ -102,7 +92,7 @@ class AssetsControllerTest < ActionDispatch::IntegrationTest
   end
 
   test "file requires authentication when signed out entirely" do
-    asset = asset_with_file
+    asset = assets(:image_one)
 
     sign_out @user
 

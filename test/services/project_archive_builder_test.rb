@@ -165,11 +165,6 @@ class ProjectArchiveBuilderTest < ActiveSupport::TestCase
   test "packs each asset with a file under source/external using its ref" do
     project = projects(:one)
     asset = assets(:image_one)
-    asset.file.attach(
-      io: File.open(Rails.root.join("test/fixtures/files/test_image.png")),
-      filename: "test_image.png",
-      content_type: "image/png"
-    )
 
     contents = entries(ProjectArchiveBuilder.new(project).build)
 

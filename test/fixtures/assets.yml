@@ -1,7 +1,8 @@
 # Read about fixtures at https://api.rubyonrails.org/classes/ActiveRecord/FixtureSet.html
 
-# An authored asset in project one, not file-backed. File-backed assets are
-# created through an upload in tests, since they need a real attachment.
+# An authored asset in project one -- deliberately file-less, unlike image_one
+# below: several tests (test/models/asset_test.rb, test/models/project_test.rb)
+# use this specifically to exercise the "no file attached" case.
 authored_one:
   project: one
   kind: authored
@@ -10,8 +11,13 @@ authored_one:
   short_description: My Activity
   source: ""
 
-# A file-backed asset already in project one under ref "diagram" -- used to
-# test removing/renaming an existing asset and the asset-file redirect.
+# A file-backed asset already in project one under ref "diagram", with its
+# file pre-attached via ActiveStorage fixtures (test/fixtures/active_storage/*.yml)
+# using test/fixtures/files/test_image.png -- used to test removing/renaming
+# an existing asset and the asset-file redirect. Tests that need different
+# bytes, content type, or filename (e.g. an extensionless "pasted image", a
+# non-image content type, or an SVG) still attach their own override on top
+# of this.
 image_one:
   project: one
   kind: file

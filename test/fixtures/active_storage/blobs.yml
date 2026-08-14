@@ -8,3 +8,8 @@ preview_frame_diagram_blob: <%= ActiveStorage::FixtureSet.blob(
   filename: "test_image.png",
   content_type: "image/png"
 ) %>
+
+image_one_blob: <%= ActiveStorage::FixtureSet.blob(
+  filename: "test_image.png",
+  content_type: "image/png"
+) %>

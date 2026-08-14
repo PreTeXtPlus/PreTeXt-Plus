@@ -394,8 +394,12 @@ class Publication::SettingsTest < ActiveSupport::TestCase
 
   # ---- the EPUB cover, whose list is the project's own images ----
 
-  def attach_image(asset, filename: "test_image.png")
-    asset.file.attach(io: File.open(Rails.root.join("test/fixtures/files/#{filename}")),
+  # `source` is the fixture file read for bytes; `filename` is what gets recorded
+  # on the attachment -- distinct so a caller can simulate an extensionless
+  # upload (real png bytes, a filename with no extension) without a second
+  # binary fixture.
+  def attach_image(asset, source: "test_image.png", filename: source)
+    asset.file.attach(io: File.open(Rails.root.join("test/fixtures/files/#{source}")),
                       filename:, content_type: "image/png")
     asset
   end
@@ -404,7 +408,7 @@ class Publication::SettingsTest < ActiveSupport::TestCase
   # ProjectArchiveBuilder writes assets as "<ref><ext>" -- so the value an author picks is
   # an asset's own filename there, and the two have to agree.
   test "the cover offers the project's images by the name the archive writes them under" do
-    asset = attach_image(assets(:image_one))
+    asset = assets(:image_one)
     settings = Publication::Settings.new(@project)
     option = Publication::Catalog.find("epub_cover")
 
@@ -417,9 +421,7 @@ class Publication::SettingsTest < ActiveSupport::TestCase
   # come from the content type, matching what ProjectArchiveBuilder writes
   # the file as -- not from the upload's own (missing) extension.
   test "the cover offers an extensionless upload by its content-type-derived name" do
-    asset = assets(:image_one)
-    asset.file.attach(io: File.open(Rails.root.join("test/fixtures/files/test_image.png")),
-                      filename: "pasted-image-1234567890", content_type: "image/png")
+    asset = attach_image(assets(:image_one), filename: "pasted-image-1234567890")
     settings = Publication::Settings.new(@project)
     option = Publication::Catalog.find("epub_cover")
 
@@ -429,7 +431,7 @@ class Publication::SettingsTest < ActiveSupport::TestCase
   # The tab still earns its place: an author who has never made an EPUB should learn a
   # cover is a thing they can set, and what to do about it.
   test "a project with no images keeps the cover, with what to do about it" do
-    settings = Publication::Settings.new(@project)
+    settings = Publication::Settings.new(projects(:slides))
     option = Publication::Catalog.find("epub_cover")
 
     assert settings.offers?(option)

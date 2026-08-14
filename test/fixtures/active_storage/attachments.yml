@@ -8,3 +8,8 @@ preview_frame_diagram_file:
   name: file
   record: preview_frame_diagram (Asset)
   blob: preview_frame_diagram_blob
+
+image_one_file:
+  name: file
+  record: image_one (Asset)
+  blob: image_one_blob
