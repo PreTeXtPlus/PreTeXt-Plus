@@ -72,9 +72,12 @@ class Target < ApplicationRecord
 
   default_scope { order(:position, :created_at) }
 
-  # The four statuses that mean "the build server still owes us an answer". Authors do
-  # not care which -- they all present as Building; the distinction belongs in the log.
-  IN_FLIGHT = %w[ pending in_progress sent_to_server received_from_server ].freeze
+  # The statuses that mean "the build server still owes us an answer" -- or, for
+  # received_from_server_flagged, that the answer is in hand but FullBuildArtifactJob
+  # hasn't finished importing it yet. Authors do not care which -- they all present as
+  # Building; the distinction belongs in the log.
+  IN_FLIGHT = %w[ pending in_progress sent_to_server received_from_server
+                  received_from_server_flagged ].freeze
 
   # IN_FLIGHT plus queued: everything that hasn't reached an outcome yet, whether the
   # build server owes us an answer or we haven't sent it there yet. Used wherever "don't
@@ -185,11 +188,11 @@ class Target < ApplicationRecord
     # Ahead of the current_build checks below, and deliberately: a target whose *first*
     # build came back flagged has no live build at all, and reporting that as :never --
     # "not built" -- would hide imported output the author is being asked about.
-    return :needs_review if latest_build.awaiting_review?
+    return :needs_review if latest_build.success_awaiting_review?
     return :never if current_build.nil?
     return :stale if stale?
     # Output that imported cleanly out of a build the CLI called a failure (see
-    # Build#completed_with_errors). Ranked below :stale because an author who has edited
+    # Build#built_with_errors?). Ranked below :stale because an author who has edited
     # since is going to rebuild anyway, and the drawer carries the warning either way.
     return :warned if current_build.built_with_errors?
 
@@ -293,7 +296,7 @@ class Target < ApplicationRecord
   # latest attempt -- once a newer build exists, that one is the question, and an older
   # unreviewed build is simply history.
   def build_awaiting_review
-    latest_build if latest_build&.awaiting_review?
+    latest_build if latest_build&.success_awaiting_review?
   end
 
   # Enforces the retention window, called after each build succeeds. Keeps the
@@ -306,7 +309,7 @@ class Target < ApplicationRecord
   # but it keeps "a destroyed build can never leave a dangling pointer" true with no
   # exceptions to reason about.
   def prune_builds!
-    keep_ids = builds.where(status: :success).order(created_at: :desc).limit(KEPT_SUCCESSES).ids
+    keep_ids = builds.successful.order(created_at: :desc).limit(KEPT_SUCCESSES).ids
     keep_ids |= builds.where(status: UNRESOLVED).ids
     keep_ids |= builds.order(created_at: :desc).limit(1).ids
     # Explicitly, rather than trusting the window above to contain it: a success that is

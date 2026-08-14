@@ -37,7 +37,7 @@ class BuildsController < ApplicationController
                 (result.ok? ? :notice : :alert) => result.message
   end
 
-  # Makes a build the server flagged (Build#completed_with_errors) into what readers see.
+  # Makes a build the server flagged (success_awaiting_review) into what readers see.
   # The output has been importable and previewable since it arrived; this is the only
   # thing that puts it behind the target's public link, so nothing published ever changes
   # on the strength of a failed build without someone deciding it should.
@@ -46,7 +46,7 @@ class BuildsController < ApplicationController
   # says so, because the two ways to get here -- a stale drawer, and a rebuild that
   # landed in between -- both mean the author is looking at something out of date.
   def accept
-    unless @build.awaiting_review?
+    unless @build.success_awaiting_review?
       return redirect_to project_target_path(@project, @build.target),
                          alert: "That build isn't waiting to be reviewed -- it may have been " \
                                 "replaced by a newer one."

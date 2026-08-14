@@ -25,9 +25,9 @@ class BuildStatusChecker
   end
 
   def check!
-    if @build.success?
-      return Result.new(ok: true, message: AWAITING_REVIEW) if @build.awaiting_review?
-      return Result.new(ok: true, message: BUILT_WITH_ERRORS) if @build.completed_with_errors?
+    if @build.successful?
+      return Result.new(ok: true, message: AWAITING_REVIEW) if @build.success_awaiting_review?
+      return Result.new(ok: true, message: BUILT_WITH_ERRORS) if @build.built_with_errors?
 
       return Result.new(ok: true, message: "Build was successful!")
     end
@@ -68,7 +68,7 @@ class BuildStatusChecker
       # left an output.zip behind, failure or not, so that -- not the status word -- is
       # what says whether there is output to import. See BuildCallbacksController.
       if data["artifact_url"].present?
-        @build.mark!(:received_from_server, log: remote_log(data), completed_with_errors: true)
+        @build.mark!(:received_from_server_flagged, log: remote_log(data))
         FullBuildArtifactJob.perform_later(@build, FullBuildServer.url_for(data["artifact_url"]))
         return Result.new(ok: true, message: "The build reported errors but still produced output -- " \
                                              "importing it now. It won't go live until you choose to use it.")

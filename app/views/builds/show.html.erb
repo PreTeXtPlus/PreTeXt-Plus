@@ -29,7 +29,7 @@
   </div>
 <% end %>
 
-<% if @build.awaiting_review? %>
+<% if @build.success_awaiting_review? %>
   <%# The log is where an author decides, so it says what the decision is and where it is
       made. The button itself stays in the drawer, next to the link that previews this
       output -- reading the log is half of reviewing it, looking at the result is the

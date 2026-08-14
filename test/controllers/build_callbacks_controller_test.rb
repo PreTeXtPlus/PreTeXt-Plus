@@ -73,8 +73,7 @@ class BuildCallbacksControllerTest < ActionDispatch::IntegrationTest
     end
 
     assert_response :success
-    assert @build.reload.received_from_server?
-    assert @build.completed_with_errors?
+    assert @build.reload.received_from_server_flagged?
     assert_equal "ERROR external/fig-hasse.svg not found", @build.log
   end
 
@@ -84,7 +83,6 @@ class BuildCallbacksControllerTest < ActionDispatch::IntegrationTest
     end
 
     assert @build.reload.failed?
-    assert_not @build.completed_with_errors?
   end
 
   # The flag is about the build server's verdict, not about ours: a clean build must
@@ -92,7 +90,7 @@ class BuildCallbacksControllerTest < ActionDispatch::IntegrationTest
   test "a success is not flagged" do
     post_callback(success_payload)
 
-    assert_not @build.reload.completed_with_errors?
+    assert @build.reload.received_from_server?
   end
 
   test "a failure with output still fetches the rest of a truncated log" do

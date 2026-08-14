@@ -292,13 +292,13 @@ class BuildsControllerTest < ActionDispatch::IntegrationTest
   # someone accepts it here.
   test "accepting a build with errors makes it what readers see" do
     build = builds(:one)
-    build.mark!(:success, completed_with_errors: true)
+    build.mark!(:success_awaiting_review)
     assert_nil build.target.reload.current_build
 
     patch accept_project_build_url(@project, build)
 
     assert_equal build, build.target.reload.current_build
-    assert build.reload.errors_accepted?
+    assert build.reload.success_errors_accepted?
     assert_redirected_to project_target_url(@project, build.target)
     assert_match(/Readers now see/, flash[:notice])
   end
@@ -311,18 +311,18 @@ class BuildsControllerTest < ActionDispatch::IntegrationTest
 
     patch accept_project_build_url(@project, build)
 
-    assert_not build.reload.errors_accepted?
+    assert build.reload.success?
     assert_match(/isn't waiting to be reviewed/, flash[:alert])
   end
 
   test "cannot accept a build in another user's project" do
     build = builds(:two)
-    build.mark!(:success, completed_with_errors: true)
+    build.mark!(:success_awaiting_review)
 
     patch accept_project_build_url(projects(:two), build)
 
     assert_redirected_to projects_path
-    assert_not build.reload.errors_accepted?
+    assert build.reload.success_awaiting_review?
   end
 
   test "deleting a build returns to the target drawer" do

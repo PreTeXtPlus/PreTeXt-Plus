@@ -38,7 +38,7 @@ class TargetsControllerTest < ActionDispatch::IntegrationTest
   test "the drawer offers the build awaiting review, and the row points at the drawer" do
     target = targets(:one_print)
     build = target.builds.create!(created_at: 1.hour.ago)
-    build.mark!(:success, completed_with_errors: true)
+    build.mark!(:success_awaiting_review)
 
     get project_target_url(@project, target), headers: { "Turbo-Frame" => "drawer" }
 

@@ -38,11 +38,11 @@ class BuildCallbacksController < ApplicationController
       # A failed build that still produced output. The server zips whatever landed in
       # output/ whatever the exit code was, and sends `artifact_url` whenever that zip
       # exists -- so its presence, not the status word, is what decides whether there is
-      # anything to import. Imported the same way a success is, and flagged so the
-      # dashboard, the drawer and the log page can warn that what an author is about to
-      # preview (or publish) came out of a build that reported errors.
+      # anything to import. Imported the same way a success is, via the "flagged" status
+      # so the dashboard, the drawer and the log page can warn that what an author is
+      # about to preview (or publish) came out of a build that reported errors.
       if payload["artifact_url"].present?
-        build.mark!(:received_from_server, log: inline_log(payload), completed_with_errors: true)
+        build.mark!(:received_from_server_flagged, log: inline_log(payload))
         import_artifact(build, payload)
         Rails.logger.warn("Build #{build.id} exited #{payload["exit_code"].inspect} on the build " \
                           "server but produced output -- importing it and flagging the build.")

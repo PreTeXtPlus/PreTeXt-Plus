@@ -116,7 +116,7 @@ module TargetsHelper
       # the current_build check because it is emphatically *not* that, and "Superseded"
       # -- what it would otherwise read as -- is the opposite of true: it is the newest
       # build there is.
-      elsif build.awaiting_review? then [ "Not live · errors", "bg-orange-100 text-orange-900" ]
+      elsif build.success_awaiting_review? then [ "Not live · errors", "bg-orange-100 text-orange-900" ]
       # The errors belong on the row for the attempt that had them, not only on the
       # target: a history where the live build reads plain "Live" gives an author no way
       # to tell which of two builds is the one whose log they were told to read.

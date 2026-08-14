@@ -55,14 +55,13 @@ class BuildStatusCheckerTest < ActiveJob::TestCase
 
     assert result.ok?
     assert_match(/reported errors/, result.message)
-    assert build.reload.received_from_server?
-    assert build.completed_with_errors?
+    assert build.reload.received_from_server_flagged?
     assert_enqueued_with(job: FullBuildArtifactJob,
                          args: [ build, "https://#{Rails.application.credentials.dig(:full_build, :host)}/builds/job-123/artifact" ])
   end
 
   test "an already-imported build with errors reports the warning rather than a plain success" do
-    build.mark!(:success, completed_with_errors: true)
+    build.mark!(:success_awaiting_review)
 
     result = Net::HTTP.stub(:start, ->(*_args, **_kw) { flunk "should not call the build server" }) do
       BuildStatusChecker.new(build).check!

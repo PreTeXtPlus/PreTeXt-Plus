@@ -45,17 +45,18 @@ class FullBuildArtifactJobTest < ActiveJob::TestCase
       build.build_files.find_by!(relative_path: "index.html").blob.download
   end
 
-  # Output is output: the import does not branch on how the build server graded the build,
-  # and the flag the callback set has to survive the mark!(:success) at the end of it --
-  # that flag is what holds the output back from readers until the author accepts it.
+  # Output is output: the import does not branch on how the build server graded the build.
+  # #perform reads received_from_server_flagged? off the row before the completing mark!
+  # overwrites it, and lands on success_awaiting_review instead of plain success -- that
+  # status is what holds the output back from readers until the author accepts it.
   test "importing output from a failed build keeps it flagged and out of the live slot" do
-    build.mark!(:received_from_server, completed_with_errors: true)
+    build.mark!(:received_from_server_flagged)
     response = http_response(Net::HTTPOK, "200", fake_zip("index.html" => "<html>home</html>"))
 
     stub_artifact(response) { FullBuildArtifactJob.perform_now(build, ARTIFACT_URL) }
 
-    assert build.reload.success?
-    assert build.awaiting_review?
+    assert build.reload.successful?
+    assert build.success_awaiting_review?
     assert_equal 1, build.build_files.count, "the output still has to import"
     assert_not_equal build, build.target.reload.current_build
     assert_equal build, build.target.build_awaiting_review

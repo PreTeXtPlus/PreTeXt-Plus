@@ -339,7 +339,7 @@ class TargetTest < ActiveSupport::TestCase
     target = targets(:one_print)
     projects(:one).update_column(:source_updated_at, 2.days.ago)
     build = target.builds.create!(created_at: 1.hour.ago)
-    build.mark!(:success, completed_with_errors: true)
+    build.mark!(:success_awaiting_review)
 
     assert_equal :needs_review, target.reload.state
     assert_nil target.current_build
@@ -359,7 +359,7 @@ class TargetTest < ActiveSupport::TestCase
     good = target.builds.create!(created_at: 2.days.ago)
     good.mark!(:success)
     flagged = target.builds.create!(created_at: 1.hour.ago)
-    flagged.mark!(:success, completed_with_errors: true)
+    flagged.mark!(:success_awaiting_review)
 
     assert_equal good, target.reload.current_build
     assert_equal :needs_review, target.state
@@ -376,7 +376,7 @@ class TargetTest < ActiveSupport::TestCase
   test "state is stale rather than warned when the source has moved on" do
     target = targets(:one_print)
     build = target.builds.create!(created_at: 2.days.ago)
-    build.mark!(:success, completed_with_errors: true, errors_accepted: true)
+    build.mark!(:success_errors_accepted)
     projects(:one).update_column(:source_updated_at, 1.hour.ago)
 
     assert_equal :stale, target.reload.state
@@ -387,7 +387,7 @@ class TargetTest < ActiveSupport::TestCase
   test "state is needs_review even when the source has moved on" do
     target = targets(:one_print)
     build = target.builds.create!(created_at: 2.days.ago)
-    build.mark!(:success, completed_with_errors: true)
+    build.mark!(:success_awaiting_review)
     projects(:one).update_column(:source_updated_at, 1.hour.ago)
 
     assert_equal :needs_review, target.reload.state
@@ -400,7 +400,7 @@ class TargetTest < ActiveSupport::TestCase
     live = target.builds.create!(created_at: 3.days.ago)
     live.mark!(:success)
     2.times do |i|
-      target.builds.create!(created_at: (i + 1).days.ago).mark!(:success, completed_with_errors: true)
+      target.builds.create!(created_at: (i + 1).days.ago).mark!(:success_awaiting_review)
     end
 
     target.reload.prune_builds!
@@ -409,11 +409,13 @@ class TargetTest < ActiveSupport::TestCase
     assert Build.exists?(live.id)
   end
 
-  # The flag outlives a *later* failure of the import itself (the artifact download
-  # timing out, say), and such a build has no output at all -- it is simply failed.
+  # A build the server flagged never reaches either "usable" status if the import itself
+  # then fails (the artifact download timing out, say) -- it simply ends up failed, with
+  # no output at all.
   test "a flagged build whose import failed is not treated as usable output" do
     build = builds(:in_progress)
-    build.mark!(:failed, completed_with_errors: true)
+    build.mark!(:received_from_server_flagged)
+    build.mark!(:failed)
 
     assert_not build.reload.built_with_errors?
     assert_equal :failed, build.target.reload.state

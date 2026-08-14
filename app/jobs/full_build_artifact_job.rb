@@ -5,12 +5,14 @@ require "net/http"
 # Downloads and unpacks a finished build's artifact (output.zip) from the build
 # server. Triggered by BuildCallbacksController once the server offers an artifact_url,
 # which it does whenever a build left output behind -- including a build it reports as
-# failed (see Build#completed_with_errors). Each zip entry becomes a BuildFile, and the
-# whole zip is attached for download.
+# failed (see received_from_server_flagged on Build). Each zip entry becomes a BuildFile,
+# and the whole zip is attached for download.
 #
-# Nothing here branches on that: output is output, and the flag the callback already set
-# on the row is what the UI warns from. It survives every mark! below, including the
-# failure paths -- see Build#built_with_errors? for why that is harmless.
+# The import itself doesn't branch on whether the build was flagged -- output is output --
+# but #perform reads that off `build.status` (received_from_server_flagged?) before the
+# completing mark! overwrites it, and uses it to choose success vs. success_awaiting_review.
+# A build whose import fails after that read simply ends up :failed, same as any other --
+# see Build#built_with_errors? for why that's the right outcome.
 #
 # This is the job that ends a build, and the dashboard reflects that: `success` from the
 # build server only moves a build to `received_from_server`, which Target::IN_FLIGHT still
@@ -35,7 +37,11 @@ class FullBuildArtifactJob < ApplicationJob
   def perform(build, artifact_url)
     # Cancelled as well as already-imported: a cancel can land while the artifact is
     # downloading, and finishing the import would republish output nobody is waiting for.
-    return if build.success? || build.canceled?
+    return if build.successful? || build.canceled?
+
+    # Read before the completing mark! below overwrites it -- update_columns mutates the
+    # in-memory attribute too, so this has to be captured now or the flag is lost.
+    flagged = build.received_from_server_flagged?
 
     response = FullBuildServer.get(artifact_url, read_timeout: ARTIFACT_READ_TIMEOUT)
 
@@ -75,7 +81,7 @@ class FullBuildArtifactJob < ApplicationJob
       content_type: "application/zip"
     )
 
-    build.mark!(:success, entry_path: detect_entry_path(build))
+    build.mark!(flagged ? :success_awaiting_review : :success, entry_path: detect_entry_path(build))
 
     # A new success is the one moment history grows, so it is also when the retention
     # window (Target::KEPT_SUCCESSES) is enforced -- no scheduled sweep to forget about.
