@@ -27,21 +27,6 @@ import {
 /** @typedef {import("./railsProjectMapping").EditorDivision} EditorDivision */
 
 /**
- * The static page (public/preview-frame.html) the live preview is delivered
- * into, instead of `iframe.srcdoc`.
- *
- * This is what gives the preview a real URL, which is the only way PreTeXt's
- * print preview for worksheets and handouts can work at all -- it is entered
- * via a `?printpreview=<id>` query string, and `srcdoc` documents have no URL.
- *
- * Bump `v` whenever public/preview-frame.html changes: files under public/ are
- * served with a one-year cache lifetime in production (see
- * config/environments/production.rb), so without a new URL returning readers
- * would keep the old shim.
- */
-const PREVIEW_FRAME_URL = "/preview-frame.html?v=1";
-
-/**
  * The full project JSON returned by the editor-state endpoint.
  * @typedef {Object} RailsProjectJson
  * @property {string} [title]
@@ -398,6 +383,18 @@ function EditorApp({ config }) {
   const previewUrl = `/projects/${projectId}/preview`;
   const copyUrl = `/projects/${projectId}/copy_conversion`;
   const feedbackUrl = `/projects/${projectId}/feedback`;
+  // The static page (public/preview-frame.html, served at this project-scoped
+  // URL by ProjectsController#preview_frame) the live preview is delivered
+  // into, instead of `iframe.srcdoc`.
+  //
+  // This is what gives the preview a real URL, which is the only way
+  // PreTeXt's print preview for worksheets and handouts can work at all --
+  // it is entered via a `?printpreview=<id>` query string, and `srcdoc`
+  // documents have no URL. It must be project-scoped (rather than the bare
+  // `/preview-frame.html`) so that relative asset links in the rendered
+  // preview -- e.g. `external/:ref` -- resolve against `/projects/${projectId}/...`,
+  // matching AssetsController#share's member route.
+  const previewFrameUrl = `/projects/${projectId}/preview-frame.html`;
   // Fetches the bytes of a remote image server-side (CORS workaround only --
   // does not persist anything; see onAssetFetchUrl below).
   const assetFetchUrl = "/asset_fetches";
@@ -1150,7 +1147,7 @@ function EditorApp({ config }) {
       onSaveButton={onSaveButton}
       onCancelButton={onCancelButton}
       onPreviewRebuild={onPreviewRebuild}
-      previewFrameUrl={PREVIEW_FRAME_URL}
+      previewFrameUrl={previewFrameUrl}
       onCreatePretextProjectCopy={onCreatePretextProjectCopy}
       onFeedbackSubmit={onFeedbackSubmit}
     />
