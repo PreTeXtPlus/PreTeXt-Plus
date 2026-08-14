@@ -3,8 +3,8 @@ require "application_system_test_case"
 class PreviewFrameAssetTest < ApplicationSystemTestCase
   setup do
     @user = users(:one)
-    @project = projects(:preview_frame)
-    @asset = assets(:preview_frame_diagram) # ref: "preview-frame-diagram", file pre-attached via fixtures
+    @project = projects(:one)
+    @asset = assets(:image_one) # ref: "diagram", file pre-attached via fixtures
     sign_in_through_form
   end
 
