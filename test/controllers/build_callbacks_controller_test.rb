@@ -64,6 +64,44 @@ class BuildCallbacksControllerTest < ActionDispatch::IntegrationTest
                  artifact_url
   end
 
+  # Since the build server's "keep output if it exists" change, a nonzero exit still
+  # zips whatever landed in output/ and the payload still carries artifact_url. The
+  # presence of that key, not the status word, is what decides there is an import to do.
+  test "a failure that still produced output is imported and flagged" do
+    assert_enqueued_with(job: FullBuildArtifactJob) do
+      post_callback(failure_payload("artifact_url" => "/builds/job-123/artifact"))
+    end
+
+    assert_response :success
+    assert @build.reload.received_from_server?
+    assert @build.completed_with_errors?
+    assert_equal "ERROR external/fig-hasse.svg not found", @build.log
+  end
+
+  test "a failure with no output imports nothing and stays failed" do
+    assert_no_enqueued_jobs(only: FullBuildArtifactJob) do
+      post_callback(failure_payload)
+    end
+
+    assert @build.reload.failed?
+    assert_not @build.completed_with_errors?
+  end
+
+  # The flag is about the build server's verdict, not about ours: a clean build must
+  # never pick it up on the way through.
+  test "a success is not flagged" do
+    post_callback(success_payload)
+
+    assert_not @build.reload.completed_with_errors?
+  end
+
+  test "a failure with output still fetches the rest of a truncated log" do
+    assert_enqueued_with(job: FullBuildLogJob, args: [ @build, "/builds/job-123/log" ]) do
+      post_callback(failure_payload("artifact_url" => "/builds/job-123/artifact",
+                                    "log_truncated" => true))
+    end
+  end
+
   # The tail is capped at CALLBACK_LOG_TAIL_CHARS server-side; the rest is fetched out of
   # band so a slow log endpoint can't stall the response into the server's retry.
   test "a truncated log is completed by a background fetch" do

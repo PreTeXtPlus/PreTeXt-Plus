@@ -332,6 +332,93 @@ class TargetTest < ActiveSupport::TestCase
     assert target.stale?
   end
 
+  # Output the build server produced from a build it called a failure. It imports, but it
+  # is not what readers see: that is the author's call, and until they make it the target
+  # says so.
+  test "output from a failed build is not live until it is accepted" do
+    target = targets(:one_print)
+    projects(:one).update_column(:source_updated_at, 2.days.ago)
+    build = target.builds.create!(created_at: 1.hour.ago)
+    build.mark!(:success, completed_with_errors: true)
+
+    assert_equal :needs_review, target.reload.state
+    assert_nil target.current_build
+    assert_equal build, target.build_awaiting_review
+
+    build.accept_errors!
+
+    assert_equal :warned, target.reload.state
+    assert_equal build, target.current_build
+    assert_nil target.build_awaiting_review
+  end
+
+  # The case the opt-in exists for: a published target must keep serving the build it was
+  # serving, however recently something newer imported.
+  test "a build awaiting review leaves the previously live build in place" do
+    target = targets(:one_print)
+    good = target.builds.create!(created_at: 2.days.ago)
+    good.mark!(:success)
+    flagged = target.builds.create!(created_at: 1.hour.ago)
+    flagged.mark!(:success, completed_with_errors: true)
+
+    assert_equal good, target.reload.current_build
+    assert_equal :needs_review, target.state
+
+    flagged.accept_errors!
+
+    assert_equal flagged, target.reload.current_build
+    # And the build it displaced is what "Restore previous build" now offers.
+    assert_equal good, target.previous_successful_build
+  end
+
+  # An author who has edited since is going to rebuild anyway; being out of date is the
+  # more actionable of the two, and the drawer still carries the warning.
+  test "state is stale rather than warned when the source has moved on" do
+    target = targets(:one_print)
+    build = target.builds.create!(created_at: 2.days.ago)
+    build.mark!(:success, completed_with_errors: true, errors_accepted: true)
+    projects(:one).update_column(:source_updated_at, 1.hour.ago)
+
+    assert_equal :stale, target.reload.state
+  end
+
+  # ...but a decision still waiting on the author outranks it: :stale is about the source
+  # having moved on, and there is nothing to say about output nobody has accepted yet.
+  test "state is needs_review even when the source has moved on" do
+    target = targets(:one_print)
+    build = target.builds.create!(created_at: 2.days.ago)
+    build.mark!(:success, completed_with_errors: true)
+    projects(:one).update_column(:source_updated_at, 1.hour.ago)
+
+    assert_equal :needs_review, target.reload.state
+  end
+
+  # Two unreviewed builds stacked on top of a live one fill the KEPT_SUCCESSES window
+  # between them. The live build has to survive that: it is what the public link serves.
+  test "pruning never deletes the live build to make room for unreviewed ones" do
+    target = targets(:one_print)
+    live = target.builds.create!(created_at: 3.days.ago)
+    live.mark!(:success)
+    2.times do |i|
+      target.builds.create!(created_at: (i + 1).days.ago).mark!(:success, completed_with_errors: true)
+    end
+
+    target.reload.prune_builds!
+
+    assert_equal live, target.reload.current_build
+    assert Build.exists?(live.id)
+  end
+
+  # The flag outlives a *later* failure of the import itself (the artifact download
+  # timing out, say), and such a build has no output at all -- it is simply failed.
+  test "a flagged build whose import failed is not treated as usable output" do
+    build = builds(:in_progress)
+    build.mark!(:failed, completed_with_errors: true)
+
+    assert_not build.reload.built_with_errors?
+    assert_equal :failed, build.target.reload.state
+  end
+
   # queued is not in IN_FLIGHT -- a build waiting for a slot has not been sent to the
   # build server -- so state has to check for it explicitly, ahead of #building?.
   test "state is queued when the latest build is waiting for a slot" do

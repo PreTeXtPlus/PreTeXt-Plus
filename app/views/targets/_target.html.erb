@@ -28,12 +28,10 @@
               method: :patch, params: { published: false },
               class: "cursor-pointer text-xs text-gray-500 hover:underline" %>
       <% elsif target.current_build.present? %>
-        <% publish_data = target.project.private_visibility? ?
-             { turbo_confirm: "Publishing will make this project's visibility Unlisted (it's currently Private). Continue?" } :
-             {} %>
         <%= button_to "Publish", publish_project_target_path(target.project, target),
               method: :patch, params: { published: true },
-              class: "cursor-pointer text-xs text-gray-600 hover:underline", data: publish_data %>
+              class: "cursor-pointer text-xs text-gray-600 hover:underline",
+              data: publish_confirm(target) %>
         <span class="text-xs text-gray-400">Not public</span>
       <% else %>
         <span class="text-xs text-gray-400">Build it before publishing</span>

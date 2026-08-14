@@ -47,6 +47,49 @@
       </div>
     </div>
 
+    <%# The decision this drawer exists to put in front of someone: a build the server
+        flagged has imported, and nothing serves it until it is accepted here. Preview
+        first, then decide -- which is why the accept button sits next to a link that
+        opens the output rather than on the dashboard row, where there is nothing to
+        look at. _top for the same reason as revert below: the redirect carries a flash
+        and re-renders the dashboard with this drawer open. %>
+    <% if (pending = target.build_awaiting_review) %>
+      <div class="border-b border-orange-200 bg-orange-50 p-5 text-sm text-orange-900">
+        <p class="font-semibold">The latest build reported errors.</p>
+        <p class="mt-1">
+          It still produced output, so you can look at it — but parts of it may be missing
+          or wrong, and
+          <%= target.current_build ? "readers keep seeing the previous build" :
+                                     "nothing is live for this output yet" %>
+          until you choose to use it. The log is below.
+        </p>
+        <div class="mt-3 flex flex-wrap items-center gap-2">
+          <% if pending.entry_path.present? %>
+            <%= link_to target.site? ? "Preview it" : "Open it",
+                  build_file_path(pending, pending.entry_path),
+                  class: "#{button_classes(color: "gray", outlined: true)} px-3 py-2 text-sm",
+                  target: "_blank", rel: "noopener", data: { turbo: false } %>
+          <% end %>
+          <%= button_to "Use this build", accept_project_build_path(project, pending),
+                method: :patch, form: { data: { turbo_frame: "_top" } },
+                class: "#{button_classes(color: "gray", outlined: true)} px-3 py-2 text-sm",
+                data: { turbo_confirm: "Make this build what readers see? It reported errors, " \
+                                       "so parts of it may be missing or wrong." } %>
+        </div>
+      </div>
+    <%# Once accepted, the same output is live and the warning stops being a question and
+        starts being a fact about what readers are getting. Keyed off current_build, so a
+        later attempt that failed outright leaves this saying what is actually served. %>
+    <% elsif target.current_build&.built_with_errors? %>
+      <div class="border-b border-orange-200 bg-orange-50 p-5 text-sm text-orange-900">
+        <p class="font-semibold">This output came from a build that reported errors.</p>
+        <p class="mt-1">
+          You chose to use it, so it is what readers see and what the public link serves.
+          Parts of it may be missing or wrong; the build log is below.
+        </p>
+      </div>
+    <% end %>
+
     <div class="space-y-2 border-b border-gray-200 p-5 text-sm">
       <div class="flex gap-3">
         <span class="w-28 shrink-0 font-mono text-xs uppercase tracking-wider text-gray-500">State</span>
@@ -65,7 +108,14 @@
       <div class="flex gap-3">
         <span class="w-28 shrink-0 font-mono text-xs uppercase tracking-wider text-gray-500">Last try</span>
         <span>
-          <%= target.latest_build ? "#{target.latest_build.created_at.to_fs(:long)} — #{target.latest_build.status.humanize.downcase}" : "—" %>
+          <%# "success" alone would be a lie about a build the CLI exited nonzero on --
+              the output imported, the build still reported errors. %>
+          <% if (last = target.latest_build) %>
+            <%= last.created_at.to_fs(:long) %> —
+            <%= last.built_with_errors? ? "success, with errors" : last.status.humanize.downcase %>
+          <% else %>
+            —
+          <% end %>
         </span>
       </div>
 
@@ -110,16 +160,22 @@
               method: :patch, params: { published: false },
               class: "#{button_classes(color: "gray", outlined: true)} mt-3 px-3 py-2 text-sm" %>
       <% elsif target.current_build.present? %>
-        <% publish_data = target.project.private_visibility? ?
-             { turbo_confirm: "Publishing will make this project's visibility Unlisted (it's currently Private). Continue?" } :
-             {} %>
         <%# _top because escalating visibility redirects (see targets#publish) rather than
             streaming the usual row/drawer update -- inside this frame that redirect would
             just reload the empty "drawer" frame instead of the whole page. %>
         <%= button_to "Publish this output", publish_project_target_path(project, target),
               method: :patch, params: { published: true }, form: { data: { turbo_frame: "_top" } },
-              class: "#{button_classes(color: "gray", outlined: true)} mt-2 px-3 py-2 text-sm", data: publish_data %>
+              class: "#{button_classes(color: "gray", outlined: true)} mt-2 px-3 py-2 text-sm",
+              data: publish_confirm(target) %>
         <p class="mt-2 text-xs text-gray-500">Publishing does not start a build — it exposes the one already built.</p>
+      <% elsif target.build_awaiting_review %>
+        <%# There *is* output -- it is just not live yet, and publishing exposes what is
+            live. Saying "build this output" here would send an author to rebuild
+            something they have already built. %>
+        <p class="mt-2 text-sm text-gray-600">
+          Nothing is live for this output yet. Use the latest build above, or build again,
+          before publishing it.
+        </p>
       <% else %>
         <p class="mt-2 text-sm text-gray-600">Build this output before publishing it.</p>
       <% end %>

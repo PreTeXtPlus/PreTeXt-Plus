@@ -29,6 +29,27 @@
   </div>
 <% end %>
 
+<% if @build.awaiting_review? %>
+  <%# The log is where an author decides, so it says what the decision is and where it is
+      made. The button itself stays in the drawer, next to the link that previews this
+      output -- reading the log is half of reviewing it, looking at the result is the
+      other half. %>
+  <div class="mt-4 rounded-lg border border-orange-200 bg-orange-50 p-3 text-sm text-orange-900">
+    This build reported errors but still produced output, which has been imported.
+    <strong>It is not live:</strong> readers keep seeing the previous build until you
+    choose to use this one, in
+    <%= link_to "this output's details", project_target_path(@project, @build.target),
+          class: "underline", data: { turbo: false } %>.
+    The log below is where to find out what went wrong.
+  </div>
+<% elsif @build.built_with_errors? %>
+  <div class="mt-4 rounded-lg border border-orange-200 bg-orange-50 p-3 text-sm text-orange-900">
+    This build reported errors, but it still produced output and you chose to use it —
+    it is what readers see. The log below is where to find out what went wrong, and
+    whether the missing parts matter.
+  </div>
+<% end %>
+
 <% if @build.log.present? %>
   <pre class="mt-4 overflow-auto rounded-lg bg-gray-900 p-4 text-xs text-gray-100 whitespace-pre-wrap"><%= @build.log %></pre>
 <% else %>

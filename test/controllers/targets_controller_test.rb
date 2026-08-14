@@ -32,6 +32,26 @@ class TargetsControllerTest < ActionDispatch::IntegrationTest
     assert_match(/5 days/, response.body)
   end
 
+  # The drawer is where output from a build with errors is opted into being live, so the
+  # decision has to actually be on it -- and the dashboard row has to say to come here
+  # rather than offering the same button next to nothing worth looking at.
+  test "the drawer offers the build awaiting review, and the row points at the drawer" do
+    target = targets(:one_print)
+    build = target.builds.create!(created_at: 1.hour.ago)
+    build.mark!(:success, completed_with_errors: true)
+
+    get project_target_url(@project, target), headers: { "Turbo-Frame" => "drawer" }
+
+    assert_response :success
+    assert_select "form[action=?]", accept_project_build_path(@project, build)
+    assert_match(/latest build reported errors/, response.body)
+
+    get project_url(@project)
+
+    assert_select "form[action=?]", accept_project_build_path(@project, build), false
+    assert_match(/Needs review/, response.body)
+  end
+
   test "should show the drawer" do
     get project_target_url(@project, @target)
 
