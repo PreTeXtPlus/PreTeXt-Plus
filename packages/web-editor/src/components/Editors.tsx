@@ -1,5 +1,6 @@
 import { Group, Panel, Separator } from "react-resizable-panels";
 import {
+  useCallback,
   useEffect,
   useLayoutEffect,
   useMemo,
@@ -11,7 +12,10 @@ import {
 
 import CodeEditor, { type CodeEditorHandle } from "./CodeEditor";
 //import { VisualEditor } from "@pretextbook/visual-editor";
-import LivePreview, { type LivePreviewHandle } from "./LivePreview";
+import LivePreview, {
+  type LivePreviewHandle,
+  type PreviewContentBundle,
+} from "./LivePreview";
 import { isLocalPreviewAvailable, type PreviewTheme } from "./wasmPreview";
 import {
   buildPreviewLineMap,
@@ -1393,82 +1397,95 @@ const EditorsInner = (props: EditorsInnerProps) => {
     language,
   ]);
 
-  // The active division's own tagged XML (outer element included), with any
-  // `<plus:* ref="..."/>` placeholder expanded against the full divisions
-  // pool — the real build server has no notion of that placeholder syntax,
-  // so previewing a division that still contains unresolved refs (to child
-  // divisions or to assets like `<plus:image ref="...">`) produces invalid
-  // PreTeXt and a build failure. `assembleProjectSource` handles the
-  // LaTeX/Markdown -> PreTeXt conversion internally before resolving refs, so
-  // this is correct for every source format, not just PreTeXt.
-  const divisionTaggedXml = !activeDivision
-    ? undefined
-    : assembleProjectSource(divisions, activeDivision.xmlId, projectAssets);
-
-  const previewContent =
-    activeDivision && divisionTaggedXml !== undefined
-      ? wrapDivisionForPreview(
-          activeDivision.type,
-          divisionTaggedXml,
-          effectiveDocinfo,
-          activeDivision.title,
-          language,
-        )
-      : undefined;
-
   // Is the division on screen the whole document? Then it *is* its own
   // context: there is nothing around it to number it against, and it is
-  // already a complete `<pretext>` document rather than a fragment.
+  // already a complete `<pretext>` document rather than a fragment. Cheap
+  // (just an identity comparison) — unlike everything below, this stays a
+  // live value rather than something `getPreviewContent` resolves lazily.
   const previewingWholeDocument =
     !!activeDivision &&
     !!rootDivision &&
     activeDivision.xmlId === rootDivision.xmlId;
 
-  // The surrounding document a division is previewed inside of, which is what
-  // makes its numbering match the built book ("Theorem 3.2.1", not
-  // "Theorem 1.1") and resolves the `<xref>`s that leave it. The renderer
-  // matches it against the fragment by `@xml:id` and falls back to a
-  // standalone wrapper when it finds no match — a division the author has just
-  // created and not yet linked into the document, say — so an unresolvable
-  // context degrades to exactly the previous behaviour rather than failing.
+  // Resolves what a preview build actually needs — the active division's own
+  // tagged XML with every `<plus:* ref="..."/>` placeholder expanded against
+  // the full divisions pool (`assembleProjectSource` handles the
+  // LaTeX/Markdown -> PreTeXt conversion internally before resolving refs,
+  // so this is correct for every source format, not just PreTeXt), the same
+  // document wrapped for a whole-document/server build, and the surrounding
+  // document a division is previewed inside of (so its numbering matches the
+  // built book and its outgoing `<xref>`s resolve — the renderer matches it
+  // against the fragment by `@xml:id` and falls back to a standalone wrapper
+  // when it finds no match, so an unresolvable context degrades rather than
+  // fails).
   //
-  // This is the same assembly the "full source" modal shows, but it is *not*
-  // shared with it: that one is computed only while the modal is open, and
-  // this one only while the preview is. Both walk the whole divisions tree,
-  // and neither should pay for the other being closed.
-  const previewContextSource = useMemo(() => {
-    if (!showLivePreview || !rootDivision || previewingWholeDocument) {
-      return undefined;
+  // Deliberately NOT computed here: `assembleProjectSource`/
+  // `assembleFullProjectSource` walk the whole divisions tree, converting
+  // every LaTeX/Markdown division they find along the way, which is too
+  // expensive to redo on every keystroke (this used to be a plain,
+  // unmemoized const, recomputed every render). Instead this is handed to
+  // `<LivePreview>` as `getPreviewContent`, which calls it only when a build
+  // is actually about to happen — the debounced auto-refresh firing, a
+  // manual refresh, or a division switch — and stops being called at all
+  // once a slow build disables auto-refresh (see LivePreview's
+  // `autoRefreshDisabled`/`AUTO_REFRESH_DISABLE_THRESHOLD_MS`). This is also
+  // the same assembly the "full source" modal shows (`isFullSourceOpen`
+  // below), which is independently gated the same way — both walk the whole
+  // divisions tree, and neither should pay for the other being closed.
+  const getPreviewContent = useCallback((): PreviewContentBundle => {
+    if (!activeDivision) return { content: "", serverContent: "" };
+    const divisionTaggedXml = assembleProjectSource(
+      divisions,
+      activeDivision.xmlId,
+      projectAssets,
+    );
+    const wrapped = wrapDivisionForPreview(
+      activeDivision.type,
+      divisionTaggedXml,
+      effectiveDocinfo,
+      activeDivision.title,
+      language,
+    );
+    const content = previewingWholeDocument ? wrapped : divisionTaggedXml;
+
+    let contextSource: string | undefined;
+    if (showLivePreview && rootDivision && !previewingWholeDocument) {
+      try {
+        contextSource = assembleFullProjectSource(
+          divisions,
+          rootDivision.xmlId,
+          effectiveDocinfo,
+          projectAssets ?? [],
+          language,
+        );
+      } catch {
+        // A malformed sibling division must not take the preview down with
+        // it; rendering standalone is still useful.
+        contextSource = undefined;
+      }
     }
-    try {
-      return assembleFullProjectSource(
-        divisions,
-        rootDivision.xmlId,
-        effectiveDocinfo,
-        projectAssets ?? [],
-        language,
-      );
-    } catch {
-      // A malformed sibling division must not take the preview down with it;
-      // rendering standalone is still useful.
-      return undefined;
-    }
+    return { content, serverContent: wrapped, contextSource };
   }, [
+    divisions,
+    activeDivision,
+    projectAssets,
+    effectiveDocinfo,
+    language,
     showLivePreview,
     rootDivision,
     previewingWholeDocument,
-    divisions,
-    effectiveDocinfo,
-    projectAssets,
-    language,
   ]);
 
-  // What the renderer is actually given. A whole document goes as-is; a
-  // division goes as a bare fragment, so the renderer can splice it into
-  // `previewContextSource` in place of the division it stands for.
-  const previewSource = previewingWholeDocument
-    ? previewContent
-    : divisionTaggedXml;
+  // What was actually used for the most recent build — reported back by
+  // `<LivePreview>` via `onContentBuilt`. Not necessarily what
+  // `getPreviewContent()` would return *right now* (builds are debounced),
+  // which is exactly why `previewLineMap`/`pretextValidation`/the preview→
+  // source click handler below read this instead of calling
+  // `getPreviewContent()` themselves.
+  const [builtPreview, setBuiltPreview] = useState<PreviewContentBundle>({
+    content: "",
+    serverContent: "",
+  });
 
   // The same assembled document also feeds PreTeXt schema linting, which
   // cannot validate the raw buffer — it is one division, full of
@@ -1482,10 +1499,13 @@ const EditorsInner = (props: EditorsInnerProps) => {
     () =>
       activeDivisionFormat === "pretext" &&
       divisionActiveSource &&
-      previewContent
-        ? { editorSource: divisionActiveSource, assembledDocument: previewContent }
+      builtPreview.serverContent
+        ? {
+            editorSource: divisionActiveSource,
+            assembledDocument: builtPreview.serverContent,
+          }
         : undefined,
-    [activeDivisionFormat, divisionActiveSource, previewContent],
+    [activeDivisionFormat, divisionActiveSource, builtPreview.serverContent],
   );
 
   // ── Preview rebuild helpers ──────────────────────────────────────────────
@@ -1502,27 +1522,29 @@ const EditorsInner = (props: EditorsInnerProps) => {
   // the assembled document the preview renders. See previewSync.ts for why
   // these differ and how the mapping is recovered.
   //
-  // Memoised on the two strings themselves — they are recomputed every render
-  // but compare by value, so an unchanged edit costs nothing — and skipped
-  // entirely while the preview is closed, since nothing can ask for it then.
+  // Memoised on the two strings themselves, so an unchanged edit costs
+  // nothing — and skipped entirely while the preview is closed, since
+  // nothing can ask for it then.
   //
   // Note the map describes the *current* buffer, while the page on screen is
-  // from the last rebuild (previews rebuild on save, not on every keystroke).
-  // Between the two, a lookup can land on an element that has since moved or
-  // gone; it resolves by id, so the usual outcome is a slightly stale target
-  // or no scroll at all, and the next rebuild restores exactness.
+  // from the last rebuild (previews are debounced/manual, not rebuilt on
+  // every keystroke). Between the two, a lookup can land on an element that
+  // has since moved or gone; it resolves by id, so the usual outcome is a
+  // slightly stale target or no scroll at all, and the next rebuild restores
+  // exactness.
   //
-  // Built against `previewSource` — what the renderer was actually handed —
-  // rather than the wrapped document, because the source map's line numbers
-  // are in that text's coordinates. For a division that is now the bare
-  // fragment, which is also the closer match to the buffer: no `<pretext>`
-  // wrapper or `<docinfo>` sits between them to be walked past.
+  // Built against `builtPreview.content` — what the renderer was actually
+  // handed for its most recent build — rather than the wrapped document,
+  // because the source map's line numbers are in that text's coordinates.
+  // For a division that is now the bare fragment, which is also the closer
+  // match to the buffer: no `<pretext>` wrapper or `<docinfo>` sits between
+  // them to be walked past.
   const previewLineMap = useMemo(
     () =>
-      showLivePreview && canPreview && previewSource
-        ? buildPreviewLineMap(divisionActiveSource, previewSource)
+      showLivePreview && canPreview && builtPreview.content
+        ? buildPreviewLineMap(divisionActiveSource, builtPreview.content)
         : null,
-    [showLivePreview, canPreview, previewSource, divisionActiveSource],
+    [showLivePreview, canPreview, builtPreview.content, divisionActiveSource],
   );
 
   // Source → preview. Lines with no counterpart (a `<plus:.../>` placeholder,
@@ -1547,7 +1569,7 @@ const EditorsInner = (props: EditorsInnerProps) => {
     assembledLine: number;
     elementId: string;
   }) => {
-    if (!previewContent) return;
+    if (!builtPreview.serverContent) return;
 
     const owner = divisionForElementId(elementId, (xmlId) =>
       divisions.some((d) => d.xmlId === xmlId),
@@ -1557,13 +1579,16 @@ const EditorsInner = (props: EditorsInnerProps) => {
     const targetId = owner ?? activeDivision?.xmlId;
     if (!targetId) return;
 
-    if (divisionMapCacheRef.current.key !== previewContent) {
-      divisionMapCacheRef.current = { key: previewContent, maps: new Map() };
+    if (divisionMapCacheRef.current.key !== builtPreview.serverContent) {
+      divisionMapCacheRef.current = {
+        key: builtPreview.serverContent,
+        maps: new Map(),
+      };
     }
     let map = divisionMapCacheRef.current.maps.get(targetId);
     if (!map) {
       const source = divisions.find((d) => d.xmlId === targetId)?.source ?? "";
-      map = buildPreviewLineMap(source, previewContent);
+      map = buildPreviewLineMap(source, builtPreview.serverContent);
       divisionMapCacheRef.current.maps.set(targetId, map);
     }
     // A converted division (LaTeX, Markdown) shares no lines with its rendered
@@ -1702,15 +1727,14 @@ const EditorsInner = (props: EditorsInnerProps) => {
     preview = (
       <LivePreview
         ref={livePreviewRef}
-        content={previewSource || ""}
-        serverContent={previewContent || ""}
+        getPreviewContent={getPreviewContent}
+        onContentBuilt={setBuiltPreview}
         title={title}
         onRebuild={props.onPreviewRebuild}
         onSyncToSource={handleSyncToSource}
         divisionId={activeDivision?.xmlId}
         previewLineMap={previewLineMap}
         fragment={!previewingWholeDocument}
-        contextSource={previewContextSource}
         docinfo={effectiveDocinfo}
         frameUrl={props.previewFrameUrl}
         theme={props.previewTheme}

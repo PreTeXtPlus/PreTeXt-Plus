@@ -31,7 +31,8 @@ import {
 import type { PreviewLineMap } from "./previewSync";
 import type { PtxSourceMap, SourceMapEntry } from "@pretextbook/pretext-html";
 
-interface LivePreviewProps {
+/** What a build actually needs, supplied lazily — see {@link LivePreviewProps.getPreviewContent}. */
+export interface PreviewContentBundle {
   /**
    * What the local renderer is given: a complete `<pretext>` document, or —
    * with {@link LivePreviewProps.fragment} — one division on its own.
@@ -44,6 +45,36 @@ interface LivePreviewProps {
    * `content`, which is correct whenever that is already a whole document.
    */
   serverContent?: string;
+  /**
+   * The complete project document `content` is rendered inside of, so the
+   * division is numbered as the built book numbers it and its outgoing
+   * `<xref>`s resolve. Omit to render the division standalone — which
+   * restarts numbering at 1 and leaves those references as PreTeXt's
+   * "missing target" placeholder.
+   */
+  contextSource?: string;
+}
+
+interface LivePreviewProps {
+  /**
+   * Supplies {@link PreviewContentBundle} lazily — called only when a build
+   * is actually about to happen (the debounced auto-refresh firing, a
+   * manual refresh, or a division switch), never merely because something
+   * upstream changed. Hosts whose content is expensive to produce (e.g.
+   * converted from LaTeX/Markdown, or resolved from a whole division tree)
+   * rely on this to keep that cost off the hot path of every keystroke —
+   * see `AUTO_REFRESH_DISABLE_THRESHOLD_MS` below, which this shares: once
+   * auto-refresh is paused, this simply stops being called.
+   */
+  getPreviewContent: () => PreviewContentBundle;
+  /**
+   * Reports the bundle actually used for the most recent build. Not
+   * necessarily what `getPreviewContent()` would return *right now* —
+   * builds are debounced — so hosts that derive something from the built
+   * content (a line-sync map, schema linting) should key off this instead
+   * of recomputing their own live version of it.
+   */
+  onContentBuilt?: (bundle: PreviewContentBundle) => void;
   title?: string;
   /**
    * Server-side rebuild handler. Optional: when the browser can render
@@ -81,9 +112,10 @@ interface LivePreviewProps {
    * This is deliberately an identity rather than the content — content changes
    * on every keystroke and must *not* rebuild.
    *
-   * It doubles as the `@xml:id` matched against {@link contextSource}, which
-   * is how the renderer knows which division of the surrounding document
-   * `content` stands in for.
+   * It doubles as the `@xml:id` matched against
+   * {@link PreviewContentBundle.contextSource}, which is how the renderer
+   * knows which division of the surrounding document `content` stands in
+   * for.
    */
   divisionId?: string;
   /**
@@ -96,17 +128,10 @@ interface LivePreviewProps {
   /**
    * Whether `content` is a bare division (a lone `<section>`, `<chapter>`, …)
    * that the renderer should wrap, rather than a complete `<pretext>`
-   * document. Required for {@link contextSource} to apply.
+   * document. Required for {@link PreviewContentBundle.contextSource} to
+   * apply.
    */
   fragment?: boolean;
-  /**
-   * The complete project document to render `content` *inside of*, so the
-   * division is numbered as the built book numbers it and its outgoing
-   * `<xref>`s resolve. Omit to render the division standalone — which
-   * restarts numbering at 1 and leaves those references as PreTeXt's
-   * "missing target" placeholder.
-   */
-  contextSource?: string;
   /** `<docinfo>` for a standalone fragment: LaTeX macros, custom settings. */
   docinfo?: string;
   /**
@@ -244,15 +269,14 @@ const AUTO_REFRESH_DISABLE_THRESHOLD_MS = 3000;
 const LivePreview = forwardRef<LivePreviewHandle, LivePreviewProps>(
   (
     {
-      content,
-      serverContent,
+      getPreviewContent,
+      onContentBuilt,
       title,
       onRebuild,
       onSyncToSource,
       divisionId,
       previewLineMap,
       fragment,
-      contextSource,
       docinfo,
       frameUrl,
       theme,
@@ -311,7 +335,6 @@ const LivePreview = forwardRef<LivePreviewHandle, LivePreviewProps>(
 
 
     const preview = useCallback(() => {
-      const source = content;
       const previewTitle = title || "Document Title";
 
       // Save scroll position before rebuilding so the author keeps their place.
@@ -330,14 +353,23 @@ const LivePreview = forwardRef<LivePreviewHandle, LivePreviewProps>(
       }
 
       setIsRebuilding(true);
+      // Resolved here, not read off a prop — this is the one moment a build
+      // is actually about to happen, so it's the one moment the (possibly
+      // expensive) content bundle is worth producing. Timed together with
+      // the render below: for a host whose bundle is expensive to derive
+      // (e.g. converted from LaTeX/Markdown), that cost is exactly what
+      // AUTO_REFRESH_DISABLE_THRESHOLD_MS should be guarding against too.
+      const buildStart = performance.now();
+      const built = getPreviewContent();
+      onContentBuilt?.(built);
+      const source = built.content;
 
       if (renderLocally) {
         const token = ++renderToken.current;
-        const buildStart = performance.now();
         renderPreviewHtml(source, {
           divisionId,
           fragment,
-          contextSource,
+          contextSource: built.contextSource,
           docinfo,
           theme,
           bannerMessage,
@@ -383,17 +415,16 @@ const LivePreview = forwardRef<LivePreviewHandle, LivePreviewProps>(
       const postHelper = (url: string, data: any) => {
         postToIframe(url, data, "livePreview");
       };
-      onRebuild?.(serverContent ?? source, previewTitle, postHelper);
+      onRebuild?.(built.serverContent ?? source, previewTitle, postHelper);
     }, [
-      content,
-      serverContent,
+      getPreviewContent,
+      onContentBuilt,
       title,
       onRebuild,
       renderLocally,
       previewLineMap,
       divisionId,
       fragment,
-      contextSource,
       docinfo,
       theme,
       bannerMessage,
@@ -566,6 +597,14 @@ const LivePreview = forwardRef<LivePreviewHandle, LivePreviewProps>(
     // on every change, so a fast typist doesn't queue up a render per
     // character. Server builds stay manual-only (see effect above) — a
     // network round trip on every pause would be both slow and wasteful.
+    //
+    // Keyed on `getPreviewContent`'s identity, not its result: a host builds
+    // it with `useCallback` over its own live state, so a new identity here
+    // means "something worth previewing changed" without this effect ever
+    // having to call it itself — that only happens inside `preview()`, once
+    // the debounce actually fires. When `autoRefreshDisabled` is true this
+    // returns immediately, so `getPreviewContent()` — and whatever
+    // (possibly expensive) work it wraps — simply never runs.
     useEffect(() => {
       if (!renderLocally || autoRefreshDisabled) return;
       const timer = setTimeout(() => {
@@ -573,7 +612,7 @@ const LivePreview = forwardRef<LivePreviewHandle, LivePreviewProps>(
       }, 1000);
       return () => clearTimeout(timer);
       // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [content, renderLocally, autoRefreshDisabled]);
+    }, [getPreviewContent, renderLocally, autoRefreshDisabled]);
 
     useImperativeHandle(
       ref,

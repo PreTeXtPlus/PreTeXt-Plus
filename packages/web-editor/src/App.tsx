@@ -448,8 +448,8 @@ root's \`::section{ref="md-demo-sec"}\` directive.
 // Full-build payload assembly (demo-only)
 //
 // `onPreviewRebuild` only ever receives the *active division's* converted
-// content (see Editors.tsx's `previewContent`), so it can't show what a real
-// "full build" would send: the whole document with every `<plus:* ref="..."/>`
+// content (see Editors.tsx's `getPreviewContent`), so it can't show what a
+// real "full build" would send: the whole document with every `<plus:* ref="..."/>`
 // placeholder resolved and every LaTeX/Markdown division converted to PreTeXt.
 // `assembleProjectSource` (from the library) reproduces that assembly from the
 // `divisions` pool so the payload panel below can show it live, independent

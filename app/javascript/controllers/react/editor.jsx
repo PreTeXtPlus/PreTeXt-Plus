@@ -215,18 +215,27 @@ function assembleFullPretextSource(state, projectAssets) {
 // Only asset *destroys* are re-sent from here.  We still pass `projectAssets`
 // so the assembled `pretext_source` can resolve image refs.
 /**
+ * `pretext_source` is only assembled (and only sent) on a hard save: it's an
+ * expensive whole-tree walk (`assembleFullProjectSource` converts every
+ * LaTeX/Markdown division it finds), and nothing needs it live from one
+ * autosave tick to the next — `ProjectArchiveBuilder` (the only reader of
+ * this column) is only ever reached after the author has left the editor via
+ * a hard save. Omitting the key from the PATCH leaves the column untouched,
+ * so a soft autosave still keeps `divisions_attributes` (the real source of
+ * truth) current, just without recomputing the denormalized whole-document
+ * cache on every tick.
  * @param {EditorState} state
  * @param {Asset[]} projectAssets
  * @param {{id: string, kind: "division"|"asset"}[]} [deletes] - Records to destroy.
+ * @param {boolean} [hard] - Whether this is an explicit/final save.
  * @returns {{project: Object}}
  */
-function editorStateToRailsPayload(state, projectAssets, deletes = []) {
+function editorStateToRailsPayload(state, projectAssets, deletes = [], hard = false) {
   const project = {
     title: state.title,
     docinfo: state.docinfo,
     use_common_docinfo: state.useCommonDocinfo,
     language: state.language,
-    pretext_source: assembleFullPretextSource(state, projectAssets),
     divisions_attributes: [
       ...state.divisions.map((d) => ({
         id: d.id,
@@ -239,6 +248,9 @@ function editorStateToRailsPayload(state, projectAssets, deletes = []) {
         .map(({ id }) => ({ id, _destroy: true })),
     ],
   };
+  if (hard) {
+    project.pretext_source = assembleFullPretextSource(state, projectAssets);
+  }
   const assetDeletes = deletes
     .filter((d) => d.kind === "asset")
     .map(({ id }) => ({ id, _destroy: true }));
@@ -497,8 +509,8 @@ function EditorApp({ config }) {
 
   // ----- WRITE: save via TanStack mutation ---------------------------------
   const saveMutation = useMutation({
-    mutationFn: async ({ state, assets, deletes }) => {
-      const payload = editorStateToRailsPayload(state, assets, deletes);
+    mutationFn: async ({ state, assets, deletes, hard }) => {
+      const payload = editorStateToRailsPayload(state, assets, deletes, hard);
       const res = await fetch(apiBase, {
         method: "PATCH",
         headers: {
@@ -554,6 +566,7 @@ function EditorApp({ config }) {
             // the assembled document has to be able to resolve it.
             assets: snapshot.projectAssets,
             deletes: snapshot.deletes,
+            hard,
           });
           // Rails has now dropped those rows, so the tombstones have done their
           // job; clearing them keeps the doc from accumulating one per removal
@@ -573,7 +586,7 @@ function EditorApp({ config }) {
       const snapshot = structuredClone(working.current);
       const assets = serverAssets.current;
       try {
-        await saveMutation.mutateAsync({ state: snapshot, assets, deletes: [] });
+        await saveMutation.mutateAsync({ state: snapshot, assets, deletes: [], hard });
         serverSnapshot.current = snapshot;
         return true;
       } catch (error) {
