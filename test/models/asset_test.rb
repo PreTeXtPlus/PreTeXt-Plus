@@ -3,11 +3,6 @@ require "test_helper"
 class AssetTest < ActiveSupport::TestCase
   test "url returns the attached file's url, named after the asset's ref rather than the upload" do
     asset = assets(:image_one)
-    asset.file.attach(
-      io: File.open(Rails.root.join("test/fixtures/files/test_image.png")),
-      filename: "test_image.png",
-      content_type: "image/png"
-    )
 
     ActiveStorage::Current.url_options = { host: "example.com" }
     travel_to Time.current do
@@ -23,11 +18,6 @@ class AssetTest < ActiveSupport::TestCase
 
   test "file_content_type returns the attached file's MIME type" do
     asset = assets(:image_one)
-    asset.file.attach(
-      io: File.open(Rails.root.join("test/fixtures/files/test_image.png")),
-      filename: "test_image.png",
-      content_type: "image/png"
-    )
 
     assert_equal "image/png", asset.file_content_type
   end
@@ -97,10 +87,6 @@ class AssetTest < ActiveSupport::TestCase
   test "full_dup gives the copy an independent asset row that shares the original's file blob" do
     project = projects(:one)
     asset = assets(:image_one)
-    asset.file.attach(
-      io: File.open(Rails.root.join("test/fixtures/files/test_image.png")),
-      filename: "test_image.png", content_type: "image/png"
-    )
 
     copy = project.full_dup(users(:two))
     copy.save!
@@ -154,10 +140,6 @@ class AssetTest < ActiveSupport::TestCase
 
   test "thumbnailable? is true for a variable raster image content type" do
     asset = assets(:image_one)
-    asset.file.attach(
-      io: File.open(Rails.root.join("test/fixtures/files/test_image.png")),
-      filename: "test_image.png", content_type: "image/png"
-    )
 
     assert asset.thumbnailable?
   end
@@ -204,10 +186,6 @@ class AssetTest < ActiveSupport::TestCase
 
   test "thumbnail_url returns a resized variant's url for a raster image" do
     asset = assets(:image_one)
-    asset.file.attach(
-      io: File.open(Rails.root.join("test/fixtures/files/test_image.png")),
-      filename: "test_image.png", content_type: "image/png"
-    )
 
     ActiveStorage::Current.url_options = { host: "example.com" }
     url = asset.thumbnail_url

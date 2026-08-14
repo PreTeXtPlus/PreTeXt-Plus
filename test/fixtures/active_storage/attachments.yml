@@ -1,0 +1,10 @@
+# Read about fixtures at https://api.rubyonrails.org/classes/ActiveRecord/FixtureSet.html
+#
+# Attaches blobs.yml's blob to assets.yml's image_one asset, so that asset
+# arrives with a real file already attached -- no upload step needed in the
+# tests that use it.
+
+image_one_file:
+  name: file
+  record: image_one (Asset)
+  blob: image_one_blob

@@ -232,11 +232,6 @@ class PublicationSettingsControllerTest < ActionDispatch::IntegrationTest
   # The EPUB tab appears once the project has an image to be a cover, and the picker
   # offers it under the name the archive writes it as.
   test "the cover picker offers the project's own images" do
-    assets(:image_one).file.attach(
-      io: File.open(Rails.root.join("test/fixtures/files/test_image.png")),
-      filename: "test_image.png", content_type: "image/png"
-    )
-
     get edit_project_publication_settings_url(@project), headers: modal_headers
 
     assert_select "#publication-tab-epub"
@@ -247,7 +242,7 @@ class PublicationSettingsControllerTest < ActionDispatch::IntegrationTest
   # Without one, the tab stays but says what to do -- an author who has never built an
   # EPUB should still find out a cover is something they can set.
   test "with no images the cover says what to do instead of offering an empty picker" do
-    get edit_project_publication_settings_url(@project), headers: modal_headers
+    get edit_project_publication_settings_url(projects(:slides)), headers: modal_headers
 
     assert_select "#publication-tab-epub"
     assert_select "select[name='publication_settings[epub_cover]']", false
