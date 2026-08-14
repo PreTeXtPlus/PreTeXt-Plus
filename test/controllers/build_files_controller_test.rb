@@ -36,7 +36,7 @@ class BuildFilesControllerTest < ActionDispatch::IntegrationTest
 
     assert_response :success
     assert_match "Chapter One", response.body
-    assert_match "Private preview", response.body
+    assert_match "This private preview", response.body
   end
 
   # Build output is not guaranteed to be a full document -- see the fixture above, which
@@ -47,7 +47,7 @@ class BuildFilesControllerTest < ActionDispatch::IntegrationTest
     get build_file_url(@build, "index.html")
 
     assert_response :success
-    assert_match "Private preview", response.body
+    assert_match "This private preview", response.body
   end
 
   # What the dashboard's "Download" links to for anything that is not a site. Routed
