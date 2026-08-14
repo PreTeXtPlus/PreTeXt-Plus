@@ -370,6 +370,29 @@ class TargetsControllerTest < ActionDispatch::IntegrationTest
     assert_not targets(:two_web).reload.published?
   end
 
+  test "a published target's row offers View to the public URL instead of the private preview" do
+    sign_in users(:two)
+    target = targets(:two_web)
+
+    patch publish_project_target_url(projects(:two), target), params: { published: true }
+    assert target.reload.published?
+
+    get project_url(projects(:two))
+
+    assert_select "a[href=?]", published_url(projects(:two), target.slug, host: "pub.example.com"), text: "View"
+    assert_select "a", text: "Preview (private)", count: 0
+  end
+
+  test "an unpublished target's row still opens the private preview, not the public URL" do
+    sign_in users(:two)
+    target = targets(:two_web)
+
+    get project_url(projects(:two))
+
+    assert_select "a[href=?]", build_file_path(target.current_build, target.entry_path), text: "Preview (private)"
+    assert_select "a", text: "View", count: 0
+  end
+
   test "cannot reach another user's target" do
     get project_target_url(projects(:two), targets(:two_web))
 

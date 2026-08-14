@@ -36,6 +36,17 @@ class PublishedControllerTest < ActionDispatch::IntegrationTest
     assert_match "Chapter One", response.body
   end
 
+  # The private-preview banner (see BuildFilesControllerTest) is only ever a reminder
+  # that a build isn't public yet -- it has no business on the page once it is.
+  test "published output carries no private-preview banner" do
+    publish!
+
+    get published_file_url(@project, @target.slug, "index.html")
+
+    assert_response :success
+    assert_no_match "Private preview", response.body
+  end
+
   # Built PreTeXt links between pages relatively, so a visitor has to land one level
   # inside the target or every internal link resolves a directory too high. Rails
   # normalizes trailing slashes away in routing, so both bare forms take this path.

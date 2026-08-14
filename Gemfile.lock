@@ -465,6 +465,7 @@ DEPENDENCIES
   kamal
   kaminari (~> 1.2)
   minitest (~> 5.27)
+  nokogiri (~> 1.19)
   pay (~> 11.6)
   pg (~> 1.6)
   postmark-rails (~> 0.22)
