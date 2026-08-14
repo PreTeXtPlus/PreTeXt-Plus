@@ -3,9 +3,14 @@ require "uri"
 require "net/http"
 
 # Downloads and unpacks a finished build's artifact (output.zip) from the build
-# server. Triggered by BuildCallbacksController once the server reports success;
-# artifact_url is the download URL the callback handed us. Each zip entry becomes
-# a BuildFile, and the whole zip is attached for download.
+# server. Triggered by BuildCallbacksController once the server offers an artifact_url,
+# which it does whenever a build left output behind -- including a build it reports as
+# failed (see Build#completed_with_errors). Each zip entry becomes a BuildFile, and the
+# whole zip is attached for download.
+#
+# Nothing here branches on that: output is output, and the flag the callback already set
+# on the row is what the UI warns from. It survives every mark! below, including the
+# failure paths -- see Build#built_with_errors? for why that is harmless.
 #
 # This is the job that ends a build, and the dashboard reflects that: `success` from the
 # build server only moves a build to `received_from_server`, which Target::IN_FLIGHT still

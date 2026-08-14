@@ -37,6 +37,26 @@ class BuildsController < ApplicationController
                 (result.ok? ? :notice : :alert) => result.message
   end
 
+  # Makes a build the server flagged (Build#completed_with_errors) into what readers see.
+  # The output has been importable and previewable since it arrived; this is the only
+  # thing that puts it behind the target's public link, so nothing published ever changes
+  # on the strength of a failed build without someone deciding it should.
+  #
+  # Idempotent-ish rather than silently agreeable: a build that is not awaiting review
+  # says so, because the two ways to get here -- a stale drawer, and a rebuild that
+  # landed in between -- both mean the author is looking at something out of date.
+  def accept
+    unless @build.awaiting_review?
+      return redirect_to project_target_path(@project, @build.target),
+                         alert: "That build isn't waiting to be reviewed -- it may have been " \
+                                "replaced by a newer one."
+    end
+
+    @build.accept_errors!
+    redirect_to project_target_path(@project, @build.target), status: :see_other,
+                notice: "Readers now see the build from #{@build.created_at.to_fs(:long)}, errors and all."
+  end
+
   def create
     @build = queue_or_start_build(@target)
     # The row *is* the progress indicator: swap it into its building (or queued) state

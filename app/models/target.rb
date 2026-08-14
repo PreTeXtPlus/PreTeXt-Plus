@@ -18,7 +18,9 @@ class Target < ApplicationRecord
   # Two pointers into `builds`, both denormalized onto this row so that rendering a
   # target's state costs no queries beyond eager-loading these two associations.
   #
-  #   current_build -- the latest *successful* build: what a reader actually gets.
+  #   current_build -- the newest build this target may serve (Build.live_candidates):
+  #                    what a reader actually gets. Not simply the latest success --
+  #                    output from a build that reported errors waits to be accepted.
   #   latest_build  -- the most recent attempt, however it went: what the pill reports.
   #
   # They diverge exactly when a rebuild fails over a published output, which is the case
@@ -180,9 +182,18 @@ class Target < ApplicationRecord
     return :building if building?
     return :failed if latest_build.failed?
     return :canceled if latest_build.canceled?
+    # Ahead of the current_build checks below, and deliberately: a target whose *first*
+    # build came back flagged has no live build at all, and reporting that as :never --
+    # "not built" -- would hide imported output the author is being asked about.
+    return :needs_review if latest_build.awaiting_review?
     return :never if current_build.nil?
+    return :stale if stale?
+    # Output that imported cleanly out of a build the CLI called a failure (see
+    # Build#completed_with_errors). Ranked below :stale because an author who has edited
+    # since is going to rebuild anyway, and the drawer carries the warning either way.
+    return :warned if current_build.built_with_errors?
 
-    stale? ? :stale : :current
+    :current
   end
 
   def cancelable?
@@ -258,7 +269,10 @@ class Target < ApplicationRecord
   # to the previous successful one rather than leaving a dangling id.
   def sync_from_builds!
     latest = builds.order(created_at: :desc).first
-    current = builds.where(status: :success).order(created_at: :desc).first
+    # live_candidates, not every success: output from a build the server flagged waits
+    # for the author's go-ahead (Build#awaiting_review?), so what readers see does not
+    # move on the strength of a build that reported errors.
+    current = builds.live_candidates.order(created_at: :desc).first
 
     update_columns(latest_build_id: latest&.id,
                    current_build_id: current&.id,
@@ -267,8 +281,19 @@ class Target < ApplicationRecord
   end
 
   # What "Restore previous build" would fall back to; nil is what hides the button.
+  # Same scope as current_build is chosen from, so this is genuinely the step behind it
+  # -- an unreviewed build with errors sits outside this ordering entirely and cannot be
+  # what restoring lands on.
   def previous_successful_build
-    builds.where(status: :success).order(created_at: :desc).offset(1).first
+    builds.live_candidates.order(created_at: :desc).offset(1).first
+  end
+
+  # The decision waiting on the author: imported output from a build the server flagged,
+  # which is newer than what readers see and is not serving anyone yet. Only ever the
+  # latest attempt -- once a newer build exists, that one is the question, and an older
+  # unreviewed build is simply history.
+  def build_awaiting_review
+    latest_build if latest_build&.awaiting_review?
   end
 
   # Enforces the retention window, called after each build succeeds. Keeps the
@@ -284,6 +309,11 @@ class Target < ApplicationRecord
     keep_ids = builds.where(status: :success).order(created_at: :desc).limit(KEPT_SUCCESSES).ids
     keep_ids |= builds.where(status: UNRESOLVED).ids
     keep_ids |= builds.order(created_at: :desc).limit(1).ids
+    # Explicitly, rather than trusting the window above to contain it: a success that is
+    # not live (one awaiting review) still counts against KEPT_SUCCESSES, so two of them
+    # stacked ahead of the live build would otherwise delete the very thing the public
+    # link is serving.
+    keep_ids |= [ current_build_id ].compact
 
     builds.where.not(id: keep_ids).destroy_all
   end

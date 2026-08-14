@@ -136,6 +136,9 @@ Rails.application.routes.draw do
         post "full_callback" => "build_callbacks#create", as: "full_callback"
         post "check_status" => "builds#check_status", as: "check_status"
         post "cancel" => "builds#cancel", as: "cancel"
+        # The author opting output from a build that reported errors into being what
+        # readers see; nothing serves it until they do (see Build.live_candidates).
+        patch "accept" => "builds#accept", as: "accept"
       end
       # The dashboard's one bulk action. Project-scoped, not target-scoped -- unlike
       # every other build trigger, this one doesn't start from a single target.

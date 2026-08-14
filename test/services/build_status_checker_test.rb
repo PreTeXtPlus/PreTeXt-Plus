@@ -45,6 +45,33 @@ class BuildStatusCheckerTest < ActiveJob::TestCase
     assert_equal "ERROR fig-hasse.svg not found", build.log
   end
 
+  # The build server zips output/ whatever the exit code was, so a failure that carries
+  # an artifact_url has output worth importing -- flagged, not thrown away.
+  test "a server-side failure that still produced output imports it and flags the build" do
+    result = stub_status("status" => "failed", "exit_code" => 1, "log" => "ERROR one figure is missing",
+                         "artifact_url" => "/builds/job-123/artifact") do
+      BuildStatusChecker.new(build).check!
+    end
+
+    assert result.ok?
+    assert_match(/reported errors/, result.message)
+    assert build.reload.received_from_server?
+    assert build.completed_with_errors?
+    assert_enqueued_with(job: FullBuildArtifactJob,
+                         args: [ build, "https://#{Rails.application.credentials.dig(:full_build, :host)}/builds/job-123/artifact" ])
+  end
+
+  test "an already-imported build with errors reports the warning rather than a plain success" do
+    build.mark!(:success, completed_with_errors: true)
+
+    result = Net::HTTP.stub(:start, ->(*_args, **_kw) { flunk "should not call the build server" }) do
+      BuildStatusChecker.new(build).check!
+    end
+
+    assert result.ok?
+    assert_match(/reported errors/, result.message)
+  end
+
   test "a build still running is reported, not moved" do
     result = stub_status("status" => "running") { BuildStatusChecker.new(build).check! }
 

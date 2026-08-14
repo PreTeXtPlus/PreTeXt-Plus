@@ -288,6 +288,43 @@ class BuildsControllerTest < ActionDispatch::IntegrationTest
     assert flash[:alert].present?
   end
 
+  # The opt-in the drawer offers: imported output from a failed build serves nobody until
+  # someone accepts it here.
+  test "accepting a build with errors makes it what readers see" do
+    build = builds(:one)
+    build.mark!(:success, completed_with_errors: true)
+    assert_nil build.target.reload.current_build
+
+    patch accept_project_build_url(@project, build)
+
+    assert_equal build, build.target.reload.current_build
+    assert build.reload.errors_accepted?
+    assert_redirected_to project_target_url(@project, build.target)
+    assert_match(/Readers now see/, flash[:notice])
+  end
+
+  # A drawer left open across a rebuild is the ordinary way to get here, and quietly
+  # accepting the wrong build would publish output nobody looked at.
+  test "accepting a build that is not awaiting review says so" do
+    build = builds(:one)
+    build.mark!(:success)
+
+    patch accept_project_build_url(@project, build)
+
+    assert_not build.reload.errors_accepted?
+    assert_match(/isn't waiting to be reviewed/, flash[:alert])
+  end
+
+  test "cannot accept a build in another user's project" do
+    build = builds(:two)
+    build.mark!(:success, completed_with_errors: true)
+
+    patch accept_project_build_url(projects(:two), build)
+
+    assert_redirected_to projects_path
+    assert_not build.reload.errors_accepted?
+  end
+
   test "deleting a build returns to the target drawer" do
     build = builds(:one)
     assert_difference("Build.count", -1) do
