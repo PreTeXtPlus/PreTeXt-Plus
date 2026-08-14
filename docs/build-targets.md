@@ -42,10 +42,13 @@ should not assume they work:
 2. **Nothing has been published end-to-end through a browser.** `PublishedController` is
    covered by integration tests, but no real built site has been served through `/o/…`,
    so relative links, the search index and knowls are unverified in situ.
-3. **The drawer and live-updating rows are unverified in a browser.** There is no Chrome
-   in the dev container, so `bin/rails test:system` cannot run locally; CI has Chrome and
-   will exercise them. Integration tests assert the Stimulus/Turbo wiring those depend on,
-   which is not the same as watching it work.
+3. **The drawer and live-updating rows are unverified in a browser.** CI exercises them;
+   locally `bin/rails test:system` needs a Chrome on `PATH`, and the dev container has no
+   `google-chrome` of its own — but Playwright's copy is already installed, so
+   `sudo ln -sf ~/.cache/ms-playwright/chromium-*/chrome-linux64/chrome /usr/local/bin/google-chrome`
+   is enough for Selenium Manager to find it and fetch a matching driver. Integration
+   tests assert the Stimulus/Turbo wiring those depend on, which is not the same as
+   watching it work.
 
    The first browser report against this was the drawer blanking the project page, fixed
    by rendering the dashboard behind a full-page visit to a target URL (see *Traps*).

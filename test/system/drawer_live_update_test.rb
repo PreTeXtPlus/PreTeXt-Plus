@@ -15,8 +15,15 @@ class DrawerLiveUpdateTest < ApplicationSystemTestCase
     fill_in "user_email", with: @user.email
     fill_in "user_password", with: "password123"
     click_button "Sign in"
-    # Let the redirect land before any test navigates away from it.
-    assert_selector "h1", wait: 10
+    # Let the redirect land before any test navigates away from it. The flash, not an
+    # `h1`: the sign-in page has one of those too (the layout renders `yield(:heading)`
+    # into it), so waiting for a bare h1 matched the page being *left* and waited for
+    # nothing at all. Worse than useless -- when the redirect landed in the window
+    # between Capybara finding that h1 and asking whether it was visible, Chrome failed
+    # the whole query with "Node with given id does not belong to the document", which
+    # Capybara does not retry. That is a flake in setup, so it was reported against
+    # whichever test ran first. Every other system test here already waits on this text.
+    assert_text "Signed in successfully.", wait: 10
   end
 
   test "a drawer opened from a dashboard row picks up a finished build" do
