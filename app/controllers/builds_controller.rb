@@ -7,7 +7,7 @@ class BuildsController < ApplicationController
 
   before_action :set_target, only: :create
 
-  # A build occupies a container on the build server for minutes at a time, so the cost
+  # A build occupies a container on the build server for 10s of seconds at a time, so the cost
   # of this endpoint is real and does not scale with how careful the caller is. build_all
   # is one request no matter how many builds it starts, so it counts as a single hit here
   # against a lower limit. There is no separate cap on total builds requested: past the
@@ -15,8 +15,8 @@ class BuildsController < ApplicationController
   # User#max_concurrent_builds) rather than being refused.
   rate_limit to: 20, within: 1.hour, only: :create,
              with: -> { reject_build("You've queued a lot of builds recently. Please wait a few minutes and try again.") }
-  rate_limit to: 5, within: 1.hour, only: :build_all,
-             with: -> { reject_build("You've queued a lot of builds recently. Please wait a few minutes and try again.") }
+  rate_limit to: 2, within: 1.minute, only: :build_all,
+             with: -> { reject_build("You've queued a lot of builds recently. Please wait a few seconds and try again.") }
 
   def show
   end
