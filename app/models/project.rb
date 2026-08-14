@@ -185,6 +185,7 @@ class Project < ApplicationRecord
       duplicate.user = new_owner
     end
     duplicate.title = "Copy of #{title}"
+    duplicate.is_template = false
     # Carry the target *configuration* but none of its build history, and never the
     # published flag -- a copy is not entitled to the original's public URLs. All three
     # denormalized build pointers have to go: leaving latest_build_id behind (as this
@@ -217,7 +218,6 @@ class Project < ApplicationRecord
   def instantiate_from_template_for(new_owner)
     copy = full_dup(new_owner)
     copy.title = "#{title} (generated from template)"
-    copy.is_template = false
     copy.template_description = nil
     copy
   end
