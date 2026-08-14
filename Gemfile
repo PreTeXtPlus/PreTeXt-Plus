@@ -90,3 +90,5 @@ gem "kaminari", "~> 1.2"
 gem "rubyzip", "~> 3.4"
 
 gem "honeybadger", "~> 6.9"
+
+gem "nokogiri", "~> 1.19"
