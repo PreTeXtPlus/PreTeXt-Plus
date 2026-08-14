@@ -219,6 +219,39 @@
   color: #451a03;
 }
 
+/* Shown once a local build crosses the auto-refresh disable threshold. */
+.pretext-plus-editor__preview-autopause {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem 0.75rem;
+  border-left: 3px solid #3b82f6;
+  background-color: #eff6ff;
+  color: #1e3a8a;
+  font-size: 0.8125rem;
+  line-height: 1.4;
+}
+
+.pretext-plus-editor__preview-autopause-text {
+  flex: 1;
+}
+
+.pretext-plus-editor__preview-autopause-button {
+  flex-shrink: 0;
+  border-radius: 0.125rem;
+  padding: 0.25rem 0.5rem;
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: #1e3a8a;
+  background-color: #dbeafe;
+  border: 1px solid #93c5fd;
+  cursor: pointer;
+}
+
+.pretext-plus-editor__preview-autopause-button:hover {
+  background-color: #bfdbfe;
+}
+
 /* Suggests a faster browser when the preview falls back to a server build. */
 .pretext-plus-editor__browser-tip {
   position: absolute;

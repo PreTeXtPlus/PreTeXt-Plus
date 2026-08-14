@@ -238,6 +238,9 @@ const REVEAL_ZOOM_STEP = 0.25;
 const REVEAL_ZOOM_MIN = 0.25;
 const REVEAL_ZOOM_MAX = 1;
 
+/** A local build slower than this turns off auto-refresh on content change. */
+const AUTO_REFRESH_DISABLE_THRESHOLD_MS = 3000;
+
 const LivePreview = forwardRef<LivePreviewHandle, LivePreviewProps>(
   (
     {
@@ -271,6 +274,11 @@ const LivePreview = forwardRef<LivePreviewHandle, LivePreviewProps>(
     // rather than set by us: the author enters print preview by clicking the
     // printer icon *inside* the page, which navigates the frame itself.
     const [printoutId, setPrintoutId] = useState<string | null>(null);
+    // Flips on once a local build crosses AUTO_REFRESH_DISABLE_THRESHOLD_MS,
+    // so a document that's gotten expensive to render stops re-rendering on
+    // every pause in typing. Cleared by the "Re-enable auto-refresh" banner
+    // action; any build (debounced, manual, or on division switch) counts.
+    const [autoRefreshDisabled, setAutoRefreshDisabled] = useState(false);
     const iframeRef = useRef<HTMLIFrameElement>(null);
     const savedScrollPosition = useRef<{ x: number; y: number } | null>(null);
     // Only the newest render may commit: a fast second rebuild must not be
@@ -325,6 +333,7 @@ const LivePreview = forwardRef<LivePreviewHandle, LivePreviewProps>(
 
       if (renderLocally) {
         const token = ++renderToken.current;
+        const buildStart = performance.now();
         renderPreviewHtml(source, {
           divisionId,
           fragment,
@@ -357,6 +366,12 @@ const LivePreview = forwardRef<LivePreviewHandle, LivePreviewProps>(
           .finally(() => {
             if (token === renderToken.current) {
               setIsRebuilding(false);
+              if (
+                performance.now() - buildStart >
+                AUTO_REFRESH_DISABLE_THRESHOLD_MS
+              ) {
+                setAutoRefreshDisabled(true);
+              }
             }
           });
         return;
@@ -552,13 +567,13 @@ const LivePreview = forwardRef<LivePreviewHandle, LivePreviewProps>(
     // character. Server builds stay manual-only (see effect above) — a
     // network round trip on every pause would be both slow and wasteful.
     useEffect(() => {
-      if (!renderLocally) return;
+      if (!renderLocally || autoRefreshDisabled) return;
       const timer = setTimeout(() => {
         preview();
       }, 1000);
       return () => clearTimeout(timer);
       // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [content, renderLocally]);
+    }, [content, renderLocally, autoRefreshDisabled]);
 
     useImperativeHandle(
       ref,
@@ -698,6 +713,24 @@ const LivePreview = forwardRef<LivePreviewHandle, LivePreviewProps>(
               aria-label="Dismiss preview error"
             >
               ×
+            </button>
+          </div>
+        )}
+        {autoRefreshDisabled && (
+          <div
+            className="pretext-plus-editor__preview-autopause"
+            role="status"
+            aria-live="polite"
+          >
+            <span className="pretext-plus-editor__preview-autopause-text">
+              A recent preview took longer than expected.
+              Use Refresh to manually preview.
+            </span>
+            <button
+              className="pretext-plus-editor__preview-autopause-button"
+              onClick={() => setAutoRefreshDisabled(false)}
+            >
+              Re-enable auto-refresh
             </button>
           </div>
         )}
