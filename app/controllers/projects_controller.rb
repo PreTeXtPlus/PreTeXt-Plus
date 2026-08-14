@@ -2,7 +2,7 @@ class ProjectsController < ApplicationController
   allow_unauthenticated_access only: %i[ share preview source ]
   require_unauthenticated_access only: %i[ tryit ]
   load_and_authorize_resource except: %i[ index owned shared new tryit preview feedback create_from_template create_from_import ]
-  skip_authorize_resource only: %i[ share ]
+  skip_authorize_resource only: %i[ share preview_frame ]
   after_action :allow_iframe, only: :share
   rate_limit to: 25, within: 10.minutes, only: :preview,
              with: -> { render plain: "Preview limit reached. Please wait a few minutes and try again, or create an account to continue writing and save your work!", status: :too_many_requests },
@@ -210,6 +210,16 @@ class ProjectsController < ApplicationController
       alert = project_copy.errors.full_messages.to_sentence.presence || "Copy failed."
       redirect_to projects_path, alert: alert
     end
+  end
+
+  # GET /projects/:id/preview-frame.html
+  #
+  # Serves the static shim from public/preview-frame.html (see that file's own
+  # comment) under this project's URL, so that relative asset links in the
+  # live-rendered preview -- e.g. `external/:ref` -- resolve against
+  # /projects/:id/..., matching AssetsController#share's member route.
+  def preview_frame
+    render file: Rails.public_path.join("preview-frame.html"), layout: false
   end
 
   def preview

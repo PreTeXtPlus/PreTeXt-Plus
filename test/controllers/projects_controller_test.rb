@@ -616,6 +616,40 @@ class ProjectsControllerTest < ActionDispatch::IntegrationTest
     assert json["errors"].present?
   end
 
+  # --- Preview frame ---
+
+  test "preview_frame returns the shim for the owner" do
+    get preview_frame_project_path(@project)
+
+    assert_response :success
+    assert_equal File.read(Rails.public_path.join("preview-frame.html")), response.body
+  end
+
+  test "preview_frame returns the shim for a signed-in collaborator" do
+    # projects(:one) already has users(:two) as an accepted collaborator (see
+    # test/fixtures/collaborations.yml).
+    sign_out @user
+    sign_in users(:two)
+
+    get preview_frame_project_path(@project)
+
+    assert_response :success
+  end
+
+  test "preview_frame requires authentication when signed out" do
+    sign_out @user
+
+    get preview_frame_project_path(@project)
+
+    assert_redirected_to new_user_session_path
+  end
+
+  test "preview_frame 404s for a nonexistent project" do
+    get preview_frame_project_path(id: SecureRandom.uuid)
+
+    assert_response :not_found
+  end
+
   test "copy creates a duplicate for subscriber" do
     subbed_user = users(:subscribed)
     @project.update!(visibility: :public) # copy now requires the source to be non-private
