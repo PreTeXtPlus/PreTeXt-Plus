@@ -35,6 +35,7 @@ function renderToc(readOnly?: boolean, docDivisions: Division[] = divisions) {
     docinfo: "",
     commonDocinfo: "",
     useCommonDocinfo: false,
+    language: "en-US",
     projectType: docDivisions[0].type === "book" ? "book" : "article",
     divisions: docDivisions,
     activeDivisionId: docDivisions[0].xmlId,

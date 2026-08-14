@@ -43,6 +43,16 @@ class Project < ApplicationRecord
 
   enum :document_type, { article: 0, book: 1, slideshow: 2 }, default: :article, suffix: true, validate: true
 
+  # The document's content language, written to the generated PreTeXt root
+  # element's @xml:lang. Keys are the literal BCP-47 codes so `language`
+  # itself is the attribute value -- no separate code lookup needed. Keep in
+  # sync with packages/web-editor/src/languages.ts, which drives the dropdown.
+  enum :language, {
+    "en-US": 0, "af-ZA": 1, "bg-BG": 2, "ca-ES": 3, "cs-CZ": 4, "de-DE": 5,
+    "es-ES": 6, "fi-FI": 7, "fr-CA": 8, "fr-FR": 9, "hu-HU": 10, "it-IT": 11,
+    "pt-BR": 12, "pt-PT": 13
+  }, default: "en-US", validate: true
+
   # Gates listing on the owner's /users/:username profile page only -- it does not
   # change who can open the project itself (see Ability). unlisted exists for a link
   # an author wants to hand out without appearing in their public index.

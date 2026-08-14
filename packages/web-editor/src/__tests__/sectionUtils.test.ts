@@ -25,8 +25,10 @@ import {
   splitLatexDocument,
   mergeLatexDocument,
   normalizeDivisionsOnLoad,
+  assembleFullProjectSource,
+  wrapDivisionForPreview,
 } from '../sectionUtils'
-import type { DocumentSection } from '../types/sections'
+import type { Division } from '../types/sections'
 
 const ARTICLE = `<article xml:id="a1">
 \t<title>My Article</title>
@@ -182,7 +184,7 @@ describe('division factories', () => {
 })
 
 describe('updateSectionMetadata', () => {
-  const section: DocumentSection = {
+  const section: Division = {
     id: '1',
     xmlId: 's1',
     title: 'Old',
@@ -440,7 +442,7 @@ describe('latex divisions', () => {
 // name — so hosts hand the editor records without one. Recovering it on load
 // is what lets the TOC label a row and restrict what its children may be.
 describe('normalizeDivisionsOnLoad type backfill', () => {
-  const root: DocumentSection = {
+  const root: Division = {
     id: '1',
     xmlId: 'bk',
     title: 'Book',
@@ -453,9 +455,9 @@ describe('normalizeDivisionsOnLoad type backfill', () => {
   const untyped = (
     xmlId: string,
     source: string,
-    sourceFormat: DocumentSection['sourceFormat'] = 'pretext',
+    sourceFormat: Division['sourceFormat'] = 'pretext',
   ) =>
-    ({ id: xmlId, xmlId, title: '', source, sourceFormat }) as DocumentSection
+    ({ id: xmlId, xmlId, title: '', source, sourceFormat }) as Division
 
   it('reads a pretext division type from its wrapper element', () => {
     const [, chapter, sub] = normalizeDivisionsOnLoad(
@@ -518,5 +520,34 @@ describe('normalizeDivisionsOnLoad type backfill', () => {
 
     expect(tex.type).toBeUndefined()
     expect(tex.title).toBe('Hello')
+  })
+})
+
+describe('assembleFullProjectSource / wrapDivisionForPreview — xml:lang', () => {
+  const root: Division = {
+    id: '1',
+    xmlId: 'a1',
+    title: 'My Article',
+    type: 'article',
+    sourceFormat: 'pretext',
+    source: ARTICLE,
+  }
+
+  it('writes @xml:lang on the root <pretext> element when a lang is given', () => {
+    const xml = assembleFullProjectSource([root], 'a1', '', [], 'af-ZA')
+    expect(xml).toMatch(/^<pretext xml:lang="af-ZA">/)
+    expectWellFormed(xml)
+  })
+
+  it('omits @xml:lang entirely when no lang is given', () => {
+    const xml = assembleFullProjectSource([root], 'a1', '', [])
+    expect(xml).toMatch(/^<pretext>/)
+    expect(xml).not.toContain('xml:lang')
+  })
+
+  it('writes @xml:lang for a division-scoped preview too', () => {
+    const xml = wrapDivisionForPreview('article', ARTICLE, '', 'My Article', 'fr-CA')
+    expect(xml).toMatch(/^<pretext xml:lang="fr-CA">/)
+    expectWellFormed(xml)
   })
 })

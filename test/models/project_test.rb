@@ -16,6 +16,17 @@ class ProjectTest < ActiveSupport::TestCase
     assert_not_includes Project.publicly_listed, projects(:one)
   end
 
+  test "language defaults to en-US" do
+    project = projects(:one)
+    assert_equal "en-US", project.language
+  end
+
+  test "language accepts any supported code" do
+    project = projects(:one)
+    project.update!(language: "fr-CA")
+    assert_equal "fr-CA", project.reload.language
+  end
+
   test "icon_asset is nil when the project has no icon asset" do
     assert_nil projects(:one).icon_asset
   end

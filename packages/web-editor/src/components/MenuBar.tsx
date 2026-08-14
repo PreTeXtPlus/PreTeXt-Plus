@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { useEditorStore } from "../store/hooks";
 import StoreFeedbackLink from "./StoreFeedbackLink";
+import { LANGUAGES } from "../languages";
 import "./MenuBar.css";
 
 export interface MenuBarProps {
@@ -28,6 +29,8 @@ const MenuBar = (props: MenuBarProps) => {
   const setShowLivePreview = useEditorStore((s) => s.setShowLivePreview);
   const title = useEditorStore((s) => s.title);
   const updateTitle = useEditorStore((s) => s.updateTitle);
+  const language = useEditorStore((s) => s.language);
+  const updateLanguage = useEditorStore((s) => s.updateLanguage);
   const [editingTitle, setEditingTitle] = useState(false);
   const titleInputRef = useRef<HTMLInputElement>(null);
 
@@ -120,6 +123,19 @@ const MenuBar = (props: MenuBarProps) => {
             )}
           </span>
         )}
+        <select
+          className="pretext-plus-editor__language-select"
+          aria-label="Language"
+          value={language}
+          disabled={props.readOnly}
+          onChange={(e) => updateLanguage(e.target.value)}
+        >
+          {LANGUAGES.map(({ code, label }) => (
+            <option key={code} value={code}>
+              {label}
+            </option>
+          ))}
+        </select>
       </div>
       <div className="pretext-plus-editor__menu-right">
         {props.presence}

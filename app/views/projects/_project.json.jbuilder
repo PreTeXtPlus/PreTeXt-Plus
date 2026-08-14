@@ -1,4 +1,4 @@
-json.extract! project, :id, :title, :pretext_source, :docinfo, :document_type, :use_common_docinfo, :common_docinfo
+json.extract! project, :id, :title, :pretext_source, :docinfo, :document_type, :language, :use_common_docinfo, :common_docinfo
 json.url project_url(project, format: :json)
 # Real-time collaboration is on whenever the project has collaborators (or
 # pending invites); the editor then joins the shared Yjs doc instead of

@@ -277,7 +277,7 @@ class ProjectsController < ApplicationController
     # Only allow a list of trusted parameters through.
     def project_params
       params.expect(project: [
-        :title, :pretext_source, :docinfo, :use_common_docinfo, :visibility,
+        :title, :pretext_source, :docinfo, :use_common_docinfo, :visibility, :language,
         divisions_attributes: [ [ :id, :source, :source_format, :is_root, :ref, :_destroy ] ],
         assets_attributes: [ [ :id, :ref, :kind, :file, :source, :short_description, :description, :title, :_destroy ] ]
       ])
