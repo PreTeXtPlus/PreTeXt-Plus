@@ -1,0 +1,10 @@
+# Read about fixtures at https://api.rubyonrails.org/classes/ActiveRecord/FixtureSet.html
+#
+# Attaches blobs.yml's blob to assets.yml's preview_frame_diagram asset, so
+# that asset arrives with a real file already attached -- no upload step
+# needed in the tests that use it.
+
+preview_frame_diagram_file:
+  name: file
+  record: preview_frame_diagram (Asset)
+  blob: preview_frame_diagram_blob

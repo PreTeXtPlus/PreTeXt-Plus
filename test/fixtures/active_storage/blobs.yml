@@ -1,0 +1,10 @@
+# Read about fixtures at https://api.rubyonrails.org/classes/ActiveRecord/FixtureSet.html
+#
+# ActiveStorage::FixtureSet.blob resolves `filename:` against test/fixtures/files
+# and uploads it to the :test service (see config/environments/test.rb), so this
+# blob is real, servable bytes -- not just a database row.
+
+preview_frame_diagram_blob: <%= ActiveStorage::FixtureSet.blob(
+  filename: "test_image.png",
+  content_type: "image/png"
+) %>

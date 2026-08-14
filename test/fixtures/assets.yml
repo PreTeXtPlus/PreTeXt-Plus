@@ -28,3 +28,18 @@ other_user_asset:
   title: Someone Else's Activity
   short_description: Someone Else's Activity
   source: ""
+
+# A file-backed asset with its file pre-attached via ActiveStorage fixtures
+# (test/fixtures/active_storage/*.yml), unlike image_one above -- this one
+# needs real, already-served bytes without an upload step, for tests that
+# exercise the actual asset-serving redirect end to end (e.g. the
+# preview-frame system test). Lives in its own dedicated :preview_frame
+# project (see projects.yml) rather than :one, so it can't join any test's
+# exact count/list of project :one's images.
+preview_frame_diagram:
+  project: preview_frame
+  kind: file
+  ref: preview-frame-diagram
+  title: Preview Frame Diagram
+  short_description: Preview Frame Diagram
+  source: ""

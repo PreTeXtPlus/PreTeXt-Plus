@@ -94,3 +94,20 @@ public_project_unbuilt:
     </pretext>
   document_type: article
   visibility: public
+
+# Dedicated home for the preview_frame_diagram asset fixture (see assets.yml),
+# rather than attaching it to project :one -- several tests
+# (test/models/publication/settings_test.rb,
+# test/controllers/publication_settings_controller_test.rb) assert an exact,
+# exhaustive list of project :one's file-backed images, which a shared
+# always-attached fixture would silently join.
+preview_frame:
+  user: one
+  title: Preview Frame Project
+  pretext_source: |
+    <pretext>
+    <article xml:id="document" label="document">
+      <title>Preview Frame</title>
+    </article>
+    </pretext>
+  document_type: article
