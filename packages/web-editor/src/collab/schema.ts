@@ -17,7 +17,7 @@
  *   the host has stored the file and handed back a URL; every other peer learns
  *   of the asset from this map rather than from a re-fetch.
  * - `doc.getMap("meta")`: document-wide fields — `title`, `docinfo`,
- *   `useCommonDocinfo` — all last-writer-wins values.
+ *   `useCommonDocinfo`, `language` — all last-writer-wins values.
  * - `doc.getMap("deleted")`: tombstones, record id → `"division"` | `"asset"`.
  *   Removing an entry from a Y.Map is not by itself something the host can
  *   observe later: the peer that removed a division persists that removal
@@ -73,6 +73,7 @@ export interface CollabDocState {
   title: string;
   docinfo: string;
   useCommonDocinfo?: boolean;
+  language?: string;
   divisions: CollabDivisionSnapshot[];
   /** Optional: a project may have no assets, and a host need not seed them. */
   assets?: CollabAssetSnapshot[];
@@ -238,6 +239,9 @@ export const seedDocFromState = (doc: Y.Doc, state: CollabDocState): void => {
     if (state.useCommonDocinfo !== undefined) {
       meta.set("useCommonDocinfo", state.useCommonDocinfo);
     }
+    if (state.language !== undefined) {
+      meta.set("language", state.language);
+    }
     const divisions = getDivisionsMap(doc);
     for (const division of state.divisions) {
       divisions.set(division.id, makeDivisionEntry(division));
@@ -268,6 +272,7 @@ export const docToState = (doc: Y.Doc): CollabDocSnapshot => {
     title: String(meta.get("title") ?? ""),
     docinfo: String(meta.get("docinfo") ?? ""),
     useCommonDocinfo: meta.get("useCommonDocinfo") as boolean | undefined,
+    language: meta.get("language") as string | undefined,
     divisions,
     assets,
     deleted,

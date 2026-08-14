@@ -30,6 +30,7 @@ import ErrorBoundary from "./ErrorBoundary";
 import "./Editors.css";
 
 import { derivePretextContent } from "../contentConversion";
+import { DEFAULT_LANGUAGE } from "../languages";
 import type {
   EditorContentChange,
   Asset,
@@ -114,6 +115,15 @@ export interface editorProps {
    * Called when the user edits their common docinfo from the project dialog.
    */
   onCommonDocinfoChange?: (value: string) => void;
+  /**
+   * The document's content language (a BCP-47 code, e.g. `"en-US"`), written
+   * as `@xml:lang` on the generated root element. Defaults to `"en-US"`.
+   */
+  language?: string;
+  /**
+   * Called when the user changes the document language.
+   */
+  onLanguageChange?: (value: string) => void;
   /**
    * Called whenever content changes — a division edit, a structural reorder
    * (which rewrites a parent division's content), or a document-wide docinfo
@@ -412,6 +422,7 @@ const Editors = (props: editorProps) => {
       docinfo: props.docinfo ?? "",
       commonDocinfo: props.commonDocinfo ?? "",
       useCommonDocinfo: props.useCommonDocinfo ?? false,
+      language: props.language || DEFAULT_LANGUAGE,
       projectType: props.projectType,
       divisions: normalizedDivisions,
       activeDivisionId: initActiveId,
@@ -524,6 +535,7 @@ const EditorsInner = (props: EditorsInnerProps) => {
   const docinfo = useEditorStore((s) => s.docinfo);
   const commonDocinfo = useEditorStore((s) => s.commonDocinfo);
   const useCommonDocinfo = useEditorStore((s) => s.useCommonDocinfo);
+  const language = useEditorStore((s) => s.language);
 
   // Editing-buffer mutators (optimistic; host callbacks fire as notifications).
   const applyExternalUpdate = useEditorStore((s) => s.applyExternalUpdate);
@@ -536,6 +548,7 @@ const EditorsInner = (props: EditorsInnerProps) => {
   const setActiveDivisionId = useEditorStore((s) => s.setActiveDivisionId);
   const startSectionEdit = useEditorStore((s) => s.startSectionEdit);
   const setTitle = useEditorStore((s) => s.setTitle);
+  const setLanguage = useEditorStore((s) => s.setLanguage);
   const setDocinfo = useEditorStore((s) => s.setDocinfo);
   const editingId = useEditorStore((s) => s.editingId);
   const editingIsNew = useEditorStore((s) => s.editingIsNew);
@@ -1167,6 +1180,11 @@ const EditorsInner = (props: EditorsInnerProps) => {
         bridge?.localTitleChange(value);
         props.onTitleChange?.(value);
       },
+      updateLanguage: (value) => {
+        setLanguage(value);
+        bridge?.localLanguageChange(value);
+        props.onLanguageChange?.(value);
+      },
       feedbackSubmit: props.onFeedbackSubmit,
     });
   });
@@ -1208,6 +1226,7 @@ const EditorsInner = (props: EditorsInnerProps) => {
     docinfo: props.docinfo,
     commonDocinfo: props.commonDocinfo,
     useCommonDocinfo: props.useCommonDocinfo,
+    language: props.language,
     activeDivisionId: props.activeDivisionId,
   });
   useEffect(() => {
@@ -1278,6 +1297,10 @@ const EditorsInner = (props: EditorsInnerProps) => {
       update.useCommonDocinfo = props.useCommonDocinfo;
       changed = true;
     }
+    if (props.language !== undefined && props.language !== prev.language) {
+      update.language = props.language;
+      changed = true;
+    }
     if (
       props.activeDivisionId !== undefined &&
       props.activeDivisionId !== prev.activeDivisionId
@@ -1295,6 +1318,7 @@ const EditorsInner = (props: EditorsInnerProps) => {
       docinfo: props.docinfo,
       commonDocinfo: props.commonDocinfo,
       useCommonDocinfo: props.useCommonDocinfo,
+      language: props.language,
       activeDivisionId: props.activeDivisionId,
     };
   });
@@ -1353,6 +1377,7 @@ const EditorsInner = (props: EditorsInnerProps) => {
         rootDivision.xmlId,
         effectiveDocinfo,
         projectAssets ?? [],
+        language,
       );
     } catch (error) {
       return `<!-- Unable to assemble document source: ${
@@ -1365,6 +1390,7 @@ const EditorsInner = (props: EditorsInnerProps) => {
     divisions,
     effectiveDocinfo,
     projectAssets,
+    language,
   ]);
 
   // The active division's own tagged XML (outer element included), with any
@@ -1386,6 +1412,7 @@ const EditorsInner = (props: EditorsInnerProps) => {
           divisionTaggedXml,
           effectiveDocinfo,
           activeDivision.title,
+          language,
         )
       : undefined;
 
@@ -1419,6 +1446,7 @@ const EditorsInner = (props: EditorsInnerProps) => {
         rootDivision.xmlId,
         effectiveDocinfo,
         projectAssets ?? [],
+        language,
       );
     } catch {
       // A malformed sibling division must not take the preview down with it;
@@ -1432,6 +1460,7 @@ const EditorsInner = (props: EditorsInnerProps) => {
     divisions,
     effectiveDocinfo,
     projectAssets,
+    language,
   ]);
 
   // What the renderer is actually given. A whole document goes as-is; a

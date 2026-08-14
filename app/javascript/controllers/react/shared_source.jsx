@@ -16,6 +16,7 @@ import { railsDivisionToEditor, railsAssetToEditor } from "./railsProjectMapping
  * @property {string} [common_docinfo]
  * @property {boolean} [use_common_docinfo]
  * @property {string} [document_type]
+ * @property {string} [language]
  * @property {RailsDivision[]} [divisions]
  * @property {RailsAsset[]} [assets]
  */
@@ -36,6 +37,7 @@ function railsToReadOnlyState(json) {
     docinfo: json.docinfo ?? "",
     commonDocinfo: json.common_docinfo ?? "",
     useCommonDocinfo: json.use_common_docinfo ?? false,
+    language: json.language,
     projectType,
     divisions: (json.divisions ?? []).map((d) => railsDivisionToEditor(d, rootMeta)),
     projectAssets: (json.assets ?? []).map(railsAssetToEditor),
@@ -88,6 +90,7 @@ function SharedSourceApp({ config }) {
       docinfo={state.docinfo}
       commonDocinfo={state.commonDocinfo}
       useCommonDocinfo={state.useCommonDocinfo}
+      language={state.language}
       projectType={state.projectType}
       divisions={state.divisions}
       rootDivisionId={state.rootDivisionId}

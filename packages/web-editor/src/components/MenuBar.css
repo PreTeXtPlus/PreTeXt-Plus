@@ -92,6 +92,25 @@
   }
 }
 
+.pretext-plus-editor__language-select {
+  flex-shrink: 0;
+  padding: 0.25rem 0.5rem;
+  border-radius: 3px;
+  border: 1px solid #9ca3af;
+  background-color: #fff;
+  font-size: 0.85rem;
+}
+
+.pretext-plus-editor__language-select:focus {
+  outline: 2px solid #3b82f6;
+  outline-offset: 2px;
+}
+
+.pretext-plus-editor__language-select:disabled {
+  background-color: #f3f4f6;
+  color: #6b7280;
+}
+
 .pretext-plus-editor__source-badge {
   display: inline-flex;
   align-items: center;

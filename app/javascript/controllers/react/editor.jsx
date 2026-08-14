@@ -12,6 +12,7 @@ import {
   assembleFullProjectSource,
   clearDeletions,
   docToState,
+  DEFAULT_LANGUAGE,
 } from "@pretextbook/web-editor";
 import { YCableProvider } from "./collab/yCableProvider";
 import {
@@ -34,6 +35,7 @@ import {
  * @property {string} [common_docinfo]
  * @property {boolean} [use_common_docinfo]
  * @property {string} [document_type]
+ * @property {string} [language]
  * @property {RailsDivision[]} [divisions]
  * @property {RailsAsset[]} [assets]
  */
@@ -46,6 +48,7 @@ import {
  * @property {string} docinfo
  * @property {string} commonDocinfo
  * @property {boolean} useCommonDocinfo
+ * @property {string} language
  * @property {"article"|"book"} projectType
  * @property {EditorDivision[]} divisions
  * @property {Asset[]} [projectAssets]
@@ -134,6 +137,7 @@ function railsToEditorState(json) {
     docinfo: json.docinfo ?? "",
     commonDocinfo: json.common_docinfo ?? "",
     useCommonDocinfo: json.use_common_docinfo ?? false,
+    language: json.language ?? DEFAULT_LANGUAGE,
     projectType,
     divisions: (json.divisions ?? []).map((d) => railsDivisionToEditor(d, rootMeta)),
     projectAssets: (json.assets ?? []).map(railsAssetToEditor),
@@ -185,6 +189,7 @@ function assembleFullPretextSource(state, projectAssets) {
     state.rootDivisionId,
     effectiveDocinfo(state),
     projectAssets.map(toEditorAsset),
+    state.language,
   );
 }
 
@@ -220,6 +225,7 @@ function editorStateToRailsPayload(state, projectAssets, deletes = []) {
     title: state.title,
     docinfo: state.docinfo,
     use_common_docinfo: state.useCommonDocinfo,
+    language: state.language,
     pretext_source: assembleFullPretextSource(state, projectAssets),
     divisions_attributes: [
       ...state.divisions.map((d) => ({
@@ -251,6 +257,7 @@ function persistableShape(state) {
     title: state.title,
     docinfo: state.docinfo,
     useCommonDocinfo: state.useCommonDocinfo,
+    language: state.language,
     divisions: state.divisions.map((d) => ({
       id: d.id,
       xmlId: d.xmlId,
@@ -304,6 +311,7 @@ function editorStateToCollabSeed(state) {
     title: state.title,
     docinfo: state.docinfo,
     useCommonDocinfo: state.useCommonDocinfo,
+    language: state.language,
     divisions: state.divisions.map((d) => ({
       id: d.id,
       xmlId: d.xmlId,
@@ -348,6 +356,7 @@ function collabEditorState(doc, base) {
     docinfo: shared.docinfo,
     commonDocinfo: base.commonDocinfo,
     useCommonDocinfo: shared.useCommonDocinfo ?? base.useCommonDocinfo,
+    language: shared.language ?? base.language,
     projectType: base.projectType,
     divisions,
     // The doc's assets are the session's truth about which assets exist; the
@@ -971,6 +980,10 @@ function EditorApp({ config }) {
     if (root && root.sourceFormat !== "pretext") root.title = w.title;
   }, []);
 
+  const onLanguageChange = useCallback((value) => {
+    if (working.current) working.current.language = value || DEFAULT_LANGUAGE;
+  }, []);
+
   const onUseCommonDocinfoChange = useCallback(
     (value) => {
       if (working.current) working.current.useCommonDocinfo = value === true;
@@ -1114,6 +1127,7 @@ function EditorApp({ config }) {
       docinfo={state.docinfo}
       commonDocinfo={state.commonDocinfo}
       useCommonDocinfo={state.useCommonDocinfo}
+      language={state.language}
       projectType={state.projectType}
       divisions={state.divisions}
       rootDivisionId={state.rootDivisionId}
@@ -1141,6 +1155,7 @@ function EditorApp({ config }) {
       onAssetRemove={onAssetRemove}
       onLoadAssets={onLoadAssets}
       onTitleChange={onTitleChange}
+      onLanguageChange={onLanguageChange}
       onUseCommonDocinfoChange={onUseCommonDocinfoChange}
       onCommonDocinfoChange={onCommonDocinfoChange}
       onSave={() => save()}

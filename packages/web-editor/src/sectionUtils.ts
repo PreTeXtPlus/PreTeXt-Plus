@@ -2328,10 +2328,13 @@ export function assembleProjectSource(
 /**
  * Wrap a resolved document body in the outer `<pretext>` element with
  * `<docinfo>` inserted as its sibling, matching real PreTeXt document shape.
+ * `lang`, when provided (a BCP-47 code like `"en-US"`), is written as
+ * `@xml:lang` on the root `<pretext>` element.
  */
-function wrapInPretextDocument(body: string, docinfo: string): string {
+function wrapInPretextDocument(body: string, docinfo: string, lang?: string): string {
   const docinfoBlock = docinfo.trim() ? `${docinfo.trim()}\n` : "";
-  return ensureRootLabel(`<pretext>\n${docinfoBlock}${body}\n</pretext>`);
+  const langAttr = lang ? ` xml:lang="${lang}"` : "";
+  return ensureRootLabel(`<pretext${langAttr}>\n${docinfoBlock}${body}\n</pretext>`);
 }
 
 /**
@@ -2346,15 +2349,17 @@ function wrapInPretextDocument(body: string, docinfo: string): string {
  * rendered document — the `divisions` pool itself is never a valid build
  * input, since it's a flat list of fragments rather than a single document
  * tree.
+ * `lang`, when provided, is written as `@xml:lang` on the root `<pretext>` element.
  */
 export function assembleFullProjectSource(
   divisions: Division[],
   rootXmlId: string,
   docinfo: string,
   assets: Asset[] = [],
+  lang?: string,
 ): string {
   const body = resolveDivisionXml(rootXmlId, divisions, new Set(), assets);
-  return wrapInPretextDocument(body, docinfo);
+  return wrapInPretextDocument(body, docinfo, lang);
 }
 
 // ---------------------------------------------------------------------------
@@ -2389,20 +2394,22 @@ const BOOK_CHILD_DIVISION_TYPES: ReadonlySet<DivisionType> = new Set([
  * produces no output, and 500s.
  * `docinfo` (the full `<docinfo>...</docinfo>` element, or `""`) is inserted
  * as a sibling of the root element inside `<pretext>`, matching real PreTeXt
- * document shape.
+ * document shape. `lang`, when provided, is written as `@xml:lang` on the
+ * root `<pretext>` element.
  */
 export function wrapDivisionForPreview(
   divisionType: DivisionType,
   divisionXml: string,
   docinfo: string,
   wrapperTitle: string,
+  lang?: string,
 ): string {
   const body = ROOT_DIVISION_TYPES.has(divisionType)
     ? divisionXml
     : BOOK_CHILD_DIVISION_TYPES.has(divisionType)
       ? `<book>\n<title>${wrapperTitle}</title>\n${divisionXml}\n</book>`
       : `<article>\n<title>${wrapperTitle}</title>\n${divisionXml}\n</article>`;
-  return wrapInPretextDocument(body, docinfo);
+  return wrapInPretextDocument(body, docinfo, lang);
 }
 
 // ---------------------------------------------------------------------------

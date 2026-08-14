@@ -25,6 +25,8 @@ import {
   splitLatexDocument,
   mergeLatexDocument,
   normalizeDivisionsOnLoad,
+  assembleFullProjectSource,
+  wrapDivisionForPreview,
 } from '../sectionUtils'
 import type { DocumentSection } from '../types/sections'
 
@@ -518,5 +520,34 @@ describe('normalizeDivisionsOnLoad type backfill', () => {
 
     expect(tex.type).toBeUndefined()
     expect(tex.title).toBe('Hello')
+  })
+})
+
+describe('assembleFullProjectSource / wrapDivisionForPreview — xml:lang', () => {
+  const root: DocumentSection = {
+    id: '1',
+    xmlId: 'a1',
+    title: 'My Article',
+    type: 'article',
+    sourceFormat: 'pretext',
+    source: ARTICLE,
+  }
+
+  it('writes @xml:lang on the root <pretext> element when a lang is given', () => {
+    const xml = assembleFullProjectSource([root], 'a1', '', [], 'af-ZA')
+    expect(xml).toMatch(/^<pretext xml:lang="af-ZA">/)
+    expectWellFormed(xml)
+  })
+
+  it('omits @xml:lang entirely when no lang is given', () => {
+    const xml = assembleFullProjectSource([root], 'a1', '', [])
+    expect(xml).toMatch(/^<pretext>/)
+    expect(xml).not.toContain('xml:lang')
+  })
+
+  it('writes @xml:lang for a division-scoped preview too', () => {
+    const xml = wrapDivisionForPreview('article', ARTICLE, '', 'My Article', 'fr-CA')
+    expect(xml).toMatch(/^<pretext xml:lang="fr-CA">/)
+    expectWellFormed(xml)
   })
 })

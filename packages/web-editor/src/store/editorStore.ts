@@ -80,6 +80,7 @@ export interface ExternalUpdate {
   docinfo?: string;
   commonDocinfo?: string;
   useCommonDocinfo?: boolean;
+  language?: string;
 }
 
 type ModalKey =
@@ -112,6 +113,7 @@ export interface EditorCallbacks {
   /** Duplicate a project asset under a fresh ref (host persists + pool add). */
   assetDuplicate?: (asset: Asset) => void | Promise<void>;
   updateTitle: (title: string) => void;
+  updateLanguage: (language: string) => void;
   feedbackSubmit?: (feedback: FeedbackSubmission) => void | Promise<void>;
   insertContentAtCursor?: (content: string) => void;
 }
@@ -136,6 +138,8 @@ export interface EditorStoreState {
   docinfo: string;
   commonDocinfo: string;
   useCommonDocinfo: boolean;
+  /** The document's content language (BCP-47 code, e.g. `"en-US"`), written as `@xml:lang` on the generated root element. */
+  language: string;
   projectType: "article" | "book" | undefined;
   projectUrl: string | undefined;
 
@@ -204,6 +208,8 @@ export interface EditorStoreState {
   setActiveDivisionId: (id: string | null) => void;
   /** Optimistically set the document title. */
   setTitle: (title: string) => void;
+  /** Optimistically set the document language. */
+  setLanguage: (language: string) => void;
   /** Optimistically set the docinfo-related fields together. */
   setDocinfo: (info: {
     docinfo: string;
@@ -269,6 +275,7 @@ export interface EditorStoreState {
   /** Optimistically remove the asset matching `asset` by kind+ref from the pool. */
   removeAssetFromPool: (asset: Asset) => void;
   updateTitle: (title: string) => void;
+  updateLanguage: (language: string) => void;
   feedbackSubmit: (feedback: FeedbackSubmission) => void;
 }
 
@@ -281,6 +288,7 @@ export type EditorSyncableState = Pick<
   | "docinfo"
   | "commonDocinfo"
   | "useCommonDocinfo"
+  | "language"
   | "projectType"
   | "projectUrl"
   | "divisions"
@@ -301,6 +309,7 @@ export interface EditorStoreInit {
   docinfo: string;
   commonDocinfo: string;
   useCommonDocinfo: boolean;
+  language: string;
   projectType: "article" | "book" | undefined;
   divisions: Division[];
   activeDivisionId: string | null;
@@ -335,6 +344,7 @@ export function createEditorStore(init: EditorStoreInit): EditorStoreHandle {
       handleDivisionContentChange: noop,
       assetInsert: noop,
       updateTitle: noop,
+      updateLanguage: noop,
     },
   };
 
@@ -347,6 +357,7 @@ export function createEditorStore(init: EditorStoreInit): EditorStoreHandle {
     docinfo: init.docinfo,
     commonDocinfo: init.commonDocinfo,
     useCommonDocinfo: init.useCommonDocinfo,
+    language: init.language,
     projectType: init.projectType,
     projectUrl: undefined,
     divisions: init.divisions,
@@ -421,6 +432,7 @@ export function createEditorStore(init: EditorStoreInit): EditorStoreHandle {
       })),
     setActiveDivisionId: (activeDivisionId) => set({ activeDivisionId }),
     setTitle: (title) => set({ title }),
+    setLanguage: (language) => set({ language }),
     setDocinfo: ({ docinfo, commonDocinfo, useCommonDocinfo }) =>
       set({ docinfo, commonDocinfo, useCommonDocinfo }),
 
@@ -568,6 +580,7 @@ export function createEditorStore(init: EditorStoreInit): EditorStoreHandle {
         ),
       })),
     updateTitle: (title) => bag.cbs.updateTitle(title),
+    updateLanguage: (language) => bag.cbs.updateLanguage(language),
     feedbackSubmit: (feedback) => bag.cbs.feedbackSubmit?.(feedback),
   }));
 

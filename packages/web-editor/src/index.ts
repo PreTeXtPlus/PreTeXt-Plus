@@ -33,6 +33,8 @@ export type {
   DocumentChapter,
 } from "./types/sections";
 export type { DivisionTreeNode } from "./sectionUtils";
+export { LANGUAGES, DEFAULT_LANGUAGE } from "./languages";
+export type { LanguageOption } from "./languages";
 export {
   assembleProjectSource,
   assembleFullProjectSource,

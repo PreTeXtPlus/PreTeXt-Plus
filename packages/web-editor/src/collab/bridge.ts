@@ -344,6 +344,12 @@ export class CollabBridge {
     }, this.localOrigin);
   }
 
+  localLanguageChange(language: string): void {
+    this.doc.transact(() => {
+      getMetaMap(this.doc).set("language", language);
+    }, this.localOrigin);
+  }
+
   localDocinfoChange(docinfo: string, useCommonDocinfo?: boolean): void {
     this.doc.transact(() => {
       const meta = getMetaMap(this.doc);
@@ -458,6 +464,10 @@ export class CollabBridge {
         useCommonDocinfo:
           typeof useCommon === "boolean" ? useCommon : state.useCommonDocinfo,
       });
+    }
+    const language = meta.get("language");
+    if (typeof language === "string" && language !== state.language) {
+      state.setLanguage(language);
     }
     this.bump();
   }
@@ -616,6 +626,9 @@ export class CollabBridge {
       if (key === "title") {
         const title = meta.get("title");
         if (typeof title === "string") state.setTitle(title);
+      } else if (key === "language") {
+        const language = meta.get("language");
+        if (typeof language === "string") state.setLanguage(language);
       } else if (key === "docinfo" || key === "useCommonDocinfo") {
         const docinfo = meta.get("docinfo");
         const useCommon = meta.get("useCommonDocinfo");
