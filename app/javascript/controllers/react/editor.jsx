@@ -27,6 +27,21 @@ import {
 /** @typedef {import("./railsProjectMapping").EditorDivision} EditorDivision */
 
 /**
+ * The static page (public/preview-frame.html) the live preview is delivered
+ * into, instead of `iframe.srcdoc`.
+ *
+ * This is what gives the preview a real URL, which is the only way PreTeXt's
+ * print preview for worksheets and handouts can work at all -- it is entered
+ * via a `?printpreview=<id>` query string, and `srcdoc` documents have no URL.
+ *
+ * Bump `v` whenever public/preview-frame.html changes: files under public/ are
+ * served with a one-year cache lifetime in production (see
+ * config/environments/production.rb), so without a new URL returning readers
+ * would keep the old shim.
+ */
+const PREVIEW_FRAME_URL = "/preview-frame.html?v=1";
+
+/**
  * The full project JSON returned by the editor-state endpoint.
  * @typedef {Object} RailsProjectJson
  * @property {string} [title]
@@ -1135,6 +1150,7 @@ function EditorApp({ config }) {
       onSaveButton={onSaveButton}
       onCancelButton={onCancelButton}
       onPreviewRebuild={onPreviewRebuild}
+      previewFrameUrl={PREVIEW_FRAME_URL}
       onCreatePretextProjectCopy={onCreatePretextProjectCopy}
       onFeedbackSubmit={onFeedbackSubmit}
     />

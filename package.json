@@ -15,7 +15,7 @@
   "dependencies": {
     "@hotwired/stimulus": "^3.2.2",
     "@hotwired/turbo-rails": "^8.0.20",
-    "@pretextbook/import": "^0.4.0",
+    "@pretextbook/import": "^0.5.0",
     "@pretextbook/libxslt-wasm": "^0.1.1",
     "@pretextbook/web-editor": "*",
     "@rails/actioncable": "^8.1.300",
@@ -23,12 +23,13 @@
     "react": "^19.2.0",
     "react-dom": "^19.2.0",
     "y-protocols": "^1.0.7",
-    "yjs": "^13.6.31"
+    "yjs": "^13.6.32"
   },
   "overrides": {
     "dompurify": "^3.3.2"
   },
   "allowScripts": {
-    "esbuild@0.28.1": true
+    "esbuild@0.28.1": true,
+    "core-js-pure@3.50.0": true
   }
 }

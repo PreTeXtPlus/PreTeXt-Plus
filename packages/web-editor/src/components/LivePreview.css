@@ -25,9 +25,82 @@
   text-align: center;
 }
 
-.pretext-plus-editor__rebuild-button {
+/* Right-hand controls. Absolutely positioned so the title stays centred on
+   the panel however many controls the current document calls for — a
+   slideshow adds four, a printout one. */
+.pretext-plus-editor__preview-actions {
   position: absolute;
-  right: 0;
+  right: 0.5rem;
+  display: flex;
+  align-items: center;
+  gap: 0.375rem;
+}
+
+/* Secondary controls: view toggles, zoom, exiting print preview. */
+.pretext-plus-editor__preview-button {
+  border-radius: 0.125rem;
+  padding: 0.3125rem 0.5rem;
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: #374151;
+  background-color: #ffffff;
+  border: 1px solid #d1d5db;
+  cursor: pointer;
+  line-height: 1;
+  transition: background-color 0.2s ease, border-color 0.2s ease;
+}
+
+.pretext-plus-editor__preview-button:hover:not(:disabled) {
+  background-color: #f3f4f6;
+}
+
+.pretext-plus-editor__preview-button:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+/* The active half of a segmented control (Deck / Present). */
+.pretext-plus-editor__preview-button[aria-pressed="true"] {
+  color: #065f46;
+  background-color: #d1fae5;
+  border-color: #6ee7b7;
+}
+
+/* Segmented pairs read as one control: shared border, square inner corners. */
+.pretext-plus-editor__preview-segmented,
+.pretext-plus-editor__preview-zoom {
+  display: inline-flex;
+  align-items: center;
+}
+
+.pretext-plus-editor__preview-segmented
+  .pretext-plus-editor__preview-button:first-child,
+.pretext-plus-editor__preview-zoom
+  .pretext-plus-editor__preview-button:first-child {
+  border-top-right-radius: 0;
+  border-bottom-right-radius: 0;
+}
+
+.pretext-plus-editor__preview-segmented
+  .pretext-plus-editor__preview-button:last-child,
+.pretext-plus-editor__preview-zoom
+  .pretext-plus-editor__preview-button:last-child {
+  border-top-left-radius: 0;
+  border-bottom-left-radius: 0;
+  margin-left: -1px;
+}
+
+.pretext-plus-editor__preview-zoom-value {
+  min-width: 3rem;
+  padding: 0 0.25rem;
+  text-align: center;
+  font-size: 0.6875rem;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  color: #4b5563;
+}
+
+.pretext-plus-editor__rebuild-button {
   border-radius: 0.125rem;
   padding: 0.375rem 0.75rem;
   font-size: 0.75rem;
