@@ -45,10 +45,16 @@
           container for something else, so there is nothing worth opening. Same route
           either way -- ServesBuildFiles sends html inline and redirects the rest. %>
       <% if target.site? || target.viewable? %>
-        <%= link_to target.site? ? "Preview" : "Open",
-              build_file_path(target.current_build, target.entry_path),
-              class: "#{button_classes(color: "gray", outlined: true)} px-2.5 py-1.5 text-sm",
-              target: "_blank", rel: "noopener", data: { turbo: false } %>
+        <% if target.published? %>
+          <%= link_to "View", target_public_url(target),
+                class: "#{button_classes(color: "gray", outlined: true)} px-2.5 py-1.5 text-sm",
+                target: "_blank", rel: "noopener", data: { turbo: false } %>
+        <% else %>
+          <%= link_to target.site? ? "Preview (private)" : "Open (private)",
+                build_file_path(target.current_build, target.entry_path),
+                class: "#{button_classes(color: "gray", outlined: true)} px-2.5 py-1.5 text-sm",
+                target: "_blank", rel: "noopener", data: { turbo: false } %>
+        <% end %>
       <% end %>
 
       <%# Everything that is not a site is one artifact, so "Download" means that file --
