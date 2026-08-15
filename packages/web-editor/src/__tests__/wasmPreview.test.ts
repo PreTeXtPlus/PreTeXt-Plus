@@ -3,6 +3,7 @@
  */
 import { describe, it, expect } from 'vitest'
 import {
+  applyPrintPreview,
   describePreviewError,
   findWellformednessErrorLine,
   subtreeSourceMap,
@@ -104,5 +105,70 @@ describe('subtreeSourceMap', () => {
 
   it('handles an empty map', () => {
     expect(subtreeSourceMap([], 's22')).toEqual([])
+  })
+})
+
+describe('applyPrintPreview', () => {
+  /**
+   * A rendered page as the preview stylesheet emits one: the printer icon on
+   * each printout is inert, and carries the printout's identity in
+   * `data-printout` for a picker to read.
+   */
+  const PAGE =
+    '<!doctype html><html><head><title>T</title></head><body>' +
+    '<a class="print-link" data-printout="ws-one" aria-disabled="true"></a>' +
+    '</body></html>'
+
+  /**
+   * Everything injected ahead of the page's own markup. Isolated because the
+   * page body mentions the printout id too, in the `data-printout` the picker
+   * reads — so asserting on the whole string would not distinguish "the bridge
+   * names this printout" from "the page contains one".
+   */
+  const bridge = (html: string) => html.slice(0, html.indexOf('<body>'))
+
+  it('makes the page report the printout as a printpreview query parameter', () => {
+    const out = bridge(applyPrintPreview(PAGE, 'ws-one'))
+    expect(out).toContain('printpreview')
+    expect(out).toContain('ws-one')
+  })
+
+  it('pins the print layout to light, whatever theme the page was rendered in', () => {
+    // Paper is light and print-worksheet.css carries no dark palette, so a
+    // dark-mode preview would otherwise put black print text on a dark page.
+    expect(applyPrintPreview(PAGE, 'ws-one')).toContain('color-scheme: light')
+    expect(applyPrintPreview(PAGE, undefined)).not.toContain(
+      'color-scheme: light',
+    )
+  })
+
+  it('still states the layout when print preview is off', () => {
+    // Load-bearing, not defensive: the bridge keeps its answer on a window
+    // property, so a page delivered without one inherits whatever the previous
+    // delivery said. LivePreview therefore calls this unconditionally.
+    const out = applyPrintPreview(PAGE, undefined)
+    expect(out).not.toBe(PAGE)
+    expect(bridge(out)).toContain('__ptxPrintPreview')
+    expect(bridge(out)).not.toContain('ws-one')
+  })
+
+  it('treats a printout that is not on the page as off', () => {
+    // A stale id — left over from the division the author just left — would
+    // otherwise strand them on a print-styled page with nothing on it, since
+    // pretext-core.js swaps in the print stylesheet before looking the element
+    // up.
+    expect(applyPrintPreview(PAGE, 'ws-gone')).toBe(
+      applyPrintPreview(PAGE, undefined),
+    )
+  })
+
+  it('replaces its own bridge rather than stacking a second one', () => {
+    // Entering and leaving print preview re-injects into HTML we already hold,
+    // so this runs over its own output routinely.
+    const once = applyPrintPreview(PAGE, 'ws-one')
+    expect(applyPrintPreview(once, 'ws-one')).toBe(once)
+    expect(applyPrintPreview(once, undefined)).toBe(
+      applyPrintPreview(PAGE, undefined),
+    )
   })
 })

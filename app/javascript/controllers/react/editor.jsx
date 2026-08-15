@@ -392,18 +392,6 @@ function EditorApp({ config }) {
   const previewUrl = `/projects/${projectId}/preview`;
   const copyUrl = `/projects/${projectId}/copy_conversion`;
   const feedbackUrl = `/projects/${projectId}/feedback`;
-  // The static page (public/preview-frame.html, served at this project-scoped
-  // URL by ProjectsController#preview_frame) the live preview is delivered
-  // into, instead of `iframe.srcdoc`.
-  //
-  // This is what gives the preview a real URL, which is the only way
-  // PreTeXt's print preview for worksheets and handouts can work at all --
-  // it is entered via a `?printpreview=<id>` query string, and `srcdoc`
-  // documents have no URL. It must be project-scoped (rather than the bare
-  // `/preview-frame.html`) so that relative asset links in the rendered
-  // preview -- e.g. `external/:ref` -- resolve against `/projects/${projectId}/...`,
-  // matching AssetsController#share's member route.
-  const previewFrameUrl = `/projects/${projectId}/preview-frame.html`;
   // Fetches the bytes of a remote image server-side (CORS workaround only --
   // does not persist anything; see onAssetFetchUrl below).
   const assetFetchUrl = "/asset_fetches";
@@ -1162,7 +1150,6 @@ function EditorApp({ config }) {
       onSaveButton={onSaveButton}
       onCancelButton={onCancelButton}
       onPreviewRebuild={onPreviewRebuild}
-      previewFrameUrl={previewFrameUrl}
       onCreatePretextProjectCopy={onCreatePretextProjectCopy}
       onFeedbackSubmit={onFeedbackSubmit}
     />

@@ -37,12 +37,8 @@ class PublicationFileBuilder
   end
 
   def to_xml
-    <<~XML
-      <?xml version="1.0" encoding="UTF-8"?>
-      <publication>
-      #{render_tree(tree).chomp}
-      </publication>
-    XML
+    Nokogiri::XML::Builder.new(encoding: "UTF-8") { |xml| xml.publication { build_tree(xml, tree) } }
+      .to_xml(indent: 2)
   end
 
   private
@@ -86,23 +82,13 @@ class PublicationFileBuilder
       end
     end
 
-    def render_tree(node, depth = 1)
-      node.except(:attributes).map do |name, child|
-        indent = "  " * depth
-        attributes = format_attributes(child[:attributes])
-        nested = render_tree(child, depth + 1)
-
-        if nested.empty?
-          "#{indent}<#{name}#{attributes}/>\n"
-        else
-          "#{indent}<#{name}#{attributes}>\n#{nested}#{indent}</#{name}>\n"
-        end
-      end.join
-    end
-
-    def format_attributes(attributes)
-      return "" if attributes.blank?
-
-      attributes.map { |name, value| %( #{name}="#{ERB::Util.html_escape(value)}") }.join
+    # Element names come straight out of the catalog as strings (some hyphenated, like
+    # "first-page-header"), so #send rather than a literal method call -- Builder's own
+    # method_missing dispatches either way, and #send is the only one that can carry a
+    # name Ruby method syntax can't spell.
+    def build_tree(xml, node)
+      node.except(:attributes).each do |name, child|
+        xml.send(name, child[:attributes] || {}) { build_tree(xml, child) }
+      end
     end
 end

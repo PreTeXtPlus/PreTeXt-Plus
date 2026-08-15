@@ -107,11 +107,6 @@ Rails.application.routes.draw do
   resources :projects do
     member do
       get "download" => "projects#download", as: "download"
-      # Declared in this earlier member block, not the one further down, so it is
-      # matched before the legacy `:id/*_.html` redirect in the collection block
-      # below -- that catch-all would otherwise shadow this path too, since both
-      # end in ".html".
-      get "preview-frame.html" => "projects#preview_frame", as: "preview_frame"
     end
     resources :collaborations, only: [ :create, :destroy ]
     # Publisher options for every output of this project, overriding the owner's account

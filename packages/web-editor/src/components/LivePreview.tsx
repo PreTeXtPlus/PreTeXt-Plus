@@ -10,6 +10,7 @@ import {
 import clsx from "clsx";
 import { postToIframe } from "./postToIframe";
 import {
+  applyPrintPreview,
   applyRevealView,
   describePreviewError,
   findEntryById,
@@ -19,15 +20,9 @@ import {
   previewThemeMessage,
   renderPreviewHtml,
   type PreviewTheme,
+  type PrintoutInfo,
   type RevealView,
 } from "./wasmPreview";
-import {
-  frameSrc,
-  injectFrameBootstrap,
-  isFrameReadyMessage,
-  printoutIdFromSearch,
-  FRAME_WRITE_MESSAGE,
-} from "./previewFrame";
 import type { PreviewLineMap } from "./previewSync";
 import type { PtxSourceMap, SourceMapEntry } from "@pretextbook/pretext-html";
 
@@ -109,13 +104,6 @@ interface LivePreviewProps {
   contextSource?: string;
   /** `<docinfo>` for a standalone fragment: LaTeX macros, custom settings. */
   docinfo?: string;
-  /**
-   * URL of the host's preview frame shim, which gives the preview a real
-   * same-origin URL instead of `srcdoc` (see previewFrame.ts). Without it the
-   * preview still works, but PreTeXt's print preview — which is driven by a
-   * `?printpreview=` query string — cannot be offered.
-   */
-  frameUrl?: string;
   /**
    * Drive the preview's light/dark mode from the host's own theme.
    *
@@ -238,7 +226,7 @@ const REVEAL_ZOOM_STEP = 0.25;
 const REVEAL_ZOOM_MIN = 0.25;
 const REVEAL_ZOOM_MAX = 1;
 
-// Secondary controls: view toggles, zoom, exiting print preview.
+// Secondary controls: view toggles and zoom.
 // `aria-pressed:` highlights the active half of a segmented control.
 const PREVIEW_BUTTON_CLASSES =
   "rounded-sm py-[0.3125rem] px-2 text-xs font-semibold text-gray-700 bg-white border border-gray-300 cursor-pointer leading-none transition-colors duration-200 ease-in-out enabled:hover:bg-gray-100 disabled:opacity-[0.45] disabled:cursor-default aria-pressed:text-emerald-800 aria-pressed:bg-emerald-100 aria-pressed:border-emerald-300";
@@ -262,7 +250,6 @@ const LivePreview = forwardRef<LivePreviewHandle, LivePreviewProps>(
       fragment,
       contextSource,
       docinfo,
-      frameUrl,
       theme,
       bannerMessage,
     },
@@ -278,10 +265,17 @@ const LivePreview = forwardRef<LivePreviewHandle, LivePreviewProps>(
     // Slideshow presentation, applied without re-rendering (see pageHtml).
     const [revealView, setRevealView] = useState<RevealView>("scroll");
     const [revealZoom, setRevealZoom] = useState(REVEAL_ZOOM_MAX);
-    // The printout the frame is currently previewing, mirrored from its URL
-    // rather than set by us: the author enters print preview by clicking the
-    // printer icon *inside* the page, which navigates the frame itself.
+    // The page's printouts, and which of them (if any) is being shown laid out
+    // for paper. Both are applied to the rendered page rather than baked into
+    // it, so switching costs a re-delivery and not a re-render.
+    const [printouts, setPrintouts] = useState<PrintoutInfo[]>([]);
     const [printoutId, setPrintoutId] = useState<string | null>(null);
+    // Which division the print selection above belongs to. Re-rendering the
+    // same division on every keystroke must not drag the author out of print
+    // preview — or back into it — so the default is applied once per division
+    // rather than once per render. The initial `null` is a sentinel no
+    // `divisionId` can equal, including `undefined` in document mode.
+    const printoutDivision = useRef<string | undefined | null>(null);
     const iframeRef = useRef<HTMLIFrameElement>(null);
     const savedScrollPosition = useRef<{ x: number; y: number } | null>(null);
     // Only the newest render may commit: a fast second rebuild must not be
@@ -306,12 +300,6 @@ const LivePreview = forwardRef<LivePreviewHandle, LivePreviewProps>(
     // build" case worth mentioning.
 
     const showBrowserTip = !renderLocally;
-
-    // The served-frame transport, which is what makes print preview possible.
-    // The server path posts a form into the iframe *by name* and must own the
-    // frame's navigation, so the two are mutually exclusive.
-    const useFrame = Boolean(frameUrl) && renderLocally;
-
 
     const preview = useCallback(() => {
       const source = content;
@@ -344,12 +332,29 @@ const LivePreview = forwardRef<LivePreviewHandle, LivePreviewProps>(
           theme,
           bannerMessage,
         })
-          .then(({ html, sourceMap, target }) => {
+          .then(({ html, sourceMap, target, printouts, rootPrintout }) => {
             if (token !== renderToken.current) {
               return;
             }
             sourceMapRef.current = sourceMap;
             setRenderTarget(target);
+            setPrintouts(printouts);
+            if (printoutDivision.current !== divisionId) {
+              // A division the author has just switched to. Open it on paper
+              // when the division *is* a printout — editing `worksheet-3.ptx`,
+              // where the paper layout is the whole point — and on screen when
+              // it merely contains some.
+              printoutDivision.current = divisionId;
+              setPrintoutId(rootPrintout ?? null);
+            } else {
+              // Same division, edited: the printout being shown may have just
+              // been renamed or deleted out from under the selection.
+              setPrintoutId((current) =>
+                current && printouts.some((printout) => printout.id === current)
+                  ? current
+                  : null,
+              );
+            }
             setPreviewHtml(html);
             setError(null);
           })
@@ -398,56 +403,30 @@ const LivePreview = forwardRef<LivePreviewHandle, LivePreviewProps>(
       // changing it must not invalidate this callback.
     ]);
 
-    // The page as it should currently appear. Switching a deck's view or zoom
-    // only rewrites reveal's config in HTML we already hold, so it costs a
-    // re-delivery rather than a re-render — which for a slideshow is the
-    // difference between instant and a second of waiting.
+    // The page as it should currently appear. Switching a deck's view or zoom,
+    // or entering and leaving print preview, only rewrites a small bridge in
+    // HTML we already hold, so each costs a re-delivery rather than a
+    // re-render — which for a slideshow is the difference between instant and
+    // a second of waiting.
     const pageHtml = useMemo(() => {
       if (previewHtml === null) return null;
-      if (renderTarget !== "slides") return previewHtml;
-      return applyRevealView(previewHtml, revealView, revealZoom);
-    }, [previewHtml, renderTarget, revealView, revealZoom]);
-
-    // ── Delivery into the frame ───────────────────────────────────────────
-    // Read by the sender, which must not itself be re-created on every render
-    // (it is called from a message handler registered once).
-    const pageHtmlRef = useRef<string | null>(null);
-    pageHtmlRef.current = pageHtml;
-    // Identifies the write in flight, so a page reporting in can be told apart
-    // from a freshly navigated (empty) frame. See previewFrame.ts.
-    const writeToken = useRef(0);
-    const frameReady = useRef(false);
-
-    const sendToFrame = useCallback(() => {
-      const frameWindow = iframeRef.current?.contentWindow;
-      const html = pageHtmlRef.current;
-      if (!frameWindow || html === null) return;
-      const token = ++writeToken.current;
-      frameWindow.postMessage(
-        {
-          type: FRAME_WRITE_MESSAGE,
-          html: injectFrameBootstrap(html, token),
-          token,
-        },
-        // Not "*": this message carries the author's whole document. The frame
-        // is required to be same-origin (the preview is read back through
-        // `contentDocument` for click sync), so naming our own origin costs
-        // nothing and keeps the source out of anything else that might end up
-        // in the frame.
-        window.location.origin,
-      );
-    }, []);
+      const page =
+        renderTarget === "slides"
+          ? applyRevealView(previewHtml, revealView, revealZoom)
+          : previewHtml;
+      // Unconditionally, "off" included: the print bridge keeps its answer on
+      // a window property, so a page delivered without one would inherit
+      // whatever the previous delivery said.
+      return applyPrintPreview(page, printoutId ?? undefined);
+    }, [previewHtml, renderTarget, revealView, revealZoom, printoutId]);
 
     /**
-     * Wire up a document that has just appeared in the frame: preview → source
+     * Wire up a document that has just appeared in the iframe: preview → source
      * sync, and the scroll position saved before the rebuild.
      *
-     * Called once per *document*, which is not once per iframe load — an
-     * in-place rewrite replaces the document without any `load` event — so the
-     * listener is attached fresh each time and there is nothing to clean up.
-     * Passive and non-capturing: the page's own links and knowls behave
-     * normally, including the print-preview link, whose navigation is how the
-     * frame enters print mode at all.
+     * Called once per loaded document, so the listener is attached fresh each
+     * time and there is nothing to clean up. Passive and non-capturing: the
+     * page's own links and knowls behave normally.
      */
     const wireRenderedDocument = useCallback(() => {
       const doc = iframeRef.current?.contentDocument;
@@ -473,61 +452,6 @@ const LivePreview = forwardRef<LivePreviewHandle, LivePreviewProps>(
         savedScrollPosition.current = null;
       }
     }, []);
-
-    // Point the frame at the shim once. Navigation after this is the frame's
-    // own doing (the reader clicking a print-preview link) or an explicit exit
-    // below — never React re-applying a prop, which is why `src` is set here
-    // rather than in JSX.
-    useEffect(() => {
-      if (!useFrame || !frameUrl) return;
-      const iframe = iframeRef.current;
-      if (!iframe) return;
-      frameReady.current = false;
-      iframe.src = frameSrc(frameUrl, null);
-    }, [useFrame, frameUrl]);
-
-    // The frame reports in every time a document loads in it, whether from the
-    // network or from one of our writes.
-    useEffect(() => {
-      if (!useFrame) return;
-      const onMessage = (event: MessageEvent) => {
-        if (event.source !== iframeRef.current?.contentWindow) return;
-        if (!isFrameReadyMessage(event.data)) return;
-        setPrintoutId(printoutIdFromSearch(event.data.search));
-        if (event.data.token === undefined) {
-          // A document that came from the network: the shim, empty and waiting
-          // for content. Reached on first load and whenever the reader clicks a
-          // print-preview link, which navigates the frame to the same shim with
-          // `?printpreview=` set — so simply re-sending the page is all it
-          // takes to enter (or leave) print preview.
-          frameReady.current = true;
-          sendToFrame();
-        } else if (event.data.token === writeToken.current) {
-          wireRenderedDocument();
-        }
-        // Any other token is a write that has since been superseded.
-      };
-      window.addEventListener("message", onMessage);
-      return () => window.removeEventListener("message", onMessage);
-    }, [useFrame, sendToFrame, wireRenderedDocument]);
-
-    // Deliver each new page. Skipped until the frame has reported in at least
-    // once, since a window mid-navigation has nowhere to put it; the report
-    // itself sends whatever is current.
-    useEffect(() => {
-      if (!useFrame || !frameReady.current) return;
-      sendToFrame();
-    }, [pageHtml, useFrame, sendToFrame]);
-
-    /** Leave print preview: back to the plain frame URL. */
-    const exitPrintPreview = useCallback(() => {
-      if (!frameUrl) return;
-      const iframe = iframeRef.current;
-      if (!iframe) return;
-      frameReady.current = false;
-      savedScrollPosition.current = null;
-      iframe.src = frameSrc(frameUrl, null);
-    }, [frameUrl]);
 
     // Follow the host's theme without re-rendering. Only meaningful when the
     // host drives the theme at all — otherwise no bridge was injected and the
@@ -595,10 +519,7 @@ const LivePreview = forwardRef<LivePreviewHandle, LivePreviewProps>(
       // finished.
       if (!renderLocally) {
         setIsRebuilding(false);
-      }
-      // With the served frame, a `load` is the *shim* arriving, not a rendered
-      // page — the page is written into it afterwards, and reports itself.
-      if (renderLocally && !useFrame) {
+      } else {
         wireRenderedDocument();
       }
     };
@@ -624,16 +545,41 @@ const LivePreview = forwardRef<LivePreviewHandle, LivePreviewProps>(
             {printoutId ? "Print Preview" : "Live Preview"}
           </p>
           <div className="absolute right-2 flex items-center gap-1.5">
-            {printoutId && (
-              <button
-                className={PREVIEW_BUTTON_CLASSES}
-                onClick={exitPrintPreview}
-                title="Return to the live preview"
+            {/*
+              PreTeXt's own printer icon on each printout is deliberately inert
+              in a preview render — the URL it would reload does not exist — so
+              the paper layout is offered from here instead. Absent for a page
+              with no printouts, where there is nothing to lay out.
+            */}
+            {!isSlideshow && printouts.length > 0 && (
+              <select
+                className={clsx(
+                  "rounded-sm py-1 px-1.5 max-w-56 text-xs font-semibold border cursor-pointer leading-tight",
+                  printoutId
+                    ? "text-emerald-800 bg-emerald-100 border-emerald-300"
+                    : "text-gray-700 bg-white border-gray-300 hover:bg-gray-100",
+                )}
+                // Mirrored onto the element to match the `aria-pressed:`
+                // data-driven pattern the other preview controls below use.
+                data-layout={printoutId ?? ""}
+                aria-label="Preview layout"
+                title="Lay a worksheet or handout out for print, with each workspace at the height the author asked for"
+                value={printoutId ?? ""}
+                onChange={(event) =>
+                  setPrintoutId(event.target.value || null)
+                }
               >
-                Exit print preview
-              </button>
+                <option value="">Web view</option>
+                <optgroup label="Print preview">
+                  {printouts.map((printout) => (
+                    <option key={printout.id} value={printout.id}>
+                      {printout.label || printout.id}
+                    </option>
+                  ))}
+                </optgroup>
+              </select>
             )}
-            {isSlideshow && !printoutId && (
+            {isSlideshow && (
               <>
                 <span
                   className="inline-flex items-center"
@@ -757,14 +703,10 @@ const LivePreview = forwardRef<LivePreviewHandle, LivePreviewProps>(
             name="livePreview"
             title="PreTeXt preview"
             onLoad={handleIframeLoad}
-            // Three transports, one element. The served frame owns its own
-            // `src` (set imperatively, so print-preview navigation sticks);
-            // srcdoc drives the local path when no frame URL is available; and
-            // the server path posts a form into this iframe by name, so it must
-            // have neither attribute set.
-            {...(!useFrame && renderLocally && pageHtml !== null
-              ? { srcDoc: pageHtml }
-              : {})}
+            // Two transports, one element. A local render is delivered as
+            // `srcdoc`; the server path posts a form into this iframe *by
+            // name*, so it must have no `srcdoc` attribute set at all.
+            {...(renderLocally && pageHtml !== null ? { srcDoc: pageHtml } : {})}
           />
           {showBrowserTip && (
             <div

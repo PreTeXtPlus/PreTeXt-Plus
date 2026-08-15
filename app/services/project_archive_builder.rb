@@ -41,16 +41,11 @@ class ProjectArchiveBuilder
   # a single-file output known before the build runs. See schema/project-ptx.rnc in
   # PreTeXtBook/pretext-cli for which attributes each format accepts.
   def project_ptx
-    targets = @project.targets.map { |target| target_element(target) }.join("\n    ")
-
-    <<~XML
-      <?xml version="1.0" encoding="UTF-8"?>
-      <project ptx-version="2">
-        <targets>
-          #{targets}
-        </targets>
-      </project>
-    XML
+    Nokogiri::XML::Builder.new(encoding: "UTF-8") { |xml|
+      xml.project("ptx-version" => "2") {
+        xml.targets { @project.targets.each { |target| xml.target(target_attributes(target)) } }
+      }
+    }.to_xml(indent: 2)
   end
 
   # Returns a rewound StringIO holding the zip bytes.
@@ -125,16 +120,13 @@ class ProjectArchiveBuilder
     #
     # @name is the target's slug, not its display name: this is what `pretext build <x>`
     # takes on a downloaded copy, and the schema will not accept "Instructor edition".
-    def target_element(target)
-      attributes = {
+    def target_attributes(target)
+      {
         "name" => target.slug
       }.merge(target.manifest_attributes).merge(
         "output-dir" => target.slug,
         "output-filename" => target.output_filename,
         "publication" => publication_filename(target)
       ).compact
-
-      pairs = attributes.map { |key, value| %(#{key}="#{ERB::Util.html_escape(value)}") }
-      "<target #{pairs.join(' ')} />"
     end
 end
