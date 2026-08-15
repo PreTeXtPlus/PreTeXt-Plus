@@ -628,6 +628,7 @@ const ArticleToc = ({ onOpenAssetPicker, hideAssets, readOnly }: ArticleTocProps
             <div className="block w-full bg-transparent border-none border-t border-[#dde0e6] py-[7px] px-2.5 font-[inherit] text-[0.78rem] text-left shrink-0">
               <button
                 type="button"
+                data-testid="toc-assets-btn"
                 className="bg-transparent border-none text-blue-600 cursor-pointer py-0 px-0.5 hover:bg-blue-50 hover:underline"
                 onClick={() => onOpenAssetPicker()}
               >
@@ -635,6 +636,7 @@ const ArticleToc = ({ onOpenAssetPicker, hideAssets, readOnly }: ArticleTocProps
               </button>
               <button
                 type="button"
+                data-testid="toc-assets-btn"
                 className="bg-transparent border-none text-blue-600 cursor-pointer py-0 px-0.5 hover:bg-blue-50 hover:underline"
                 onClick={() => onOpenAssetPicker("add")}
               >

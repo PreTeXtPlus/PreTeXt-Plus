@@ -378,10 +378,12 @@ const AssetManagerModal = ({
       return (
         <li
           key={ck}
+          data-testid="am-doc-row"
           className="flex items-center justify-between gap-2 py-[0.45rem] px-2 rounded hover:bg-slate-50"
         >
           <button
             type="button"
+            data-testid="am-row-info-btn"
             className="group flex-1 min-w-0 flex flex-row items-center gap-2 overflow-hidden text-left bg-transparent border-none p-0 cursor-pointer"
             onClick={onOpen}
             title={row.status === "unlinked" ? "No asset for this reference — click to link or create one" : "Manage asset"}

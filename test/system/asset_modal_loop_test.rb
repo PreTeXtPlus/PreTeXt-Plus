@@ -22,8 +22,8 @@ class AssetModalLoopTest < ApplicationSystemTestCase
 
     visit edit_project_path(project)
 
-    assert_selector "button.pretext-plus-editor__toc-assets-btn", text: "Manage", wait: 20
-    find("button.pretext-plus-editor__toc-assets-btn", text: "Manage").click
+    assert_selector "button[data-testid='toc-assets-btn']", text: "Manage", wait: 20
+    find("button[data-testid='toc-assets-btn']", text: "Manage").click
 
     assert_selector "[aria-label='Asset manager']", wait: 10
 

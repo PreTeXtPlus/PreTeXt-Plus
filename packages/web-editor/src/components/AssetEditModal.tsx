@@ -298,7 +298,7 @@ const AssetEditModal = ({
               </>
             )}
 
-            <details>
+            <details data-testid="asset-edit-advanced">
               <summary>Advanced</summary>
               <DialogLabel>
                 Additional source
@@ -308,6 +308,7 @@ const AssetEditModal = ({
                 </DialogHelperCopy>
               </DialogLabel>
               <DialogEditorPane
+                data-testid="asset-edit-source-editor"
                 className="flex-none min-h-0"
                 style={{ height: editorHeight }}
               >

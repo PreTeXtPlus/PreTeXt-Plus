@@ -51,6 +51,7 @@ const PresenceAvatars = ({ awareness }: { awareness: Awareness }) => {
       {peers.map((peer) => (
         <span
           key={peer.clientId}
+          data-testid="presence-avatar"
           className="inline-flex items-center justify-center w-7 h-7 rounded-full border-2 border-white text-white text-[0.8rem] font-bold [text-shadow:0_1px_1px_rgba(0,0,0,0.4)] select-none"
           style={{ backgroundColor: peer.user.color }}
           title={peer.user.name}

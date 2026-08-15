@@ -33,8 +33,8 @@ class AssetEditSyncTest < ApplicationSystemTestCase
     # The content editor is Monaco, which only accepts keystrokes once its
     # hidden textarea has focus -- and it only takes focus from a click on a
     # concrete `.view-line`, never the `.view-lines` container.
-    find("details.pretext-plus-editor__advanced-details").click
-    within(".pretext-plus-editor__am-edit-editor") do
+    find("details[data-testid='asset-edit-advanced']").click
+    within("[data-testid='asset-edit-source-editor']") do
       assert_selector ".view-line", wait: 10
       first(".view-line").click
     end
@@ -63,7 +63,7 @@ class AssetEditSyncTest < ApplicationSystemTestCase
 
     assert_selector "[aria-label='Asset manager']", wait: 10
     attach_file(Rails.root.join("test/fixtures/files/test_image.png"), make_visible: true) do
-      find(".pretext-plus-editor__am-drop-zone").click
+      find("[aria-label='Paste an image, drag and drop to upload, or click to browse files']").click
     end
     click_button "Add to Project"
 
@@ -98,12 +98,12 @@ class AssetEditSyncTest < ApplicationSystemTestCase
     # asset manager -- the only route a user has to it.
     def open_asset_editor_for(ref)
       visit edit_project_path(@project)
-      assert_selector "button.pretext-plus-editor__toc-assets-btn", text: "Manage", wait: 20
-      find("button.pretext-plus-editor__toc-assets-btn", text: "Manage").click
+      assert_selector "button[data-testid='toc-assets-btn']", text: "Manage", wait: 20
+      find("button[data-testid='toc-assets-btn']", text: "Manage").click
 
       assert_selector "[aria-label='Asset manager']", wait: 10
-      find(".pretext-plus-editor__am-doc-row", text: ref, wait: 10)
-        .find("button.pretext-plus-editor__am-row-info").click
+      find("[data-testid='am-doc-row']", text: ref, wait: 10)
+        .find("button[data-testid='am-row-info-btn']").click
 
       assert_selector "[aria-label^='Manage asset']", wait: 10
     end
