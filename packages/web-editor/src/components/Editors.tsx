@@ -1407,20 +1407,31 @@ const EditorsInner = (props: EditorsInnerProps) => {
   // PreTeXt and a build failure. `assembleProjectSource` handles the
   // LaTeX/Markdown -> PreTeXt conversion internally before resolving refs, so
   // this is correct for every source format, not just PreTeXt.
-  const divisionTaggedXml = !activeDivision
-    ? undefined
-    : assembleProjectSource(divisions, activeDivision.xmlId, projectAssets);
+  //
+  // Memoised because it is not free: for a LaTeX or Markdown division it runs
+  // the converter, ~25ms on a large one. Uncached in the render body it paid
+  // that on every render — a cursor move, a hover — rather than once per edit.
+  const divisionTaggedXml = useMemo(
+    () =>
+      activeDivision
+        ? assembleProjectSource(divisions, activeDivision.xmlId, projectAssets)
+        : undefined,
+    [activeDivision, divisions, projectAssets],
+  );
 
-  const previewContent =
-    activeDivision && divisionTaggedXml !== undefined
-      ? wrapDivisionForPreview(
-          activeDivision.type,
-          divisionTaggedXml,
-          effectiveDocinfo,
-          activeDivision.title,
-          language,
-        )
-      : undefined;
+  const previewContent = useMemo(
+    () =>
+      activeDivision && divisionTaggedXml !== undefined
+        ? wrapDivisionForPreview(
+            activeDivision.type,
+            divisionTaggedXml,
+            effectiveDocinfo,
+            activeDivision.title,
+            language,
+          )
+        : undefined,
+    [activeDivision, divisionTaggedXml, effectiveDocinfo, language],
+  );
 
   // Is the division on screen the whole document? Then it *is* its own
   // context: there is nothing around it to number it against, and it is
