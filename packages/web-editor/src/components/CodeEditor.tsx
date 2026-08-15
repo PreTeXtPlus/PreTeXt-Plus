@@ -12,7 +12,6 @@ import { installEditGuard } from "../collab/editGuard";
 import { computeLockedRegion, findPretextHeaderEnd } from "./lockedRegion";
 import type { CollabUser } from "../collab/types";
 import type { SourceFormat } from "../types/editor";
-import "./CodeEditor.css";
 
 /** Live-collaboration wiring for the active division's shared text. */
 export interface CodeEditorCollab {

@@ -1,11 +1,25 @@
 import { useState, useEffect, useRef, type ReactNode } from "react";
+import clsx from "clsx";
 import type { Asset, AssetKind } from "../types/editor";
 import { useEditorStore } from "../store/hooks";
 import { assetEmbedCode } from "../sectionUtils";
 import { buildProjectAssetView, type AssetRow } from "../assetView";
 import { ASSET_KIND_LABELS, SHOW_DOENET, VISIBLE_ASSET_KINDS } from "../assetKinds";
-import "./dialog.css";
-import "./AssetManagerModal.css";
+import {
+  DialogOverlay,
+  Dialog,
+  DialogHeader,
+  DialogTitle,
+  DialogClose,
+  DialogTabBar,
+  DialogTab,
+  DialogContent,
+  DialogLabel,
+  DialogHelperCopy,
+  DialogFileInput,
+  DialogActions,
+  DialogButton,
+} from "./Dialog";
 import doenetLogo from "../assets/doenet.png";
 
 export interface AssetManagerModalProps {
@@ -333,15 +347,11 @@ const AssetManagerModal = ({
   const renderInDocument = () => {
     if (assetView.length === 0) {
       return (
-        <div className="pretext-plus-editor__am-placeholder">
+        <div className="flex flex-col items-center justify-center min-h-[200px] gap-4 text-slate-500 text-[0.9rem] text-center">
           <p>No assets in this project yet.</p>
-          <button
-            type="button"
-            className="pretext-plus-editor__dialog-button"
-            onClick={() => { setTab("add"); setAddKind(null); }}
-          >
+          <DialogButton onClick={() => { setTab("add"); setAddKind(null); }}>
             Add an asset
-          </button>
+          </DialogButton>
         </div>
       );
     }
@@ -366,49 +376,65 @@ const AssetManagerModal = ({
         }
       };
       return (
-        <li key={ck} className="pretext-plus-editor__am-doc-row">
+        <li
+          key={ck}
+          className="flex items-center justify-between gap-2 py-[0.45rem] px-2 rounded hover:bg-slate-50"
+        >
           <button
             type="button"
-            className="pretext-plus-editor__am-row-info pretext-plus-editor__am-row-info--btn"
+            className="group flex-1 min-w-0 flex flex-row items-center gap-2 overflow-hidden text-left bg-transparent border-none p-0 cursor-pointer"
             onClick={onOpen}
             title={row.status === "unlinked" ? "No asset for this reference — click to link or create one" : "Manage asset"}
           >
             {(row.asset?.thumbnailUrl ?? row.asset?.url) && (
               <img
-                className="pretext-plus-editor__am-row-thumb"
+                className="shrink-0 w-8 h-8 rounded object-cover bg-slate-100 border border-slate-200"
                 src={row.asset?.thumbnailUrl ?? row.asset?.url}
                 alt=""
               />
             )}
-            <span className="pretext-plus-editor__am-row-text">
-              <span className="pretext-plus-editor__am-row-name">{row.asset?.title ?? row.ref}</span>
-              <span className="pretext-plus-editor__am-row-ref">
+            <span className="flex flex-col gap-0.5 min-w-0 overflow-hidden">
+              <span className="text-sm text-slate-900 whitespace-nowrap overflow-hidden text-ellipsis group-hover:underline">
+                {row.asset?.title ?? row.ref}
+              </span>
+              <span className="text-[0.72rem] text-slate-400 font-mono whitespace-nowrap overflow-hidden text-ellipsis">
                 {row.ref}
                 {row.asset?.contentType && ` · ${row.asset.contentType}`}
               </span>
             </span>
           </button>
           {row.status === "unlinked" && (
-            <span className="pretext-plus-editor__am-status pretext-plus-editor__am-status--warn" title="No asset for this reference">
+            <span
+              className="shrink-0 text-[0.65rem] font-semibold uppercase tracking-[0.04em] whitespace-nowrap rounded-full py-px px-[7px] text-amber-800 bg-amber-100"
+              title="No asset for this reference"
+            >
               needs asset
             </span>
           )}
           {row.status === "unused" && (
-            <span className="pretext-plus-editor__am-status" title="Not referenced in the document yet">
+            <span
+              className="shrink-0 text-[0.65rem] font-semibold uppercase tracking-[0.04em] whitespace-nowrap rounded-full py-px px-[7px] text-slate-600 bg-slate-200"
+              title="Not referenced in the document yet"
+            >
               not placed
             </span>
           )}
-          <div className="pretext-plus-editor__am-row-actions">
+          <div className="flex items-center gap-1 shrink-0">
             <button
               type="button"
-              className="pretext-plus-editor__am-action-btn"
+              className="text-[0.75rem] py-0.5 px-2 border border-slate-300 rounded bg-white text-slate-700 cursor-pointer leading-[1.5] whitespace-nowrap transition-colors duration-100 hover:bg-slate-100 hover:border-slate-400"
               onClick={onOpen}
             >
               {row.status === "unlinked" ? "Link / create" : "Manage"}
             </button>
             <button
               type="button"
-              className={`pretext-plus-editor__am-action-btn${copiedKey === ck ? " pretext-plus-editor__am-action-btn--done" : ""}`}
+              className={clsx(
+                "text-[0.75rem] py-0.5 px-2 border rounded cursor-pointer leading-[1.5] whitespace-nowrap transition-colors duration-100",
+                copiedKey === ck
+                  ? "text-emerald-600 border-emerald-300 bg-emerald-50"
+                  : "border-slate-300 bg-white text-slate-700 hover:bg-slate-100 hover:border-slate-400",
+              )}
               onClick={() => handleCopy(row.kind, row.ref)}
               title={`Copy ${embedFor(row.kind, row.ref)}`}
             >
@@ -417,7 +443,7 @@ const AssetManagerModal = ({
             {onDuplicateAsset && row.asset?.url && (
               <button
                 type="button"
-                className="pretext-plus-editor__am-action-btn"
+                className="text-[0.75rem] py-0.5 px-2 border border-slate-300 rounded bg-white text-slate-700 cursor-pointer leading-[1.5] whitespace-nowrap transition-colors duration-100 hover:bg-slate-100 hover:border-slate-400"
                 disabled={isDuplicating}
                 onClick={async () => {
                   setDuplicatingKey(ck);
@@ -438,7 +464,7 @@ const AssetManagerModal = ({
             {onRemoveAsset && row.asset && (
               <button
                 type="button"
-                className="pretext-plus-editor__am-action-btn pretext-plus-editor__am-action-btn--danger"
+                className="text-[0.75rem] py-0.5 px-2 border rounded cursor-pointer leading-[1.5] whitespace-nowrap transition-colors duration-100 text-red-700 border-red-300 bg-white hover:bg-red-50 hover:border-red-400"
                 onClick={() => {
                   // Also strip the placeholders, else the row would return as
                   // "needs asset" (mirrors the sidebar's Remove from project).
@@ -465,15 +491,17 @@ const AssetManagerModal = ({
     };
 
     return (
-      <div className="pretext-plus-editor__am-in-doc">
+      <div className="p-1">
         {byKind.map(({ kind, rows }) => (
-          <div key={kind} className="pretext-plus-editor__am-kind-group">
-            <div className="pretext-plus-editor__am-kind-header">
+          <div key={kind} className="mb-2">
+            <div className="flex items-center gap-[0.35rem] pt-[0.4rem] px-2 pb-1 text-[0.72rem] font-semibold text-slate-600 uppercase tracking-[0.05em] border-b border-slate-200">
               <span aria-hidden="true">📁</span>
               <span>{ASSET_KIND_LABELS[kind]}</span>
-              <span className="pretext-plus-editor__am-kind-count">{rows.length}</span>
+              <span className="inline-flex items-center justify-center text-[0.65rem] font-bold text-slate-600 bg-slate-200 rounded-full px-[5px] min-w-[16px] leading-[1.4]">
+                {rows.length}
+              </span>
             </div>
-            <ul className="pretext-plus-editor__am-list">{rows.map(renderRow)}</ul>
+            <ul className="list-none m-0 p-0">{rows.map(renderRow)}</ul>
           </div>
         ))}
       </div>
@@ -481,38 +509,41 @@ const AssetManagerModal = ({
   };
 
   // ── "Add Asset" tab ────────────────────────────────────────────────────────
+  const kindCardClasses =
+    "flex flex-col items-center gap-[0.4rem] py-6 px-8 bg-white border-2 border-slate-200 rounded-lg cursor-pointer min-w-[130px] text-center transition-[border-color,box-shadow] duration-150 hover:border-[#0e639c] hover:shadow-[0_0_0_3px_rgba(14,99,156,0.12)]";
+
   const renderKindPicker = () => (
-    <div className="pretext-plus-editor__am-kind-picker">
-      <p className="pretext-plus-editor__am-kind-picker-label">What kind of asset?</p>
-      <div className="pretext-plus-editor__am-kind-cards">
+    <div className="flex flex-col items-center justify-center min-h-[220px] gap-6 py-6 px-4 [@media(max-height:600px)]:min-h-0 [@media(max-height:600px)]:py-4 [@media(max-height:600px)]:px-2">
+      <p className="m-0 text-base font-medium text-slate-700">What kind of asset?</p>
+      <div className="flex gap-4">
         <button
           type="button"
-          className="pretext-plus-editor__am-kind-card"
+          className={kindCardClasses}
           onClick={() => { setAddKind("image"); setImageTab(onUpload ? "upload" : "url"); }}
         >
-          <span className="pretext-plus-editor__am-kind-card-icon" aria-hidden="true">🖼️</span>
-          <span className="pretext-plus-editor__am-kind-card-label">Image</span>
-          <span className="pretext-plus-editor__am-kind-card-hint">PNG, JPEG, SVG, etc.</span>
+          <span className="text-[2rem] leading-none" aria-hidden="true">🖼️</span>
+          <span className="text-base font-semibold text-slate-900">Image</span>
+          <span className="text-[0.78rem] text-slate-500">PNG, JPEG, SVG, etc.</span>
         </button>
         {SHOW_DOENET && (
           <button
             type="button"
-            className="pretext-plus-editor__am-kind-card"
+            className={kindCardClasses}
             onClick={() => setAddKind("doenet")}
           >
-            <span className="pretext-plus-editor__am-kind-card-icon" aria-hidden="true"><img src={doenetLogo} alt="Doenet" /></span>
-            <span className="pretext-plus-editor__am-kind-card-label">Doenet</span>
-            <span className="pretext-plus-editor__am-kind-card-hint">Interactive activity</span>
+            <span className="text-[2rem] leading-none" aria-hidden="true"><img src={doenetLogo} alt="Doenet" /></span>
+            <span className="text-base font-semibold text-slate-900">Doenet</span>
+            <span className="text-[0.78rem] text-slate-500">Interactive activity</span>
           </button>
         )}
         {!SHOW_DOENET && (
           <div
-            className="pretext-plus-editor__am-kind-card pretext-plus-editor__am-kind-card--soon"
+            className="flex flex-col items-center gap-[0.4rem] py-6 px-8 border-2 border-dashed border-slate-200 rounded-lg cursor-default min-w-[130px] text-center opacity-70 bg-slate-50 hover:shadow-none"
             aria-disabled="true"
           >
-            <span className="pretext-plus-editor__am-kind-card-icon" aria-hidden="true">✨</span>
-            <span className="pretext-plus-editor__am-kind-card-label">More coming soon</span>
-            <span className="pretext-plus-editor__am-kind-card-hint">Interactive activities and more</span>
+            <span className="text-[2rem] leading-none" aria-hidden="true">✨</span>
+            <span className="text-base font-semibold text-slate-900">More coming soon</span>
+            <span className="text-[0.78rem] text-slate-500">Interactive activities and more</span>
           </div>
         )}
       </div>
@@ -520,39 +551,40 @@ const AssetManagerModal = ({
   );
 
   const renderImageAdd = (showBack: boolean) => (
-    <div className="pretext-plus-editor__am-configure">
+    <div className="flex flex-col min-h-0">
       {showBack && (
-        <button type="button" className="pretext-plus-editor__am-back-btn" onClick={() => setAddKind(null)}>
+        <button
+          type="button"
+          className="text-[0.8rem] text-slate-600 bg-transparent border-none cursor-pointer py-[0.35rem] px-2 rounded w-fit mt-1 mx-1 hover:bg-slate-100 hover:text-slate-900"
+          onClick={() => setAddKind(null)}
+        >
           ← Back
         </button>
       )}
-      <div className="pretext-plus-editor__dialog-tab-bar pretext-plus-editor__am-sub-tabs">
+      <DialogTabBar className="border-b-slate-200 pl-1">
         {onUpload && (
-          <button
-            type="button"
-            className={`pretext-plus-editor__dialog-tab${imageTab === "upload" ? " pretext-plus-editor__dialog-tab--active" : ""}`}
+          <DialogTab
+            active={imageTab === "upload"}
             onClick={() => setImageTab("upload")}
           >
             Upload
-          </button>
+          </DialogTab>
         )}
-        <button
-          type="button"
-          className={`pretext-plus-editor__dialog-tab${imageTab === "url" ? " pretext-plus-editor__dialog-tab--active" : ""}`}
-          onClick={() => setImageTab("url")}
-        >
+        <DialogTab active={imageTab === "url"} onClick={() => setImageTab("url")}>
           External URL
-        </button>
-      </div>
-      <div className="pretext-plus-editor__am-configure-body">
+        </DialogTab>
+      </DialogTabBar>
+      <div className="p-1">
         {imageTab === "upload" && onUpload && (
-          <div className="pretext-plus-editor__am-upload">
+          <div className="flex flex-col gap-3">
             {!pendingUploadFile ? (
               <div
-                className={[
-                  "pretext-plus-editor__am-drop-zone",
-                  isDragging ? "pretext-plus-editor__am-drop-zone--active" : "",
-                ].filter(Boolean).join(" ")}
+                className={clsx(
+                  "min-h-[160px] flex flex-col items-center justify-center gap-2 border-2 border-dashed rounded-md cursor-pointer py-8 px-4 outline-none transition-[border-color,background-color] duration-150 [@media(max-height:600px)]:min-h-[110px] [@media(max-height:600px)]:py-5 [@media(max-height:600px)]:px-4",
+                  isDragging
+                    ? "border-[#0e639c] bg-sky-100"
+                    : "border-slate-300 bg-slate-50 hover:border-[#0e639c] hover:bg-sky-50 focus-visible:border-[#0e639c] focus-visible:bg-sky-50",
+                )}
                 onDragOver={(e) => { e.preventDefault(); setIsDragging(true); }}
                 onDragLeave={() => setIsDragging(false)}
                 onDrop={(e) => { e.preventDefault(); setIsDragging(false); const f = e.dataTransfer.files[0]; if (f) selectPendingUpload(f); }}
@@ -562,81 +594,88 @@ const AssetManagerModal = ({
                 onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); fileInputRef.current?.click(); } }}
                 aria-label="Paste an image, drag and drop to upload, or click to browse files"
               >
-                <input
+                <DialogFileInput
                   ref={fileInputRef}
-                  type="file"
                   accept="image/*"
-                  className="pretext-plus-editor__dialog-file-input"
                   onChange={(e) => { const f = e.target.files?.[0]; if (f) selectPendingUpload(f); }}
                 />
-                <span className="pretext-plus-editor__am-drop-icon" aria-hidden="true">↑</span>
-                <p className="pretext-plus-editor__am-drop-text">Paste your image, drag &amp; drop a file, or click to browse</p>
-                <p className="pretext-plus-editor__dialog-helper-copy">PNG, JPEG, GIF, SVG, WebP</p>
+                <span className="text-[2.5rem] text-slate-400 leading-none" aria-hidden="true">↑</span>
+                <p className="m-0 text-slate-600 text-[0.95rem] font-medium text-center">
+                  Paste your image, drag &amp; drop a file, or click to browse
+                </p>
+                <DialogHelperCopy as="p">PNG, JPEG, GIF, SVG, WebP</DialogHelperCopy>
               </div>
             ) : (
-              <div className="pretext-plus-editor__am-url-form">
+              <div className="flex flex-col gap-2 pt-1 px-1 pb-2 max-w-[420px]">
                 <img
                   src={pendingUploadPreviewUrl ?? undefined}
                   alt="Preview"
-                  className="pretext-plus-editor__am-url-preview"
+                  className="max-w-full max-h-[140px] object-contain border border-slate-200 rounded bg-slate-50 mt-1"
                 />
-                <label className="pretext-plus-editor__dialog-label" htmlFor="am-upload-title">
-                  Title <span className="pretext-plus-editor__dialog-helper-copy">(optional)</span>
-                </label>
+                <DialogLabel htmlFor="am-upload-title">
+                  Title <DialogHelperCopy>(optional)</DialogHelperCopy>
+                </DialogLabel>
                 <input
                   id="am-upload-title"
                   type="text"
-                  className="pretext-plus-editor__am-input"
+                  className="text-[0.9rem] border border-slate-300 rounded py-1.5 px-2.5 bg-white outline-none text-slate-900 w-full focus:border-[#0e639c] focus:shadow-[0_0_0_2px_rgba(14,99,156,0.15)]"
                   placeholder={pendingUploadFile.name}
                   value={uploadTitle}
                   onChange={(e) => setUploadTitle(e.target.value)}
                   disabled={isUploading}
                   autoFocus
                 />
-                {uploadError && <p className="pretext-plus-editor__am-error">{uploadError}</p>}
-                <button
-                  type="button"
-                  className="pretext-plus-editor__dialog-button pretext-plus-editor__dialog-button--secondary"
+                {uploadError && (
+                  <p className="m-0 py-[0.4rem] px-[0.6rem] bg-[#fde8e8] text-red-700 rounded text-[0.83rem]">
+                    {uploadError}
+                  </p>
+                )}
+                <DialogButton
+                  variant="secondary"
                   onClick={clearPendingUpload}
                   disabled={isUploading}
                 >
                   Choose a different file
-                </button>
+                </DialogButton>
               </div>
             )}
           </div>
         )}
         {imageTab === "url" && (
-          <div className="pretext-plus-editor__am-url-form">
-            <label className="pretext-plus-editor__dialog-label" htmlFor="am-url-value">Image URL</label>
+          <div className="flex flex-col gap-2 pt-1 px-1 pb-2 max-w-[420px]">
+            <DialogLabel htmlFor="am-url-value">Image URL</DialogLabel>
             <input
               id="am-url-value"
               type="url"
-              className="pretext-plus-editor__am-input"
+              className="text-[0.9rem] border border-slate-300 rounded py-1.5 px-2.5 bg-white outline-none text-slate-900 w-full focus:border-[#0e639c] focus:shadow-[0_0_0_2px_rgba(14,99,156,0.15)]"
               placeholder="https://example.com/image.png"
               value={urlValue}
               onChange={(e) => setUrlValue(e.target.value)}
               disabled={isAddingUrl}
               autoFocus
             />
-            <label className="pretext-plus-editor__dialog-label" htmlFor="am-url-title">
-              Title <span className="pretext-plus-editor__dialog-helper-copy">(optional)</span>
-            </label>
+            <DialogLabel htmlFor="am-url-title">
+              Title <DialogHelperCopy>(optional)</DialogHelperCopy>
+            </DialogLabel>
             <input
               id="am-url-title"
               type="text"
-              className="pretext-plus-editor__am-input"
+              className="text-[0.9rem] border border-slate-300 rounded py-1.5 px-2.5 bg-white outline-none text-slate-900 w-full focus:border-[#0e639c] focus:shadow-[0_0_0_2px_rgba(14,99,156,0.15)]"
               placeholder="My image"
               value={urlTitle}
               onChange={(e) => setUrlTitle(e.target.value)}
               disabled={isAddingUrl}
             />
-            {urlError && <p className="pretext-plus-editor__am-error">{urlError}</p>}
+            {urlError && (
+              <p className="m-0 py-[0.4rem] px-[0.6rem] bg-[#fde8e8] text-red-700 rounded text-[0.83rem]">
+                {urlError}
+              </p>
+            )}
             {urlValue.trim() && (
               <img
                 src={urlValue.trim()}
                 alt="Preview"
-                className="pretext-plus-editor__am-url-preview"
+                className="max-w-full max-h-[140px] object-contain border border-slate-200 rounded bg-slate-50 mt-1"
                 onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = "none"; }}
               />
             )}
@@ -651,69 +690,71 @@ const AssetManagerModal = ({
   // inline, so both the URL and Upload flows commit from the same place once
   // the user has previewed what they're adding.
   const renderUrlAddAction = () => (
-    <button
-      type="button"
-      className="pretext-plus-editor__dialog-button"
+    <DialogButton
       onClick={handleUrlInsert}
       disabled={!urlValue.trim() || isAddingUrl}
     >
       {isAddingUrl ? "Adding…" : onFetchUrl && onUpload ? "Add to Project" : "Add"}
-    </button>
+    </DialogButton>
   );
 
   const renderUploadAddAction = () => (
-    <button
-      type="button"
-      className="pretext-plus-editor__dialog-button"
+    <DialogButton
       onClick={handleUploadConfirm}
       disabled={!pendingUploadFile || isUploading}
     >
       {isUploading ? "Uploading…" : "Add to Project"}
-    </button>
+    </DialogButton>
   );
 
   const renderDoenetAdd = (showBack: boolean) => (
-    <div className="pretext-plus-editor__am-configure">
+    <div className="flex flex-col min-h-0">
       {showBack && (
-        <button type="button" className="pretext-plus-editor__am-back-btn" onClick={() => setAddKind(null)}>
+        <button
+          type="button"
+          className="text-[0.8rem] text-slate-600 bg-transparent border-none cursor-pointer py-[0.35rem] px-2 rounded w-fit mt-1 mx-1 hover:bg-slate-100 hover:text-slate-900"
+          onClick={() => setAddKind(null)}
+        >
           ← Back
         </button>
       )}
-      <div className="pretext-plus-editor__am-configure-body">
-        <div className="pretext-plus-editor__am-create-form">
-            <label className="pretext-plus-editor__dialog-label" htmlFor="am-doenet-title">Title</label>
+      <div className="p-1">
+        <div className="flex flex-col gap-2 pt-1 px-1 pb-2 max-w-[420px]">
+            <DialogLabel htmlFor="am-doenet-title">Title</DialogLabel>
             <input
               id="am-doenet-title"
               type="text"
-              className="pretext-plus-editor__am-input"
+              className="text-[0.9rem] border border-slate-300 rounded py-1.5 px-2.5 bg-white outline-none text-slate-900 w-full focus:border-[#0e639c] focus:shadow-[0_0_0_2px_rgba(14,99,156,0.15)]"
               placeholder="My Activity"
               value={doenetTitle}
               onChange={(e) => setDoenetTitle(e.target.value)}
               disabled={isCreatingDoenet}
               autoFocus
             />
-            <label className="pretext-plus-editor__dialog-label" htmlFor="am-doenet-ref">Id</label>
+            <DialogLabel htmlFor="am-doenet-ref">Id</DialogLabel>
             <input
               id="am-doenet-ref"
               type="text"
-              className="pretext-plus-editor__am-input"
+              className="text-[0.9rem] border border-slate-300 rounded py-1.5 px-2.5 bg-white outline-none text-slate-900 w-full focus:border-[#0e639c] focus:shadow-[0_0_0_2px_rgba(14,99,156,0.15)]"
               placeholder="my-activity"
               value={doenetRef}
               onChange={(e) => setDoenetRef(e.target.value)}
               disabled={isCreatingDoenet}
             />
-            <p className="pretext-plus-editor__dialog-helper-copy">
+            <DialogHelperCopy as="p">
               The id is used in the embed code: <code>{embedFor("doenet", doenetRef || "my-activity")}</code>
-            </p>
-            {doenetError && <p className="pretext-plus-editor__am-error">{doenetError}</p>}
-            <button
-              type="button"
-              className="pretext-plus-editor__dialog-button"
+            </DialogHelperCopy>
+            {doenetError && (
+              <p className="m-0 py-[0.4rem] px-[0.6rem] bg-[#fde8e8] text-red-700 rounded text-[0.83rem]">
+                {doenetError}
+              </p>
+            )}
+            <DialogButton
               onClick={handleCreateDoenet}
               disabled={!doenetTitle.trim() || !doenetRef.trim() || isCreatingDoenet}
             >
               {isCreatingDoenet ? "Creating…" : onCreateDoenet ? "Create" : "Add"}
-            </button>
+            </DialogButton>
         </div>
       </div>
     </div>
@@ -722,34 +763,25 @@ const AssetManagerModal = ({
   // ── Source-picker mode (resolve / replace): go straight to the picker ──────
   const renderSourcePickerMode = (kind: AssetKind, title: string, hint: ReactNode) => (
     <>
-      <div className="pretext-plus-editor__dialog-header">
-        <h2 className="pretext-plus-editor__dialog-title">{title}</h2>
-        <button
-          type="button"
-          className="pretext-plus-editor__dialog-close"
-          onClick={onClose}
-          aria-label="Close"
-        >
+      <DialogHeader>
+        <DialogTitle>{title}</DialogTitle>
+        <DialogClose onClick={onClose} aria-label="Close">
           ✕
-        </button>
-      </div>
-      <div className="pretext-plus-editor__dialog-content pretext-plus-editor__dialog-content--single">
-        <p className="pretext-plus-editor__dialog-helper-copy pretext-plus-editor__am-resolve-hint">
+        </DialogClose>
+      </DialogHeader>
+      <DialogContent single>
+        <DialogHelperCopy as="p" className="pb-2 px-2">
           {hint}
-        </p>
+        </DialogHelperCopy>
         {kind === "doenet" ? renderDoenetAdd(false) : renderImageAdd(false)}
-      </div>
-      <div className="pretext-plus-editor__dialog-actions">
-        <button
-          type="button"
-          className="pretext-plus-editor__dialog-button pretext-plus-editor__dialog-button--secondary"
-          onClick={onClose}
-        >
+      </DialogContent>
+      <DialogActions>
+        <DialogButton variant="secondary" onClick={onClose}>
           Cancel
-        </button>
+        </DialogButton>
         {kind === "image" && imageTab === "url" && renderUrlAddAction()}
         {kind === "image" && imageTab === "upload" && onUpload && renderUploadAddAction()}
-      </div>
+      </DialogActions>
     </>
   );
 
@@ -774,12 +806,9 @@ const AssetManagerModal = ({
     );
 
   return (
-    <div
-      className="pretext-plus-editor__dialog-overlay"
-      onClick={(e) => e.target === e.currentTarget && onClose()}
-    >
-      <div
-        className="pretext-plus-editor__dialog pretext-plus-editor__dialog--asset-manager"
+    <DialogOverlay onClick={(e) => e.target === e.currentTarget && onClose()}>
+      <Dialog
+        className="w-[min(90%,700px)] h-[min(85%,600px)] [@media(max-height:600px)]:h-[98%]"
         role="dialog"
         aria-modal="true"
         aria-label="Asset manager"
@@ -790,39 +819,34 @@ const AssetManagerModal = ({
           renderReplaceMode(replaceTarget)
         ) : (
           <>
-            <div className="pretext-plus-editor__dialog-header">
-              <h2 className="pretext-plus-editor__dialog-title">Assets</h2>
-              <button
-                type="button"
-                className="pretext-plus-editor__dialog-close"
-                onClick={onClose}
-                aria-label="Close"
-              >
+            <DialogHeader>
+              <DialogTitle>Assets</DialogTitle>
+              <DialogClose onClick={onClose} aria-label="Close">
                 ✕
-              </button>
-            </div>
+              </DialogClose>
+            </DialogHeader>
 
-            <div className="pretext-plus-editor__dialog-tab-bar">
-              <button
-                type="button"
-                className={`pretext-plus-editor__dialog-tab${tab === "in-document" ? " pretext-plus-editor__dialog-tab--active" : ""}`}
+            <DialogTabBar>
+              <DialogTab
+                active={tab === "in-document"}
                 onClick={() => setTab("in-document")}
               >
                 Assets
                 {assetView.length > 0 && (
-                  <span className="pretext-plus-editor__asset-tab-count">{assetView.length}</span>
+                  <span className="inline-flex items-center justify-center ml-[5px] text-[0.68rem] font-bold text-slate-600 bg-slate-200 rounded-full px-[5px] min-w-[16px] leading-[1.4]">
+                    {assetView.length}
+                  </span>
                 )}
-              </button>
-              <button
-                type="button"
-                className={`pretext-plus-editor__dialog-tab${tab === "add" ? " pretext-plus-editor__dialog-tab--active" : ""}`}
+              </DialogTab>
+              <DialogTab
+                active={tab === "add"}
                 onClick={() => { setTab("add"); setAddKind(null); }}
               >
                 Add Asset
-              </button>
-            </div>
+              </DialogTab>
+            </DialogTabBar>
 
-            <div className="pretext-plus-editor__dialog-content pretext-plus-editor__dialog-content--single">
+            <DialogContent single>
               {tab === "in-document"
                 ? renderInDocument()
                 : addKind === null
@@ -830,23 +854,19 @@ const AssetManagerModal = ({
                   : addKind === "image"
                     ? renderImageAdd(true)
                     : renderDoenetAdd(true)}
-            </div>
+            </DialogContent>
 
-            <div className="pretext-plus-editor__dialog-actions">
-              <button
-                type="button"
-                className="pretext-plus-editor__dialog-button pretext-plus-editor__dialog-button--secondary"
-                onClick={onClose}
-              >
+            <DialogActions>
+              <DialogButton variant="secondary" onClick={onClose}>
                 Close
-              </button>
+              </DialogButton>
               {tab === "add" && addKind === "image" && imageTab === "url" && renderUrlAddAction()}
               {tab === "add" && addKind === "image" && imageTab === "upload" && onUpload && renderUploadAddAction()}
-            </div>
+            </DialogActions>
           </>
         )}
-      </div>
-    </div>
+      </Dialog>
+    </DialogOverlay>
   );
 };
 

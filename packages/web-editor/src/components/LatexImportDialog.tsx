@@ -11,7 +11,25 @@ import {
   getConversionErrorMessage,
 } from "../contentConversion";
 import StoreFeedbackLink from "./StoreFeedbackLink";
-import "./dialog.css";
+import {
+  DialogOverlay,
+  Dialog,
+  DialogHeader,
+  DialogTitle,
+  DialogCopy,
+  DialogClose,
+  DialogContent,
+  DialogSection,
+  DialogLabelRow,
+  DialogLabel,
+  DialogLinkButton,
+  DialogFileInput,
+  DialogEditorPane,
+  DialogHelperCopy,
+  DialogStatus,
+  DialogActions,
+  DialogButton,
+} from "./Dialog";
 
 interface LatexImportDialogProps {
   /** Called when the dialog should close (Cancel button, Escape key, or after "Copy and Close"). */
@@ -149,67 +167,48 @@ const LatexImportDialog = ({
   };
 
   return (
-    <div className="pretext-plus-editor__dialog-overlay" onClick={onClose}>
-      <div
-        className="pretext-plus-editor__dialog"
+    <DialogOverlay onClick={onClose}>
+      <Dialog
         role="dialog"
         aria-modal="true"
         aria-labelledby="pretext-plus-editor-dialog-title"
         onClick={(event) => event.stopPropagation()}
       >
-        <div className="pretext-plus-editor__dialog-header">
+        <DialogHeader>
           <div>
-            <h2
-              id="pretext-plus-editor-dialog-title"
-              className="pretext-plus-editor__dialog-title"
-            >
+            <DialogTitle id="pretext-plus-editor-dialog-title">
               Convert LaTeX
-            </h2>
-            <p className="pretext-plus-editor__dialog-copy">
+            </DialogTitle>
+            <DialogCopy>
               Paste LaTeX, convert it to PreTeXt, then copy the result.
-            </p>
-            <div className="pretext-plus-editor__dialog-feedback-row">
+            </DialogCopy>
+            <div className="mt-[0.45rem]">
               <StoreFeedbackLink
                 label="Give feedback on conversion"
                 context="latex-conversion"
               />
             </div>
           </div>
-          <button
-            type="button"
-            className="pretext-plus-editor__dialog-close"
-            onClick={onClose}
-            aria-label="Close LaTeX import dialog"
-          >
+          <DialogClose onClick={onClose} aria-label="Close LaTeX import dialog">
             Close
-          </button>
-        </div>
+          </DialogClose>
+        </DialogHeader>
 
-        <div className="pretext-plus-editor__dialog-content">
-          <div className="pretext-plus-editor__dialog-section">
-            <div className="pretext-plus-editor__dialog-label-row">
-              <label className="pretext-plus-editor__dialog-label">
-                LaTeX Input
-              </label>
-              <button
-                type="button"
-                className="pretext-plus-editor__dialog-link-button"
-                onClick={() => fileInputRef.current?.click()}
-              >
+        <DialogContent>
+          <DialogSection>
+            <DialogLabelRow>
+              <DialogLabel>LaTeX Input</DialogLabel>
+              <DialogLinkButton onClick={() => fileInputRef.current?.click()}>
                 Open .tex File
-              </button>
-              <input
+              </DialogLinkButton>
+              <DialogFileInput
                 ref={fileInputRef}
-                type="file"
                 accept=".tex,text/x-tex"
-                className="pretext-plus-editor__dialog-file-input"
                 onChange={handleFileInputChange}
               />
-            </div>
-            <div
-              className={`pretext-plus-editor__dialog-editor ${
-                isDragActive ? "pretext-plus-editor__dialog-editor--drag" : ""
-              }`}
+            </DialogLabelRow>
+            <DialogEditorPane
+              dragActive={isDragActive}
               onDragOver={handleDragOver}
               onDragLeave={handleDragLeave}
               onDrop={handleDrop}
@@ -225,61 +224,41 @@ const LatexImportDialog = ({
                 }}
                 onChange={(value) => setLatexInput(value || "")}
               />
-            </div>
-            <p className="pretext-plus-editor__dialog-helper-copy">
+            </DialogEditorPane>
+            <DialogHelperCopy as="p">
               Paste LaTeX, open a `.tex` file, or drag one onto this editor.
-            </p>
-          </div>
+            </DialogHelperCopy>
+          </DialogSection>
 
-          <div className="pretext-plus-editor__dialog-section">
-            <div className="pretext-plus-editor__dialog-label-row">
-              <label className="pretext-plus-editor__dialog-label">
-                Converted PreTeXt
-              </label>
-              {copyStatus === "copied" ? (
-                <span className="pretext-plus-editor__dialog-status">
-                  Copied
-                </span>
-              ) : null}
-            </div>
-            <div className="pretext-plus-editor__dialog-editor">
+          <DialogSection>
+            <DialogLabelRow>
+              <DialogLabel>Converted PreTeXt</DialogLabel>
+              {copyStatus === "copied" ? <DialogStatus>Copied</DialogStatus> : null}
+            </DialogLabelRow>
+            <DialogEditorPane>
               <Editor
                 options={{ ...editorOptions, readOnly: true }}
                 height="100%"
                 language="xml"
                 value={convertedOutput}
               />
-            </div>
-          </div>
-        </div>
+            </DialogEditorPane>
+          </DialogSection>
+        </DialogContent>
 
-        <div className="pretext-plus-editor__dialog-actions">
-          <button
-            type="button"
-            className="pretext-plus-editor__dialog-button pretext-plus-editor__dialog-button--secondary"
-            onClick={onClose}
-          >
+        <DialogActions>
+          <DialogButton variant="secondary" onClick={onClose}>
             Cancel
-          </button>
-          <button
-            type="button"
-            className="pretext-plus-editor__dialog-button"
-            onClick={handleConvert}
-            disabled={!latexInput.trim()}
-          >
+          </DialogButton>
+          <DialogButton onClick={handleConvert} disabled={!latexInput.trim()}>
             Convert
-          </button>
-          <button
-            type="button"
-            className="pretext-plus-editor__dialog-button"
-            onClick={handleCopy}
-            disabled={!convertedOutput}
-          >
+          </DialogButton>
+          <DialogButton onClick={handleCopy} disabled={!convertedOutput}>
             Copy and Close
-          </button>
-        </div>
-      </div>
-    </div>
+          </DialogButton>
+        </DialogActions>
+      </Dialog>
+    </DialogOverlay>
   );
 };
 

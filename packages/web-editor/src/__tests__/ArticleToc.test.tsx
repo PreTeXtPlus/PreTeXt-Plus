@@ -52,10 +52,10 @@ function renderToc(readOnly?: boolean, docDivisions: Division[] = divisions) {
 function openMenu(label: string) {
   // Matched on the row's own title element: once an edit form is open the
   // label also appears as an <option>, which a plain text query would hit.
-  const row = [...document.querySelectorAll("li.pretext-plus-editor__toc-item")]
+  const row = [...document.querySelectorAll('[data-testid^="toc-item-"]')]
     .find(
       (li) =>
-        li.querySelector(".pretext-plus-editor__toc-title")?.textContent ===
+        li.querySelector('[data-testid="toc-title"]')?.textContent ===
         label,
     ) as HTMLElement | undefined;
   if (!row) throw new Error(`no TOC row for "${label}"`);

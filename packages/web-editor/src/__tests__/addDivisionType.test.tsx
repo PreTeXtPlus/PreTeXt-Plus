@@ -66,10 +66,10 @@ function renderEditors(divisions: Division[]) {
 
 /** Click "Add new division" in the menu of the TOC row titled `label`. */
 function addDivisionUnder(label: string) {
-  const row = [...document.querySelectorAll("li.pretext-plus-editor__toc-item")]
+  const row = [...document.querySelectorAll('[data-testid^="toc-item-"]')]
     .find(
       (li) =>
-        li.querySelector(".pretext-plus-editor__toc-title")?.textContent ===
+        li.querySelector('[data-testid="toc-title"]')?.textContent ===
         label,
     ) as HTMLElement | undefined;
   if (!row) throw new Error(`no TOC row for "${label}"`);

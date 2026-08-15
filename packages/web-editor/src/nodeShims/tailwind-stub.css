@@ -1,0 +1,15 @@
+/* Empty stub so esbuild's CSS-import resolver has something to resolve @import "tailwindcss"; to.
+
+The root app compiles @pretextbook/web-editor's TypeScript source directly
+(package.json exports -> src/index.ts, not a prebuilt dist/ -- see
+../README.md for why), and esbuild has no Tailwind processor, so it cannot
+handle Tailwind v4's @import "tailwindcss"; directive the way the Vite
+plugin used for this package's own dev server / lib build does. Utility
+classes for this app come from its own tailwindcss-rails pipeline instead
+(bin/rails tailwindcss:watch), which already scans this package's .tsx files
+via Tailwind's default content auto-detection.
+
+Aliased only in the root app's esbuild command (--alias:tailwindcss=...),
+never in vite.config.ts -- Vite's @tailwindcss/vite plugin needs to see the
+real import to generate this package's own Tailwind output. */
+

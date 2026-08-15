@@ -5,7 +5,7 @@ import React, {
   useRef,
   useState,
 } from "react";
-import "./CodeEditorMenu.css";
+import clsx from "clsx";
 import { formatPretext } from "@pretextbook/format";
 import type { SourceFormat } from "../types/editor";
 
@@ -53,11 +53,18 @@ interface MenuAction {
   label: string;
   onClick: () => void;
   title: string;
-  className?: string;
+  variant?: "convert";
   disabled?: boolean;
 }
 
 const GAP = 6;
+
+const MENU_BUTTON_BASE_CLASSES =
+  "py-[5px] px-2.5 border rounded-[3px] cursor-pointer text-[13px] font-medium leading-[1.3] transition-colors duration-150 ease-in-out";
+const MENU_BUTTON_DEFAULT_CLASSES =
+  "bg-transparent text-[#1f1f1f] border-transparent enabled:hover:bg-[#e8e8e8] enabled:hover:border-[#d0d0d0] disabled:text-gray-400 disabled:cursor-not-allowed";
+const MENU_BUTTON_CONVERT_CLASSES =
+  "bg-blue-600 text-white border-transparent enabled:hover:bg-blue-700 disabled:bg-blue-300 disabled:text-white disabled:cursor-not-allowed";
 
 /**
  * Renders a horizontal row of toolbar actions, collapsing the trailing ones
@@ -153,10 +160,19 @@ const OverflowMenu: React.FC<{ actions: MenuAction[] }> = ({ actions }) => {
   const visibleActions = actions.slice(0, visibleCount);
   const overflowActions = actions.slice(visibleCount);
 
+  const actionButtonClasses = (action: MenuAction) =>
+    clsx(
+      MENU_BUTTON_BASE_CLASSES,
+      "shrink-0 whitespace-nowrap",
+      action.variant === "convert"
+        ? MENU_BUTTON_CONVERT_CLASSES
+        : MENU_BUTTON_DEFAULT_CLASSES,
+    );
+
   const renderButton = (action: MenuAction) => (
     <button
       key={action.key}
-      className={`pretext-plus-editor__menu-button ${action.className ?? ""}`}
+      className={actionButtonClasses(action)}
       onClick={action.onClick}
       disabled={action.disabled}
       title={action.title}
@@ -166,17 +182,17 @@ const OverflowMenu: React.FC<{ actions: MenuAction[] }> = ({ actions }) => {
   );
 
   return (
-    <div className="pretext-plus-editor__menu-actions" ref={containerRef}>
+    <div
+      className="relative flex items-center gap-1.5 flex-1 min-w-0"
+      ref={containerRef}
+    >
       {visibleActions.map(renderButton)}
 
       {overflowActions.length > 0 && (
-        <div
-          className="pretext-plus-editor__menu-dropdown"
-          ref={dropdownRef}
-        >
+        <div className="relative inline-flex flex-none" ref={dropdownRef}>
           <button
             type="button"
-            className="pretext-plus-editor__menu-button"
+            className={clsx(MENU_BUTTON_BASE_CLASSES, MENU_BUTTON_DEFAULT_CLASSES)}
             onClick={() => setIsOpen((o) => !o)}
             aria-haspopup="menu"
             aria-expanded={isOpen}
@@ -185,13 +201,16 @@ const OverflowMenu: React.FC<{ actions: MenuAction[] }> = ({ actions }) => {
             More ▾
           </button>
           {isOpen && (
-            <div className="pretext-plus-editor__menu-dropdown-list" role="menu">
+            <div
+              className="absolute top-[calc(100%+4px)] left-0 z-20 flex flex-col min-w-[180px] p-1 bg-white border border-[#d0d0d0] rounded-md shadow-[0_6px_16px_rgba(0,0,0,0.14)]"
+              role="menu"
+            >
               {overflowActions.map((action) => (
                 <button
                   key={action.key}
                   type="button"
                   role="menuitem"
-                  className="pretext-plus-editor__menu-dropdown-item"
+                  className="block w-full py-1.5 px-2.5 text-left bg-transparent text-[#1f1f1f] rounded cursor-pointer text-[13px] font-medium leading-[1.3] whitespace-nowrap enabled:hover:bg-[#e8e8e8] disabled:text-gray-400 disabled:cursor-not-allowed"
                   onClick={() => {
                     setIsOpen(false);
                     action.onClick();
@@ -208,18 +227,26 @@ const OverflowMenu: React.FC<{ actions: MenuAction[] }> = ({ actions }) => {
       )}
 
       {/* Hidden mirror row used only to measure natural button widths. */}
-      <div className="pretext-plus-editor__menu-measure" ref={measureRef} aria-hidden>
+      <div
+        className="absolute top-0 left-0 invisible pointer-events-none flex gap-1.5 whitespace-nowrap"
+        ref={measureRef}
+        aria-hidden
+      >
         {actions.map((action) => (
           <button
             key={action.key}
             data-measure-btn
-            className={`pretext-plus-editor__menu-button ${action.className ?? ""}`}
+            className={actionButtonClasses(action)}
             tabIndex={-1}
           >
             {action.label}
           </button>
         ))}
-        <button data-measure-more className="pretext-plus-editor__menu-button" tabIndex={-1}>
+        <button
+          data-measure-more
+          className={clsx(MENU_BUTTON_BASE_CLASSES, MENU_BUTTON_DEFAULT_CLASSES)}
+          tabIndex={-1}
+        >
           More ▾
         </button>
       </div>
@@ -268,7 +295,7 @@ const CodeEditorMenu: React.FC<CodeEditorMenuProps> = ({
               label: "Convert to PreTeXt",
               onClick: onConvertToPretext,
               title: "Create a new project copy using the converted PreTeXt source",
-              className: "pretext-plus-editor__menu-button--convert",
+              variant: "convert",
               disabled: canConvertToPretext === false,
             } satisfies MenuAction,
           ]
@@ -290,7 +317,7 @@ const CodeEditorMenu: React.FC<CodeEditorMenuProps> = ({
               label: "Convert to PreTeXt",
               onClick: onConvertToPretext,
               title: "Create a new project copy using the converted PreTeXt source",
-              className: "pretext-plus-editor__menu-button--convert",
+              variant: "convert",
               disabled: canConvertToPretext === false,
             } satisfies MenuAction,
           ]
@@ -338,9 +365,9 @@ const CodeEditorMenu: React.FC<CodeEditorMenuProps> = ({
   }
 
   return (
-    <div className="pretext-plus-editor__code-editor-menu">
+    <div className="flex items-center gap-1.5 py-1.5 px-2.5 w-full bg-[#f3f3f3] border-b border-[#d6d6d6]">
       <OverflowMenu actions={actions} />
-      <span className="pretext-plus-editor__code-editor-source-badge pretext-plus-editor__code-editor-source-badge--right">
+      <span className="inline-flex items-center py-0.5 px-2 rounded-full bg-gray-200 text-gray-800 text-xs font-semibold ml-auto">
         {sourceFormat === "latex"
           ? "LaTeX"
           : sourceFormat === "markdown"

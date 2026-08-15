@@ -59,14 +59,17 @@ class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundaryState> {
     if (error !== null) {
       if (this.props.fallback) return this.props.fallback(error, this.reset);
       return (
-        <div className="pretext-plus-editor__error-boundary" role="alert">
+        <div
+          className="m-4 py-4 px-[18px] border border-[#f5c2c7] rounded-md bg-[#fde8e8] text-[#842029] text-[0.9rem]"
+          role="alert"
+        >
           <strong>Something went wrong rendering this view.</strong>
-          <p className="pretext-plus-editor__error-boundary-detail">
+          <p className="mt-2 mb-3 font-mono text-[0.8rem] whitespace-pre-wrap break-words">
             {error.message}
           </p>
           <button
             type="button"
-            className="pretext-plus-editor__error-boundary-retry"
+            className="py-[5px] px-3 border border-[#842029] rounded text-[#842029] bg-white cursor-pointer hover:bg-[#842029] hover:text-white"
             onClick={this.reset}
           >
             Try again

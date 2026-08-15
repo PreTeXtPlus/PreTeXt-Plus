@@ -1,8 +1,8 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
+import clsx from "clsx";
 import { useEditorStore } from "../store/hooks";
 import StoreFeedbackLink from "./StoreFeedbackLink";
 import { LANGUAGES } from "../languages";
-import "./MenuBar.css";
 
 export interface MenuBarProps {
   /** If provided, a Save button is rendered. */
@@ -46,56 +46,54 @@ const MenuBar = (props: MenuBarProps) => {
     previewModeToggle = null;
   } else {
     previewModeToggle = (
-      <label className="pretext-plus-editor__preview-toggle">
+      <label className="relative inline-flex cursor-pointer select-none flex-col">
         <input
           type="checkbox"
           checked={!showLivePreview}
           onChange={() => setShowLivePreview(!showLivePreview)}
-          className="pretext-plus-editor__preview-toggle-input"
+          className="absolute w-px h-px opacity-0 [clip:rect(0,0,0,0)]"
         />
-        <div className="pretext-plus-editor__preview-toggle-container">
-          <span className="pretext-plus-editor__preview-toggle-label">
+        <div className="flex items-center gap-2">
+          <span className="flex items-center justify-center text-[0.875rem] font-medium w-14">
             Simple
           </span>
           <span
-            className={`pretext-plus-editor__preview-toggle-slider ${
-              showLivePreview
-                ? "pretext-plus-editor__preview-toggle-slider--active"
-                : ""
-            }`}
+            className={clsx(
+              "flex items-center h-[1em] w-[2em] rounded-[3px] p-1 bg-[#ccccce] transition-colors duration-200 ease-in-out",
+              showLivePreview && "bg-gray-800",
+            )}
           >
             <span
-              className={`pretext-plus-editor__preview-toggle-dot ${
-                showLivePreview
-                  ? "pretext-plus-editor__preview-toggle-dot--active"
-                  : ""
-              }`}
+              className={clsx(
+                "h-[0.75em] w-[0.75em] rounded-[2px] bg-white transition-transform duration-200 ease-in-out",
+                showLivePreview && "translate-x-[0.8em]",
+              )}
             ></span>
           </span>
-          <span className="pretext-plus-editor__preview-toggle-label">
+          <span className="flex items-center justify-center text-[0.875rem] font-medium w-14">
             Full
           </span>
         </div>
-        <span className="pretext-plus-editor__preview-toggle-caption">
+        <span className="mt-1 text-[0.75rem] font-medium text-gray-600 text-center">
           Preview Mode
         </span>
         <input
           type="checkbox"
           checked={showLivePreview}
           onChange={() => setShowLivePreview(!showLivePreview)}
-          className="pretext-plus-editor__preview-toggle-input"
+          className="absolute w-px h-px opacity-0 [clip:rect(0,0,0,0)]"
         />
       </label>
     );
   }
 
   return (
-    <div className="pretext-plus-editor__menu-bar">
-      <div className="pretext-plus-editor__menu-left">
+    <div className="flex items-center justify-between py-2 px-4 bg-gray-100 border-b border-gray-300 max-[500px]:flex-wrap max-[500px]:gap-y-3">
+      <div className="flex items-center gap-4 max-[500px]:basis-full">
         {editingTitle ? (
           <input
             ref={titleInputRef}
-            className="pretext-plus-editor__title-input"
+            className="w-[40vw] py-1 px-2 inline-block shadow-[0_1px_2px_0_rgba(0,0,0,0.05)] rounded-[3px] border border-gray-400 font-mono bg-white focus:outline focus:outline-2 focus:outline-blue-500 focus:outline-offset-2"
             type="text"
             aria-label="Title"
             value={title}
@@ -108,14 +106,14 @@ const MenuBar = (props: MenuBarProps) => {
             }}
           />
         ) : (
-          <span className="pretext-plus-editor__title">
-            <span className="pretext-plus-editor__title-text">
+          <span className="flex items-baseline gap-2 min-w-0 pr-4 max-[500px]:w-full">
+            <span className="font-semibold text-[1.05rem] overflow-hidden text-ellipsis whitespace-nowrap">
               {title || "Untitled"}
             </span>
             {!props.readOnly && (
               <button
                 type="button"
-                className="pretext-plus-editor__title-edit"
+                className="shrink-0 bg-transparent border-none p-0 text-[0.8rem] text-blue-600 underline cursor-pointer hover:text-blue-700"
                 onClick={() => setEditingTitle(true)}
               >
                 edit
@@ -124,7 +122,7 @@ const MenuBar = (props: MenuBarProps) => {
           </span>
         )}
         <select
-          className="pretext-plus-editor__language-select"
+          className="shrink-0 py-1 px-2 rounded-[3px] border border-gray-400 bg-white text-[0.85rem] focus:outline focus:outline-2 focus:outline-blue-500 focus:outline-offset-2 disabled:bg-gray-100 disabled:text-gray-500"
           aria-label="Language"
           value={language}
           disabled={props.readOnly}
@@ -137,11 +135,11 @@ const MenuBar = (props: MenuBarProps) => {
           ))}
         </select>
       </div>
-      <div className="pretext-plus-editor__menu-right">
+      <div className="flex items-center gap-4">
         {props.presence}
         {props.onSaveButton && (
           <button
-            className="pretext-plus-editor__button pretext-plus-editor__button--save"
+            className="w-full sm:w-auto rounded-[3px] py-1 px-2.5 font-medium cursor-pointer border-none transition-colors duration-200 ease-in-out disabled:cursor-not-allowed disabled:opacity-60 bg-green-600 text-white hover:bg-green-700"
             onClick={props.onSaveButton}
           >
             {props.saveButtonLabel || "Save"}
@@ -149,14 +147,16 @@ const MenuBar = (props: MenuBarProps) => {
         )}
         {props.onCancelButton && (
           <button
-            className="pretext-plus-editor__button pretext-plus-editor__button--cancel"
+            className="w-full sm:w-auto rounded-[3px] py-1 px-2.5 font-medium cursor-pointer border-none transition-colors duration-200 ease-in-out disabled:cursor-not-allowed disabled:opacity-60 bg-gray-300 text-black m-0 hover:bg-gray-400"
             onClick={props.onCancelButton}
           >
             {props.cancelButtonLabel || "Cancel"}
           </button>
         )}
         {props.readOnly && (
-          <span className="pretext-plus-editor__read-only-label">Read-only Mode</span>
+          <span className="inline-block py-1 px-2.5 rounded-[3px] bg-[#a32899] text-white font-medium mx-auto">
+            Read-only Mode
+          </span>
         )}
         <StoreFeedbackLink label="Give feedback" context="main-editor" />
         {previewModeToggle}

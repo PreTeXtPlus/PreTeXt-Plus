@@ -5,7 +5,6 @@
 import { useSyncExternalStore } from "react";
 import type { Awareness } from "y-protocols/awareness";
 import type { CollabUser } from "./types";
-import "./PresenceAvatars.css";
 
 interface Peer {
   clientId: number;
@@ -46,13 +45,13 @@ const PresenceAvatars = ({ awareness }: { awareness: Awareness }) => {
   if (peers.length === 0) return null;
   return (
     <div
-      className="pretext-plus-editor__presence"
+      className="flex items-center gap-1 mr-2"
       aria-label={`${peers.length} other ${peers.length === 1 ? "person" : "people"} editing`}
     >
       {peers.map((peer) => (
         <span
           key={peer.clientId}
-          className="pretext-plus-editor__presence-avatar"
+          className="inline-flex items-center justify-center w-7 h-7 rounded-full border-2 border-white text-white text-[0.8rem] font-bold [text-shadow:0_1px_1px_rgba(0,0,0,0.4)] select-none"
           style={{ backgroundColor: peer.user.color }}
           title={peer.user.name}
         >

@@ -7,7 +7,7 @@ import {
   forwardRef,
   useImperativeHandle,
 } from "react";
-import "./LivePreview.css";
+import clsx from "clsx";
 import { postToIframe } from "./postToIframe";
 import {
   applyRevealView,
@@ -237,6 +237,17 @@ function defaultPreviewToLight(): void {
 const REVEAL_ZOOM_STEP = 0.25;
 const REVEAL_ZOOM_MIN = 0.25;
 const REVEAL_ZOOM_MAX = 1;
+
+// Secondary controls: view toggles, zoom, exiting print preview.
+// `aria-pressed:` highlights the active half of a segmented control.
+const PREVIEW_BUTTON_CLASSES =
+  "rounded-sm py-[0.3125rem] px-2 text-xs font-semibold text-gray-700 bg-white border border-gray-300 cursor-pointer leading-none transition-colors duration-200 ease-in-out enabled:hover:bg-gray-100 disabled:opacity-[0.45] disabled:cursor-default aria-pressed:text-emerald-800 aria-pressed:bg-emerald-100 aria-pressed:border-emerald-300";
+// Segmented pairs read as one control: shared border, square inner corners.
+// Applied only to buttons rendered inside a two-button .preview-zoom /
+// .preview-segmented group (never a lone button like "Exit print preview"),
+// where `first:`/`last:` resolve against exactly that pair of siblings.
+const PREVIEW_BUTTON_SEGMENTED_CLASSES =
+  "first:rounded-r-none last:rounded-l-none last:-ml-px";
 
 const LivePreview = forwardRef<LivePreviewHandle, LivePreviewProps>(
   (
@@ -607,15 +618,15 @@ const LivePreview = forwardRef<LivePreviewHandle, LivePreviewProps>(
       );
 
     return (
-      <div className="pretext-plus-editor__full-preview">
-        <div className="pretext-plus-editor__preview-header">
-          <p className="pretext-plus-editor__preview-title">
+      <div className="flex flex-col w-full h-full">
+        <div className="relative flex items-center justify-center pt-2 pb-2 bg-[#f3f3f3] border-b border-[#dde0e6]">
+          <p className="text-base font-medium m-0 text-center">
             {printoutId ? "Print Preview" : "Live Preview"}
           </p>
-          <div className="pretext-plus-editor__preview-actions">
+          <div className="absolute right-2 flex items-center gap-1.5">
             {printoutId && (
               <button
-                className="pretext-plus-editor__preview-button"
+                className={PREVIEW_BUTTON_CLASSES}
                 onClick={exitPrintPreview}
                 title="Return to the live preview"
               >
@@ -625,12 +636,15 @@ const LivePreview = forwardRef<LivePreviewHandle, LivePreviewProps>(
             {isSlideshow && !printoutId && (
               <>
                 <span
-                  className="pretext-plus-editor__preview-zoom"
+                  className="inline-flex items-center"
                   role="group"
                   aria-label="Slide zoom"
                 >
                   <button
-                    className="pretext-plus-editor__preview-button"
+                    className={clsx(
+                      PREVIEW_BUTTON_CLASSES,
+                      PREVIEW_BUTTON_SEGMENTED_CLASSES,
+                    )}
                     onClick={() => stepZoom(-REVEAL_ZOOM_STEP)}
                     disabled={revealZoom <= REVEAL_ZOOM_MIN}
                     title="Zoom out: smaller text, so more of each slide is visible"
@@ -638,11 +652,14 @@ const LivePreview = forwardRef<LivePreviewHandle, LivePreviewProps>(
                   >
                     −
                   </button>
-                  <span className="pretext-plus-editor__preview-zoom-value">
+                  <span className="min-w-12 px-1 text-center text-[0.6875rem] font-semibold [font-variant-numeric:tabular-nums] text-gray-600">
                     {zoomPercent}%
                   </span>
                   <button
-                    className="pretext-plus-editor__preview-button"
+                    className={clsx(
+                      PREVIEW_BUTTON_CLASSES,
+                      PREVIEW_BUTTON_SEGMENTED_CLASSES,
+                    )}
                     onClick={() => stepZoom(REVEAL_ZOOM_STEP)}
                     disabled={revealZoom >= REVEAL_ZOOM_MAX}
                     title="Zoom in, up to the deck's true presented size"
@@ -652,12 +669,15 @@ const LivePreview = forwardRef<LivePreviewHandle, LivePreviewProps>(
                   </button>
                 </span>
                 <span
-                  className="pretext-plus-editor__preview-segmented"
+                  className="inline-flex items-center"
                   role="group"
                   aria-label="Slideshow view"
                 >
                   <button
-                    className="pretext-plus-editor__preview-button"
+                    className={clsx(
+                      PREVIEW_BUTTON_CLASSES,
+                      PREVIEW_BUTTON_SEGMENTED_CLASSES,
+                    )}
                     aria-pressed={revealView === "scroll"}
                     onClick={() => setRevealView("scroll")}
                     title="Show the whole deck as one scrolling page"
@@ -665,7 +685,10 @@ const LivePreview = forwardRef<LivePreviewHandle, LivePreviewProps>(
                     Deck
                   </button>
                   <button
-                    className="pretext-plus-editor__preview-button"
+                    className={clsx(
+                      PREVIEW_BUTTON_CLASSES,
+                      PREVIEW_BUTTON_SEGMENTED_CLASSES,
+                    )}
                     aria-pressed={revealView === "slides"}
                     onClick={() => setRevealView("slides")}
                     title="Show one slide at a time, with pauses, as it will be presented"
@@ -676,7 +699,7 @@ const LivePreview = forwardRef<LivePreviewHandle, LivePreviewProps>(
               </>
             )}
             <button
-              className="pretext-plus-editor__rebuild-button"
+              className="rounded-sm py-1.5 px-3 text-xs font-semibold text-white bg-emerald-500 border-none cursor-pointer shadow-[0_1px_2px_0_rgba(0,0,0,0.05)] transition-colors duration-200 ease-in-out hover:bg-emerald-600 active:bg-emerald-700"
               onClick={() => preview()}
             >
               Refresh
@@ -685,15 +708,15 @@ const LivePreview = forwardRef<LivePreviewHandle, LivePreviewProps>(
         </div>
         {error && (
           <div
-            className="pretext-plus-editor__preview-error"
+            className="flex items-start gap-2 m-0 mb-2 py-2 px-3 border-l-[3px] border-amber-500 bg-amber-50 text-amber-900 text-[0.8125rem] leading-[1.4]"
             role="status"
             aria-live="polite"
           >
-            <span className="pretext-plus-editor__preview-error-text">
+            <span className="flex-1 [overflow-wrap:anywhere]">
               <strong>Preview not updated:</strong> {error}
             </span>
             <button
-              className="pretext-plus-editor__preview-error-dismiss"
+              className="shrink-0 border-none bg-transparent cursor-pointer text-amber-900 text-base leading-none px-1 hover:text-amber-950"
               onClick={() => setError(null)}
               aria-label="Dismiss preview error"
             >
@@ -701,7 +724,7 @@ const LivePreview = forwardRef<LivePreviewHandle, LivePreviewProps>(
             </button>
           </div>
         )}
-        <div className="pretext-plus-editor__preview-container">
+        <div className="flex-1 flex flex-col overflow-hidden relative">
           {/*
             A warm local render takes ~90ms — a full-screen modal would strobe.
             The blocking overlay is kept for the two cases that genuinely take
@@ -711,17 +734,17 @@ const LivePreview = forwardRef<LivePreviewHandle, LivePreviewProps>(
           */}
           {isRebuilding &&
             (!renderLocally || previewHtml === null ? (
-              <div className="pretext-plus-editor__rebuilding-overlay">
-                <div className="pretext-plus-editor__rebuilding-popup">
-                  <div className="pretext-plus-editor__spinner"></div>
-                  <p className="pretext-plus-editor__rebuilding-text">
+              <div className="absolute inset-0 bg-black/50 flex items-center justify-center z-[1000]">
+                <div className="bg-white rounded-lg py-8 px-12 shadow-[0_10px_25px_rgba(0,0,0,0.3)] flex flex-col items-center gap-4">
+                  <div className="w-10 h-10 border-4 border-gray-200 border-t-emerald-500 rounded-full animate-[spin_0.8s_linear_infinite]"></div>
+                  <p className="m-0 text-lg font-medium text-gray-800">
                     {renderLocally ? "Preparing preview..." : "Rebuilding..."}
                   </p>
                 </div>
               </div>
             ) : (
               <div
-                className="pretext-plus-editor__rebuilding-pill"
+                className="absolute top-2 right-3 z-[1000] rounded-full py-0.5 px-2.5 text-[0.6875rem] font-semibold text-emerald-800 bg-emerald-100 shadow-[0_1px_2px_0_rgba(0,0,0,0.08)] pointer-events-none"
                 role="status"
                 aria-live="polite"
               >
@@ -730,7 +753,7 @@ const LivePreview = forwardRef<LivePreviewHandle, LivePreviewProps>(
             ))}
           <iframe
             ref={iframeRef}
-            className="pretext-plus-editor__preview-iframe"
+            className="flex flex-col w-full h-full border-none"
             name="livePreview"
             title="PreTeXt preview"
             onLoad={handleIframeLoad}
@@ -745,11 +768,11 @@ const LivePreview = forwardRef<LivePreviewHandle, LivePreviewProps>(
           />
           {showBrowserTip && (
             <div
-              className="pretext-plus-editor__browser-tip"
+              className="absolute left-3 right-3 bottom-3 z-[1000] flex items-center gap-2 py-2 px-3 rounded-md bg-gray-800 text-gray-50 text-[0.8125rem] leading-[1.4] shadow-[0_4px_12px_rgba(0,0,0,0.15)]"
               role="status"
               aria-live="polite"
             >
-              <span className="pretext-plus-editor__browser-tip-text">
+              <span className="flex-1">
                 Tip: Previews refresh much faster and have two-way sync in
                 Chromium-based browsers like Chrome or Edge.
               </span>

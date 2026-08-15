@@ -46,6 +46,7 @@
     "@pretextbook/schema": "^0.6.1",
     "@pretextbook/visual-editor": "^0.1.1",
     "@tailwindcss/vite": "^4.3.3",
+    "clsx": "^2.1.1",
     "constrained-editor-plugin": "^1.4.0",
     "react-resizable-panels": "^4.12.2",
     "tailwindcss": "^4.3.3",
