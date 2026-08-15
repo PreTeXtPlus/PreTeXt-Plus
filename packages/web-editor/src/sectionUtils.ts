@@ -2287,28 +2287,60 @@ function findUnusedLabel(tree: Root, desiredLabel: string): string {
 // there's nothing to cache for it.
 const divisionOwnXmlCache = new WeakMap<Division, string>();
 
+/**
+ * Run the actual LaTeX/Markdown -> PreTeXt AST conversion for a single
+ * division (its own element, refs not yet expanded) — the pure, uncached
+ * computation behind {@link getDivisionOwnXml}'s cache-miss path.
+ *
+ * Exported (in addition to `getDivisionOwnXml`) so it can also run inside a
+ * Web Worker: it's a pure function of `division`, with no DOM/window
+ * dependency anywhere in its call chain, so `useBackgroundDivisionConversion`
+ * posts a division to a worker, which calls this same function off the main
+ * thread and hands the result back to {@link primeDivisionOwnXml} — one
+ * implementation of "how do we convert a division," used identically by the
+ * synchronous fallback and the background path.
+ */
+export function computeDivisionOwnXml(division: Division): string {
+  if (division.sourceFormat === "pretext") return division.source;
+
+  if (division.sourceFormat === "markdown") {
+    // A markdown division is a full markdown file (frontmatter + body); the
+    // converter emits the complete `<type xml:id="..." label="...">` element
+    // from the frontmatter, so the source is converted as-is with no wrapper
+    // to strip or re-add here.
+    const { pretextSource, pretextError } = derivePretextContent(
+      division.source,
+      "markdown",
+    );
+    return pretextSource ?? `<!-- conversion error: ${pretextError} -->`;
+  }
+
+  // LaTeX: convert the source and tag it with the division's authored type
+  // (the `\label` becomes the `xml:id`) — see latexDivisionToTaggedPretext.
+  return (
+    latexDivisionToTaggedPretext(division) ??
+    `<!-- conversion error: ${division.xmlId} -->`
+  );
+}
+
+/**
+ * Write a precomputed result (e.g. from a background worker job) into the
+ * same cache {@link getDivisionOwnXml} reads, so a division converted off the
+ * main thread is a cache hit the next time it's needed synchronously. Safe to
+ * call redundantly — a `pretext`-format division has nothing to prime, and an
+ * existing entry is simply overwritten with (assumed identical) content.
+ */
+export function primeDivisionOwnXml(division: Division, xml: string): void {
+  if (division.sourceFormat === "pretext") return;
+  divisionOwnXmlCache.set(division, xml);
+}
+
 function getDivisionOwnXml(division: Division): string {
   if (division.sourceFormat === "pretext") return division.source;
 
   let xml = divisionOwnXmlCache.get(division);
   if (xml === undefined) {
-    if (division.sourceFormat === "markdown") {
-      // A markdown division is a full markdown file (frontmatter + body); the
-      // converter emits the complete `<type xml:id="..." label="...">` element
-      // from the frontmatter, so the source is converted as-is with no wrapper
-      // to strip or re-add here.
-      const { pretextSource, pretextError } = derivePretextContent(
-        division.source,
-        "markdown",
-      );
-      xml = pretextSource ?? `<!-- conversion error: ${pretextError} -->`;
-    } else {
-      // LaTeX: convert the source and tag it with the division's authored type
-      // (the `\label` becomes the `xml:id`) — see latexDivisionToTaggedPretext.
-      xml =
-        latexDivisionToTaggedPretext(division) ??
-        `<!-- conversion error: ${division.xmlId} -->`;
-    }
+    xml = computeDivisionOwnXml(division);
     divisionOwnXmlCache.set(division, xml);
   }
   return xml;

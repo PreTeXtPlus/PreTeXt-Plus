@@ -29,6 +29,8 @@ import {
   assembleProjectSource,
   buildDivisionTree,
   getOrphanRoots,
+  computeDivisionOwnXml,
+  primeDivisionOwnXml,
   wrapDivisionForPreview,
 } from '../sectionUtils'
 import * as contentConversion from '../contentConversion'
@@ -692,5 +694,72 @@ describe('division graph and AST-conversion caching', () => {
     // `.find()`-per-node walk would take vastly longer than this for
     // N=2000; the O(N) walk finishes in low single-digit milliseconds.
     expect(elapsed).toBeLessThan(2000)
+  })
+})
+
+// `computeDivisionOwnXml` is the pure computation a background conversion
+// Worker runs off the main thread; `primeDivisionOwnXml` is how its result
+// gets back into the cache `resolveDivisionXml`'s synchronous path reads —
+// see `useBackgroundDivisionConversion.ts`. These pin down that the two
+// halves agree with each other and with the synchronous fallback.
+describe('computeDivisionOwnXml / primeDivisionOwnXml', () => {
+  it('computeDivisionOwnXml converts a division the same way the synchronous path would', () => {
+    const s1: Division = {
+      id: '1',
+      xmlId: 's1',
+      title: 'One',
+      type: 'section',
+      sourceFormat: 'latex',
+      source: '\\section{One}\n\nBody one.',
+    }
+    const xml = computeDivisionOwnXml(s1)
+    expect(xml).toContain('<title>One</title>')
+    expect(xml).toContain('Body one.')
+  })
+
+  it('a pretext division\'s own xml is its source verbatim, with nothing to prime', () => {
+    const p: Division = {
+      id: 'p',
+      xmlId: 'p1',
+      title: 'P',
+      type: 'section',
+      sourceFormat: 'pretext',
+      source: '<section xml:id="p1"><title>P</title></section>',
+    }
+    expect(computeDivisionOwnXml(p)).toBe(p.source)
+    // Priming a pretext division must be a no-op — there's nothing to cache
+    // for it, and `getDivisionOwnXml` never even checks the cache for one.
+    primeDivisionOwnXml(p, '<section>should be ignored</section>')
+    expect(computeDivisionOwnXml(p)).toBe(p.source)
+  })
+
+  it('a division primed ahead of time is used verbatim, skipping conversion entirely', () => {
+    const root: Division = {
+      id: 'r',
+      xmlId: 'root',
+      title: 'Doc',
+      type: 'article',
+      sourceFormat: 'pretext',
+      source: '<article xml:id="root"><title>Doc</title><plus:section ref="s1"/></article>',
+    }
+    const s1: Division = {
+      id: '1',
+      xmlId: 's1',
+      title: 'One',
+      type: 'section',
+      sourceFormat: 'latex',
+      source: '\\section{One}\n\nBody one.',
+    }
+
+    primeDivisionOwnXml(s1, '<section><title>Primed</title></section>')
+
+    const spy = vi.spyOn(contentConversion, 'derivePretextContent')
+    const xml = assembleProjectSource([root, s1], 'root')
+
+    expect(spy).not.toHaveBeenCalled()
+    expect(xml).toContain('Primed')
+    expect(xml).not.toContain('Body one.')
+
+    spy.mockRestore()
   })
 })

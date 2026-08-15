@@ -103,6 +103,27 @@ import {
 
 const AUTOSAVE_MS = 10000;
 
+// Background conversion worker, wired to `<Editors conversionWorker>` below.
+// `pretext-conversion-worker.js` is a separate esbuild entry point (it's a
+// top-level file under app/javascript/, picked up by the same glob that
+// builds this one) whose only job is `import "@pretextbook/web-editor/conversion-worker"`.
+// The URL is resolved relative to *this bundle's own* runtime location
+// (`import.meta.url`), the same way `@pretextbook/libxslt-wasm`'s wasm binary
+// is located from the web-editor package's wasmPreview.ts — both files land
+// in the same output directory as this one, so a bare filename (no `../`
+// traversal) is correct once bundled, even though the source files live in
+// different directories.
+//
+// Defined at module scope (not inline in JSX) so its identity is stable
+// across renders — `useBackgroundDivisionConversion` only reads this once, at
+// mount, but a stable reference is simply the more honest signature for a
+// factory that doesn't close over any props/state.
+function createConversionWorker() {
+  return new Worker(new URL("pretext-conversion-worker.js", import.meta.url), {
+    type: "module",
+  });
+}
+
 // --- Rails JSON  <->  web-editor shapes ------------------------------------
 // railsDivisionToEditor / railsAssetToEditor / toEditorAsset now live in
 // ./railsProjectMapping, shared with ./shared_source.jsx.
@@ -1165,6 +1186,7 @@ function EditorApp({ config }) {
       previewFrameUrl={previewFrameUrl}
       onCreatePretextProjectCopy={onCreatePretextProjectCopy}
       onFeedbackSubmit={onFeedbackSubmit}
+      conversionWorker={createConversionWorker}
     />
   );
 }

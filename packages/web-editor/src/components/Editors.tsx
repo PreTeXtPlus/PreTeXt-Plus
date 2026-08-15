@@ -76,6 +76,7 @@ import { useEditorStore } from "../store/hooks";
 import { CollabBridge } from "../collab/bridge";
 import type { CollabSession } from "../collab/types";
 import PresenceAvatars from "../collab/PresenceAvatars";
+import { useBackgroundDivisionConversion } from "../workers/useBackgroundDivisionConversion";
 
 /**
  * Default wording for the live preview's warning banner.
@@ -365,6 +366,21 @@ export interface editorProps {
    * where the viewer is not the document's author.
    */
   readOnly?: boolean;
+
+  /**
+   * Optional factory for a background conversion Worker. When provided, every
+   * LaTeX/Markdown division is proactively converted to PreTeXt off the main
+   * thread as soon as it appears or changes, so the (still synchronous)
+   * preview/full-source assembly usually finds an already-warm cache instead
+   * of doing that conversion itself. Purely a performance path: omitting it
+   * (or a factory/worker that fails) falls back to converting synchronously
+   * exactly as before, with identical output — see
+   * `useBackgroundDivisionConversion` for details. The host is responsible
+   * for building and serving the worker script (its entry point is exported
+   * as `@pretextbook/web-editor/conversion-worker`) and must point the
+   * factory at it, e.g. `() => new Worker(workerUrl, { type: "module" })`.
+   */
+  conversionWorker?: () => Worker;
 }
 
 // ── Helper: find the root division for a divisions pool ─────────────────────
@@ -463,7 +479,7 @@ interface EditorsInnerProps extends editorProps {
 }
 
 const EditorsInner = (props: EditorsInnerProps) => {
-  const { bindCallbacks, bridge } = props;
+  const { bindCallbacks, bridge, conversionWorker } = props;
 
   // Re-render when the set of shared-doc entries changes outside React's flow
   // (a remote division or asset add/remove, or a local one) — the active
@@ -530,6 +546,12 @@ const EditorsInner = (props: EditorsInnerProps) => {
   // anything back as new props.
   const divisionsRaw = useEditorStore((s) => s.divisions);
   const divisions = useMemo(() => divisionsRaw ?? [], [divisionsRaw]);
+  // Warms the conversion cache the assembly `useMemo`s below read from, off
+  // the main thread, whenever `conversionWorker` is provided — see
+  // `useBackgroundDivisionConversion`'s docstring. `conversionCacheVersion`
+  // is threaded into those `useMemo` dependency arrays so a freshly-warmed
+  // division actually triggers a recompute.
+  const conversionCacheVersion = useBackgroundDivisionConversion(divisions, conversionWorker);
   const activeDivisionId = useEditorStore((s) => s.activeDivisionId);
   const title = useEditorStore((s) => s.title);
   const docinfo = useEditorStore((s) => s.docinfo);
@@ -1384,6 +1406,10 @@ const EditorsInner = (props: EditorsInnerProps) => {
         error instanceof Error ? error.message : String(error)
       } -->`;
     }
+    // `conversionCacheVersion` isn't read inside the callback — it's a
+    // cache-busting trigger only, so a background-warmed division actually
+    // gets picked up on the next render.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
     isFullSourceOpen,
     rootDivision,
@@ -1391,6 +1417,7 @@ const EditorsInner = (props: EditorsInnerProps) => {
     effectiveDocinfo,
     projectAssets,
     language,
+    conversionCacheVersion,
   ]);
 
   // The active division's own tagged XML (outer element included), with any
@@ -1421,7 +1448,11 @@ const EditorsInner = (props: EditorsInnerProps) => {
         language,
       ),
     };
-  }, [divisions, activeDivision, projectAssets, effectiveDocinfo, language]);
+    // `conversionCacheVersion` isn't read inside the callback — it's a
+    // cache-busting trigger only, so a background-warmed division actually
+    // gets picked up on the next render.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [divisions, activeDivision, projectAssets, effectiveDocinfo, language, conversionCacheVersion]);
 
   // Is the division on screen the whole document? Then it *is* its own
   // context: there is nothing around it to number it against, and it is
@@ -1460,6 +1491,10 @@ const EditorsInner = (props: EditorsInnerProps) => {
       // rendering standalone is still useful.
       return undefined;
     }
+    // `conversionCacheVersion` isn't read inside the callback — it's a
+    // cache-busting trigger only, so a background-warmed division actually
+    // gets picked up on the next render.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
     showLivePreview,
     rootDivision,
@@ -1468,6 +1503,7 @@ const EditorsInner = (props: EditorsInnerProps) => {
     effectiveDocinfo,
     projectAssets,
     language,
+    conversionCacheVersion,
   ]);
 
   // What the renderer is actually given. A whole document goes as-is; a
