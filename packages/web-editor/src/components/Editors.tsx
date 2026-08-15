@@ -20,6 +20,8 @@ import {
   type PreviewLineMap,
 } from "./previewSync";
 import LatexImportDialog from "./LatexImportDialog";
+import LatexCleanDialog from "./LatexCleanDialog";
+import type { CleanFinding } from "../cleanFindings";
 import ConvertToPretextDialog from "./ConvertToPretextDialog";
 import DocinfoEditor from "./DocinfoEditor";
 import FullSourceModal from "./FullSourceModal";
@@ -474,6 +476,7 @@ const EditorsInner = (props: EditorsInnerProps) => {
   const isTocCollapsed = useEditorStore((s) => s.isTocCollapsed);
   const setIsTocCollapsed = useEditorStore((s) => s.setIsTocCollapsed);
   const isLatexDialogOpen = useEditorStore((s) => s.isLatexDialogOpen);
+  const isCleanDialogOpen = useEditorStore((s) => s.isCleanDialogOpen);
   const isConvertDialogOpen = useEditorStore((s) => s.isConvertDialogOpen);
   const isDocinfoEditorOpen = useEditorStore((s) => s.isDocinfoEditorOpen);
   const isAssetPickerOpen = useEditorStore((s) => s.isAssetPickerOpen);
@@ -537,6 +540,27 @@ const EditorsInner = (props: EditorsInnerProps) => {
 
   const livePreviewRef = useRef<LivePreviewHandle>(null);
   const codeEditorRef = useRef<CodeEditorHandle>(null);
+
+  // Source-cleanup findings for the review dialog. Local UI state, and read
+  // from the code editor rather than derived from `divisionActiveSource`: the
+  // store's copy of the source lags the model by the editor's 500ms debounce,
+  // and a list that predates the author's last keystroke would offer fixes at
+  // offsets that have already moved.
+  const [cleanFindings, setCleanFindings] = useState<CleanFinding[]>([]);
+  const refreshCleanFindings = () => {
+    setCleanFindings(codeEditorRef.current?.getCleanFindings() ?? []);
+  };
+  const handleOpenCleanDialog = () => {
+    refreshCleanFindings();
+    openModal("isCleanDialogOpen");
+  };
+  // Recomputed after every apply, so fixed rows disappear and any finding the
+  // fixes newly exposed shows up (rewrites cascade: `{\bf x}` becomes
+  // `\textbf{x}`, which is then flagged as presentational).
+  const handleApplyClean = (ruleIds?: string[]) => {
+    codeEditorRef.current?.applyCleanFixes(ruleIds);
+    refreshCleanFindings();
+  };
 
   // A brand-new division's properties form (title/format/id) opens immediately
   // after creation — see handleDivisionAdd. Once the author closes it (Save or
@@ -1652,6 +1676,9 @@ const EditorsInner = (props: EditorsInnerProps) => {
       onSave={triggerSaveAndRebuild}
       onCursorLineChange={handleCursorLineChange}
       onOpenLatexImport={() => openModal("isLatexDialogOpen")}
+      // The code editor hides this unless the active format has a cleanup
+      // engine behind it (LaTeX) and the buffer is editable.
+      onOpenClean={handleOpenCleanDialog}
       onOpenDocinfoEditor={() => openModal("isDocinfoEditorOpen")}
       onOpenConvertToPretext={
         isNonPretextDoc && divisionConvertedPretext !== undefined
@@ -1845,6 +1872,14 @@ const EditorsInner = (props: EditorsInnerProps) => {
         </ErrorBoundary>
         {isLatexDialogOpen ? (
           <LatexImportDialog onClose={() => closeModal("isLatexDialogOpen")} />
+        ) : null}
+        {isCleanDialogOpen ? (
+          <LatexCleanDialog
+            findings={cleanFindings}
+            onApply={() => handleApplyClean()}
+            onApplyRule={(ruleId) => handleApplyClean([ruleId])}
+            onClose={() => closeModal("isCleanDialogOpen")}
+          />
         ) : null}
         {isConvertDialogOpen && activeDivision && divisionConvertedPretext ? (
           <ConvertToPretextDialog
