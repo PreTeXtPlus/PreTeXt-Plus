@@ -2054,6 +2054,48 @@ export function reorderDivisionRefs(
   return result;
 }
 
+// ---------------------------------------------------------------------------
+// Division graph cache
+//
+// `collectReachable`/`buildDivisionTree`/`getOrphanRoots` all walk the same
+// ref graph over the same `divisions` pool, and previously each did so with
+// `divisions.find()` per node visited (O(N) per lookup) and re-ran the ref
+// regex-scan on every division touched — O(N^2) work per walk, redone by
+// each of the three functions independently.
+//
+// `getDivisionIndex` builds an id -> division `Map` once per distinct
+// `divisions` array and caches it in a `WeakMap` keyed on the array
+// reference itself, so repeated calls in the same render (or across a single
+// walk) are O(1) lookups instead of O(N) scans. `getDivisionRefs` similarly
+// caches the parsed-refs result per division object.  Both caches are safe
+// and self-invalidating with no manual busting: the store only ever
+// allocates a *new* object (division or array) for the thing that actually
+// changed — see `setDivisionContent`/`patchDivision` in `editorStore.ts` —
+// so an unchanged division or array keeps its exact reference, and a stale
+// cache entry simply becomes unreachable (and GC'd) once its key is dropped.
+// ---------------------------------------------------------------------------
+
+const divisionIndexCache = new WeakMap<Division[], Map<string, Division>>();
+const divisionRefsCache = new WeakMap<Division, string[]>();
+
+function getDivisionIndex(divisions: Division[]): Map<string, Division> {
+  let index = divisionIndexCache.get(divisions);
+  if (!index) {
+    index = new Map(divisions.map((d) => [d.xmlId, d] as const));
+    divisionIndexCache.set(divisions, index);
+  }
+  return index;
+}
+
+function getDivisionRefs(division: Division): string[] {
+  let refs = divisionRefsCache.get(division);
+  if (!refs) {
+    refs = parseDivisionRefs(division.source, division.sourceFormat);
+    divisionRefsCache.set(division, refs);
+  }
+  return refs;
+}
+
 /**
  * Build a reachability set starting from `rootXmlId` by following
  * `<plus:* ref="..."/>` placeholders recursively through the `divisions` pool.
@@ -2062,15 +2104,16 @@ export function reorderDivisionRefs(
  * including the root itself.  Used to identify orphaned divisions.
  */
 function collectReachable(divisions: Division[], rootXmlId: string): Set<string> {
+  const byId = getDivisionIndex(divisions);
   const seen = new Set<string>();
   const queue = [rootXmlId];
   while (queue.length > 0) {
     const id = queue.pop()!;
     if (seen.has(id)) continue;
     seen.add(id);
-    const div = divisions.find((d) => d.xmlId === id);
+    const div = byId.get(id);
     if (div) {
-      for (const ref of parseDivisionRefs(div.source, div.sourceFormat)) {
+      for (const ref of getDivisionRefs(div)) {
         queue.push(ref);
       }
     }
@@ -2116,14 +2159,15 @@ export function buildDivisionTree(
   divisions: Division[],
   startXmlId: string,
 ): DivisionTreeNode[] {
+  const byId = getDivisionIndex(divisions);
   const out: DivisionTreeNode[] = [];
   const visited = new Set<string>([startXmlId]);
   const walk = (parentXmlId: string, depth: number) => {
-    const parent = divisions.find((d) => d.xmlId === parentXmlId);
+    const parent = byId.get(parentXmlId);
     if (!parent) return;
-    for (const ref of parseDivisionRefs(parent.source, parent.sourceFormat)) {
+    for (const ref of getDivisionRefs(parent)) {
       if (visited.has(ref)) continue;
-      const div = divisions.find((d) => d.xmlId === ref);
+      const div = byId.get(ref);
       if (!div) continue;
       visited.add(ref);
       out.push({ division: div, depth, parentXmlId });
@@ -2148,7 +2192,7 @@ export function getOrphanRoots(
   const orphanIds = new Set(orphans.map((d) => d.xmlId));
   const referenced = new Set<string>();
   for (const o of orphans) {
-    for (const ref of parseDivisionRefs(o.source, o.sourceFormat)) {
+    for (const ref of getDivisionRefs(o)) {
       if (orphanIds.has(ref)) referenced.add(ref);
     }
   }
@@ -2234,6 +2278,42 @@ function findUnusedLabel(tree: Root, desiredLabel: string): string {
   return label;
 }
 
+// The LaTeX/Markdown -> PreTeXt conversion is a full AST parse (unified.js /
+// remark) plus a `formatPretext` re-parse — the expensive step in assembly.
+// It depends only on the division's own source, not on its ancestors or
+// descendants, so it's cached per division object here (see the division
+// graph cache comment above for why object-identity caching is safe). A
+// `pretext`-format division's "own xml" is just its source verbatim, so
+// there's nothing to cache for it.
+const divisionOwnXmlCache = new WeakMap<Division, string>();
+
+function getDivisionOwnXml(division: Division): string {
+  if (division.sourceFormat === "pretext") return division.source;
+
+  let xml = divisionOwnXmlCache.get(division);
+  if (xml === undefined) {
+    if (division.sourceFormat === "markdown") {
+      // A markdown division is a full markdown file (frontmatter + body); the
+      // converter emits the complete `<type xml:id="..." label="...">` element
+      // from the frontmatter, so the source is converted as-is with no wrapper
+      // to strip or re-add here.
+      const { pretextSource, pretextError } = derivePretextContent(
+        division.source,
+        "markdown",
+      );
+      xml = pretextSource ?? `<!-- conversion error: ${pretextError} -->`;
+    } else {
+      // LaTeX: convert the source and tag it with the division's authored type
+      // (the `\label` becomes the `xml:id`) — see latexDivisionToTaggedPretext.
+      xml =
+        latexDivisionToTaggedPretext(division) ??
+        `<!-- conversion error: ${division.xmlId} -->`;
+    }
+    divisionOwnXmlCache.set(division, xml);
+  }
+  return xml;
+}
+
 /**
  * Resolve a single division to its final PreTeXt XML, then recursively expand
  * any `<plus:* ref="..."/>` placeholders found inside it.
@@ -2255,30 +2335,11 @@ function resolveDivisionXml(
   ancestors: Set<string>,
   assets: Asset[],
 ): string {
-  const division = divisions.find((d) => d.xmlId === xmlId);
+  const division = getDivisionIndex(divisions).get(xmlId);
   if (!division) return `<!-- missing division: ${xmlId} -->`;
   if (ancestors.has(xmlId)) return `<!-- circular reference: ${xmlId} -->`;
 
-  let xml: string;
-  if (division.sourceFormat === "pretext") {
-    xml = division.source;
-  } else if (division.sourceFormat === "markdown") {
-    // A markdown division is a full markdown file (frontmatter + body); the
-    // converter emits the complete `<type xml:id="..." label="...">` element
-    // from the frontmatter, so the source is converted as-is with no wrapper
-    // to strip or re-add here.
-    const { pretextSource, pretextError } = derivePretextContent(
-      division.source,
-      "markdown",
-    );
-    xml = pretextSource ?? `<!-- conversion error: ${pretextError} -->`;
-  } else {
-    // LaTeX: convert the source and tag it with the division's authored type
-    // (the `\label` becomes the `xml:id`) — see latexDivisionToTaggedPretext.
-    xml =
-      latexDivisionToTaggedPretext(division) ??
-      `<!-- conversion error: ${division.xmlId} -->`;
-  }
+  const xml = getDivisionOwnXml(division);
 
   // Expand child `<plus:* ref="..."/>` placeholders against the *derived*
   // PreTeXt, whatever the source format was. Markdown includes authored as

@@ -1401,20 +1401,27 @@ const EditorsInner = (props: EditorsInnerProps) => {
   // PreTeXt and a build failure. `assembleProjectSource` handles the
   // LaTeX/Markdown -> PreTeXt conversion internally before resolving refs, so
   // this is correct for every source format, not just PreTeXt.
-  const divisionTaggedXml = !activeDivision
-    ? undefined
-    : assembleProjectSource(divisions, activeDivision.xmlId, projectAssets);
-
-  const previewContent =
-    activeDivision && divisionTaggedXml !== undefined
-      ? wrapDivisionForPreview(
-          activeDivision.type,
-          divisionTaggedXml,
-          effectiveDocinfo,
-          activeDivision.title,
-          language,
-        )
-      : undefined;
+  //
+  // Walks the whole divisions tree (like `fullProjectSource`/
+  // `previewContextSource` below), so it's memoized the same way — otherwise
+  // it reruns on every render of `Editors`, including ones unrelated to
+  // content (tab switches, modal toggles).
+  const { divisionTaggedXml, previewContent } = useMemo(() => {
+    if (!activeDivision) {
+      return { divisionTaggedXml: undefined, previewContent: undefined };
+    }
+    const xml = assembleProjectSource(divisions, activeDivision.xmlId, projectAssets);
+    return {
+      divisionTaggedXml: xml,
+      previewContent: wrapDivisionForPreview(
+        activeDivision.type,
+        xml,
+        effectiveDocinfo,
+        activeDivision.title,
+        language,
+      ),
+    };
+  }, [divisions, activeDivision, projectAssets, effectiveDocinfo, language]);
 
   // Is the division on screen the whole document? Then it *is* its own
   // context: there is nothing around it to number it against, and it is

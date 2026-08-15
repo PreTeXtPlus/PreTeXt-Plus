@@ -1,4 +1,4 @@
-import { Fragment, useState } from "react";
+import { Fragment, useMemo, useState } from "react";
 import type { Division } from "../../types/sections";
 import type { AssetKind } from "../../types/editor";
 import SectionItem from "./SectionItem";
@@ -28,7 +28,11 @@ const ArticleToc = ({ onOpenAssetPicker, hideAssets, readOnly }: ArticleTocProps
   const divisions = useEditorStore((s) => s.divisions);
   const rootDivisionId = useEditorStore((s) => s.rootDivisionId);
   const activeDivisionId = useEditorStore((s) => s.activeDivisionId);
-  const projectAssets = useEditorStore((s) => s.projectAssets) ?? [];
+  // No `?? []` fallback here: that would allocate a new array reference on
+  // every render whenever the store has no assets, defeating the `assetView`
+  // memo below (its dependency would never be reference-equal). The `?? []`
+  // is applied inside that memo's callback instead.
+  const projectAssets = useEditorStore((s) => s.projectAssets);
 
   const selectSection = useEditorStore((s) => s.selectSection);
   const addSection = useEditorStore((s) => s.addSection);
@@ -62,23 +66,55 @@ const ArticleToc = ({ onOpenAssetPicker, hideAssets, readOnly }: ArticleTocProps
         null)
     : null;
 
-  const treeNodes =
-    rootDivision && divisions
-      ? buildDivisionTree(divisions, rootDivision.xmlId)
-      : [];
+  // These walk the whole divisions tree (`buildDivisionTree`/`getOrphanRoots`
+  // are O(N) but still touch every division), so they're memoized to avoid
+  // rerunning on renders that don't touch division content — e.g. expanding a
+  // TOC node just flips `collapsedIds` state and shouldn't re-derive the tree.
+  const treeNodes = useMemo(
+    () =>
+      rootDivision && divisions
+        ? buildDivisionTree(divisions, rootDivision.xmlId)
+        : [],
+    [divisions, rootDivision],
+  );
 
-  const orphanRoots =
-    rootDivision && divisions
-      ? getOrphanRoots(divisions, rootDivision.xmlId)
-      : [];
+  const orphanRoots = useMemo(
+    () =>
+      rootDivision && divisions
+        ? getOrphanRoots(divisions, rootDivision.xmlId)
+        : [],
+    [divisions, rootDivision],
+  );
+
+  // Each orphan root heads its own dangling subtree; precompute all of them
+  // together with `orphanRoots` rather than re-walking per orphan on every
+  // render (previously done inline in the orphan `.map()` below).
+  const orphanTrees = useMemo(
+    () =>
+      orphanRoots.map((orphan) => {
+        const subtree = divisions ? buildDivisionTree(divisions, orphan.xmlId) : [];
+        const subtreeIdsWithChildren = new Set(
+          subtree.map((n) => n.parentXmlId).filter(Boolean) as string[],
+        );
+        return { orphan, subtree, subtreeIdsWithChildren };
+      }),
+    [orphanRoots, divisions],
+  );
 
   // ── Joined asset view — placeholders + project assets, with status ─────────
-  const assetView = buildProjectAssetView(divisions, projectAssets);
+  const assetView = useMemo(
+    () => buildProjectAssetView(divisions, projectAssets),
+    [divisions, projectAssets],
+  );
 
-  const groupedAssetRows = VISIBLE_ASSET_KINDS.map((kind) => ({
-    kind,
-    rows: assetView.filter((r) => r.kind === kind),
-  })).filter((g) => g.rows.length > 0);
+  const groupedAssetRows = useMemo(
+    () =>
+      VISIBLE_ASSET_KINDS.map((kind) => ({
+        kind,
+        rows: assetView.filter((r) => r.kind === kind),
+      })).filter((g) => g.rows.length > 0),
+    [assetView],
+  );
 
   const [assetsExpanded, setAssetsExpanded] = useState(true);
 
@@ -392,13 +428,7 @@ const ArticleToc = ({ onOpenAssetPicker, hideAssets, readOnly }: ArticleTocProps
             Unplaced divisions
           </div>
           <ul className="pretext-plus-editor__toc-list">
-            {orphanRoots.map((orphan) => {
-              const subtree = divisions
-                ? buildDivisionTree(divisions, orphan.xmlId)
-                : [];
-              const subtreeIdsWithChildren = new Set(
-                subtree.map((n) => n.parentXmlId).filter(Boolean) as string[],
-              );
+            {orphanTrees.map(({ orphan, subtree, subtreeIdsWithChildren }) => {
               return (
                 <Fragment key={orphan.xmlId}>
                   <SectionItem

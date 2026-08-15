@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest'
+import { describe, it, expect, vi } from 'vitest'
 import { fromXml } from 'xast-util-from-xml'
 import {
   splitDocument,
@@ -26,8 +26,12 @@ import {
   mergeLatexDocument,
   normalizeDivisionsOnLoad,
   assembleFullProjectSource,
+  assembleProjectSource,
+  buildDivisionTree,
+  getOrphanRoots,
   wrapDivisionForPreview,
 } from '../sectionUtils'
+import * as contentConversion from '../contentConversion'
 import type { Division } from '../types/sections'
 
 const ARTICLE = `<article xml:id="a1">
@@ -549,5 +553,144 @@ describe('assembleFullProjectSource / wrapDivisionForPreview — xml:lang', () =
     const xml = wrapDivisionForPreview('article', ARTICLE, '', 'My Article', 'fr-CA')
     expect(xml).toMatch(/^<pretext xml:lang="fr-CA">/)
     expectWellFormed(xml)
+  })
+})
+
+// `buildDivisionTree`/`getOrphanRoots`/`assembleProjectSource` all walk the
+// division ref graph and previously did so with an O(N) `.find()` per node
+// visited (O(N^2) per walk) and no caching of the expensive LaTeX/Markdown ->
+// PreTeXt conversion, so editing one division reconverted the whole tree.
+// These tests pin down the fix: structural correctness is unchanged, an
+// unchanged division is never reconverted, and a stale per-array cache never
+// leaks across a structural edit.
+describe('division graph and AST-conversion caching', () => {
+  const makeDivisions = (): Division[] => [
+    {
+      id: 'r',
+      xmlId: 'root',
+      title: 'Doc',
+      type: 'article',
+      sourceFormat: 'pretext',
+      source:
+        '<article xml:id="root"><title>Doc</title><plus:section ref="s1"/><plus:section ref="s2"/></article>',
+    },
+    {
+      id: '1',
+      xmlId: 's1',
+      title: 'One',
+      type: 'section',
+      sourceFormat: 'latex',
+      source: '\\section{One}\n\nBody one.',
+    },
+    {
+      id: '2',
+      xmlId: 's2',
+      title: 'Two',
+      type: 'section',
+      sourceFormat: 'latex',
+      source: '\\section{Two}\n\nBody two.',
+    },
+  ]
+
+  it('buildDivisionTree / getOrphanRoots reflect the ref graph', () => {
+    const divisions = makeDivisions()
+    const tree = buildDivisionTree(divisions, 'root')
+    expect(tree.map((n) => n.division.xmlId)).toEqual(['s1', 's2'])
+    expect(getOrphanRoots(divisions, 'root')).toEqual([])
+  })
+
+  it('picks up a structural edit when the divisions array is a new reference', () => {
+    const divisions = makeDivisions()
+    buildDivisionTree(divisions, 'root') // warm the per-array index cache
+
+    const s3: Division = {
+      id: '3',
+      xmlId: 's3',
+      title: 'Three',
+      type: 'section',
+      sourceFormat: 'latex',
+      source: '\\section{Three}\n\nBody three.',
+    }
+    const withThird = divisions.map((d) =>
+      d.xmlId === 'root'
+        ? { ...d, source: d.source.replace('</article>', '<plus:section ref="s3"/></article>') }
+        : d,
+    )
+    withThird.push(s3)
+
+    const tree = buildDivisionTree(withThird, 'root')
+    expect(tree.map((n) => n.division.xmlId)).toEqual(['s1', 's2', 's3'])
+  })
+
+  it('does not reconvert an unchanged LaTeX division across repeated assemblies', () => {
+    const divisions = makeDivisions()
+    const spy = vi.spyOn(contentConversion, 'derivePretextContent')
+
+    assembleProjectSource(divisions, 'root')
+    const firstCallCount = spy.mock.calls.length
+    expect(firstCallCount).toBeGreaterThan(0)
+
+    assembleProjectSource(divisions, 'root')
+    expect(spy.mock.calls.length).toBe(firstCallCount)
+
+    spy.mockRestore()
+  })
+
+  it('reconverts only the division whose content actually changed', () => {
+    const divisions = makeDivisions()
+    const spy = vi.spyOn(contentConversion, 'derivePretextContent')
+    assembleProjectSource(divisions, 'root')
+    spy.mockClear()
+
+    // Mirrors how the store replaces only the edited division's object
+    // (`setDivisionContent` in `editorStore.ts`) — every other division keeps
+    // its exact reference.
+    const updated = divisions.map((d) =>
+      d.xmlId === 's1' ? { ...d, source: '\\section{One}\n\nEdited body.' } : d,
+    )
+    const xml = assembleProjectSource(updated, 'root')
+
+    expect(spy.mock.calls.length).toBe(1)
+    expect(spy.mock.calls[0][0]).toContain('Edited body.')
+    expect(xml).toContain('Edited body.')
+    expect(xml).toContain('Body two.') // s2 untouched — reused from cache
+
+    spy.mockRestore()
+  })
+
+  it('stays fast for a large flat division pool (regression guard for the O(N^2) tree/orphan walk)', () => {
+    const N = 2000
+    const children: Division[] = Array.from({ length: N }, (_, i): Division => ({
+      id: `c${i}`,
+      xmlId: `c${i}`,
+      title: `Child ${i}`,
+      type: 'section',
+      sourceFormat: 'pretext',
+      source: `<section xml:id="c${i}"><title>Child ${i}</title><p>Body</p></section>`,
+    }))
+    const root: Division = {
+      id: 'root',
+      xmlId: 'root',
+      title: 'Doc',
+      type: 'article',
+      sourceFormat: 'pretext',
+      source:
+        '<article xml:id="root"><title>Doc</title>' +
+        children.map((c) => `<plus:section ref="${c.xmlId}"/>`).join('') +
+        '</article>',
+    }
+    const divisions = [root, ...children]
+
+    const start = performance.now()
+    const tree = buildDivisionTree(divisions, 'root')
+    const orphans = getOrphanRoots(divisions, 'root')
+    const elapsed = performance.now() - start
+
+    expect(tree.length).toBe(N)
+    expect(orphans).toEqual([])
+    // Generous bound, not a precise benchmark: a reintroduced O(N^2)
+    // `.find()`-per-node walk would take vastly longer than this for
+    // N=2000; the O(N) walk finishes in low single-digit milliseconds.
+    expect(elapsed).toBeLessThan(2000)
   })
 })
