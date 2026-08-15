@@ -41,8 +41,12 @@ import {
   previewThemeMessage,
   type PreviewTheme,
 } from "@pretextbook/pretext-html/theme";
+import {
+  injectPrintPreview,
+  type PrintoutInfo,
+} from "@pretextbook/pretext-html/printout";
 
-export type { PreviewTheme, RevealView };
+export type { PreviewTheme, RevealView, PrintoutInfo };
 export { previewThemeMessage };
 
 /**
@@ -128,6 +132,20 @@ export interface PreviewRender {
    * deck, and the slideshow-only controls (view toggle, zoom) apply to it.
    */
   target: RenderTarget;
+  /**
+   * The printouts on the page — worksheets, handouts, projects — in document
+   * order, each of which can be laid out on paper by {@link applyPrintPreview}.
+   * Empty for a page with none, which is also when PreTeXt emits no paper-size
+   * controls and there is therefore no print preview to offer.
+   */
+  printouts: PrintoutInfo[];
+  /**
+   * The printout to open on paper by default: set only when the previewed
+   * document *is* a printout (editing `worksheet-3.ptx`) rather than merely
+   * containing some (a chapter with three worksheets in it, which should open
+   * as the chapter).
+   */
+  rootPrintout?: string;
 }
 
 type PretextHtmlModule = typeof import("@pretextbook/pretext-html");
@@ -183,7 +201,7 @@ export async function renderPreviewHtml(
   options: LocalRenderOptions = {},
 ): Promise<PreviewRender> {
   const { renderHtml } = await loadRenderer();
-  const { html, sourceMap, target } = await renderHtml({
+  const { html, sourceMap, target, printouts, rootPrintout } = await renderHtml({
     cssTheme: "default-modern",
     sourcePath: PREVIEW_SOURCE_PATH,
     projectDir: "/source",
@@ -208,6 +226,8 @@ export async function renderPreviewHtml(
     html,
     sourceMap: subtreeSourceMap(sourceMap ?? [], options.divisionId),
     target,
+    printouts,
+    rootPrintout,
   };
 }
 
@@ -258,6 +278,33 @@ export function applyRevealView(
   zoom: number,
 ): string {
   return injectRevealBridge(html, view, { zoom });
+}
+
+/**
+ * Re-present an already-rendered page as one of its printouts laid out for
+ * paper — or, with no id, as the ordinary page.
+ *
+ * pretext-core.js enters that layout by reading `?printpreview=<id>` from
+ * `location.search`, which a preview has no way to set: it is delivered into an
+ * iframe whose URL is not ours to write. `injectPrintPreview` supplies the
+ * parameter without the navigation, by patching the one reader that looks for
+ * it. See the printout module's own documentation for why rewriting the URL is
+ * not an option.
+ *
+ * Must be applied on **every** delivery, "off" included, and never skipped as
+ * a no-op: the injected bridge keeps its answer on a window property, so a page
+ * delivered without one inherits whatever the previous delivery said.
+ *
+ * The transformation itself is one-way — pretext-core.js runs it once from a
+ * DOMContentLoaded handler and rearranges the DOM destructively — which is why
+ * leaving print preview means re-delivering the pristine render rather than
+ * undoing anything.
+ */
+export function applyPrintPreview(
+  html: string,
+  printoutId: string | undefined,
+): string {
+  return injectPrintPreview(html, printoutId);
 }
 
 /**
