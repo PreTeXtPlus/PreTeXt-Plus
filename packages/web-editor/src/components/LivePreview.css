@@ -36,7 +36,7 @@
   gap: 0.375rem;
 }
 
-/* Secondary controls: view toggles, zoom, exiting print preview. */
+/* Secondary controls: view toggles and zoom. */
 .pretext-plus-editor__preview-button {
   border-radius: 0.125rem;
   padding: 0.3125rem 0.5rem;
@@ -57,6 +57,33 @@
 .pretext-plus-editor__preview-button:disabled {
   opacity: 0.45;
   cursor: default;
+}
+
+/* The printout picker: web view, or one of the page's worksheets/handouts laid
+   out for paper. Sized and coloured to sit alongside the buttons above rather
+   than as a form field. */
+.pretext-plus-editor__preview-select {
+  border-radius: 0.125rem;
+  padding: 0.25rem 0.375rem;
+  max-width: 14rem;
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: #374151;
+  background-color: #ffffff;
+  border: 1px solid #d1d5db;
+  cursor: pointer;
+  line-height: 1.25;
+}
+
+.pretext-plus-editor__preview-select:hover {
+  background-color: #f3f4f6;
+}
+
+/* Print preview is a mode, not a setting, so say so while it is on. */
+.pretext-plus-editor__preview-select:not([data-layout=""]) {
+  color: #065f46;
+  background-color: #d1fae5;
+  border-color: #6ee7b7;
 }
 
 /* The active half of a segmented control (Deck / Present). */

@@ -180,24 +180,6 @@ export interface editorProps {
     postToIframe: (url: string, data: unknown) => void,
   ) => void;
   /**
-   * URL of a page the host serves that the live preview can be delivered into,
-   * instead of rendering it through `iframe.srcdoc`.
-   *
-   * Supply it to enable **print preview** for worksheets, handouts and
-   * standalone projects. PreTeXt enters print-preview mode from a
-   * `?printpreview=<id>` query string, and a `srcdoc` document has no URL to
-   * put one on — so without this the printer icon on a worksheet stays inert,
-   * exactly as it is in a `pretext-html` render. Everything else about the
-   * preview is unaffected.
-   *
-   * The page must be same-origin and must implement the tiny protocol in
-   * `components/previewFrame.ts`; `public/preview-frame.html` in the
-   * pretext.plus application is a complete implementation to copy. Give the
-   * URL a version query (`/preview-frame.html?v=1`) if the host serves it with
-   * a long cache lifetime.
-   */
-  previewFrameUrl?: string;
-  /**
    * Drive the live preview's light/dark mode from the host's own theme, rather
    * than leaving the rendered page to decide from `localStorage` and
    * `prefers-color-scheme`.
@@ -1712,7 +1694,6 @@ const EditorsInner = (props: EditorsInnerProps) => {
         fragment={!previewingWholeDocument}
         contextSource={previewContextSource}
         docinfo={effectiveDocinfo}
-        frameUrl={props.previewFrameUrl}
         theme={props.previewTheme}
         bannerMessage={
           props.previewBannerMessage ?? DEFAULT_PREVIEW_BANNER_MESSAGE

@@ -1,6 +1,6 @@
 require "application_system_test_case"
 
-class PreviewFrameAssetTest < ApplicationSystemTestCase
+class PreviewAssetTest < ApplicationSystemTestCase
   setup do
     @user = users(:one)
     @project = projects(:one)
@@ -14,16 +14,17 @@ class PreviewFrameAssetTest < ApplicationSystemTestCase
 
     # Mirrors the real WASM renderer's output shape for `<image source="..."/>`
     # (see node_modules/@pretextbook/pretext-html/assets/xsl/pretext-html.xsl,
-    # image-inclusion mode): a path relative to the frame document's own URL.
-    # It has to resolve against /projects/:id/preview-frame.html -- the whole
-    # point of ProjectsController#preview_frame -- rather than against the
-    # app root, to reach AssetsController#share.
+    # image-inclusion mode): a path relative to the preview document's own base
+    # URL. The preview is delivered as `srcdoc`, so that base is the editor
+    # page's -- /projects/:id/edit -- and the link has to reach
+    # AssetsController#share from there, which is what the `(*_)` prefix on its
+    # member route is for.
     preview_html = <<~HTML
-      <!doctype html><html><body><img src="external/#{@asset.ref}.png" alt="preview frame diagram"></body></html>
+      <!doctype html><html><body><img src="external/#{@asset.ref}.png" alt="preview diagram"></body></html>
     HTML
 
     loaded_width = eventually(timeout: 15.seconds) do
-      write_into_preview_frame(preview_html)
+      write_into_preview(preview_html)
       within_frame("livePreview") do
         next nil unless has_selector?("img[src$='external/#{@asset.ref}.png']", wait: 1)
         width = page.evaluate_script(
@@ -49,20 +50,13 @@ class PreviewFrameAssetTest < ApplicationSystemTestCase
       assert_text "Signed in successfully.", wait: 10
     end
 
-    # Posts through the same `pretext-plus:frame-write` protocol the real
-    # renderer uses (see public/preview-frame.html) -- retried by `eventually`
-    # since the shim's message listener isn't registered until the iframe's
-    # own navigation to preview-frame.html has completed, which races the
-    # editor's mount.
-    def write_into_preview_frame(html)
+    # Delivers a page the same way LivePreview does -- by setting `srcdoc` --
+    # retried by `eventually` since a render finishing on the editor's own
+    # schedule can replace whatever we wrote.
+    def write_into_preview(html)
       page.execute_script(<<~JS, html)
         var iframe = document.querySelector("iframe[name='livePreview']");
-        if (iframe && iframe.contentWindow) {
-          iframe.contentWindow.postMessage(
-            { type: "pretext-plus:frame-write", html: arguments[0], token: "system-test" },
-            "*"
-          );
-        }
+        if (iframe) { iframe.srcdoc = arguments[0]; }
       JS
     end
 
