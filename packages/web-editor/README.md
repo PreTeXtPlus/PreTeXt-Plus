@@ -233,6 +233,7 @@ If your product needs an audit trail, keep the original LaTeX and created PreTeX
 
 - **Visual Editor**: Intuitive WYSIWYG editor for PreTeXt documents via `@pretextbook/visual-editor`
 - **Code Editor**: Monaco-powered code editor with syntax highlighting
+- **Spell Checking**: PreTeXt-aware spell check that skips math, code, and markup — see [Spell checking](#spell-checking)
 - **Full Preview**: Full-page preview of your document
 - **Synchronized Editing**: Changes in one editor instantly reflect in the other
 - **Split View**: View code and visual editor side-by-side
@@ -339,6 +340,77 @@ One host-visible side effect: the preview iframe uses `srcdoc` and therefore
 shares your page's origin, so PreTeXt reads and writes its theme setting in
 **your app's `localStorage`, under the key `theme`**. If your app uses that same
 key, the two will fight; namespace yours to avoid it.
+
+## Spell checking
+
+The code editor spell checks PreTeXt prose and offers corrections, "Add to
+dictionary", and "Ignore this session" as quick fixes on each misspelling
+(Ctrl+. / the lightbulb). Misspellings are published as `Info` markers under the
+`pretext-spellcheck` owner, so they never collide with the schema diagnostics
+(`pretext-schema`) or the LaTeX/Markdown flavor linters.
+
+### Serving the dictionary (required)
+
+The Hunspell dictionary is **fetched at runtime, not bundled** — it is ~550KB of
+word list that would otherwise sit in your main bundle and be parsed on every
+page load, whether or not anyone checks a document. Copy the two files into your
+asset root at build time:
+
+```js
+// dictionary-en exports only its root, so locate the data files relative to it
+const dir = path.dirname(require.resolve("dictionary-en"));
+fs.copyFileSync(path.join(dir, "index.aff"), "public/assets/dictionaries/en.aff");
+fs.copyFileSync(path.join(dir, "index.dic"), "public/assets/dictionaries/en.dic");
+```
+
+Those are the default paths. If you serve them elsewhere, say so via
+`dictionarySource`. **Without this step spell checking silently does nothing** —
+the editor logs one console warning and carries on with no markers, rather than
+failing to load.
+
+### Configuration
+
+Call `configureSpellCheck` once, before mounting the editor:
+
+```ts
+import { configureSpellCheck } from "@pretextbook/web-editor";
+
+configureSpellCheck({
+  enabled: true,
+  // Which PreTeXt constructs to look inside. These names, values and defaults
+  // deliberately mirror `pretext-tools.spellCheck.checkErrorsInsideScope` in
+  // the PreTeXt VS Code extension, so authors get the same behavior in both.
+  scopes: {
+    comments: "Check",
+    inlineMath: "Ignore",   // <m>
+    displayMath: "Ignore",  // <me>, <men>, <md>, <mdn>
+    inlineCode: "Ignore",   // <c>
+    blockCode: "Ignore",    // <program>, <sage>, <pre>
+    latexImage: "Ignore",   // <latex-image>
+    tags: "Ignore",         // prose-bearing attribute values (alt, title, description)
+  },
+  dictionarySource: {
+    affUrl: "/assets/dictionaries/en.aff",
+    dicUrl: "/assets/dictionaries/en.dic",
+  },
+  // Optional. Without a store, added words last only for the session.
+  userWordStore: {
+    load: () => fetch("/api/dictionary").then((r) => r.json()),
+    add: (word) =>
+      fetch("/api/dictionary", { method: "POST", body: JSON.stringify({ word }) }),
+  },
+});
+```
+
+A `userWordStore` is worth wiring up early: a textbook is full of correct words
+no general dictionary carries — technical vocabulary, author names, notation —
+and without persistence the author re-adds them every session.
+
+Unlike the VS Code extension, which can only hand cSpell regexes that strip
+whole tags, scopes here resolve against a real scan of the source: element
+nesting is tracked, CDATA is never checked, a `>` inside an attribute value
+doesn't end a tag, and `tags: "Check"` checks prose-bearing attribute *values*
+without ever flagging tag or attribute names.
 
 ## Browser Support
 

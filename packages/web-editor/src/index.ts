@@ -101,6 +101,22 @@ export type { CollabSession, CollabUser } from "./collab/types";
 // can mint one for a record it creates outside the editor's own flows.
 export { newRecordId } from "./recordId";
 
+// Spell checking: hosts configure it once at startup (dictionary location,
+// which PreTeXt constructs to look inside, where "Add to dictionary" persists).
+// Serving the Hunspell files is the host's job — see the README.
+export {
+  configureSpellCheck,
+  DEFAULT_SPELL_CHECK_SCOPES,
+  DEFAULT_DICTIONARY_SOURCE,
+} from "./components/editorConfigs/spellcheck";
+export type {
+  SpellCheckSettings,
+  SpellCheckScope,
+  SpellCheckScopeSetting,
+  DictionarySource,
+  UserWordStore,
+} from "./components/editorConfigs/spellcheck";
+
 // Export components
 export { default as CodeEditor } from "./components/CodeEditor";
 export { VisualEditor } from "@pretextbook/visual-editor";
