@@ -1,7 +1,6 @@
 import { Fragment, useState } from "react";
 import clsx from "clsx";
 import type { Division } from "../../types/sections";
-import type { AssetKind } from "../../types/editor";
 import SectionItem from "./SectionItem";
 import DivisionMenu, { type DivisionMenuItem } from "./DivisionMenu";
 import { canContainDivisions } from "./types";
@@ -16,7 +15,6 @@ import {
 } from "../../sectionUtils";
 import { buildProjectAssetView, type AssetRow } from "../../assetView";
 import { useEditorStore } from "../../store/hooks";
-import { ASSET_KIND_LABELS, VISIBLE_ASSET_KINDS } from "../../assetKinds";
 
 export interface ArticleTocProps {
   onOpenAssetPicker?: (initialTab?: "add") => void;
@@ -75,11 +73,6 @@ const ArticleToc = ({ onOpenAssetPicker, hideAssets, readOnly }: ArticleTocProps
 
   // ── Joined asset view — placeholders + project assets, with status ─────────
   const assetView = buildProjectAssetView(divisions, projectAssets);
-
-  const groupedAssetRows = VISIBLE_ASSET_KINDS.map((kind) => ({
-    kind,
-    rows: assetView.filter((r) => r.kind === kind),
-  })).filter((g) => g.rows.length > 0);
 
   const [assetsExpanded, setAssetsExpanded] = useState(true);
 
@@ -228,12 +221,12 @@ const ArticleToc = ({ onOpenAssetPicker, hideAssets, readOnly }: ArticleTocProps
   // ── Asset row helpers ───────────────────────────────────────────────────────
   const openAssetRow = (row: AssetRow) =>
     row.status === "unlinked"
-      ? openAssetResolver(row.kind, row.ref)
-      : openAssetEditor(row.kind, row.ref);
+      ? openAssetResolver(row.ref)
+      : openAssetEditor(row.ref);
 
-  const copyAssetEmbed = (kind: AssetKind, ref: string) => {
+  const copyAssetEmbed = (ref: string) => {
     navigator.clipboard
-      .writeText(assetEmbedCode(kind, ref, activeFormat))
+      .writeText(assetEmbedCode(ref, activeFormat))
       .catch(() => {});
   };
 
@@ -245,7 +238,7 @@ const ArticleToc = ({ onOpenAssetPicker, hideAssets, readOnly }: ArticleTocProps
       },
       {
         label: "Copy embed code",
-        onClick: () => copyAssetEmbed(row.kind, row.ref),
+        onClick: () => copyAssetEmbed(row.ref),
       },
     ];
     if (hasAssetDuplicate && row.asset) {
@@ -257,7 +250,7 @@ const ArticleToc = ({ onOpenAssetPicker, hideAssets, readOnly }: ArticleTocProps
     if (row.status === "unlinked") {
       items.push({
         label: "Remove from document",
-        onClick: () => removeAssetRefFromDocument(row.kind, row.ref),
+        onClick: () => removeAssetRefFromDocument(row.ref),
         danger: true,
       });
     } else if (row.asset) {
@@ -266,7 +259,7 @@ const ArticleToc = ({ onOpenAssetPicker, hideAssets, readOnly }: ArticleTocProps
         onClick: () => {
           // Removing the asset alone would leave its placeholders behind (the
           // row would just reappear as "needs asset"), so also strip every
-          // `<plus:KIND ref/>` for it from the document — mirroring how
+          // `<plus:image ref/>` for it from the document — mirroring how
           // deleting a division also removes its references. Confirm first when
           // it's actually placed, since that edits the source.
           if (
@@ -280,7 +273,7 @@ const ArticleToc = ({ onOpenAssetPicker, hideAssets, readOnly }: ArticleTocProps
             return;
           }
           removeAsset(row.asset!);
-          removeAssetRefFromDocument(row.kind, row.ref);
+          removeAssetRefFromDocument(row.ref);
         },
         danger: true,
       });
@@ -526,18 +519,11 @@ const ArticleToc = ({ onOpenAssetPicker, hideAssets, readOnly }: ArticleTocProps
                   </p>
                 ) : (
                   <div className="flex flex-col">
-                    {groupedAssetRows.map(({ kind, rows }) => (
-                      <div key={kind}>
-                        <div className="flex items-center gap-1 pt-1 px-2 pb-0.5 text-[0.7rem] font-semibold text-slate-500 uppercase tracking-[0.04em]">
-                          {ASSET_KIND_LABELS[kind]}
-                        </div>
-                        <ul className="list-none m-0 pt-0 px-0 pb-1">
-                          {rows.map((row) => {
+                    <ul className="list-none m-0 pt-0 px-0 pb-1">
+                          {assetView.map((row) => {
                             const isUnlinked = row.status === "unlinked";
                             const isMissingShortDescription =
-                              row.asset &&
-                              row.kind === "image" &&
-                              !row.asset.shortDescription?.trim();
+                              row.asset && !row.asset.shortDescription?.trim();
                             const isBusy = duplicatingRef === row.ref;
                             return (
                               <li
@@ -615,9 +601,7 @@ const ArticleToc = ({ onOpenAssetPicker, hideAssets, readOnly }: ArticleTocProps
                               </li>
                             );
                           })}
-                        </ul>
-                      </div>
-                    ))}
+                    </ul>
                   </div>
                 )}
               </div>

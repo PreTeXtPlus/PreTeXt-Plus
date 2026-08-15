@@ -32,7 +32,7 @@
 import * as Y from "yjs";
 import type { Division } from "../types/sections";
 import type { DivisionChanges, EditorStoreInstance } from "../store/editorStore";
-import type { Asset, AssetKind } from "../types/editor";
+import type { Asset } from "../types/editor";
 import type { CollabSession } from "./types";
 import {
   applyAssetFields,
@@ -53,16 +53,6 @@ import {
   extractLatexDivisionTitle,
   extractMarkdownDivisionMetadata,
 } from "../sectionUtils";
-
-/** The store pool's identity for an asset, as one comparable string. */
-const assetRefKey = (kind: AssetKind, ref: string | undefined): string =>
-  `${kind}:${ref ?? ""}`;
-
-/** Inverse of {@link assetRefKey}. A ref may itself contain no colon (REF_REGEX). */
-const splitAssetRefKey = (key: string): [AssetKind, string] => {
-  const separator = key.indexOf(":");
-  return [key.slice(0, separator) as AssetKind, key.slice(separator + 1)];
-};
 
 /** Division record derived from a doc entry, for insertion into the store pool. */
 const snapshotToRecord = (snapshot: CollabDivisionSnapshot): Division => {
@@ -108,8 +98,8 @@ export class CollabBridge {
   private readonly keyToXmlId = new Map<string, string>();
   private readonly xmlIdToKey = new Map<string, string>();
   /**
-   * Asset entry key (record id) ↔ current `kind:ref`, both directions. The doc
-   * keys assets by record id; the store's pool keys them by kind+ref, so a
+   * Asset entry key (record id) ↔ current `ref`, both directions. The doc
+   * keys assets by record id; the store's pool keys them by ref, so a
    * remote `ref` rename has to be dispatched as a rename of a *known* old key.
    */
   private readonly keyToAssetRef = new Map<string, string>();
@@ -285,12 +275,10 @@ export class CollabBridge {
   /**
    * Mirror an edit to an asset's fields. `previousRef` names the ref the asset
    * had before this edit, when the edit renames it — the store pool keys on
-   * kind+ref, so the bridge has to move its own index along with the doc.
+   * ref, so the bridge has to move its own index along with the doc.
    */
   localAssetUpdate(asset: Asset, previousRef?: string): void {
-    const key =
-      asset.id ??
-      this.assetRefToKey.get(assetRefKey(asset.kind, previousRef ?? asset.ref));
+    const key = asset.id ?? this.assetRefToKey.get(previousRef ?? asset.ref ?? "");
     if (!key) return;
     const assets = getAssetsMap(this.doc);
     this.doc.transact(() => {
@@ -298,14 +286,14 @@ export class CollabBridge {
       if (entry) applyAssetFields(entry, asset);
       else assets.set(key, makeAssetEntry(asset));
     }, this.localOrigin);
-    // `previousRef` located the entry above; retiring the old `kind:ref` index
-    // is trackAssetKey's job, and it only does so when this key still owns it.
+    // `previousRef` located the entry above; retiring the old `ref` index is
+    // trackAssetKey's job, and it only does so when this key still owns it.
     this.trackAssetKey(key, asset);
     this.bump();
   }
 
   localAssetRemove(asset: Asset): void {
-    const key = asset.id ?? this.assetRefToKey.get(assetRefKey(asset.kind, asset.ref));
+    const key = asset.id ?? this.assetRefToKey.get(asset.ref ?? "");
     if (!key) return;
     this.doc.transact(() => {
       getAssetsMap(this.doc).delete(key);
@@ -317,13 +305,13 @@ export class CollabBridge {
 
   private trackAssetKey(key: string, asset: Asset): void {
     this.untrackAssetKey(key);
-    const current = assetRefKey(asset.kind, asset.ref);
+    const current = asset.ref ?? "";
     this.keyToAssetRef.set(key, current);
     this.assetRefToKey.set(current, key);
   }
 
   /**
-   * Forget an asset key, returning the `kind:ref` it held — but only if it
+   * Forget an asset key, returning the `ref` it held — but only if it
    * still held it. Two records can briefly share a ref (Replace hands the
    * replacement the old asset's ref before the old one is dropped), and the
    * loser of that overlap must not tear down the winner's mapping, nor be
@@ -427,7 +415,7 @@ export class CollabBridge {
     assets.forEach((entry, key) => {
       const snapshot = assetEntryToSnapshot(key, entry);
       this.trackAssetKey(key, snapshot);
-      // Match the pool entry by record id, not by kind+ref: a peer may have
+      // Match the pool entry by record id, not by ref: a peer may have
       // renamed the ref since the prop we were seeded from was read, and
       // updating under the new ref alone would leave the old one behind as a
       // duplicate.
@@ -435,7 +423,7 @@ export class CollabBridge {
         .getState()
         .projectAssets?.find((a) => a.id === key);
       if (pooled && pooled.ref !== snapshot.ref) {
-        state.renameAssetInPool(pooled.kind, pooled.ref ?? "", snapshot);
+        state.renameAssetInPool(pooled.ref ?? "", snapshot);
       } else {
         state.updateAssetInPool(snapshot);
       }
@@ -556,7 +544,7 @@ export class CollabBridge {
   };
 
   /**
-   * Remote asset changes → the store's pool. The pool keys on kind+ref while
+   * Remote asset changes → the store's pool. The pool keys on ref while
    * the doc keys on record id, so a field change that moved `ref` has to be
    * replayed as a rename from the ref this bridge last saw for that key.
    */
@@ -577,8 +565,7 @@ export class CollabBridge {
             // pool now would remove the wrong asset.
             const previous = this.untrackAssetKey(key);
             if (previous === undefined) return;
-            const [kind, ref] = splitAssetRefKey(previous);
-            state.removeAssetFromPool({ id: key, kind, ref, title: "" });
+            state.removeAssetFromPool({ id: key, ref: previous, title: "" });
             return;
           }
           const entry = assets.get(key);
@@ -599,7 +586,7 @@ export class CollabBridge {
   private applyRemoteAsset(key: string, asset: Asset): void {
     const state = this.store.getState();
     const previous = this.keyToAssetRef.get(key);
-    const current = assetRefKey(asset.kind, asset.ref);
+    const current = asset.ref ?? "";
     // Rename only when this record still owns the ref it is moving away from;
     // otherwise the pool entry under that ref belongs to someone else.
     if (
@@ -607,8 +594,7 @@ export class CollabBridge {
       previous !== current &&
       this.assetRefToKey.get(previous) === key
     ) {
-      const [kind, ref] = splitAssetRefKey(previous);
-      state.renameAssetInPool(kind, ref, asset);
+      state.renameAssetInPool(previous, asset);
     } else {
       state.updateAssetInPool(asset);
     }

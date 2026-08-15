@@ -9,7 +9,7 @@
  *   `Y.Text` under `"source"` — the CRDT that makes concurrent character edits
  *   merge.
  * - `doc.getMap("assets")`: key → `Y.Map` entry per project asset, keyed by the
- *   asset's record id. Metadata only (`ref`, `kind`, `title`, `source`, `url`,
+ *   asset's record id. Metadata only (`ref`, `title`, `source`, `url`,
  *   `thumbnailUrl`, `extension`, `contentType`, `fileRef`, `isFile`), all
  *   last-writer-wins — an asset's *bytes* stay with
  *   the host, since the doc is replicated to every peer and persisted as an
@@ -152,7 +152,6 @@ export const makeDivisionEntry = (
  */
 const ASSET_FIELDS = [
   "ref",
-  "kind",
   "title",
   "source",
   "shortDescription",
@@ -213,7 +212,6 @@ export const assetEntryToSnapshot = (
 ): CollabAssetSnapshot => ({
   id,
   ref: entry.get("ref") as string | undefined,
-  kind: (entry.get("kind") ?? "image") as Asset["kind"],
   title: String(entry.get("title") ?? ""),
   source: entry.get("source") as string | undefined,
   shortDescription: entry.get("shortDescription") as string | undefined,

@@ -23,7 +23,7 @@
  * @typedef {Object} RailsAsset
  * @property {string} id
  * @property {string} [ref]
- * @property {"file"|"authored"} [kind]
+ * @property {"file"|"authored"} kind
  * @property {string} [title]
  * @property {string} [source]
  * @property {string} [short_description] - Plain-text image alt description; rendered as
@@ -123,12 +123,8 @@ export function railsDivisionToEditor(d, rootMeta) {
 //    resolve wherever the build's output is displayed.
 //
 // `isFile` distinguishes a file-backed asset from one defined purely by its
-// authored `source`; derived from `path`'s presence (only set when a file is
-// attached), not from Rails' `kind` column -- the web-editor's own `AssetKind`
-// no longer distinguishes a source-only image from a file-backed one (both are
-// just `"image"`), so `kind` below is always `"image"`; the only other kind it
-// supports, `"doenet"`, is a distinct, currently feature-flagged-off activity
-// type with no creation path wired up yet.
+// authored `source`; read straight from Rails' `kind` column (`file`/
+// `authored`), the single source of truth for that distinction.
 //
 // The bare `<ref>.<ext>` source filename for a file-backed asset, or undefined
 // for a non-file asset (which relies entirely on its authored `source`) or one
@@ -153,14 +149,13 @@ export function railsAssetToEditor(a) {
     id: String(a.id),
     ref: a.ref ?? "",
     title: a.title,
-    kind: "image",
     source: a.source ?? undefined,
     shortDescription: a.short_description ?? undefined,
     url: a.path ?? undefined,
     thumbnailUrl: a.thumbnail_path ?? undefined,
     extension: a.extension ?? undefined,
     contentType: a.content_type ?? undefined,
-    isFile: Boolean(a.path),
+    isFile: a.kind === "file",
     fileRef: fileRefFor(a, a.ref),
   };
 }
@@ -178,7 +173,6 @@ export function toEditorAsset(rec) {
     id: rec.id,
     ref: rec.ref,
     title: rec.title,
-    kind: rec.kind,
     source: rec.source,
     shortDescription: rec.shortDescription,
     url: rec.url,
@@ -186,9 +180,8 @@ export function toEditorAsset(rec) {
     extension: rec.extension,
     contentType: rec.contentType,
     fileRef: rec.fileRef,
-    // Recomputed from `url` rather than carried on `rec`, same reasoning as
-    // railsAssetToEditor: file-backed-ness is a property of the attachment,
-    // not of `kind`.
-    isFile: Boolean(rec.url),
+    // Already correctly set by railsAssetToEditor upstream (from Rails' real
+    // `kind` column) for every asset that reaches this function.
+    isFile: rec.isFile,
   };
 }

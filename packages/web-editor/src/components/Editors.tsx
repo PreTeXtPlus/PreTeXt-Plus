@@ -34,7 +34,6 @@ import { DEFAULT_LANGUAGE } from "../languages";
 import type {
   EditorContentChange,
   Asset,
-  AssetKind,
   FeedbackSubmission,
   SourceFormat,
 } from "../types/editor";
@@ -282,8 +281,7 @@ export interface editorProps {
    * @deprecated Assets are no longer inserted at the cursor — adding an asset
    * now copies its embed code to the clipboard. Retained for backward
    * compatibility; it is no longer called. Use the creation hooks
-   * (`onAssetUpload`/`onCreateDoenet`) to learn when an asset enters the
-   * project.
+   * (`onAssetUpload`) to learn when an asset enters the project.
    */
   onAssetInsert?: (asset: Asset) => void;
   /**
@@ -301,8 +299,6 @@ export interface editorProps {
    * title passed as `onAssetUpload`'s second argument.
    */
   onAssetFetchUrl?: (url: string) => Promise<File>;
-  /** Called when the user creates a new Doenet activity. */
-  onCreateDoenet?: (title: string, ref: string) => Promise<Asset>;
   /**
    * Called when the user removes an asset from the project. Return a promise
    * if the removal is persisted asynchronously: the Replace flow awaits it
@@ -501,9 +497,7 @@ const EditorsInner = (props: EditorsInnerProps) => {
   const removeAssetFromPool = useEditorStore((s) => s.removeAssetFromPool);
 
   const editingAsset = editingAssetRef
-    ? projectAssets?.find(
-        (a) => a.kind === editingAssetRef.kind && a.ref === editingAssetRef.ref,
-      )
+    ? projectAssets?.find((a) => a.ref === editingAssetRef.ref)
     : undefined;
 
   // ── Authoritative editing buffer (read from the store, not props) ─────────
@@ -966,8 +960,8 @@ const EditorsInner = (props: EditorsInnerProps) => {
     // Add to the authoritative pool optimistically so it's editable immediately,
     // even before the host echoes it back as an updated `projectAssets` prop.
     // The host already learns of the asset through the creation hook that
-    // produced it (`onAssetUpload`/`onCreateDoenet`), so the deprecated
-    // `onAssetInsert` is no longer fired here.
+    // produced it (`onAssetUpload`), so the deprecated `onAssetInsert` is no
+    // longer fired here.
     addAssetToPool(asset);
     // Publishing to the shared doc is how *other* collaborators learn of it:
     // by the time this runs the host has already stored the file and handed
@@ -1037,7 +1031,7 @@ const EditorsInner = (props: EditorsInnerProps) => {
     await props.onAssetUpdate?.(copy);
     addAssetToPool(copy);
     bridge?.localAssetAdd(copy);
-    openAssetEditor(copy.kind, newRef);
+    openAssetEditor(newRef);
   };
 
   /**
@@ -1063,7 +1057,7 @@ const EditorsInner = (props: EditorsInnerProps) => {
     //    the ref. Removing first is what makes the rename land in the database
     //    rather than failing there and leaving the replacement under whatever
     //    ref its upload was given.
-    //  - The pool is keyed by kind+ref, and after the swap both assets share
+    //  - The pool is keyed by ref, and after the swap both assets share
     //    one — so dropping the old one from the pool last would take the
     //    replacement with it.
     await props.onAssetRemove?.(oldAsset);
@@ -1079,30 +1073,26 @@ const EditorsInner = (props: EditorsInnerProps) => {
   };
 
   /**
-   * Rewrite every `<plus:KIND ref="oldRef"/>` placeholder across all divisions
+   * Rewrite every `<plus:image ref="oldRef"/>` placeholder across all divisions
    * to `newRef`, routing each affected division through the unified
    * content-change channel so the edit is persisted and survives locked
    * regions. Used when an asset's ref is renamed or an unresolved placeholder
    * is linked to an asset whose ref differs.
    */
-  const renameAssetRefEverywhere = (
-    kind: AssetKind,
-    oldRef: string,
-    newRef: string,
-  ) => {
+  const renameAssetRefEverywhere = (oldRef: string, newRef: string) => {
     if (oldRef === newRef) return;
     for (const division of divisions) {
-      const next = renameAssetRef(division.source, kind, oldRef, newRef);
+      const next = renameAssetRef(division.source, oldRef, newRef);
       if (next !== division.source) {
         emitContentChange(division.xmlId, next, division.sourceFormat);
       }
     }
   };
 
-  /** Delete every `<plus:KIND ref="ref"/>` placeholder for an unresolved ref. */
-  const removeAssetRefEverywhere = (kind: AssetKind, ref: string) => {
+  /** Delete every `<plus:image ref="ref"/>` placeholder for an unresolved ref. */
+  const removeAssetRefEverywhere = (ref: string) => {
     for (const division of divisions) {
-      const next = removeAssetRef(division.source, kind, ref);
+      const next = removeAssetRef(division.source, ref);
       if (next !== division.source) {
         emitContentChange(division.xmlId, next, division.sourceFormat);
       }
@@ -1907,7 +1897,6 @@ const EditorsInner = (props: EditorsInnerProps) => {
             }}
             onUpload={props.onAssetUpload}
             onFetchUrl={props.onAssetFetchUrl}
-            onCreateDoenet={props.onCreateDoenet}
             onRemoveAsset={props.onAssetRemove ? handleAssetRemove : undefined}
             onDuplicateAsset={
               canDuplicateAsset ? handleAssetDuplicate : undefined
@@ -1930,7 +1919,7 @@ const EditorsInner = (props: EditorsInnerProps) => {
             // modal and re-seeds its form fields from the new asset, instead of
             // carrying the previous asset's edits over and writing them to the
             // wrong record on Save.
-            key={`${editingAsset.kind}:${editingAsset.ref}`}
+            key={editingAsset.ref}
             asset={editingAsset}
             projectAssets={projectAssets ?? []}
             onClose={closeAssetEditor}
@@ -1953,8 +1942,8 @@ const EditorsInner = (props: EditorsInnerProps) => {
             onSave={async (asset, prevRef) => {
               // Persist before touching the document. A `ref` has to be unique
               // across the whole project, which is more than this modal can
-              // check against its own pool (a division or another kind of
-              // asset can hold the name too), so the host is the only place
+              // check against its own pool (a division can hold the name too),
+              // so the host is the only place
               // the rename is truly settled. Letting it fail first means the
               // modal reports the error with the document still intact, rather
               // than leaving every placeholder rewritten to a ref nothing owns.
@@ -1964,8 +1953,8 @@ const EditorsInner = (props: EditorsInnerProps) => {
               // they would briefly hold placeholders pointing at neither ref.
               collabTransact(() => {
                 if (asset.ref && asset.ref !== prevRef) {
-                  renameAssetRefEverywhere(asset.kind, prevRef, asset.ref);
-                  renameAssetInPool(asset.kind, prevRef, asset);
+                  renameAssetRefEverywhere(prevRef, asset.ref);
+                  renameAssetInPool(prevRef, asset);
                   bridge?.localAssetUpdate(asset, prevRef);
                 } else {
                   updateAssetInPool(asset);

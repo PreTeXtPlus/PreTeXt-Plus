@@ -489,7 +489,6 @@ function App() {
       id: "asset-1",
       title: "Euler Formula",
       ref: "euler-formula",
-      kind: "image",
       isFile: true,
       url: demoImageDataUrl("Euler Formula", "#0e639c"),
       contentType: "image/svg+xml",
@@ -499,7 +498,6 @@ function App() {
       id: "asset-2",
       title: "Markdown Logo",
       ref: "markdown-logo",
-      kind: "image",
       isFile: true,
       url: demoImageDataUrl("Markdown Logo", "#0f766e"),
       contentType: "image/svg+xml",
@@ -509,7 +507,6 @@ function App() {
       id: "asset-3",
       title: "PreTeXt Logo",
       ref: "pretext-logo",
-      kind: "image",
       isFile: true,
       url: demoImageDataUrl("PreTeXt Logo", "#7c3aed"),
       contentType: "image/svg+xml",
@@ -660,7 +657,6 @@ function App() {
       // (no id = insert) and the server mints one on save.
       title: title?.trim() || file.name.replace(/\.[^.]+$/, ""),
       ref: file.name,
-      kind: "image",
       isFile: true,
       url: URL.createObjectURL(file),
       contentType: file.type,
@@ -687,28 +683,17 @@ function App() {
     }
   };
 
-  const handleCreateDoenet = async (title: string, ref: string): Promise<Asset> => {
-    console.log("Creating Doenet activity:", title, ref);
-    await new Promise((resolve) => setTimeout(resolve, 400));
-    // No `id` — same new-asset convention as uploads.
-    const newAsset: Asset = { title, ref, kind: "doenet" };
-    setProjectAssets((prev) => [...prev, newAsset]);
-    return newAsset;
-  };
-
-  // Assets are keyed by kind+ref, not id — a new asset may not have an id yet.
+  // Assets are keyed by ref, not id — a new asset may not have an id yet.
   const handleAssetRemove = (asset: Asset) => {
     console.log("Removing asset from project:", asset.ref);
-    setProjectAssets((prev) =>
-      prev.filter((a) => !(a.kind === asset.kind && a.ref === asset.ref)),
-    );
+    setProjectAssets((prev) => prev.filter((a) => a.ref !== asset.ref));
   };
 
   const handleAssetUpdate = async (asset: Asset) => {
     console.log("Updating asset:", asset.ref, asset.source);
     await new Promise((resolve) => setTimeout(resolve, 300));
     setProjectAssets((prev) =>
-      prev.map((a) => (a.kind === asset.kind && a.ref === asset.ref ? asset : a)),
+      prev.map((a) => (a.ref === asset.ref ? asset : a)),
     );
   };
 
@@ -806,7 +791,6 @@ function App() {
         onAssetInsert={handleAssetInsert}
         onAssetUpload={handleAssetUpload}
         onAssetFetchUrl={handleAssetFetchUrl}
-        onCreateDoenet={handleCreateDoenet}
         onAssetRemove={handleAssetRemove}
         onAssetUpdate={handleAssetUpdate}
         divisions={divisions}

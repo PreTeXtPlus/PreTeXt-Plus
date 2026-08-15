@@ -65,8 +65,6 @@ export interface AssetEditModalProps {
   onDuplicate?: (asset: Asset) => void | Promise<void>;
 }
 
-const KIND_TAG: Record<Asset["kind"], string> = { image: "image", doenet: "interactive" };
-
 const AssetEditModal = ({
   asset,
   projectAssets,
@@ -111,11 +109,7 @@ const AssetEditModal = ({
     sync();
   };
 
-  const embedCode = assetEmbedCode(
-    asset.kind,
-    refValue.trim() || prevRef,
-    activeFormat,
-  );
+  const embedCode = assetEmbedCode(refValue.trim() || prevRef, activeFormat);
 
   const handleCopy = () => {
     navigator.clipboard.writeText(embedCode).catch(() => {});
@@ -129,11 +123,11 @@ const AssetEditModal = ({
       setError("Reference can't be empty — it identifies the asset and is used by every embed of it.");
       return;
     }
-    // A ref must stay unique within its kind: it's the key every
-    // `<plus:KIND ref="..."/>` placeholder resolves against.
+    // A ref must stay unique project-wide: it's the key every
+    // `<plus:image ref="..."/>` placeholder resolves against.
     if (
       ref !== prevRef &&
-      projectAssets.some((a) => a.kind === asset.kind && a.ref === ref)
+      projectAssets.some((a) => a.ref === ref)
     ) {
       setError(`Reference "${ref}" is already used by another asset. Choose a unique reference.`);
       return;
@@ -174,8 +168,8 @@ const AssetEditModal = ({
   };
 
   const busy = isSaving || isDuplicating;
-  const showPreview = asset.kind === "image" && !!asset.url;
-  const canReplace = asset.kind === "image" && !!onReplace;
+  const showPreview = !!asset.url;
+  const canReplace = !!onReplace;
 
   return (
     <DialogOverlay onClick={(e) => e.target === e.currentTarget && onClose()}>
@@ -274,28 +268,24 @@ const AssetEditModal = ({
               </div>
             </div>
 
-            {asset.kind === "image" && (
-              <>
-                <DialogLabel htmlFor="am-edit-short-description">
-                  Short description (Alt text)
-                  <DialogHelperCopy>
-                    A brief plaintext description of the image for accessibility.
-                  </DialogHelperCopy>
-                </DialogLabel>
-                <input
-                  id="am-edit-short-description"
-                  type="text"
-                  className="text-[0.9rem] border border-slate-300 rounded py-1.5 px-2.5 bg-white outline-none text-slate-900 w-full focus:border-[#0e639c] focus:shadow-[0_0_0_2px_rgba(14,99,156,0.15)]"
-                  value={shortDescriptionValue}
-                  onChange={(e) => setShortDescriptionValue(e.target.value)}
-                  disabled={busy}
-                />
-                {!shortDescriptionValue.trim() && (
-                  <p className="m-0 py-[0.4rem] px-[0.6rem] bg-amber-100 text-amber-800 rounded text-[0.83rem]">
-                    ⚠ A short description is required for accessibility.
-                  </p>
-                )}
-              </>
+            <DialogLabel htmlFor="am-edit-short-description">
+              Short description (Alt text)
+              <DialogHelperCopy>
+                A brief plaintext description of the image for accessibility.
+              </DialogHelperCopy>
+            </DialogLabel>
+            <input
+              id="am-edit-short-description"
+              type="text"
+              className="text-[0.9rem] border border-slate-300 rounded py-1.5 px-2.5 bg-white outline-none text-slate-900 w-full focus:border-[#0e639c] focus:shadow-[0_0_0_2px_rgba(14,99,156,0.15)]"
+              value={shortDescriptionValue}
+              onChange={(e) => setShortDescriptionValue(e.target.value)}
+              disabled={busy}
+            />
+            {!shortDescriptionValue.trim() && (
+              <p className="m-0 py-[0.4rem] px-[0.6rem] bg-amber-100 text-amber-800 rounded text-[0.83rem]">
+                ⚠ A short description is required for accessibility.
+              </p>
             )}
 
             <details data-testid="asset-edit-advanced">
@@ -303,7 +293,7 @@ const AssetEditModal = ({
               <DialogLabel>
                 Additional source
                 <DialogHelperCopy>
-                  Inserted verbatim inside the generated <code>{`<${KIND_TAG[asset.kind]}>`}</code> element
+                  Inserted verbatim inside the generated <code>{"<image>"}</code> element
                   — e.g. <code>{"<description>...</description>"}</code>.
                 </DialogHelperCopy>
               </DialogLabel>
