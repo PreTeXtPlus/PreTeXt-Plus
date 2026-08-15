@@ -104,7 +104,7 @@ Only exports meant for consumers should be added here. Exported types include `E
 
 - All TypeScript; prefer typed over `any`.
 - Function components with hooks only.
-- CSS class names use the `pretext-plus-editor__` prefix (BEM-style) to avoid collision with consumer styles.
+- Styling is inline Tailwind CSS v4 utility classes in JSX `className` props — no per-component CSS files. Conditional/variant classes use `clsx`. Shared dialog chrome lives in reusable subcomponents (`src/components/Dialog.tsx`: `DialogOverlay`, `Dialog`, `DialogHeader`, `DialogButton`, etc.) rather than repeated className strings. Elements queried by tests carry a `data-testid` (see `src/components/toc/SectionItem.tsx`) instead of being selected by class name. The only literal CSS left in the package is `src/index.css` (the `@import "tailwindcss";` entry point, plus two rules that style Monaco's own internally-generated DOM and can't be expressed as a React `className`) and `src/App.css` (three demo-only selectors for `html`/`body`/`#root`, which are outside any JSX this package renders).
 - Visual-editor behavior and PreTeXt-tag support belong in `@pretextbook/visual-editor`, not here.
 - Tailwind CSS v4 is used internally; it is **pre-compiled** into `dist/web-editor.css`. Consumers import the CSS file and do not need Tailwind installed.
 
@@ -115,6 +115,6 @@ Only exports meant for consumers should be added here. Exported types include `E
 - `dist/index.js` — CommonJS bundle
 - `dist/index.es.js` — ES module bundle
 - `dist/index.d.ts` — TypeScript declarations
-- `dist/web-editor.css` — all styles (Tailwind + component CSS)
+- `dist/web-editor.css` — all styles (Tailwind-generated)
 
 Publishing is handled by `.github/workflows/publish.yml` (manual trigger, choose patch/minor/major bump).

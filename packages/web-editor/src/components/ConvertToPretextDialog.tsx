@@ -1,7 +1,21 @@
 import { useEffect } from "react";
 import { Editor } from "@monaco-editor/react";
 import type { SourceFormat } from "../types/editor";
-import "./dialog.css";
+import {
+  DialogOverlay,
+  Dialog,
+  DialogHeader,
+  DialogTitle,
+  DialogCopy,
+  DialogClose,
+  DialogContent,
+  DialogSection,
+  DialogLabelRow,
+  DialogLabel,
+  DialogEditorPane,
+  DialogActions,
+  DialogButton,
+} from "./Dialog";
 
 interface ConvertToPretextDialogProps {
   /** The current source to display (read-only) on the left. */
@@ -66,89 +80,68 @@ const ConvertToPretextDialog = ({
   const sourceLabel = FORMAT_LABELS[sourceFormat] ?? sourceFormat;
 
   return (
-    <div className="pretext-plus-editor__dialog-overlay" onClick={onClose}>
-      <div
-        className="pretext-plus-editor__dialog"
+    <DialogOverlay onClick={onClose}>
+      <Dialog
         role="dialog"
         aria-modal="true"
         aria-labelledby="pretext-plus-editor-convert-dialog-title"
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="pretext-plus-editor__dialog-header">
+        <DialogHeader>
           <div>
-            <h2
-              id="pretext-plus-editor-convert-dialog-title"
-              className="pretext-plus-editor__dialog-title"
-            >
+            <DialogTitle id="pretext-plus-editor-convert-dialog-title">
               Convert Division to PreTeXt
-            </h2>
-            <p className="pretext-plus-editor__dialog-copy">
+            </DialogTitle>
+            <DialogCopy>
               Add a new PreTeXt division using the converted source below. Your
               current {sourceLabel} division will remain unchanged.
-            </p>
+            </DialogCopy>
           </div>
-          <button
-            type="button"
-            className="pretext-plus-editor__dialog-close"
-            onClick={onClose}
-            aria-label="Close convert to PreTeXt dialog"
-          >
+          <DialogClose onClick={onClose} aria-label="Close convert to PreTeXt dialog">
             Close
-          </button>
-        </div>
+          </DialogClose>
+        </DialogHeader>
 
-        <div className="pretext-plus-editor__dialog-content">
-          <div className="pretext-plus-editor__dialog-section">
-            <div className="pretext-plus-editor__dialog-label-row">
-              <label className="pretext-plus-editor__dialog-label">
-                Current {sourceLabel} Source
-              </label>
-            </div>
-            <div className="pretext-plus-editor__dialog-editor">
+        <DialogContent>
+          <DialogSection>
+            <DialogLabelRow>
+              <DialogLabel>Current {sourceLabel} Source</DialogLabel>
+            </DialogLabelRow>
+            <DialogEditorPane>
               <Editor
                 options={editorOptions}
                 height="100%"
                 language={FORMAT_LANGUAGES[sourceFormat] ?? "plaintext"}
                 value={source}
               />
-            </div>
-          </div>
+            </DialogEditorPane>
+          </DialogSection>
 
-          <div className="pretext-plus-editor__dialog-section">
-            <div className="pretext-plus-editor__dialog-label-row">
-              <label className="pretext-plus-editor__dialog-label">
-                Converted PreTeXt
-              </label>
-            </div>
-            <div className="pretext-plus-editor__dialog-editor">
+          <DialogSection>
+            <DialogLabelRow>
+              <DialogLabel>Converted PreTeXt</DialogLabel>
+            </DialogLabelRow>
+            <DialogEditorPane>
               <Editor
                 options={editorOptions}
                 height="100%"
                 language="xml"
                 value={pretextSource}
               />
-            </div>
-          </div>
-        </div>
+            </DialogEditorPane>
+          </DialogSection>
+        </DialogContent>
 
-        <div className="pretext-plus-editor__dialog-actions">
-          <button
-            type="button"
-            className="pretext-plus-editor__dialog-button pretext-plus-editor__dialog-button--secondary"
-            onClick={onClose}
-          >
+        <DialogActions>
+          <DialogButton variant="secondary" onClick={onClose}>
             Cancel
-          </button>
-          <button
-            type="button"
-            className="pretext-plus-editor__dialog-button pretext-plus-editor__dialog-button--danger"
-            onClick={handleConfirm}
-          >
+          </DialogButton>
+          <DialogButton variant="danger" onClick={handleConfirm}>
             Create PreTeXt Division
-          </button>
-        </div>
-      </div>
-    </div>
+          </DialogButton>
+        </DialogActions>
+      </Dialog>
+    </DialogOverlay>
   );
 };
 

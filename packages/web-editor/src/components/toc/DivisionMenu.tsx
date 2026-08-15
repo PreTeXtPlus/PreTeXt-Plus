@@ -1,5 +1,6 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
+import clsx from "clsx";
 
 export interface DivisionMenuItem {
   label: string;
@@ -85,10 +86,10 @@ const DivisionMenu = ({ items }: DivisionMenuProps) => {
   if (items.length === 0) return null;
 
   return (
-    <div ref={containerRef} className="pretext-plus-editor__toc-div-menu">
+    <div ref={containerRef} className="relative shrink-0">
       <button
         type="button"
-        className="pretext-plus-editor__toc-div-menu-trigger"
+        className="shrink-0 py-px px-[5px] bg-transparent border border-transparent rounded-[3px] cursor-pointer text-[0.9rem] text-[#666] leading-[1.3] hover:bg-[#dde0e6] hover:border-[#b0b5c0] hover:text-[#111]"
         onClick={(e) => {
           e.stopPropagation();
           setOpen((v) => {
@@ -106,7 +107,7 @@ const DivisionMenu = ({ items }: DivisionMenuProps) => {
         createPortal(
           <div
             ref={popupRef}
-            className="pretext-plus-editor__toc-div-menu-popup pretext-plus-editor__toc-div-menu-popup--portal"
+            className="fixed right-0 z-[1000] flex flex-col overflow-hidden min-w-[170px] bg-white border border-[#ccc] rounded-[5px] shadow-[0_4px_14px_rgba(0,0,0,0.13)]"
             style={{
               // Hidden until measured so it can't flash at the wrong spot.
               visibility: pos ? "visible" : "hidden",
@@ -119,10 +120,12 @@ const DivisionMenu = ({ items }: DivisionMenuProps) => {
               <button
                 key={item.label}
                 type="button"
-                className={[
-                  "pretext-plus-editor__toc-div-menu-item",
-                  item.danger ? "pretext-plus-editor__toc-div-menu-item--danger" : "",
-                ].filter(Boolean).join(" ")}
+                className={clsx(
+                  "bg-transparent border-none py-[7px] px-3 font-inherit text-[0.82rem] cursor-pointer text-left whitespace-nowrap",
+                  item.danger
+                    ? "text-red-700 hover:bg-red-100 hover:text-red-600"
+                    : "text-[#333] hover:bg-[#e8edf8] hover:text-[#1a3a9c]",
+                )}
                 onClick={() => pick(item.onClick)}
               >
                 {item.label}

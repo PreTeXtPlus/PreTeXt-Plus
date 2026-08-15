@@ -1,11 +1,31 @@
 import { useEffect, useRef, useState } from "react";
 import { Editor } from "@monaco-editor/react";
 import type { OnMount } from "@monaco-editor/react";
+import clsx from "clsx";
 import type { Asset } from "../types/editor";
 import { useEditorStore } from "../store/hooks";
 import { assetEmbedCode } from "../sectionUtils";
-import "./dialog.css";
-import "./AssetManagerModal.css";
+import {
+  DialogOverlay,
+  Dialog,
+  DialogHeader,
+  DialogTitle,
+  DialogClose,
+  DialogContent,
+  DialogSection,
+  DialogLabel,
+  DialogHelperCopy,
+  DialogEditorPane,
+  DialogActions,
+  DialogButton,
+} from "./Dialog";
+
+const ACTION_BTN_CLASSES =
+  "text-[0.75rem] py-0.5 px-2 border rounded cursor-pointer leading-[1.5] whitespace-nowrap transition-colors duration-100";
+const ACTION_BTN_DEFAULT_CLASSES =
+  "border-slate-300 bg-white text-slate-700 hover:bg-slate-100 hover:border-slate-400";
+const ACTION_BTN_DONE_CLASSES =
+  "text-emerald-600 border-emerald-300 bg-emerald-50";
 
 const editorOptions = {
   automaticLayout: true,
@@ -158,67 +178,64 @@ const AssetEditModal = ({
   const canReplace = asset.kind === "image" && !!onReplace;
 
   return (
-    <div
-      className="pretext-plus-editor__dialog-overlay"
-      onClick={(e) => e.target === e.currentTarget && onClose()}
-    >
-      <div
-        className="pretext-plus-editor__dialog"
+    <DialogOverlay onClick={(e) => e.target === e.currentTarget && onClose()}>
+      <Dialog
         role="dialog"
         aria-modal="true"
         aria-label={`Manage asset ${asset.title}`}
       >
-        <div className="pretext-plus-editor__dialog-header">
-          <h2 className="pretext-plus-editor__dialog-title">Manage asset</h2>
-          <button
-            type="button"
-            className="pretext-plus-editor__dialog-close"
-            onClick={onClose}
-            aria-label="Close"
-          >
+        <DialogHeader>
+          <DialogTitle>Manage asset</DialogTitle>
+          <DialogClose onClick={onClose} aria-label="Close">
             ✕
-          </button>
-        </div>
+          </DialogClose>
+        </DialogHeader>
 
-        <div className="pretext-plus-editor__am-embed-row">
-          <label className="pretext-plus-editor__dialog-label">Copy/paste this code to embed in your document:</label>
+        <div className="flex items-center gap-2 mt-[0.35rem] mb-3">
+          <DialogLabel>Copy/paste this code to embed in your document:</DialogLabel>
           <button
             type="button"
-            className={`pretext-plus-editor__am-action-btn${copied ? " pretext-plus-editor__am-action-btn--done" : ""}`}
+            className={clsx(
+              ACTION_BTN_CLASSES,
+              copied ? ACTION_BTN_DONE_CLASSES : ACTION_BTN_DEFAULT_CLASSES,
+            )}
             onClick={handleCopy}
             title="Copy embed code to clipboard"
           >
             {copied ? "Copied!" : "Copy"}
           </button>
-          <code className="pretext-plus-editor__am-embed-code">{embedCode}</code>
+          <code className="flex-1 min-w-0 font-mono text-[0.78rem] text-slate-900 bg-slate-100 border border-slate-200 rounded py-1 px-2 overflow-x-auto whitespace-nowrap">
+            {embedCode}
+          </code>
         </div>
 
-        <div
+        <DialogContent
+          single
           ref={contentRef}
-          className="pretext-plus-editor__dialog-content pretext-plus-editor__dialog-content--single pretext-plus-editor__am-edit-content"
+          className="flex flex-col"
         >
-          <div className="pretext-plus-editor__dialog-section">
-            <div className="pretext-plus-editor__am-edit-grid">
+          <DialogSection>
+            <div className="grid grid-cols-2 gap-5 items-start shrink-0 max-[700px]:grid-cols-1 max-[700px]:gap-2">
               {/* Left column: preview, replace, embed code */}
-              <div className="pretext-plus-editor__am-edit-col">
-              <label className="pretext-plus-editor__dialog-label">Asset preview:</label>
+              <div className="flex flex-col gap-2 min-w-0">
+              <DialogLabel>Asset preview:</DialogLabel>
                 {showPreview && (
                   <img
                     src={asset.url}
                     alt={titleValue}
-                    className="pretext-plus-editor__am-url-preview"
+                    className="max-w-full max-h-[200px] object-contain border border-slate-200 rounded bg-slate-50"
                     onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = "none"; }}
                   />
                 )}
 
                 {canReplace && (
-                  <div className="pretext-plus-editor__am-replace-row">
-                    <span className="pretext-plus-editor__am-row-ref">
+                  <div className="flex justify-end items-center gap-2 mb-2">
+                    <span className="text-[0.72rem] text-slate-400 font-mono whitespace-nowrap overflow-hidden text-ellipsis">
                       {asset?.contentType && `${asset.contentType}`}
                     </span>
                     <button
                       type="button"
-                      className="pretext-plus-editor__am-action-btn"
+                      className={clsx(ACTION_BTN_CLASSES, ACTION_BTN_DEFAULT_CLASSES)}
                       onClick={() => onReplace?.(asset)}
                       disabled={busy}
                       title="Choose or upload a different asset to use here"
@@ -230,68 +247,69 @@ const AssetEditModal = ({
               </div>
 
               {/* Right column: title and id fields, then embed code */}
-              <div className="pretext-plus-editor__am-edit-col">
-                <label className="pretext-plus-editor__dialog-label" htmlFor="am-edit-title">Title</label>
+              <div className="flex flex-col gap-2 min-w-0">
+                <DialogLabel htmlFor="am-edit-title">Title</DialogLabel>
                 <input
                   id="am-edit-title"
                   type="text"
-                  className="pretext-plus-editor__am-input"
+                  className="text-[0.9rem] border border-slate-300 rounded py-1.5 px-2.5 bg-white outline-none text-slate-900 w-full focus:border-[#0e639c] focus:shadow-[0_0_0_2px_rgba(14,99,156,0.15)]"
                   value={titleValue}
                   onChange={(e) => setTitleValue(e.target.value)}
                   disabled={busy}
                 />
 
-                <label className="pretext-plus-editor__dialog-label" htmlFor="am-edit-ref">Id</label>
+                <DialogLabel htmlFor="am-edit-ref">Id</DialogLabel>
                 <input
                   id="am-edit-ref"
                   type="text"
-                  className="pretext-plus-editor__am-input"
+                  className="text-[0.9rem] border border-slate-300 rounded py-1.5 px-2.5 bg-white outline-none text-slate-900 w-full focus:border-[#0e639c] focus:shadow-[0_0_0_2px_rgba(14,99,156,0.15)]"
                   value={refValue}
                   onChange={(e) => setRefValue(e.target.value)}
                   disabled={busy}
                 />
-                <p className="pretext-plus-editor__dialog-helper-copy">
+                <DialogHelperCopy as="p">
                   Used in the embed code. Changing it updates every reference to this
                   asset already in your document.
-                </p>
+                </DialogHelperCopy>
               </div>
             </div>
 
             {asset.kind === "image" && (
               <>
-                <label className="pretext-plus-editor__dialog-label" htmlFor="am-edit-short-description">
+                <DialogLabel htmlFor="am-edit-short-description">
                   Short description (Alt text)
-                  <span className="pretext-plus-editor__dialog-helper-copy">
+                  <DialogHelperCopy>
                     A brief plaintext description of the image for accessibility.
-                  </span>
-                </label>
+                  </DialogHelperCopy>
+                </DialogLabel>
                 <input
                   id="am-edit-short-description"
                   type="text"
-                  className="pretext-plus-editor__am-input"
+                  className="text-[0.9rem] border border-slate-300 rounded py-1.5 px-2.5 bg-white outline-none text-slate-900 w-full focus:border-[#0e639c] focus:shadow-[0_0_0_2px_rgba(14,99,156,0.15)]"
                   value={shortDescriptionValue}
                   onChange={(e) => setShortDescriptionValue(e.target.value)}
                   disabled={busy}
                 />
                 {!shortDescriptionValue.trim() && (
-                  <p className="pretext-plus-editor__am-warning">
+                  <p className="m-0 py-[0.4rem] px-[0.6rem] bg-amber-100 text-amber-800 rounded text-[0.83rem]">
                     ⚠ A short description is required for accessibility.
                   </p>
                 )}
               </>
             )}
 
-            <details className="pretext-plus-editor__advanced-details">
+            <details data-testid="asset-edit-advanced">
               <summary>Advanced</summary>
-              <label className="pretext-plus-editor__dialog-label">
+              <DialogLabel>
                 Additional source
-                <span className="pretext-plus-editor__dialog-helper-copy">
+                <DialogHelperCopy>
                   Inserted verbatim inside the generated <code>{`<${KIND_TAG[asset.kind]}>`}</code> element
                   — e.g. <code>{"<description>...</description>"}</code>.
-                </span>
-              </label>
-              <div
-                className="pretext-plus-editor__dialog-editor pretext-plus-editor__am-edit-editor"
+                </DialogHelperCopy>
+              </DialogLabel>
+              <DialogEditorPane
+                data-testid="asset-edit-source-editor"
+                className="flex-none min-h-0"
                 style={{ height: editorHeight }}
               >
                 <Editor
@@ -302,43 +320,37 @@ const AssetEditModal = ({
                   onMount={handleEditorMount}
                   onChange={(value) => setSourceValue(value ?? "")}
                 />
-              </div>
-              {error && <p className="pretext-plus-editor__am-error">{error}</p>}
+              </DialogEditorPane>
+              {error && (
+                <p className="m-0 py-[0.4rem] px-[0.6rem] bg-[#fde8e8] text-red-700 rounded text-[0.83rem]">
+                  {error}
+                </p>
+              )}
             </details>
-          </div>
-        </div>
+          </DialogSection>
+        </DialogContent>
 
-        <div className="pretext-plus-editor__dialog-actions">
+        <DialogActions>
           {onDuplicate && (
-            <button
-              type="button"
-              className="pretext-plus-editor__dialog-button pretext-plus-editor__dialog-button--secondary pretext-plus-editor__am-duplicate-btn"
+            <DialogButton
+              variant="secondary"
+              className="mr-auto"
               onClick={handleDuplicate}
               disabled={busy}
               title="Create a copy of this asset under a new reference"
             >
               {isDuplicating ? "Duplicating…" : "Duplicate"}
-            </button>
+            </DialogButton>
           )}
-          <button
-            type="button"
-            className="pretext-plus-editor__dialog-button pretext-plus-editor__dialog-button--secondary"
-            onClick={onClose}
-            disabled={busy}
-          >
+          <DialogButton variant="secondary" onClick={onClose} disabled={busy}>
             Cancel
-          </button>
-          <button
-            type="button"
-            className="pretext-plus-editor__dialog-button"
-            onClick={handleSave}
-            disabled={busy}
-          >
+          </DialogButton>
+          <DialogButton onClick={handleSave} disabled={busy}>
             {isSaving ? "Saving…" : "Save"}
-          </button>
-        </div>
-      </div>
-    </div>
+          </DialogButton>
+        </DialogActions>
+      </Dialog>
+    </DialogOverlay>
   );
 };
 

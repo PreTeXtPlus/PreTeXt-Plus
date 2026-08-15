@@ -1,3 +1,4 @@
+import clsx from "clsx";
 import type { Division, DivisionType } from "../../types/sections";
 import SectionEditForm from "./SectionEditForm";
 import DivisionMenu, { type DivisionMenuItem } from "./DivisionMenu";
@@ -51,20 +52,23 @@ const SectionItem = ({
 
   return (
     <li
-      className={[
-        "pretext-plus-editor__toc-item",
-        `pretext-plus-editor__toc-item--${division.type}`,
-        isActive ? "pretext-plus-editor__toc-item--active" : "",
-        isEditing ? "pretext-plus-editor__toc-item--editing" : "",
-      ].filter(Boolean).join(" ")}
+      data-testid={`toc-item-${division.xmlId}`}
+      className={clsx(
+        "group relative flex flex-col border-l-[3px] border-transparent cursor-default",
+        isActive && "border-l-blue-600",
+        isEditing && "bg-[#f0f4ff]",
+      )}
     >
       <div
-        className="pretext-plus-editor__toc-item-row"
+        className={clsx(
+          "flex items-center gap-0.5 px-1 min-h-8",
+          isActive ? "bg-[#e0e8ff]" : "group-hover:bg-[#e8eaf0]",
+        )}
         style={depth > 0 ? { paddingLeft: `${depth * 14}px` } : undefined}
       >
         <button
           type="button"
-          className="pretext-plus-editor__toc-expand-btn"
+          className="shrink-0 py-0 px-0.5 bg-transparent border-none rounded-[3px] cursor-pointer text-[0.7rem] leading-none text-[#aaa] w-4 text-center hover:text-[#555] hover:bg-[#dde0e6]"
           onClick={onToggleExpand}
           aria-label={isExpanded ? "Collapse" : "Expand"}
           tabIndex={hasChildren ? 0 : -1}
@@ -75,22 +79,33 @@ const SectionItem = ({
 
         <button
           type="button"
-          className="pretext-plus-editor__toc-select"
+          className={clsx(
+            "flex-1 min-w-0 bg-transparent border-none cursor-pointer text-left text-[#333] py-1 px-0.5 overflow-hidden",
+            isActive && "font-semibold",
+          )}
           onClick={onSelect}
           aria-current={isActive ? "true" : undefined}
           title={TYPE_FULL_LABELS[division.type] ?? division.type}
         >
-          <span className="pretext-plus-editor__toc-title">
+          <span
+            data-testid="toc-title"
+            className="block overflow-hidden text-ellipsis whitespace-nowrap text-[0.83rem]"
+          >
             {division.title || untitledFallback || <em>Untitled</em>}
           </span>
           {division.xmlId && (
-            <span className="pretext-plus-editor__toc-xmlid">
+            <span className="block overflow-hidden text-ellipsis whitespace-nowrap text-[0.68rem] font-normal font-mono text-slate-400">
               {division.xmlId}
             </span>
           )}
         </button>
 
-        <div className="pretext-plus-editor__toc-actions">
+        <div
+          className={clsx(
+            "flex items-center shrink-0 opacity-0 pointer-events-none transition-opacity duration-100 group-hover:opacity-100 group-hover:pointer-events-auto",
+            isActive && "opacity-100 pointer-events-auto",
+          )}
+        >
           <DivisionMenu items={menuItems} />
         </div>
       </div>

@@ -1,6 +1,18 @@
 import { useEffect } from "react";
 import { Editor } from "@monaco-editor/react";
-import "./dialog.css";
+import {
+  DialogOverlay,
+  Dialog,
+  DialogHeader,
+  DialogTitle,
+  DialogCopy,
+  DialogClose,
+  DialogContent,
+  DialogSection,
+  DialogEditorPane,
+  DialogActions,
+  DialogButton,
+} from "./Dialog";
 
 interface FullSourceModalProps {
   /** The full, assembled PreTeXt source for the whole project (read-only). */
@@ -42,68 +54,52 @@ const FullSourceModal = ({ source, onClose }: FullSourceModalProps) => {
   };
 
   return (
-    <div className="pretext-plus-editor__dialog-overlay" onClick={onClose}>
-      <div
-        className="pretext-plus-editor__dialog"
+    <DialogOverlay onClick={onClose}>
+      <Dialog
         role="dialog"
         aria-modal="true"
         aria-labelledby="pretext-plus-editor-full-source-title"
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="pretext-plus-editor__dialog-header">
+        <DialogHeader>
           <div>
-            <h2
-              id="pretext-plus-editor-full-source-title"
-              className="pretext-plus-editor__dialog-title"
-            >
+            <DialogTitle id="pretext-plus-editor-full-source-title">
               Full Document Source
-            </h2>
-            <p className="pretext-plus-editor__dialog-copy">
+            </DialogTitle>
+            <DialogCopy>
               The complete assembled PreTeXt source for this project, with every
               division and asset reference expanded. This view is read-only.
-            </p>
+            </DialogCopy>
           </div>
-          <button
-            type="button"
-            className="pretext-plus-editor__dialog-close"
+          <DialogClose
             onClick={onClose}
             aria-label="Close full document source dialog"
           >
             Close
-          </button>
-        </div>
+          </DialogClose>
+        </DialogHeader>
 
-        <div className="pretext-plus-editor__dialog-content pretext-plus-editor__dialog-content--single">
-          <div className="pretext-plus-editor__dialog-section">
-            <div className="pretext-plus-editor__dialog-editor">
+        <DialogContent single>
+          <DialogSection>
+            <DialogEditorPane>
               <Editor
                 options={editorOptions}
                 height="100%"
                 language="xml"
                 value={source}
               />
-            </div>
-          </div>
-        </div>
+            </DialogEditorPane>
+          </DialogSection>
+        </DialogContent>
 
-        <div className="pretext-plus-editor__dialog-actions">
-          <button
-            type="button"
-            className="pretext-plus-editor__dialog-button pretext-plus-editor__dialog-button--secondary"
-            onClick={handleCopy}
-          >
+        <DialogActions>
+          <DialogButton variant="secondary" onClick={handleCopy}>
             Copy to Clipboard
-          </button>
-          <button
-            type="button"
-            className="pretext-plus-editor__dialog-button"
-            onClick={onClose}
-          >
-            Done
-          </button>
-        </div>
-      </div>
-    </div>
+          </DialogButton>
+          <DialogButton onClick={onClose}>Done</DialogButton>
+        </DialogActions>
+      </Dialog>
+    </DialogOverlay>
   );
 };
 

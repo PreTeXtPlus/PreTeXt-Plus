@@ -1,4 +1,5 @@
 import { Fragment, useState } from "react";
+import clsx from "clsx";
 import type { Division } from "../../types/sections";
 import type { AssetKind } from "../../types/editor";
 import SectionItem from "./SectionItem";
@@ -290,7 +291,7 @@ const ArticleToc = ({ onOpenAssetPicker, hideAssets, readOnly }: ArticleTocProps
   // ── Render ───────────────────────────────────────────────────────────────────
   return (
     <>
-      <ul className="pretext-plus-editor__toc-list" role="list">
+      <ul className="list-none m-0 overflow-y-auto flex-1" role="list">
         {/* Root division — depth 0, always visible */}
         {rootDivision && (
           <SectionItem
@@ -387,11 +388,11 @@ const ArticleToc = ({ onOpenAssetPicker, hideAssets, readOnly }: ArticleTocProps
 
       {/* Unplaced divisions */}
       {orphanRoots.length > 0 && (
-        <div className="pretext-plus-editor__toc-orphans">
-          <div className="pretext-plus-editor__toc-orphans-heading">
+        <div className="shrink-0 border-t-2 border-dashed border-[#e2c97e] bg-amber-50">
+          <div className="text-[0.7rem] font-bold uppercase tracking-[0.06em] text-amber-800 pt-[5px] px-2.5 pb-0.5">
             Unplaced divisions
           </div>
-          <ul className="pretext-plus-editor__toc-list">
+          <ul className="list-none m-0 flex-initial overflow-y-visible">
             {orphanRoots.map((orphan) => {
               const subtree = divisions
                 ? buildDivisionTree(divisions, orphan.xmlId)
@@ -488,20 +489,20 @@ const ArticleToc = ({ onOpenAssetPicker, hideAssets, readOnly }: ArticleTocProps
       {/* Asset refs — kept separate from divisions, folded by default */}
       {!hideAssets && (
         <>
-          <div className="pretext-plus-editor__toc-assets">
-            <div className="pretext-plus-editor__toc-assets-header">
+          <div className="shrink-0 border-t border-[#dde0e6] flex flex-col max-h-[220px]">
+            <div className="flex items-center justify-between py-1 pl-1 pr-1.5 shrink-0">
               <button
                 type="button"
-                className="pretext-plus-editor__toc-assets-toggle"
+                className="flex items-center gap-1 bg-transparent border-none cursor-pointer py-0.5 px-1 font-[inherit] flex-1 min-w-0 text-left rounded-[3px] hover:bg-[#e3e6ec]"
                 onClick={() => setAssetsExpanded((v) => !v)}
                 aria-expanded={assetsExpanded}
               >
-                <span className="pretext-plus-editor__toc-assets-chevron">
+                <span className="text-[0.7rem] text-[#888] w-2.5 shrink-0">
                   {assetsExpanded ? "▾" : "▸"}
                 </span>
                 <span>Assets</span>
                 {assetView.length > 0 && (
-                  <span className="pretext-plus-editor__toc-assets-count">
+                  <span className="text-[0.68rem] font-semibold text-white bg-slate-400 rounded-full px-[5px] py-0 leading-[1.4] shrink-0">
                     {assetView.length}
                   </span>
                 )}
@@ -509,14 +510,14 @@ const ArticleToc = ({ onOpenAssetPicker, hideAssets, readOnly }: ArticleTocProps
             </div>
 
             {assetsExpanded && (
-              <div className="pretext-plus-editor__toc-assets-body">
+              <div className="overflow-y-auto flex-1 min-h-0">
                 {assetView.length === 0 ? (
-                  <p className="pretext-plus-editor__toc-assets-empty">
+                  <p className="m-0 py-2 px-3 text-slate-400 text-[0.78rem]">
                     No assets in this project yet.{" "}
                     {onOpenAssetPicker && (
                       <button
                         type="button"
-                        className="pretext-plus-editor__toc-assets-add-link"
+                        className="bg-transparent border-none text-blue-600 cursor-pointer font-[inherit] text-[0.78rem] p-0 hover:underline"
                         onClick={() => onOpenAssetPicker("add")}
                       >
                         Add one
@@ -524,78 +525,96 @@ const ArticleToc = ({ onOpenAssetPicker, hideAssets, readOnly }: ArticleTocProps
                     )}
                   </p>
                 ) : (
-                  <div className="pretext-plus-editor__toc-assets-groups">
+                  <div className="flex flex-col">
                     {groupedAssetRows.map(({ kind, rows }) => (
                       <div key={kind}>
-                        <div className="pretext-plus-editor__toc-assets-group-header">
+                        <div className="flex items-center gap-1 pt-1 px-2 pb-0.5 text-[0.7rem] font-semibold text-slate-500 uppercase tracking-[0.04em]">
                           {ASSET_KIND_LABELS[kind]}
                         </div>
-                        <ul className="pretext-plus-editor__toc-assets-list">
-                          {rows.map((row) => (
-                            <li
-                              key={row.ref}
-                              className={[
-                                "pretext-plus-editor__toc-asset-item",
-                                row.status === "unlinked" ? "pretext-plus-editor__toc-asset-item--unlinked" : "",
-                                row.status === "unused" ? "pretext-plus-editor__toc-asset-item--unused" : "",
-                                row.asset && row.kind === "image" && !row.asset.shortDescription?.trim()
-                                  ? "pretext-plus-editor__toc-asset-item--missing-short-description"
-                                  : "",
-                                duplicatingRef === row.ref ? "pretext-plus-editor__toc-asset-item--busy" : "",
-                              ].filter(Boolean).join(" ")}
-                            >
-                              {(row.asset?.thumbnailUrl || row.asset?.url) ? (
-                                <img
-                                  src={row.asset?.thumbnailUrl || row.asset.url}
-                                  className="pretext-plus-editor__toc-asset-img"
-                                  onClick={() => openAssetRow(row)}
-                                />
-                              ) : (
-                                <span
-                                  className="pretext-plus-editor__toc-asset-img pretext-plus-editor__toc-asset-img--placeholder"
-                                  onClick={() => openAssetRow(row)}
-                                  title={row.status === "unlinked" ? "No asset — click to link" : undefined}
-                                  aria-hidden="true"
-                                >
-                                  {row.status === "unlinked" ? "⚠" : "🖼"}
-                                </span>
-                              )}
-                              <button
-                                type="button"
-                                className="pretext-plus-editor__toc-asset-name"
-                                onClick={() => openAssetRow(row)}
-                                title={
-                                  row.status === "unlinked"
-                                    ? "No asset for this reference — click to link or create one"
-                                    : "Manage asset"
-                                }
+                        <ul className="list-none m-0 pt-0 px-0 pb-1">
+                          {rows.map((row) => {
+                            const isUnlinked = row.status === "unlinked";
+                            const isMissingShortDescription =
+                              row.asset &&
+                              row.kind === "image" &&
+                              !row.asset.shortDescription?.trim();
+                            const isBusy = duplicatingRef === row.ref;
+                            return (
+                              <li
+                                key={row.ref}
+                                className={clsx(
+                                  "group flex items-center gap-1.5 py-[3px] pr-1.5 pl-4 min-h-7 hover:bg-[#e8eaf0]",
+                                  isBusy && "opacity-60 pointer-events-none",
+                                )}
                               >
-                                <span className="pretext-plus-editor__toc-asset-label">
-                                  {row.asset?.title ?? row.ref}
-                                </span>
-                                <span className="pretext-plus-editor__toc-asset-filename">
-                                  {row.status === "unlinked"
-                                    ? `${row.ref} — needs asset`
-                                    : row.status === "unused"
-                                      ? `${row.ref} — not placed`
-                                      : row.ref}
-                                  {row.asset?.contentType && ` · ${row.asset.contentType}`}
-                                </span>
-                              </button>
-                              <div className="pretext-plus-editor__toc-actions">
-                                {duplicatingRef === row.ref ? (
-                                  <span
-                                    className="pretext-plus-editor__toc-asset-spinner"
-                                    role="status"
-                                    aria-label="Duplicating asset"
-                                    title="Duplicating…"
+                                {(row.asset?.thumbnailUrl || row.asset?.url) ? (
+                                  <img
+                                    src={row.asset?.thumbnailUrl || row.asset.url}
+                                    className="h-[30px] cursor-pointer"
+                                    onClick={() => openAssetRow(row)}
                                   />
                                 ) : (
-                                  <DivisionMenu items={assetMenuItems(row)} />
+                                  <span
+                                    className={clsx(
+                                      "inline-flex items-center justify-center w-[30px] h-[30px] cursor-pointer text-[0.85rem] rounded bg-[#eef2f7] text-slate-400",
+                                      isUnlinked && "bg-amber-100 text-amber-700",
+                                    )}
+                                    onClick={() => openAssetRow(row)}
+                                    title={row.status === "unlinked" ? "No asset — click to link" : undefined}
+                                    aria-hidden="true"
+                                  >
+                                    {row.status === "unlinked" ? "⚠" : "🖼"}
+                                  </span>
                                 )}
-                              </div>
-                            </li>
-                          ))}
+                                <button
+                                  type="button"
+                                  className="flex-1 min-w-0 flex flex-col items-start gap-px overflow-hidden border-none bg-transparent p-0 font-[inherit] text-left cursor-pointer"
+                                  onClick={() => openAssetRow(row)}
+                                  title={
+                                    row.status === "unlinked"
+                                      ? "No asset for this reference — click to link or create one"
+                                      : "Manage asset"
+                                  }
+                                >
+                                  <span className="text-[0.78rem] text-slate-700 overflow-hidden text-ellipsis whitespace-nowrap">
+                                    {row.asset?.title ?? row.ref}
+                                  </span>
+                                  <span
+                                    className={clsx(
+                                      "text-[0.68rem] font-mono overflow-hidden text-ellipsis whitespace-nowrap",
+                                      isUnlinked || isMissingShortDescription
+                                        ? "text-amber-700"
+                                        : "text-slate-400",
+                                    )}
+                                  >
+                                    {row.status === "unlinked"
+                                      ? `${row.ref} — needs asset`
+                                      : row.status === "unused"
+                                        ? `${row.ref} — not placed`
+                                        : row.ref}
+                                    {row.asset?.contentType && ` · ${row.asset.contentType}`}
+                                  </span>
+                                </button>
+                                <div
+                                  className={clsx(
+                                    "flex items-center shrink-0 opacity-0 pointer-events-none transition-opacity duration-100 group-hover:opacity-100 group-hover:pointer-events-auto",
+                                    isBusy && "opacity-100 pointer-events-auto",
+                                  )}
+                                >
+                                  {isBusy ? (
+                                    <span
+                                      className="inline-block w-[14px] h-[14px] border-2 border-slate-300 border-t-emerald-500 rounded-full animate-[spin_0.8s_linear_infinite]"
+                                      role="status"
+                                      aria-label="Duplicating asset"
+                                      title="Duplicating…"
+                                    />
+                                  ) : (
+                                    <DivisionMenu items={assetMenuItems(row)} />
+                                  )}
+                                </div>
+                              </li>
+                            );
+                          })}
                         </ul>
                       </div>
                     ))}
@@ -606,17 +625,19 @@ const ArticleToc = ({ onOpenAssetPicker, hideAssets, readOnly }: ArticleTocProps
           </div>
 
           {onOpenAssetPicker && (
-            <div className="pretext-plus-editor__toc-assets-btns">
+            <div className="block w-full bg-transparent border-none border-t border-[#dde0e6] py-[7px] px-2.5 font-[inherit] text-[0.78rem] text-left shrink-0">
               <button
                 type="button"
-                className="pretext-plus-editor__toc-assets-btn"
+                data-testid="toc-assets-btn"
+                className="bg-transparent border-none text-blue-600 cursor-pointer py-0 px-0.5 hover:bg-blue-50 hover:underline"
                 onClick={() => onOpenAssetPicker()}
               >
                 Manage
               </button>
               <button
                 type="button"
-                className="pretext-plus-editor__toc-assets-btn"
+                data-testid="toc-assets-btn"
+                className="bg-transparent border-none text-blue-600 cursor-pointer py-0 px-0.5 hover:bg-blue-50 hover:underline"
                 onClick={() => onOpenAssetPicker("add")}
               >
                 Add

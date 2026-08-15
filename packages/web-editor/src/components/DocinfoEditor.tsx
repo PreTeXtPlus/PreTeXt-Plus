@@ -1,6 +1,23 @@
 import { useEffect, useState } from "react";
 import { Editor } from "@monaco-editor/react";
-import "./dialog.css";
+import {
+  DialogOverlay,
+  Dialog,
+  DialogHeader,
+  DialogTitle,
+  DialogCopy,
+  DialogCheckboxRow,
+  DialogLinkButton,
+  DialogClose,
+  DialogCommonModeBanner,
+  DialogTabBar,
+  DialogTab,
+  DialogContent,
+  DialogSection,
+  DialogEditorPane,
+  DialogActions,
+  DialogButton,
+} from "./Dialog";
 
 export interface DocinfoEditorCloseValue {
   /** The project-specific docinfo XML from this editor session. */
@@ -248,34 +265,22 @@ const DocinfoEditor = ({
       : setOther;
 
   return (
-    <div
-      className="pretext-plus-editor__dialog-overlay"
-      onClick={() => onClose(undefined)}
-    >
-      <div
-        className={`pretext-plus-editor__dialog${
-          isEditingCommonDocinfo
-            ? " pretext-plus-editor__dialog--common-mode"
-            : ""
-        }`}
+    <DialogOverlay onClick={() => onClose(undefined)}>
+      <Dialog
+        commonMode={isEditingCommonDocinfo}
         role="dialog"
         aria-modal="true"
         aria-labelledby="pretext-plus-editor-docinfo-dialog-title"
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="pretext-plus-editor__dialog-header">
+        <DialogHeader>
           <div>
-            <h2
-              id="pretext-plus-editor-docinfo-dialog-title"
-              className="pretext-plus-editor__dialog-title"
-            >
+            <DialogTitle id="pretext-plus-editor-docinfo-dialog-title">
               Edit docinfo/preamble elements
-            </h2>
-            <p className="pretext-plus-editor__dialog-copy">
-              {TAB_DESCRIPTIONS[activeTab]}
-            </p>
+            </DialogTitle>
+            <DialogCopy>{TAB_DESCRIPTIONS[activeTab]}</DialogCopy>
             {showCommonDocinfoControls ? (
-              <label className="pretext-plus-editor__dialog-checkbox-row">
+              <DialogCheckboxRow>
                 <input
                   type="checkbox"
                   checked={useCommonDocinfo}
@@ -284,61 +289,52 @@ const DocinfoEditor = ({
                   }
                 />
                 <span>Use my common docinfo/preamble.</span>
-              </label>
+              </DialogCheckboxRow>
             ) : null}
             {showCommonDocinfoControls && !useCommonDocinfo ? (
-              <div className="pretext-plus-editor__dialog-common-import-row">
-                <button
-                  type="button"
-                  className="pretext-plus-editor__dialog-link-button"
+              <div className="mt-[0.4rem]">
+                <DialogLinkButton
                   onClick={handleImportCommonDocinfo}
                   disabled={!canImportCommonDocinfo}
                 >
                   Import common docinfo
-                </button>
+                </DialogLinkButton>
               </div>
             ) : null}
           </div>
-          <button
-            type="button"
-            className="pretext-plus-editor__dialog-close"
+          <DialogClose
             onClick={() => onClose(undefined)}
             aria-label="Close docinfo editor"
           >
             Close
-          </button>
-        </div>
+          </DialogClose>
+        </DialogHeader>
 
         {isEditingCommonDocinfo ? (
-          <div className="pretext-plus-editor__dialog-common-mode-banner">
+          <DialogCommonModeBanner>
             You are editing your shared common docinfo/preamble. These values
             will apply to all projects that use this option.
-          </div>
+          </DialogCommonModeBanner>
         ) : null}
 
         <>
-          <div className="pretext-plus-editor__dialog-tab-bar" role="tablist">
+          <DialogTabBar role="tablist">
             {(["macros", "preamble", "other"] as DocinfoTab[]).map((tab) => (
-              <button
+              <DialogTab
                 key={tab}
-                type="button"
                 role="tab"
                 aria-selected={activeTab === tab}
-                className={`pretext-plus-editor__dialog-tab${
-                  activeTab === tab
-                    ? " pretext-plus-editor__dialog-tab--active"
-                    : ""
-                }`}
+                active={activeTab === tab}
                 onClick={() => setActiveTab(tab)}
               >
                 {TAB_LABELS[tab]}
-              </button>
+              </DialogTab>
             ))}
-          </div>
+          </DialogTabBar>
 
-          <div className="pretext-plus-editor__dialog-content pretext-plus-editor__dialog-content--single">
-            <div className="pretext-plus-editor__dialog-section">
-              <div className="pretext-plus-editor__dialog-editor">
+          <DialogContent single>
+            <DialogSection>
+              <DialogEditorPane>
                 <Editor
                   key={`${activeTab}-${
                     useCommonDocinfo ? "common" : "project"
@@ -353,28 +349,18 @@ const DocinfoEditor = ({
                   value={currentValue}
                   onChange={(value) => currentSetter(value ?? "")}
                 />
-              </div>
-            </div>
-          </div>
+              </DialogEditorPane>
+            </DialogSection>
+          </DialogContent>
         </>
-        <div className="pretext-plus-editor__dialog-actions">
-          <button
-            type="button"
-            className="pretext-plus-editor__dialog-button pretext-plus-editor__dialog-button--secondary"
-            onClick={() => onClose(undefined)}
-          >
+        <DialogActions>
+          <DialogButton variant="secondary" onClick={() => onClose(undefined)}>
             Cancel
-          </button>
-          <button
-            type="button"
-            className="pretext-plus-editor__dialog-button"
-            onClick={handleSave}
-          >
-            Save
-          </button>
-        </div>
-      </div>
-    </div>
+          </DialogButton>
+          <DialogButton onClick={handleSave}>Save</DialogButton>
+        </DialogActions>
+      </Dialog>
+    </DialogOverlay>
   );
 };
 

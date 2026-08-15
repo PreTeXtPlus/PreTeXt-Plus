@@ -1,7 +1,18 @@
 import { useId, useMemo, useState, type FormEvent } from "react";
 import type { FeedbackSubmission, SourceFormat } from "../types/editor";
-import "./dialog.css";
-import "./FeedbackLink.css";
+import {
+  DialogOverlay,
+  Dialog,
+  DialogHeader,
+  DialogTitle,
+  DialogCopy,
+  DialogClose,
+  DialogActions,
+  DialogButton,
+} from "./Dialog";
+
+const FEEDBACK_TRIGGER_CLASSES =
+  "border-none bg-transparent text-[#0e639c] cursor-pointer text-[0.85rem] font-semibold p-0 hover:underline";
 
 interface FeedbackLinkProps {
   /** Link text shown where the trigger is rendered. */
@@ -103,57 +114,47 @@ const FeedbackLink = ({
     <>
       <button
         type="button"
-        className={
-          className ||
-          "pretext-plus-editor__feedback-trigger pretext-plus-editor__dialog-link-button"
-        }
+        className={className || FEEDBACK_TRIGGER_CLASSES}
         onClick={() => setIsOpen(true)}
       >
         {label}
       </button>
       {isOpen ? (
-        <div
-          className="pretext-plus-editor__dialog-overlay"
-          onClick={closeDialog}
-        >
-          <div
-            className="pretext-plus-editor__dialog pretext-plus-editor__feedback-dialog"
+        <DialogOverlay onClick={closeDialog}>
+          <Dialog
+            className="w-[min(96%,560px)] h-auto max-h-[min(90%,640px)]"
             role="dialog"
             aria-modal="true"
             aria-labelledby={titleId}
             onClick={(event) => event.stopPropagation()}
           >
-            <div className="pretext-plus-editor__dialog-header">
+            <DialogHeader>
               <div>
-                <h2 id={titleId} className="pretext-plus-editor__dialog-title">
-                  Provide Feedback
-                </h2>
-                <p className="pretext-plus-editor__dialog-copy">
+                <DialogTitle id={titleId}>Provide Feedback</DialogTitle>
+                <DialogCopy>
                   Help us improve PreTeXt.plus! We'd love to hear from you.
-                </p>
-                <p className="pretext-plus-editor__dialog-copy">
+                </DialogCopy>
+                <DialogCopy>
                   (If you would like a response, please include your email
                   address in the form below and we will get back to you as soon
                   as we can.)
-                </p>
+                </DialogCopy>
               </div>
-              <button
-                type="button"
-                className="pretext-plus-editor__dialog-close"
+              <DialogClose
                 onClick={closeDialog}
                 aria-label="Close feedback dialog"
                 disabled={isSubmitting}
               >
                 Close
-              </button>
-            </div>
+              </DialogClose>
+            </DialogHeader>
 
             <form
-              className="pretext-plus-editor__feedback-form"
+              className="flex flex-col gap-[0.6rem] flex-1 min-h-0 overflow-y-auto"
               onSubmit={handleSubmit}
             >
               <label
-                className="pretext-plus-editor__feedback-label"
+                className="text-slate-700 text-[0.85rem] font-semibold"
                 htmlFor={emailId}
               >
                 Email (optional)
@@ -161,7 +162,7 @@ const FeedbackLink = ({
               <input
                 id={emailId}
                 type="email"
-                className="pretext-plus-editor__feedback-input"
+                className="w-full border border-slate-300 rounded-[2px] py-2 px-[0.6rem] text-slate-900 bg-white focus:outline focus:outline-2 focus:outline-blue-300 focus:outline-offset-1"
                 value={email}
                 onChange={(event) => setEmail(event.target.value)}
                 placeholder="name@example.com"
@@ -169,14 +170,14 @@ const FeedbackLink = ({
               />
 
               <label
-                className="pretext-plus-editor__feedback-label"
+                className="text-slate-700 text-[0.85rem] font-semibold"
                 htmlFor={messageId}
               >
                 Message
               </label>
               <textarea
                 id={messageId}
-                className="pretext-plus-editor__feedback-textarea"
+                className="w-full border border-slate-300 rounded-[2px] py-2 px-[0.6rem] text-slate-900 bg-white focus:outline focus:outline-2 focus:outline-blue-300 focus:outline-offset-1 resize-y min-h-[110px]"
                 value={message}
                 onChange={(event) => setMessage(event.target.value)}
                 rows={5}
@@ -184,7 +185,7 @@ const FeedbackLink = ({
               />
 
               <label
-                className="pretext-plus-editor__feedback-checkbox-row"
+                className="inline-flex items-center gap-2 text-gray-800 text-[0.9rem]"
                 htmlFor={sourceId}
               >
                 <input
@@ -199,39 +200,39 @@ const FeedbackLink = ({
               </label>
 
               {resolvedProjectUrl ? (
-                <p className="pretext-plus-editor__feedback-project">
+                <p className="m-0 text-slate-500 text-[0.8rem]">
                   Project link will be included.
                 </p>
               ) : (
-                <p className="pretext-plus-editor__feedback-project">
+                <p className="m-0 text-slate-500 text-[0.8rem]">
                   No project link is currently available.
                 </p>
               )}
 
               {error ? (
-                <p className="pretext-plus-editor__feedback-error">{error}</p>
+                <p className="m-0 text-red-700 text-[0.85rem] font-semibold">
+                  {error}
+                </p>
               ) : null}
 
-              <div className="pretext-plus-editor__dialog-actions">
-                <button
-                  type="button"
-                  className="pretext-plus-editor__dialog-button pretext-plus-editor__dialog-button--secondary"
+              <DialogActions>
+                <DialogButton
+                  variant="secondary"
                   onClick={closeDialog}
                   disabled={isSubmitting}
                 >
                   Cancel
-                </button>
-                <button
+                </DialogButton>
+                <DialogButton
                   type="submit"
-                  className="pretext-plus-editor__dialog-button"
                   disabled={isSubmitting || !message.trim()}
                 >
                   {isSubmitting ? "Submitting..." : "Submit"}
-                </button>
-              </div>
+                </DialogButton>
+              </DialogActions>
             </form>
-          </div>
-        </div>
+          </Dialog>
+        </DialogOverlay>
       ) : null}
     </>
   );

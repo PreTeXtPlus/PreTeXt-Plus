@@ -8,6 +8,7 @@ import {
   useSyncExternalStore,
   type ReactNode,
 } from "react";
+import clsx from "clsx";
 
 import CodeEditor, { type CodeEditorHandle } from "./CodeEditor";
 //import { VisualEditor } from "@pretextbook/visual-editor";
@@ -27,7 +28,6 @@ import AssetEditModal from "./AssetEditModal";
 import MenuBar from "./MenuBar";
 import TableOfContents from "./TableOfContents";
 import ErrorBoundary from "./ErrorBoundary";
-import "./Editors.css";
 
 import { derivePretextContent } from "../contentConversion";
 import { DEFAULT_LANGUAGE } from "../languages";
@@ -1746,10 +1746,10 @@ const EditorsInner = (props: EditorsInnerProps) => {
   let editorDisplays: ReactNode;
   if (isNarrowScreen) {
     editorDisplays = (
-      <div className="pretext-plus-editor__tabs">
+      <div className="h-full w-full flex flex-row overflow-hidden">
         {tocSidebar}
-        <div className="pretext-plus-editor__tabs-main">
-          <div className="pretext-plus-editor__tab-list" role="tablist">
+        <div className="flex flex-col flex-1 min-w-0 h-full">
+          <div className="flex border-b border-[#ddd] bg-[#f8f8f8]" role="tablist">
             <button
               type="button"
               id={editorTabId}
@@ -1757,9 +1757,10 @@ const EditorsInner = (props: EditorsInnerProps) => {
               aria-controls={tabPanelId}
               aria-selected={activeTab === "editor"}
               tabIndex={activeTab === "editor" ? 0 : -1}
-              className={`pretext-plus-editor__tab-button ${
-                activeTab === "editor" ? "is-active" : ""
-              }`}
+              className={clsx(
+                "border-none border-b-2 border-transparent bg-transparent py-[0.6rem] px-[0.9rem] cursor-pointer",
+                activeTab === "editor" && "border-b-blue-600 font-semibold",
+              )}
               onClick={() => setActiveTab("editor")}
             >
               Editor
@@ -1771,9 +1772,10 @@ const EditorsInner = (props: EditorsInnerProps) => {
               aria-controls={tabPanelId}
               aria-selected={activeTab === "preview"}
               tabIndex={activeTab === "preview" ? 0 : -1}
-              className={`pretext-plus-editor__tab-button ${
-                activeTab === "preview" ? "is-active" : ""
-              }`}
+              className={clsx(
+                "border-none border-b-2 border-transparent bg-transparent py-[0.6rem] px-[0.9rem] cursor-pointer",
+                activeTab === "preview" && "border-b-blue-600 font-semibold",
+              )}
               onClick={() => setActiveTab("preview")}
             >
               Preview
@@ -1781,7 +1783,7 @@ const EditorsInner = (props: EditorsInnerProps) => {
           </div>
           <div
             id={tabPanelId}
-            className="pretext-plus-editor__tab-panel"
+            className="flex-1 min-h-0"
             role="tabpanel"
             aria-labelledby={
               activeTab === "editor" ? editorTabId : previewTabId
@@ -1796,31 +1798,32 @@ const EditorsInner = (props: EditorsInnerProps) => {
     );
   } else {
     editorDisplays = (
-      <div className="pretext-plus-editor__sectioned-layout">
+      <div className="flex flex-row w-full h-full overflow-hidden">
         {tocSidebar}
-        <Group
-          orientation="horizontal"
-          className="pretext-plus-editor__splitter"
-        >
+        <Group orientation="horizontal" className="h-full w-full">
           <Panel
-            className="pretext-plus-editor__editor-panel"
+            className="flex flex-col min-h-0 relative overflow-visible z-[1]"
             style={{ overflow: "hidden" }}
           >
             {codeEditor}
           </Panel>
-          <Separator className="pretext-plus-editor__resize-handle">
-            <div className="pretext-plus-editor__resize-dots"></div>
+          <Separator className="group bg-[#f0f0f0] cursor-col-resize w-2 flex items-center justify-center border-l border-r border-[#ddd] transition-colors duration-200 ease-in-out hover:bg-[#e0e0e0] active:bg-[#d0d0d0]">
+            <div className="flex flex-col gap-1 items-center justify-center h-full px-[0.5px] bg-[#dde0e6]">
+              <span className="h-0.5 w-0.5 rounded-full bg-[#999] group-hover:bg-[#333]" />
+              <span className="h-0.5 w-0.5 rounded-full bg-[#999] group-hover:bg-[#333]" />
+            </div>
           </Separator>
-          <Panel className="pretext-plus-editor__preview-panel">
-            {preview}
-          </Panel>
+          <Panel className="flex flex-col min-h-0">{preview}</Panel>
         </Group>
       </div>
     );
   }
 
   return (
-    <div className="pretext-plus-editor" onKeyDown={handleKeyDown}>
+    <div
+      className="flex flex-col w-full h-full flex-1 min-h-0 relative"
+      onKeyDown={handleKeyDown}
+    >
       {!props.hideMenuBar && (
         <MenuBar
           onSaveButton={props.onSaveButton}
@@ -1836,7 +1839,7 @@ const EditorsInner = (props: EditorsInnerProps) => {
           }
         />
       )}
-      <div className="pretext-plus-editor__editor-displays">
+      <div className="flex flex-1 min-h-0 flex-col relative">
         <ErrorBoundary resetKeys={[divisionActiveSource, activeDivisionId]}>
           {editorDisplays}
         </ErrorBoundary>
