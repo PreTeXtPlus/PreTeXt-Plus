@@ -109,6 +109,9 @@ Rails.application.routes.draw do
       get "download" => "projects#download", as: "download"
     end
     resources :collaborations, only: [ :create, :destroy ]
+    # Words the editor's spell checker has been taught. Written one at a time as
+    # the author adds them; they are read back with the project itself (show.json).
+    resources :dictionary_words, only: [ :create ]
     # Publisher options for every output of this project, overriding the owner's account
     # defaults; the one on a target below overrides these in turn.
     resource :publication_settings, only: [ :edit, :update ]

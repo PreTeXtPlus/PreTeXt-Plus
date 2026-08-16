@@ -11,6 +11,7 @@ import {
   Editors,
   assembleFullProjectSource,
   clearDeletions,
+  configureSpellCheck,
   docToState,
   DEFAULT_LANGUAGE,
 } from "@pretextbook/web-editor";
@@ -150,6 +151,9 @@ function railsToEditorState(json) {
     // Real-time collaboration flag + the identity shown on remote cursors.
     collaborative: json.collaborative === true,
     editorUser: json.editor_user ?? null,
+    // Words the spell checker has been taught on this project. Read-only here,
+    // like the two fields above: additions go straight to their own endpoint.
+    dictionaryWords: json.dictionary_words ?? [],
   };
 }
 
@@ -432,13 +436,43 @@ function EditorApp({ config }) {
   // we keep no asset working copy here -- this is just the latest server snapshot,
   // refreshed whenever an asset mutation invalidates the project query.
   const serverAssets = useRef([]);
+  // The project's spell-check dictionary, mirrored the same way: the checker
+  // reads it whenever it registers (on mount, and again on a format switch), so
+  // going through a ref is what lets a later registration see words a
+  // collaborator added and a refetch has since brought in.
+  const dictionaryWords = useRef([]);
 
   if (projectQuery.data && !initial.current) {
     initial.current = projectQuery.data;
     working.current = structuredClone(projectQuery.data);
     serverSnapshot.current = structuredClone(projectQuery.data);
+    configureSpellCheck({
+      // Words the author teaches the checker belong to the book, so they persist
+      // on the project and every collaborator sees them. The `add` is
+      // fire-and-forget by design: the editor has already accepted the word
+      // locally, and a failed write costs persistence only.
+      //
+      // Configured here rather than in an effect because <Editors> is not
+      // rendered until this branch has run, so the settings are always in place
+      // before Monaco mounts and the checker reads them.
+      userWordStore: {
+        load: () => dictionaryWords.current,
+        add: (word) =>
+          fetch(`/projects/${projectId}/dictionary_words`, {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              "X-CSRF-Token": csrfToken,
+            },
+            body: JSON.stringify({ word }),
+          }),
+      },
+    });
   }
-  if (projectQuery.data) serverAssets.current = projectQuery.data.projectAssets;
+  if (projectQuery.data) {
+    serverAssets.current = projectQuery.data.projectAssets;
+    dictionaryWords.current = projectQuery.data.dictionaryWords;
+  }
 
   // ----- Real-time collaboration ------------------------------------------
   // When the project has collaborators, the buffer sync moves to a shared

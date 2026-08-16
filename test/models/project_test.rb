@@ -367,4 +367,61 @@ class ProjectTest < ActiveSupport::TestCase
 
     assert_equal "keyed-asset", project.assets.find(id).ref
   end
+
+  test "add_dictionary_word accepts words, including accented and hyphenated ones" do
+    project = projects(:one)
+
+    assert project.add_dictionary_word("Erdős")
+    assert project.add_dictionary_word("well-ordering")
+    assert project.add_dictionary_word("  Cauchy  ")
+
+    assert_equal [ "Erdős", "well-ordering", "Cauchy" ], project.reload.dictionary_words
+  end
+
+  test "add_dictionary_word rejects anything that is not a word" do
+    project = projects(:one)
+
+    assert_not project.add_dictionary_word("sec-intro-3")
+    assert_not project.add_dictionary_word("")
+    assert_not project.add_dictionary_word("a" * (Project::MAX_DICTIONARY_WORD_LENGTH + 1))
+
+    assert_empty project.reload.dictionary_words
+  end
+
+  test "add_dictionary_word ignores a word already stored, whatever its case" do
+    project = projects(:one)
+    project.add_dictionary_word("Cauchy")
+
+    assert project.add_dictionary_word("cauchy")
+    assert_equal [ "Cauchy" ], project.reload.dictionary_words
+  end
+
+  # The reason the append is done in SQL: a read-modify-write from two sessions
+  # holding the same record loses one of the words.
+  test "add_dictionary_word keeps words added concurrently from another session" do
+    project = projects(:one)
+    elsewhere = Project.find(project.id)
+
+    project.add_dictionary_word("Cauchy")
+    elsewhere.add_dictionary_word("Erdos")
+
+    assert_equal [ "Cauchy", "Erdos" ], project.reload.dictionary_words
+  end
+
+  test "add_dictionary_word does not touch updated_at" do
+    project = projects(:one)
+    before = project.updated_at
+
+    project.add_dictionary_word("Cauchy")
+
+    assert_equal before, project.reload.updated_at
+  end
+
+  test "add_dictionary_word stops at the cap" do
+    project = projects(:one)
+    project.update_column(:dictionary_words, Array.new(Project::MAX_DICTIONARY_WORDS) { |i| "word#{i}" })
+
+    assert project.add_dictionary_word("Cauchy")
+    assert_not_includes project.reload.dictionary_words, "Cauchy"
+  end
 end
