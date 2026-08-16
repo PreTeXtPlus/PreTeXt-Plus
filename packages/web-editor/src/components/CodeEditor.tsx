@@ -4,6 +4,8 @@ import { useState, useRef, useEffect, useMemo, forwardRef, useImperativeHandle }
 import type * as Y from "yjs";
 import type { Awareness } from "y-protocols/awareness";
 import { editorConfigs } from "./editorConfigs";
+import { applyCleanFixes, fixesForModel } from "./editorConfigs/latexClean";
+import { summarizeCleanFixes, type CleanFinding } from "../cleanFindings";
 import { usePretextDiagnostics } from "./editorConfigs/usePretextDiagnostics";
 import type { PretextValidationInput } from "./editorConfigs/pretextDiagnostics";
 import CodeEditorMenu from "./CodeEditorMenu";
@@ -47,6 +49,12 @@ interface CodeEditorProps {
   onCursorLineChange?: (line: number) => void;
   /** Called when the user clicks "Import LaTeX" in the toolbar. */
   onOpenLatexImport: () => void;
+  /**
+   * Called when the user clicks "Clean up LaTeX…" in the toolbar. The button is
+   * shown only when the active format has a cleanup engine (LaTeX) and the
+   * buffer is editable, so a host that omits this simply never offers it.
+   */
+  onOpenClean?: () => void;
   /** Called when the user clicks "Edit Macros" in the toolbar. */
   onOpenDocinfoEditor: () => void;
   /**
@@ -104,6 +112,18 @@ export interface CodeEditorHandle {
   focus: () => void;
   /** Put the cursor on `line`, scrolling it into view if it is off-screen. */
   revealLine: (line: number) => void;
+  /**
+   * Source-cleanup findings for the buffer as it stands, one row per rule.
+   * Empty for a format with no cleanup engine. Read (not pushed) because the
+   * dialog that renders it is opened on demand and must never show a list that
+   * predates the author's last keystroke.
+   */
+  getCleanFindings: () => CleanFinding[];
+  /**
+   * Apply the auto-fixable cleanup findings — all of them, or just `ruleIds` —
+   * as one undo step. A no-op for a format with no cleanup engine.
+   */
+  applyCleanFixes: (ruleIds?: string[]) => void;
 }
 
 /** Base Monaco editor options shared across all instances of this component. */
@@ -139,6 +159,7 @@ const CodeEditor = forwardRef<CodeEditorHandle, CodeEditorProps>(({
   onSave,
   onCursorLineChange,
   onOpenLatexImport,
+  onOpenClean,
   onOpenDocinfoEditor,
   onOpenConvertToPretext,
   canConvertToPretext,
@@ -249,6 +270,27 @@ const CodeEditor = forwardRef<CodeEditorHandle, CodeEditorProps>(({
         suppressCursorReportRef.current = false;
       }
       lastCursorLineRef.current = line;
+    },
+    // Both cleanup methods read the format from its ref rather than closing
+    // over the prop: this handle is built once (`[]`), while the editor lives
+    // across division switches, so a captured `sourceFormat` would go stale.
+    getCleanFindings: () => {
+      const clean = editorConfigs[sourceFormatRef.current].clean;
+      if (!clean) return [];
+      return summarizeCleanFixes(
+        fixesForModel(editorRef.current?.getModel?.(), clean),
+        clean.describeFix,
+      );
+    },
+    applyCleanFixes: (ruleIds?: string[]) => {
+      const clean = editorConfigs[sourceFormatRef.current].clean;
+      if (!clean) return;
+      applyCleanFixes(monacoRef.current, editorRef.current, clean, {
+        sourceFormat: sourceFormatRef.current,
+        ruleIds,
+      });
+      // No host notification here: these are ordinary model edits, so Monaco's
+      // `onChange` fires and the debounce below reports them like any typing.
     },
   }), []);
 
@@ -729,6 +771,11 @@ const CodeEditor = forwardRef<CodeEditorHandle, CodeEditorProps>(({
         sourceFormat={sourceFormat}
         onContentChange={handleContentChange}
         onOpenLatexImport={onOpenLatexImport}
+        onOpenClean={
+          onOpenClean && !readOnly && editorConfigs[sourceFormat].clean
+            ? onOpenClean
+            : undefined
+        }
         onOpenDocinfoEditor={onOpenDocinfoEditor}
         onUndo={handleUndo}
         onRedo={handleRedo}

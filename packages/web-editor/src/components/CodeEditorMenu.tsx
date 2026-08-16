@@ -18,6 +18,12 @@ interface CodeEditorMenuProps {
   onContentChange: (newContent: string) => void;
   /** Called when the user clicks "Import LaTeX" to open the import dialog. */
   onOpenLatexImport: () => void;
+  /**
+   * If provided, a "Clean up LaTeX…" button is shown.  Opens the review dialog
+   * listing the legacy markup found in this division.  Omitted for formats with
+   * no legacy dialect behind them, and on a read-only buffer.
+   */
+  onOpenClean?: () => void;
   /** Called when the user clicks "Edit Macros" to open the docinfo editor. */
   onOpenDocinfoEditor: () => void;
   /** Triggers an undo in the Monaco editor.  Passed through from the parent. */
@@ -259,6 +265,7 @@ const CodeEditorMenu: React.FC<CodeEditorMenuProps> = ({
   sourceFormat,
   onContentChange,
   onOpenLatexImport,
+  onOpenClean,
   onOpenDocinfoEditor,
   onConvertToPretext,
   canConvertToPretext,
@@ -297,6 +304,17 @@ const CodeEditorMenu: React.FC<CodeEditorMenuProps> = ({
               title: "Create a new project copy using the converted PreTeXt source",
               variant: "convert",
               disabled: canConvertToPretext === false,
+            } satisfies MenuAction,
+          ]
+        : []),
+      ...(onOpenClean
+        ? [
+            {
+              key: "clean",
+              label: "Clean up LaTeX…",
+              onClick: onOpenClean,
+              title:
+                "Review LaTeX markup that does not belong in PreTeXt, and fix it",
             } satisfies MenuAction,
           ]
         : []),

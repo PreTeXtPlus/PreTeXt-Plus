@@ -1,6 +1,8 @@
 import { formatPretext } from "@pretextbook/format";
 import { latexToPretext } from "@pretextbook/latex-pretext";
 import { markdownToPretext } from "@pretextbook/remark-pretext";
+import { cleanLatexText, describeFix } from "@pretextbook/latex-style-pretext";
+import { summarizeCleanFixes, type CleanFinding } from "./cleanFindings";
 import type { SourceFormat } from "./types/editor";
 
 /** Returned by {@link derivePretextContent}. Exactly one of the two fields will be set. */
@@ -74,6 +76,39 @@ export function detectSourceFormat(source: string): SourceFormat {
     return "markdown";
   }
   return "pretext";
+}
+
+/** Returned by {@link cleanLatexSource}. */
+export interface CleanedLatex {
+  /** The cleaned source. */
+  latex: string;
+  /** What the cleaner did, and what it left for the author, one row per rule. */
+  findings: CleanFinding[];
+}
+
+/**
+ * Runs the source cleaner over a piece of LaTeX: legacy markup that converts
+ * badly or shouldn't survive into PreTeXt (`\vspace`, `{\bf …}`, plain-TeX
+ * font switches) is removed or rewritten, to a fixpoint.
+ *
+ * This is the *import* path — text arriving from outside the project, where
+ * stripping presentational LaTeX is the whole point. It is deliberately not
+ * applied to a division the author is editing: `derivePretextContent` below
+ * leaves their source alone and converts it as written, and cleanup there is
+ * an explicit action (the "Clean up LaTeX…" toolbar button) that edits the
+ * source they can see rather than silently changing what gets built.
+ *
+ * Note this is the language package's cleaner, not `@pretextbook/import`'s:
+ * that one also strips every comment, which is right for a wholesale project
+ * import and wrong here, where a comment may be something the author pasted on
+ * purpose.
+ */
+export function cleanLatexSource(latexContent: string): CleanedLatex {
+  const outcome = cleanLatexText(latexContent);
+  return {
+    latex: outcome.output,
+    findings: summarizeCleanFixes(outcome.fixes, describeFix),
+  };
 }
 
 /**

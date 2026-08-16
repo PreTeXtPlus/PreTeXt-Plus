@@ -85,6 +85,7 @@ export interface ExternalUpdate {
 
 type ModalKey =
   | "isLatexDialogOpen"
+  | "isCleanDialogOpen"
   | "isConvertDialogOpen"
   | "isDocinfoEditorOpen"
   | "isAssetPickerOpen"
@@ -167,6 +168,7 @@ export interface EditorStoreState {
   isNarrowScreen: boolean;
   activeTab: "editor" | "preview";
   isLatexDialogOpen: boolean;
+  isCleanDialogOpen: boolean;
   isConvertDialogOpen: boolean;
   isDocinfoEditorOpen: boolean;
   isAssetPickerOpen: boolean;
@@ -374,6 +376,7 @@ export function createEditorStore(init: EditorStoreInit): EditorStoreHandle {
     isNarrowScreen: isNarrowViewport(),
     activeTab: "editor",
     isLatexDialogOpen: false,
+    isCleanDialogOpen: false,
     isConvertDialogOpen: false,
     isDocinfoEditorOpen: false,
     isAssetPickerOpen: false,

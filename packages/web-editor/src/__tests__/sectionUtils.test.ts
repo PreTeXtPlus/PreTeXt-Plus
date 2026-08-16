@@ -25,6 +25,7 @@ import {
   splitLatexDocument,
   mergeLatexDocument,
   normalizeDivisionsOnLoad,
+  assembleProjectSource,
   assembleFullProjectSource,
   wrapDivisionForPreview,
 } from '../sectionUtils'
@@ -549,5 +550,144 @@ describe('assembleFullProjectSource / wrapDivisionForPreview — xml:lang', () =
     const xml = wrapDivisionForPreview('article', ARTICLE, '', 'My Article', 'fr-CA')
     expect(xml).toMatch(/^<pretext xml:lang="fr-CA">/)
     expectWellFormed(xml)
+  })
+})
+
+// The root `@label` is what the previewer matches the root division on, and it
+// is added by scanning for the root element's start tag rather than parsing the
+// document — assembling a book means assembling the whole project, and parsing
+// all of it to reach one attribute dominated every preview rebuild. These pin
+// down the constructs that scan has to survive.
+describe('root @label on an assembled document', () => {
+  const div = (source: string, type: Division['type'] = 'article'): Division => ({
+    id: '1',
+    xmlId: 'a1',
+    title: 'My Article',
+    type,
+    sourceFormat: 'pretext',
+    source,
+  })
+
+  const rootTagOf = (xml: string) =>
+    /<(?:book|article|slideshow)\b[^>]*>/.exec(xml)?.[0] ?? ''
+
+  it('copies the root @xml:id into a @label', () => {
+    const xml = assembleFullProjectSource([div(ARTICLE)], 'a1', '')
+    expect(rootTagOf(xml)).toContain('label="a1"')
+  })
+
+  it('leaves an existing @label alone', () => {
+    const source = ARTICLE.replace(
+      '<article xml:id="a1">',
+      '<article xml:id="a1" label="chosen">',
+    )
+    const xml = assembleFullProjectSource([div(source)], 'a1', '')
+    expect(rootTagOf(xml)).toContain('label="chosen"')
+    expect(rootTagOf(xml)).not.toContain('label="a1"')
+  })
+
+  it('changes nothing but the root start tag', () => {
+    const xml = assembleFullProjectSource([div(ARTICLE)], 'a1', '')
+    // Everything after the root's own `>` is byte-for-byte what went in, which
+    // is what keeps preview line numbers aligned with the editor buffer.
+    expect(xml).toContain(ARTICLE.slice(ARTICLE.indexOf('>') + 1))
+    expectWellFormed(xml)
+  })
+
+  it('falls back to "main" when the root has no @xml:id, avoiding collisions', () => {
+    const noId = ARTICLE.replace('<article xml:id="a1">', '<article>')
+    expect(rootTagOf(assembleFullProjectSource([div(noId)], 'a1', ''))).toContain(
+      'label="main"',
+    )
+
+    const taken = noId.replace('<section xml:id="s1">', '<section label="main">')
+    expect(rootTagOf(assembleFullProjectSource([div(taken)], 'a1', ''))).toContain(
+      'label="main-1"',
+    )
+  })
+
+  it('finds the root division past <docinfo> and its subtree', () => {
+    const docinfo = `<docinfo>
+  <macros>\\newcommand{\\R}{\\mathbb{R}}</macros>
+  <cross-references text="type-global"/>
+</docinfo>`
+    const xml = assembleFullProjectSource([div(ARTICLE)], 'a1', docinfo)
+    expect(rootTagOf(xml)).toContain('label="a1"')
+    expect(xml).toContain('<macros>')
+    expectWellFormed(xml)
+  })
+
+  // Asserted on the whole document rather than via `rootTagOf`: a naive tag
+  // regex is fooled by exactly these two constructs, which is the point.
+  it('is not fooled by a comment that mentions a root element', () => {
+    const source = `<!-- an <article> in a comment, and a <book> too -->\n${ARTICLE}`
+    const xml = assembleFullProjectSource([div(source)], 'a1', '')
+    expect(xml).toContain('<article xml:id="a1" label="a1">')
+    expect(xml).toContain('<!-- an <article> in a comment, and a <book> too -->')
+  })
+
+  it('is not fooled by a > inside an attribute value', () => {
+    const source = ARTICLE.replace(
+      '<article xml:id="a1">',
+      '<article xml:id="a1" data-note="a > b">',
+    )
+    const xml = assembleFullProjectSource([div(source)], 'a1', '')
+    expect(xml).toContain('<article xml:id="a1" data-note="a > b" label="a1">')
+    expectWellFormed(xml)
+  })
+
+  it('leaves a bare division fragment untouched', () => {
+    const section = '<section xml:id="s1"><title>First</title><p>Body</p></section>'
+    expect(assembleProjectSource([div(section, 'section')], 'a1')).toBe(section)
+  })
+})
+
+// Assembly walks the whole project on every keystroke while only the division
+// being typed in has changed, so conversions are cached per division. The cache
+// is keyed on xml:id and validated against the source, so the risk it carries
+// is serving a stale conversion — which is what these cover.
+describe('per-division conversion caching', () => {
+  const latexDivision = (source: string): Division => ({
+    id: '1',
+    xmlId: 'sec-1',
+    title: 'A Section',
+    type: 'section',
+    sourceFormat: 'latex',
+    source,
+  })
+
+  it('reflects an edit to a division it has already converted', () => {
+    const first = assembleProjectSource(
+      [latexDivision('\\section{A Section}\\label{sec-1}\n\nBefore the edit.')],
+      'sec-1',
+    )
+    expect(first).toContain('Before the edit.')
+
+    const second = assembleProjectSource(
+      [latexDivision('\\section{A Section}\\label{sec-1}\n\nAfter the edit.')],
+      'sec-1',
+    )
+    expect(second).toContain('After the edit.')
+    expect(second).not.toContain('Before the edit.')
+  })
+
+  it('returns the same conversion for unchanged source', () => {
+    const division = latexDivision('\\section{A Section}\\label{sec-1}\n\nStable.')
+    expect(assembleProjectSource([division], 'sec-1')).toBe(
+      assembleProjectSource([division], 'sec-1'),
+    )
+  })
+
+  it('does not confuse two divisions that share an xml:id across projects', () => {
+    const projectA = assembleProjectSource(
+      [latexDivision('\\section{A Section}\\label{sec-1}\n\nProject A.')],
+      'sec-1',
+    )
+    const projectB = assembleProjectSource(
+      [latexDivision('\\section{A Section}\\label{sec-1}\n\nProject B.')],
+      'sec-1',
+    )
+    expect(projectA).toContain('Project A.')
+    expect(projectB).toContain('Project B.')
   })
 })
