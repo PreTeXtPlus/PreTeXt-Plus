@@ -9,6 +9,7 @@ import { registerLatexSyntax } from "./latexSyntax";
 import { registerFlavorLanguage } from "./flavorLanguage";
 import { applyCleanFixes, editableRangeFor } from "./latexClean";
 import type { CleanSupport, FormatEditorConfig } from "./types";
+import { registerConfiguredSpellCheck } from "./spellcheck";
 
 /**
  * Source-cleanup engine for LaTeX-style PreTeXt: legacy markup that converts
@@ -34,6 +35,7 @@ const latexCleanSupport: CleanSupport = {
     pretextLatexLanguage.getCleanCodeActions?.(text, range, uri) ?? [],
   describeFix,
 };
+
 
 export const latexConfig: FormatEditorConfig = {
   // Not Monaco's `latex` — there is no such built-in language, and an
@@ -62,9 +64,18 @@ export const latexConfig: FormatEditorConfig = {
           }),
       },
     });
+    // Spelling reads the same scopes the PreTeXt editor does; what changes is
+    // how prose is told apart from markup (see `spellcheck/latexRegions.ts`).
+    const spelling = registerConfiguredSpellCheck(
+      monaco,
+      editor,
+      PRETEXT_LATEX_LANGUAGE_ID,
+      "latex",
+    );
 
     return {
       dispose: () => {
+        spelling?.dispose();
         language.dispose();
         syntax.dispose();
       },
