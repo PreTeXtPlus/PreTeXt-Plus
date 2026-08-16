@@ -1,14 +1,14 @@
 import { suppressedElements, type SpellCheckScope } from "./scopes";
+import type { TextRegion } from "./regions";
 
-/** A half-open `[start, end)` slice of the source that should be spell checked. */
-export interface TextRegion {
-  start: number;
-  end: number;
-}
+export type { TextRegion };
 
 /**
  * Scans PreTeXt (XML) source and returns the slices whose words are worth
- * checking, honouring {@link SpellCheckScope}.
+ * checking, honouring {@link SpellCheckScope}.  The LaTeX and Markdown flavors
+ * have finders of their own (`latexRegions.ts`, `markdownRegions.ts`) built on
+ * the same scopes; this is the only part of spell checking that differs
+ * between formats.
  *
  * This is a purpose-built scanner rather than a pass over Monaco's tokens, for
  * two reasons.  The PreTeXt flavor renders with Monaco's *built-in* `xml`

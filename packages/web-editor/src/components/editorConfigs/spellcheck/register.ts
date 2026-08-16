@@ -7,6 +7,7 @@ import {
 import { DEFAULT_SPELL_CHECK_SCOPES, type SpellCheckScope } from "./scopes";
 import { UserWords, type UserWordStore } from "./userWords";
 import { extractWords, splitCompound, type FoundWord } from "./words";
+import type { RegionFinder } from "./regions";
 import { findCheckableRegions } from "./xmlRegions";
 
 /**
@@ -33,6 +34,12 @@ export interface SpellCheckOptions {
   monacoLanguageId: string;
   /** Which PreTeXt constructs to look inside. Defaults to {@link DEFAULT_SPELL_CHECK_SCOPES}. */
   scopes?: SpellCheckScope;
+  /**
+   * How to find the checkable slices of the source — the one part of spell
+   * checking that depends on the format.  Defaults to the PreTeXt (XML)
+   * scanner; the LaTeX and Markdown flavors pass their own.
+   */
+  findRegions?: RegionFinder;
   /** Where to fetch the Hunspell files from. */
   dictionarySource?: DictionarySource;
   /** Optional persistence for "Add to dictionary". */
@@ -63,6 +70,7 @@ export const registerSpellCheck = (
   const {
     monacoLanguageId,
     scopes = DEFAULT_SPELL_CHECK_SCOPES,
+    findRegions = findCheckableRegions,
     dictionarySource = DEFAULT_DICTIONARY_SOURCE,
     userWordStore,
     debounceMs = 500,
@@ -76,7 +84,7 @@ export const registerSpellCheck = (
   const check = async () => {
     if (!dictionary || disposed || model.isDisposed?.()) return;
     const source = model.getValue();
-    const words = extractWords(source, findCheckableRegions(source, scopes));
+    const words = extractWords(source, findRegions(source, scopes));
 
     const markers: any[] = [];
     for (const found of words) {

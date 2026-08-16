@@ -233,7 +233,7 @@ If your product needs an audit trail, keep the original LaTeX and created PreTeX
 
 - **Visual Editor**: Intuitive WYSIWYG editor for PreTeXt documents via `@pretextbook/visual-editor`
 - **Code Editor**: Monaco-powered code editor with syntax highlighting
-- **Spell Checking**: PreTeXt-aware spell check that skips math, code, and markup — see [Spell checking](#spell-checking)
+- **Spell Checking**: format-aware spell check for PreTeXt, LaTeX-style and Markdown-style source, skipping math, code, and markup — see [Spell checking](#spell-checking)
 - **Full Preview**: Full-page preview of your document
 - **Synchronized Editing**: Changes in one editor instantly reflect in the other
 - **Split View**: View code and visual editor side-by-side
@@ -343,11 +343,15 @@ key, the two will fight; namespace yours to avoid it.
 
 ## Spell checking
 
-The code editor spell checks PreTeXt prose and offers corrections, "Add to
+The code editor spell checks prose and offers corrections, "Add to
 dictionary", and "Ignore this session" as quick fixes on each misspelling
 (Ctrl+. / the lightbulb). Misspellings are published as `Info` markers under the
 `pretext-spellcheck` owner, so they never collide with the schema diagnostics
 (`pretext-schema`) or the LaTeX/Markdown flavor linters.
+
+All three source formats are checked — PreTeXt, LaTeX-style and Markdown-style —
+under one set of settings. See [Scopes across the three
+formats](#scopes-across-the-three-formats) for what each scope covers in each.
 
 ### Serving the dictionary (required)
 
@@ -380,6 +384,7 @@ configureSpellCheck({
   // Which PreTeXt constructs to look inside. These names, values and defaults
   // deliberately mirror `pretext-tools.spellCheck.checkErrorsInsideScope` in
   // the PreTeXt VS Code extension, so authors get the same behavior in both.
+  // They apply to LaTeX- and Markdown-style divisions too — see the table below.
   scopes: {
     comments: "Check",
     inlineMath: "Ignore",   // <m>
@@ -411,6 +416,41 @@ whole tags, scopes here resolve against a real scan of the source: element
 nesting is tracked, CDATA is never checked, a `>` inside an attribute value
 doesn't end a tag, and `tags: "Check"` checks prose-bearing attribute *values*
 without ever flagging tag or attribute names.
+
+### Scopes across the three formats
+
+The settings are written in PreTeXt's vocabulary, and a LaTeX or Markdown
+division answers to them through **what its constructs convert into**: a
+`\begin{program}` becomes a `<program>`, so it obeys `blockCode`; `$…$` becomes
+an `<m>`, so it obeys `inlineMath`. One setting therefore behaves the same way
+whichever format a division happens to be written in.
+
+| Scope | PreTeXt | LaTeX-style | Markdown-style |
+| --- | --- | --- | --- |
+| `comments` | `<!-- … -->` | `% …` | `<!-- … -->` |
+| `inlineMath` | `<m>` | `$…$`, `\(…\)` | `$…$`, `\(…\)` |
+| `displayMath` | `<me>`, `<men>`, `<md>`, `<mdn>` | `$$…$$`, `\[…\]`, `equation`, `align`, … | `$$…$$`, `\[…\]` |
+| `inlineCode` | `<c>` | `\code`, `\texttt`, `\lstinline`, `\kbd`, `\verb\|…\|` | `` `…` `` |
+| `blockCode` | `<program>`, `<sage>`, `<pre>` | `program`, `sage`, `console`, `verbatim`, `lstlisting`, `minted`, `code` | ` ``` ` and `~~~` fences |
+| `latexImage` | `<latex-image>` | `latex-image`, `tikzpicture`, `tikzcd` | — (diagrams are *included*, not written inline) |
+| `tags` | prose-bearing attribute values (`alt`, `title`, `description`) | — (LaTeX carries no prose inside a marker) | image alt text, `![alt](src)` |
+
+The math and verbatim environment lists come from `@pretextbook/latex-style-pretext`
+itself, so an environment the converter learns about is honoured here at the same
+time.
+
+Two things are hidden in every format regardless of the scopes, because nothing
+in them could be misspelled or corrected from a dictionary: **markup names**
+(tag names, `\macro` and environment names, directive names) and **identifiers,
+paths and URLs** — `xml:id="…"`, `\label{…}`, `\ref{…}`, `\includegraphics{…}`,
+`{#sec-intro}`, a link's destination, YAML frontmatter.
+
+Everything else is prose and is checked. In particular a **title is checked by
+default** in all three formats — `<title>`, `\begin{theorem}[Pythagorean
+Theorem]`, `:::theorem[Pythagorean Theorem]` — since all three become a `<title>`
+element, while a link's or an image's *destination* never is:
+`\href{https://example.org}{the guide}` and `[the guide](https://example.org)`
+check "the guide" and nothing else.
 
 ## Browser Support
 

@@ -1,5 +1,21 @@
+import { findCheckableLatexRegions } from "./latexRegions";
+import { findCheckableMarkdownRegions } from "./markdownRegions";
+import type { RegionFinder } from "./regions";
 import { registerSpellCheck } from "./register";
 import { getSpellCheckSettings } from "./settings";
+import { findCheckableRegions } from "./xmlRegions";
+
+/**
+ * Which source format an editor is showing, and with it the only part of spell
+ * checking that varies: how the prose is told apart from the markup.
+ */
+export type SpellCheckFlavor = "pretext" | "latex" | "markdown";
+
+const REGION_FINDERS: Record<SpellCheckFlavor, RegionFinder> = {
+  pretext: findCheckableRegions,
+  latex: findCheckableLatexRegions,
+  markdown: findCheckableMarkdownRegions,
+};
 
 /**
  * Wires spell checking into a format's `registerMonacoExtensions`, using the
@@ -11,12 +27,14 @@ export const registerConfiguredSpellCheck = (
   monaco: any,
   editor: any,
   monacoLanguageId: string,
+  flavor: SpellCheckFlavor,
 ): { dispose: () => void } | null => {
   const settings = getSpellCheckSettings();
   if (!settings.enabled) return null;
   return registerSpellCheck(monaco, editor, {
     monacoLanguageId,
     scopes: settings.scopes,
+    findRegions: REGION_FINDERS[flavor],
     dictionarySource: settings.dictionarySource,
     userWordStore: settings.userWordStore,
   });
@@ -39,4 +57,5 @@ export {
   type DictionarySource,
 } from "./dictionary";
 export type { UserWordStore } from "./userWords";
+export type { RegionFinder, TextRegion } from "./regions";
 export { registerSpellCheck, SPELLCHECK_MARKER_OWNER } from "./register";

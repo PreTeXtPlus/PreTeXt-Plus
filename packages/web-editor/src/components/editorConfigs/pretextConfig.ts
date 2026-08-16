@@ -14,6 +14,7 @@ export const pretextConfig: FormatEditorConfig = {
       monaco,
       editor,
       PRETEXT_MONACO_LANGUAGE_ID,
+      "pretext",
     );
 
     return {

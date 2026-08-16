@@ -1,4 +1,4 @@
-import type { TextRegion } from "./xmlRegions";
+import type { TextRegion } from "./regions";
 
 /** A candidate word and where it sits in the source. */
 export interface FoundWord {
@@ -46,7 +46,7 @@ export const extractWords = (
       const word = match[0];
       const start = region.start + match.index;
       const end = start + word.length;
-      if (isCheckable(word, source, start, end)) {
+      if (isCheckable(word, source, start, end, region)) {
         found.push({ word, start, end });
       }
     }
@@ -60,6 +60,7 @@ const isCheckable = (
   source: string,
   start: number,
   end: number,
+  region: TextRegion,
 ): boolean => {
   // Apostrophes don't count toward length: "I'd" is still too short to judge.
   const letters = word.replace(/['’]/g, "");
@@ -67,8 +68,11 @@ const isCheckable = (
   // Acronyms and initialisms (PDF, HTML, PTX) are never in a word list.
   if (letters === letters.toUpperCase()) return false;
 
-  const before = source[start - 1] ?? "";
-  const after = source[end] ?? "";
+  // Only characters the scanner left *inside* the region say anything about the
+  // word. One it excluded is markup — the `_` around a Markdown `_term_`, say —
+  // and reading it would condemn the word for the delimiters around it.
+  const before = start > region.start ? (source[start - 1] ?? "") : "";
+  const after = end < region.end ? (source[end] ?? "") : "";
   if (CODE_ADJACENT.test(before) || CODE_ADJACENT.test(after)) return false;
   // `&amp;` and friends: the word is the entity name, not something the author
   // spelled. `.slice` keeps the lookahead short so a stray `&` earlier in a
