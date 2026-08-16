@@ -112,7 +112,7 @@ const AssetEditModal = ({
   const embedCode = assetEmbedCode(refValue.trim() || prevRef, activeFormat);
 
   const handleCopy = () => {
-    navigator.clipboard.writeText(embedCode).catch(() => {});
+    navigator.clipboard?.writeText(embedCode).catch(() => {});
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
   };
@@ -170,6 +170,12 @@ const AssetEditModal = ({
   const busy = isSaving || isDuplicating;
   const showPreview = !!asset.url;
   const canReplace = !!onReplace;
+  // Duplicate re-fetches the asset's bytes and re-uploads them (see
+  // Editors.tsx's handleAssetDuplicate), so it's meaningless for an authored
+  // asset with no file to fetch -- Editors.tsx silently no-ops rather than
+  // resolving/rejecting when `asset.url` is missing, which would otherwise
+  // leave this button stuck on "Duplicating…" forever.
+  const canDuplicate = !!onDuplicate && !!asset.url;
 
   return (
     <DialogOverlay onClick={(e) => e.target === e.currentTarget && onClose()}>
@@ -294,7 +300,9 @@ const AssetEditModal = ({
                 Additional source
                 <DialogHelperCopy>
                   Inserted verbatim inside the generated <code>{"<image>"}</code> element
-                  — e.g. <code>{"<description>...</description>"}</code>.
+                  — e.g. <code>{"<description>...</description>"}</code>, or a hand-authored
+                  element like <code>{"<latex-image>...</latex-image>"}</code> for an
+                  authored (file-less) asset.
                 </DialogHelperCopy>
               </DialogLabel>
               <DialogEditorPane
@@ -321,7 +329,7 @@ const AssetEditModal = ({
         </DialogContent>
 
         <DialogActions>
-          {onDuplicate && (
+          {canDuplicate && (
             <DialogButton
               variant="secondary"
               className="mr-auto"

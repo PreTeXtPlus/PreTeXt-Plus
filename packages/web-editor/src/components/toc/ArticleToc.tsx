@@ -226,7 +226,7 @@ const ArticleToc = ({ onOpenAssetPicker, hideAssets, readOnly }: ArticleTocProps
 
   const copyAssetEmbed = (ref: string) => {
     navigator.clipboard
-      .writeText(assetEmbedCode(ref, activeFormat))
+      ?.writeText(assetEmbedCode(ref, activeFormat))
       .catch(() => {});
   };
 
@@ -479,7 +479,7 @@ const ArticleToc = ({ onOpenAssetPicker, hideAssets, readOnly }: ArticleTocProps
         </div>
       )}
 
-      {/* Asset refs — kept separate from divisions, folded by default */}
+      {/* Asset refs — kept separate from divisions */}
       {!hideAssets && (
         <>
           <div className="shrink-0 border-t border-[#dde0e6] flex flex-col max-h-[220px]">
@@ -609,11 +609,11 @@ const ArticleToc = ({ onOpenAssetPicker, hideAssets, readOnly }: ArticleTocProps
           </div>
 
           {onOpenAssetPicker && (
-            <div className="block w-full bg-transparent border-none border-t border-[#dde0e6] py-[7px] px-2.5 font-[inherit] text-[0.78rem] text-left shrink-0">
+            <div className="block w-full bg-transparent border-none border-t border-[#dde0e6] py-[7px] px-2.5 font-[inherit] text-[0.78rem] text-left shrink-0 flex justify-around">
               <button
                 type="button"
                 data-testid="toc-assets-btn"
-                className="bg-transparent border-none text-blue-600 cursor-pointer py-0 px-0.5 hover:bg-blue-50 hover:underline"
+                className="bg-transparent border-none text-blue-600 cursor-pointer hover:bg-blue-50 hover:underline"
                 onClick={() => onOpenAssetPicker()}
               >
                 Manage
@@ -621,7 +621,7 @@ const ArticleToc = ({ onOpenAssetPicker, hideAssets, readOnly }: ArticleTocProps
               <button
                 type="button"
                 data-testid="toc-assets-btn"
-                className="bg-transparent border-none text-blue-600 cursor-pointer py-0 px-0.5 hover:bg-blue-50 hover:underline"
+                className="bg-transparent border-none text-blue-600 cursor-pointer hover:bg-blue-50 hover:underline"
                 onClick={() => onOpenAssetPicker("add")}
               >
                 Add

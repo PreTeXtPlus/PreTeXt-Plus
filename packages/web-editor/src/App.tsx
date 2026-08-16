@@ -683,6 +683,19 @@ function App() {
     }
   };
 
+  const handleCreateAuthored = async (title: string): Promise<Asset> => {
+    console.log("Creating authored asset:", title);
+    await new Promise((resolve) => setTimeout(resolve, 400));
+    // No `id` — same new-asset convention as uploads. `source` starts empty;
+    // the user fills it in via the asset editor's "Additional source" field.
+    // A real host derives the ref itself (see onAssetUpload's `uniqueRef`);
+    // this demo does a simple lowercase/dash slug of the title.
+    const ref = title.toLowerCase().trim().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "") || "asset";
+    const newAsset: Asset = { title, ref };
+    setProjectAssets((prev) => [...prev, newAsset]);
+    return newAsset;
+  };
+
   // Assets are keyed by ref, not id — a new asset may not have an id yet.
   const handleAssetRemove = (asset: Asset) => {
     console.log("Removing asset from project:", asset.ref);
@@ -791,6 +804,7 @@ function App() {
         onAssetInsert={handleAssetInsert}
         onAssetUpload={handleAssetUpload}
         onAssetFetchUrl={handleAssetFetchUrl}
+        onCreateAuthored={handleCreateAuthored}
         onAssetRemove={handleAssetRemove}
         onAssetUpdate={handleAssetUpdate}
         divisions={divisions}

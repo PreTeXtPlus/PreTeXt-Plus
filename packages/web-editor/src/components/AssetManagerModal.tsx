@@ -55,6 +55,13 @@ export interface AssetManagerModalProps {
    * file pick, so there is a single code path that creates project assets.
    */
   onFetchUrl?: (url: string) => Promise<File>;
+  /**
+   * Create a new authored asset (no file — its `source` is a hand-typed
+   * PreTeXt element the user fills in afterward via the asset editor). Host
+   * derives the ref from `title` itself (the same way it already does for
+   * `onUpload`) and returns the created asset.
+   */
+  onCreateAuthored?: (title: string) => Promise<Asset>;
   /** Remove an asset from the project. */
   onRemoveAsset?: (asset: Asset) => void;
   /**
@@ -77,7 +84,7 @@ export interface AssetManagerModalProps {
 
 export type AssetManagerMainTab = "in-document" | "add";
 type MainTab = AssetManagerMainTab;
-type ImageSourceTab = "upload" | "url";
+type ImageSourceTab = "upload" | "url" | "authored";
 
 /**
  * A throwaway client-side id for a locally-created asset, used only in the
@@ -101,6 +108,20 @@ function namePastedImageFile(file: File): File {
   return new File([file], `pasted-image-${Date.now()}`, { type: file.type });
 }
 
+/**
+ * Client-only fallback for deriving a ref from a title when no host
+ * `onCreateAuthored` is wired (demo/no-host testing) -- a real host derives
+ * the ref itself, the same way it already does for `onAssetUpload`.
+ */
+function slugifyTitle(title: string): string {
+  const slug = title
+    .toLowerCase()
+    .trim()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+  return slug || "asset";
+}
+
 const AssetManagerModal = ({
   open,
   onClose,
@@ -109,6 +130,7 @@ const AssetManagerModal = ({
   replaceTarget,
   onUpload,
   onFetchUrl,
+  onCreateAuthored,
   onRemoveAsset,
   onDuplicateAsset,
   onAssetAdded,
@@ -150,6 +172,13 @@ const AssetManagerModal = ({
   const [urlTitle, setUrlTitle] = useState("");
   const [isAddingUrl, setIsAddingUrl] = useState(false);
   const [urlError, setUrlError] = useState<string | null>(null);
+
+  // Author state — the created asset is bare (no source yet); the user fills
+  // it in afterward via the asset editor's "Additional source" field. Its ref
+  // is derived from the title (like uploads), not typed in directly.
+  const [authorTitle, setAuthorTitle] = useState("");
+  const [isCreatingAuthored, setIsCreatingAuthored] = useState(false);
+  const [authorError, setAuthorError] = useState<string | null>(null);
 
   // Copy feedback, keyed by `ref`.
   const [copiedKey, setCopiedKey] = useState<string | null>(null);
@@ -239,14 +268,14 @@ const AssetManagerModal = ({
       return;
     }
     if (asset.ref) {
-      navigator.clipboard.writeText(embedFor(asset.ref)).catch(() => {});
+      navigator.clipboard?.writeText(embedFor(asset.ref)).catch(() => {});
       openAssetEditor(asset.ref);
     }
     onClose();
   };
 
   const handleCopy = (ref: string) => {
-    navigator.clipboard.writeText(embedFor(ref)).catch(() => {});
+    navigator.clipboard?.writeText(embedFor(ref)).catch(() => {});
     setCopiedKey(ref);
     setTimeout(() => setCopiedKey((k) => (k === ref ? null : k)), 2000);
   };
@@ -296,6 +325,25 @@ const AssetManagerModal = ({
         ref: url.split("/").pop() ?? "image",
         url,
       });
+    }
+  };
+
+  const handleCreateAuthored = async () => {
+    const title = authorTitle.trim();
+    if (!title) return;
+    setAuthorError(null);
+    if (onCreateAuthored) {
+      setIsCreatingAuthored(true);
+      try {
+        const asset = await onCreateAuthored(title);
+        commitAsset(asset);
+      } catch (err) {
+        setAuthorError(err instanceof Error ? err.message : "Failed to create asset.");
+      } finally {
+        setIsCreatingAuthored(false);
+      }
+    } else {
+      commitAsset({ id: localAssetId("authored"), title, ref: slugifyTitle(title) });
     }
   };
 
@@ -464,6 +512,14 @@ const AssetManagerModal = ({
         <DialogTab active={imageTab === "url"} onClick={() => setImageTab("url")}>
           External URL
         </DialogTab>
+        {onCreateAuthored && (
+          <DialogTab
+            active={imageTab === "authored"}
+            onClick={() => setImageTab("authored")}
+          >
+            Custom
+          </DialogTab>
+        )}
       </DialogTabBar>
       <div className="p-1">
         {imageTab === "upload" && onUpload && (
@@ -570,6 +626,37 @@ const AssetManagerModal = ({
                 onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = "none"; }}
               />
             )}
+          </div>
+        )}
+        {imageTab === "authored" && (
+          <div className="flex flex-col gap-2 pt-1 px-1 pb-2 max-w-[420px]">
+            <DialogLabel htmlFor="am-author-title">Title</DialogLabel>
+            <input
+              id="am-author-title"
+              type="text"
+              className="text-[0.9rem] border border-slate-300 rounded py-1.5 px-2.5 bg-white outline-none text-slate-900 w-full focus:border-[#0e639c] focus:shadow-[0_0_0_2px_rgba(14,99,156,0.15)]"
+              placeholder="My Diagram"
+              value={authorTitle}
+              onChange={(e) => setAuthorTitle(e.target.value)}
+              disabled={isCreatingAuthored}
+              autoFocus
+            />
+            <DialogHelperCopy as="p">
+              A reference id will be generated from the title. You'll write the
+              asset's PreTeXt content (e.g. <code>{"<latex-image>"}</code>) in
+              the next step.
+            </DialogHelperCopy>
+            {authorError && (
+              <p className="m-0 py-[0.4rem] px-[0.6rem] bg-[#fde8e8] text-red-700 rounded text-[0.83rem]">
+                {authorError}
+              </p>
+            )}
+            <DialogButton
+              onClick={handleCreateAuthored}
+              disabled={!authorTitle.trim() || isCreatingAuthored}
+            >
+              {isCreatingAuthored ? "Creating…" : onCreateAuthored ? "Create" : "Add"}
+            </DialogButton>
           </div>
         )}
       </div>

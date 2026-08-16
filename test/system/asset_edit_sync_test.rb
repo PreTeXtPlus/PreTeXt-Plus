@@ -82,6 +82,42 @@ class AssetEditSyncTest < ApplicationSystemTestCase
     assert_not Asset.exists?(@asset.id), "the replaced asset's row should be gone"
   end
 
+  test "authoring a new asset creates it without a file, and editing its source persists it" do
+    # The ref is server-derived from the title (slugifyRef), not typed in.
+    ref = "authored-diagram"
+
+    visit edit_project_path(@project)
+    assert_selector "button[data-testid='toc-assets-btn']", text: "Add", wait: 20
+    find("button[data-testid='toc-assets-btn']", text: "Add").click
+
+    assert_selector "[aria-label='Asset manager']", wait: 10
+    click_button "Custom"
+
+    fill_in "am-author-title", with: "Authored Diagram"
+    click_button "Create"
+
+    # A bare authored asset (no source yet) is created, then the standalone
+    # asset editor opens on it automatically -- same hand-off as upload/URL.
+    assert_no_selector "[aria-label='Asset manager']", wait: 10
+    assert_selector "[aria-label^='Manage asset']", wait: 10
+
+    find("details[data-testid='asset-edit-advanced']").click
+    within("[data-testid='asset-edit-source-editor']") do
+      assert_selector ".view-line", wait: 10
+      first(".view-line").click
+    end
+    page.send_keys "<latex-image>tikzpicture</latex-image>"
+    within("[aria-label^='Manage asset']") { click_button "Save" }
+
+    assert_no_selector "[aria-label^='Manage asset']", wait: 10
+
+    asset = eventually { @project.assets.reload.find_by(ref: ref) }
+    assert asset, "expected an authored asset to have been created with ref #{ref}"
+    assert_equal "authored", asset.kind
+    assert_not asset.file.attached?
+    assert_equal "<latex-image>tikzpicture</latex-image>", asset.source
+  end
+
   private
     def sign_in_through_form
       visit new_user_session_path

@@ -300,6 +300,14 @@ export interface editorProps {
    */
   onAssetFetchUrl?: (url: string) => Promise<File>;
   /**
+   * Called when the user creates a new authored (file-less) asset via the
+   * asset manager's "Author" tab. Host derives the ref from `title` itself
+   * (the same way it already does for `onAssetUpload`) and returns the
+   * created asset — its `source` is empty until the user fills it in via the
+   * asset editor.
+   */
+  onCreateAuthored?: (title: string) => Promise<Asset>;
+  /**
    * Called when the user removes an asset from the project. Return a promise
    * if the removal is persisted asynchronously: the Replace flow awaits it
    * before handing the removed asset's `ref` to its replacement.
@@ -1897,6 +1905,7 @@ const EditorsInner = (props: EditorsInnerProps) => {
             }}
             onUpload={props.onAssetUpload}
             onFetchUrl={props.onAssetFetchUrl}
+            onCreateAuthored={props.onCreateAuthored}
             onRemoveAsset={props.onAssetRemove ? handleAssetRemove : undefined}
             onDuplicateAsset={
               canDuplicateAsset ? handleAssetDuplicate : undefined
