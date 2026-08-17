@@ -50,7 +50,7 @@ import {
  * @property {string} commonDocinfo
  * @property {boolean} useCommonDocinfo
  * @property {string} language
- * @property {"article"|"book"} projectType
+ * @property {"article"|"book"|"slideshow"} projectType
  * @property {EditorDivision[]} divisions
  * @property {Asset[]} [projectAssets]
  * @property {string} [rootDivisionId]
@@ -104,6 +104,11 @@ import {
 
 const AUTOSAVE_MS = 10000;
 
+// Root element tag names the editor understands, which is also exactly the set
+// of `Project#document_type` values -- see railsToEditorState for why the two
+// vocabularies are deliberately the same.
+const ROOT_ELEMENT_TYPES = [ "article", "book", "slideshow" ];
+
 // --- Rails JSON  <->  web-editor shapes ------------------------------------
 // railsDivisionToEditor / railsAssetToEditor / toEditorAsset now live in
 // ./railsProjectMapping, shared with ./shared_source.jsx.
@@ -131,7 +136,14 @@ function slugifyRef(value) {
 function railsToEditorState(json) {
   const root = (json.divisions ?? []).find((d) => d.is_root);
   const title = json.title ?? "";
-  const projectType = json.document_type === "book" ? "book" : "article";
+  // `document_type` and the editor's `projectType` are the same vocabulary --
+  // root element tag names -- so this is an identity map with a fallback, not a
+  // translation. That is deliberate: the editor synthesizes a wrapper element
+  // from this value, so it has to be a real tag name. Anything unrecognised
+  // becomes an article, since a wrong tag is worse than a default one.
+  const projectType = ROOT_ELEMENT_TYPES.includes(json.document_type)
+    ? json.document_type
+    : "article";
   const rootMeta = { type: projectType, title };
   return {
     title,

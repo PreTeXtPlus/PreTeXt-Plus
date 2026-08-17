@@ -20,7 +20,6 @@ const makeStore = () =>
     commonDocinfo: "",
     useCommonDocinfo: false,
     language: "en-US",
-    projectType: "article",
     divisions: [],
     activeDivisionId: null,
     projectAssets: undefined,

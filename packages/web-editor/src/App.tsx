@@ -8,7 +8,7 @@ import type {
   FeedbackSubmission,
   SourceFormat,
 } from "./types/editor";
-import type { Division, DivisionType } from "./types/sections";
+import type { Division, DivisionType, RootDivisionType } from "./types/sections";
 import { assembleProjectSource } from "./sectionUtils";
 
 /** A self-contained placeholder image (no network dependency) for demo image assets. */
@@ -514,7 +514,7 @@ function App() {
     },
   ]);
 
-  const [projectType, setProjectType] = useState<"article" | "book">("article");
+  const [projectType, setProjectType] = useState<RootDivisionType>("article");
   const [demoLabel, setDemoLabel] = useState("Article");
   // Collaboration demo: two editors sharing one (in-memory-relayed) Y.Doc.
   // Keyed so each entry builds a fresh session pair.

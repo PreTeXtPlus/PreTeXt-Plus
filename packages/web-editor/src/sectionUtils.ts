@@ -16,6 +16,7 @@ import type {
   DocumentSection,
   DocumentSectionType,
   DocumentSplitResult,
+  RootDivisionType,
 } from "./types/sections";
 import { derivePretextContent } from "./contentConversion";
 import { resolveAssetRef } from "./assetTransforms";
@@ -2148,11 +2149,23 @@ export function getOrphanRoots(
 
 
 /** Root division types — already a valid top-level PreTeXt element on their own. */
-const ROOT_DIVISION_TYPES: ReadonlySet<DivisionType> = new Set([
+const ROOT_DIVISION_TYPES: ReadonlySet<DivisionType> = new Set<RootDivisionType>([
   "book",
   "article",
   "slideshow",
 ]);
+
+/**
+ * Narrow an arbitrary value to a {@link RootDivisionType}. Exists because the
+ * root type arrives from the *host*, which may be untyped JavaScript (the Rails
+ * app hands it over as a JSON string), so an unknown value has to fall back
+ * rather than be trusted into a template.
+ */
+export function isRootDivisionType(value: unknown): value is RootDivisionType {
+  return (
+    typeof value === "string" && ROOT_DIVISION_TYPES.has(value as DivisionType)
+  );
+}
 
 /**
  * The index just past a start/end tag beginning at `open`, or -1 if it never
@@ -2535,14 +2548,23 @@ const BOOK_CHILD_DIVISION_TYPES: ReadonlySet<DivisionType> = new Set([
  * `divisionType` determines the minimal wrapper needed around `divisionXml`:
  * root types (`book`/`article`/`slideshow`) need none, `chapter`/`part` are
  * wrapped in a bare `<book>`, and everything else in a bare `<article>`.
- * The PreTeXt schema requires `<book>`/`<article>` to have a `<title>` as
- * their first child, so a wrapper built here uses `wrapperTitle` for that —
- * without it the build server's schema validation rejects the document,
- * produces no output, and 500s.
+ * The PreTeXt schema requires `<book>`/`<article>`/`<slideshow>` to have a
+ * `<title>` as their first child, so a wrapper built here uses `wrapperTitle`
+ * for that — without it the build server's schema validation rejects the
+ * document, produces no output, and 500s.
  * `docinfo` (the full `<docinfo>...</docinfo>` element, or `""`) is inserted
  * as a sibling of the root element inside `<pretext>`, matching real PreTeXt
  * document shape. `lang`, when provided, is written as `@xml:lang` on the
  * root `<pretext>` element.
+ *
+ * `rootType` is the type of the *project's* root division, which a division's
+ * own type cannot reveal: a `<section>` looks identical whether it lives in an
+ * article or in a deck. It matters only for a slideshow, and getting it wrong
+ * there **fails silently**. A section of slides wrapped in `<article>` still
+ * renders — the renderer detects the `<slide>` elements and selects the
+ * reveal.js conversion, which is then handed a root element it has no template
+ * for, and emits a deck-shaped page with no slides in it. An empty preview, not
+ * an error. Omit it and the article fallback is used, as before.
  */
 export function wrapDivisionForPreview(
   divisionType: DivisionType,
@@ -2550,13 +2572,23 @@ export function wrapDivisionForPreview(
   docinfo: string,
   wrapperTitle: string,
   lang?: string,
+  rootType?: RootDivisionType,
 ): string {
-  const body = ROOT_DIVISION_TYPES.has(divisionType)
-    ? divisionXml
-    : BOOK_CHILD_DIVISION_TYPES.has(divisionType)
-      ? `<book>\n<title>${wrapperTitle}</title>\n${divisionXml}\n</book>`
-      : `<article>\n<title>${wrapperTitle}</title>\n${divisionXml}\n</article>`;
-  return wrapInPretextDocument(body, docinfo, lang);
+  // A root division is already a complete top-level element.
+  if (ROOT_DIVISION_TYPES.has(divisionType)) {
+    return wrapInPretextDocument(divisionXml, docinfo, lang);
+  }
+  const wrapper: RootDivisionType =
+    rootType === "slideshow"
+      ? "slideshow"
+      : BOOK_CHILD_DIVISION_TYPES.has(divisionType)
+        ? "book"
+        : "article";
+  return wrapInPretextDocument(
+    `<${wrapper}>\n<title>${wrapperTitle}</title>\n${divisionXml}\n</${wrapper}>`,
+    docinfo,
+    lang,
+  );
 }
 
 // ---------------------------------------------------------------------------
@@ -2573,12 +2605,12 @@ export function wrapDivisionForPreview(
  * though its source already has a real title. Backfill it here so the TOC
  * doesn't show "Untitled" for content that already has one.
  *
- * The root division additionally needs an `<article>`/`<book>` wrapper
- * element. A host that hands back a brand-new project's root division as a
- * bare body fragment (no wrapper at all) gets one added here, chosen from
- * `projectType` (`"book"` vs. the default `"article"`). The wrapper's
- * `<title>` falls back to the host's `projectTitle` when the fragment carries
- * no title of its own, rather than the placeholder `"Untitled"`.
+ * The root division additionally needs an `<article>`/`<book>`/`<slideshow>`
+ * wrapper element. A host that hands back a brand-new project's root division
+ * as a bare body fragment (no wrapper at all) gets one added here, named by
+ * `projectType` (defaulting to `"article"`). The wrapper's `<title>` falls back
+ * to the host's `projectTitle` when the fragment carries no title of its own,
+ * rather than the placeholder `"Untitled"`.
  */
 /**
  * Strip a leading `<title>...</title>` element off a bare (unwrapped) PreTeXt
@@ -2597,10 +2629,14 @@ function extractLeadingTitle(content: string): { title: string; body: string } {
 export function normalizeDivisionsOnLoad(
   divisions: Division[],
   rootDivisionId: string | undefined,
-  projectType: "article" | "book" | undefined,
+  projectType: RootDivisionType | undefined,
   projectTitle?: string,
 ): Division[] {
-  const wrapperType: DivisionType = projectType === "book" ? "book" : "article";
+  // Checked rather than cast: `projectType` comes from the host, which may be
+  // untyped JavaScript, and this value is written straight into a tag name.
+  const wrapperType: RootDivisionType = isRootDivisionType(projectType)
+    ? projectType
+    : "article";
 
   return divisions.map((division) => {
     if (division.sourceFormat === "markdown") {

@@ -56,7 +56,6 @@ const makeStore = () =>
     commonDocinfo: "",
     useCommonDocinfo: false,
     language: "en-US",
-    projectType: "article",
     divisions: structuredClone(DIVISIONS),
     activeDivisionId: "sec-a",
     projectAssets: undefined,
@@ -379,7 +378,6 @@ describe("CollabBridge", () => {
       commonDocinfo: "",
       useCommonDocinfo: false,
       language: "en-US",
-      projectType: "article",
       divisions: structuredClone(DIVISIONS),
       activeDivisionId: "sec-a",
       projectAssets: [

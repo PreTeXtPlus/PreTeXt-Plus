@@ -48,14 +48,23 @@ const SectionEditForm = ({
 }: SectionEditFormProps) => {
   const selectableTypes = getSelectableDivisionTypes(parentType, draft.type);
 
-  // The root's own type dropdown offers article/book (the only two switch
-  // targets so far) plus its current type when that's something else (e.g. a
-  // pre-existing slideshow) — so the <select> always has a matching <option>
-  // and never silently mismatches what's actually stored. Same guarantee
+  // The root's own type dropdown offers article/book, the two root elements that
+  // can be freely swapped: they hold the same children, so switching leaves the
+  // document valid.
+  //
+  // A root type outside that set (a slideshow) is offered as the *only* option,
+  // not prepended to the switchable ones. Article and slideshow do not hold the
+  // same children — a deck's <slide>s are illegal in an article, and a
+  // slideshow's build targets stop existing — so converting is a rewrite of the
+  // document, not a change of one tag. Keeping it in the list would present that
+  // as a routine choice and produce a document that cannot build. The <select>
+  // still always has an <option> matching what's stored, which is the guarantee
   // `getSelectableDivisionTypes` gives every other division.
   const rootTypeOptions = SWITCHABLE_ROOT_TYPES.includes(draft.type)
     ? SWITCHABLE_ROOT_TYPES
-    : [draft.type, ...SWITCHABLE_ROOT_TYPES];
+    : [draft.type];
+
+  const typeOptions = isRoot ? rootTypeOptions : selectableTypes;
 
   // A brand-new division starts with an opaque generated id (e.g.
   // "sec-m5x2k9-a3f8z1"). Until the author edits the Id field directly, keep
@@ -123,6 +132,9 @@ const SectionEditForm = ({
       <select
         className={FIELD_CONTROL_CLASSES}
         value={draft.type}
+        // Nothing to choose: a slideshow root has no legal switch target, so an
+        // enabled control would only offer the type it already is.
+        disabled={typeOptions.length < 2}
         onChange={(e) => {
           const type = e.target.value as DivisionType;
           onDraftChange(
@@ -132,7 +144,7 @@ const SectionEditForm = ({
           );
         }}
       >
-        {(isRoot ? rootTypeOptions : selectableTypes).map((t) => (
+        {typeOptions.map((t) => (
           <option key={t} value={t}>
             {TYPE_FULL_LABELS[t]}
           </option>

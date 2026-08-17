@@ -2,10 +2,10 @@
 
 Plan of record for first-class `<slideshow>` support.
 
-**Status:** the preview render path landed earlier on `main` (old Part 4.1/4.2). Parts 1
-and 2 — creating a slideshow — are **done** on this branch. Part 3 (the editor's
-root-type plumbing, including a live preview bug), Part 4.3 (the build-server fallback)
-and Part 5 (authoring affordances) are open.
+**Status:** the preview render path landed earlier on `main` (old Part 4.1/4.2). Parts 1,
+2 and 3 are **done** on this branch — a slideshow can be created, and the editor types it
+correctly. Part 4.3 (the build-server fallback) and Part 5 (authoring affordances) are
+open.
 
 ## Context
 
@@ -207,7 +207,7 @@ hosts) — this just means a project created through *our* form never depends on
 
 ---
 
-## Part 3 — The `<slideshow>` root in the editor
+## Part 3 — The `<slideshow>` root in the editor ✅ done
 
 ### 3.1 `projectType` plumbing
 
@@ -266,6 +266,17 @@ which is why the wrapper adds one.
 **This failure is silent** — a wrong wrapper yields an empty page, not an error — which is
 the argument for pinning it with a unit test rather than a visual check.
 
+Measured through the real renderer before and after, on the same section of two slides:
+
+| Wrapper | Detected target | Rendered output |
+| --- | --- | --- |
+| `<article>` (the bug) | `slides` | **17 bytes** — no `.slides` container, no slides |
+| `<slideshow>` (fixed) | `slides` | 4191 bytes, `.slides` container, both slides |
+
+The wrapper is chosen from the **root division's own tag**, falling back to the
+`projectType` prop: the source is authoritative for which root element a document has, and
+a host that let the author switch article↔book may not have echoed the prop back yet.
+
 ### 3.3 Close the root-type switch
 
 `SWITCHABLE_ROOT_TYPES = ["article", "book"]`
@@ -277,9 +288,9 @@ list ([SectionEditForm.tsx:56-58](../packages/web-editor/src/components/toc/Sect
 so a slideshow root would offer **Slideshow, Article, Book** and the author could pick
 Article.
 
-Change that fallback so a non-switchable root type renders as the only option (or a
-disabled control), instead of being prepended to the switchable ones. Cover it with a
-test — this is a one-line regression waiting to happen.
+The fallback now renders a non-switchable root type as the only option, and the `<select>`
+is disabled when it has nothing to offer. Covered by a test — this is a one-line
+regression waiting to happen.
 
 ---
 
@@ -351,12 +362,11 @@ will have.
 
 ## Sequencing
 
-Parts 1 and 2 were the critical path — without them there was no way to create a
-slideshow, and everything else was unreachable in the product. **Part 3 is now the
-priority:** slideshows can be made but the editor still types them as articles, which
-means a non-root preview renders an empty deck (3.2) and the TOC will offer to convert a
-deck into an article (3.3). Part 4.3 is independent and low-traffic. Part 5 is independent
-of all of it.
+Parts 1–3 are done: a slideshow can be created in any of the three markup styles, and the
+editor types, previews and protects it correctly. What remains is independent of both:
+**Part 4.3** (the build-server fallback, reached only by engines without JSPI) and **Part
+5** (authoring affordances — the "New slide" insertion is the gap an author hits first,
+since slides are not divisions and the TOC cannot add one).
 
 ## Traps
 

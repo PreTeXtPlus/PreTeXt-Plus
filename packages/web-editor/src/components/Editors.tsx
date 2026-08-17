@@ -39,7 +39,7 @@ import type {
   FeedbackSubmission,
   SourceFormat,
 } from "../types/editor";
-import type { Division, DivisionType } from "../types/sections";
+import type { Division, DivisionType, RootDivisionType } from "../types/sections";
 import {
   createNewSection,
   createDivisionContent,
@@ -61,6 +61,7 @@ import {
   removeAssetRef,
   updateSectionMetadata,
   normalizeDivisionsOnLoad,
+  isRootDivisionType,
 } from "../sectionUtils";
 import { defaultChildDivisionType } from "./toc/types";
 import { buildProjectAssetView, makeUniqueAssetRef } from "../assetView";
@@ -197,10 +198,17 @@ export interface editorProps {
    */
   previewBannerMessage?: string;
   /**
-   * Whether this is an `"article"` (default) or `"book"` project.
-   * When `"book"`, the TOC shows a chapter list that expands to show sections.
+   * The tag name of this project's root element: `"article"` (default),
+   * `"book"` or `"slideshow"`. When `"book"`, the TOC shows a chapter list that
+   * expands to show sections. When `"slideshow"`, a preview of a single
+   * non-root division is wrapped in `<slideshow>` rather than `<article>`, so
+   * the renderer picks the reveal.js conversion with a root it can build.
+   *
+   * These are element names, not host-side project categories — a host that
+   * models the article/book distinction some other way still has to name the
+   * tag it wants synthesized.
    */
-  projectType?: "article" | "book";
+  projectType?: RootDivisionType;
   // ── Divisions API ────────────────────────────────────────────────────────────
   /**
    * Flat pool of all division records for this project.  The editor's content
@@ -412,7 +420,6 @@ const Editors = (props: editorProps) => {
       commonDocinfo: props.commonDocinfo ?? "",
       useCommonDocinfo: props.useCommonDocinfo ?? false,
       language: props.language || DEFAULT_LANGUAGE,
-      projectType: props.projectType,
       divisions: normalizedDivisions,
       activeDivisionId: initActiveId,
       projectAssets: props.projectAssets,
@@ -1205,7 +1212,6 @@ const EditorsInner = (props: EditorsInnerProps) => {
     syncState({
       source: divisionActiveSource,
       sourceFormat: activeDivisionFormat,
-      projectType: props.projectType,
       projectUrl: props.projectUrl,
       rootDivisionId: rootDivision?.xmlId,
       canConvertToPretext: divisionConvertedPretext !== undefined,
@@ -1419,6 +1425,17 @@ const EditorsInner = (props: EditorsInnerProps) => {
     [activeDivision, divisions, projectAssets],
   );
 
+  // The root division's own tag wins over `props.projectType`: the source is
+  // authoritative for which root element this document actually has, and a host
+  // that let the author switch article↔book in the TOC may not have echoed the
+  // prop back yet. The prop is the fallback for a root that hasn't been
+  // synthesized yet.
+  const previewRootType: RootDivisionType | undefined = isRootDivisionType(
+    rootDivision?.type,
+  )
+    ? rootDivision.type
+    : props.projectType;
+
   const previewContent = useMemo(
     () =>
       activeDivision && divisionTaggedXml !== undefined
@@ -1428,9 +1445,16 @@ const EditorsInner = (props: EditorsInnerProps) => {
             effectiveDocinfo,
             activeDivision.title,
             language,
+            previewRootType,
           )
         : undefined,
-    [activeDivision, divisionTaggedXml, effectiveDocinfo, language],
+    [
+      activeDivision,
+      divisionTaggedXml,
+      effectiveDocinfo,
+      language,
+      previewRootType,
+    ],
   );
 
   // Is the division on screen the whole document? Then it *is* its own
