@@ -9,6 +9,14 @@
  * here; a construct silently regressing to a `<TODO>` placeholder fails here
  * rather than in an author's document).
  *
+ * A PreTeXt body is validated the way the editor validates one: assembled
+ * first. A buffer here is a *division*, and a division may hold
+ * `<plus:* ref="…"/>` placeholders — the figure snippet writes one for its
+ * image — which are expanded by `assembleFullProjectSource` before the schema
+ * ever sees them. Validating a body as written would fail on a namespace the
+ * grammar has never heard of, and would say nothing about what actually
+ * reaches a build.
+ *
  * The grammar is read from the installed package with `fetch` stubbed to serve
  * it, exactly as `pretextSchema.test.ts` does, so the suite stays offline.
  */
@@ -28,7 +36,9 @@ import {
   setPretextSchemaUrl,
   validatePretextDocument,
 } from "../components/editorConfigs/pretextSchema";
-import type { SourceFormat } from "../types/editor";
+import { assembleFullProjectSource } from "../sectionUtils";
+import type { Asset, SourceFormat } from "../types/editor";
+import type { Division } from "../types/sections";
 
 const require = createRequire(import.meta.url);
 const GRAMMAR_URL = "https://test.invalid/pretext.json";
@@ -164,19 +174,53 @@ describe("snippetPlainText", () => {
 });
 
 describe("PreTeXt snippets", () => {
+  /**
+   * The asset the figure snippet's `<plus:image ref/>` placeholder resolves
+   * against. Its `ref` is the placeholder's own default text, since {@link
+   * filled} keeps a placeholder's default — so the figure body points at a real
+   * asset here exactly as an author's would once they picked one.
+   */
+  const ASSETS: Asset[] = [
+    {
+      title: "A picture",
+      ref: "image-ref",
+      isFile: true,
+      fileRef: "image-ref.png",
+      shortDescription: "A picture.",
+    },
+  ];
+
+  /** A division of PreTeXt source, as the divisions pool holds one. */
+  const division = (
+    xmlId: string,
+    type: Division["type"],
+    source: string,
+  ): Division => ({ xmlId, title: xmlId, type, sourceFormat: "pretext", source });
+
+  /**
+   * `body` in the document it would really be built into: a section of an
+   * article, assembled by the same function the preview and the schema linter
+   * assemble with, so `<plus:* ref/>` placeholders are expanded rather than
+   * handed to the grammar raw.
+   */
   const wrap = (body: string) =>
-    [
-      `<?xml version="1.0" encoding="UTF-8"?>`,
-      `<pretext>`,
-      `<article>`,
-      `<title>Doc</title>`,
-      `<section xml:id="sec-a">`,
-      `<title>One</title>`,
-      body,
-      `</section>`,
-      `</article>`,
-      `</pretext>`,
-    ].join("\n");
+    assembleFullProjectSource(
+      [
+        division(
+          "art-a",
+          "article",
+          `<article xml:id="art-a">\n<title>Doc</title>\n<plus:section ref="sec-a"/>\n</article>`,
+        ),
+        division(
+          "sec-a",
+          "section",
+          `<section xml:id="sec-a">\n<title>One</title>\n${body}\n</section>`,
+        ),
+      ],
+      "art-a",
+      "",
+      ASSETS,
+    );
 
   /**
    * A snippet as it reaches the buffer: tab stops filled, and a cross-reference
