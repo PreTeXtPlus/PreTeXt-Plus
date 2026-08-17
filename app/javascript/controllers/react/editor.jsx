@@ -395,7 +395,10 @@ function EditorApp({ config }) {
   const projectUrl = `/projects/${projectId}`;
   const previewUrl = `/projects/${projectId}/preview`;
   const copyUrl = `/projects/${projectId}/copy_conversion`;
-  const feedbackUrl = `/projects/${projectId}/feedback`;
+  // Feedback is a collection route, not a member one: the action doesn't load a
+  // project, it just mails what the form sends (the project is identified by the
+  // `project_url` in the body).
+  const feedbackUrl = "/projects/feedback";
   // Fetches the bytes of a remote image server-side (CORS workaround only --
   // does not persist anything; see onAssetFetchUrl below).
   const assetFetchUrl = "/asset_fetches";
