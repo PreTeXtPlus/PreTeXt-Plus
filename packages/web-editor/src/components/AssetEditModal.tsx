@@ -304,7 +304,11 @@ const AssetEditModal = ({
                   disabled={busy}
                 />
 
-                <DialogLabel htmlFor="am-edit-ref">Id</DialogLabel>
+                <DialogLabel htmlFor="am-edit-ref">Id
+                <DialogHelperCopy>
+                  Used in the embed code. Changing it updates every reference to this
+                  asset already in your document.
+                </DialogHelperCopy></DialogLabel>
                 <input
                   id="am-edit-ref"
                   type="text"
@@ -313,17 +317,14 @@ const AssetEditModal = ({
                   onChange={(e) => setRefValue(e.target.value)}
                   disabled={busy}
                 />
-                <DialogHelperCopy as="p">
-                  Used in the embed code. Changing it updates every reference to this
-                  asset already in your document.
-                </DialogHelperCopy>
               </div>
             </div>
 
             <DialogLabel htmlFor="am-edit-short-description">
               Short description (Alt text)
               <DialogHelperCopy>
-                A brief plaintext description of the image for accessibility.
+                A brief plaintext description of the image for accessibility,
+                automatically inserted as a PreTeXt <code>&lt;shortdescription/&gt;</code>
               </DialogHelperCopy>
             </DialogLabel>
             <input
