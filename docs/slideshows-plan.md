@@ -1,189 +1,209 @@
 # Slideshows
 
-Plan of record for first-class `<slideshow>` support. **Not started** — parked on the
-`slides` branch until we pick it back up.
+Plan of record for first-class `<slideshow>` support.
+
+**Status:** the preview render path landed earlier on `main` (old Part 4.1/4.2). Parts 1
+and 2 — creating a slideshow — are **done** on this branch. Part 3 (the editor's
+root-type plumbing, including a live preview bug), Part 4.3 (the build-server fallback)
+and Part 5 (authoring affordances) are open.
 
 ## Context
 
 A slideshow is a PreTeXt document whose root element is `<slideshow>` rather than
 `<article>`/`<book>`, built to a reveal.js deck (or a Beamer PDF) instead of a website.
-Pieces of this already exist — the target catalog has restricted `revealjs`/`beamer` to
-slideshows since the build-targets work, and the editor knows `slideshow` as a division
-type — but there is no way to *make* one, and the preview only half works.
+The target catalog has restricted `revealjs`/`beamer` to slideshows since the
+build-targets work, the editor knows `slideshow` as a division type, and the live preview
+now renders and drives a deck properly. What is still missing is a way to *make* one.
 
-### Decisions taken up front
+### Decisions
 
-1. **Slideshows are PreTeXt-classic markup only, for now.** The LaTeX converter already
-   understands a `\slideshow{…}` header and `contentConversion.ts` lists it as a root
-   header, so the door is open — but the new-project flow will not offer LaTeX- or
-   Markdown-style slideshows until someone has actually exercised those paths.
+1. **All three markup styles may be slideshows.** *(Revised — the previous plan restricted
+   slideshows to PreTeXt-classic until someone exercised the other paths. They have now
+   been exercised: both converters handle a slideshow root today, with no package changes
+   needed.)* Verified against the installed `@pretextbook/latex-pretext` and
+   `@pretextbook/remark-pretext`:
 
-2. **`document_type` collapses to `document` vs `slideshow`.** Article-vs-book is a
-   property of the root element in the source, and the TOC already switches between them
-   freely (`SWITCHABLE_ROOT_TYPES`). Carrying the same distinction a second time on the
-   project row buys nothing and gives two places to disagree. What the project row *does*
-   need to say is the one thing that is not freely switchable: whether this is a deck.
+   | Markup | Root | Section | Slide |
+   | --- | --- | --- | --- |
+   | PreTeXt | `<slideshow>` | `<section>` | `<slide>` |
+   | LaTeX | `\slideshow{…}` | `\section{…}` | `\begin{frame}{Title}` |
+   | Markdown | `division: slideshow` frontmatter | `#` | `##` |
 
-3. **No conversion between a document and a slideshow, in either direction.** Not a
-   temporary limitation — changing the root element out from under a project means
-   rewriting the source, invalidating targets, and re-deciding what every division means.
-   The document type is fixed when the project is created.
+   Two things to carry forward. **LaTeX authors slides with Beamer's `frame` environment,
+   not a `\slide` macro** — `\slide{…}` converts to a `<TODO type="unknown-macro">`, so
+   Part 5's snippet must emit `\begin{frame}`. And **Markdown's heading levels shift
+   meaning inside a slideshow**: `#` is a section and `##` a slide, where in an article
+   they are the root and a section. A Markdown deck written with only `##` headings
+   produces `<slide>` children directly under `<slideshow>` — the flat form discussed in
+   Part 5, which is now reachable through an ordinary authoring path rather than
+   hypothetical.
+
+2. **The `document_type` enum keeps all three values.** *(Revised — the previous plan
+   collapsed `article`/`book` into a single `document`.)* The only axis any code
+   discriminates on is slideshow-vs-not, and `Target::Catalog#available_for?` asks exactly
+   that question, so the collapse bought nothing and cost a data migration, a retired
+   integer, fixture churn across six files, and a new normalization trap on the import
+   path. Keeping `book` also keeps the Rails→editor mapping an identity function across
+   all three values (Part 3.1), which is strictly simpler than mapping `document` back
+   onto the literal tag `article`.
+
+   The staleness this leaves behind — a project row saying `article` whose root element
+   the author has since switched to `<book>` — already exists on `main` today and has no
+   consumer: article-vs-book is read only by two admin display strings and by the
+   editor's root-wrapper synthesis fallback for a project that has no wrapper yet. See
+   Part 1.3 for the optional fix if it ever starts to matter.
+
+3. **Slideshow-vs-not is fixed at creation; article-vs-book is not.** Turning a document
+   into a deck means rewriting the source, invalidating targets, and re-deciding what
+   every division means — not a temporary limitation. Article↔book stays freely
+   switchable in the TOC exactly as it is today.
 
 4. **The local WASM render is the primary preview path.** `@pretextbook/pretext-html`
-   0.5.0 renders decks in-page. The lite build server remains the fallback for engines
-   without WebAssembly JSPI; it takes an **optional** `target` of `html` or `revealjs`
-   and detects the format from the source when it is absent.
+   renders decks in-page. The lite build server remains the fallback for engines without
+   WebAssembly JSPI; it takes an **optional** `target` of `html` or `revealjs` and detects
+   the format from the source when it is absent.
 
 ### What already works — do not redo
 
-- `Project` has the enum value; `Target::Catalog` restricts `revealjs`/`beamer` to it,
-  enforced three ways (picker, `Target`, `Project`). See `docs/build-targets.md`.
+- `Project` has the enum value; `Target::Catalog` restricts `revealjs`/`beamer` to it
+  ([catalog.rb:96,100](../app/models/target/catalog.rb#L96)), enforced three ways
+  (picker, `Target`, `Project`). See `docs/build-targets.md`.
 - The editor knows `slideshow` as a `DivisionType` throughout: TOC labels, id prefix,
   `ALLOWED_CHILD_DIVISION_TYPES.slideshow = ["section"]`, root-division lookups,
   `ROOT_DIVISION_TYPES` in `sectionUtils.ts`.
-- `railsDivisionToEditor` derives a PreTeXt root's type from its own tag
-  ([editor.jsx:136](../app/javascript/controllers/react/editor.jsx#L136)), so a
+- `railsDivisionToEditor` derives a PreTeXt root's type from its own tag, so a
   `<slideshow>` root already types itself correctly once one exists.
-- pretext-html 0.5.0 auto-detects a deck and returns `target` from `renderHtml`. A
-  **root-division** live preview of a slideshow very likely already renders as a deck
-  today. Non-root previews do not — see Part 3.2.
+- **The whole preview render path (old Part 4.1/4.2) is done.** `@pretextbook/pretext-html`
+  is on `^0.12.0` and committed. `wasmPreview.renderPreviewHtml` returns `target`;
+  `LivePreview` tracks `renderTarget`, defaults a deck to `revealView: "scroll"`, and
+  offers Scroll/Slides and zoom controls gated on `renderTarget === "slides"`, switching
+  views by re-applying `applyRevealView` to the HTML in hand rather than talking to the
+  live deck.
+- The Insert menu now has real placement machinery — `editorConfigs/insertContext.ts`
+  gates each snippet on whether the cursor is inside a `<p>`. Part 5 builds on this
+  rather than inventing anything.
 
 ---
 
-## Part 1 — Collapse `document_type` to `document` vs `slideshow`
+## Part 1 — Fix the slideshow axis at creation ✅ done
 
-Independent of everything else here; land it first and on its own.
-
-### 1.1 Migration
-
-`projects.document_type` is an integer with `default: 0, null: false`, currently
-`{ article: 0, book: 1, slideshow: 2 }`. Map `book` onto `article`'s integer and retire
-`1`:
+No migration. No schema change. The enum at
+[project.rb:44](../app/models/project.rb#L44) stays exactly as it is:
 
 ```ruby
-class CollapseArticleAndBookDocumentTypes < ActiveRecord::Migration[8.1]
-  def up
-    Project.where(document_type: 1).update_all(document_type: 0)
-  end
-
-  def down
-    # Irreversible: which of these rows were books is not recoverable, and it does not
-    # matter — the root element in the source is where that has always really lived.
-    raise ActiveRecord::IrreversibleMigration
-  end
-end
+enum :document_type, { article: 0, book: 1, slideshow: 2 }, default: :article, suffix: true, validate: true
 ```
 
-`default: 0` stays correct and the column is untouched. **Integer `1` is retired
-permanently** — the same rule `builds.status` follows in `docs/build-targets.md`.
-Reusing it later silently reinterprets whatever these rows become. Do not renumber
-`slideshow` down to 1 to "tidy up"; that rewrites the meaning of every existing deck.
+### 1.1 Permit `document_type` on create only
 
-### 1.2 Model
+[projects_controller.rb:268](../app/controllers/projects_controller.rb#L268) —
+`project_params` does not permit `document_type` at all today; only `import_params` does.
+**This is the actual blocker: nothing outside the importer can create a slideshow.**
 
-[project.rb:40](../app/models/project.rb#L40):
+Permit it in `project_params`, but only on `create`. On `update`, drop it before it
+reaches the model. Decision 3 is a write-once rule for the slideshow axis, and the
+cheapest place to enforce "you cannot become or stop being a deck" is the boundary,
+rather than leaning on the target validation to notice after the fact.
 
-```ruby
-enum :document_type, { document: 0, slideshow: 2 }, default: :document, suffix: true, validate: true
-```
+Because the enum keeps all three values, an update that *did* slip through with
+`article`↔`book` would be harmless — but permitting it invites the UI to start offering
+it, and the root element is where that choice belongs.
 
-`Target::Catalog`'s `document_types: %i[ slideshow ]` and `available_for?` need no
-change, and the validation message ("only available for slideshow projects") still
-reads correctly.
+### 1.2 Keep the target guard
 
-Keep `Project#targets_supported_by_document_type` even though decision 3 means nothing
-in the UI changes the type. It costs one validation and it is the guard that catches a
-console edit or a future feature; deleting it is how the trap it documents comes back.
+`Project#targets_supported_by_document_type`
+([project.rb:368](../app/models/project.rb#L368)) stays. It costs one validation and it
+is the guard that catches a console edit or a future feature; deleting it because
+"nothing in the UI can change the type" is how the trap it documents comes back.
 
-### 1.3 The import path — a real trap
+`Target::Catalog`'s `document_types: %i[ slideshow ]` and `available_for?` need no change,
+and the validation message still reads correctly.
 
-`import_params` permits `document_type`, and `@pretextbook/import` sends one:
-`DocumentKind` is `"article" | "book"`, never `"slideshow"`. After the collapse, both
-values are unknown to the enum. With `validate: true` an unknown value does **not**
-raise — the record simply fails validation — so an import would break with
-"Document type is not included in the list" and no obvious cause.
+### 1.3 The import path — nothing to do
 
-Normalize at the boundary in `ProjectsController#import_params`, which also
-future-proofs for the day the importer learns to detect a deck:
+`@pretextbook/import` sends `DocumentKind` as `"article" | "book"`, never `"slideshow"`.
+With the enum unchanged, both values remain valid and the import path keeps working
+untouched. *(The previous plan needed a normalization shim here purely to survive its own
+collapse.)*
 
-```ruby
-# @pretextbook/import reports the root element it found ("article"/"book"); we only
-# care whether it is a slideshow.
-attrs[:document_type] = attrs[:document_type].to_s == "slideshow" ? "slideshow" : "document"
-```
+### 1.4 Optional, deferred — derive article/book from the source
 
-(Simply dropping `document_type` from the permitted list would work today and lose
-nothing, since the importer cannot produce a slideshow — but it silently starts
-discarding real information the moment that changes.)
+If the stale-row concern in decision 2 ever grows teeth, the fix is to derive rather than
+collapse: on save, read the root division's tag and set `document_type` from it for the
+article/book axis only, leaving `slideshow` alone. Cheap, one callback, and it makes the
+row correct instead of merely unread. Not part of this work.
 
-### 1.4 Fixtures and tests
+### 1.5 Tests
 
-- `test/fixtures/projects.yml` — five `article` and one `book` become `document`;
-  the `slides` fixture is untouched.
-- `test/models/project_test.rb:129-149` — the conversion-guard tests change
-  `:article`/`:book` to `:document`. The guard itself is unchanged.
-- `test/models/target_test.rb:181` — `for_document_type(:article)` becomes
-  `for_document_type(:document)`.
-- `test/controllers/projects_controller_test.rb:750,787,804` — the import tests post
-  `document_type: "article"/"book"` and assert `project.book_document_type?`, which
-  stops existing. Rewrite against the normalization in 1.3.
+Nothing existing changes. Fixtures, `project_test.rb`'s conversion guards,
+`target_test.rb:181`, and the import controller tests all stay as they are. Add:
+
+- `project_params` permits `document_type` on create and ignores it on update.
+- Creating with `document_type: "slideshow"` yields a slideshow project with the right
+  default target (Part 2.3).
 
 ---
 
-## Part 2 — Creating a slideshow (Rails)
+## Part 2 — Creating a slideshow (Rails) ✅ done
 
-### 2.1 Permit `document_type`
+### 2.1 The new-project dialog
 
-[projects_controller.rb:227](../app/controllers/projects_controller.rb#L227) —
-`project_params` does not permit `document_type` at all today; only `import_params`
-does. This is the actual blocker: nothing outside the importer can create a slideshow.
-
-Permit it. Because of decision 3 it must be **write-once**: permit it on `create` and
-reject it on `update`, rather than relying on the target validation to catch changes
-after the fact.
-
-### 2.2 The new-project dialog
-
-[new.html.erb](../app/views/projects/new.html.erb) currently asks only for a markup
-style; the document type has never been a choice there (every project is an article
-until the author switches the root element in the editor). Add the axis:
+[new.html.erb](../app/views/projects/new.html.erb) — the "New empty document" dialog
+currently asks only for a markup style; the document type has never been a choice there.
+Add the axis:
 
 - A **Document / Slideshow** pair above the markup-style radios, as a `radio_button
   :document_type` on the same `form_with`. "Document" says something like *an article or
-  a book — you choose in the editor*; "Slideshow" says *a reveal.js deck*.
-- Extend the `new-project` Stimulus controller so choosing Slideshow disables the LaTeX
-  and Markdown radios and forces `pretext` (decision 1). The template already has a
-  disabled-card style for the "coming soon" case — reuse it rather than inventing a
-  second disabled look.
-- The validation re-render path (`create`'s `else` branch, which re-renders `:new`) must
-  preserve the selection, like the markup style already does.
+  a book — you choose in the editor*; "Slideshow" says *a reveal.js deck*. Post the value
+  `article` for Document: it is the enum's default and the tag the editor will synthesize.
+- The two axes are **independent** — decision 1 allows every markup style for a slideshow,
+  so no radio disables another and the `new-project` Stimulus controller needs no changes
+  at all. Six combinations, all supported.
+- The validation re-render path (`create`'s `else` branch at
+  [projects_controller.rb:83](../app/controllers/projects_controller.rb#L83), which
+  re-renders `:new`) must preserve the selection, like the markup style already does.
 
-### 2.3 The default target
+Leave the template and import cards alone.
 
-[project.rb:65](../app/models/project.rb#L65) — `DEFAULT_TARGET` is Website for every
-project, built by `before_create :build_default_target`. A website is a legal output for
-a slideshow, but it is not what someone making slides wants first. Pick by document
-type: a slideshow gets `{ name: "Slides", kind: "revealjs" }`.
+### 2.2 The default target
+
+[project.rb:83](../app/models/project.rb#L83) — `DEFAULT_TARGET` is Website for every
+project, built by `before_create :build_default_target`
+([:354](../app/models/project.rb#L354)). A website is a legal output for a slideshow, but
+it is not what someone making slides wants first. Pick by document type: a slideshow gets
+`{ name: "Slides", kind: "revealjs" }`.
 
 Note while editing this: `before_create` runs **after** validation, so a target built
-there is never validated against `Target#kind_available_for_document_type`. That is
-safe here precisely because we derive the kind from the document type — but it means
-this hook is not the place to trust user input, now or later.
+there is never validated against `Target#kind_available_for_document_type`. That is safe
+here precisely because we derive the kind from the document type — but it means this hook
+is not the place to trust user input, now or later.
 
-### 2.4 Starter content
+### 2.3 Starter content
 
-`ProjectsController#new` builds the root division with no `source`; the editor
-synthesizes the wrapper element on load (Part 3.1). An empty `<slideshow>` renders as a
-blank deck, which is a poor first screen.
+`ProjectsController#new` ([:59](../app/controllers/projects_controller.rb#L59)) builds the
+root division with no `source`; the editor synthesizes the wrapper element on load
+(Part 3.1). An empty `<slideshow>` renders as a blank deck, which is a poor first screen.
 
-Seed it server-side, mirroring how docinfo already works — `Project.set_default_docinfo`
-is called from `create` and reads from `app/default_docs/`. Add
-`app/default_docs/slideshow/root.xml` holding a `<slideshow>` with a title and one
-starter `<slide>`, plus a `Project#set_default_root_source` called from `create` when the
-root division's source is blank.
+Today the starter source comes from `Division`'s three constants
+([division.rb:15-17](../app/models/division.rb#L15)), each reading one file from
+`app/default_docs/`. Because decision 1 allows all six combinations, a slideshow needs its
+own file **per markup style**, not one file:
 
-The editor's wrapper synthesis still has to handle slideshows (imports, legacy rows,
-other hosts) — this just means a project created through *our* form never depends on it.
+- `app/default_docs/slideshow.xml` — `<slideshow>` + `<title>` + one starter `<slide>`
+- `app/default_docs/slideshow.tex` — `\slideshow{…}\label{document}` + one
+  `\begin{frame}{…}`
+- `app/default_docs/slideshow.md` — `division: slideshow` frontmatter + one `##` heading
+
+Each starter includes a slide, not just the root: an empty `<slideshow>` renders as a
+blank deck, which is a poor first screen, and the slide doubles as the example of the
+markup an author needs (especially for LaTeX, where `frame` is not guessable).
+
+Select among the six in `Division`, keyed on the owning project's document type, rather
+than branching in the controller — the three existing constants already live there and
+the selection is the same shape.
+
+The editor's wrapper synthesis still has to handle slideshows (imports, legacy rows, other
+hosts) — this just means a project created through *our* form never depends on it.
 
 ---
 
@@ -191,41 +211,39 @@ other hosts) — this just means a project created through *our* form never depe
 
 ### 3.1 `projectType` plumbing
 
-`projectType` is typed `"article" | "book"` in three places and collapses everything
-non-book to `article`:
+`projectType` is typed `"article" | "book"` and collapses everything non-book to
+`article`:
 
-- [Editors.tsx:161](../packages/web-editor/src/components/Editors.tsx#L161) (the prop)
-- [sectionUtils.ts:2419-2422](../packages/web-editor/src/sectionUtils.ts#L2419) —
+- [Editors.tsx:203](../packages/web-editor/src/components/Editors.tsx#L203) (the prop)
+- [sectionUtils.ts:2600-2603](../packages/web-editor/src/sectionUtils.ts#L2600) —
   `normalizeDivisionsOnLoad`, the only real consumer
-- [editorStore.ts:139](../packages/web-editor/src/store/editorStore.ts#L139) and `:304`
+- [editorStore.ts:177](../packages/web-editor/src/store/editorStore.ts#L177) and `:354`
+- [App.tsx:517](../packages/web-editor/src/App.tsx#L517) (the standalone demo host)
 
-**Keep the editor's vocabulary as root *element* names** — `"article" | "book" |
-"slideshow"` — and let Rails map its own `document` onto `article`. The collapse in
-Part 1 is a decision about our project model, not about the component library: the
-library still needs to be able to synthesize a `<book>` wrapper for a host that wants
-one, and `normalizeDivisionsOnLoad` is picking a literal tag name.
+**Widen to `"article" | "book" | "slideshow"`** — root *element* names, which is what
+`normalizeDivisionsOnLoad` is actually picking. With decision 2 the Rails side is then an
+identity map: [editor.jsx:134](../app/javascript/controllers/react/editor.jsx#L134)
+becomes a check that `json.document_type` is one of the three, falling back to `article`.
+The `EditorState` and `rootMeta` typedefs above it (`:53`, `:135`) widen to match.
 
-In `normalizeDivisionsOnLoad`, replace `projectType === "book" ? "book" : "article"`
-with a lookup against the existing `ROOT_DIVISION_TYPES` set, so the next root type
-added needs no edit here.
+In `normalizeDivisionsOnLoad`, replace `projectType === "book" ? "book" : "article"` with
+a lookup against the existing `ROOT_DIVISION_TYPES` set
+([sectionUtils.ts:2151](../packages/web-editor/src/sectionUtils.ts#L2151)), so the next
+root type added needs no edit here.
 
-[editor.jsx:286](../app/javascript/controllers/react/editor.jsx#L286) does the mapping:
-`json.document_type === "slideshow" ? "slideshow" : "article"`. The `EditorState` and
-`rootMeta` typedefs above it (`:78`, `:165`) need widening to match.
-
-**`store.projectType` is dead** — it is written by `syncState`
-([Editors.tsx:1120](../packages/web-editor/src/components/Editors.tsx#L1120)) and read
-by nothing. Delete the field rather than widening it; a mirrored value nobody consumes
-is just another place to forget.
+**`store.projectType` is dead** — written by `syncState` and read by nothing. Delete the
+field rather than widening it; a mirrored value nobody consumes is just another place to
+forget.
 
 ### 3.2 `wrapDivisionForPreview` — the preview correctness bug
 
-[sectionUtils.ts:2367](../packages/web-editor/src/sectionUtils.ts#L2367). Root previews
-are fine (root types get no wrapper at all), but a **non-root** division falls through
-to an `<article>` wrapper. So previewing one `<section>` of slides produces
-`<pretext><article><section>…<slide>…`. pretext-html's `detectRenderTarget` scans for
-`<slide>` and correctly reports `"slides"`, so `pretext-revealjs.xsl` then receives an
-`<article>` root — a deck-shaped page with nothing in it.
+[sectionUtils.ts:2547](../packages/web-editor/src/sectionUtils.ts#L2547). **Still
+present**, and not fixed by the preview work that landed: root previews are fine (root
+types get no wrapper at all), but a **non-root** division falls through to an `<article>`
+wrapper. So previewing one `<section>` of slides produces
+`<pretext><article><section>…<slide>…`. pretext-html detects `<slide>` and correctly
+selects the slides target, so `pretext-revealjs.xsl` receives an `<article>` root — a
+deck-shaped page with nothing in it.
 
 The function only ever sees the division's *own* type, never the project's. Add the root
 type as a parameter and use it for the fallback wrapper:
@@ -236,22 +254,28 @@ part/chapter                               →  <book>   (unchanged)
 everything else                            →  <article> (unchanged)
 ```
 
-The single call site is [Editors.tsx:1320](../packages/web-editor/src/components/Editors.tsx#L1320),
-which already has `rootDivision` in scope. Confirm against the schema that `<slideshow>`
-wants a `<title>` first child the way `<article>`/`<book>` do — the wrapper adds one for
-exactly that reason, and it is what makes the difference between a build and a 500.
+The single call site is
+[Editors.tsx:1425](../packages/web-editor/src/components/Editors.tsx#L1425), which
+already has the root division in scope.
 
-**This failure is silent**, which is the argument for pinning it with a unit test:
-a wrong wrapper yields an empty page, not an error.
+The `<title>` is right: the compiled schema
+(`node_modules/@pretextbook/schema/assets/pretext.json`) defines `slideshow` as a required
+`title` followed by a choice of `section*` or `slide*`. Same shape as `<article>`/`<book>`,
+which is why the wrapper adds one.
+
+**This failure is silent** — a wrong wrapper yields an empty page, not an error — which is
+the argument for pinning it with a unit test rather than a visual check.
 
 ### 3.3 Close the root-type switch
 
 `SWITCHABLE_ROOT_TYPES = ["article", "book"]`
-([toc/types.ts:89](../packages/web-editor/src/components/toc/types.ts#L89)) stays as it
-is — but that is not sufficient on its own. `SectionEditForm` builds its dropdown as
+([toc/types.ts:119](../packages/web-editor/src/components/toc/types.ts#L119)) stays as it
+is — that is decision 3's article↔book freedom, and it is correct. But it is not
+sufficient on its own. `SectionEditForm` builds its dropdown as
 `[draft.type, ...SWITCHABLE_ROOT_TYPES]` when the current type is not in the switchable
-list, so a slideshow root today offers **Slideshow, Article, Book** and the author can
-pick Article. Decision 3 says that must not be possible.
+list ([SectionEditForm.tsx:56-58](../packages/web-editor/src/components/toc/SectionEditForm.tsx#L56)),
+so a slideshow root would offer **Slideshow, Article, Book** and the author could pick
+Article.
 
 Change that fallback so a non-switchable root type renders as the only option (or a
 disabled control), instead of being prepended to the switchable ones. Cover it with a
@@ -261,58 +285,40 @@ test — this is a one-line regression waiting to happen.
 
 ## Part 4 — Preview
 
-### 4.1 Local render
+### 4.1 / 4.2 — Done
 
-[wasmPreview.ts:102](../packages/web-editor/src/components/wasmPreview.ts#L102) —
-`renderPreviewHtml` passes `cssTheme: "greeley"` and nothing else, and drops the
-`target` that `renderHtml` returns.
+The local render and the deck preview UI landed on `main`. Two follow-ups worth confirming
+while working nearby, neither blocking:
 
-- **Pass `target` explicitly**, derived from the root division type, rather than relying
-  on detection. Detection stays as the fallback when a caller says nothing; being
-  explicit is cheaper and does not depend on a string scan getting the answer right.
-- **Pass `revealView: "scroll"` by default.** A deck opens as a presentation — one slide,
-  arrow keys — which is what an audience should see and a bad way to write. Scroll view
-  shows the whole deck like every other preview in the editor.
-- **`cssTheme` is meaningless for a deck**; `revealTheme` is the knob (reveal's own
-  themes: `simple`, `white`, `black`, …). Pick a default and pass it only for decks.
-- **Return `target` from `PreviewRender`** so `LivePreview` can tell a deck from a
-  document without re-inspecting anything.
+- `renderPreviewHtml` relies on pretext-html's detection rather than passing `target`
+  explicitly. Detection is a string scan for `<slide>`; once Part 3.2 gives the caller the
+  root type, passing it is cheaper and does not depend on the scan getting it right.
+- Two-way preview sync in decks is unverified. `previewSync.ts` depends on `@unique-id`s
+  surviving into the rendered page, and the reveal.js stylesheets may emit fewer of them
+  than the HTML ones. Check it, and make sure it degrades to "no scroll" rather than
+  scrolling to the wrong place.
 
-### 4.2 Deck-only preview UI
+### 4.3 The fallback build server — still open
 
-[LivePreview.tsx](../packages/web-editor/src/components/LivePreview.tsx) — add a
-Slides/Scroll toggle to the preview header, rendered only when `target === "slides"`.
-
-Switch views by re-injecting, not by talking to the live deck: `injectRevealBridge(html,
-view)` rewrites the HTML already in hand and the iframe's `srcDoc` is re-assigned. The
-pretext-html docs are explicit that scroll view restructures the DOM and
-`Reveal.destroy()` does not undo it, so a destroy/re-initialize toggle leaves debris.
-No re-render is needed.
-
-Also: `theme` (light/dark) does nothing for a deck — it loads none of the PreTeXt JS
-that implements it — so `defaultPreviewToLight()` is inert there and no light/dark
-affordance should be offered for decks. A dark reveal theme is the only way to get a
-dark deck.
-
-### 4.3 The fallback build server
-
-Only engines without JSPI reach this path.
+Only engines without JSPI reach this path
+([Editors.tsx:1515](../packages/web-editor/src/components/Editors.tsx#L1515)).
 
 - **`onRebuild` cannot say "this is a deck."** Its signature
-  ([LivePreview.tsx:29](../packages/web-editor/src/components/LivePreview.tsx#L29)) is
+  ([LivePreview.tsx:49](../packages/web-editor/src/components/LivePreview.tsx#L49)) is
   `(content, title, postToIframe)`. Widen it to carry the target. This is a public API
-  change on the `onPreviewRebuild` prop, which is cheap now that the package is an
-  in-repo workspace with exactly one consumer.
+  change on the `onPreviewRebuild` prop, cheap now that the package is an in-repo
+  workspace with exactly one consumer.
 - **Translate the vocabulary at the boundary.** pretext-html says `"slides"`; the build
-  server says `"revealjs"`. `onPreviewRebuild` in `editor.jsx` maps one to the other.
-  Do not wire `slides` straight through.
+  server says `"revealjs"`. `onPreviewRebuild` in
+  [editor.jsx:1064](../app/javascript/controllers/react/editor.jsx#L1064) maps one to the
+  other. Do not wire `slides` straight through.
 - **`ProjectsController#preview`**
-  ([:174-193](../app/controllers/projects_controller.rb#L174)) builds `post_params` from
-  `source` + `token`. Add `target` **only when present and in `%w[ html revealjs ]`** —
-  it is optional server-side and detection-from-source is the safer default, so
-  forwarding nothing beats forwarding junk.
-- `/tryit/preview` shares this action and posts no target, so it keeps detecting. That
-  is the reason the parameter must stay optional rather than defaulting to `html` here.
+  ([:214](../app/controllers/projects_controller.rb#L214)) builds `post_params` from
+  `source` + `token`. Add `target` **only when present and in `%w[ html revealjs ]`** — it
+  is optional server-side and detection-from-source is the safer default, so forwarding
+  nothing beats forwarding junk.
+- `/tryit/preview` shares this action and posts no target, so it keeps detecting. That is
+  the reason the parameter must stay optional rather than defaulting to `html` here.
 
 ---
 
@@ -323,40 +329,44 @@ Lower priority than the above, but the difference between "slideshows exist" and
 
 **Slides are not divisions.** A `<slide>` is a block inside a `<slideshow>` or a
 `<section>`, so the TOC can only ever show sections and adding a slide is raw typing in
-Monaco. At minimum, add a "New slide" insertion (a `CodeEditorMenu` action or a Monaco
-snippet). `@pretextbook/completions` should already offer the tag from the schema —
-confirm before building anything.
+Monaco. Add a slide snippet to `editorConfigs/snippets.ts` as a **block** construct, which
+`insertContext.ts` already places correctly (after the enclosing `<p>` if the cursor is in
+one, inline otherwise). Gate its appearance in the Insert menu on a slideshow root —
+offering it in an article produces a schema error for a menu item we handed the author.
+
+The snippet body is **per format**, and the LaTeX one is not guessable: `\begin{frame}{…}`,
+not `\slide{…}` (which converts to an unknown-macro TODO). Markdown's is a `##` heading.
 
 **A `<slideshow>` may hold `<slide>` children directly**, with no `<section>` layer at
-all, and the division tree has no representation for that. Decide whether the TOC lists
-slides as read-only leaves or ignores them entirely. Deferred, but it is the shape most
-short decks will actually have.
+all — the schema is `title, (section* | slide*)` — and the division tree has no
+representation for that. The two branches are exclusive: a deck is *either* sectioned *or*
+flat, and `ALLOWED_CHILD_DIVISION_TYPES.slideshow = ["section"]` currently assumes the
+sectioned form. Decision 1 raises the stakes here — a Markdown deck written with only `##`
+headings lands in the flat form through an ordinary authoring path, so this is now
+reachable rather than hypothetical. Decide whether the TOC lists slides as read-only
+leaves or ignores them entirely. Still deferred, but flat is the shape most short decks
+will have.
 
 ---
 
 ## Sequencing
 
-Part 1 stands alone and should land first — it touches fixtures and several test files
-and does not want to be tangled with feature work. Part 2 depends on it. Parts 3 and 4
-depend on the pretext-html 0.5.0 bump (see Traps) and can go together. Part 5 is
-independent of all of it.
+Parts 1 and 2 were the critical path — without them there was no way to create a
+slideshow, and everything else was unreachable in the product. **Part 3 is now the
+priority:** slideshows can be made but the editor still types them as articles, which
+means a non-root preview renders an empty deck (3.2) and the TOC will offer to convert a
+deck into an article (3.3). Part 4.3 is independent and low-traffic. Part 5 is independent
+of all of it.
 
 ## Traps
 
-- **`@pretextbook/pretext-html` 0.5.0 is uncommitted** in `package.json` and
-  `package-lock.json` on this branch. 0.4.0 has no slides target, no
-  `detectRenderTarget`, and no reveal view control — Parts 3 and 4 do not exist without
-  the bump. It must land with them.
-- **Enum integer `1` is retired forever** after Part 1. Reusing it silently reinterprets
-  rows.
-- **`@pretextbook/import` emits `document_type: "article" | "book"`** and never
-  `"slideshow"`. Part 1 breaks the import path unless 1.3 lands with it, and the failure
-  is a validation error with no obvious cause.
-- **`before_create :build_default_target` runs after validation**, so the target it
-  builds is never validated against the project's document type.
+- **`before_create :build_default_target` runs after validation**, so the target it builds
+  is never validated against the project's document type.
 - **A wrong preview wrapper fails silently** — an empty deck, not an exception. Unit-test
   `wrapDivisionForPreview` rather than trusting a visual check.
-- **Two-way preview sync in decks is unverified.** `previewSync.ts` depends on
-  `@unique-id`s surviving into the rendered page, and the reveal.js stylesheets may emit
-  fewer of them than the HTML ones. Check it, and make sure it degrades to "no scroll"
-  rather than scrolling to the wrong place.
+- **`SectionEditForm`'s dropdown fallback silently re-opens the conversion** decision 3
+  forbids, from a single line that reads like defensive code.
+- **Two-way preview sync in decks is unverified** (see 4.1).
+- **Integer enum values are never reused** here, per `docs/build-targets.md`. Decision 2
+  means none are retired, so nothing to do — but the rule still applies if a value is ever
+  removed.

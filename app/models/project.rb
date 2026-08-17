@@ -82,6 +82,10 @@ class Project < ApplicationRecord
   # every other output, so there is one rule rather than one rule and an exception.
   DEFAULT_TARGET = { name: "Website", kind: "website" }.freeze
 
+  # A website is a legal output for a slideshow, but it is not what someone who just
+  # asked for slides wants waiting for them on the dashboard.
+  DEFAULT_SLIDESHOW_TARGET = { name: "Slides", kind: "revealjs" }.freeze
+
   # The mirror of Target's own check, and the one that is easy to miss: Rails does not
   # re-validate children when the parent changes, so without this, converting a slideshow
   # to an article would silently leave a reveal.js target behind to fail at the build
@@ -351,10 +355,14 @@ class Project < ApplicationRecord
       self.source_updated_at = Time.current
     end
 
+    # Note this runs after validation, so what it builds is never checked against
+    # Target#kind_available_for_document_type. That is safe only because the kind is
+    # derived from the document type rather than taken from the caller -- this hook is
+    # not the place to trust user input, now or later.
     def build_default_target
       return if targets.any?
 
-      targets.build(**DEFAULT_TARGET)
+      targets.build(**(slideshow_document_type? ? DEFAULT_SLIDESHOW_TARGET : DEFAULT_TARGET))
     end
 
     def unpublish_targets_if_private

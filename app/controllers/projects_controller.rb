@@ -265,12 +265,21 @@ class ProjectsController < ApplicationController
 
   private
     # Only allow a list of trusted parameters through.
+    # `document_type` is permitted on create and *only* on create. Whether a project is a
+    # deck is fixed when it is made: changing it would mean rewriting the source,
+    # invalidating every target, and re-deciding what each division means. Enforcing that
+    # here rather than leaning on Project#targets_supported_by_document_type keeps the
+    # rule where it can be read, and keeps the model's guard as the backstop it is meant
+    # to be. Article-vs-book is deliberately *not* on this axis -- that lives in the root
+    # element, where the TOC switches it freely.
     def project_params
-      params.expect(project: [
+      permitted = [
         :title, :pretext_source, :docinfo, :use_common_docinfo, :visibility, :language,
         divisions_attributes: [ [ :id, :source, :source_format, :is_root, :ref, :_destroy ] ],
         assets_attributes: [ [ :id, :ref, :kind, :file, :source, :short_description, :description, :title, :_destroy ] ]
-      ])
+      ]
+      permitted.unshift(:document_type) if action_name == "create"
+      params.expect(project: permitted)
     end
 
     # The import wizard posts what @pretextbook/import already emits, in this
