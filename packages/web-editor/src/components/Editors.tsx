@@ -176,11 +176,16 @@ export interface editorProps {
    * unexpanded. Not the raw division content, and not the full document.
    * @param title - The current document title.
    * @param postToIframe - Helper to post a message into the preview iframe.
+   * @param target - Which conversion this document needs: `"slides"` for a
+   *   `<slideshow>` root, `"html"` otherwise. In pretext-html's vocabulary; a
+   *   build server that names the deck conversion differently (the PreTeXt CLI
+   *   calls it `revealjs`) should be translated to here, not upstream.
    */
   onPreviewRebuild?: (
     source: string,
     title: string,
     postToIframe: (url: string, data: unknown) => void,
+    target: "html" | "slides",
   ) => void;
   /**
    * Drive the live preview's light/dark mode from the host's own theme, rather
@@ -1691,6 +1696,7 @@ const EditorsInner = (props: EditorsInnerProps) => {
       ref={codeEditorRef}
       content={divisionActiveSource}
       sourceFormat={activeDivisionFormat}
+      rootType={previewRootType}
       pretextValidation={pretextValidation}
       collab={
         props.collaboration && bridge && activeCollabText && activeDivision
@@ -1749,6 +1755,7 @@ const EditorsInner = (props: EditorsInnerProps) => {
         content={previewSource || ""}
         serverContent={previewContent || ""}
         title={title}
+        documentTarget={previewRootType === "slideshow" ? "slides" : "html"}
         onRebuild={props.onPreviewRebuild}
         onSyncToSource={handleSyncToSource}
         divisionId={activeDivision?.xmlId}

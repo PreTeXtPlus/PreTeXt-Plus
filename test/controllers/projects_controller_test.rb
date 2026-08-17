@@ -791,6 +791,28 @@ class ProjectsControllerTest < ActionDispatch::IntegrationTest
     assert_includes response.body, "Hello World"
   end
 
+  # The build server takes `target` as an *optional* override and otherwise
+  # detects the conversion from the source. That makes forwarding junk strictly
+  # worse than forwarding nothing, so the action filters rather than passes through.
+  test "preview forwards a recognised target to the build server" do
+    assert_equal "revealjs",
+                 captured_preview_body(target: "revealjs")["target"]
+    assert_equal "html", captured_preview_body(target: "html")["target"]
+  end
+
+  test "preview drops an unrecognised target instead of forwarding it" do
+    assert_nil captured_preview_body(target: "slides")["target"]
+    assert_nil captured_preview_body(target: "; rm -rf /")["target"]
+  end
+
+  # /tryit/preview shares this action and posts no target, which is the reason
+  # the parameter has to stay optional rather than defaulting to "html".
+  test "preview omits target entirely when none is posted" do
+    body = captured_preview_body
+    assert_nil body["target"]
+    assert_equal "<section/>", body["source"]
+  end
+
   test "preview with no project_id renders the build server response with no base tag" do
     stub_preview_server(body: "<html><body>stub</body></html>") do
       post preview_project_url(@project), params: { source: "<section/>", title: "Test" }
@@ -1067,4 +1089,26 @@ class ProjectsControllerTest < ActionDispatch::IntegrationTest
     end
     assert_redirected_to new_user_session_path
   end
+
+  private
+    # POST to #preview and return the form body it sent *upstream*, parsed. The
+    # shared stub only fakes a response; what matters here is the request, since
+    # the whole point of the filter is what does and doesn't leave our server.
+    def captured_preview_body(extra_params = {})
+      captured = nil
+      fake_response = Struct.new(:body).new("<html><body>stub</body></html>")
+      fake_response.define_singleton_method(:code) { "200" }
+      fake_http = Object.new
+      fake_http.define_singleton_method(:request) do |req|
+        captured = req.body
+        fake_response
+      end
+
+      Net::HTTP.stub(:start, proc { |*_args, &blk| blk.call(fake_http) }) do
+        post preview_project_url(@project),
+             params: { source: "<section/>", title: "Test" }.merge(extra_params)
+      end
+      assert_response :success
+      Rack::Utils.parse_nested_query(captured)
+    end
 end

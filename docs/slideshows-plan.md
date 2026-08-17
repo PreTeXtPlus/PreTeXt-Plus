@@ -2,10 +2,11 @@
 
 Plan of record for first-class `<slideshow>` support.
 
-**Status:** the preview render path landed earlier on `main` (old Part 4.1/4.2). Parts 1,
-2 and 3 are **done** on this branch — a slideshow can be created, and the editor types it
-correctly. Part 4.3 (the build-server fallback) and Part 5 (authoring affordances) are
-open.
+**Status:** the preview render path landed earlier on `main` (old Part 4.1/4.2). Parts 1–5
+are **done** on this branch: a slideshow can be created in any markup style, the editor
+types and previews it correctly, the build-server fallback knows it is a deck, and the
+Insert menu can add a slide. One deferred item remains — the flat `<slideshow><slide>`
+shape in the TOC, at the end of Part 5.
 
 ## Context
 
@@ -309,7 +310,7 @@ while working nearby, neither blocking:
   than the HTML ones. Check it, and make sure it degrades to "no scroll" rather than
   scrolling to the wrong place.
 
-### 4.3 The fallback build server — still open
+### 4.3 The fallback build server ✅ done
 
 Only engines without JSPI reach this path
 ([Editors.tsx:1515](../packages/web-editor/src/components/Editors.tsx#L1515)).
@@ -335,18 +336,30 @@ Only engines without JSPI reach this path
 
 ## Part 5 — Authoring affordances
 
-Lower priority than the above, but the difference between "slideshows exist" and
-"slideshows are usable".
+The difference between "slideshows exist" and "slideshows are usable".
+
+### The slide insertion ✅ done
 
 **Slides are not divisions.** A `<slide>` is a block inside a `<slideshow>` or a
-`<section>`, so the TOC can only ever show sections and adding a slide is raw typing in
-Monaco. Add a slide snippet to `editorConfigs/snippets.ts` as a **block** construct, which
-`insertContext.ts` already places correctly (after the enclosing `<p>` if the cursor is in
-one, inline otherwise). Gate its appearance in the Insert menu on a slideshow root —
-offering it in an article produces a schema error for a menu item we handed the author.
+`<section>`, so the TOC can only ever show sections and adding a slide was raw typing in
+Monaco. The catalog in `editorConfigs/snippets.ts` now carries a `slide` entry in a
+**Slides** group placed first — it is the structural act a deck is built out of, and it
+should not sit below Emphasis.
 
-The snippet body is **per format**, and the LaTeX one is not guessable: `\begin{frame}{…}`,
-not `\slide{…}` (which converts to an unknown-macro TODO). Markdown's is a `##` heading.
+Catalog entries gained an optional `rootTypes`, and `snippetGroupsFor` takes the root type;
+`slide` is the only gated construct. The gate is not cosmetic: the same body is *rejected*
+by the schema in an article, which the tests assert both ways, so the gate cannot be
+dropped without a failure.
+
+Bodies are per format, and the LaTeX one is not guessable:
+
+| Format | Body |
+| --- | --- |
+| PreTeXt | `<slide><title>…</title><p>…</p></slide>` |
+| LaTeX | `\begin{frame}{…}` — **not** `\slide{…}`, which is an unknown-macro TODO |
+| Markdown | `## …` — the level below a section, because a deck shifts headings down |
+
+### Still deferred — the flat deck in the TOC
 
 **A `<slideshow>` may hold `<slide>` children directly**, with no `<section>` layer at
 all — the schema is `title, (section* | slide*)` — and the division tree has no
@@ -360,13 +373,18 @@ will have.
 
 ---
 
-## Sequencing
+## What is left
 
-Parts 1–3 are done: a slideshow can be created in any of the three markup styles, and the
-editor types, previews and protects it correctly. What remains is independent of both:
-**Part 4.3** (the build-server fallback, reached only by engines without JSPI) and **Part
-5** (authoring affordances — the "New slide" insertion is the gap an author hits first,
-since slides are not divisions and the TOC cannot add one).
+Everything planned has landed. Two follow-ups, neither blocking:
+
+- **The flat deck in the TOC** (end of Part 5) — a Markdown deck written with only `##`
+  headings reaches it through an ordinary authoring path.
+- **Content directly under a deck's `<section>`.** The Insert menu offers every general
+  construct in a slideshow, but a `<section>` of a deck holds `<slide>`s — a paragraph or
+  theorem inserted at section level, outside any slide, is not valid there. The placement
+  gate in `insertContext.ts` reasons about `<p>` proximity, not about the root, so it
+  cannot currently catch this. Worth a look before decks get much use.
+- **Two-way preview sync in decks** is still unverified (see 4.1).
 
 ## Traps
 

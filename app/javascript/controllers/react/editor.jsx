@@ -1073,9 +1073,19 @@ function EditorApp({ config }) {
   // prepends to this project's own preview/external/:ref route (see
   // routes.rb) -- unlike the anonymous /tryit demo, which posts no
   // project_id and never has external assets to resolve.
+  // `target` arrives in pretext-html's vocabulary ("slides"), and the lite build
+  // server speaks the PreTeXt CLI's ("revealjs"). Translating here rather than
+  // upstream keeps the editor package independent of which build server a host
+  // happens to run.
   const onPreviewRebuild = useCallback(
-    (source, title, postToIframe) => {
-      postToIframe(previewUrl, { source, title, project_id: projectId, authenticity_token: csrfToken });
+    (source, title, postToIframe, target) => {
+      postToIframe(previewUrl, {
+        source,
+        title,
+        target: target === "slides" ? "revealjs" : "html",
+        project_id: projectId,
+        authenticity_token: csrfToken,
+      });
     },
     [previewUrl, projectId, csrfToken],
   );

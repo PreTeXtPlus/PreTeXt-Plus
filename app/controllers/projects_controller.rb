@@ -8,6 +8,11 @@ class ProjectsController < ApplicationController
              with: -> { render plain: "Preview limit reached. Please wait a few minutes and try again, or create an account to continue writing and save your work!", status: :too_many_requests },
              if: -> { !authenticated? }
 
+  # Conversions the lite build server accepts on #preview. Its own vocabulary,
+  # which is the PreTeXt CLI's -- the editor speaks pretext-html's ("slides")
+  # and translates in `onPreviewRebuild`.
+  PREVIEW_TARGETS = %w[ html revealjs ].freeze
+
   # GET /projects
   def index
     @query = params[:q].to_s.strip
@@ -219,6 +224,12 @@ class ProjectsController < ApplicationController
       source: params[:source],
       token: Rails.application.credentials.dig(:preview_build, :token)
     }
+    # `target` is optional server-side: absent, the build server detects the
+    # conversion from the source, which is the safer default and the only thing
+    # /tryit/preview (which shares this action and posts no target) can rely on.
+    # So an unrecognised value is dropped rather than forwarded -- sending junk
+    # would turn a working detection into a failed build.
+    post_params[:target] = params[:target] if PREVIEW_TARGETS.include?(params[:target])
     uri = URI.parse("https://#{Rails.application.credentials.dig(:preview_build, :host)}")
     response = Net::HTTP.start(
       uri.host,

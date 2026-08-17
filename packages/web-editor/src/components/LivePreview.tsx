@@ -41,15 +41,31 @@ interface LivePreviewProps {
   serverContent?: string;
   title?: string;
   /**
+   * Which conversion this document needs — `"slides"` for a `<slideshow>`
+   * root, `"html"` otherwise. Only consulted on the server path: a local
+   * render reports its own target back from the renderer, which is more
+   * reliable than anything a caller can assert.
+   *
+   * This is pretext-html's vocabulary. A build server that spells the deck
+   * conversion differently (the PreTeXt CLI calls it `revealjs`) is the host's
+   * business to translate in `onRebuild`.
+   */
+  documentTarget?: "html" | "slides";
+  /**
    * Server-side rebuild handler. Optional: when the browser can render
    * locally (WebAssembly JSPI), the preview builds in-page and this is never
    * called. It remains the fallback for engines without JSPI, so hosts that
    * must support them should keep providing it.
+   *
+   * `target` is {@link LivePreviewProps.documentTarget}. Without it a build
+   * server has to guess the conversion by scanning the source, which is how a
+   * deck ends up built as a website.
    */
   onRebuild?: (
     content: string,
     title: string,
     postToIframe: (url: string, data: any) => void,
+    target: "html" | "slides",
   ) => void;
   /**
    * Called when the author clicks somewhere in the preview, for preview →
@@ -243,6 +259,7 @@ const LivePreview = forwardRef<LivePreviewHandle, LivePreviewProps>(
       content,
       serverContent,
       title,
+      documentTarget = "html",
       onRebuild,
       onSyncToSource,
       divisionId,
@@ -384,11 +401,12 @@ const LivePreview = forwardRef<LivePreviewHandle, LivePreviewProps>(
       const postHelper = (url: string, data: any) => {
         postToIframe(url, data, "livePreview");
       };
-      onRebuild?.(serverContent ?? source, previewTitle, postHelper);
+      onRebuild?.(serverContent ?? source, previewTitle, postHelper, documentTarget);
     }, [
       content,
       serverContent,
       title,
+      documentTarget,
       onRebuild,
       renderLocally,
       previewLineMap,

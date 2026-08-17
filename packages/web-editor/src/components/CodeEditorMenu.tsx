@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { formatPretext } from "@pretextbook/format";
 import type { SourceFormat } from "../types/editor";
+import type { RootDivisionType } from "../types/sections";
 import MenuDropdown, { type MenuEntry } from "./MenuDropdown";
 import {
   MONACO_COMMANDS,
@@ -39,6 +40,11 @@ interface CodeEditorMenuProps {
   content: string;
   /** Decides which document actions and which snippets the menus offer. */
   sourceFormat: SourceFormat;
+  /**
+   * The project's root element. Gates the constructs that only exist under one
+   * of them — the Slides group appears for a `<slideshow>` and nowhere else.
+   */
+  rootType?: RootDivisionType;
   /** Called with the formatted content after a successful format operation. */
   onContentChange: (newContent: string) => void;
   /** Opens the LaTeX import dialog. */
@@ -138,6 +144,7 @@ const separator = (key: string): MenuEntry => ({ kind: "separator", key });
 const CodeEditorMenu: React.FC<CodeEditorMenuProps> = ({
   content,
   sourceFormat,
+  rootType,
   onContentChange,
   onOpenLatexImport,
   onOpenClean,
@@ -264,7 +271,7 @@ const CodeEditorMenu: React.FC<CodeEditorMenuProps> = ({
       ];
 
   // ── Insert ────────────────────────────────────────────────────────────────
-  const insertEntries: MenuEntry[] = snippetGroupsFor(sourceFormat).flatMap(
+  const insertEntries: MenuEntry[] = snippetGroupsFor(sourceFormat, rootType).flatMap(
     (group) => [
       { kind: "heading" as const, key: `heading-${group.key}`, label: group.label },
       ...group.snippets.map(
