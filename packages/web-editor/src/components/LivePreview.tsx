@@ -715,7 +715,7 @@ const LivePreview = forwardRef<LivePreviewHandle, LivePreviewProps>(
               aria-live="polite"
             >
               <span className="flex-1">
-                Tip: Previews refresh much faster and have two-way sync in
+                Tip: Previews refresh much faster, handle assets better, and have two-way sync in
                 Chromium-based browsers like Chrome or Edge.
               </span>
             </div>
