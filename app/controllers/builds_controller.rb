@@ -13,9 +13,9 @@ class BuildsController < ApplicationController
   # against a lower limit. There is no separate cap on total builds requested: past the
   # author's own concurrent-build limit they queue (see Build#slot_available?,
   # User#max_concurrent_builds) rather than being refused.
-  rate_limit to: 20, within: 1.hour, only: :create,
+  rate_limit to: 20, within: 1.hour, only: :create, name: "create",
              with: -> { reject_build("You've queued a lot of builds recently. Please wait a few minutes and try again.") }
-  rate_limit to: 2, within: 1.minute, only: :build_all,
+  rate_limit to: 2, within: 1.minute, only: :build_all, name: "build_all",
              with: -> { reject_build("You've queued a lot of builds recently. Please wait a few seconds and try again.") }
 
   def show
