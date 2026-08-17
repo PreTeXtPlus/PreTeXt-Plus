@@ -68,6 +68,7 @@ import { buildProjectAssetView, makeUniqueAssetRef } from "../assetView";
 import { newRecordId } from "../recordId";
 import {
   createEditorStore,
+  defaultTocCollapsed,
   isNarrowViewport,
   type DivisionChanges,
   type EditorCallbacks,
@@ -475,6 +476,7 @@ const EditorsInner = (props: EditorsInnerProps) => {
   const setActiveTab = useEditorStore((s) => s.setActiveTab);
   const isTocCollapsed = useEditorStore((s) => s.isTocCollapsed);
   const setIsTocCollapsed = useEditorStore((s) => s.setIsTocCollapsed);
+  const toggleTocCollapsed = useEditorStore((s) => s.toggleTocCollapsed);
   const isLatexDialogOpen = useEditorStore((s) => s.isLatexDialogOpen);
   const isCleanDialogOpen = useEditorStore((s) => s.isCleanDialogOpen);
   const isConvertDialogOpen = useEditorStore((s) => s.isConvertDialogOpen);
@@ -1135,12 +1137,12 @@ const EditorsInner = (props: EditorsInnerProps) => {
 
   // ── Resize listener ──────────────────────────────────────────────────────
   // The TOC follows the same narrow/wide breakpoint as the tabs-vs-split
-  // layout: collapsed on narrow screens, expanded once the viewport crosses
-  // back to wide. It only snaps on an actual crossing (not every resize
-  // event), so a manual toggle made while on one side of the breakpoint
-  // survives until the layout itself would change. Tracked via a ref (rather
-  // than the reactive `isNarrowScreen` value) so the listener never needs to
-  // be torn down and re-added as that value changes.
+  // layout: collapsed on narrow screens, back to the author's remembered
+  // choice once the viewport crosses to wide. It only snaps on an actual
+  // crossing (not every resize event), so a manual toggle made while on one
+  // side of the breakpoint survives until the layout itself would change.
+  // Tracked via a ref (rather than the reactive `isNarrowScreen` value) so the
+  // listener never needs to be torn down and re-added as that value changes.
   const wasNarrowScreenRef = useRef(isNarrowScreen);
   useEffect(() => {
     const handleResize = () => {
@@ -1148,7 +1150,7 @@ const EditorsInner = (props: EditorsInnerProps) => {
       if (narrow !== wasNarrowScreenRef.current) {
         wasNarrowScreenRef.current = narrow;
         setIsNarrowScreen(narrow);
-        setIsTocCollapsed(narrow);
+        setIsTocCollapsed(defaultTocCollapsed());
       }
     };
     window.addEventListener("resize", handleResize);
@@ -1762,7 +1764,7 @@ const EditorsInner = (props: EditorsInnerProps) => {
   const tocSidebar = (
     <TableOfContents
       isCollapsed={isTocCollapsed}
-      onToggleCollapse={() => setIsTocCollapsed((c) => !c)}
+      onToggleCollapse={toggleTocCollapsed}
       hideAssets={props.hideAssets}
       readOnly={props.readOnly}
       onOpenAssetPicker={

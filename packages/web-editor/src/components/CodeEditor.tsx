@@ -1,6 +1,14 @@
 import { Editor } from "@monaco-editor/react";
 import { constrainedEditor } from "constrained-editor-plugin";
 import { useState, useRef, useEffect, useMemo, forwardRef, useImperativeHandle } from "react";
+import {
+  copySelection,
+  cutSelection,
+  insertSnippet,
+  pasteFromClipboard,
+  runEditorCommand,
+} from "./editorCommands";
+import type { EditorMenuActions } from "./CodeEditorMenu";
 import type * as Y from "yjs";
 import type { Awareness } from "y-protocols/awareness";
 import { editorConfigs } from "./editorConfigs";
@@ -11,7 +19,7 @@ import type { PretextValidationInput } from "./editorConfigs/pretextDiagnostics"
 import CodeEditorMenu from "./CodeEditorMenu";
 import { MonacoCollabBinding } from "../collab/monacoBinding";
 import { installEditGuard } from "../collab/editGuard";
-import { computeLockedRegion, findPretextHeaderEnd } from "./lockedRegion";
+import { computeLockedRegion, findPretextHeaderEnd, isRangeWithin } from "./lockedRegion";
 import type { CollabUser } from "../collab/types";
 import type { SourceFormat } from "../types/editor";
 
@@ -210,6 +218,7 @@ const CodeEditor = forwardRef<CodeEditorHandle, CodeEditorProps>(({
   const contentListenerRef = useRef<{ dispose: () => void } | null>(null);
   const mouseListenerRef = useRef<{ dispose: () => void } | null>(null);
   const cursorListenerRef = useRef<{ dispose: () => void } | null>(null);
+  const selectionListenerRef = useRef<{ dispose: () => void } | null>(null);
   const onCursorLineChangeRef = useRef(onCursorLineChange);
   // Last line reported, so a cursor moving along one line stays quiet.
   const lastCursorLineRef = useRef<number | null>(null);
@@ -225,6 +234,8 @@ const CodeEditor = forwardRef<CodeEditorHandle, CodeEditorProps>(({
   const isProgrammaticUpdateRef = useRef(false);
   const [canUndo, setCanUndo] = useState(false);
   const [canRedo, setCanRedo] = useState(false);
+  // Drives the Edit menu's Cut/Copy, which act on the selection.
+  const [hasSelection, setHasSelection] = useState(false);
   // Monaco arrives asynchronously (the loader fetches it), so effects that
   // need the editor instance have to wait for it. The refs alone can't say
   // when that happened — they don't re-render.
@@ -342,6 +353,7 @@ const CodeEditor = forwardRef<CodeEditorHandle, CodeEditorProps>(({
       languageExtensionsRef.current?.dispose?.();
       mouseListenerRef.current?.dispose?.();
       cursorListenerRef.current?.dispose?.();
+      selectionListenerRef.current?.dispose?.();
       constrainedRef.current?.disposeConstrainer?.();
       editGuardRef.current?.();
       editGuardRef.current = null;
@@ -673,6 +685,20 @@ const CodeEditor = forwardRef<CodeEditorHandle, CodeEditorProps>(({
       onCursorLineChangeRef.current?.(line);
     });
 
+    // Track whether anything is selected, so the Edit menu can disable Cut and
+    // Copy when there is nothing to act on.
+    selectionListenerRef.current?.dispose?.();
+    selectionListenerRef.current = editor.onDidChangeCursorSelection((e: any) => {
+      const selection = e?.selection;
+      setHasSelection(
+        !!selection &&
+          !(
+            selection.startLineNumber === selection.endLineNumber &&
+            selection.startColumn === selection.endColumn
+          ),
+      );
+    });
+
     // Subscribe to content changes to refresh undo/redo availability
     contentListenerRef.current?.dispose?.();
     contentListenerRef.current = editor.onDidChangeModelContent(() => {
@@ -764,6 +790,48 @@ const CodeEditor = forwardRef<CodeEditorHandle, CodeEditorProps>(({
     updateUndoRedoState();
   };
 
+  /**
+   * Park the cursor inside the editable body before writing to it.
+   *
+   * The caret can legitimately sit on a locked structural line — clicking one
+   * opens the TOC properties form, but the click still moves the cursor there.
+   * An insert from that position would be reverted by the constrained-editor
+   * plugin (or refused by the collab guard) with nothing to show for it, so
+   * move to the first editable line instead of writing into a locked one.
+   */
+  const ensureCursorInEditableRegion = () => {
+    const editor = editorRef.current;
+    const model = editor?.getModel?.();
+    if (!editor || !model) return;
+    const region = computeLockedRegion(model, sourceFormatRef.current);
+    if (!region) return;
+    const selection = editor.getSelection();
+    if (selection && isRangeWithin(region.editableRange, selection)) return;
+    const [lineNumber, column] = region.editableRange;
+    editor.setPosition({ lineNumber, column });
+  };
+
+  // Rebuilt each render rather than memoized: every method reads the editor
+  // through `editorRef`, so there is no state to go stale and nothing below
+  // this is memoized on the object's identity.
+  const menuActions: EditorMenuActions = {
+    runCommand: (id) => {
+      runEditorCommand(editorRef.current, id);
+      // Undo/redo run through here too, and the model's stacks have moved.
+      updateUndoRedoState();
+    },
+    cut: () => cutSelection(editorRef.current),
+    copy: () => copySelection(editorRef.current),
+    paste: async () => {
+      ensureCursorInEditableRegion();
+      return pasteFromClipboard(editorRef.current);
+    },
+    insertSnippet: (snippet) => {
+      ensureCursorInEditableRegion();
+      insertSnippet(editorRef.current, snippet.body);
+    },
+  };
+
   return (
     <div style={{ display: "flex", flexDirection: "column", height: "100%" }}>
       <CodeEditorMenu
@@ -781,6 +849,8 @@ const CodeEditor = forwardRef<CodeEditorHandle, CodeEditorProps>(({
         onRedo={handleRedo}
         canUndo={canUndo}
         canRedo={canRedo}
+        hasSelection={hasSelection}
+        actions={menuActions}
         onConvertToPretext={onOpenConvertToPretext}
         canConvertToPretext={canConvertToPretext}
         onOpenAssets={onOpenAssets}

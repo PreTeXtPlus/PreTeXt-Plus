@@ -56,6 +56,40 @@ export const NARROW_SCREEN_MAX_WIDTH = 800;
 export const isNarrowViewport = (): boolean =>
   typeof window !== "undefined" && window.innerWidth < NARROW_SCREEN_MAX_WIDTH;
 
+/**
+ * Where a deliberate show/hide of the TOC is remembered across sessions, so an
+ * author who never uses the sidebar can keep it shut. Only a *wide-screen*
+ * toggle is written here: on narrow screens the TOC is a drawer over the
+ * editor, which always starts closed, and the programmatic collapses (the
+ * breakpoint crossing, expanding to show the properties form) aren't the
+ * author expressing a preference either.
+ */
+const TOC_COLLAPSED_KEY = "pretext-plus:toc-collapsed";
+
+/** The stored preference, or `null` if never set / storage unavailable. */
+const readStoredTocCollapsed = (): boolean | null => {
+  try {
+    const stored = localStorage.getItem(TOC_COLLAPSED_KEY);
+    return stored === null ? null : stored === "true";
+  } catch {
+    // Storage blocked (private mode, third-party iframe): fall back to the
+    // viewport default, exactly as before it was persisted.
+    return null;
+  }
+};
+
+const writeStoredTocCollapsed = (collapsed: boolean): void => {
+  try {
+    localStorage.setItem(TOC_COLLAPSED_KEY, String(collapsed));
+  } catch {
+    // Storage blocked — the choice just doesn't outlive this session.
+  }
+};
+
+/** Collapsed on narrow screens; otherwise the remembered choice, else open. */
+export const defaultTocCollapsed = (): boolean =>
+  isNarrowViewport() ? true : (readStoredTocCollapsed() ?? false);
+
 // ── Types ───────────────────────────────────────────────────────────────────
 
 export type DivisionChanges = {
@@ -223,7 +257,13 @@ export interface EditorStoreState {
   setShowLivePreview: (show: boolean) => void;
   setActiveTab: (tab: "editor" | "preview") => void;
   setIsNarrowScreen: (narrow: boolean) => void;
+  /** Set the TOC's collapsed state programmatically (not a saved preference). */
   setIsTocCollapsed: (value: boolean | ((prev: boolean) => boolean)) => void;
+  /**
+   * Flip the TOC open/closed on the user's behalf, remembering the new state
+   * for future sessions — see {@link TOC_COLLAPSED_KEY}.
+   */
+  toggleTocCollapsed: () => void;
   openModal: (modal: ModalKey) => void;
   closeModal: (modal: ModalKey) => void;
 
@@ -371,7 +411,7 @@ export function createEditorStore(init: EditorStoreInit): EditorStoreHandle {
     hasAssetDuplicate: false,
 
     // ── Initial UI state ───────────────────────────────────────────────────
-    isTocCollapsed: isNarrowViewport(),
+    isTocCollapsed: defaultTocCollapsed(),
     showLivePreview: true,
     isNarrowScreen: isNarrowViewport(),
     activeTab: "editor",
@@ -447,6 +487,12 @@ export function createEditorStore(init: EditorStoreInit): EditorStoreHandle {
         isTocCollapsed:
           typeof value === "function" ? value(s.isTocCollapsed) : value,
       })),
+    toggleTocCollapsed: () =>
+      set((s) => {
+        const isTocCollapsed = !s.isTocCollapsed;
+        if (!s.isNarrowScreen) writeStoredTocCollapsed(isTocCollapsed);
+        return { isTocCollapsed };
+      }),
     openModal: (modal) => set({ [modal]: true } as Pick<EditorStoreState, ModalKey>),
     closeModal: (modal) => set({ [modal]: false } as Pick<EditorStoreState, ModalKey>),
 
