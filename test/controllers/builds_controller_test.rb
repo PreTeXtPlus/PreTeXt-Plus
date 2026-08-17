@@ -237,6 +237,32 @@ class BuildsControllerTest < ActionDispatch::IntegrationTest
     assert_match(/Started/, flash[:notice])
   end
 
+  # Regression test: the two rate_limit declarations at the top of this controller must
+  # carry distinct `name:` values. Rails keys a rate limit's counter by controller path
+  # + name, so without a name both declarations collapse onto the same counter --
+  # ordinary per-target rebuilds (capped at 20/hour) then silently eat into build_all's
+  # much lower budget (2/minute), and a subscriber can get rejected on their very first
+  # "Rebuild outdated" click. Runs against a real counting store since the test
+  # environment's :null_store never actually enforces limits.
+  test "the create and build_all rate limits track independently" do
+    subscription_seats(:one).update!(user: @user)
+    counts = Hash.new(0)
+
+    Rails.cache.stub(:increment, ->(key, amount = 1, *) { counts[key] += amount }) do
+      # Rebuilds one_web, which is already building and so isn't a build_all candidate --
+      # these hits must not affect whether one_instructor/one_print get built below.
+      3.times { post project_target_builds_url(@project, targets(:one_web)) }
+
+      assert_difference("Build.count", 2) do
+        post build_all_project_builds_url(@project)
+      end
+    end
+
+    assert_nil flash[:alert], "build_all was rejected by the create rate limit: #{flash[:alert]}"
+    assert_redirected_to project_url(@project)
+    assert_match(/Started/, flash[:notice])
+  end
+
   test "the build log page is reachable and shows the log" do
     build = builds(:one)
     build.update_column(:log, "ERROR external/fig-hasse.svg not found")
