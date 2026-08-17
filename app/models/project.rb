@@ -121,6 +121,52 @@ class Project < ApplicationRecord
     user.has_subscriber_benefits? ? 5 : 1
   end
 
+  # Words the authors have taught the editor's spell checker ("Add to
+  # dictionary"). They live on the project, not on the browser or the user, for
+  # the same reason the source does: a co-author has to see the same book. A
+  # textbook is full of correct words no general dictionary carries -- notation,
+  # place and person names, the vocabulary of the field -- and without this the
+  # squiggles are noise by chapter two.
+  MAX_DICTIONARY_WORDS = 5000
+  MAX_DICTIONARY_WORD_LENGTH = 64
+  # A letter followed by letters, combining marks, apostrophes or hyphens.
+  # Anything else reaching this endpoint is a stray selection, not a word an
+  # author means to declare correct.
+  DICTIONARY_WORD_FORMAT = /\A\p{L}[\p{L}\p{M}'’-]*\z/
+
+  # Adds one word, idempotently. Returns false only if the word itself is
+  # unusable -- an addition dropped for already being there, or for the cap, is
+  # the outcome the caller wanted either way.
+  #
+  # The append happens in SQL rather than as a read-modify-write, because two
+  # collaborators (or one author in two tabs) adding words in the same moment
+  # would otherwise each save an array that omits the other's word. For the same
+  # reason the duplicate check is part of that statement instead of a Ruby-side
+  # `include?`.
+  #
+  # update_all, so no callbacks and no updated_at bump: teaching the checker a
+  # word is not an edit to the book, and must not restack the dashboard or make
+  # every built target look stale. It also leaves the in-memory record alone,
+  # which is what we want -- writing the attribute back would mark it dirty, and
+  # the next save of an unrelated change would push that now-stale array over
+  # whatever the other collaborators have added since.
+  def add_dictionary_word(word)
+    word = word.to_s.strip
+    return false unless word.length.between?(1, MAX_DICTIONARY_WORD_LENGTH)
+    return false unless word.match?(DICTIONARY_WORD_FORMAT)
+
+    # unscoped: `update_all` on the default ordered scope would carry an ORDER BY
+    # into an UPDATE, which Postgres rejects.
+    self.class.unscoped.where(id: id)
+      .where("cardinality(dictionary_words) < ?", MAX_DICTIONARY_WORDS)
+      .where.not(
+        "EXISTS (SELECT 1 FROM unnest(dictionary_words) AS existing WHERE lower(existing) = lower(?))",
+        word
+      )
+      .update_all([ "dictionary_words = array_append(dictionary_words, ?)", word ])
+    true
+  end
+
   def editable_by?(other_user)
     return false if other_user.nil?
     other_user == user || collaborators.include?(other_user)

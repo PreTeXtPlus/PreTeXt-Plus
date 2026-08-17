@@ -2155,70 +2155,249 @@ const ROOT_DIVISION_TYPES: ReadonlySet<DivisionType> = new Set([
 ]);
 
 /**
- * Ensure that the provided xml string has a label on the root document element (Book, Article, or Slideshow).  We can generally assume there is an xml:id, but we should duplicate that as a label if it is missing.  This is important for the previewer, which uses the label to identify the root document element.
- * @param xml: Full XML for a pretext document, including <pretext> around the <book>/<article>/<slideshow> root element. 
+ * The index just past a start/end tag beginning at `open`, or -1 if it never
+ * closes. Quoted attribute values are skipped, since an unescaped `>` is legal
+ * inside one and `indexOf(">")` would stop short.
  */
-function ensureRootLabel(xml: string): string {
-  try {
-    const tree: Root = fromXml(xml);
-    const firstElement = tree.children.find((node): node is Element => node.type === "element");
-    const el = firstElement?.name === "pretext"
-      ? firstElement.children.find(
-        (node): node is Element =>
-          node.type === "element" && ROOT_DIVISION_TYPES.has(node.name as DivisionType),
-      )
-      : firstElement && ROOT_DIVISION_TYPES.has(firstElement.name as DivisionType)
-        ? firstElement
-        : undefined;
-    if (!el) return xml;
-    let xmlId = el.attributes["xml:id"];
-    if (!xmlId) {
-      xmlId = findUnusedLabel(tree, "main");
+function tagEnd(xml: string, open: number): number {
+  let quote = "";
+  for (let i = open + 1; i < xml.length; i++) {
+    const char = xml[i];
+    if (quote) {
+      if (char === quote) quote = "";
+    } else if (char === '"' || char === "'") {
+      quote = char;
+    } else if (char === ">") {
+      return i + 1;
     }
-    if (!el.attributes["label"]) {
-      el.attributes["label"] = xmlId;
-      return toXml(tree, XML_SERIALIZE_OPTIONS);
-    }
-    return xml;
-  } catch (error) {
-    console.error("Error ensuring label:", error);
-    return xml;
   }
+  return -1;
+}
+
+/** Start of the next markup construct at or after `from`, skipping text. */
+const TAG_NAME_RE = /^<\/?([A-Za-z_][A-Za-z0-9_.:-]*)/;
+
+interface StartTag {
+  name: string;
+  /** Index of the `<`. */
+  open: number;
+  /** Index just past the `>`. */
+  close: number;
+  /** True for `<foo/>`, which has no matching end tag. */
+  selfClosing: boolean;
+  /** True for `</foo>`. */
+  closing: boolean;
 }
 
 /**
- * Check if a label is already used in the document tree.
- * @param node: The node to search within.
- * @param label: The label to search for.
+ * The next tag at or after `from`, with comments, CDATA, processing
+ * instructions and the doctype skipped rather than reported. Returns
+ * `undefined` at end of input.
  */
-function hasLabelInTree(node: Root | Element, label: string): boolean {
-  if (node.type === "element" && (node as Element).attributes?.label === label) {
-    return true;
+function nextTag(xml: string, from: number): StartTag | undefined {
+  let i = from;
+  while (i < xml.length) {
+    const open = xml.indexOf("<", i);
+    if (open === -1) return undefined;
+    if (xml.startsWith("<!--", open)) {
+      const end = xml.indexOf("-->", open + 4);
+      if (end === -1) return undefined;
+      i = end + 3;
+      continue;
+    }
+    if (xml.startsWith("<![CDATA[", open)) {
+      const end = xml.indexOf("]]>", open + 9);
+      if (end === -1) return undefined;
+      i = end + 3;
+      continue;
+    }
+    if (xml.startsWith("<?", open) || xml.startsWith("<!", open)) {
+      const end = tagEnd(xml, open);
+      if (end === -1) return undefined;
+      i = end;
+      continue;
+    }
+    const name = TAG_NAME_RE.exec(xml.slice(open, open + 128))?.[1];
+    const close = tagEnd(xml, open);
+    if (!name || close === -1) return undefined;
+    return {
+      name,
+      open,
+      close,
+      selfClosing: xml[close - 2] === "/",
+      closing: xml[open + 1] === "/",
+    };
   }
-  if ("children" in node && node.children) {
-    return node.children.some((child) => {
-      if (child.type === "element") {
-        return hasLabelInTree(child as Element, label);
-      }
-      return false;
-    });
-  }
-  return false;
+  return undefined;
 }
 
 /**
- * Utility to find a label that is not already used in the document.  If the desired label is already used, it will append a number to it until it finds an unused label.
- * @param tree: The root of the document tree.
- * @param desiredLabel: The label we want to use.
+ * Locate the root division element's start tag — `<book>`, `<article>` or
+ * `<slideshow>` — as either the document's own first element or the first such
+ * child of a `<pretext>` wrapper (`<docinfo>`, its usual preceding sibling, is
+ * skipped over). Returns `undefined` when `xml` holds neither, which is the
+ * ordinary case for a bare division fragment.
+ *
+ * Deliberately a scanner rather than a parse. This runs on every assembly, and
+ * an assembled book is the whole project: parsing it to reach one attribute on
+ * the outermost element cost ~2.5s on a 900KB document and dominated every
+ * preview rebuild. The scan stops at the root division tag, so it reads the
+ * document's first few hundred bytes rather than all of it.
  */
-function findUnusedLabel(tree: Root, desiredLabel: string): string {
+function findRootDivisionTag(xml: string): StartTag | undefined {
+  const first = nextTag(xml, 0);
+  if (!first || first.closing) return undefined;
+  if (ROOT_DIVISION_TYPES.has(first.name as DivisionType)) return first;
+  if (first.name !== "pretext" || first.selfClosing) return undefined;
+
+  // Inside <pretext>: walk its direct children, skipping any that isn't a root
+  // division (in practice just <docinfo>) over its whole subtree.
+  let i = first.close;
+  for (;;) {
+    const tag = nextTag(xml, i);
+    if (!tag || tag.closing) return undefined; // </pretext>, or end of input
+    if (ROOT_DIVISION_TYPES.has(tag.name as DivisionType)) return tag;
+    if (tag.selfClosing) {
+      i = tag.close;
+      continue;
+    }
+    let depth = 1;
+    i = tag.close;
+    while (depth > 0) {
+      const inner = nextTag(xml, i);
+      if (!inner) return undefined;
+      i = inner.close;
+      if (inner.closing) depth--;
+      else if (!inner.selfClosing) depth++;
+    }
+  }
+}
+
+const LABEL_ATTR_RE = /\slabel\s*=\s*("([^"]*)"|'([^']*)')/g;
+const XML_ID_ATTR_RE = /\sxml:id\s*=\s*(?:"([^"]*)"|'([^']*)')/;
+
+/**
+ * A `label` value not already used anywhere in `xml`, starting from
+ * `desiredLabel` and appending `-1`, `-2`, … until one is free.
+ *
+ * Only reached for a root element with no `@xml:id` at all, so the one full
+ * pass over the document this costs is rare.
+ */
+function findUnusedLabel(xml: string, desiredLabel: string): string {
+  const used = new Set<string>();
+  for (const match of xml.matchAll(LABEL_ATTR_RE)) {
+    used.add(match[2] ?? match[3] ?? "");
+  }
   let label = desiredLabel;
   let i = 1;
-  while (hasLabelInTree(tree, label)) {
+  while (used.has(label)) {
     label = `${desiredLabel}-${i}`;
     i++;
   }
   return label;
+}
+
+/**
+ * Ensure that the provided xml string has a label on the root document element
+ * (book, article, or slideshow). We can generally assume there is an xml:id,
+ * but we should duplicate that as a label if it is missing. This is important
+ * for the previewer, which uses the label to identify the root document
+ * element.
+ *
+ * The label is spliced into the root element's start tag, so the rest of the
+ * document comes back byte-for-byte — which also keeps every line number
+ * intact for the preview's two-way sync.
+ *
+ * @param xml Full XML for a PreTeXt document, including `<pretext>` around the
+ * `<book>`/`<article>`/`<slideshow>` root element — or a bare division
+ * fragment, which has no root element and is returned untouched.
+ */
+function ensureRootLabel(xml: string): string {
+  const tag = findRootDivisionTag(xml);
+  if (!tag) return xml;
+  const startTag = xml.slice(tag.open, tag.close);
+  if (LABEL_ATTR_RE.test(startTag)) {
+    LABEL_ATTR_RE.lastIndex = 0; // /g regexes carry state between .test() calls
+    return xml;
+  }
+  LABEL_ATTR_RE.lastIndex = 0;
+  const xmlIdMatch = XML_ID_ATTR_RE.exec(startTag);
+  const label =
+    xmlIdMatch?.[1] ?? xmlIdMatch?.[2] ?? findUnusedLabel(xml, "main");
+  // Before the tag's own `>` or `/>`, so both forms stay well-formed.
+  const insertAt = tag.close - (tag.selfClosing ? 2 : 1);
+  return (
+    xml.slice(0, insertAt) +
+    ` label="${escapeAttribute(label)}"` +
+    xml.slice(insertAt)
+  );
+}
+
+/**
+ * Converted PreTeXt for one division, remembered alongside the exact source it
+ * came from.
+ *
+ * Keyed by `xml:id` rather than by source text, so the cache holds one entry
+ * per division and is bounded by the size of the project rather than by how
+ * long the author has been typing. A stale entry costs a re-conversion, never a
+ * wrong answer: the stored source must equal the division's current source for
+ * the entry to be used at all.
+ */
+interface ConvertedDivision {
+  source: string;
+  xml: string;
+}
+
+const conversionCache = new Map<string, ConvertedDivision>();
+
+/**
+ * Cap on remembered divisions. Reached only by a session that has cycled
+ * through several large projects, since a single project contributes one entry
+ * per division; clearing wholesale (rather than evicting one entry) keeps this
+ * free in the common case, where the limit is never approached.
+ */
+const CONVERSION_CACHE_LIMIT = 2000;
+
+/**
+ * A division's own PreTeXt XML: its source as-is when it is already PreTeXt,
+ * and the converter's output — the division's own element included — when it
+ * is LaTeX or Markdown. Conversion failures come back as an XML comment, so
+ * one bad division never takes the surrounding document down with it.
+ *
+ * Conversions are cached because assembly walks the *whole* project on every
+ * keystroke, while only the division being typed in has actually changed.
+ * Re-converting the other divisions each time cost 18s per keystroke on an
+ * 870KB LaTeX book; with the cache it is the ~25ms of converting the one that
+ * changed.
+ */
+function divisionToPretext(division: Division): string {
+  if (division.sourceFormat === "pretext") return division.source;
+
+  const cached = conversionCache.get(division.xmlId);
+  if (cached && cached.source === division.source) return cached.xml;
+
+  let xml: string;
+  if (division.sourceFormat === "markdown") {
+    // A markdown division is a full markdown file (frontmatter + body); the
+    // converter emits the complete `<type xml:id="..." label="...">` element
+    // from the frontmatter, so the source is converted as-is with no wrapper
+    // to strip or re-add here.
+    const { pretextSource, pretextError } = derivePretextContent(
+      division.source,
+      "markdown",
+    );
+    xml = pretextSource ?? `<!-- conversion error: ${pretextError} -->`;
+  } else {
+    // LaTeX: convert the source and tag it with the division's authored type
+    // (the `\label` becomes the `xml:id`) — see latexDivisionToTaggedPretext.
+    xml =
+      latexDivisionToTaggedPretext(division) ??
+      `<!-- conversion error: ${division.xmlId} -->`;
+  }
+
+  if (conversionCache.size >= CONVERSION_CACHE_LIMIT) conversionCache.clear();
+  conversionCache.set(division.xmlId, { source: division.source, xml });
+  return xml;
 }
 
 /**
@@ -2246,26 +2425,7 @@ function resolveDivisionXml(
   if (!division) return `<!-- missing division: ${xmlId} -->`;
   if (ancestors.has(xmlId)) return `<!-- circular reference: ${xmlId} -->`;
 
-  let xml: string;
-  if (division.sourceFormat === "pretext") {
-    xml = division.source;
-  } else if (division.sourceFormat === "markdown") {
-    // A markdown division is a full markdown file (frontmatter + body); the
-    // converter emits the complete `<type xml:id="..." label="...">` element
-    // from the frontmatter, so the source is converted as-is with no wrapper
-    // to strip or re-add here.
-    const { pretextSource, pretextError } = derivePretextContent(
-      division.source,
-      "markdown",
-    );
-    xml = pretextSource ?? `<!-- conversion error: ${pretextError} -->`;
-  } else {
-    // LaTeX: convert the source and tag it with the division's authored type
-    // (the `\label` becomes the `xml:id`) — see latexDivisionToTaggedPretext.
-    xml =
-      latexDivisionToTaggedPretext(division) ??
-      `<!-- conversion error: ${division.xmlId} -->`;
-  }
+  const xml = divisionToPretext(division);
 
   // Expand child `<plus:* ref="..."/>` placeholders against the *derived*
   // PreTeXt, whatever the source format was. Markdown includes authored as

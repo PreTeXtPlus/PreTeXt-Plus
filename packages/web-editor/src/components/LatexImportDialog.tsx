@@ -7,9 +7,12 @@ import {
 } from "react";
 import { Editor } from "@monaco-editor/react";
 import {
+  cleanLatexSource,
   convertLatexToPretext,
   getConversionErrorMessage,
 } from "../contentConversion";
+import CleanFindingsList from "./CleanFindingsList";
+import type { CleanFinding } from "../cleanFindings";
 import StoreFeedbackLink from "./StoreFeedbackLink";
 import {
   DialogOverlay,
@@ -29,6 +32,7 @@ import {
   DialogStatus,
   DialogActions,
   DialogButton,
+  DialogCheckboxRow,
 } from "./Dialog";
 
 interface LatexImportDialogProps {
@@ -48,6 +52,13 @@ const LatexImportDialog = ({
 }: LatexImportDialogProps) => {
   const [latexInput, setLatexInput] = useState("");
   const [convertedOutput, setConvertedOutput] = useState("");
+  // On by default: pasted LaTeX is nearly always lifted out of a document
+  // written for print, and its presentational markup has no meaning in PreTeXt.
+  // Exposed as a checkbox rather than done silently so the author can see that
+  // their input was rewritten, and turn it off when they want a literal
+  // conversion.
+  const [cleanBeforeConvert, setCleanBeforeConvert] = useState(true);
+  const [cleanFindings, setCleanFindings] = useState<CleanFinding[]>([]);
   const [isDragActive, setIsDragActive] = useState(false);
   const [copyStatus, setCopyStatus] = useState<"idle" | "copied" | "error">(
     "idle",
@@ -87,7 +98,11 @@ const LatexImportDialog = ({
     }
 
     try {
-      setConvertedOutput(convertLatexToPretext(trimmedLatex));
+      const cleaned = cleanBeforeConvert
+        ? cleanLatexSource(trimmedLatex)
+        : { latex: trimmedLatex, findings: [] };
+      setCleanFindings(cleaned.findings);
+      setConvertedOutput(convertLatexToPretext(cleaned.latex));
       setCopyStatus("idle");
     } catch (error) {
       console.error("Error converting LaTeX:", error);
@@ -128,6 +143,7 @@ const LatexImportDialog = ({
       const text = typeof reader.result === "string" ? reader.result : "";
       setLatexInput(text);
       setConvertedOutput("");
+      setCleanFindings([]);
       setCopyStatus("idle");
       inputEditorRef.current?.focus();
     };
@@ -228,6 +244,16 @@ const LatexImportDialog = ({
             <DialogHelperCopy as="p">
               Paste LaTeX, open a `.tex` file, or drag one onto this editor.
             </DialogHelperCopy>
+            <DialogCheckboxRow className="mt-1">
+              <input
+                type="checkbox"
+                checked={cleanBeforeConvert}
+                onChange={(event) =>
+                  setCleanBeforeConvert(event.target.checked)
+                }
+              />
+              Clean up LaTeX before converting
+            </DialogCheckboxRow>
           </DialogSection>
 
           <DialogSection>
@@ -243,6 +269,14 @@ const LatexImportDialog = ({
                 value={convertedOutput}
               />
             </DialogEditorPane>
+            {cleanFindings.length > 0 && (
+              <div className="shrink-0 max-h-[35%] overflow-y-auto">
+                <DialogLabel className="block mb-1.5">
+                  Cleaned before converting
+                </DialogLabel>
+                <CleanFindingsList findings={cleanFindings} />
+              </div>
+            )}
           </DialogSection>
         </DialogContent>
 

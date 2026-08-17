@@ -1,15 +1,25 @@
 import { Editor } from "@monaco-editor/react";
 import { constrainedEditor } from "constrained-editor-plugin";
 import { useState, useRef, useEffect, useMemo, forwardRef, useImperativeHandle } from "react";
+import {
+  copySelection,
+  cutSelection,
+  insertSnippet,
+  pasteFromClipboard,
+  runEditorCommand,
+} from "./editorCommands";
+import type { EditorMenuActions } from "./CodeEditorMenu";
 import type * as Y from "yjs";
 import type { Awareness } from "y-protocols/awareness";
 import { editorConfigs } from "./editorConfigs";
+import { applyCleanFixes, fixesForModel } from "./editorConfigs/latexClean";
+import { summarizeCleanFixes, type CleanFinding } from "../cleanFindings";
 import { usePretextDiagnostics } from "./editorConfigs/usePretextDiagnostics";
 import type { PretextValidationInput } from "./editorConfigs/pretextDiagnostics";
 import CodeEditorMenu from "./CodeEditorMenu";
 import { MonacoCollabBinding } from "../collab/monacoBinding";
 import { installEditGuard } from "../collab/editGuard";
-import { computeLockedRegion, findPretextHeaderEnd } from "./lockedRegion";
+import { computeLockedRegion, findPretextHeaderEnd, isRangeWithin } from "./lockedRegion";
 import type { CollabUser } from "../collab/types";
 import type { SourceFormat } from "../types/editor";
 
@@ -47,6 +57,12 @@ interface CodeEditorProps {
   onCursorLineChange?: (line: number) => void;
   /** Called when the user clicks "Import LaTeX" in the toolbar. */
   onOpenLatexImport: () => void;
+  /**
+   * Called when the user clicks "Clean up LaTeX…" in the toolbar. The button is
+   * shown only when the active format has a cleanup engine (LaTeX) and the
+   * buffer is editable, so a host that omits this simply never offers it.
+   */
+  onOpenClean?: () => void;
   /** Called when the user clicks "Edit Macros" in the toolbar. */
   onOpenDocinfoEditor: () => void;
   /**
@@ -104,6 +120,18 @@ export interface CodeEditorHandle {
   focus: () => void;
   /** Put the cursor on `line`, scrolling it into view if it is off-screen. */
   revealLine: (line: number) => void;
+  /**
+   * Source-cleanup findings for the buffer as it stands, one row per rule.
+   * Empty for a format with no cleanup engine. Read (not pushed) because the
+   * dialog that renders it is opened on demand and must never show a list that
+   * predates the author's last keystroke.
+   */
+  getCleanFindings: () => CleanFinding[];
+  /**
+   * Apply the auto-fixable cleanup findings — all of them, or just `ruleIds` —
+   * as one undo step. A no-op for a format with no cleanup engine.
+   */
+  applyCleanFixes: (ruleIds?: string[]) => void;
 }
 
 /** Base Monaco editor options shared across all instances of this component. */
@@ -139,6 +167,7 @@ const CodeEditor = forwardRef<CodeEditorHandle, CodeEditorProps>(({
   onSave,
   onCursorLineChange,
   onOpenLatexImport,
+  onOpenClean,
   onOpenDocinfoEditor,
   onOpenConvertToPretext,
   canConvertToPretext,
@@ -189,6 +218,7 @@ const CodeEditor = forwardRef<CodeEditorHandle, CodeEditorProps>(({
   const contentListenerRef = useRef<{ dispose: () => void } | null>(null);
   const mouseListenerRef = useRef<{ dispose: () => void } | null>(null);
   const cursorListenerRef = useRef<{ dispose: () => void } | null>(null);
+  const selectionListenerRef = useRef<{ dispose: () => void } | null>(null);
   const onCursorLineChangeRef = useRef(onCursorLineChange);
   // Last line reported, so a cursor moving along one line stays quiet.
   const lastCursorLineRef = useRef<number | null>(null);
@@ -204,6 +234,8 @@ const CodeEditor = forwardRef<CodeEditorHandle, CodeEditorProps>(({
   const isProgrammaticUpdateRef = useRef(false);
   const [canUndo, setCanUndo] = useState(false);
   const [canRedo, setCanRedo] = useState(false);
+  // Drives the Edit menu's Cut/Copy, which act on the selection.
+  const [hasSelection, setHasSelection] = useState(false);
   // Monaco arrives asynchronously (the loader fetches it), so effects that
   // need the editor instance have to wait for it. The refs alone can't say
   // when that happened — they don't re-render.
@@ -249,6 +281,27 @@ const CodeEditor = forwardRef<CodeEditorHandle, CodeEditorProps>(({
         suppressCursorReportRef.current = false;
       }
       lastCursorLineRef.current = line;
+    },
+    // Both cleanup methods read the format from its ref rather than closing
+    // over the prop: this handle is built once (`[]`), while the editor lives
+    // across division switches, so a captured `sourceFormat` would go stale.
+    getCleanFindings: () => {
+      const clean = editorConfigs[sourceFormatRef.current].clean;
+      if (!clean) return [];
+      return summarizeCleanFixes(
+        fixesForModel(editorRef.current?.getModel?.(), clean),
+        clean.describeFix,
+      );
+    },
+    applyCleanFixes: (ruleIds?: string[]) => {
+      const clean = editorConfigs[sourceFormatRef.current].clean;
+      if (!clean) return;
+      applyCleanFixes(monacoRef.current, editorRef.current, clean, {
+        sourceFormat: sourceFormatRef.current,
+        ruleIds,
+      });
+      // No host notification here: these are ordinary model edits, so Monaco's
+      // `onChange` fires and the debounce below reports them like any typing.
     },
   }), []);
 
@@ -300,6 +353,7 @@ const CodeEditor = forwardRef<CodeEditorHandle, CodeEditorProps>(({
       languageExtensionsRef.current?.dispose?.();
       mouseListenerRef.current?.dispose?.();
       cursorListenerRef.current?.dispose?.();
+      selectionListenerRef.current?.dispose?.();
       constrainedRef.current?.disposeConstrainer?.();
       editGuardRef.current?.();
       editGuardRef.current = null;
@@ -631,6 +685,20 @@ const CodeEditor = forwardRef<CodeEditorHandle, CodeEditorProps>(({
       onCursorLineChangeRef.current?.(line);
     });
 
+    // Track whether anything is selected, so the Edit menu can disable Cut and
+    // Copy when there is nothing to act on.
+    selectionListenerRef.current?.dispose?.();
+    selectionListenerRef.current = editor.onDidChangeCursorSelection((e: any) => {
+      const selection = e?.selection;
+      setHasSelection(
+        !!selection &&
+          !(
+            selection.startLineNumber === selection.endLineNumber &&
+            selection.startColumn === selection.endColumn
+          ),
+      );
+    });
+
     // Subscribe to content changes to refresh undo/redo availability
     contentListenerRef.current?.dispose?.();
     contentListenerRef.current = editor.onDidChangeModelContent(() => {
@@ -722,6 +790,48 @@ const CodeEditor = forwardRef<CodeEditorHandle, CodeEditorProps>(({
     updateUndoRedoState();
   };
 
+  /**
+   * Park the cursor inside the editable body before writing to it.
+   *
+   * The caret can legitimately sit on a locked structural line — clicking one
+   * opens the TOC properties form, but the click still moves the cursor there.
+   * An insert from that position would be reverted by the constrained-editor
+   * plugin (or refused by the collab guard) with nothing to show for it, so
+   * move to the first editable line instead of writing into a locked one.
+   */
+  const ensureCursorInEditableRegion = () => {
+    const editor = editorRef.current;
+    const model = editor?.getModel?.();
+    if (!editor || !model) return;
+    const region = computeLockedRegion(model, sourceFormatRef.current);
+    if (!region) return;
+    const selection = editor.getSelection();
+    if (selection && isRangeWithin(region.editableRange, selection)) return;
+    const [lineNumber, column] = region.editableRange;
+    editor.setPosition({ lineNumber, column });
+  };
+
+  // Rebuilt each render rather than memoized: every method reads the editor
+  // through `editorRef`, so there is no state to go stale and nothing below
+  // this is memoized on the object's identity.
+  const menuActions: EditorMenuActions = {
+    runCommand: (id) => {
+      runEditorCommand(editorRef.current, id);
+      // Undo/redo run through here too, and the model's stacks have moved.
+      updateUndoRedoState();
+    },
+    cut: () => cutSelection(editorRef.current),
+    copy: () => copySelection(editorRef.current),
+    paste: async () => {
+      ensureCursorInEditableRegion();
+      return pasteFromClipboard(editorRef.current);
+    },
+    insertSnippet: (snippet) => {
+      ensureCursorInEditableRegion();
+      insertSnippet(editorRef.current, snippet.body);
+    },
+  };
+
   return (
     <div style={{ display: "flex", flexDirection: "column", height: "100%" }}>
       <CodeEditorMenu
@@ -729,11 +839,18 @@ const CodeEditor = forwardRef<CodeEditorHandle, CodeEditorProps>(({
         sourceFormat={sourceFormat}
         onContentChange={handleContentChange}
         onOpenLatexImport={onOpenLatexImport}
+        onOpenClean={
+          onOpenClean && !readOnly && editorConfigs[sourceFormat].clean
+            ? onOpenClean
+            : undefined
+        }
         onOpenDocinfoEditor={onOpenDocinfoEditor}
         onUndo={handleUndo}
         onRedo={handleRedo}
         canUndo={canUndo}
         canRedo={canRedo}
+        hasSelection={hasSelection}
+        actions={menuActions}
         onConvertToPretext={onOpenConvertToPretext}
         canConvertToPretext={canConvertToPretext}
         onOpenAssets={onOpenAssets}

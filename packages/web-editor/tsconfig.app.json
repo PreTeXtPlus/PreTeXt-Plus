@@ -18,8 +18,20 @@
     /* Linting */
     "strict": true,
     "noImplicitAny": false,
-    "noUnusedLocals": true,
-    "noUnusedParameters": true,
+    /*
+     * Unused locals/parameters are enforced by ESLint
+     * (@typescript-eslint/no-unused-vars, an error in tseslint's recommended
+     * config, and CI runs lint) rather than by tsc.
+     *
+     * They cannot be enforced here because several @pretextbook packages ship
+     * raw TypeScript as their entry point ("types": "./src/index.ts", no dist),
+     * so `tsc -b` compiles a dependency's own source under *our* options — and
+     * an unused import in a published package then fails our build, with no fix
+     * available on this side. ESLint only looks at our source, so the check
+     * lands exactly where it can be acted on.
+     */
+    "noUnusedLocals": false,
+    "noUnusedParameters": false,
     "noFallthroughCasesInSwitch": true,
     "noUncheckedSideEffectImports": true
   },

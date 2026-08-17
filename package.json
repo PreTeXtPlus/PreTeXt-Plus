@@ -10,12 +10,12 @@
     "playwright": "^1.62.0"
   },
   "scripts": {
-    "build": "node -e \"const fs=require('fs');fs.mkdirSync('public/assets',{recursive:true});fs.copyFileSync(require.resolve('@pretextbook/libxslt-wasm/output/libxslt.wasm'),'public/assets/libxslt.wasm')\" && esbuild app/javascript/*.* --bundle --sourcemap --format=esm --outdir=app/assets/builds --public-path=/assets --external:module --external:worker_threads --alias:path=./packages/web-editor/src/nodeShims/path.ts --alias:url=./packages/web-editor/src/nodeShims/url.ts --alias:fs=./packages/web-editor/src/nodeShims/fs.ts --alias:tailwindcss=./packages/web-editor/src/nodeShims/tailwind-stub.css --loader:.png=dataurl --jsx=automatic"
+    "build": "node script/copy-static-assets.js && esbuild app/javascript/*.* --bundle --sourcemap --format=esm --outdir=app/assets/builds --public-path=/assets --external:module --external:worker_threads --alias:path=./packages/web-editor/src/nodeShims/path.ts --alias:url=./packages/web-editor/src/nodeShims/url.ts --alias:fs=./packages/web-editor/src/nodeShims/fs.ts --alias:tailwindcss=./packages/web-editor/src/nodeShims/tailwind-stub.css --loader:.png=dataurl --jsx=automatic"
   },
   "dependencies": {
     "@hotwired/stimulus": "^3.2.2",
     "@hotwired/turbo-rails": "^8.0.20",
-    "@pretextbook/import": "^0.5.0",
+    "@pretextbook/import": "^0.6.0",
     "@pretextbook/libxslt-wasm": "^0.1.1",
     "@pretextbook/web-editor": "*",
     "@rails/actioncable": "^8.1.300",
