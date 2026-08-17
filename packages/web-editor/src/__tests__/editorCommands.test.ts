@@ -15,7 +15,9 @@ import {
   insertSnippet,
   pasteFromClipboard,
   runEditorCommand,
+  selectEditableRegion,
 } from "../components/editorCommands";
+import { computeLockedRegion } from "../components/lockedRegion";
 
 /** A Monaco stand-in: a model holding one line, and a recorded selection. */
 const makeEditor = (
@@ -37,13 +39,18 @@ const makeEditor = (
     endColumn: empty ? 1 : text.length + 1,
     isEmpty: () => empty,
   };
+  const selections: any[] = [];
   return {
     edits,
     inserted,
     triggered,
+    selections,
     focus: vi.fn(),
     getModel: () => ({ getValueInRange: () => text }),
     getSelection: () => selection,
+    setSelection: (range: any) => {
+      selections.push(range);
+    },
     executeEdits: (_source: string, ops: any[]) => {
       edits.push(...ops);
     },
@@ -161,6 +168,64 @@ describe("clipboard operations", () => {
     const editor = makeEditor();
     expect(await pasteFromClipboard(editor)).toBe(false);
     expect(editor.edits).toEqual([]);
+  });
+});
+
+describe("selectEditableRegion", () => {
+  /** A stand-in for Monaco's text model, backed by a plain string. */
+  const model = (source: string) => {
+    const lines = source.split("\n");
+    return {
+      getLineCount: () => lines.length,
+      getLineContent: (n: number) => lines[n - 1] ?? "",
+      getLineMaxColumn: (n: number) => (lines[n - 1]?.length ?? 0) + 1,
+    };
+  };
+
+  it("selects the body, leaving a PreTeXt division's wrapper lines out", () => {
+    const editor = makeEditor();
+    const source = `<section xml:id="s">\n  <title>T</title>\n  <p>Body.</p>\n</section>`;
+    selectEditableRegion(
+      editor,
+      computeLockedRegion(model(source), "pretext")!.editableRange,
+    );
+
+    // Line 3 only: the opening tag and title above it and the closing tag
+    // below are locked.
+    expect(editor.selections).toEqual([
+      {
+        startLineNumber: 3,
+        startColumn: 1,
+        endLineNumber: 3,
+        endColumn: "  <p>Body.</p>".length + 1,
+      },
+    ]);
+  });
+
+  it("skips the Markdown frontmatter block", () => {
+    const editor = makeEditor();
+    const source = `---\ntype: section\ntitle: T\n---\nBody.`;
+    selectEditableRegion(
+      editor,
+      computeLockedRegion(model(source), "markdown")!.editableRange,
+    );
+
+    expect(editor.selections[0]).toMatchObject({
+      startLineNumber: 5,
+      endLineNumber: 5,
+    });
+  });
+
+  it("falls back to Monaco's select-all when nothing is locked", () => {
+    const editor = makeEditor();
+    selectEditableRegion(editor, null);
+
+    expect(editor.selections).toEqual([]);
+    expect(editor.triggered).toEqual([MONACO_COMMANDS.selectAll.id]);
+  });
+
+  it("does nothing before Monaco has loaded", () => {
+    expect(() => selectEditableRegion(null, [1, 1, 2, 1])).not.toThrow();
   });
 });
 

@@ -24,6 +24,12 @@ export interface EditorMenuActions {
   cut: () => Promise<boolean>;
   copy: () => Promise<boolean>;
   paste: () => Promise<boolean>;
+  /**
+   * Select the editable body — not the locked structural lines. Same operation
+   * Mod+A performs in the editor; see `selectEditableRegion` in
+   * `editorCommands`.
+   */
+  selectAll: () => void;
   /** Insert a snippet at the cursor, tab stops live. */
   insertSnippet: (snippet: EditorSnippet) => void;
 }
@@ -210,12 +216,18 @@ const CodeEditorMenu: React.FC<CodeEditorMenuProps> = ({
     !hasSelection,
   );
 
+  // Select All goes through the parent rather than Monaco's own action: it
+  // selects the editable body and leaves the locked structural lines out.
+  const selectAllEntry = commandEntry(MONACO_COMMANDS.selectAll, run, {
+    onSelect: actions.selectAll,
+  });
+
   // A read-only buffer keeps the operations that only read: copying it,
   // selecting it, searching it.
   const editEntries: MenuEntry[] = readOnly
     ? [
         copyEntry,
-        commandEntry(MONACO_COMMANDS.selectAll, run),
+        selectAllEntry,
         separator("find"),
         commandEntry(MONACO_COMMANDS.find, run),
       ]
@@ -245,7 +257,7 @@ const CodeEditorMenu: React.FC<CodeEditorMenuProps> = ({
           actions.paste,
           "Your browser blocked reading the clipboard — use the keyboard shortcut to paste.",
         ),
-        commandEntry(MONACO_COMMANDS.selectAll, run),
+        selectAllEntry,
         separator("find"),
         commandEntry(MONACO_COMMANDS.find, run),
         commandEntry(MONACO_COMMANDS.replace, run),

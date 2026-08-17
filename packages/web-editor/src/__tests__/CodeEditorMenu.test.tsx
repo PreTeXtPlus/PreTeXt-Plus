@@ -15,6 +15,7 @@ const makeActions = (): EditorMenuActions => ({
   cut: vi.fn(async () => true),
   copy: vi.fn(async () => true),
   paste: vi.fn(async () => true),
+  selectAll: vi.fn(),
   insertSnippet: vi.fn(),
 });
 
@@ -111,6 +112,17 @@ describe("CodeEditorMenu", () => {
 
       expect(await screen.findByRole("status")).toHaveTextContent(
         /blocked reading the clipboard/i,
+      );
+    });
+
+    it("selects through the parent, which excludes the locked lines", async () => {
+      render(<CodeEditorMenu {...baseProps()} sourceFormat="pretext" />);
+      const user = await openMenu("Edit");
+      await user.click(menuItem(/^Select All/));
+
+      expect(actions.selectAll).toHaveBeenCalled();
+      expect(actions.runCommand).not.toHaveBeenCalledWith(
+        MONACO_COMMANDS.selectAll.id,
       );
     });
 
