@@ -118,6 +118,7 @@ const AssetEditModal = ({
   };
 
   const handleSave = async () => {
+    navigator.clipboard?.writeText(embedCode).catch(() => {});  // always copy to clipboard upon save
     const ref = refValue.trim();
     if (!ref) {
       setError("Reference can't be empty — it identifies the asset and is used by every embed of it.");
@@ -368,7 +369,7 @@ const AssetEditModal = ({
             Cancel
           </DialogButton>
           <DialogButton onClick={handleSave} disabled={busy}>
-            {isSaving ? "Saving…" : "Save"}
+            {isSaving ? "Saving…" : "Save and copy embed code"}
           </DialogButton>
         </DialogActions>
       </Dialog>
