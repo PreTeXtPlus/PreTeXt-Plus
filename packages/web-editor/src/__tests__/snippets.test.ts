@@ -21,6 +21,7 @@ import { markdownToPretext } from "@pretextbook/remark-pretext";
 import {
   snippetGroupsFor,
   snippetPlainText,
+  wrapInParagraph,
   type EditorSnippet,
 } from "../components/editorConfigs/snippets";
 import {
@@ -96,16 +97,6 @@ const EXPECTED_ELEMENT: Record<string, RegExp> = {
   table: /<table[ >]/,
   program: /<program[ >]/,
 };
-
-/** Snippets that belong inside a paragraph rather than beside one. */
-const INLINE_KEYS = new Set([
-  "emphasis",
-  "term",
-  "code-inline",
-  "xref",
-  "link",
-  "math-inline",
-]);
 
 describe("the shared catalog", () => {
   it("gives a construct the same label in every format", () => {
@@ -187,18 +178,42 @@ describe("PreTeXt snippets", () => {
       `</pretext>`,
     ].join("\n");
 
+  /**
+   * A snippet as it reaches the buffer: tab stops filled, and a cross-reference
+   * pointed at something the wrapper below actually contains, since a `<xref>`
+   * is validated against the document it lands in.
+   */
+  const written = (body: string) =>
+    filled(body).replace('ref="xml-id"', 'ref="sec-a"');
+
   it.each(snippetsOf("pretext").map((s) => [s.key, s] as const))(
     "%s validates against the PreTeXt schema",
     async (key, snippet) => {
-      // A cross-reference is checked against the document it lands in, so point
-      // the placeholder at something the wrapper below actually contains.
-      const text = filled(snippet.body).replace('ref="xml-id"', 'ref="sec-a"');
-      const body = INLINE_KEYS.has(key) ? `<p>Some ${text} prose.</p>` : text;
+      const text = written(snippet.body);
+      // Each body is checked where the placement gate would put it: an
+      // `in-paragraph` construct inside a paragraph, a block one beside it.
+      const body =
+        snippet.placement === "in-paragraph"
+          ? `<p>Some ${text} prose.</p>`
+          : text;
 
       expect(await validatePretextDocument(wrap(body))).toEqual([]);
       expect(text).toMatch(EXPECTED_ELEMENT[key]);
     },
   );
+
+  // The other half of the gate: outside a paragraph the same body is wrapped in
+  // one, and that wrapping has to be valid too — this is what the menu writes
+  // when the cursor sits between paragraphs, which is the common case.
+  it.each(
+    snippetsOf("pretext")
+      .filter((s) => s.placement === "in-paragraph")
+      .map((s) => [s.key, s] as const),
+  )("%s validates once wrapped in a paragraph", async (_key, snippet) => {
+    const wrapped = written(wrapInParagraph(snippet.body));
+
+    expect(await validatePretextDocument(wrap(wrapped))).toEqual([]);
+  });
 });
 
 describe("LaTeX snippets", () => {

@@ -21,6 +21,8 @@ import CodeEditorMenu from "./CodeEditorMenu";
 import { MonacoCollabBinding } from "../collab/monacoBinding";
 import { installEditGuard } from "../collab/editGuard";
 import { computeLockedRegion, findPretextHeaderEnd, isRangeWithin } from "./lockedRegion";
+import { planSnippetInsertion } from "./editorConfigs/insertContext";
+import type { EditorSnippet } from "./editorConfigs/snippets";
 import type { CollabUser } from "../collab/types";
 import type { SourceFormat } from "../types/editor";
 
@@ -855,6 +857,56 @@ const CodeEditor = forwardRef<CodeEditorHandle, CodeEditorProps>(({
     editor.setPosition({ lineNumber, column });
   };
 
+  /** Whether the caret may be placed here — nothing is locked, or this is body. */
+  const isEditablePosition = (
+    model: any,
+    position: { lineNumber: number; column: number },
+  ): boolean => {
+    const region = computeLockedRegion(model, sourceFormatRef.current);
+    if (!region) return true;
+    return isRangeWithin(region.editableRange, {
+      startLineNumber: position.lineNumber,
+      startColumn: position.column,
+      endLineNumber: position.lineNumber,
+      endColumn: position.column,
+    });
+  };
+
+  /**
+   * Insert a snippet where it is legal, rather than only where the caret is.
+   *
+   * `planSnippetInsertion` reads the cursor's surroundings and decides both the
+   * text and the spot: a list gains a `<p>` unless the cursor is already in one,
+   * a theorem moves past the paragraph it can't nest inside. The one thing it
+   * can't know about is the locked structural lines, so a move onto one — an
+   * unterminated `<p>` running past the division's body — is declined and the
+   * snippet goes in at the caret as written.
+   */
+  const insertSnippetInContext = (snippet: EditorSnippet) => {
+    ensureCursorInEditableRegion();
+    const editor = editorRef.current;
+    const model = editor?.getModel?.();
+    const position = editor?.getPosition?.();
+    if (!editor || !model || !position) return;
+
+    const offset = model.getOffsetAt(position);
+    const plan = planSnippetInsertion(
+      model.getValue(),
+      offset,
+      snippet,
+      sourceFormatRef.current,
+    );
+    if (plan.offset !== offset) {
+      const target = model.getPositionAt(plan.offset);
+      if (!isEditablePosition(model, target)) {
+        insertSnippet(editor, snippet.body);
+        return;
+      }
+      editor.setPosition(target);
+    }
+    insertSnippet(editor, plan.body);
+  };
+
   // Rebuilt each render rather than memoized: every method reads the editor
   // through `editorRef`, so there is no state to go stale and nothing below
   // this is memoized on the object's identity.
@@ -871,10 +923,7 @@ const CodeEditor = forwardRef<CodeEditorHandle, CodeEditorProps>(({
       ensureCursorInEditableRegion();
       return pasteFromClipboard(editorRef.current);
     },
-    insertSnippet: (snippet) => {
-      ensureCursorInEditableRegion();
-      insertSnippet(editorRef.current, snippet.body);
-    },
+    insertSnippet: insertSnippetInContext,
   };
 
   return (

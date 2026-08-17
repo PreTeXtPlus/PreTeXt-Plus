@@ -1,5 +1,6 @@
 import { suppressedElements, type SpellCheckScope } from "./scopes";
 import type { TextRegion } from "./regions";
+import { findTagEnd, isNameStart, readName } from "../xmlTags";
 
 export type { TextRegion };
 
@@ -113,34 +114,6 @@ export const findCheckableRegions = (
   }
 
   return regions;
-};
-
-/**
- * Index just past a tag's closing `>`, or the end of the source if it is never
- * closed.  Quoted attribute values are skipped, so a `>` inside `title="a > b"`
- * doesn't end the tag early.
- */
-const findTagEnd = (source: string, start: number): number => {
-  let quote = "";
-  for (let i = start + 1; i < source.length; i++) {
-    const ch = source[i];
-    if (quote) {
-      if (ch === quote) quote = "";
-    } else if (ch === '"' || ch === "'") {
-      quote = ch;
-    } else if (ch === ">") {
-      return i + 1;
-    }
-  }
-  return source.length;
-};
-
-const isNameStart = (ch: string | undefined): boolean =>
-  ch !== undefined && /[A-Za-z_]/.test(ch);
-
-const readName = (source: string, start: number): string => {
-  const match = /^[A-Za-z_][\w.:-]*/.exec(source.slice(start, start + 128));
-  return match ? match[0] : "";
 };
 
 /**
