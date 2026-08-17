@@ -177,6 +177,51 @@ const AssetEditModal = ({
   // leave this button stuck on "Duplicating…" forever.
   const canDuplicate = !!onDuplicate && !!asset.url;
 
+  // For a file-backed asset this is genuinely optional/secondary (an extra
+  // `<description>`), so it stays collapsed under "Advanced". For an authored
+  // asset it *is* the asset's entire content, so it's shown directly instead
+  // -- see the `asset.isFile` branch below.
+  const sourceEditor = (
+    <>
+      <DialogLabel>
+        {asset.isFile ? "Additional source" : "PreTeXt source"}
+        <DialogHelperCopy>
+          {asset.isFile ? (
+            <>
+              Inserted verbatim inside the generated <code>{"<image>"}</code>{" "}
+              element — e.g. <code>{"<description>...</description>"}</code>.
+            </>
+          ) : (
+            <>
+              The PreTeXt element(s) this reference resolves to, inserted
+              verbatim inside the generated <code>{"<image>"}</code> element —
+              e.g. <code>{"<latex-image>...</latex-image>"}</code>.
+            </>
+          )}
+        </DialogHelperCopy>
+      </DialogLabel>
+      <DialogEditorPane
+        data-testid="asset-edit-source-editor"
+        className="flex-none min-h-0"
+        style={{ height: editorHeight }}
+      >
+        <Editor
+          options={{ ...editorOptions, readOnly: busy }}
+          height="100%"
+          language="xml"
+          value={sourceValue}
+          onMount={handleEditorMount}
+          onChange={(value) => setSourceValue(value ?? "")}
+        />
+      </DialogEditorPane>
+      {error && (
+        <p className="m-0 py-[0.4rem] px-[0.6rem] bg-[#fde8e8] text-red-700 rounded text-[0.83rem]">
+          {error}
+        </p>
+      )}
+    </>
+  );
+
   return (
     <DialogOverlay onClick={(e) => e.target === e.currentTarget && onClose()}>
       <Dialog
@@ -191,60 +236,61 @@ const AssetEditModal = ({
           </DialogClose>
         </DialogHeader>
 
-        <div className="flex items-center gap-2 mt-[0.35rem] mb-3">
-          <DialogLabel>Copy/paste this code to embed in your document:</DialogLabel>
-          <button
-            type="button"
-            className={clsx(
-              ACTION_BTN_CLASSES,
-              copied ? ACTION_BTN_DONE_CLASSES : ACTION_BTN_DEFAULT_CLASSES,
-            )}
-            onClick={handleCopy}
-            title="Copy embed code to clipboard"
-          >
-            {copied ? "Copied!" : "Copy"}
-          </button>
-          <code className="flex-1 min-w-0 font-mono text-[0.78rem] text-slate-900 bg-slate-100 border border-slate-200 rounded py-1 px-2 overflow-x-auto whitespace-nowrap">
-            {embedCode}
-          </code>
-        </div>
-
         <DialogContent
           single
           ref={contentRef}
           className="flex flex-col"
         >
           <DialogSection>
-            <div className="grid grid-cols-2 gap-5 items-start shrink-0 max-[700px]:grid-cols-1 max-[700px]:gap-2">
+            <div className="grid gap-5 items-start shrink-0 max-[700px]:grid-cols-1 max-[700px]:gap-2">
               {/* Left column: preview, replace, embed code */}
-              <div className="flex flex-col gap-2 min-w-0">
-              <DialogLabel>Asset preview:</DialogLabel>
-                {showPreview && (
+              {showPreview && (
+                <div className="flex flex-col gap-2 min-w-0">
+                  <DialogLabel>Asset preview:</DialogLabel>
                   <img
                     src={asset.url}
                     alt={titleValue}
                     className="max-w-full max-h-[200px] object-contain border border-slate-200 rounded bg-slate-50"
                     onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = "none"; }}
                   />
-                )}
 
-                {canReplace && (
-                  <div className="flex justify-end items-center gap-2 mb-2">
-                    <span className="text-[0.72rem] text-slate-400 font-mono whitespace-nowrap overflow-hidden text-ellipsis">
-                      {asset?.contentType && `${asset.contentType}`}
-                    </span>
-                    <button
-                      type="button"
-                      className={clsx(ACTION_BTN_CLASSES, ACTION_BTN_DEFAULT_CLASSES)}
-                      onClick={() => onReplace?.(asset)}
-                      disabled={busy}
-                      title="Choose or upload a different asset to use here"
-                    >
-                      Replace image…
-                    </button>
-                  </div>
-                )}
+                  {canReplace && (
+                    <div className="flex justify-end items-center gap-2 mb-2">
+                      <span className="text-[0.72rem] text-slate-400 font-mono whitespace-nowrap overflow-hidden text-ellipsis">
+                        {asset?.contentType && `${asset.contentType}`}
+                      </span>
+                      <button
+                        type="button"
+                        className={clsx(ACTION_BTN_CLASSES, ACTION_BTN_DEFAULT_CLASSES)}
+                        onClick={() => onReplace?.(asset)}
+                        disabled={busy}
+                        title="Choose or upload a different asset to use here"
+                      >
+                        Replace image…
+                      </button>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              <div className="flex items-center gap-2 mt-[0.35rem] mb-3">
+                <DialogLabel>Copy/paste this code to embed in your document:</DialogLabel>
+                <button
+                  type="button"
+                  className={clsx(
+                    ACTION_BTN_CLASSES,
+                    copied ? ACTION_BTN_DONE_CLASSES : ACTION_BTN_DEFAULT_CLASSES,
+                  )}
+                  onClick={handleCopy}
+                  title="Copy embed code to clipboard"
+                >
+                  {copied ? "Copied!" : "Copy"}
+                </button>
+                <code className="flex-1 min-w-0 font-mono text-[0.78rem] text-slate-900 bg-slate-100 border border-slate-200 rounded py-1 px-2 overflow-x-auto whitespace-nowrap">
+                  {embedCode}
+                </code>
               </div>
+
 
               {/* Right column: title and id fields, then embed code */}
               <div className="flex flex-col gap-2 min-w-0">
@@ -294,37 +340,14 @@ const AssetEditModal = ({
               </p>
             )}
 
-            <details data-testid="asset-edit-advanced">
-              <summary>Advanced</summary>
-              <DialogLabel>
-                Additional source
-                <DialogHelperCopy>
-                  Inserted verbatim inside the generated <code>{"<image>"}</code> element
-                  — e.g. <code>{"<description>...</description>"}</code>, or a hand-authored
-                  element like <code>{"<latex-image>...</latex-image>"}</code> for an
-                  authored (file-less) asset.
-                </DialogHelperCopy>
-              </DialogLabel>
-              <DialogEditorPane
-                data-testid="asset-edit-source-editor"
-                className="flex-none min-h-0"
-                style={{ height: editorHeight }}
-              >
-                <Editor
-                  options={{ ...editorOptions, readOnly: busy }}
-                  height="100%"
-                  language="xml"
-                  value={sourceValue}
-                  onMount={handleEditorMount}
-                  onChange={(value) => setSourceValue(value ?? "")}
-                />
-              </DialogEditorPane>
-              {error && (
-                <p className="m-0 py-[0.4rem] px-[0.6rem] bg-[#fde8e8] text-red-700 rounded text-[0.83rem]">
-                  {error}
-                </p>
-              )}
-            </details>
+            {asset.isFile ? (
+              <details data-testid="asset-edit-advanced">
+                <summary className="cursor-pointer select-none">Advanced</summary>
+                {sourceEditor}
+              </details>
+            ) : (
+              sourceEditor
+            )}
           </DialogSection>
         </DialogContent>
 

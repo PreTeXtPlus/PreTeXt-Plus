@@ -101,7 +101,9 @@ class AssetEditSyncTest < ApplicationSystemTestCase
     assert_no_selector "[aria-label='Asset manager']", wait: 10
     assert_selector "[aria-label^='Manage asset']", wait: 10
 
-    find("details[data-testid='asset-edit-advanced']").click
+    # Unlike a file-backed asset, an authored asset's source editor is shown
+    # directly rather than tucked behind a collapsed "Advanced" disclosure --
+    # it's the asset's entire content, not an optional extra.
     within("[data-testid='asset-edit-source-editor']") do
       assert_selector ".view-line", wait: 10
       first(".view-line").click
