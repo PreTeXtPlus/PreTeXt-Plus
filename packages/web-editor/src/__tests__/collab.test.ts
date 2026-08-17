@@ -274,7 +274,6 @@ describe("CollabBridge", () => {
     const { bridgeA, storeA, storeB } = makeLinkedPair();
     const asset: Asset = {
       id: "asset-1",
-      kind: "image",
       ref: "diagram",
       title: "A Diagram",
       isFile: true,
@@ -304,11 +303,11 @@ describe("CollabBridge", () => {
     expect(storeB.store.getState().projectAssets ?? []).toHaveLength(0);
   });
 
-  // The pool keys on kind+ref, the doc on record id, so a rename has to move
+  // The pool keys on ref, the doc on record id, so a rename has to move
   // the pool entry rather than leave the old ref behind as a duplicate.
   it("mirrors an asset ref rename without duplicating the pool entry", () => {
     const { bridgeA, storeA, storeB } = makeLinkedPair();
-    const asset: Asset = { id: "asset-2", kind: "image", ref: "old-ref", title: "T" };
+    const asset: Asset = { id: "asset-2", ref: "old-ref", title: "T" };
     storeA.store.getState().addAssetToPool(asset);
     bridgeA.localAssetAdd(asset);
 
@@ -327,7 +326,6 @@ describe("CollabBridge", () => {
     const { bridgeA, storeA, storeB } = makeLinkedPair();
     const original: Asset = {
       id: "asset-old",
-      kind: "image",
       ref: "figure",
       title: "Figure",
       url: "/old.png",
@@ -352,7 +350,7 @@ describe("CollabBridge", () => {
   // act on, so the removal is also recorded as a tombstone.
   it("records tombstones so a delete can be re-sent by the leader", () => {
     const { bridgeA, docA } = makeLinkedPair();
-    const asset: Asset = { id: "asset-3", kind: "image", ref: "gone", title: "Gone" };
+    const asset: Asset = { id: "asset-3", ref: "gone", title: "Gone" };
     bridgeA.localAssetAdd(asset);
     bridgeA.localAssetRemove(asset);
     bridgeA.localDivisionRemove("sec-a");
@@ -385,7 +383,7 @@ describe("CollabBridge", () => {
       divisions: structuredClone(DIVISIONS),
       activeDivisionId: "sec-a",
       projectAssets: [
-        { id: "stale-asset", kind: "image", ref: "stale", title: "Stale" },
+        { id: "stale-asset", ref: "stale", title: "Stale" },
       ],
     });
     new CollabBridge(

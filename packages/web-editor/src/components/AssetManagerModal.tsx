@@ -1,10 +1,9 @@
 import { useState, useEffect, useRef, type ReactNode } from "react";
 import clsx from "clsx";
-import type { Asset, AssetKind } from "../types/editor";
+import type { Asset } from "../types/editor";
 import { useEditorStore } from "../store/hooks";
 import { assetEmbedCode } from "../sectionUtils";
 import { buildProjectAssetView, type AssetRow } from "../assetView";
-import { ASSET_KIND_LABELS, SHOW_DOENET, VISIBLE_ASSET_KINDS } from "../assetKinds";
 import {
   DialogOverlay,
   Dialog,
@@ -20,7 +19,6 @@ import {
   DialogActions,
   DialogButton,
 } from "./Dialog";
-import doenetLogo from "../assets/doenet.png";
 
 export interface AssetManagerModalProps {
   open: boolean;
@@ -32,15 +30,15 @@ export interface AssetManagerModalProps {
   initialTab?: AssetManagerMainTab;
   /**
    * When set, the modal opens in "resolve" mode for an unresolved
-   * `<plus:KIND ref="..."/>` placeholder: it goes straight to the source picker
-   * for that kind, and whatever asset the user picks/uploads/creates is bound to
-   * this placeholder (its ref is rewritten in the source) instead of copying an
+   * `<plus:image ref="..."/>` placeholder: it goes straight to the source
+   * picker, and whatever asset the user picks/uploads is bound to this
+   * placeholder (its ref is rewritten in the source) instead of copying an
    * embed code.
    */
-  resolveTarget?: { kind: AssetKind; ref: string } | null;
+  resolveTarget?: { ref: string } | null;
   /**
    * When set, the modal opens in "replace" mode for an existing asset: it goes
-   * straight to the source picker, and whatever the user picks/uploads/creates
+   * straight to the source picker, and whatever the user picks/uploads
    * takes over from this asset (handled by `onReplaceAsset`).
    */
   replaceTarget?: Asset | null;
@@ -57,8 +55,13 @@ export interface AssetManagerModalProps {
    * file pick, so there is a single code path that creates project assets.
    */
   onFetchUrl?: (url: string) => Promise<File>;
-  /** Create a new Doenet activity; host returns the created asset. */
-  onCreateDoenet?: (title: string, ref: string) => Promise<Asset>;
+  /**
+   * Create a new authored asset (no file — its `source` is a hand-typed
+   * PreTeXt element the user fills in afterward via the asset editor). Host
+   * derives the ref from `title` itself (the same way it already does for
+   * `onUpload`) and returns the created asset.
+   */
+  onCreateAuthored?: (title: string) => Promise<Asset>;
   /** Remove an asset from the project. */
   onRemoveAsset?: (asset: Asset) => void;
   /**
@@ -70,8 +73,8 @@ export interface AssetManagerModalProps {
   onDuplicateAsset?: (asset: Asset) => void | Promise<void>;
   /** Notify that an asset now exists in the project (optimistic pool add). */
   onAssetAdded: (asset: Asset) => void;
-  /** Rewrite in-document `<plus:KIND ref="oldRef"/>` placeholders to `newRef`. */
-  onResolveRef: (kind: AssetKind, oldRef: string, newRef: string) => void;
+  /** Rewrite in-document `<plus:image ref="oldRef"/>` placeholders to `newRef`. */
+  onResolveRef: (oldRef: string, newRef: string) => void;
   /**
    * Replace `oldAsset` with the user's freshly created `newAsset`, which adopts
    * the old asset's ref so the document's references don't move.
@@ -81,7 +84,7 @@ export interface AssetManagerModalProps {
 
 export type AssetManagerMainTab = "in-document" | "add";
 type MainTab = AssetManagerMainTab;
-type ImageSourceTab = "upload" | "url";
+type ImageSourceTab = "upload" | "url" | "authored";
 
 /**
  * A throwaway client-side id for a locally-created asset, used only in the
@@ -105,6 +108,20 @@ function namePastedImageFile(file: File): File {
   return new File([file], `pasted-image-${Date.now()}`, { type: file.type });
 }
 
+/**
+ * Client-only fallback for deriving a ref from a title when no host
+ * `onCreateAuthored` is wired (demo/no-host testing) -- a real host derives
+ * the ref itself, the same way it already does for `onAssetUpload`.
+ */
+function slugifyTitle(title: string): string {
+  const slug = title
+    .toLowerCase()
+    .trim()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+  return slug || "asset";
+}
+
 const AssetManagerModal = ({
   open,
   onClose,
@@ -113,7 +130,7 @@ const AssetManagerModal = ({
   replaceTarget,
   onUpload,
   onFetchUrl,
-  onCreateDoenet,
+  onCreateAuthored,
   onRemoveAsset,
   onDuplicateAsset,
   onAssetAdded,
@@ -128,8 +145,7 @@ const AssetManagerModal = ({
   const activeFormat =
     divisions?.find((d) => d.xmlId === activeDivisionId)?.sourceFormat ??
     "pretext";
-  const embedFor = (kind: AssetKind, ref: string) =>
-    assetEmbedCode(kind, ref, activeFormat);
+  const embedFor = (ref: string) => assetEmbedCode(ref, activeFormat);
   // Authoritative project-asset pool, owned by the store.
   const projectAssets = useEditorStore((s) => s.projectAssets) ?? [];
   const openAssetEditor = useEditorStore((s) => s.openAssetEditor);
@@ -137,7 +153,6 @@ const AssetManagerModal = ({
   const removeAssetRefFromDocument = useEditorStore((s) => s.removeAssetRefFromDocument);
 
   const [tab, setTab] = useState<MainTab>(initialTab ?? "in-document");
-  const [addKind, setAddKind] = useState<AssetKind | null>(null);
   const [imageTab, setImageTab] = useState<ImageSourceTab>("upload");
 
   // Upload state
@@ -158,16 +173,17 @@ const AssetManagerModal = ({
   const [isAddingUrl, setIsAddingUrl] = useState(false);
   const [urlError, setUrlError] = useState<string | null>(null);
 
-  // Create Doenet state
-  const [doenetTitle, setDoenetTitle] = useState("");
-  const [doenetRef, setDoenetRef] = useState("");
-  const [isCreatingDoenet, setIsCreatingDoenet] = useState(false);
-  const [doenetError, setDoenetError] = useState<string | null>(null);
+  // Author state — the created asset is bare (no source yet); the user fills
+  // it in afterward via the asset editor's "Additional source" field. Its ref
+  // is derived from the title (like uploads), not typed in directly.
+  const [authorTitle, setAuthorTitle] = useState("");
+  const [isCreatingAuthored, setIsCreatingAuthored] = useState(false);
+  const [authorError, setAuthorError] = useState<string | null>(null);
 
-  // Copy feedback (keyed by `kind:ref`)
+  // Copy feedback, keyed by `ref`.
   const [copiedKey, setCopiedKey] = useState<string | null>(null);
 
-  // Row whose Duplicate round-trip (fetch + re-upload) is in flight (keyed by `kind:ref`).
+  // Row whose Duplicate round-trip (fetch + re-upload) is in flight, keyed by `ref`.
   const [duplicatingKey, setDuplicatingKey] = useState<string | null>(null);
 
   // Stash a picked/dropped file for preview; the actual upload is deferred
@@ -198,18 +214,10 @@ const AssetManagerModal = ({
   }, [pendingUploadPreviewUrl]);
 
   // Is pasting an image a sensible thing to do right now? Any time this
-  // modal is open and uploads are supported — including the "Assets" tab,
-  // the kind picker, mid-Doenet-form, or with an image already staged (a
-  // fresh paste replaces it) — a stray Ctrl/Cmd+V with an image on the
-  // clipboard jumps straight to Image/Upload. The one exception is a
-  // resolve/replace target locked to a non-image kind (e.g. an unresolved
-  // Doenet placeholder), which has no Image view to receive it.
-  const pasteImageActive =
-    open &&
-    !!onUpload &&
-    (resolveTarget ? resolveTarget.kind === "image"
-      : replaceTarget ? replaceTarget.kind === "image"
-      : true);
+  // modal is open and uploads are supported — including the "Assets" tab, or
+  // with an image already staged (a fresh paste replaces it) — a stray
+  // Ctrl/Cmd+V with an image on the clipboard jumps straight to Image/Upload.
+  const pasteImageActive = open && !!onUpload;
 
   // Bound at the window level (rather than the drop zone's onPaste) so it
   // fires no matter what currently has focus inside the modal.
@@ -224,7 +232,6 @@ const AssetManagerModal = ({
           if (file) {
             e.preventDefault();
             setTab("add");
-            setAddKind("image");
             setImageTab("upload");
             selectPendingUpload(namePastedImageFile(file), "Pasted Image");
           }
@@ -256,22 +263,21 @@ const AssetManagerModal = ({
     }
     onAssetAdded(asset);
     if (resolveTarget) {
-      if (asset.ref) onResolveRef(resolveTarget.kind, resolveTarget.ref, asset.ref);
+      if (asset.ref) onResolveRef(resolveTarget.ref, asset.ref);
       onClose();
       return;
     }
     if (asset.ref) {
-      navigator.clipboard.writeText(embedFor(asset.kind, asset.ref)).catch(() => {});
-      openAssetEditor(asset.kind, asset.ref);
+      navigator.clipboard?.writeText(embedFor(asset.ref)).catch(() => {});
+      openAssetEditor(asset.ref);
     }
     onClose();
   };
 
-  const handleCopy = (kind: AssetKind, ref: string) => {
-    const key = `${kind}:${ref}`;
-    navigator.clipboard.writeText(embedFor(kind, ref)).catch(() => {});
-    setCopiedKey(key);
-    setTimeout(() => setCopiedKey((k) => (k === key ? null : k)), 2000);
+  const handleCopy = (ref: string) => {
+    navigator.clipboard?.writeText(embedFor(ref)).catch(() => {});
+    setCopiedKey(ref);
+    setTimeout(() => setCopiedKey((k) => (k === ref ? null : k)), 2000);
   };
 
   const clearPendingUpload = () => {
@@ -317,29 +323,27 @@ const AssetManagerModal = ({
         id: localAssetId("url"),
         title: title || url,
         ref: url.split("/").pop() ?? "image",
-        kind: "image",
         url,
       });
     }
   };
 
-  const handleCreateDoenet = async () => {
-    const title = doenetTitle.trim();
-    const ref = doenetRef.trim();
-    if (!title || !ref) return;
-    if (onCreateDoenet) {
-      setDoenetError(null);
-      setIsCreatingDoenet(true);
+  const handleCreateAuthored = async () => {
+    const title = authorTitle.trim();
+    if (!title) return;
+    setAuthorError(null);
+    if (onCreateAuthored) {
+      setIsCreatingAuthored(true);
       try {
-        const asset = await onCreateDoenet(title, ref);
+        const asset = await onCreateAuthored(title);
         commitAsset(asset);
       } catch (err) {
-        setDoenetError(err instanceof Error ? err.message : "Failed to create activity.");
+        setAuthorError(err instanceof Error ? err.message : "Failed to create asset.");
       } finally {
-        setIsCreatingDoenet(false);
+        setIsCreatingAuthored(false);
       }
     } else {
-      commitAsset({ id: localAssetId("doenet"), title, ref, kind: "doenet" });
+      commitAsset({ id: localAssetId("authored"), title, ref: slugifyTitle(title) });
     }
   };
 
@@ -349,35 +353,29 @@ const AssetManagerModal = ({
       return (
         <div className="flex flex-col items-center justify-center min-h-[200px] gap-4 text-slate-500 text-[0.9rem] text-center">
           <p>No assets in this project yet.</p>
-          <DialogButton onClick={() => { setTab("add"); setAddKind(null); }}>
+          <DialogButton onClick={() => setTab("add")}>
             Add an asset
           </DialogButton>
         </div>
       );
     }
 
-    const byKind = VISIBLE_ASSET_KINDS.map((kind) => ({
-      kind,
-      rows: assetView.filter((r) => r.kind === kind),
-    })).filter((g) => g.rows.length > 0);
-
     const renderRow = (row: AssetRow) => {
-      const ck = `${row.kind}:${row.ref}`;
-      const isDuplicating = duplicatingKey === ck;
+      const isDuplicating = duplicatingKey === row.ref;
       const onOpen = () => {
         if (row.status === "unlinked") {
           // Switches this same modal into resolve mode (resolveTarget wins in render).
-          openAssetResolver(row.kind, row.ref);
+          openAssetResolver(row.ref);
         } else {
           // Hand off to the standalone asset editor; close the manager so the
           // two dialogs don't stack.
-          openAssetEditor(row.kind, row.ref);
+          openAssetEditor(row.ref);
           onClose();
         }
       };
       return (
         <li
-          key={ck}
+          key={row.ref}
           data-testid="am-doc-row"
           className="flex items-center justify-between gap-2 py-[0.45rem] px-2 rounded hover:bg-slate-50"
         >
@@ -433,14 +431,14 @@ const AssetManagerModal = ({
               type="button"
               className={clsx(
                 "text-[0.75rem] py-0.5 px-2 border rounded cursor-pointer leading-[1.5] whitespace-nowrap transition-colors duration-100",
-                copiedKey === ck
+                copiedKey === row.ref
                   ? "text-emerald-600 border-emerald-300 bg-emerald-50"
                   : "border-slate-300 bg-white text-slate-700 hover:bg-slate-100 hover:border-slate-400",
               )}
-              onClick={() => handleCopy(row.kind, row.ref)}
-              title={`Copy ${embedFor(row.kind, row.ref)}`}
+              onClick={() => handleCopy(row.ref)}
+              title={`Copy ${embedFor(row.ref)}`}
             >
-              {copiedKey === ck ? "Copied!" : "Copy embed code"}
+              {copiedKey === row.ref ? "Copied!" : "Copy embed code"}
             </button>
             {onDuplicateAsset && row.asset?.url && (
               <button
@@ -448,7 +446,7 @@ const AssetManagerModal = ({
                 className="text-[0.75rem] py-0.5 px-2 border border-slate-300 rounded bg-white text-slate-700 cursor-pointer leading-[1.5] whitespace-nowrap transition-colors duration-100 hover:bg-slate-100 hover:border-slate-400"
                 disabled={isDuplicating}
                 onClick={async () => {
-                  setDuplicatingKey(ck);
+                  setDuplicatingKey(row.ref);
                   try {
                     // On success the editor opens on the new copy; close the
                     // manager so the two dialogs don't stack (mirrors Edit).
@@ -479,7 +477,7 @@ const AssetManagerModal = ({
                     return;
                   }
                   onRemoveAsset(row.asset!);
-                  removeAssetRefFromDocument(row.kind, row.ref);
+                  removeAssetRefFromDocument(row.ref);
                   onClose();
                 }}
                 title="Remove from project"
@@ -494,75 +492,14 @@ const AssetManagerModal = ({
 
     return (
       <div className="p-1">
-        {byKind.map(({ kind, rows }) => (
-          <div key={kind} className="mb-2">
-            <div className="flex items-center gap-[0.35rem] pt-[0.4rem] px-2 pb-1 text-[0.72rem] font-semibold text-slate-600 uppercase tracking-[0.05em] border-b border-slate-200">
-              <span aria-hidden="true">📁</span>
-              <span>{ASSET_KIND_LABELS[kind]}</span>
-              <span className="inline-flex items-center justify-center text-[0.65rem] font-bold text-slate-600 bg-slate-200 rounded-full px-[5px] min-w-[16px] leading-[1.4]">
-                {rows.length}
-              </span>
-            </div>
-            <ul className="list-none m-0 p-0">{rows.map(renderRow)}</ul>
-          </div>
-        ))}
+        <ul className="list-none m-0 p-0">{assetView.map(renderRow)}</ul>
       </div>
     );
   };
 
   // ── "Add Asset" tab ────────────────────────────────────────────────────────
-  const kindCardClasses =
-    "flex flex-col items-center gap-[0.4rem] py-6 px-8 bg-white border-2 border-slate-200 rounded-lg cursor-pointer min-w-[130px] text-center transition-[border-color,box-shadow] duration-150 hover:border-[#0e639c] hover:shadow-[0_0_0_3px_rgba(14,99,156,0.12)]";
-
-  const renderKindPicker = () => (
-    <div className="flex flex-col items-center justify-center min-h-[220px] gap-6 py-6 px-4 [@media(max-height:600px)]:min-h-0 [@media(max-height:600px)]:py-4 [@media(max-height:600px)]:px-2">
-      <p className="m-0 text-base font-medium text-slate-700">What kind of asset?</p>
-      <div className="flex gap-4">
-        <button
-          type="button"
-          className={kindCardClasses}
-          onClick={() => { setAddKind("image"); setImageTab(onUpload ? "upload" : "url"); }}
-        >
-          <span className="text-[2rem] leading-none" aria-hidden="true">🖼️</span>
-          <span className="text-base font-semibold text-slate-900">Image</span>
-          <span className="text-[0.78rem] text-slate-500">PNG, JPEG, SVG, etc.</span>
-        </button>
-        {SHOW_DOENET && (
-          <button
-            type="button"
-            className={kindCardClasses}
-            onClick={() => setAddKind("doenet")}
-          >
-            <span className="text-[2rem] leading-none" aria-hidden="true"><img src={doenetLogo} alt="Doenet" /></span>
-            <span className="text-base font-semibold text-slate-900">Doenet</span>
-            <span className="text-[0.78rem] text-slate-500">Interactive activity</span>
-          </button>
-        )}
-        {!SHOW_DOENET && (
-          <div
-            className="flex flex-col items-center gap-[0.4rem] py-6 px-8 border-2 border-dashed border-slate-200 rounded-lg cursor-default min-w-[130px] text-center opacity-70 bg-slate-50 hover:shadow-none"
-            aria-disabled="true"
-          >
-            <span className="text-[2rem] leading-none" aria-hidden="true">✨</span>
-            <span className="text-base font-semibold text-slate-900">More coming soon</span>
-            <span className="text-[0.78rem] text-slate-500">Interactive activities and more</span>
-          </div>
-        )}
-      </div>
-    </div>
-  );
-
-  const renderImageAdd = (showBack: boolean) => (
+  const renderImageAdd = () => (
     <div className="flex flex-col min-h-0">
-      {showBack && (
-        <button
-          type="button"
-          className="text-[0.8rem] text-slate-600 bg-transparent border-none cursor-pointer py-[0.35rem] px-2 rounded w-fit mt-1 mx-1 hover:bg-slate-100 hover:text-slate-900"
-          onClick={() => setAddKind(null)}
-        >
-          ← Back
-        </button>
-      )}
       <DialogTabBar className="border-b-slate-200 pl-1">
         {onUpload && (
           <DialogTab
@@ -575,6 +512,14 @@ const AssetManagerModal = ({
         <DialogTab active={imageTab === "url"} onClick={() => setImageTab("url")}>
           External URL
         </DialogTab>
+        {onCreateAuthored && (
+          <DialogTab
+            active={imageTab === "authored"}
+            onClick={() => setImageTab("authored")}
+          >
+            Custom
+          </DialogTab>
+        )}
       </DialogTabBar>
       <div className="p-1">
         {imageTab === "upload" && onUpload && (
@@ -683,6 +628,37 @@ const AssetManagerModal = ({
             )}
           </div>
         )}
+        {imageTab === "authored" && (
+          <div className="flex flex-col gap-2 pt-1 px-1 pb-2 max-w-[420px]">
+            <DialogLabel htmlFor="am-author-title">Title</DialogLabel>
+            <input
+              id="am-author-title"
+              type="text"
+              className="text-[0.9rem] border border-slate-300 rounded py-1.5 px-2.5 bg-white outline-none text-slate-900 w-full focus:border-[#0e639c] focus:shadow-[0_0_0_2px_rgba(14,99,156,0.15)]"
+              placeholder="My Diagram"
+              value={authorTitle}
+              onChange={(e) => setAuthorTitle(e.target.value)}
+              disabled={isCreatingAuthored}
+              autoFocus
+            />
+            <DialogHelperCopy as="p">
+              A reference id will be generated from the title. You'll write the
+              asset's PreTeXt content (e.g. <code>{"<latex-image>"}</code>) in
+              the next step.
+            </DialogHelperCopy>
+            {authorError && (
+              <p className="m-0 py-[0.4rem] px-[0.6rem] bg-[#fde8e8] text-red-700 rounded text-[0.83rem]">
+                {authorError}
+              </p>
+            )}
+            <DialogButton
+              onClick={handleCreateAuthored}
+              disabled={!authorTitle.trim() || isCreatingAuthored}
+            >
+              {isCreatingAuthored ? "Creating…" : onCreateAuthored ? "Create" : "Add"}
+            </DialogButton>
+          </div>
+        )}
       </div>
     </div>
   );
@@ -709,61 +685,8 @@ const AssetManagerModal = ({
     </DialogButton>
   );
 
-  const renderDoenetAdd = (showBack: boolean) => (
-    <div className="flex flex-col min-h-0">
-      {showBack && (
-        <button
-          type="button"
-          className="text-[0.8rem] text-slate-600 bg-transparent border-none cursor-pointer py-[0.35rem] px-2 rounded w-fit mt-1 mx-1 hover:bg-slate-100 hover:text-slate-900"
-          onClick={() => setAddKind(null)}
-        >
-          ← Back
-        </button>
-      )}
-      <div className="p-1">
-        <div className="flex flex-col gap-2 pt-1 px-1 pb-2 max-w-[420px]">
-            <DialogLabel htmlFor="am-doenet-title">Title</DialogLabel>
-            <input
-              id="am-doenet-title"
-              type="text"
-              className="text-[0.9rem] border border-slate-300 rounded py-1.5 px-2.5 bg-white outline-none text-slate-900 w-full focus:border-[#0e639c] focus:shadow-[0_0_0_2px_rgba(14,99,156,0.15)]"
-              placeholder="My Activity"
-              value={doenetTitle}
-              onChange={(e) => setDoenetTitle(e.target.value)}
-              disabled={isCreatingDoenet}
-              autoFocus
-            />
-            <DialogLabel htmlFor="am-doenet-ref">Id</DialogLabel>
-            <input
-              id="am-doenet-ref"
-              type="text"
-              className="text-[0.9rem] border border-slate-300 rounded py-1.5 px-2.5 bg-white outline-none text-slate-900 w-full focus:border-[#0e639c] focus:shadow-[0_0_0_2px_rgba(14,99,156,0.15)]"
-              placeholder="my-activity"
-              value={doenetRef}
-              onChange={(e) => setDoenetRef(e.target.value)}
-              disabled={isCreatingDoenet}
-            />
-            <DialogHelperCopy as="p">
-              The id is used in the embed code: <code>{embedFor("doenet", doenetRef || "my-activity")}</code>
-            </DialogHelperCopy>
-            {doenetError && (
-              <p className="m-0 py-[0.4rem] px-[0.6rem] bg-[#fde8e8] text-red-700 rounded text-[0.83rem]">
-                {doenetError}
-              </p>
-            )}
-            <DialogButton
-              onClick={handleCreateDoenet}
-              disabled={!doenetTitle.trim() || !doenetRef.trim() || isCreatingDoenet}
-            >
-              {isCreatingDoenet ? "Creating…" : onCreateDoenet ? "Create" : "Add"}
-            </DialogButton>
-        </div>
-      </div>
-    </div>
-  );
-
   // ── Source-picker mode (resolve / replace): go straight to the picker ──────
-  const renderSourcePickerMode = (kind: AssetKind, title: string, hint: ReactNode) => (
+  const renderSourcePickerMode = (title: string, hint: ReactNode) => (
     <>
       <DialogHeader>
         <DialogTitle>{title}</DialogTitle>
@@ -775,21 +698,20 @@ const AssetManagerModal = ({
         <DialogHelperCopy as="p" className="pb-2 px-2">
           {hint}
         </DialogHelperCopy>
-        {kind === "doenet" ? renderDoenetAdd(false) : renderImageAdd(false)}
+        {renderImageAdd()}
       </DialogContent>
       <DialogActions>
         <DialogButton variant="secondary" onClick={onClose}>
           Cancel
         </DialogButton>
-        {kind === "image" && imageTab === "url" && renderUrlAddAction()}
-        {kind === "image" && imageTab === "upload" && onUpload && renderUploadAddAction()}
+        {imageTab === "url" && renderUrlAddAction()}
+        {imageTab === "upload" && onUpload && renderUploadAddAction()}
       </DialogActions>
     </>
   );
 
-  const renderResolveMode = (target: { kind: AssetKind; ref: string }) =>
+  const renderResolveMode = (target: { ref: string }) =>
     renderSourcePickerMode(
-      target.kind,
       "Link asset",
       <>
         The reference <code>{target.ref}</code> has no asset yet. Choose or create one — the
@@ -799,7 +721,6 @@ const AssetManagerModal = ({
 
   const renderReplaceMode = (target: Asset) =>
     renderSourcePickerMode(
-      target.kind,
       "Replace asset",
       <>
         Choose or upload a new asset to replace <code>{target.title}</code>. Every place
@@ -842,28 +763,22 @@ const AssetManagerModal = ({
               </DialogTab>
               <DialogTab
                 active={tab === "add"}
-                onClick={() => { setTab("add"); setAddKind(null); }}
+                onClick={() => setTab("add")}
               >
                 Add Asset
               </DialogTab>
             </DialogTabBar>
 
             <DialogContent single>
-              {tab === "in-document"
-                ? renderInDocument()
-                : addKind === null
-                  ? renderKindPicker()
-                  : addKind === "image"
-                    ? renderImageAdd(true)
-                    : renderDoenetAdd(true)}
+              {tab === "in-document" ? renderInDocument() : renderImageAdd()}
             </DialogContent>
 
             <DialogActions>
               <DialogButton variant="secondary" onClick={onClose}>
                 Close
               </DialogButton>
-              {tab === "add" && addKind === "image" && imageTab === "url" && renderUrlAddAction()}
-              {tab === "add" && addKind === "image" && imageTab === "upload" && onUpload && renderUploadAddAction()}
+              {tab === "add" && imageTab === "url" && renderUrlAddAction()}
+              {tab === "add" && imageTab === "upload" && onUpload && renderUploadAddAction()}
             </DialogActions>
           </>
         )}

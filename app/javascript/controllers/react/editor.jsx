@@ -862,6 +862,26 @@ function EditorApp({ config }) {
     [uniqueRef, patchProjectAssetUpload, invalidateAssetQueries],
   );
 
+  // Creates a file-less "authored" asset -- unlike onAssetUpload there's no
+  // file to multipart-upload, so this goes through patchProjectJson (like
+  // onDivisionAdd) instead of patchProjectAssetUpload. `title` comes from the
+  // asset manager's create form; the ref is derived from it exactly like
+  // onAssetUpload derives one from an uploaded file's title. `source` starts
+  // empty and is filled in afterward through onAssetUpdate, the same as any
+  // other edit.
+  const onCreateAuthored = useCallback(
+    async (title) => {
+      const ref = uniqueRef(slugifyRef(title));
+      const json = await patchProjectJson({
+        assets_attributes: [ { ref, kind: "authored", title, source: "" } ],
+      });
+      const created = (json.assets ?? []).find((a) => a.ref === ref);
+      invalidateAssetQueries();
+      return toEditorAsset(railsAssetToEditor(created));
+    },
+    [uniqueRef, patchProjectJson, invalidateAssetQueries],
+  );
+
   // Fetches the image bytes server-side and hands back a File -- it does not
   // create a persisted asset. The editor commits the file (possibly after
   // letting the user edit it) through onAssetUpload, the same path used for
@@ -1173,6 +1193,7 @@ function EditorApp({ config }) {
       onAssetInsert={onAssetInsert}
       onAssetUpload={onAssetUpload}
       onAssetFetchUrl={onAssetFetchUrl}
+      onCreateAuthored={onCreateAuthored}
       onAssetUpdate={onAssetUpdate}
       onAssetRemove={onAssetRemove}
       onLoadAssets={onLoadAssets}

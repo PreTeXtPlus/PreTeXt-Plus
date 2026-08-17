@@ -1,9 +1,6 @@
 /** The format of the source content being edited. */
 export type SourceFormat = "pretext" | "latex" | "markdown";
 
-/** The kind of a project asset — determines the inserted PreTeXt tag. */
-export type AssetKind = "image" | "doenet";
-
 /** An asset owned by a single project. */
 export interface Asset {
   /**
@@ -11,43 +8,41 @@ export interface Asset {
    * persisted through the project's nested `assets_attributes`, so a
    * freshly-created asset has **no** `id` until the project is saved and the
    * server mints one — the *absence* of an `id` is the signal that an asset is
-   * new. The editor keys asset identity on `kind` + `ref` (never `id`), so an
-   * id-less asset is fully usable the instant it's added.
+   * new. The editor keys asset identity on `ref` (never `id`), so an id-less
+   * asset is fully usable the instant it's added.
    */
   id?: string;
   /** Human-readable display title shown in the library UI. */
   title: string;
   /** Short reference used when authoring references, e.g. `"euler-painting"`.
    * Authors write e.g. `<plus:image ref="euler-painting"/>` and the build system
-   * resolves it to the necessary core PreTeXt markup based upon the kind of
-   * asset it is.
+   * resolves it to the necessary core PreTeXt markup for that image.
    */
   ref?: string;
-  /** The kind of asset — determines the tag inserted into the document. */
-  kind: AssetKind;
   /**
-   * User-authored inner XML for the asset's PreTeXt element — e.g. a
-   * `<description>...</description>` block for an image, or an activity's
-   * body for a Doenet interactive. Inserted verbatim as the children of the
-   * generated element, after any auto-generated `<shortdescription>` (see
-   * {@link shortDescription}).
+   * User-authored inner XML for the asset's `<image>` element — e.g. a
+   * `<description>...</description>` block. Inserted verbatim as the children
+   * of the generated element, after any auto-generated `<shortdescription>`
+   * (see {@link shortDescription}).
    */
   source?: string;
   /**
-   * Plain-text alt description for an image, rendered as a `<shortdescription>`
+   * Plain-text alt description for the image, rendered as a `<shortdescription>`
    * element that's auto-generated (and XML-escaped) as the first child of the
    * `<image>` element — distinct from {@link source}, which is raw,
-   * user-authored XML. Only meaningful for `kind: "image"`.
+   * user-authored XML.
    */
   shortDescription?: string;
   /**
    * Whether this asset is backed by an uploaded/fetched file rather than
-   * being defined purely by `source`. File-based image assets emit a
-   * `source` attribute on the generated `<image>` element built from this
-   * asset's {@link ref} plus a file extension (e.g. `ref="euler-painting"`
-   * with a PNG upload emits `source="euler-painting.png"`); non-file image
-   * assets carry no `source` attribute and rely entirely on their authored
-   * `source` content.
+   * being defined purely by `source`. File-based assets emit a `source`
+   * attribute on the generated `<image>` element built from this asset's
+   * {@link ref} plus a file extension (e.g. `ref="euler-painting"` with a PNG
+   * upload emits `source="euler-painting.png"`); non-file assets carry no
+   * `source` attribute and rely entirely on their authored `source` content.
+   * Mirrors a host's own storage-origin distinction — e.g. this app's Rails
+   * `Asset#kind` (`file`/`authored`) — rather than being derived by the
+   * web-editor itself.
    */
   isFile?: boolean;
   /**

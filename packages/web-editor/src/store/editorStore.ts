@@ -26,7 +26,7 @@
  * they are stable while always calling the latest mode-routed callback.
  */
 import { createStore, type StoreApi } from "zustand/vanilla";
-import type { Asset, AssetKind, FeedbackSubmission, SourceFormat } from "../types/editor";
+import type { Asset, FeedbackSubmission, SourceFormat } from "../types/editor";
 import type { Division, DivisionType } from "../types/sections";
 import type { EditDraft } from "../components/toc/types";
 import {
@@ -39,12 +39,11 @@ import {
 // ── Helpers ─────────────────────────────────────────────────────────────────
 
 /**
- * Asset identity within a project: a `<plus:KIND ref="..."/>` placeholder is
- * resolved by kind+ref, so that pair (not the host's `id`) is what every
- * lookup and pool mutation keys on.
+ * Asset identity within a project: a `<plus:image ref="..."/>` placeholder is
+ * resolved by `ref`, so that (not the host's `id`) is what every lookup and
+ * pool mutation keys on.
  */
-const sameAssetRef = (a: Asset, b: Asset): boolean =>
-  a.kind === b.kind && a.ref === b.ref;
+const sameAssetRef = (a: Asset, b: Asset): boolean => a.ref === b.ref;
 
 /**
  * Breakpoint shared by `isNarrowScreen` (tabs vs. split layout) and the TOC's
@@ -143,8 +142,8 @@ export interface EditorCallbacks {
   assetInsert: (asset: Asset) => void;
   /** Remove a project asset (optimistic pool drop + host persistence). */
   assetRemove?: (asset: Asset) => void;
-  /** Remove every `<plus:KIND ref/>` placeholder for an unresolved ref from source. */
-  assetRefRemove?: (kind: AssetKind, ref: string) => void;
+  /** Remove every `<plus:image ref/>` placeholder for an unresolved ref from source. */
+  assetRefRemove?: (ref: string) => void;
   /** Duplicate a project asset under a fresh ref (host persists + pool add). */
   assetDuplicate?: (asset: Asset) => void | Promise<void>;
   updateTitle: (title: string) => void;
@@ -214,15 +213,15 @@ export interface EditorStoreState {
   /** True while `editDraft` belongs to a just-created, not-yet-saved division. */
   editingIsNew: boolean;
 
-  /** The asset currently open in the asset edit modal, identified by kind+ref. */
-  editingAssetRef: { kind: AssetKind; ref: string } | null;
+  /** The asset currently open in the asset edit modal, identified by ref. */
+  editingAssetRef: { ref: string } | null;
 
   /**
    * An unresolved placeholder the user is resolving — opens the asset manager
    * in "resolve this ref" mode, where picking/uploading binds the result to
-   * this `kind`+`ref` instead of copying an embed code.
+   * this `ref` instead of copying an embed code.
    */
-  assetResolveTarget: { kind: AssetKind; ref: string } | null;
+  assetResolveTarget: { ref: string } | null;
 
   // ── Actions ────────────────────────────────────────────────────────────────
 
@@ -284,37 +283,37 @@ export interface EditorStoreState {
   // Assets / content
   insertAsset: (asset: Asset) => void;
   insertAtCursor: (content: string) => void;
-  /** Open the asset edit modal for the asset identified by `kind`+`ref`. */
-  openAssetEditor: (kind: AssetKind, ref: string) => void;
+  /** Open the asset edit modal for the asset identified by `ref`. */
+  openAssetEditor: (ref: string) => void;
   closeAssetEditor: () => void;
-  /** Open the asset manager in resolve mode for an unresolved `kind`+`ref`. */
-  openAssetResolver: (kind: AssetKind, ref: string) => void;
+  /** Open the asset manager in resolve mode for an unresolved `ref`. */
+  openAssetResolver: (ref: string) => void;
   closeAssetResolver: () => void;
   /** Remove a project asset (pool + host persistence). */
   removeAsset: (asset: Asset) => void;
-  /** Remove every placeholder for an unresolved `kind`+`ref` from the document. */
-  removeAssetRefFromDocument: (kind: AssetKind, ref: string) => void;
+  /** Remove every placeholder for an unresolved `ref` from the document. */
+  removeAssetRefFromDocument: (ref: string) => void;
   /** Duplicate a project asset under a fresh ref. Resolves when the host settles. */
   duplicateAsset: (asset: Asset) => Promise<void>;
   /**
    * Optimistically add an asset to the pool (no-op if one with the same
-   * kind+ref already exists). Used when an asset is uploaded, created, added
+   * ref already exists). Used when an asset is uploaded, created, added
    * from the library, or inserted, so it's editable immediately.
    */
   addAssetToPool: (asset: Asset) => void;
   /**
-   * Optimistically replace the pool entry matching `asset` by kind+ref (adding
+   * Optimistically replace the pool entry matching `asset` by ref (adding
    * it if absent). Used when an asset's content/source is edited.
    */
   updateAssetInPool: (asset: Asset) => void;
   /**
    * Optimistically rename an asset's `ref`: drop the pool entry matching
-   * `kind`+`oldRef` and insert `newAsset` (which carries the new ref). Used when
+   * `oldRef` and insert `newAsset` (which carries the new ref). Used when
    * an asset's `ref` is edited — a plain `updateAssetInPool` can't match it
-   * because the kind+ref key has changed.
+   * because the ref key has changed.
    */
-  renameAssetInPool: (kind: AssetKind, oldRef: string, newAsset: Asset) => void;
-  /** Optimistically remove the asset matching `asset` by kind+ref from the pool. */
+  renameAssetInPool: (oldRef: string, newAsset: Asset) => void;
+  /** Optimistically remove the asset matching `asset` by ref from the pool. */
   removeAssetFromPool: (asset: Asset) => void;
   updateTitle: (title: string) => void;
   updateLanguage: (language: string) => void;
@@ -592,12 +591,12 @@ export function createEditorStore(init: EditorStoreInit): EditorStoreHandle {
 
     insertAsset: (asset) => bag.cbs.assetInsert(asset),
     insertAtCursor: (content) => bag.cbs.insertContentAtCursor?.(content),
-    openAssetEditor: (kind, ref) => set({ editingAssetRef: { kind, ref } }),
+    openAssetEditor: (ref) => set({ editingAssetRef: { ref } }),
     closeAssetEditor: () => set({ editingAssetRef: null }),
-    openAssetResolver: (kind, ref) => set({ assetResolveTarget: { kind, ref } }),
+    openAssetResolver: (ref) => set({ assetResolveTarget: { ref } }),
     closeAssetResolver: () => set({ assetResolveTarget: null }),
     removeAsset: (asset) => bag.cbs.assetRemove?.(asset),
-    removeAssetRefFromDocument: (kind, ref) => bag.cbs.assetRefRemove?.(kind, ref),
+    removeAssetRefFromDocument: (ref) => bag.cbs.assetRefRemove?.(ref),
     duplicateAsset: async (asset) => {
       await bag.cbs.assetDuplicate?.(asset);
     },
@@ -614,11 +613,11 @@ export function createEditorStore(init: EditorStoreInit): EditorStoreHandle {
           ? { projectAssets: base.map((a) => (sameAssetRef(a, asset) ? asset : a)) }
           : { projectAssets: [...base, asset] };
       }),
-    renameAssetInPool: (kind, oldRef, newAsset) =>
+    renameAssetInPool: (oldRef, newAsset) =>
       set((s) => {
         const base = s.projectAssets ?? [];
         const filtered = base.filter(
-          (a) => !(a.kind === kind && a.ref === oldRef) && !sameAssetRef(a, newAsset),
+          (a) => a.ref !== oldRef && !sameAssetRef(a, newAsset),
         );
         return { projectAssets: [...filtered, newAsset] };
       }),

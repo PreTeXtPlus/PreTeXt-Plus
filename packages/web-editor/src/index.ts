@@ -15,7 +15,6 @@ export {
 } from "./contentConversion";
 export type {
   Asset,
-  AssetKind,
   EditorContentChange,
   EditorContentState,
   FeedbackSubmission,

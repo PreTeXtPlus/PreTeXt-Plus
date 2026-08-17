@@ -60,7 +60,7 @@ describe('parseDivisionRefs', () => {
   })
 
   it('does not treat asset placeholders as divisions', () => {
-    expect(parseDivisionRefs('<plus:image ref="img1"/><plus:doenet ref="d1"/>', 'pretext')).toEqual([])
+    expect(parseDivisionRefs('<plus:image ref="img1"/>', 'pretext')).toEqual([])
   })
 
   it('recognises nested division levels', () => {
@@ -89,13 +89,10 @@ describe('parseDivisionRefsWithTypes', () => {
 })
 
 describe('parseAssetRefs', () => {
-  it('reads image and doenet placeholders in each syntax', () => {
-    expect(parseAssetRefs('<plus:image ref="i1"/><plus:doenet ref="d1"/>', 'pretext')).toEqual([
-      { kind: 'image', ref: 'i1' },
-      { kind: 'doenet', ref: 'd1' },
-    ])
-    expect(parseAssetRefs('::image{ref="i1"}', 'markdown')).toEqual([{ kind: 'image', ref: 'i1' }])
-    expect(parseAssetRefs('\\plus{image}{i1}', 'latex')).toEqual([{ kind: 'image', ref: 'i1' }])
+  it('reads image placeholders in each syntax', () => {
+    expect(parseAssetRefs('<plus:image ref="i1"/>', 'pretext')).toEqual([{ ref: 'i1' }])
+    expect(parseAssetRefs('::image{ref="i1"}', 'markdown')).toEqual([{ ref: 'i1' }])
+    expect(parseAssetRefs('\\plus{image}{i1}', 'latex')).toEqual([{ ref: 'i1' }])
   })
 
   it('does not treat division placeholders as assets', () => {
@@ -113,57 +110,52 @@ describe('parseAssetRefs', () => {
 
 describe('assetEmbedCode', () => {
   it('emits the syntax matching the target division format', () => {
-    expect(assetEmbedCode('image', 'x', 'pretext')).toBe('<plus:image ref="x"/>')
-    expect(assetEmbedCode('image', 'x', 'markdown')).toBe('::image{ref="x"}')
-    expect(assetEmbedCode('image', 'x', 'latex')).toBe('\\plus{image}{x}')
+    expect(assetEmbedCode('x', 'pretext')).toBe('<plus:image ref="x"/>')
+    expect(assetEmbedCode('x', 'markdown')).toBe('::image{ref="x"}')
+    expect(assetEmbedCode('x', 'latex')).toBe('\\plus{image}{x}')
   })
 
   it('defaults to pretext', () => {
-    expect(assetEmbedCode('doenet', 'x')).toBe('<plus:doenet ref="x"/>')
+    expect(assetEmbedCode('x')).toBe('<plus:image ref="x"/>')
   })
 
   it('produces output its own parser reads back', () => {
     for (const format of ['pretext', 'markdown', 'latex'] as const) {
-      expect(parseAssetRefs(assetEmbedCode('image', 'x', format), format)).toEqual([
-        { kind: 'image', ref: 'x' },
-      ])
+      expect(parseAssetRefs(assetEmbedCode('x', format), format)).toEqual([{ ref: 'x' }])
     }
   })
 })
 
 describe('renameAssetRef', () => {
   it('rewrites the ref and preserves other attributes', () => {
-    expect(renameAssetRef('<plus:image ref="old" width="50%"/>', 'image', 'old', 'new')).toBe(
+    expect(renameAssetRef('<plus:image ref="old" width="50%"/>', 'old', 'new')).toBe(
       '<plus:image ref="new" width="50%"/>',
     )
   })
 
   it('rewrites every occurrence across syntaxes', () => {
-    expect(renameAssetRef('<plus:image ref="old"/>::image{ref="old"}', 'image', 'old', 'new')).toBe(
+    expect(renameAssetRef('<plus:image ref="old"/>::image{ref="old"}', 'old', 'new')).toBe(
       '<plus:image ref="new"/>::image{ref="new"}',
     )
-    expect(renameAssetRef('\\plus{image}{old}', 'image', 'old', 'new')).toBe('\\plus{image}{new}')
+    expect(renameAssetRef('\\plus{image}{old}', 'old', 'new')).toBe('\\plus{image}{new}')
   })
 
-  it('leaves other refs and other kinds alone', () => {
-    expect(renameAssetRef('<plus:image ref="other"/>', 'image', 'old', 'new')).toBe(
+  it('leaves other refs alone', () => {
+    expect(renameAssetRef('<plus:image ref="other"/>', 'old', 'new')).toBe(
       '<plus:image ref="other"/>',
-    )
-    expect(renameAssetRef('<plus:doenet ref="old"/>', 'image', 'old', 'new')).toBe(
-      '<plus:doenet ref="old"/>',
     )
   })
 })
 
 describe('removeAssetRef', () => {
   it('removes the placeholder and nothing else', () => {
-    expect(removeAssetRef('a<plus:image ref="x"/>b', 'image', 'x')).toBe('ab')
-    expect(removeAssetRef('a::image{ref="x"}b', 'image', 'x')).toBe('ab')
-    expect(removeAssetRef('a\\plus{image}{x}b', 'image', 'x')).toBe('ab')
+    expect(removeAssetRef('a<plus:image ref="x"/>b', 'x')).toBe('ab')
+    expect(removeAssetRef('a::image{ref="x"}b', 'x')).toBe('ab')
+    expect(removeAssetRef('a\\plus{image}{x}b', 'x')).toBe('ab')
   })
 
   it('leaves non-matching placeholders in place', () => {
-    expect(removeAssetRef('<plus:image ref="keep"/>', 'image', 'x')).toBe('<plus:image ref="keep"/>')
+    expect(removeAssetRef('<plus:image ref="keep"/>', 'x')).toBe('<plus:image ref="keep"/>')
   })
 })
 

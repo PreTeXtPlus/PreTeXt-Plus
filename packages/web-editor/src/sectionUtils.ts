@@ -9,7 +9,7 @@
 import { fromXml } from "xast-util-from-xml";
 import { toXml } from "xast-util-to-xml";
 import type { Element, ElementContent, Root } from "xast";
-import type { Asset, AssetKind, SourceFormat } from "./types/editor";
+import type { Asset, SourceFormat } from "./types/editor";
 import type {
   Division,
   DivisionType,
@@ -18,7 +18,7 @@ import type {
   DocumentSplitResult,
 } from "./types/sections";
 import { derivePretextContent } from "./contentConversion";
-import { ASSET_KINDS, resolveAssetRef } from "./assetTransforms";
+import { resolveAssetRef } from "./assetTransforms";
 import { escapeAttribute } from "./xmlUtils";
 
 // ---------------------------------------------------------------------------
@@ -1498,9 +1498,9 @@ export function canEmbedDivisionRefs(sourceFormat: SourceFormat): boolean {
  * position a `Division` within its parent's content — i.e. every
  * `DivisionType` plus the generic `division` alias.
  *
- * Asset placeholders (`<plus:image ref="..."/>`, `<plus:doenet ref="..."/>`)
- * share the same `<plus:* ref="..."/>` shape but are NOT divisions — they
- * reference project assets and must be excluded here, otherwise asset refs
+ * Asset placeholders (`<plus:image ref="..."/>`) share the same
+ * `<plus:* ref="..."/>` shape but are NOT divisions — they reference project
+ * assets and must be excluded here, otherwise asset refs
  * get parsed as division children, auto-created as bogus Division records,
  * and shown/orphaned in the TOC.
  */
@@ -1561,8 +1561,8 @@ function latexDivisionRefSource(refValue: string | null): string {
  * (TOC tree building, parent lookup, reorder/remove) work uniformly regardless
  * of the parent division's source format.
  *
- * Only matches tag names in {@link DIVISION_REF_TAGS} — asset placeholders
- * (`plus:image`, `plus:doenet`, ...) are deliberately excluded.
+ * Only matches tag names in {@link DIVISION_REF_TAGS} — the asset placeholder
+ * (`plus:image`) is deliberately excluded.
  *
  * When `refValue` is `null` the ref value is captured — in group 1 for the XML
  * form, group 2 for the Markdown form and group 3 for the LaTeX form (read as
@@ -1688,9 +1688,9 @@ export function parseDivisionRefs(
  * from the tag name (e.g. `<plus:chapter ref="x"/>` → `{ type: "chapter", xmlId: "x" }`).
  * Used to auto-create Division records when new refs appear in edited content.
  *
- * Only tag names in {@link DIVISION_REF_TAGS} are considered — asset
- * placeholders (`plus:image`, `plus:doenet`, ...) are not divisions and are
- * skipped. The generic `<plus:division ref="x"/>` alias falls back to type
+ * Only tag names in {@link DIVISION_REF_TAGS} are considered — the asset
+ * placeholder (`plus:image`) is not a division and is skipped. The generic
+ * `<plus:division ref="x"/>` alias falls back to type
  * `"section"`, matching {@link tagToType}'s default for unrecognised tags.
  */
 export function parseDivisionRefsWithTypes(
@@ -1720,12 +1720,11 @@ export function parseDivisionRefsWithTypes(
 }
 
 // ---------------------------------------------------------------------------
-// Asset ref utilities — `<plus:image|doenet ref="..."/>` placeholder parsing
+// Asset ref utilities — `<plus:image ref="..."/>` placeholder parsing
 // ---------------------------------------------------------------------------
 
-/** A `<plus:image ref="..."/>` / `<plus:doenet ref="..."/>` asset placeholder. */
+/** A `<plus:image ref="..."/>` asset placeholder. */
 export interface AssetRef {
-  kind: "image" | "doenet";
   ref: string;
 }
 
@@ -1739,30 +1738,26 @@ export interface AssetRef {
  *
  * Asset placeholders share the same shape as division refs (see
  * {@link DIVISION_REF_TAGS}) but are deliberately parsed by a separate,
- * disjoint tag set (`image`/`doenet`) so the two kinds of include are never
- * conflated.
+ * disjoint tag (`image`) so the two kinds of include are never conflated.
  */
 export function parseAssetRefs(
   content: string,
   sourceFormat: SourceFormat,
 ): AssetRef[] {
   const refs: AssetRef[] = [];
-  // One alternative per format, each capturing kind in group 1 and ref in
-  // group 2, so only the division's own asset-include syntax is recognised
-  // and example placeholders in verbatim spans are ignored.
+  // One alternative per format, capturing the ref in group 1, so only the
+  // division's own asset-include syntax is recognised and example
+  // placeholders in verbatim spans are ignored.
   const source: Record<SourceFormat, string> = {
-    pretext: `<plus:(image|doenet)\\b[^>]*\\bref="([^"]+)"`,
-    markdown: `::(image|doenet)(?:\\[[^\\]]*\\])?\\{[^}]*\\bref="([^"]+)"[^}]*\\}`,
-    latex: `\\\\plus\\{(image|doenet)\\}\\{([^}]+)\\}`,
+    pretext: `<plus:image\\b[^>]*\\bref="([^"]+)"`,
+    markdown: `::image(?:\\[[^\\]]*\\])?\\{[^}]*\\bref="([^"]+)"[^}]*\\}`,
+    latex: `\\\\plus\\{image\\}\\{([^}]+)\\}`,
   };
   const re = new RegExp(source[sourceFormat], "g");
   const scanned = blankVerbatim(content, sourceFormat);
   let m: RegExpExecArray | null;
   while ((m = re.exec(scanned)) !== null) {
-    refs.push({
-      kind: m[1] as AssetRef["kind"],
-      ref: m[2],
-    });
+    refs.push({ ref: m[1] });
   }
   return refs;
 }
@@ -1778,21 +1773,19 @@ export function parseAssetRefs(
  */
 export function renameAssetRef(
   content: string,
-  kind: AssetRef["kind"],
   oldRef: string,
   newRef: string,
 ): string {
-  const k = escapeRegex(kind);
   const oldR = escapeRegex(oldRef);
   // Match the placeholder opening and the specific ref separately so other
   // attributes between/around them are preserved verbatim. The three forms are
   // textually disjoint, so replacing each in turn never double-applies.
-  const xmlRe = new RegExp(`(<plus:${k}\\b[^>]*?\\bref=")${oldR}(")`, "g");
+  const xmlRe = new RegExp(`(<plus:image\\b[^>]*?\\bref=")${oldR}(")`, "g");
   const mdRe = new RegExp(
-    `(::${k}(?:\\[[^\\]]*\\])?\\{[^}]*?\\bref=")${oldR}(")`,
+    `(::image(?:\\[[^\\]]*\\])?\\{[^}]*?\\bref=")${oldR}(")`,
     "g",
   );
-  const latexRe = new RegExp(`(\\\\plus\\{${k}\\}\\{)${oldR}(\\})`, "g");
+  const latexRe = new RegExp(`(\\\\plus\\{image\\}\\{)${oldR}(\\})`, "g");
   return content
     .replace(xmlRe, `$1${newRef}$2`)
     .replace(mdRe, `$1${newRef}$2`)
@@ -1800,24 +1793,19 @@ export function renameAssetRef(
 }
 
 /**
- * Remove every asset placeholder for the given kind+ref from `content`, in the
- * PreTeXt (`<plus:image ref="..."/>`), Markdown (`::image{ref="..."}`) or LaTeX
+ * Remove every asset placeholder for `ref` from `content`, in the PreTeXt
+ * (`<plus:image ref="..."/>`), Markdown (`::image{ref="..."}`) or LaTeX
  * (`\plus{image}{...}`) form. Used when removing an unresolved placeholder
  * (one with no backing asset) directly from the source.
  */
-export function removeAssetRef(
-  content: string,
-  kind: AssetRef["kind"],
-  ref: string,
-): string {
-  const k = escapeRegex(kind);
+export function removeAssetRef(content: string, ref: string): string {
   const r = escapeRegex(ref);
-  const xmlRe = new RegExp(`<plus:${k}\\b[^>]*?\\bref="${r}"[^>]*/?>`, "g");
+  const xmlRe = new RegExp(`<plus:image\\b[^>]*?\\bref="${r}"[^>]*/?>`, "g");
   const mdRe = new RegExp(
-    `::${k}(?:\\[[^\\]]*\\])?\\{[^}]*?\\bref="${r}"[^}]*\\}`,
+    `::image(?:\\[[^\\]]*\\])?\\{[^}]*?\\bref="${r}"[^}]*\\}`,
     "g",
   );
-  const latexRe = new RegExp(`\\\\plus\\{${k}\\}\\{${r}\\}`, "g");
+  const latexRe = new RegExp(`\\\\plus\\{image\\}\\{${r}\\}`, "g");
   return content.replace(xmlRe, "").replace(mdRe, "").replace(latexRe, "");
 }
 
@@ -1827,16 +1815,15 @@ export function removeAssetRef(
  * leaf-directive form `::image{ref="x"}` and a LaTeX division the macro form
  * `\plus{image}{x}` — raw `<plus:image .../>` XML pasted into either does NOT
  * survive conversion (it is escaped as literal text). PreTeXt gets the
- * canonical `<plus:… ref="x"/>` form.
+ * canonical `<plus:image ref="x"/>` form.
  */
 export function assetEmbedCode(
-  kind: AssetRef["kind"],
   ref: string,
   sourceFormat: SourceFormat = "pretext",
 ): string {
-  if (sourceFormat === "markdown") return `::${kind}{ref="${ref}"}`;
-  if (sourceFormat === "latex") return `\\plus{${kind}}{${ref}}`;
-  return `<plus:${kind} ref="${ref}"/>`;
+  if (sourceFormat === "markdown") return `::image{ref="${ref}"}`;
+  if (sourceFormat === "latex") return `\\plus{image}{${ref}}`;
+  return `<plus:image ref="${ref}"/>`;
 }
 
 /**
@@ -2453,11 +2440,11 @@ function resolveDivisionXml(
     /<plus:([a-z-]+)\s([^>]*ref="[^"]+"[^>]*?)(?:\/>|>\s*<\/plus:\1>)/g,
     (_match, tag: string, attrs: string) => {
       const ref = /ref="([^"]+)"/.exec(attrs)?.[1] ?? "";
-      if (!ASSET_KINDS.has(tag as AssetKind)) {
+      if (tag !== "image") {
         return resolveDivisionXml(ref, divisions, nextAncestors, assets);
       }
       const width = /width="([^"]+)"/.exec(attrs)?.[1];
-      return resolveAssetRef(tag as AssetKind, ref, assets, width);
+      return resolveAssetRef(ref, assets, width);
     },
   );
 }
