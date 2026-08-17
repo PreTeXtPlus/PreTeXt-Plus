@@ -7,6 +7,7 @@ import {
   insertSnippet,
   pasteFromClipboard,
   runEditorCommand,
+  selectEditableRegion,
 } from "./editorCommands";
 import type { EditorMenuActions } from "./CodeEditorMenu";
 import type * as Y from "yjs";
@@ -200,6 +201,9 @@ const CodeEditor = forwardRef<CodeEditorHandle, CodeEditorProps>(({
   // The live source format, read from inside the mount-time guard closure.
   const sourceFormatRef = useRef(sourceFormat);
   sourceFormatRef.current = sourceFormat;
+  // Read from the mount-time Mod+A handler, which is registered once.
+  const readOnlyRef = useRef(readOnly);
+  readOnlyRef.current = readOnly;
   const lockedDecorationsRef = useRef<any>(null);
   const lockedRef = useRef(false);
   // How many lines at the very top are locked (the wrapper tag + title for
@@ -640,6 +644,28 @@ const CodeEditor = forwardRef<CodeEditorHandle, CodeEditorProps>(({
     };
   }, []);
 
+  /**
+   * Select the editable body, leaving the locked structural lines out.
+   *
+   * Shared by the Edit menu's Select All and the Mod+A keybinding registered at
+   * mount, so both mean the same thing. The geometry is recomputed per
+   * invocation — the locked lines move as the body grows, and in collab mode a
+   * remote edit moves them with no local event.
+   *
+   * A read-only buffer selects everything instead: nothing there is editable,
+   * and selecting the whole document to copy it is the point.
+   */
+  const selectEditableContent = () => {
+    const editor = editorRef.current;
+    const model = editor?.getModel?.();
+    if (!editor || !model) return;
+    const editable = readOnlyRef.current
+      ? null
+      : (computeLockedRegion(model, sourceFormatRef.current)?.editableRange ??
+        null);
+    selectEditableRegion(editor, editable);
+  };
+
   const handleEditorMount = (editor: any, monaco: any) => {
     editorRef.current = editor;
     monacoRef.current = monaco;
@@ -740,6 +766,24 @@ const CodeEditor = forwardRef<CodeEditorHandle, CodeEditorProps>(({
       onSaveRef.current?.();
     });
 
+    // Take over Mod+A so select-all stops at the editable body. A dynamic
+    // keybinding outweighs Monaco's built-in `editor.action.selectAll`, which
+    // stays registered for the command palette; the Edit menu reaches this
+    // same handler through `menuActions.selectAll`.
+    //
+    // Scoped to `editorTextFocus` — the buffer itself — rather than the
+    // built-in's `textInputFocus`, which also covers the editor's own widgets.
+    // Without that, Mod+A in the find box would select the document instead of
+    // the search term; with it, this rule simply doesn't match there and
+    // Monaco's own select-all takes the keystroke.
+    editor.addCommand(
+      monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyA,
+      () => {
+        selectEditableContent();
+      },
+      "editorTextFocus",
+    );
+
     languageExtensionsRef.current?.dispose?.();
     const config = editorConfigs[sourceFormat];
     languageExtensionsRef.current =
@@ -822,6 +866,7 @@ const CodeEditor = forwardRef<CodeEditorHandle, CodeEditorProps>(({
     },
     cut: () => cutSelection(editorRef.current),
     copy: () => copySelection(editorRef.current),
+    selectAll: selectEditableContent,
     paste: async () => {
       ensureCursorInEditableRegion();
       return pasteFromClipboard(editorRef.current);

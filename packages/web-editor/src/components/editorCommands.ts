@@ -11,6 +11,7 @@
  * `CodeEditor` holds it) and tolerates `null`, since the menus render before
  * Monaco's loader has produced an editor.
  */
+import type { LineRange } from "./lockedRegion";
 import { snippetPlainText } from "./editorConfigs/snippets";
 
 /** A Monaco command as a menu row: what to run, what to call it. */
@@ -101,6 +102,40 @@ export const runEditorCommand = (editor: any, id: string): void => {
     return;
   }
   editor.trigger?.("pretext-plus-menu", id, null);
+};
+
+/**
+ * Select the division's editable body rather than the whole buffer.
+ *
+ * A division's structural lines are locked (see {@link ./lockedRegion}), so a
+ * plain select-all hands the author a selection that mostly can't be acted on:
+ * typing over it, cutting it or pasting into it is reverted by the
+ * constrained-editor plugin (or refused by the collab guard), and the one thing
+ * that does work — copying — picks up wrapper markup the author never sees as
+ * theirs. Restricting the selection to `editable` makes Select All mean
+ * "everything you can act on", in the menu and under Mod+A alike.
+ *
+ * Falls back to Monaco's own select-all when `editable` is null — nothing is
+ * locked, or the buffer is read-only, where the whole document is protected and
+ * selecting all of it to copy is exactly the intent.
+ */
+export const selectEditableRegion = (
+  editor: any,
+  editable: LineRange | null,
+): void => {
+  if (!editor) return;
+  if (!editable) {
+    runEditorCommand(editor, MONACO_COMMANDS.selectAll.id);
+    return;
+  }
+  editor.focus?.();
+  const [startLineNumber, startColumn, endLineNumber, endColumn] = editable;
+  editor.setSelection?.({
+    startLineNumber,
+    startColumn,
+    endLineNumber,
+    endColumn,
+  });
 };
 
 /** The editor's selected text, or `""` when the selection is empty. */
