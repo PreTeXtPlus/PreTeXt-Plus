@@ -227,19 +227,33 @@ class TargetTest < ActiveSupport::TestCase
     assert Target.new(project: projects(:slides), name: "Handout", kind: "beamer").valid?
   end
 
-  test "an unrestricted kind is available to every document type" do
-    assert Target.new(project: projects(:slides), name: "Notes", kind: "pdf").valid?
+  # The pairing is exclusive in both directions. A prose kind on a deck is the same
+  # mistake as a deck kind on an article: PreTeXt cannot build it, so the build would be
+  # queued and then fail at the server for a reason the dashboard cannot show.
+  test "a prose kind is refused on a slideshow" do
+    target = Target.new(project: projects(:slides), name: "Notes", kind: "pdf")
+
+    assert_not target.valid?
+    assert_match(/article or book/, target.errors[:kind].to_sentence)
+  end
+
+  test "a prose kind is accepted on an article" do
     assert Target.new(project: projects(:one), name: "Notes", kind: "pdf").valid?
   end
 
-  test "the picker offers slides only to a slideshow" do
-    slugs = Target::Catalog.for_document_type(:article).map(&:slug)
-    assert_includes slugs, "website"
-    assert_includes slugs, "scorm"
-    assert_not_includes slugs, "revealjs"
-    assert_not_includes slugs, "beamer"
+  test "the picker pairs each document type with only the kinds it can build" do
+    prose = Target::Catalog.for_document_type(:article).map(&:slug)
+    assert_includes prose, "website"
+    assert_includes prose, "scorm"
+    assert_not_includes prose, "revealjs"
+    assert_not_includes prose, "beamer"
 
-    assert_includes Target::Catalog.for_document_type(:slideshow).map(&:slug), "revealjs"
+    # A deck gets the slide kinds and *nothing* else — this is the whole list.
+    assert_equal %w[ revealjs beamer ],
+                 Target::Catalog.for_document_type(:slideshow).map(&:slug)
+
+    # A book builds like an article; the distinction has never mattered here.
+    assert_equal prose, Target::Catalog.for_document_type(:book).map(&:slug)
   end
 
   test "latest_build is the newest by created_at, not the newest successful" do

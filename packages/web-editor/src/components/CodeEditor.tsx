@@ -10,6 +10,7 @@ import {
   selectEditableRegion,
 } from "./editorCommands";
 import type { EditorMenuActions } from "./CodeEditorMenu";
+import type { RootDivisionType } from "../types/sections";
 import type * as Y from "yjs";
 import type { Awareness } from "y-protocols/awareness";
 import { editorConfigs } from "./editorConfigs";
@@ -46,6 +47,11 @@ interface CodeEditorProps {
    * to `"xml"`, `"pretext-latex"`, or `"pretext-markdown"`.
    */
   sourceFormat: SourceFormat;
+  /**
+   * The project's root element, passed through to the Insert menu so it can
+   * offer the constructs that only exist under one (a `<slide>`).
+   */
+  rootType?: RootDivisionType;
   /** Called (debounced 500 ms) whenever the user edits the content. */
   onChange: (value: string | undefined) => void;
   /** If provided, Ctrl+Enter in the editor triggers this callback. */
@@ -165,6 +171,7 @@ const baseOptions = {
 const CodeEditor = forwardRef<CodeEditorHandle, CodeEditorProps>(({
   content,
   sourceFormat,
+  rootType,
   onChange,
   onRebuild,
   onSave,
@@ -931,6 +938,7 @@ const CodeEditor = forwardRef<CodeEditorHandle, CodeEditorProps>(({
       <CodeEditorMenu
         content={content}
         sourceFormat={sourceFormat}
+        rootType={rootType}
         onContentChange={handleContentChange}
         onOpenLatexImport={onOpenLatexImport}
         onOpenClean={

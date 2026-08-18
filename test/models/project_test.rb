@@ -169,6 +169,17 @@ class ProjectTest < ActiveSupport::TestCase
     assert_equal "website", target.kind
   end
 
+  # A website builds fine from a deck, so this is about what greets the author rather
+  # than about legality.
+  test "a new slideshow is created with a reveal.js target instead" do
+    project = Project.create!(user: users(:one), title: "Fresh Deck", document_type: :slideshow)
+
+    assert_equal 1, project.targets.count
+    target = project.targets.first
+    assert_equal "Slides", target.name
+    assert_equal "revealjs", target.kind
+  end
+
   # The trap this guard exists for: Rails does not re-validate children when the parent
   # changes, so without an explicit check on Project a slideshow could become an article
   # while keeping a reveal.js target that can never build again.

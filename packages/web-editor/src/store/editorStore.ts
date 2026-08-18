@@ -17,7 +17,7 @@
  *     edit.
  *
  * Derived/config fields that are never edited locally (`source`, `sourceFormat`,
- * `projectAssets`, `projectType`, `rootDivisionId`, …) are still mirrored from
+ * `projectAssets`, `rootDivisionId`, …) are still mirrored from
  * props every render via `syncState()`.
  *
  * Callback stability: createEditorStore returns a `bindCallbacks` function that
@@ -174,7 +174,6 @@ export interface EditorStoreState {
   useCommonDocinfo: boolean;
   /** The document's content language (BCP-47 code, e.g. `"en-US"`), written as `@xml:lang` on the generated root element. */
   language: string;
-  projectType: "article" | "book" | undefined;
   projectUrl: string | undefined;
 
   // Divisions (host-controlled pool)
@@ -330,7 +329,6 @@ export type EditorSyncableState = Pick<
   | "commonDocinfo"
   | "useCommonDocinfo"
   | "language"
-  | "projectType"
   | "projectUrl"
   | "divisions"
   | "rootDivisionId"
@@ -351,7 +349,6 @@ export interface EditorStoreInit {
   commonDocinfo: string;
   useCommonDocinfo: boolean;
   language: string;
-  projectType: "article" | "book" | undefined;
   divisions: Division[];
   activeDivisionId: string | null;
   projectAssets: Asset[] | undefined;
@@ -399,7 +396,6 @@ export function createEditorStore(init: EditorStoreInit): EditorStoreHandle {
     commonDocinfo: init.commonDocinfo,
     useCommonDocinfo: init.useCommonDocinfo,
     language: init.language,
-    projectType: init.projectType,
     projectUrl: undefined,
     divisions: init.divisions,
     rootDivisionId: undefined,

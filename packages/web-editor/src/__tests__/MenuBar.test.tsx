@@ -18,7 +18,6 @@ function renderWithStore(ui: (wrap: (children: ReactNode) => ReactNode) => React
     commonDocinfo: "",
     useCommonDocinfo: false,
     language: "en-US",
-    projectType: "article",
     divisions: [],
     activeDivisionId: null,
     projectAssets: undefined,

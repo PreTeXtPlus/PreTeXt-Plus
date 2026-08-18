@@ -38,7 +38,7 @@ import {
 } from "../components/editorConfigs/pretextSchema";
 import { assembleFullProjectSource } from "../sectionUtils";
 import type { Asset, SourceFormat } from "../types/editor";
-import type { Division } from "../types/sections";
+import type { Division, RootDivisionType } from "../types/sections";
 
 const require = createRequire(import.meta.url);
 const GRAMMAR_URL = "https://test.invalid/pretext.json";
@@ -75,11 +75,23 @@ const filled = (body: string): string =>
   snippetPlainText(body.replace(/(?<!\\)\$\{?\d+\}?(?!:)/g, "Text"));
 
 /** Every snippet of a format, flattened out of its groups. */
-const snippetsOf = (format: SourceFormat): EditorSnippet[] =>
-  snippetGroupsFor(format).flatMap((group) => group.snippets);
+const snippetsOf = (
+  format: SourceFormat,
+  rootType: RootDivisionType = "article",
+): EditorSnippet[] =>
+  snippetGroupsFor(format, rootType).flatMap((group) => group.snippets);
 
 const byKey = (format: SourceFormat): Map<string, EditorSnippet> =>
   new Map(snippetsOf(format).map((snippet) => [snippet.key, snippet]));
+
+/**
+ * The snippets a slideshow adds over an article — just the slide, but derived
+ * rather than hard-coded so a second gated construct is covered automatically.
+ */
+const deckOnlySnippets = (format: SourceFormat): EditorSnippet[] => {
+  const inArticle = new Set(snippetsOf(format).map((s) => s.key));
+  return snippetsOf(format, "slideshow").filter((s) => !inArticle.has(s.key));
+};
 
 /**
  * What each construct has to become, whichever format it was written in —
@@ -106,6 +118,7 @@ const EXPECTED_ELEMENT: Record<string, RegExp> = {
   figure: /<figure[ >]/,
   table: /<table[ >]/,
   program: /<program[ >]/,
+  slide: /<slide[ >]/,
 };
 
 describe("the shared catalog", () => {
@@ -146,12 +159,40 @@ describe("the shared catalog", () => {
 
   it("describes every snippet it offers", () => {
     for (const format of ["pretext", "latex", "markdown"] as const) {
-      for (const snippet of snippetsOf(format)) {
+      for (const snippet of snippetsOf(format, "slideshow")) {
         expect(snippet.detail).not.toBe("");
         expect(snippet.body).not.toBe("");
         expect(EXPECTED_ELEMENT[snippet.key]).toBeDefined();
       }
     }
+  });
+
+  // A <slide> is only legal inside a <slideshow>, so offering one anywhere else
+  // would hand the author markup the schema rejects — for a menu item we put in
+  // front of them.
+  it("offers the Slides group to a slideshow and to nothing else", () => {
+    for (const format of ["pretext", "latex", "markdown"] as const) {
+      expect(snippetGroupsFor(format, "slideshow").map((g) => g.key)).toContain(
+        "slides",
+      );
+      for (const rootType of ["article", "book"] as const) {
+        expect(
+          snippetGroupsFor(format, rootType).map((g) => g.key),
+        ).not.toContain("slides");
+      }
+    }
+  });
+
+  it("gates the slide and nothing else on the root type", () => {
+    for (const format of ["pretext", "latex", "markdown"] as const) {
+      expect(deckOnlySnippets(format).map((s) => s.key)).toEqual(["slide"]);
+    }
+  });
+
+  it("puts the Slides group first, ahead of the general constructs", () => {
+    // Adding a slide is the structural act a deck is built out of; it should not
+    // sit below Emphasis.
+    expect(snippetGroupsFor("pretext", "slideshow")[0].key).toBe("slides");
   });
 });
 
@@ -258,6 +299,48 @@ describe("PreTeXt snippets", () => {
 
     expect(await validatePretextDocument(wrap(wrapped))).toEqual([]);
   });
+
+  /** The deck equivalent of {@link wrap}: a section of a `<slideshow>`. */
+  const wrapDeck = (body: string) =>
+    assembleFullProjectSource(
+      [
+        division(
+          "deck-a",
+          "slideshow",
+          `<slideshow xml:id="deck-a">\n<title>Deck</title>\n<plus:section ref="sec-a"/>\n</slideshow>`,
+        ),
+        division(
+          "sec-a",
+          "section",
+          `<section xml:id="sec-a">\n<title>One</title>\n${body}\n</section>`,
+        ),
+      ],
+      "deck-a",
+      "",
+      ASSETS,
+    );
+
+  it.each(deckOnlySnippets("pretext").map((s) => [s.key, s] as const))(
+    "%s validates against the schema inside a slideshow",
+    async (key, snippet) => {
+      const text = written(snippet.body);
+
+      expect(await validatePretextDocument(wrapDeck(text))).toEqual([]);
+      expect(text).toMatch(EXPECTED_ELEMENT[key]);
+    },
+  );
+
+  // The reason the construct is gated at all: the same body in the article
+  // wrapper every other snippet is checked against must be *rejected*. Without
+  // this, the gate could be dropped and every other test here would still pass.
+  it.each(deckOnlySnippets("pretext").map((s) => [s.key, s] as const))(
+    "%s is rejected by the schema outside a slideshow",
+    async (_key, snippet) => {
+      expect(
+        await validatePretextDocument(wrap(written(snippet.body))),
+      ).not.toEqual([]);
+    },
+  );
 });
 
 describe("LaTeX snippets", () => {
@@ -269,6 +352,19 @@ describe("LaTeX snippets", () => {
       expect(converted).toMatch(EXPECTED_ELEMENT[key]);
       expect(converted).not.toContain("<TODO");
       expect(converted.toLowerCase()).not.toContain("unsupported");
+    },
+  );
+
+  // LaTeX spells a slide as Beamer's `frame` environment. `\slide{…}` is not a
+  // macro the converter knows and becomes a TODO placeholder, so this is the
+  // check that the body keeps the one spelling that works.
+  it.each(deckOnlySnippets("latex").map((s) => [s.key, s] as const))(
+    "%s converts to the element it promises",
+    (key, snippet) => {
+      const converted = String(latexToPretext(filled(snippet.body)));
+
+      expect(converted).toMatch(EXPECTED_ELEMENT[key]);
+      expect(converted).not.toContain("<TODO");
     },
   );
 });
@@ -284,6 +380,23 @@ describe("Markdown snippets", () => {
       expect(converted).toMatch(EXPECTED_ELEMENT[key]);
       expect(converted).not.toContain("<TODO");
       expect(converted.toLowerCase()).not.toContain("unsupported");
+    },
+  );
+
+  // Markdown has no slide *element* — a heading is the slide, and which heading
+  // depends on the root: inside a slideshow `#` is a section and `##` a slide,
+  // where in an article `#` would be the root's own title. So this body is only
+  // correct because the buffer it is offered in is a deck.
+  it.each(deckOnlySnippets("markdown").map((s) => [s.key, s] as const))(
+    "%s converts to the element it promises",
+    (key, snippet) => {
+      const converted = markdownToPretext(filled(snippet.body), {
+        documentRoot: "slideshow",
+        topLevelDivision: "section",
+      });
+
+      expect(converted).toMatch(EXPECTED_ELEMENT[key]);
+      expect(converted).not.toContain("<TODO");
     },
   );
 

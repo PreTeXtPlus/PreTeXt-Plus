@@ -22,14 +22,20 @@ import type { SourceFormat } from "./editor";
  */
 
 /**
+ * A division type that is already a legal top-level PreTeXt element, and so can
+ * be a project's root. These are element *tag names*, not host-side project
+ * categories: a host that models article-vs-book differently (the Rails app
+ * carries a `document_type` column) still has to name one of these, because
+ * this is the literal tag a synthesized wrapper is written with.
+ */
+export type RootDivisionType = "book" | "article" | "slideshow";
+
+/**
  * The PreTeXt element type of a division.  Values match the XML tag name so
  * the type can be used directly when serialising (`<${type}>…</${type}>`).
  */
 export type DivisionType =
-  // Root types
-  | "book"
-  | "article"
-  | "slideshow"
+  | RootDivisionType
   // Book structure
   | "part"
   | "chapter"

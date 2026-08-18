@@ -26,6 +26,7 @@
  * constants below.
  */
 import type { SourceFormat } from "../../types/editor";
+import type { RootDivisionType } from "../../types/sections";
 
 /** A literal `$`; a bare one would open a tab stop. */
 const DOLLAR = "\\$";
@@ -76,6 +77,10 @@ export interface SnippetGroup {
 
 /** The groups, in menu order. */
 const GROUPS = [
+  // First because it is the structural container a deck is built out of, and
+  // the one thing an author of one cannot get any other way — see the `slide`
+  // entry below. Empty (and so dropped) for every non-slideshow project.
+  { key: "slides", label: "Slides" },
   { key: "text", label: "Text" },
   { key: "blocks", label: "Blocks" },
   { key: "lists", label: "Lists" },
@@ -92,9 +97,27 @@ interface SnippetSpec {
   detail: string;
   group: GroupKey;
   placement: SnippetPlacement;
+  /**
+   * Root elements this construct is legal under. Omitted means "any" — which is
+   * true of everything except a slide, whose element only exists inside a
+   * `<slideshow>`. Offering one in an article would hand the author markup the
+   * schema rejects, for a menu item we put in front of them.
+   */
+  rootTypes?: RootDivisionType[];
 }
 
 const CATALOG: SnippetSpec[] = [
+  {
+    // Slides are not divisions -- a <slide> is a block inside a <slideshow> or
+    // one of its <section>s -- so the TOC can never offer to add one, and
+    // without this the only way to write a slide is to type it by hand.
+    key: "slide",
+    label: "Slide",
+    detail: "One slide of a presentation.",
+    group: "slides",
+    placement: "block",
+    rootTypes: [ "slideshow" ],
+  },
   {
     key: "paragraph",
     label: "Paragraph",
@@ -238,6 +261,7 @@ const CATALOG: SnippetSpec[] = [
 ];
 
 const PRETEXT_BODIES: Record<string, string> = {
+  slide: lines("<slide>", "\t<title>${1:Title}</title>", "\t<p>$0</p>", "</slide>"),
   paragraph: "<p>$0</p>",
   emphasis: "<em>$0</em>",
   term: "<term>$0</term>",
@@ -362,6 +386,10 @@ const PRETEXT_BODIES: Record<string, string> = {
 };
 
 const LATEX_BODIES: Record<string, string> = {
+  // Beamer's `frame` environment, which is what the LaTeX converter recognises.
+  // There is no `\slide` macro -- writing one produces a TODO placeholder for an
+  // unknown macro -- so this is exactly the spelling an author cannot guess.
+  slide: lines("\\begin{frame}{${1:Title}}", "$0", "\\end{frame}"),
   // No `paragraph`: a paragraph in LaTeX-style source is just prose between
   // blank lines, so there is nothing to insert.
   emphasis: "\\emph{$0}",
@@ -438,6 +466,9 @@ const LATEX_BODIES: Record<string, string> = {
 };
 
 const MARKDOWN_BODIES: Record<string, string> = {
+  // Inside a slideshow the heading levels shift down a step: `#` is a section
+  // and `##` a slide, where in an article `#` would be the root's own title.
+  slide: lines("## ${1:Title}", "", "$0"),
   // No `paragraph` (prose is prose), and no `term`, `xref`, `link`, `figure` or
   // `table`: the Markdown converter has no handler for those yet, and emits a
   // `<TODO>` placeholder instead of the element.
@@ -503,16 +534,23 @@ const BODIES: Record<SourceFormat, Record<string, string>> = {
 
 /**
  * The Insert menu's contents for `format`: the shared catalog, in catalog
- * order, minus the constructs this format has no body for. Groups left empty
- * are dropped.
+ * order, minus the constructs this format has no body for and the ones illegal
+ * under `rootType`. Groups left empty are dropped, so a non-slideshow project
+ * never sees a Slides group at all.
  */
-export const snippetGroupsFor = (format: SourceFormat): SnippetGroup[] => {
+export const snippetGroupsFor = (
+  format: SourceFormat,
+  rootType: RootDivisionType = "article",
+): SnippetGroup[] => {
   const bodies = BODIES[format];
   return GROUPS.map(({ key, label }) => ({
     key,
     label,
     snippets: CATALOG.filter(
-      (spec) => spec.group === key && bodies[spec.key] !== undefined,
+      (spec) =>
+        spec.group === key &&
+        bodies[spec.key] !== undefined &&
+        (spec.rootTypes === undefined || spec.rootTypes.includes(rootType)),
     ).map((spec) => ({
       key: spec.key,
       label: spec.label,

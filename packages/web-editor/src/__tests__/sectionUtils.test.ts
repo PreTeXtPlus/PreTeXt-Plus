@@ -553,6 +553,57 @@ describe('assembleFullProjectSource / wrapDivisionForPreview — xml:lang', () =
   })
 })
 
+// Unit-tested rather than checked by eye because the failure mode is an *empty*
+// preview, not an error: the renderer sees the <slide> elements, selects the
+// reveal.js conversion, and hands it a root element it has no template for. A
+// visual check on a deck that legitimately has no content yet looks identical.
+describe('wrapDivisionForPreview — the project root type', () => {
+  const SLIDES =
+    '<section xml:id="sec"><title>Sec</title><slide><title>One</title><p>Hi</p></slide></section>'
+
+  /** The wrapper element's tag name — it also carries a root `@label`. */
+  const wrapperTag = (xml: string) =>
+    xml.match(/^<pretext[^>]*>\s*<([a-z-]+)/)?.[1]
+
+  it('wraps a non-root division of a slideshow in <slideshow>', () => {
+    const xml = wrapDivisionForPreview('section', SLIDES, '', 'My Deck', undefined, 'slideshow')
+    expect(wrapperTag(xml)).toBe('slideshow')
+    expect(xml).toContain('<title>My Deck</title>')
+    expectWellFormed(xml)
+  })
+
+  it('still wraps a non-root division of an article in <article>', () => {
+    const xml = wrapDivisionForPreview('section', SLIDES, '', 'My Article', undefined, 'article')
+    expect(wrapperTag(xml)).toBe('article')
+    expectWellFormed(xml)
+  })
+
+  it('defaults to <article> when the root type is not given', () => {
+    const xml = wrapDivisionForPreview('section', SLIDES, '', 'My Article')
+    expect(wrapperTag(xml)).toBe('article')
+    expectWellFormed(xml)
+  })
+
+  // part/chapter can only occur in a book, so a slideshow root never reaches
+  // this branch in practice — but the book rule must not be lost either.
+  it('keeps the <book> wrapper for a chapter', () => {
+    const chapter = '<chapter xml:id="ch"><title>Ch</title><p>Hi</p></chapter>'
+    const xml = wrapDivisionForPreview('chapter', chapter, '', 'My Book', undefined, 'book')
+    expect(wrapperTag(xml)).toBe('book')
+    expectWellFormed(xml)
+  })
+
+  // A <slideshow> root division is already a complete top-level element, so it
+  // must be passed through rather than nested inside a second one.
+  it('adds no wrapper to a slideshow root division', () => {
+    const deck = '<slideshow xml:id="d"><title>D</title><slide><p>Hi</p></slide></slideshow>'
+    const xml = wrapDivisionForPreview('slideshow', deck, '', 'D', undefined, 'slideshow')
+    expect(xml.match(/<slideshow\b/g)).toHaveLength(1)
+    expect(xml).not.toContain('<title>D</title>\n<slideshow')
+    expectWellFormed(xml)
+  })
+})
+
 // The root `@label` is what the previewer matches the root division on, and it
 // is added by scanning for the root element's start tag rather than parsing the
 // document — assembling a book means assembling the whole project, and parsing
