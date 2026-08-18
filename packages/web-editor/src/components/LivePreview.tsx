@@ -558,8 +558,8 @@ const LivePreview = forwardRef<LivePreviewHandle, LivePreviewProps>(
 
     return (
       <div className="flex flex-col w-full h-full">
-        <div className="relative flex items-center justify-center pt-2 pb-2 bg-[#f3f3f3] border-b border-[#dde0e6]">
-          <p className="text-base font-medium m-0 text-center">
+        <div className="relative flex items-center justify-left p-2 bg-[#f3f3f3] border-b border-[#dde0e6]">
+          <p className="text-base font-medium m-0">
             {printoutId ? "Print Preview" : "Live Preview"}
           </p>
           <div className="absolute right-2 flex items-center gap-1.5">
