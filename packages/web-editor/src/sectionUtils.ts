@@ -1555,37 +1555,25 @@ function latexDivisionRefSource(refValue: string | null): string {
 }
 
 /**
- * Build a regex source that matches a division-ref placeholder written in ANY
- * of the PreTeXt (`<plus:section ref="x"/>`), Markdown (`::section{ref="x"}`)
- * or LaTeX (`\plus{section}{x}`) forms.  The three syntaxes are textually
- * disjoint, so a combined pattern is unambiguous — letting every ref consumer
- * (TOC tree building, parent lookup, reorder/remove) work uniformly regardless
- * of the parent division's source format.
- *
- * Only matches tag names in {@link DIVISION_REF_TAGS} — the asset placeholder
- * (`plus:image`) is deliberately excluded.
- *
- * When `refValue` is `null` the ref value is captured — in group 1 for the XML
- * form, group 2 for the Markdown form and group 3 for the LaTeX form (read as
- * `m[1] ?? m[2] ?? m[3]`); otherwise the pattern matches only that specific ref
- * (nothing captured).
- */
-function divisionRefSource(refValue: string | null): string {
-  return `(?:${xmlDivisionRefSource(refValue)}|${markdownDivisionRefSource(refValue)}|${latexDivisionRefSource(refValue)})`;
-}
-
-/**
  * Return the regex source for a division-ref placeholder written in the ONE
  * syntax that a division of `format` actually uses:
  *   - `pretext`  → `<plus:section ref="x"/>`
  *   - `markdown` → `::section{ref="x"}`
  *   - `latex`    → `\plus{section}{x}`
  *
- * Unlike {@link divisionRefSource}, which matches all three at once, this
- * restricts scanning to the parent's own format. A `::section{ref="x"}` typed
- * into a PreTeXt division (e.g. as literal example text, or by a Markdown
- * author pasting into the wrong pane) is then NOT mistaken for a real child
- * include — the false match that was producing spurious blank sections.
+ * Scanning is deliberately restricted to the holder's own format: there is no
+ * all-formats-at-once variant, because every consumer knows the format of the
+ * division whose source it is looking at, and a combined pattern silently
+ * turns a `\plus{section}{x}` typed into a PreTeXt division (as literal
+ * example text, or by a LaTeX author pasting into the wrong pane) into a real
+ * include — the false match that was producing spurious blank sections, and
+ * that made a stray macro copy inside a child look like its own parent.
+ *
+ * Only matches tag names in {@link DIVISION_REF_TAGS} — the asset placeholder
+ * (`plus:image`) is deliberately excluded.
+ *
+ * When `refValue` is `null` the ref value is captured in group 1; otherwise the
+ * pattern matches only that specific ref and captures nothing.
  */
 function divisionRefSourceForFormat(
   format: SourceFormat,
@@ -1684,21 +1672,42 @@ export function parseDivisionRefs(
   return refs;
 }
 
+/** A division ref together with the type its tag name names. */
+export interface DivisionRefWithType {
+  xmlId: string;
+  /** The division type the placeholder's tag names. */
+  type: DivisionType;
+  /**
+   * `true` when the placeholder used the generic `division` alias rather than
+   * naming a type, so `type` is the `"section"` fallback rather than something
+   * the author actually wrote.
+   *
+   * Callers that *create* a division from a ref can ignore this — they need
+   * some concrete type and `"section"` is the documented default. Callers that
+   * push the tag name onto an *existing* division must not: retyping a
+   * `worksheet` to `section` because someone wrote `<plus:division ref="…"/>`
+   * would silently destroy a type the author chose elsewhere.
+   */
+  generic: boolean;
+}
+
 /**
  * Like {@link parseDivisionRefs} but also returns the division type inferred
  * from the tag name (e.g. `<plus:chapter ref="x"/>` → `{ type: "chapter", xmlId: "x" }`).
- * Used to auto-create Division records when new refs appear in edited content.
+ * Used to auto-create Division records when new refs appear in edited content,
+ * and to push a retyped placeholder onto the division it points at.
  *
  * Only tag names in {@link DIVISION_REF_TAGS} are considered — the asset
  * placeholder (`plus:image`) is not a division and is skipped. The generic
  * `<plus:division ref="x"/>` alias falls back to type
- * `"section"`, matching {@link tagToType}'s default for unrecognised tags.
+ * `"section"`, matching {@link tagToType}'s default for unrecognised tags, and
+ * is flagged `generic` so callers can tell the fallback from a real choice.
  */
 export function parseDivisionRefsWithTypes(
   content: string,
   sourceFormat: SourceFormat,
-): { xmlId: string; type: DivisionType }[] {
-  const refs: { xmlId: string; type: DivisionType }[] = [];
+): DivisionRefWithType[] {
+  const refs: DivisionRefWithType[] = [];
   const tags = DIVISION_REF_TAG_ALTERNATION;
   const closeTag = `(?:${tags})`;
   // One alternative per format, each capturing tag in group 1 and ref in
@@ -1714,11 +1723,39 @@ export function parseDivisionRefsWithTypes(
   while ((m = re.exec(scanned)) !== null) {
     const tagName = m[1];
     const xmlId = m[2];
-    const type: DivisionType = tagName === "division" ? "section" : (tagName as DivisionType);
-    refs.push({ type, xmlId });
+    const generic = tagName === "division";
+    const type: DivisionType = generic ? "section" : (tagName as DivisionType);
+    refs.push({ type, xmlId, generic });
   }
   return refs;
 }
+
+/**
+ * Locate every division-ref placeholder for `xmlId` in `content`, returning the
+ * `[index, length)` span of each within `content` itself.
+ *
+ * The scan runs against a {@link blankVerbatim} copy of `content` and only in
+ * `sourceFormat`'s own include syntax, so it agrees exactly with
+ * {@link parseDivisionRefs} about what counts as a real include. Blanking
+ * preserves length, so offsets found in the blanked copy index the original
+ * unchanged — which is what lets the rewrite helpers below edit the real text
+ * while still ignoring examples inside verbatim spans.
+ */
+function locateDivisionRefs(
+  content: string,
+  xmlId: string,
+  sourceFormat: SourceFormat,
+): { index: number; length: number }[] {
+  const re = new RegExp(divisionRefSourceForFormat(sourceFormat, xmlId), "g");
+  const scanned = blankVerbatim(content, sourceFormat);
+  const spans: { index: number; length: number }[] = [];
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(scanned)) !== null) {
+    spans.push({ index: m.index, length: m[0].length });
+  }
+  return spans;
+}
+
 
 // ---------------------------------------------------------------------------
 // Asset ref utilities — `<plus:image ref="..."/>` placeholder parsing
@@ -1873,7 +1910,36 @@ export function createDivisionContent(
 }
 
 /**
- * Insert a `<plus:TYPE ref="xmlId"/>` placeholder into `content`.
+ * Render a division-ref placeholder in `sourceFormat`'s own include syntax: a
+ * Markdown holder stores its includes as `::type{ref="x"}` leaf directives, a
+ * LaTeX holder as `\plus{type}{x}` macros, and a PreTeXt holder as the
+ * canonical `<plus:type ref="x"/>` placeholder.
+ *
+ * Exported because the TOC emits the same three shapes when inserting a ref at
+ * the cursor, and the two spellings must not be able to drift apart.
+ *
+ * `type` accepts the generic `"division"` alias as well as a real
+ * {@link DivisionType}, for the fallback placeholder `moveDivisionRef` writes
+ * when the ref it was asked to move isn't present.
+ */
+export function divisionRefTag(
+  type: DivisionType | "division",
+  xmlId: string,
+  sourceFormat: SourceFormat,
+): string {
+  switch (sourceFormat) {
+    case "markdown":
+      return `::${type}{ref="${xmlId}"}`;
+    case "latex":
+      return `\\plus{${type}}{${xmlId}}`;
+    case "pretext":
+      return `<plus:${type} ref="${xmlId}"/>`;
+  }
+}
+
+/**
+ * Insert a `<plus:TYPE ref="xmlId"/>` placeholder into `content`, written in
+ * `sourceFormat`'s own include syntax.
  *
  * - When `afterXmlId` is `null` the ref is appended just before the closing
  *   tag of the outer element (or at the end of the string if none is found).
@@ -1888,22 +1954,12 @@ export function insertDivisionRef(
   afterXmlId: string | null,
   sourceFormat: SourceFormat = "pretext",
 ): string {
-  // Emit the include in the parent's own syntax: a Markdown parent stores its
-  // includes as `::type{ref="x"}` leaf directives, a LaTeX parent as
-  // `\plus{type}{x}` macros, and a PreTeXt parent as the canonical
-  // `<plus:type ref="x"/>` placeholder.
-  const tag =
-    sourceFormat === "markdown"
-      ? `::${type}{ref="${xmlId}"}`
-      : sourceFormat === "latex"
-        ? `\\plus{${type}}{${xmlId}}`
-        : `<plus:${type} ref="${xmlId}"/>`;
+  const tag = divisionRefTag(type, xmlId, sourceFormat);
 
   if (afterXmlId !== null) {
-    const afterRe = new RegExp(divisionRefSource(afterXmlId));
-    const m = afterRe.exec(content);
-    if (m) {
-      const pos = m.index + m[0].length;
+    const [anchor] = locateDivisionRefs(content, afterXmlId, sourceFormat);
+    if (anchor) {
+      const pos = anchor.index + anchor.length;
       return content.slice(0, pos) + "\n" + tag + content.slice(pos);
     }
   }
@@ -1918,14 +1974,37 @@ export function insertDivisionRef(
 
 /**
  * Remove the `<plus:* ref="xmlId"/>` placeholder for `xmlId` from `content`.
- * The surrounding newline/whitespace is cleaned up so the result stays tidy.
+ * The surrounding horizontal whitespace and trailing newline are swallowed too
+ * so the result stays tidy.
+ *
+ * Only placeholders written in `sourceFormat`'s own syntax and outside verbatim
+ * spans are removed, so unplacing a division cannot silently mangle a code
+ * sample that happens to show the same include (see {@link locateDivisionRefs}).
+ * The whitespace either side is trimmed from the *original* text rather than
+ * the blanked scan copy, so a placeholder sitting immediately after a verbatim
+ * span (`\verb|x|\plus{section}{a}`) takes only its own characters with it.
  */
-export function removeDivisionRef(content: string, xmlId: string): string {
-  const re = new RegExp(
-    `[ \t]*${divisionRefSource(xmlId)}[ \t]*\n?`,
-    "g",
-  );
-  return content.replace(re, "");
+export function removeDivisionRef(
+  content: string,
+  xmlId: string,
+  sourceFormat: SourceFormat = "pretext",
+): string {
+  const spans = locateDivisionRefs(content, xmlId, sourceFormat);
+  if (spans.length === 0) return content;
+
+  const isBlank = (ch: string | undefined) => ch === " " || ch === "\t";
+  let out = "";
+  let cursor = 0;
+  for (const { index, length } of spans) {
+    let start = index;
+    while (start > cursor && isBlank(content[start - 1])) start--;
+    let end = index + length;
+    while (end < content.length && isBlank(content[end])) end++;
+    if (content[end] === "\n") end++;
+    out += content.slice(cursor, start);
+    cursor = end;
+  }
+  return out + content.slice(cursor);
 }
 
 /**
@@ -1942,19 +2021,20 @@ export function moveDivisionRef(
   content: string,
   xmlId: string,
   afterXmlId: string | null,
+  sourceFormat: SourceFormat = "pretext",
 ): string {
   // Capture the original tag so we preserve its element name.
-  const captureRe = new RegExp(divisionRefSource(xmlId));
-  const m = captureRe.exec(content);
-  const originalTag = m ? m[0] : `<plus:division ref="${xmlId}"/>`;
+  const [span] = locateDivisionRefs(content, xmlId, sourceFormat);
+  const originalTag = span
+    ? content.slice(span.index, span.index + span.length)
+    : divisionRefTag("division", xmlId, sourceFormat);
 
-  const withoutRef = removeDivisionRef(content, xmlId);
+  const withoutRef = removeDivisionRef(content, xmlId, sourceFormat);
 
   if (afterXmlId !== null) {
-    const afterRe = new RegExp(divisionRefSource(afterXmlId));
-    const after = afterRe.exec(withoutRef);
-    if (after) {
-      const pos = after.index + after[0].length;
+    const [anchor] = locateDivisionRefs(withoutRef, afterXmlId, sourceFormat);
+    if (anchor) {
+      const pos = anchor.index + anchor.length;
       return (
         withoutRef.slice(0, pos) + "\n" + originalTag + withoutRef.slice(pos)
       );
@@ -1983,6 +2063,12 @@ export function moveDivisionRef(
  * child's own `xml:id`/type are edited directly in its source, so the
  * rename doesn't orphan the child from its parent.
  *
+ * Every placeholder for `oldXmlId` is rewritten, not just the first: after an
+ * id rename a missed one would dangle, and a duplicate include is already
+ * malformed enough without leaving half of it pointing at the old type. The
+ * rewrite is emitted in `sourceFormat`'s own syntax, and placeholders inside
+ * verbatim spans are left alone.
+ *
  * Returns `content` unchanged if no placeholder for `oldXmlId` is found.
  */
 export function renameDivisionRef(
@@ -1990,19 +2076,19 @@ export function renameDivisionRef(
   oldXmlId: string,
   newXmlId: string,
   newType: DivisionType,
+  sourceFormat: SourceFormat = "pretext",
 ): string {
-  const re = new RegExp(divisionRefSource(oldXmlId));
-  // Rewrite the placeholder in the SAME syntax it was found in: a Markdown
-  // parent's `::section{ref="x"}` stays a leaf directive, a LaTeX parent's
-  // `\plus{section}{x}` stays a macro, and a PreTeXt parent's
-  // `<plus:section ref="x"/>` stays XML. (`.replace` returns `content`
-  // unchanged when nothing matches.)
-  return content.replace(re, (match) => {
-    const trimmed = match.trimStart();
-    if (trimmed.startsWith("::")) return `::${newType}{ref="${newXmlId}"}`;
-    if (trimmed.startsWith("\\plus")) return `\\plus{${newType}}{${newXmlId}}`;
-    return `<plus:${newType} ref="${newXmlId}"/>`;
-  });
+  const spans = locateDivisionRefs(content, oldXmlId, sourceFormat);
+  if (spans.length === 0) return content;
+
+  const tag = divisionRefTag(newType, newXmlId, sourceFormat);
+  let out = "";
+  let cursor = 0;
+  for (const { index, length } of spans) {
+    out += content.slice(cursor, index) + tag;
+    cursor = index + length;
+  }
+  return out + content.slice(cursor);
 }
 
 /**
@@ -2010,13 +2096,26 @@ export function renameDivisionRef(
  * `<plus:* ref="xmlId"/>` placeholder for `xmlId` — i.e. `xmlId`'s parent in
  * the division tree.  Returns `null` if `xmlId` is unplaced (orphaned) or is
  * the root.
+ *
+ * Membership is decided by {@link parseDivisionRefs}, so this agrees exactly
+ * with the TOC tree about who a division's parent is. Two consequences are
+ * deliberate and load-bearing: a division is never its own parent (a stray
+ * `\plus{handout}{self}` pasted into a child's body is malformed, not a
+ * placement), and a division that only *mentions* the placeholder — inside a
+ * verbatim span, or in another format's syntax — is not a parent either.
+ * Without both, a ref-sync write could land on the wrong division's source.
  */
 export function findDivisionParent(
   divisions: Division[],
   xmlId: string,
 ): Division | null {
-  const re = new RegExp(divisionRefSource(xmlId));
-  return divisions.find((d) => re.test(d.source)) ?? null;
+  return (
+    divisions.find(
+      (d) =>
+        d.xmlId !== xmlId &&
+        parseDivisionRefs(d.source, d.sourceFormat).includes(xmlId),
+    ) ?? null
+  );
 }
 
 /**
@@ -2032,11 +2131,12 @@ export function findDivisionParent(
 export function reorderDivisionRefs(
   content: string,
   orderedXmlIds: string[],
+  sourceFormat: SourceFormat = "pretext",
 ): string {
   let result = content;
   let prev: string | null = null;
   for (const xmlId of orderedXmlIds) {
-    result = moveDivisionRef(result, xmlId, prev);
+    result = moveDivisionRef(result, xmlId, prev, sourceFormat);
     prev = xmlId;
   }
   return result;

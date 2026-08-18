@@ -12,6 +12,7 @@ import {
   getOrphanRoots,
   insertDivisionRef,
   removeDivisionRef,
+  divisionRefTag,
 } from "../../sectionUtils";
 import { buildProjectAssetView, type AssetRow } from "../../assetView";
 import { useEditorStore } from "../../store/hooks";
@@ -160,7 +161,10 @@ const ArticleToc = ({ onOpenAssetPicker, hideAssets, readOnly }: ArticleTocProps
     if (!divisions) return;
     const parent = divisions.find((d) => d.xmlId === parentXmlId);
     if (!parent) return;
-    divisionContentChange(parent.xmlId, removeDivisionRef(parent.source, xmlId));
+    divisionContentChange(
+      parent.xmlId,
+      removeDivisionRef(parent.source, xmlId, parent.sourceFormat),
+    );
   };
 
   const handleDelete = (division: Division, parentXmlId: string | null) => {
@@ -175,7 +179,7 @@ const ArticleToc = ({ onOpenAssetPicker, hideAssets, readOnly }: ArticleTocProps
       if (parent) {
         divisionContentChange(
           parent.xmlId,
-          removeDivisionRef(parent.source, division.xmlId),
+          removeDivisionRef(parent.source, division.xmlId, parent.sourceFormat),
         );
       }
     }
@@ -192,13 +196,7 @@ const ArticleToc = ({ onOpenAssetPicker, hideAssets, readOnly }: ArticleTocProps
     "pretext";
 
   const handleInsertAtCursor = (division: Division) => {
-    insertAtCursor(
-      activeFormat === "markdown"
-        ? `::${division.type}{ref="${division.xmlId}"}`
-        : activeFormat === "latex"
-          ? `\\plus{${division.type}}{${division.xmlId}}`
-          : `<plus:${division.type} ref="${division.xmlId}"/>`,
-    );
+    insertAtCursor(divisionRefTag(division.type, division.xmlId, activeFormat));
   };
 
   const handlePlaceOrphan = (orphan: Division) => {

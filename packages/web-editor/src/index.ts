@@ -39,6 +39,7 @@ export {
   assembleFullProjectSource,
   // Division ref utilities (new architecture)
   parseDivisionRefs,
+  divisionRefTag,
   insertDivisionRef,
   removeDivisionRef,
   moveDivisionRef,
