@@ -389,6 +389,32 @@ const findRootDivision = (
  * Top-level editor component.  Creates the per-instance Zustand store and
  * wraps the inner component in the store's Context provider.
  */
+/**
+ * Rewrite `division`'s own source so its structural metadata matches `changes`,
+ * using whichever updater its source format speaks — the PreTeXt wrapper
+ * element, the Markdown YAML frontmatter, or the LaTeX `\section`/`\label`
+ * commands. Every format carries its metadata in its own source, so this is the
+ * one dispatch every metadata edit goes through.
+ *
+ * For LaTeX, `type` renames the header command (`\section{` → `\worksheet{`)
+ * and `title`/`xmlId` are written into the header and its `\label`; LaTeX has no
+ * representation for PreTeXt's separate `label` attribute, so that change is
+ * tracked on the record only.
+ */
+function rewriteDivisionMetadata(
+  division: Division,
+  changes: DivisionChanges,
+): Division {
+  switch (division.sourceFormat) {
+    case "markdown":
+      return updateMarkdownDivisionMetadata(division, changes);
+    case "latex":
+      return updateLatexDivisionMetadata(division, changes);
+    default:
+      return updateSectionMetadata(division, changes);
+  }
+}
+
 const Editors = (props: editorProps) => {
   // Store + bindCallbacks are created once per mount via lazy useState.
   // bindCallbacks is a plain function (not a React ref), so passing it during
@@ -664,6 +690,35 @@ const EditorsInner = (props: EditorsInnerProps) => {
     props.onDivisionUpdate?.(xmlId, changes);
   };
 
+  // Keep a parent's `<plus:TYPE ref="..."/>` placeholder in sync when the child
+  // it points at changes its own `xml:id` or type, so the child stays placed in
+  // the tree and the placeholder keeps naming what it actually references.
+  //
+  // The parent is resolved by `findDivisionParent`, which never returns the
+  // child itself and never matches a placeholder inside a verbatim span or
+  // written in another format's syntax. That matters here: a stray
+  // `\plus{handout}{self}` pasted into a child's own body is malformed markup,
+  // not a placement, and rewriting *it* would both miss the real parent and
+  // clobber the child's freshly rewritten header. The rewrite is emitted in the
+  // parent's syntax, which need not match the child's.
+  const syncParentDivisionRef = (
+    oldXmlId: string,
+    newXmlId: string,
+    newType: DivisionType,
+  ) => {
+    const parent = findDivisionParent(divisions, oldXmlId);
+    if (!parent) return;
+    const newParentContent = renameDivisionRef(
+      parent.source,
+      oldXmlId,
+      newXmlId,
+      newType,
+      parent.sourceFormat,
+    );
+    if (newParentContent === parent.source) return;
+    emitContentChange(parent.xmlId, newParentContent, parent.sourceFormat);
+  };
+
   // Metadata edits from the TOC "Edit properties" form. Unlike code-editor
   // edits — where the source is authoritative and already carries the new
   // attributes — here the form fields are authoritative, so we must rewrite the
@@ -709,16 +764,8 @@ const EditorsInner = (props: EditorsInnerProps) => {
           newXmlId,
         ),
       };
-    } else if (division.sourceFormat === "markdown") {
-      updated = updateMarkdownDivisionMetadata(division, changes);
-    } else if (division.sourceFormat === "latex") {
-      // The header command is renamed to match the new type (`\section{` →
-      // `\worksheet{`), and the title/xml:id are written into the header/`\label`.
-      // LaTeX has no representation for PreTeXt's separate `label` attribute, so
-      // that change is tracked on the record only.
-      updated = updateLatexDivisionMetadata(division, changes);
     } else {
-      updated = updateSectionMetadata(division, changes);
+      updated = rewriteDivisionMetadata(division, changes);
     }
     const newXmlId = updated.xmlId;
     // Steps 1–3 are one edit as far as the document is concerned: the division's
@@ -738,22 +785,7 @@ const EditorsInner = (props: EditorsInnerProps) => {
       // 3. Keep the parent's ref placeholder in sync with an id or type change
       //    so the division stays placed in the tree.
       if (newXmlId !== division.xmlId || updated.type !== division.type) {
-        const parent = findDivisionParent(divisions, division.xmlId);
-        if (parent) {
-          const newParentContent = renameDivisionRef(
-            parent.source,
-            division.xmlId,
-            newXmlId,
-            updated.type,
-          );
-          if (newParentContent !== parent.source) {
-            emitContentChange(
-              parent.xmlId,
-              newParentContent,
-              parent.sourceFormat,
-            );
-          }
-        }
+        syncParentDivisionRef(division.xmlId, newXmlId, updated.type);
       }
     });
 
@@ -784,6 +816,25 @@ const EditorsInner = (props: EditorsInnerProps) => {
     removeDivisionFromPool(xmlId);
     bridge?.localDivisionRemove(xmlId);
     props.onDivisionRemove?.(xmlId);
+  };
+
+  // Push a type named by a parent's `<plus:TYPE ref="..."/>` placeholder onto
+  // the division it points at: the child's own source header is rewritten to
+  // match (`\handout{…}` → `\worksheet{…}`) and its record follows. The mirror
+  // of `syncParentDivisionRef`, for when the author edited the placeholder
+  // rather than the child. No recursion is possible between the two: this only
+  // ever writes to a division other than the one being edited, and the child→
+  // parent sync runs only for the division whose editor produced the change.
+  const applyDivisionRetype = (division: Division, type: DivisionType) => {
+    const updated = rewriteDivisionMetadata(division, { type });
+    // One edit: the child's header and its record type must reach peers
+    // together, or the TOC and the source disagree about what it is.
+    collabTransact(() => {
+      if (updated.source !== division.source) {
+        emitContentChange(division.xmlId, updated.source, division.sourceFormat);
+      }
+      applyDivisionUpdate(division.xmlId, { type });
+    });
   };
 
   const applyDivisionSelect = (xmlId: string) => {
@@ -868,22 +919,11 @@ const EditorsInner = (props: EditorsInnerProps) => {
         // `<plus:TYPE ref="..."/>` placeholder tag in sync. The id never
         // changes here, so the ref target stays stable.
         if (meta.type !== activeDivision.type) {
-          const parent = findDivisionParent(divisions, activeDivision.xmlId);
-          if (parent) {
-            const newParentContent = renameDivisionRef(
-              parent.source,
-              activeDivision.xmlId,
-              activeDivision.xmlId,
-              meta.type,
-            );
-            if (newParentContent !== parent.source) {
-              emitContentChange(
-                parent.xmlId,
-                newParentContent,
-                parent.sourceFormat,
-              );
-            }
-          }
+          syncParentDivisionRef(
+            activeDivision.xmlId,
+            activeDivision.xmlId,
+            meta.type,
+          );
         }
       }
     } else if (activeDivisionFormat === "markdown") {
@@ -901,22 +941,11 @@ const EditorsInner = (props: EditorsInnerProps) => {
         });
 
         if (meta.type !== activeDivision.type) {
-          const parent = findDivisionParent(divisions, activeDivision.xmlId);
-          if (parent) {
-            const newParentContent = renameDivisionRef(
-              parent.source,
-              activeDivision.xmlId,
-              activeDivision.xmlId,
-              meta.type,
-            );
-            if (newParentContent !== parent.source) {
-              emitContentChange(
-                parent.xmlId,
-                newParentContent,
-                parent.sourceFormat,
-              );
-            }
-          }
+          syncParentDivisionRef(
+            activeDivision.xmlId,
+            activeDivision.xmlId,
+            meta.type,
+          );
         }
       }
     } else if (activeDivisionFormat === "latex") {
@@ -930,19 +959,36 @@ const EditorsInner = (props: EditorsInnerProps) => {
       }
     }
 
-    // Auto-create Division records for any new <plus:TYPE ref="id"/> placeholders
-    // that appeared in the edited content but don't yet have a matching division.
-    const existingIds = new Set(divisions.map((d) => d.xmlId));
-    for (const { xmlId, type } of parseDivisionRefsWithTypes(
+    // Reconcile this division's child placeholders against the pool: a
+    // `<plus:TYPE ref="id"/>` naming a division that doesn't exist yet creates
+    // it, and one naming a type its target disagrees with retypes the target.
+    // The placeholder's tag is a mirror of the child's own type — the assembled
+    // document ignores it entirely and uses the child's own element — so the two
+    // must be kept equal from whichever side the author edited.
+    const pool = new Map(divisions.map((d) => [d.xmlId, d]));
+    for (const { xmlId, type, generic } of parseDivisionRefsWithTypes(
       wrapped,
       activeDivisionFormat,
     )) {
-      if (!existingIds.has(xmlId)) {
-        applyDivisionAdd(
-          createDivisionWithId(xmlId, type, activeDivisionFormat),
-        );
-        existingIds.add(xmlId); // prevent duplicates within the same edit
+      const child = pool.get(xmlId);
+      if (!child) {
+        const created = createDivisionWithId(xmlId, type, activeDivisionFormat);
+        applyDivisionAdd(created);
+        pool.set(xmlId, created); // prevent duplicates within the same edit
+        continue;
       }
+      // `generic` means the author wrote the untyped `division` alias, so `type`
+      // is a default rather than a choice — never push it onto the child.
+      if (generic || child.type === type) continue;
+      // A placeholder pointing at the division that holds it is malformed
+      // markup, not a placement (the assembler renders it as a circular
+      // reference); acting on it would retype the division from a line inside
+      // its own body. The root is likewise never retyped from a placeholder —
+      // an `<article>` demoted to `<section>` has no valid document left.
+      if (xmlId === activeDivision.xmlId) continue;
+      if (rootDivision && xmlId === rootDivision.xmlId) continue;
+      applyDivisionRetype(child, type);
+      pool.set(xmlId, { ...child, type });
     }
   };
 
