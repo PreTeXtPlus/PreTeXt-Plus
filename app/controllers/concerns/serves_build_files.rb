@@ -40,7 +40,8 @@ module ServesBuildFiles
     # never be mistaken for the finished public site while it's open in a tab.
     def private_preview_banner(manage_path)
       (
-        '<div style="background:#4e6172;color:#aad4f9;font:14px/1.4 sans-serif;' \
+        "<style>@media print { .no-print { display: none !important; }}</style>" \
+        '<div class="no-print" style="background:#4e6172;color:#aad4f9;font:14px/1.4 sans-serif;' \
         'text-align:center;padding:8px 12px;">' \
         "This private preview is only available to authors. This link won't work for anyone else. " \
         "<a href='#{manage_path}' style='color:#fff'>[Manage project]</a>" \
