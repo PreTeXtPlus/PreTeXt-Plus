@@ -289,7 +289,7 @@ class ProjectsController < ApplicationController
         divisions_attributes: [ [ :id, :source, :source_format, :is_root, :ref, :_destroy ] ],
         assets_attributes: [ [ :id, :ref, :kind, :file, :source, :short_description, :description, :title, :_destroy ] ]
       ]
-      permitted.unshift(:document_type) if action_name == "create"
+      permitted << :document_type if action_name == "create"
       params.expect(project: permitted)
     end
 
