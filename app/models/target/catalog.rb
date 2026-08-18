@@ -15,11 +15,11 @@ class Target
   # It also makes illegal combinations unrepresentable rather than validated-against:
   # there is no way to spell "a PDF compressed as scorm", because no kind emits it.
   module Catalog
-    # What a kind serves when it says nothing: the prose roots, i.e. everything that is
-    # not a deck. Spelled out rather than left as "all types except slideshow" so adding
+    # What a kind serves when it says nothing: a manuscript, i.e. everything that is
+    # not a slide deck. Spelled out rather than left as "all types except slideshow" so adding
     # a root element to Project#document_type is a decision made here, deliberately,
     # rather than one that silently grants every output to a new kind of document.
-    PROSE_DOCUMENT_TYPES = %i[ article book ].freeze
+    MANUSCRIPT_DOCUMENT_TYPES = %i[ article book ].freeze
 
     Kind = Data.define(:slug, :label, :emits, :site, :viewable, :filename_ext, :extensions,
                        :document_types) do
@@ -31,7 +31,7 @@ class Target
       # feed to something else, and offering to "open" it just downloads it with extra
       # steps. Every site is viewable by definition, so `site` implies it.
       def self.build(slug, label:, emits:, site: false, viewable: false, filename_ext: nil,
-                     extensions: [], document_types: PROSE_DOCUMENT_TYPES)
+                     extensions: [], document_types: MANUSCRIPT_DOCUMENT_TYPES)
         new(slug: slug.to_s, label: label, emits: emits.freeze, site: site,
             viewable: site || viewable, filename_ext: filename_ext,
             extensions: extensions.freeze,
