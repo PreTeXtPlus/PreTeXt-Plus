@@ -10,6 +10,10 @@ class SubscriptionType < ApplicationRecord
     stripe_price_id.present?
   end
 
+  def invoiceable?
+    invoiceable.present?
+  end
+
   def stripe_price
     return nil if stripe_price_id.blank? || Rails.env.test?
     return mock_stripe_price if Rails.env.development?

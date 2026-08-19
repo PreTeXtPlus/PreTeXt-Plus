@@ -1,6 +1,6 @@
 class SubscriptionTypesController < ApplicationController
-  before_action :require_admin, except: :checkout
-  before_action :set_subscription_type, only: %i[ show edit update destroy checkout ]
+  before_action :require_admin, except: %i[ checkout new_invoice invoice ]
+  before_action :set_subscription_type, only: %i[ show edit update destroy checkout new_invoice invoice ]
 
   # GET /subscription_types or /subscription_types.json
   def index
@@ -48,6 +48,38 @@ class SubscriptionTypesController < ApplicationController
 
   def checkout
     redirect_to checkout_url, allow_other_host: true, status: :see_other
+  end
+
+  # GET /subscription_types/1/invoice
+  def new_invoice
+    unless @subscription_type.invoiceable? && @subscription_type.can_be_subscribed?
+      redirect_to subscriptions_path, alert: "#{@subscription_type.name} is not payable by invoice."
+    end
+  end
+
+  # POST /subscription_types/1/invoice
+  #
+  # Direct self-serve pay-by-invoice: creates a real Stripe subscription with
+  # collection_method: "send_invoice" via the pay gem's API, the same mechanism
+  # Admin::SubscriptionsController#create uses on the admin's behalf. Replaces the
+  # old flow where this button only emailed support to set the subscription up by
+  # hand -- Stripe emails the invoice directly, and access begins once it's paid.
+  def invoice
+    unless @subscription_type.invoiceable? && @subscription_type.can_be_subscribed?
+      return redirect_to subscriptions_path, alert: "#{@subscription_type.name} is not payable by invoice."
+    end
+
+    quantity = params[:quantity].to_i.clamp(1, 999)
+    current_user.payment_processor.subscribe(
+      name: Pay.default_product_name,
+      plan: @subscription_type.stripe_price_id,
+      quantity: quantity,
+      collection_method: "send_invoice",
+      days_until_due: 30
+    )
+    redirect_to subscriptions_path, notice: "Subscribed! An invoice for #{quantity} seat(s) has been sent to your email — access begins once it's paid."
+  rescue Pay::Stripe::Error => e
+    redirect_to subscriptions_path, alert: "Could not create invoiced subscription: #{e.message}"
   end
 
   private

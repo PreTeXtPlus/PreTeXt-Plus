@@ -63,6 +63,12 @@ Rails.application.routes.draw do
         post :reset_password
         patch :update_email
       end
+      resources :subscriptions, only: [ :create ], controller: "subscriptions" do
+        member do
+          patch :update_seats
+          post :mark_invoice_paid
+        end
+      end
     end
     resources :projects, only: %i[show update]
     resources :terms, only: %i[new create]
@@ -92,8 +98,6 @@ Rails.application.routes.draw do
 
   get "tos" => "terms#tos", as: "tos"
   get "privacy" => "terms#privacy", as: "privacy"
-  get "subscriptions/invoice" => "subscriptions#invoice_request", as: "invoice_request"
-  post "subscriptions/invoice" => "subscriptions#submit_invoice_request", as: "submit_invoice_request"
   resources :subscriptions, only: [ :index, :show ] do
     member do
       post "seat" => "subscriptions#seat", as: "seat"
@@ -102,6 +106,8 @@ Rails.application.routes.draw do
   resources :subscription_types do
     member do
       get "checkout" => "subscription_types#checkout", as: "checkout"
+      get "invoice" => "subscription_types#new_invoice", as: "new_invoice"
+      post "invoice" => "subscription_types#invoice", as: "invoice"
     end
   end
   resources :projects do
