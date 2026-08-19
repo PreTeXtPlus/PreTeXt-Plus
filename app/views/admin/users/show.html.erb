@@ -70,13 +70,54 @@
                 <% if seat.subscription.current_period_end.present? %>
                   · Ends <%= local_time_tag(seat.subscription.current_period_end, date_only: true) %>
                 <% end %>
+                <% if seat.subscription.object&.dig("collection_method") == "send_invoice" %>
+                  · Billed by invoice
+                <% end %>
               </p>
+
+              <% if seat.subscription.user == @user %>
+                <% if seat.subscription.object&.dig("collection_method") == "send_invoice" %>
+                  <%= button_to "Mark invoice paid", mark_invoice_paid_admin_user_subscription_path(@user, seat.subscription),
+                    method: :post, class: "#{button_classes(color: "green")} mt-3 px-2.5 py-1 text-xs", form_class: "inline-block" %>
+                <% end %>
+
+                <%= form_with url: update_seats_admin_user_subscription_path(@user, seat.subscription), method: :patch, class: "mt-3 space-y-2" do |form| %>
+                  <label class="block text-xs font-medium text-gray-500">
+                    Seated users (<%= seat.subscription.quantity %> seat(s) available, one email per line)
+                  </label>
+                  <%= form.text_area :emails, rows: 3, value: seat.subscription.seated_users.map(&:email).join("\n"),
+                    class: "w-full rounded-md border border-gray-300 px-2.5 py-1.5 text-sm shadow-sm focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500" %>
+                  <%= form.submit "Update seats", class: "#{button_classes(color: "blue")} px-2.5 py-1 text-xs" %>
+                <% end %>
+              <% end %>
             </div>
           <% end %>
         </div>
       <% else %>
         <p class="mt-4 text-gray-600">No active subscription access.</p>
       <% end %>
+
+      <div class="mt-6 border-t border-gray-200 pt-4">
+        <h3 class="text-sm font-semibold text-gray-900">Add subscription (invoiced)</h3>
+        <%= form_with url: admin_user_subscriptions_path(@user), method: :post, class: "mt-3 space-y-3" do |form| %>
+          <div>
+            <label class="block text-xs font-medium text-gray-500 mb-1">Plan</label>
+            <%= form.select :subscription_type_id, @subscription_types.map { |t| [ "#{t.name} — #{t.price}", t.id ] },
+              {}, class: "w-full rounded-md border border-gray-300 px-2.5 py-1.5 text-sm shadow-sm focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500" %>
+          </div>
+          <div class="flex gap-3">
+            <div>
+              <label class="block text-xs font-medium text-gray-500 mb-1">Seats</label>
+              <%= form.number_field :quantity, value: 1, min: 1, class: "w-24 rounded-md border border-gray-300 px-2.5 py-1.5 text-sm shadow-sm focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500" %>
+            </div>
+            <div>
+              <label class="block text-xs font-medium text-gray-500 mb-1">Days until invoice due</label>
+              <%= form.number_field :days_until_due, value: 30, min: 1, class: "w-24 rounded-md border border-gray-300 px-2.5 py-1.5 text-sm shadow-sm focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500" %>
+            </div>
+          </div>
+          <%= form.submit "Create invoiced subscription", class: "#{button_classes(color: "blue")} px-3.5 py-2" %>
+        <% end %>
+      </div>
     </div>
   </section>
 

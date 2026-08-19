@@ -63,6 +63,12 @@ Rails.application.routes.draw do
         post :reset_password
         patch :update_email
       end
+      resources :subscriptions, only: [ :create ], controller: "subscriptions" do
+        member do
+          patch :update_seats
+          post :mark_invoice_paid
+        end
+      end
     end
     resources :projects, only: %i[show update]
     resources :terms, only: %i[new create]

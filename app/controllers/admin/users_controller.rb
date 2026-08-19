@@ -10,6 +10,7 @@ class Admin::UsersController < Admin::BaseController
   def show
     @projects = @user.projects.order(updated_at: :desc)
     @subscription_seats = @user.subscription_seats.includes(:subscription)
+    @subscription_types = SubscriptionType.all.select(&:can_be_subscribed?)
   end
 
   def confirm
