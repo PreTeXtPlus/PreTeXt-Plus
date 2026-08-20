@@ -285,7 +285,7 @@ class ProjectsController < ApplicationController
     # element, where the TOC switches it freely.
     def project_params
       permitted = [
-        :title, :pretext_source, :docinfo, :use_common_docinfo, :visibility, :language,
+        :title, :pretext_source, :docinfo, :use_common_docinfo, :visibility, :language, :description,
         divisions_attributes: [ [ :id, :source, :source_format, :is_root, :ref, :_destroy ] ],
         assets_attributes: [ [ :id, :ref, :kind, :file, :source, :short_description, :description, :title, :_destroy ] ]
       ]
