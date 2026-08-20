@@ -18,17 +18,24 @@
       <% published_targets = project.targets.select(&:published?) %>
       <div class="rounded-xl bg-white p-4 ring-2 ring-gray-100 hover:ring-indigo-200">
         <h3 class="text-lg font-medium"><%= project.title %></h3>
-        <% if published_targets.any? %>
-          <div class="mt-2 flex flex-wrap items-center gap-2">
-            <%# target_public_url, never share_project_path -- a profile visitor should
-                land on the built output itself, not the dashboard's quick-build page. %>
-            <% published_targets.each do |target| %>
-              <%= link_to target.name, target_public_url(target),
-                    class: "inline-flex items-center rounded-full border border-gray-300 px-2.5 py-1 text-xs font-medium hover:bg-gray-50",
-                    target: "_blank", rel: "noopener", data: { turbo: false } %>
-            <% end %>
-          </div>
-        <% else %>
+        <% if project.description.present? %>
+          <p class="mt-1 text-sm text-gray-600"><%= project.description %></p>
+        <% end %>
+        <div class="mt-2 flex flex-wrap items-center gap-2">
+          <%# target_public_url, never share_project_path -- a profile visitor should
+              land on the built output itself, not the dashboard's quick-build page. %>
+          <% published_targets.each do |target| %>
+            <%= link_to target.name, target_public_url(target),
+                  class: "inline-flex items-center rounded-full border border-gray-300 px-2.5 py-1 text-xs font-medium hover:bg-gray-50",
+                  target: "_blank", rel: "noopener", data: { turbo: false } %>
+          <% end %>
+          <%# @projects is already scoped to publicly_listed (visibility: :public), so
+              this is always non-private -- no private_visibility? guard needed here. %>
+          <%= link_to "View source", share_source_project_path(project),
+                class: "inline-flex items-center rounded-full border border-gray-300 px-2.5 py-1 text-xs font-medium hover:bg-gray-50",
+                target: "_blank", rel: "noopener", data: { turbo: false } %>
+        </div>
+        <% if published_targets.empty? %>
           <p class="mt-1 text-xs text-gray-500">No published outputs yet.</p>
         <% end %>
       </div>
