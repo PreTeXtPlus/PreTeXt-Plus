@@ -7,6 +7,10 @@ export interface TableOfContentsProps {
   onOpenAssetPicker?: (initialTab?: "add") => void;
   /** If true, hides all assets in the TOC and asset manager. */
   hideAssets?: boolean;
+  /** When provided, shows "Open snippet picker" affordance in the TOC. */
+  onOpenSnippetPicker?: (initialTab?: "add") => void;
+  /** If true, hides all snippets in the TOC and snippet manager. */
+  hideSnippets?: boolean;
   /** If true, hides every structural action (add/remove/edit/place a division). */
   readOnly?: boolean;
 }
@@ -17,6 +21,8 @@ const TableOfContents = ({
   onToggleCollapse,
   onOpenAssetPicker,
   hideAssets,
+  onOpenSnippetPicker,
+  hideSnippets,
   readOnly,
 }: TableOfContentsProps) => {
   if (isCollapsed) {
@@ -53,7 +59,13 @@ const TableOfContents = ({
           </button>
         </div>
       </div>
-      <ArticleToc onOpenAssetPicker={onOpenAssetPicker} hideAssets={hideAssets} readOnly={readOnly} />
+      <ArticleToc
+        onOpenAssetPicker={onOpenAssetPicker}
+        hideAssets={hideAssets}
+        onOpenSnippetPicker={onOpenSnippetPicker}
+        hideSnippets={hideSnippets}
+        readOnly={readOnly}
+      />
     </div>
   );
 };

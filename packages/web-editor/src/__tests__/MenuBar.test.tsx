@@ -31,6 +31,7 @@ function renderWithStore(ui: (wrap: (children: ReactNode) => ReactNode) => React
     divisionContentChange: noop,
     handleDivisionContentChange: noop,
     assetInsert: noop,
+    snippetInsert: noop,
     // Stands in for the host: a title edit lands back in the store.
     updateTitle: (title) => store.getState().setTitle(title),
     updateLanguage: (language) => store.getState().setLanguage(language),

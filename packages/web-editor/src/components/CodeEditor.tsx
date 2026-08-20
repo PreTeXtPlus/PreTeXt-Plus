@@ -86,6 +86,8 @@ interface CodeEditorProps {
   canConvertToPretext?: boolean;
   /** If provided, an "Assets" button is shown in the toolbar (PreTeXt mode only). */
   onOpenAssets?: () => void;
+  /** If provided, a "Snippets" button is shown in the toolbar (PreTeXt mode only). */
+  onOpenSnippets?: () => void;
   /** Called when the user clicks "Display Full Source" to open the assembled-source modal. */
   onShowFullSource: () => void;
   /**
@@ -96,6 +98,7 @@ interface CodeEditorProps {
    */
   onRequestWrapperEdit?: () => void;
   hideAssets?: boolean;
+  hideSnippets?: boolean;
   /** When true, Monaco is non-editable and the toolbar shows only "Display Full Source". */
   readOnly?: boolean;
   /**
@@ -182,9 +185,11 @@ const CodeEditor = forwardRef<CodeEditorHandle, CodeEditorProps>(({
   onOpenConvertToPretext,
   canConvertToPretext,
   onOpenAssets,
+  onOpenSnippets,
   onShowFullSource,
   onRequestWrapperEdit,
   hideAssets,
+  hideSnippets,
   readOnly,
   pretextValidation,
   collab,
@@ -956,8 +961,10 @@ const CodeEditor = forwardRef<CodeEditorHandle, CodeEditorProps>(({
         onConvertToPretext={onOpenConvertToPretext}
         canConvertToPretext={canConvertToPretext}
         onOpenAssets={onOpenAssets}
+        onOpenSnippets={onOpenSnippets}
         onShowFullSource={onShowFullSource}
         hideAssets={hideAssets}
+        hideSnippets={hideSnippets}
         readOnly={readOnly}
       />
       <div style={{ flex: 1 }}>

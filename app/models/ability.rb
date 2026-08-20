@@ -69,6 +69,10 @@ class Ability
     can :manage, Division, project: { user_id: user.id }
     can :manage, Division, project: { collaborations: { user_id: user.id } }
 
+    # Snippets belonging to own projects
+    can :manage, Snippet, project: { user_id: user.id }
+    can :manage, Snippet, project: { collaborations: { user_id: user.id } }
+
     # Only the owner manages who collaborates; a collaborator may remove
     # (only) their own row to leave the project.
     can [ :create, :destroy ], Collaboration, project: { user_id: user.id }

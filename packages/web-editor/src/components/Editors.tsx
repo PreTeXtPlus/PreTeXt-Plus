@@ -27,6 +27,8 @@ import DocinfoEditor from "./DocinfoEditor";
 import FullSourceModal from "./FullSourceModal";
 import AssetManagerModal, { type AssetManagerMainTab } from "./AssetManagerModal";
 import AssetEditModal from "./AssetEditModal";
+import SnippetManagerModal, { type SnippetManagerMainTab } from "./SnippetManagerModal";
+import SnippetEditModal from "./SnippetEditModal";
 import MenuBar from "./MenuBar";
 import TableOfContents from "./TableOfContents";
 import ErrorBoundary from "./ErrorBoundary";
@@ -37,6 +39,7 @@ import type {
   EditorContentChange,
   Asset,
   FeedbackSubmission,
+  Snippet,
   SourceFormat,
 } from "../types/editor";
 import type { Division, DivisionType, RootDivisionType } from "../types/sections";
@@ -59,12 +62,15 @@ import {
   renameDivisionRef,
   renameAssetRef,
   removeAssetRef,
+  renameSnippetRef,
+  removeSnippetRef,
   updateSectionMetadata,
   normalizeDivisionsOnLoad,
   isRootDivisionType,
 } from "../sectionUtils";
 import { defaultChildDivisionType } from "./toc/types";
 import { buildProjectAssetView, makeUniqueAssetRef } from "../assetView";
+import { buildProjectSnippetView, makeUniqueSnippetRef } from "../snippetView";
 import { newRecordId } from "../recordId";
 import {
   createEditorStore,
@@ -341,6 +347,38 @@ export interface editorProps {
   onAssetUpdate?: (asset: Asset) => Promise<void> | void;
   /** If true, the TOC and asset manager hide all assets. */
   hideAssets?: boolean;
+
+  /**
+   * Snippets already associated with this project. When omitted, the
+   * Snippets button and modal are hidden entirely.
+   */
+  projectSnippets?: Snippet[];
+  /**
+   * Called when the user creates a new snippet via the snippet manager's
+   * "Add" tab. Host derives the record from `ref` (which the user typed
+   * directly, unlike an asset's derived-from-title ref) and returns the
+   * created snippet — its `source` is empty until the user fills it in via
+   * the snippet editor.
+   */
+  onCreateSnippet?: (ref: string) => Promise<Snippet>;
+  /**
+   * Called when the user removes a snippet from the project.
+   */
+  onSnippetRemove?: (snippet: Snippet) => Promise<void> | void;
+  /**
+   * Called when the user saves edits to an existing snippet. The snippet is
+   * identified by its `id` (stable across renames); `ref`, `source`, and
+   * `sourceFormat` may all have changed, so all three must be persisted.
+   */
+  onSnippetUpdate?: (snippet: Snippet) => Promise<void> | void;
+  /**
+   * Called when the user duplicates a snippet from the snippet manager/editor.
+   * When omitted, the Duplicate control is hidden.
+   */
+  onSnippetDuplicate?: (snippet: Snippet) => void | Promise<void>;
+  /** If true, the snippet manager is hidden entirely. */
+  hideSnippets?: boolean;
+
   /**
    * If true, the built-in menu bar (title field, Save/Cancel buttons,
    * feedback link, presence avatars) is not rendered at all. Useful when
@@ -454,6 +492,7 @@ const Editors = (props: editorProps) => {
       divisions: normalizedDivisions,
       activeDivisionId: initActiveId,
       projectAssets: props.projectAssets,
+      projectSnippets: props.projectSnippets,
     });
   });
 
@@ -524,16 +563,24 @@ const EditorsInner = (props: EditorsInnerProps) => {
   const isConvertDialogOpen = useEditorStore((s) => s.isConvertDialogOpen);
   const isDocinfoEditorOpen = useEditorStore((s) => s.isDocinfoEditorOpen);
   const isAssetPickerOpen = useEditorStore((s) => s.isAssetPickerOpen);
+  const isSnippetPickerOpen = useEditorStore((s) => s.isSnippetPickerOpen);
   const isFullSourceOpen = useEditorStore((s) => s.isFullSourceOpen);
   const editingAssetRef = useEditorStore((s) => s.editingAssetRef);
   const openAssetEditor = useEditorStore((s) => s.openAssetEditor);
   const closeAssetEditor = useEditorStore((s) => s.closeAssetEditor);
   const assetResolveTarget = useEditorStore((s) => s.assetResolveTarget);
   const closeAssetResolver = useEditorStore((s) => s.closeAssetResolver);
+  const editingSnippetRef = useEditorStore((s) => s.editingSnippetRef);
+  const openSnippetEditor = useEditorStore((s) => s.openSnippetEditor);
+  const closeSnippetEditor = useEditorStore((s) => s.closeSnippetEditor);
+  const snippetResolveTarget = useEditorStore((s) => s.snippetResolveTarget);
+  const closeSnippetResolver = useEditorStore((s) => s.closeSnippetResolver);
   // Replace target is local UI state (only Editors + the asset manager need it).
   const [assetReplaceTarget, setAssetReplaceTarget] = useState<Asset | null>(null);
   // Which tab the asset manager should open on — local UI state, reset per open.
   const [assetPickerInitialTab, setAssetPickerInitialTab] = useState<AssetManagerMainTab>("in-document");
+  // Which tab the snippet manager should open on — local UI state, reset per open.
+  const [snippetPickerInitialTab, setSnippetPickerInitialTab] = useState<SnippetManagerMainTab>("in-document");
   const openModal = useEditorStore((s) => s.openModal);
   const closeModal = useEditorStore((s) => s.closeModal);
   const syncState = useEditorStore((s) => s.syncState);
@@ -547,8 +594,19 @@ const EditorsInner = (props: EditorsInnerProps) => {
   const renameAssetInPool = useEditorStore((s) => s.renameAssetInPool);
   const removeAssetFromPool = useEditorStore((s) => s.removeAssetFromPool);
 
+  // Same rationale as `projectAssets`, for snippets.
+  const projectSnippets = useEditorStore((s) => s.projectSnippets);
+  const addSnippetToPool = useEditorStore((s) => s.addSnippetToPool);
+  const updateSnippetInPool = useEditorStore((s) => s.updateSnippetInPool);
+  const renameSnippetInPool = useEditorStore((s) => s.renameSnippetInPool);
+  const removeSnippetFromPool = useEditorStore((s) => s.removeSnippetFromPool);
+
   const editingAsset = editingAssetRef
     ? projectAssets?.find((a) => a.ref === editingAssetRef.ref)
+    : undefined;
+
+  const editingSnippet = editingSnippetRef
+    ? projectSnippets?.find((s) => s.ref === editingSnippetRef.ref)
     : undefined;
 
   // ── Authoritative editing buffer (read from the store, not props) ─────────
@@ -1191,6 +1249,71 @@ const EditorsInner = (props: EditorsInnerProps) => {
     }
   };
 
+  // ── Snippet embedding ─────────────────────────────────────────────────────
+  // Mirrors "Asset embedding" above: a newly added snippet is dropped into the
+  // project pool and its embed code copied to the clipboard (by the snippet
+  // manager), so the author pastes it wherever it belongs.
+  const handleSnippetAdded = (snippet: Snippet) => {
+    addSnippetToPool(snippet);
+    bridge?.localSnippetAdd(snippet);
+  };
+
+  const handleSnippetRemove = (snippet: Snippet) => {
+    removeSnippetFromPool(snippet);
+    bridge?.localSnippetRemove(snippet);
+    props.onSnippetRemove?.(snippet);
+  };
+
+  const canDuplicateSnippet = !!(props.onCreateSnippet && props.onSnippetUpdate);
+
+  /**
+   * Duplicate a snippet under a fresh, non-colliding ref: create a bare record
+   * under the new ref, then give it the original's source/format. Unlike an
+   * asset there are no bytes to re-fetch, so this is a plain create + update.
+   */
+  const handleSnippetDuplicate = async (snippet: Snippet) => {
+    if (!props.onCreateSnippet || !props.onSnippetUpdate || !snippet.ref) return;
+    const taken = new Set(
+      buildProjectSnippetView(divisions, projectSnippets).map((r) => r.ref),
+    );
+    const newRef = makeUniqueSnippetRef(snippet.ref, taken);
+    const created = await props.onCreateSnippet(newRef);
+    const copy: Snippet = {
+      ...created,
+      ref: newRef,
+      source: snippet.source,
+      sourceFormat: snippet.sourceFormat,
+    };
+    await props.onSnippetUpdate(copy);
+    addSnippetToPool(copy);
+    bridge?.localSnippetAdd(copy);
+    openSnippetEditor(newRef);
+  };
+
+  /**
+   * Rewrite every `<plus:snippet ref="oldRef"/>` placeholder across all
+   * divisions to `newRef`. Mirrors `renameAssetRefEverywhere`.
+   */
+  const renameSnippetRefEverywhere = (oldRef: string, newRef: string) => {
+    if (oldRef === newRef) return;
+    for (const division of divisions) {
+      const next = renameSnippetRef(division.source, oldRef, newRef);
+      if (next !== division.source) {
+        emitContentChange(division.xmlId, next, division.sourceFormat);
+      }
+    }
+  };
+
+  /** Delete every `<plus:snippet ref="ref"/>` placeholder for an unresolved ref. */
+  const removeSnippetRefEverywhere = (ref: string) => {
+    for (const division of divisions) {
+      const next = removeSnippetRef(division.source, ref);
+      if (next !== division.source) {
+        emitContentChange(division.xmlId, next, division.sourceFormat);
+      }
+    }
+  };
+
   // ── Resize listener ──────────────────────────────────────────────────────
   // The TOC follows the same narrow/wide breakpoint as the tabs-vs-split
   // layout: collapsed on narrow screens, back to the author's remembered
@@ -1237,6 +1360,10 @@ const EditorsInner = (props: EditorsInnerProps) => {
       assetRemove: handleAssetRemove,
       assetRefRemove: removeAssetRefEverywhere,
       assetDuplicate: canDuplicateAsset ? handleAssetDuplicate : undefined,
+      snippetInsert: handleSnippetAdded,
+      snippetRemove: handleSnippetRemove,
+      snippetRefRemove: removeSnippetRefEverywhere,
+      snippetDuplicate: canDuplicateSnippet ? handleSnippetDuplicate : undefined,
       insertContentAtCursor: (content) =>
         codeEditorRef.current?.insertAtCursor(content),
       updateTitle: (value) => {
@@ -1269,6 +1396,7 @@ const EditorsInner = (props: EditorsInnerProps) => {
       activeEditorSource: divisionActiveSource,
       hasFeedback: props.onFeedbackSubmit !== undefined,
       hasAssetDuplicate: canDuplicateAsset,
+      hasSnippetDuplicate: canDuplicateSnippet,
     });
   });
 
@@ -1285,6 +1413,7 @@ const EditorsInner = (props: EditorsInnerProps) => {
   const externalRef = useRef({
     divisions: props.divisions,
     projectAssets: props.projectAssets,
+    projectSnippets: props.projectSnippets,
     title: props.title,
     docinfo: props.docinfo,
     commonDocinfo: props.commonDocinfo,
@@ -1308,6 +1437,16 @@ const EditorsInner = (props: EditorsInnerProps) => {
       props.projectAssets !== prev.projectAssets
     ) {
       update.projectAssets = props.projectAssets;
+      changed = true;
+    }
+
+    // Same reasoning as the asset pool above, for snippets.
+    if (
+      !bridge &&
+      props.projectSnippets !== undefined &&
+      props.projectSnippets !== prev.projectSnippets
+    ) {
+      update.projectSnippets = props.projectSnippets;
       changed = true;
     }
 
@@ -1377,6 +1516,7 @@ const EditorsInner = (props: EditorsInnerProps) => {
     externalRef.current = {
       divisions: props.divisions,
       projectAssets: props.projectAssets,
+      projectSnippets: props.projectSnippets,
       title: props.title,
       docinfo: props.docinfo,
       commonDocinfo: props.commonDocinfo,
@@ -1441,6 +1581,7 @@ const EditorsInner = (props: EditorsInnerProps) => {
         effectiveDocinfo,
         projectAssets ?? [],
         language,
+        projectSnippets ?? [],
       );
     } catch (error) {
       return `<!-- Unable to assemble document source: ${
@@ -1453,6 +1594,7 @@ const EditorsInner = (props: EditorsInnerProps) => {
     divisions,
     effectiveDocinfo,
     projectAssets,
+    projectSnippets,
     language,
   ]);
 
@@ -1471,9 +1613,14 @@ const EditorsInner = (props: EditorsInnerProps) => {
   const divisionTaggedXml = useMemo(
     () =>
       activeDivision
-        ? assembleProjectSource(divisions, activeDivision.xmlId, projectAssets)
+        ? assembleProjectSource(
+            divisions,
+            activeDivision.xmlId,
+            projectAssets,
+            projectSnippets,
+          )
         : undefined,
-    [activeDivision, divisions, projectAssets],
+    [activeDivision, divisions, projectAssets, projectSnippets],
   );
 
   // The root division's own tag wins over `props.projectType`: the source is
@@ -1539,6 +1686,7 @@ const EditorsInner = (props: EditorsInnerProps) => {
         effectiveDocinfo,
         projectAssets ?? [],
         language,
+        projectSnippets ?? [],
       );
     } catch {
       // A malformed sibling division must not take the preview down with it;
@@ -1552,6 +1700,7 @@ const EditorsInner = (props: EditorsInnerProps) => {
     divisions,
     effectiveDocinfo,
     projectAssets,
+    projectSnippets,
     language,
   ]);
 
@@ -1778,6 +1927,11 @@ const EditorsInner = (props: EditorsInnerProps) => {
           ? () => openModal("isAssetPickerOpen")
           : undefined
       }
+      onOpenSnippets={
+        props.projectSnippets !== undefined && activeDivisionFormat === "pretext"
+          ? () => openModal("isSnippetPickerOpen")
+          : undefined
+      }
       onShowFullSource={() => openModal("isFullSourceOpen")}
       // Every format now locks its structural lines (the PreTeXt wrapper tag +
       // title, the Markdown frontmatter, the LaTeX `\section` header) and a
@@ -1788,6 +1942,7 @@ const EditorsInner = (props: EditorsInnerProps) => {
       // entry point into it beyond the (already-hidden) TOC menus.
       onRequestWrapperEdit={props.readOnly ? undefined : handleRequestWrapperEdit}
       hideAssets={props.hideAssets}
+      hideSnippets={props.hideSnippets}
       readOnly={props.readOnly}
     />
   );
@@ -1847,6 +2002,15 @@ const EditorsInner = (props: EditorsInnerProps) => {
           ? (initialTab) => {
               setAssetPickerInitialTab(initialTab ?? "in-document");
               openModal("isAssetPickerOpen");
+            }
+          : undefined
+      }
+      hideSnippets={props.hideSnippets}
+      onOpenSnippetPicker={
+        props.projectSnippets !== undefined
+          ? (initialTab) => {
+              setSnippetPickerInitialTab(initialTab ?? "in-document");
+              openModal("isSnippetPickerOpen");
             }
           : undefined
       }
@@ -2093,6 +2257,57 @@ const EditorsInner = (props: EditorsInnerProps) => {
                 } else {
                   updateAssetInPool(asset);
                   bridge?.localAssetUpdate(asset);
+                }
+              });
+            }}
+          />
+        ) : null}
+        {(isSnippetPickerOpen || snippetResolveTarget) &&
+        props.projectSnippets !== undefined ? (
+          <SnippetManagerModal
+            open={isSnippetPickerOpen || !!snippetResolveTarget}
+            initialTab={snippetPickerInitialTab}
+            resolveTarget={snippetResolveTarget}
+            onClose={() => {
+              closeModal("isSnippetPickerOpen");
+              closeSnippetResolver();
+              setSnippetPickerInitialTab("in-document");
+            }}
+            onCreateSnippet={props.onCreateSnippet}
+            onRemoveSnippet={props.onSnippetRemove ? handleSnippetRemove : undefined}
+            onDuplicateSnippet={
+              canDuplicateSnippet ? handleSnippetDuplicate : undefined
+            }
+            onSnippetAdded={handleSnippetAdded}
+            onResolveRef={renameSnippetRefEverywhere}
+          />
+        ) : null}
+        {editingSnippet ? (
+          <SnippetEditModal
+            // Key by the edited snippet so switching targets (e.g. opening the
+            // original right after Duplicate auto-opens the copy) remounts the
+            // modal and re-seeds its form fields from the new snippet.
+            key={editingSnippet.ref}
+            snippet={editingSnippet}
+            projectSnippets={projectSnippets ?? []}
+            onClose={closeSnippetEditor}
+            onDuplicate={
+              canDuplicateSnippet
+                ? (snippet) => handleSnippetDuplicate(snippet)
+                : undefined
+            }
+            onSave={async (snippet, prevRef) => {
+              // Persist before touching the document — see the identical
+              // reasoning on AssetEditModal's onSave above.
+              await props.onSnippetUpdate?.(snippet);
+              collabTransact(() => {
+                if (snippet.ref && snippet.ref !== prevRef) {
+                  renameSnippetRefEverywhere(prevRef, snippet.ref);
+                  renameSnippetInPool(prevRef, snippet);
+                  bridge?.localSnippetUpdate(snippet, prevRef);
+                } else {
+                  updateSnippetInPool(snippet);
+                  bridge?.localSnippetUpdate(snippet);
                 }
               });
             }}

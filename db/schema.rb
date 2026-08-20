@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_08_19_120000) do
+ActiveRecord::Schema[8.1].define(version: 2026_08_20_120000) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
   enable_extension "pgcrypto"
@@ -251,6 +251,16 @@ ActiveRecord::Schema[8.1].define(version: 2026_08_19_120000) do
     t.index ["user_id"], name: "index_projects_on_user_id"
   end
 
+  create_table "snippets", id: :uuid, default: -> { "gen_random_uuid()" }, force: :cascade do |t|
+    t.datetime "created_at", null: false
+    t.uuid "project_id", null: false
+    t.string "ref"
+    t.text "source"
+    t.integer "source_format", default: 0, null: false
+    t.datetime "updated_at", null: false
+    t.index ["project_id"], name: "index_snippets_on_project_id"
+  end
+
   create_table "subscription_seats", id: :uuid, default: -> { "gen_random_uuid()" }, force: :cascade do |t|
     t.datetime "created_at", null: false
     t.uuid "pay_subscription_id", null: false
@@ -345,6 +355,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_08_19_120000) do
   add_foreign_key "project_doc_updates", "projects"
   add_foreign_key "project_docs", "projects"
   add_foreign_key "projects", "users"
+  add_foreign_key "snippets", "projects"
   add_foreign_key "subscription_seats", "pay_subscriptions"
   add_foreign_key "subscription_seats", "users"
   add_foreign_key "targets", "projects"

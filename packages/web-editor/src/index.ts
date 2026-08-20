@@ -18,6 +18,7 @@ export type {
   EditorContentChange,
   EditorContentState,
   FeedbackSubmission,
+  Snippet,
   SourceFormat,
 } from "./types/editor";
 export type {
@@ -73,7 +74,17 @@ export {
   createNewLatexSection,
   createLatexIntroduction,
   createLatexConclusion,
+  // Snippet ref utilities
+  parseSnippetRefs,
+  renameSnippetRef,
+  removeSnippetRef,
+  snippetEmbedCode,
 } from "./sectionUtils";
+export {
+  buildProjectSnippetView,
+  makeUniqueSnippetRef,
+} from "./snippetView";
+export type { SnippetRow, SnippetStatus } from "./snippetView";
 
 // Collaboration: the shared-doc schema (hosts seed/serialize through these)
 // and the session types the `collaboration` prop expects. The host owns the
@@ -84,12 +95,14 @@ export {
   clearDeletions,
   getDivisionsMap,
   getAssetsMap,
+  getSnippetsMap,
   getMetaMap,
   getDeletedMap,
   getDivisionText,
 } from "./collab/schema";
 export type {
   CollabAssetSnapshot,
+  CollabSnippetSnapshot,
   CollabDeletedKind,
   CollabDeletion,
   CollabDivisionSnapshot,

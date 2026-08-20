@@ -1,4 +1,7 @@
 class Asset < ApplicationRecord
+  include HasUniqueRef
+  ref_sibling_classes "Division", "Snippet"
+
   # See Division: a build consumes assets too, so changing one makes built targets stale.
   belongs_to :project, touch: :source_updated_at
   has_one_attached :file
@@ -8,8 +11,6 @@ class Asset < ApplicationRecord
     authored: 1
   }, suffix: true
 
-  validates :ref, format: REF_REGEX, presence: true, uniqueness: { scope: :project }
-  validate :ref_unique_among_divisions
   # The cap applies only when adding a new asset: an account already over its
   # limit (subscription lapsed) keeps its existing assets rather than being
   # forced to delete them (see Collaboration#within_collaborator_limit for the
@@ -120,14 +121,6 @@ class Asset < ApplicationRecord
   end
 
   private
-
-  def ref_unique_among_divisions
-    return unless project_id && ref
-
-    if Division.where(project_id: project_id, ref: ref).exists?
-      errors.add(:ref, "has already been taken")
-    end
-  end
 
   # Keyed to the project OWNER, not whoever is actually uploading -- an
   # asset's storage cost belongs to whoever's account it lives in, exactly

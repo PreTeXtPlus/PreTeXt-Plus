@@ -6,6 +6,10 @@ import {
   assetEmbedCode,
   renameAssetRef,
   removeAssetRef,
+  parseSnippetRefs,
+  snippetEmbedCode,
+  renameSnippetRef,
+  removeSnippetRef,
   canEmbedDivisionRefs,
   createDivisionContent,
   createDivisionWithId,
@@ -162,6 +166,72 @@ describe('removeAssetRef', () => {
 
   it('leaves non-matching placeholders in place', () => {
     expect(removeAssetRef('<plus:image ref="keep"/>', 'x')).toBe('<plus:image ref="keep"/>')
+  })
+})
+
+describe('parseSnippetRefs', () => {
+  it('reads snippet placeholders in each syntax', () => {
+    expect(parseSnippetRefs('<plus:snippet ref="s1"/>', 'pretext')).toEqual([{ ref: 's1' }])
+    expect(parseSnippetRefs('::snippet{ref="s1"}', 'markdown')).toEqual([{ ref: 's1' }])
+    expect(parseSnippetRefs('\\plus{snippet}{s1}', 'latex')).toEqual([{ ref: 's1' }])
+  })
+
+  it('does not treat division or asset placeholders as snippets', () => {
+    expect(parseSnippetRefs('<plus:section ref="s1"/>', 'pretext')).toEqual([])
+    expect(parseSnippetRefs('<plus:image ref="i1"/>', 'pretext')).toEqual([])
+  })
+
+  it('ignores placeholders in verbatim spans', () => {
+    expect(parseSnippetRefs('<pre><plus:snippet ref="s1"/></pre>', 'pretext')).toEqual([])
+  })
+
+  it('keeps duplicates, in document order', () => {
+    expect(parseSnippetRefs('<plus:snippet ref="a"/><plus:snippet ref="a"/>', 'pretext')).toHaveLength(2)
+  })
+})
+
+describe('snippetEmbedCode', () => {
+  it('emits the syntax matching the target division format', () => {
+    expect(snippetEmbedCode('x', 'pretext')).toBe('<plus:snippet ref="x"/>')
+    expect(snippetEmbedCode('x', 'markdown')).toBe('::snippet{ref="x"}')
+    expect(snippetEmbedCode('x', 'latex')).toBe('\\plus{snippet}{x}')
+  })
+
+  it('defaults to pretext', () => {
+    expect(snippetEmbedCode('x')).toBe('<plus:snippet ref="x"/>')
+  })
+
+  it('produces output its own parser reads back', () => {
+    for (const format of ['pretext', 'markdown', 'latex'] as const) {
+      expect(parseSnippetRefs(snippetEmbedCode('x', format), format)).toEqual([{ ref: 'x' }])
+    }
+  })
+})
+
+describe('renameSnippetRef', () => {
+  it('rewrites every occurrence across syntaxes', () => {
+    expect(renameSnippetRef('<plus:snippet ref="old"/>::snippet{ref="old"}', 'old', 'new')).toBe(
+      '<plus:snippet ref="new"/>::snippet{ref="new"}',
+    )
+    expect(renameSnippetRef('\\plus{snippet}{old}', 'old', 'new')).toBe('\\plus{snippet}{new}')
+  })
+
+  it('leaves other refs alone', () => {
+    expect(renameSnippetRef('<plus:snippet ref="other"/>', 'old', 'new')).toBe(
+      '<plus:snippet ref="other"/>',
+    )
+  })
+})
+
+describe('removeSnippetRef', () => {
+  it('removes the placeholder and nothing else', () => {
+    expect(removeSnippetRef('a<plus:snippet ref="x"/>b', 'x')).toBe('ab')
+    expect(removeSnippetRef('a::snippet{ref="x"}b', 'x')).toBe('ab')
+    expect(removeSnippetRef('a\\plus{snippet}{x}b', 'x')).toBe('ab')
+  })
+
+  it('leaves non-matching placeholders in place', () => {
+    expect(removeSnippetRef('<plus:snippet ref="keep"/>', 'x')).toBe('<plus:snippet ref="keep"/>')
   })
 })
 

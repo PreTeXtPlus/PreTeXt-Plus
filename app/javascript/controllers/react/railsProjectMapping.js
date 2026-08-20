@@ -6,6 +6,7 @@
 
 /** @typedef {import("@pretextbook/web-editor").Asset} Asset */
 /** @typedef {import("@pretextbook/web-editor").Division} Division */
+/** @typedef {import("@pretextbook/web-editor").Snippet} Snippet */
 
 /**
  * A division record as returned by the Rails `divisions` JSON array.
@@ -34,6 +35,16 @@
  *   attached file can be thumbnailed (see Asset#thumbnailable?).
  * @property {string} [content_type] - The attached file's MIME type; present only when a
  *   file is attached.
+ */
+
+/**
+ * A snippet record as returned by Rails' `snippets` JSON array
+ * (`snippets/_snippet.json.jbuilder`).
+ * @typedef {Object} RailsSnippet
+ * @property {string} id
+ * @property {string} [ref]
+ * @property {string} [source]
+ * @property {string} [source_format]
  */
 
 /**
@@ -183,5 +194,36 @@ export function toEditorAsset(rec) {
     // Already correctly set by railsAssetToEditor upstream (from Rails' real
     // `kind` column) for every asset that reaches this function.
     isFile: rec.isFile,
+  };
+}
+
+// Map one Rails snippet to the web-editor's Snippet shape. Simpler than an
+// asset's mapper -- no file/thumbnail/content-type fields, since a snippet is
+// always pure text.
+/**
+ * @param {RailsSnippet} s
+ * @returns {Snippet}
+ */
+export function railsSnippetToEditor(s) {
+  return {
+    id: String(s.id),
+    ref: s.ref ?? "",
+    source: s.source ?? "",
+    sourceFormat: s.source_format ?? "pretext",
+  };
+}
+
+// Strip a host project-snippet record down to the bare web-editor Snippet
+// shape. Mirrors `toEditorAsset`.
+/**
+ * @param {Snippet} rec
+ * @returns {Snippet}
+ */
+export function toEditorSnippet(rec) {
+  return {
+    id: rec.id,
+    ref: rec.ref,
+    source: rec.source,
+    sourceFormat: rec.sourceFormat,
   };
 }

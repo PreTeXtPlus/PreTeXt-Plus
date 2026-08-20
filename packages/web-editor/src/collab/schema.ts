@@ -16,15 +16,20 @@
  *   append-only update log. The uploader therefore writes its entry only once
  *   the host has stored the file and handed back a URL; every other peer learns
  *   of the asset from this map rather than from a re-fetch.
+ * - `doc.getMap("snippets")`: key → `Y.Map` entry per project snippet, keyed by
+ *   the snippet's record id. Metadata only (`ref`, `source`, `sourceFormat`),
+ *   all last-writer-wins — mirrors the `assets` map's shape rather than
+ *   `divisions`' (no nested `Y.Text`), since a snippet is edited through the
+ *   same kind of open/close modal as an asset, not a continuously-open buffer.
  * - `doc.getMap("meta")`: document-wide fields — `title`, `docinfo`,
  *   `useCommonDocinfo`, `language` — all last-writer-wins values.
- * - `doc.getMap("deleted")`: tombstones, record id → `"division"` | `"asset"`.
- *   Removing an entry from a Y.Map is not by itself something the host can
- *   observe later: the peer that removed a division persists that removal
- *   immediately, but if its request never lands, nothing in the doc would ever
- *   ask again and a full reload would resurrect the row. A tombstone is what
- *   lets the session leader re-send the `_destroy` from the doc (see
- *   `docToState`), so the host's delete must be idempotent.
+ * - `doc.getMap("deleted")`: tombstones, record id → `"division"` | `"asset"` |
+ *   `"snippet"`. Removing an entry from a Y.Map is not by itself something the
+ *   host can observe later: the peer that removed a division persists that
+ *   removal immediately, but if its request never lands, nothing in the doc
+ *   would ever ask again and a full reload would resurrect the row. A
+ *   tombstone is what lets the session leader re-send the `_destroy` from the
+ *   doc (see `docToState`), so the host's delete must be idempotent.
  *
  * Record ids are minted by whichever client creates the record (see
  * `src/recordId.ts`) rather than assigned by the host, so an entry can be
@@ -40,7 +45,7 @@
  */
 import * as Y from "yjs";
 import type { DivisionType } from "../types/sections";
-import type { Asset, SourceFormat } from "../types/editor";
+import type { Asset, Snippet, SourceFormat } from "../types/editor";
 
 /** One division as it crosses the doc boundary (seed input / serialize output). */
 export interface CollabDivisionSnapshot {
@@ -59,8 +64,15 @@ export interface CollabDivisionSnapshot {
  */
 export type CollabAssetSnapshot = Asset & { id: string };
 
+/**
+ * One project snippet as it crosses the doc boundary. Identical to
+ * {@link Snippet} except that `id` is required — it is the entry's key in the
+ * snippets map.
+ */
+export type CollabSnippetSnapshot = Snippet & { id: string };
+
 /** Which collection a tombstone refers to, so the host can route its delete. */
-export type CollabDeletedKind = "division" | "asset";
+export type CollabDeletedKind = "division" | "asset" | "snippet";
 
 /** A record removed during the session, kept so the delete can be re-sent. */
 export interface CollabDeletion {
@@ -77,6 +89,8 @@ export interface CollabDocState {
   divisions: CollabDivisionSnapshot[];
   /** Optional: a project may have no assets, and a host need not seed them. */
   assets?: CollabAssetSnapshot[];
+  /** Optional: a project may have no snippets, and a host need not seed them. */
+  snippets?: CollabSnippetSnapshot[];
   /**
    * Tombstones. Meaningless in a seed (a fresh doc has deleted nothing) and
    * ignored by {@link seedDocFromState}; always present in `docToState` output.
@@ -87,6 +101,7 @@ export interface CollabDocState {
 /** The whole doc as plain data, as `docToState` reads it back out. */
 export interface CollabDocSnapshot extends CollabDocState {
   assets: CollabAssetSnapshot[];
+  snippets: CollabSnippetSnapshot[];
   deleted: CollabDeletion[];
 }
 
@@ -95,6 +110,9 @@ export const getDivisionsMap = (doc: Y.Doc): Y.Map<Y.Map<unknown>> =>
 
 export const getAssetsMap = (doc: Y.Doc): Y.Map<Y.Map<unknown>> =>
   doc.getMap<Y.Map<unknown>>("assets");
+
+export const getSnippetsMap = (doc: Y.Doc): Y.Map<Y.Map<unknown>> =>
+  doc.getMap<Y.Map<unknown>>("snippets");
 
 export const getMetaMap = (doc: Y.Doc): Y.Map<unknown> =>
   doc.getMap<unknown>("meta");
@@ -179,6 +197,28 @@ export const applyAssetFields = (entry: Y.Map<unknown>, asset: Asset): void => {
   }
 };
 
+/** The snippet fields the doc carries — every field of {@link Snippet}. */
+const SNIPPET_FIELDS = ["ref", "source", "sourceFormat"] as const;
+
+/** Build a snippets-map entry. Plain last-writer-wins scalars throughout. */
+export const makeSnippetEntry = (snippet: Snippet): Y.Map<unknown> => {
+  const entry = new Y.Map<unknown>();
+  applySnippetFields(entry, snippet);
+  return entry;
+};
+
+/** Write a snippet's fields onto an entry. Callers own the transaction. */
+export const applySnippetFields = (
+  entry: Y.Map<unknown>,
+  snippet: Snippet,
+): void => {
+  for (const field of SNIPPET_FIELDS) {
+    const value = snippet[field];
+    if (value === undefined) entry.delete(field);
+    else entry.set(field, value);
+  }
+};
+
 /** The `Y.Text` holding a division's source, or undefined if absent. */
 export const getDivisionText = (
   doc: Y.Doc,
@@ -223,6 +263,17 @@ export const assetEntryToSnapshot = (
   isFile: entry.get("isFile") as boolean | undefined,
 });
 
+/** Read one snippets-map entry back into plain data. */
+export const snippetEntryToSnapshot = (
+  id: string,
+  entry: Y.Map<unknown>,
+): CollabSnippetSnapshot => ({
+  id,
+  ref: String(entry.get("ref") ?? ""),
+  source: String(entry.get("source") ?? ""),
+  sourceFormat: (entry.get("sourceFormat") ?? "pretext") as SourceFormat,
+});
+
 /**
  * Populate an empty doc from host records, in a single transaction. Must only
  * ever run once per project (hosts guard this server-side): two clients each
@@ -248,6 +299,10 @@ export const seedDocFromState = (doc: Y.Doc, state: CollabDocState): void => {
     for (const asset of state.assets ?? []) {
       assets.set(asset.id, makeAssetEntry(asset));
     }
+    const snippets = getSnippetsMap(doc);
+    for (const snippet of state.snippets ?? []) {
+      snippets.set(snippet.id, makeSnippetEntry(snippet));
+    }
   });
 };
 
@@ -262,6 +317,10 @@ export const docToState = (doc: Y.Doc): CollabDocSnapshot => {
   getAssetsMap(doc).forEach((entry, id) => {
     assets.push(assetEntryToSnapshot(id, entry));
   });
+  const snippets: CollabSnippetSnapshot[] = [];
+  getSnippetsMap(doc).forEach((entry, id) => {
+    snippets.push(snippetEntryToSnapshot(id, entry));
+  });
   const deleted: CollabDeletion[] = [];
   getDeletedMap(doc).forEach((kind, id) => {
     deleted.push({ id, kind });
@@ -273,6 +332,7 @@ export const docToState = (doc: Y.Doc): CollabDocSnapshot => {
     language: meta.get("language") as string | undefined,
     divisions,
     assets,
+    snippets,
     deleted,
   };
 };

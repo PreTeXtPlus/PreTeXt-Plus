@@ -13,7 +13,7 @@ import { createEditorStore } from "../store/editorStore";
 import { Awareness } from "y-protocols/awareness";
 import type { CollabSession } from "../collab/types";
 import type { Division } from "../types/sections";
-import type { Asset } from "../types/editor";
+import type { Asset, Snippet } from "../types/editor";
 
 const DIVISIONS: Division[] = [
   {
@@ -104,6 +104,22 @@ describe("collab schema", () => {
     const secA = state.divisions.find((d) => d.id === "sec-a-id");
     expect(secA?.xmlId).toBe("sec-a");
     expect(secA?.source).toContain("<p>Hello.</p>");
+  });
+
+  it("seeds and round-trips snippets", () => {
+    const doc = new Y.Doc();
+    seedDocFromState(doc, {
+      ...seedState(),
+      snippets: [{ id: "snip-1", ref: "note", source: "<p>Hi.</p>", sourceFormat: "pretext" }],
+    });
+    const state = docToState(doc);
+    expect(state.snippets).toHaveLength(1);
+    expect(state.snippets[0]).toMatchObject({
+      id: "snip-1",
+      ref: "note",
+      source: "<p>Hi.</p>",
+      sourceFormat: "pretext",
+    });
   });
 });
 
@@ -300,6 +316,50 @@ describe("CollabBridge", () => {
 
     bridgeA.localAssetRemove(asset);
     expect(storeB.store.getState().projectAssets ?? []).toHaveLength(0);
+  });
+
+  // Mirrors "mirrors asset adds, edits and removals" above for snippets, whose
+  // bridge methods are a structural copy of the asset ones.
+  it("mirrors snippet adds, edits and removals", () => {
+    const { bridgeA, storeA, storeB } = makeLinkedPair();
+    const snippet: Snippet = {
+      id: "snippet-1",
+      ref: "note",
+      source: "<p>A note.</p>",
+      sourceFormat: "pretext",
+    };
+    storeA.store.getState().addSnippetToPool(snippet);
+    bridgeA.localSnippetAdd(snippet);
+
+    const remote = storeB.store
+      .getState()
+      .projectSnippets?.find((s) => s.ref === "note");
+    expect(remote?.id).toBe("snippet-1");
+    expect(remote?.source).toBe("<p>A note.</p>");
+
+    bridgeA.localSnippetUpdate({ ...snippet, source: "<p>Updated.</p>" });
+    expect(
+      storeB.store.getState().projectSnippets?.find((s) => s.ref === "note")?.source,
+    ).toBe("<p>Updated.</p>");
+
+    bridgeA.localSnippetRemove(snippet);
+    expect(storeB.store.getState().projectSnippets ?? []).toHaveLength(0);
+  });
+
+  // The pool keys on ref, the doc on record id, so a rename has to move
+  // the pool entry rather than leave the old ref behind as a duplicate.
+  it("mirrors a snippet ref rename without duplicating the pool entry", () => {
+    const { bridgeA, storeA, storeB } = makeLinkedPair();
+    const snippet: Snippet = { id: "snippet-2", ref: "old-ref", source: "", sourceFormat: "pretext" };
+    storeA.store.getState().addSnippetToPool(snippet);
+    bridgeA.localSnippetAdd(snippet);
+
+    const renamed = { ...snippet, ref: "new-ref" };
+    bridgeA.localSnippetUpdate(renamed, "old-ref");
+
+    const pool = storeB.store.getState().projectSnippets ?? [];
+    expect(pool).toHaveLength(1);
+    expect(pool[0].ref).toBe("new-ref");
   });
 
   // The pool keys on ref, the doc on record id, so a rename has to move
