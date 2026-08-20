@@ -28,15 +28,23 @@
 <% end %>
 
 <div class="mt-4">
-  <% if can? :update, @project %>
-    <%= form_with model: @project, method: :patch, class: "flex flex-col gap-2" do |form| %>
-      <%= form.label :description, "Description", class: "text-xs font-semibold uppercase tracking-widest text-gray-500" %>
-      <%= form.text_area :description, rows: 3, placeholder: "What's this project about?",
-            class: "rounded-md border border-gray-300 px-3 py-2 text-sm" %>
-      <%= form.submit "Save description", class: "#{button_classes(color: "gray", outlined: true)} self-start px-3 py-1.5 text-sm" %>
-    <% end %>
-  <% elsif @project.description.present? %>
+  <% if @project.description.present? %>
     <p class="text-sm text-gray-700 whitespace-pre-line"><%= @project.description %></p>
+  <% elsif !can?(:update, @project) %>
+    <p class="text-sm text-gray-500 italic">No description yet.</p>
+  <% end %>
+
+  <% if can? :update, @project %>
+    <details class="mt-2">
+      <summary class="cursor-pointer text-xs font-semibold uppercase tracking-widest text-gray-500">
+        Edit description
+      </summary>
+      <%= form_with model: @project, method: :patch, class: "mt-2 flex flex-col gap-2" do |form| %>
+        <%= form.text_area :description, rows: 3, placeholder: "What's this project about?",
+              class: "rounded-md border border-gray-300 px-3 py-2 text-sm" %>
+        <%= form.submit "Save description", class: "#{button_classes(color: "gray", outlined: true)} self-start px-3 py-1.5 text-sm" %>
+      <% end %>
+    </details>
   <% end %>
 </div>
 
