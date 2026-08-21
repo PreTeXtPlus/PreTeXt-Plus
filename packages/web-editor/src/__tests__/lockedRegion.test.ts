@@ -114,19 +114,50 @@ describe("computeLockedRegion — markdown and latex", () => {
     ).toBeNull();
   });
 
-  it("locks a latex division header line", () => {
+  it("locks a latex division header line and the blank line below it", () => {
+    const region = computeLockedRegion(
+      model(`\\section{Title}\\label{s}\n\nBody text.`),
+      "latex",
+    );
+    expect(region!.lockedLines).toEqual([1, 2]);
+    expect(region!.leadingLockedLines).toBe(2);
+    expect(region!.editableRange).toEqual([3, 1, 3, 11]);
+  });
+
+  it("locks the latex header alone until the blank line is inserted", () => {
+    // `CodeEditor.ensureLatexHeaderBlankLine` repairs this on the next pass;
+    // until it does, the author's first paragraph must not be frozen.
     const region = computeLockedRegion(
       model(`\\section{Title}\\label{s}\nBody text.`),
       "latex",
     );
     expect(region!.lockedLines).toEqual([1]);
     expect(region!.leadingLockedLines).toBe(1);
+    expect(region!.editableRange).toEqual([2, 1, 2, 11]);
+  });
+
+  it("locks nothing when a latex division is only a header and a blank line", () => {
+    // Locking both would leave no editable line at all.
+    expect(
+      computeLockedRegion(model(`\\section{Title}\\label{s}\n`), "latex"),
+    ).toBeNull();
   });
 
   it("locks nothing for an environment-style latex division", () => {
     expect(
       computeLockedRegion(
         model(`\\begin{section}\nBody.\n\\end{section}`),
+        "latex",
+      ),
+    ).toBeNull();
+  });
+
+  it("locks nothing when a latex body merely opens with a macro", () => {
+    // `\emph` names no division, so this is the first line of an
+    // introduction's prose — not a header to freeze.
+    expect(
+      computeLockedRegion(
+        model(`\\emph{Once} upon a time.\n\nMore prose.`),
         "latex",
       ),
     ).toBeNull();

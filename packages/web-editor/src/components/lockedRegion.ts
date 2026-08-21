@@ -18,6 +18,7 @@
  *   {@link ../collab/editGuard}.
  */
 import type { SourceFormat } from "../types/editor";
+import { isLatexDivisionHeaderLine } from "../sectionUtils";
 
 /** The slice of Monaco's text model this module needs (kept tiny so it's testable). */
 export interface LockedRegionModel {
@@ -139,16 +140,24 @@ export function computeLockedRegion(
     // Need a body line after the header; otherwise locking line 1 would leave
     // no editable region and trap the user.
     if (lineCount < 2) return null;
-    if (
-      !/^\s*\\(?!begin\b|end\b)[A-Za-z][A-Za-z-]*\*?\{/.test(
-        model.getLineContent(1),
-      )
-    )
-      return null;
+    if (!isLatexDivisionHeaderLine(model.getLineContent(1))) return null;
+    // The blank line under the header is locked with it: `latex-pretext` reads
+    // a first paragraph butted straight against the header as part of the
+    // header, so the separation is structural rather than cosmetic and must not
+    // be deletable. `CodeEditor` inserts it when it's missing; until it does
+    // (and for any caller reading a raw model), fall back to locking the header
+    // alone rather than freezing a line of the author's prose.
+    const headerEnd = model.getLineContent(2).trim() === "" ? 2 : 1;
+    if (headerEnd >= lineCount) return null;
     return {
-      editableRange: [2, 1, lineCount, model.getLineMaxColumn(lineCount)],
-      lockedLines: [1],
-      leadingLockedLines: 1,
+      editableRange: [
+        headerEnd + 1,
+        1,
+        lineCount,
+        model.getLineMaxColumn(lineCount),
+      ],
+      lockedLines: headerEnd === 2 ? [1, 2] : [1],
+      leadingLockedLines: headerEnd,
     };
   }
 

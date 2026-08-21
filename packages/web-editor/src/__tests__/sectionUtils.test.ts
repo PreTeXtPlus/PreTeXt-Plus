@@ -22,6 +22,10 @@ import {
   extractLatexDivisionTitle,
   extractLatexSectionLabel,
   updateLatexDivisionMetadata,
+  parseLatexDivisionHeader,
+  normalizeLatexDivisionSource,
+  ensureLatexSectionWrapper,
+  stripLatexSectionWrapper,
   splitLatexDocument,
   mergeLatexDocument,
   normalizeDivisionsOnLoad,
@@ -421,6 +425,130 @@ describe('latex divisions', () => {
     )
   })
 
+  it('always leaves a blank line between the header and the body', () => {
+    const tight = { ...division, source: '\\section{Hello}\\label{s1}\nbody' }
+    expect(updateLatexDivisionMetadata(tight, { title: 'Bye' }).source).toBe(
+      '\\section{Bye}\\label{s1}\n\nbody',
+    )
+    expect(normalizeLatexDivisionSource(tight.source)).toBe(
+      '\\section{Hello}\\label{s1}\n\nbody',
+    )
+    // …and never piles up more than one.
+    expect(
+      normalizeLatexDivisionSource('\\section{Hello}\n\n\n\n  body'),
+    ).toBe('\\section{Hello}\n\nbody')
+  })
+})
+
+describe('parseLatexDivisionHeader', () => {
+  it('reads a well-formed header', () => {
+    expect(parseLatexDivisionHeader('\\section{Hello}\\label{s1}\n\nbody')).toEqual({
+      macro: 'section',
+      starred: false,
+      title: 'Hello',
+      label: 's1',
+      length: '\\section{Hello}\\label{s1}'.length,
+    })
+  })
+
+  it('keeps the star of a starred header', () => {
+    const header = parseLatexDivisionHeader('\\section*{Hi}\nbody')
+    expect(header!.starred).toBe(true)
+    expect(header!.macro).toBe('section')
+  })
+
+  it('brace-matches the title argument rather than stopping at the first }', () => {
+    // The hand-written LaTeX idiom: the label lives inside the section argument.
+    const header = parseLatexDivisionHeader('\\section{Hello\\label{sec:hi}}\nbody')
+    expect(header!.title).toBe('Hello')
+    expect(header!.label).toBe('sec:hi')
+    expect(header!.length).toBe('\\section{Hello\\label{sec:hi}}'.length)
+  })
+
+  it('swallows the wreckage of a doubly-labelled header', () => {
+    // The reported bug: an import left `\label{…}}` inside the argument and the
+    // editor then appended the division's own label after it.
+    const broken = '\\section{Hello\\label{sec:hi}}\\label{s1}\nbody'
+    const header = parseLatexDivisionHeader(broken)
+    expect(header!.title).toBe('Hello')
+    // The label the TOC form wrote wins over the one buried in the argument.
+    expect(header!.label).toBe('s1')
+    expect(broken.slice(header!.length)).toBe('\nbody')
+  })
+
+  it('does not read past the end of the first line', () => {
+    const header = parseLatexDivisionHeader('\\section{Unclosed\nbody')
+    expect(header!.title).toBe('Unclosed')
+    expect(header!.length).toBe('\\section{Unclosed'.length)
+  })
+
+  it('ignores an environment-style division', () => {
+    expect(parseLatexDivisionHeader('\\begin{section}\nbody\n\\end{section}')).toBeNull()
+    expect(parseLatexDivisionHeader('% Introduction\n\nbody')).toBeNull()
+  })
+})
+
+describe('normalizeLatexDivisionSource', () => {
+  it('rebuilds a mangled header into a well-formed one', () => {
+    expect(
+      normalizeLatexDivisionSource('\\section{Hello\\label{sec:hi}}\\label{s1}\nbody'),
+    ).toBe('\\section{Hello}\\label{s1}\n\nbody')
+  })
+
+  it('is idempotent', () => {
+    const clean = '\\worksheet{W}\\label{w1}\n\nbody'
+    expect(normalizeLatexDivisionSource(clean)).toBe(clean)
+  })
+
+  it('leaves a body that merely opens with some other macro alone', () => {
+    // `\emph` is not a division type, so this is prose, not a broken header.
+    const prose = '\\emph{Once} upon a time.\nMore prose.'
+    expect(normalizeLatexDivisionSource(prose)).toBe(prose)
+  })
+
+  it('repairs a division as it is loaded, without an author touching it', () => {
+    const [division] = normalizeDivisionsOnLoad(
+      [
+        {
+          id: '1',
+          xmlId: 's1',
+          title: '',
+          type: 'section',
+          sourceFormat: 'latex',
+          source: '\\section{Hello\\label{sec:hi}}\\label{s1}\nbody',
+        } as Division,
+      ],
+      undefined,
+      'article',
+    )
+    expect(division.source).toBe('\\section{Hello}\\label{s1}\n\nbody')
+    expect(division.title).toBe('Hello')
+  })
+})
+
+describe('latex section wrappers', () => {
+  it('recognises any division macro as an intact header', () => {
+    const worksheet = '\\worksheet{W}\\label{w1}\n\nbody'
+    expect(ensureLatexSectionWrapper(worksheet, 'worksheet', 'W')).toBe(worksheet)
+  })
+
+  it('restores a header named after the division type', () => {
+    expect(ensureLatexSectionWrapper('body', 'worksheet', 'W')).toBe(
+      '\\worksheet{W}\n\nbody',
+    )
+  })
+
+  it('strips a malformed header along with its wreckage', () => {
+    expect(
+      stripLatexSectionWrapper(
+        '\\section{Hello\\label{sec:hi}}\\label{s1}\n\nbody',
+        'section',
+      ),
+    ).toBe('body')
+  })
+})
+
+describe('latex documents', () => {
   it('splits a document at \\section commands and keeps the preamble', () => {
     const latex =
       '\\documentclass{article}\n\\begin{document}\nintro\n\\section{One}\nbody1\n\\section{Two}\nbody2\n\\end{document}'
