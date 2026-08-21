@@ -81,9 +81,12 @@ interface CodeEditorMenuProps {
   canConvertToPretext?: boolean;
   /** If provided, an "Assets…" item is shown (PreTeXt mode only). */
   onOpenAssets?: () => void;
+  /** If provided, a "Snippets…" item is shown (PreTeXt mode only). */
+  onOpenSnippets?: () => void;
   /** Opens the assembled-source modal. */
   onShowFullSource: () => void;
   hideAssets?: boolean;
+  hideSnippets?: boolean;
   /** When true, every editing action is hidden — only viewing actions remain. */
   readOnly?: boolean;
 }
@@ -159,6 +162,8 @@ const CodeEditorMenu: React.FC<CodeEditorMenuProps> = ({
   canConvertToPretext,
   onOpenAssets,
   hideAssets,
+  onOpenSnippets,
+  hideSnippets,
   onShowFullSource,
   readOnly,
 }) => {
@@ -329,6 +334,15 @@ const CodeEditorMenu: React.FC<CodeEditorMenuProps> = ({
         label: "Assets…",
         title: "Manage the project's images and other assets",
         onSelect: onOpenAssets,
+      });
+    }
+    if (onOpenSnippets && !hideSnippets) {
+      documentEntries.push({
+        kind: "item",
+        key: "snippets",
+        label: "Snippets…",
+        title: "Manage the project's reusable source snippets",
+        onSelect: onOpenSnippets,
       });
     }
   }

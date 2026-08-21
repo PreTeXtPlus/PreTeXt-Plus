@@ -7,6 +7,7 @@ import { canContainDivisions } from "./types";
 
 import {
   assetEmbedCode,
+  snippetEmbedCode,
   buildDivisionTree,
   canEmbedDivisionRefs,
   getOrphanRoots,
@@ -15,20 +16,30 @@ import {
   divisionRefTag,
 } from "../../sectionUtils";
 import { buildProjectAssetView, type AssetRow } from "../../assetView";
+import { buildProjectSnippetView, type SnippetRow } from "../../snippetView";
 import { useEditorStore } from "../../store/hooks";
 
 export interface ArticleTocProps {
   onOpenAssetPicker?: (initialTab?: "add") => void;
   hideAssets?: boolean;
+  onOpenSnippetPicker?: (initialTab?: "add") => void;
+  hideSnippets?: boolean;
   /** If true, hides every structural action (add/remove/edit/place a division). */
   readOnly?: boolean;
 }
 
-const ArticleToc = ({ onOpenAssetPicker, hideAssets, readOnly }: ArticleTocProps) => {
+const ArticleToc = ({
+  onOpenAssetPicker,
+  hideAssets,
+  onOpenSnippetPicker,
+  hideSnippets,
+  readOnly,
+}: ArticleTocProps) => {
   const divisions = useEditorStore((s) => s.divisions);
   const rootDivisionId = useEditorStore((s) => s.rootDivisionId);
   const activeDivisionId = useEditorStore((s) => s.activeDivisionId);
   const projectAssets = useEditorStore((s) => s.projectAssets) ?? [];
+  const projectSnippets = useEditorStore((s) => s.projectSnippets) ?? [];
 
   const selectSection = useEditorStore((s) => s.selectSection);
   const addSection = useEditorStore((s) => s.addSection);
@@ -42,6 +53,13 @@ const ArticleToc = ({ onOpenAssetPicker, hideAssets, readOnly }: ArticleTocProps
   const removeAssetRefFromDocument = useEditorStore((s) => s.removeAssetRefFromDocument);
   const duplicateAsset = useEditorStore((s) => s.duplicateAsset);
   const hasAssetDuplicate = useEditorStore((s) => s.hasAssetDuplicate);
+
+  const openSnippetEditor = useEditorStore((s) => s.openSnippetEditor);
+  const openSnippetResolver = useEditorStore((s) => s.openSnippetResolver);
+  const removeSnippet = useEditorStore((s) => s.removeSnippet);
+  const removeSnippetRefFromDocument = useEditorStore((s) => s.removeSnippetRefFromDocument);
+  const duplicateSnippet = useEditorStore((s) => s.duplicateSnippet);
+  const hasSnippetDuplicate = useEditorStore((s) => s.hasSnippetDuplicate);
 
   const startSectionEdit = useEditorStore((s) => s.startSectionEdit);
   const setEditDraft = useEditorStore((s) => s.setEditDraft);
@@ -90,6 +108,23 @@ const ArticleToc = ({ onOpenAssetPicker, hideAssets, readOnly }: ArticleTocProps
       await duplicateAsset(row.asset);
     } finally {
       setDuplicatingRef(null);
+    }
+  };
+
+  // ── Joined snippet view — placeholders + project snippets, with status ─────
+  const snippetView = buildProjectSnippetView(divisions, projectSnippets);
+
+  const [snippetsExpanded, setSnippetsExpanded] = useState(true);
+
+  const [duplicatingSnippetRef, setDuplicatingSnippetRef] = useState<string | null>(null);
+
+  const handleDuplicateSnippet = async (row: SnippetRow) => {
+    if (!row.snippet || duplicatingSnippetRef) return;
+    setDuplicatingSnippetRef(row.ref);
+    try {
+      await duplicateSnippet(row.snippet);
+    } finally {
+      setDuplicatingSnippetRef(null);
     }
   };
 
@@ -272,6 +307,64 @@ const ArticleToc = ({ onOpenAssetPicker, hideAssets, readOnly }: ArticleTocProps
           }
           removeAsset(row.asset!);
           removeAssetRefFromDocument(row.ref);
+        },
+        danger: true,
+      });
+    }
+    return items;
+  };
+
+  // ── Snippet row helpers ─────────────────────────────────────────────────────
+  const openSnippetRow = (row: SnippetRow) =>
+    row.status === "unlinked"
+      ? openSnippetResolver(row.ref)
+      : openSnippetEditor(row.ref);
+
+  const copySnippetEmbed = (ref: string) => {
+    navigator.clipboard
+      ?.writeText(snippetEmbedCode(ref, activeFormat))
+      .catch(() => {});
+  };
+
+  const snippetMenuItems = (row: SnippetRow): DivisionMenuItem[] => {
+    const items: DivisionMenuItem[] = [
+      {
+        label: row.status === "unlinked" ? "Link / create snippet" : "Manage snippet",
+        onClick: () => openSnippetRow(row),
+      },
+      {
+        label: "Copy embed code",
+        onClick: () => copySnippetEmbed(row.ref),
+      },
+    ];
+    if (hasSnippetDuplicate && row.snippet) {
+      items.push({
+        label: "Duplicate snippet",
+        onClick: () => handleDuplicateSnippet(row),
+      });
+    }
+    if (row.status === "unlinked") {
+      items.push({
+        label: "Remove from document",
+        onClick: () => removeSnippetRefFromDocument(row.ref),
+        danger: true,
+      });
+    } else if (row.snippet) {
+      items.push({
+        label: "Remove from project",
+        onClick: () => {
+          if (
+            row.inDocument &&
+            !window.confirm(
+              `Remove snippet "${row.snippet!.ref}" from the project? This also deletes its ${
+                row.inDocument ? "reference(s)" : "reference"
+              } from the document.`,
+            )
+          ) {
+            return;
+          }
+          removeSnippet(row.snippet!);
+          removeSnippetRefFromDocument(row.ref);
         },
         danger: true,
       });
@@ -475,6 +568,142 @@ const ArticleToc = ({ onOpenAssetPicker, hideAssets, readOnly }: ArticleTocProps
             })}
           </ul>
         </div>
+      )}
+
+      {/* Snippet refs — kept separate from divisions, mirrors the Assets section */}
+      {!hideSnippets && (
+        <>
+          <div className="shrink-0 border-t border-[#dde0e6] flex flex-col max-h-[220px]">
+            <div className="flex items-center justify-between py-1 pl-1 pr-1.5 shrink-0">
+              <button
+                type="button"
+                className="flex items-center gap-1 bg-transparent border-none cursor-pointer py-0.5 px-1 font-[inherit] flex-1 min-w-0 text-left rounded-[3px] hover:bg-[#e3e6ec]"
+                onClick={() => setSnippetsExpanded((v) => !v)}
+                aria-expanded={snippetsExpanded}
+              >
+                <span className="text-[0.7rem] text-[#888] w-2.5 shrink-0">
+                  {snippetsExpanded ? "▾" : "▸"}
+                </span>
+                <span>Snippets</span>
+                {snippetView.length > 0 && (
+                  <span className="text-[0.68rem] font-semibold text-white bg-slate-400 rounded-full px-[5px] py-0 leading-[1.4] shrink-0">
+                    {snippetView.length}
+                  </span>
+                )}
+              </button>
+            </div>
+
+            {snippetsExpanded && (
+              <div className="overflow-y-auto flex-1 min-h-0">
+                {snippetView.length === 0 ? (
+                  <p className="m-0 py-2 px-3 text-slate-400 text-[0.78rem]">
+                    No snippets in this project yet.{" "}
+                    {onOpenSnippetPicker && (
+                      <button
+                        type="button"
+                        className="bg-transparent border-none text-blue-600 cursor-pointer font-[inherit] text-[0.78rem] p-0 hover:underline"
+                        onClick={() => onOpenSnippetPicker("add")}
+                      >
+                        Add one
+                      </button>
+                    )}
+                  </p>
+                ) : (
+                  <div className="flex flex-col">
+                    <ul className="list-none m-0 pt-0 px-0 pb-1">
+                      {snippetView.map((row) => {
+                        const isUnlinked = row.status === "unlinked";
+                        const isBusy = duplicatingSnippetRef === row.ref;
+                        return (
+                          <li
+                            key={row.ref}
+                            className={clsx(
+                              "group flex items-center gap-1.5 py-[3px] pr-1.5 pl-4 min-h-7 hover:bg-[#e8eaf0]",
+                              isBusy && "opacity-60 pointer-events-none",
+                            )}
+                          >
+                            <span
+                              className={clsx(
+                                "inline-flex items-center justify-center w-[30px] h-[30px] cursor-pointer text-[0.85rem] rounded bg-[#eef2f7] text-slate-400",
+                                isUnlinked && "bg-amber-100 text-amber-700",
+                              )}
+                              onClick={() => openSnippetRow(row)}
+                              title={row.status === "unlinked" ? "No snippet — click to link" : undefined}
+                              aria-hidden="true"
+                            >
+                              {row.status === "unlinked" ? "⚠" : "⌘"}
+                            </span>
+                            <button
+                              type="button"
+                              className="flex-1 min-w-0 flex flex-col items-start gap-px overflow-hidden border-none bg-transparent p-0 font-[inherit] text-left cursor-pointer"
+                              onClick={() => openSnippetRow(row)}
+                              title={
+                                row.status === "unlinked"
+                                  ? "No snippet for this reference — click to link or create one"
+                                  : "Manage snippet"
+                              }
+                            >
+                              <span
+                                className={clsx(
+                                  "text-[0.78rem] font-mono overflow-hidden text-ellipsis whitespace-nowrap",
+                                  isUnlinked ? "text-amber-700" : "text-slate-700",
+                                )}
+                              >
+                                {row.status === "unlinked"
+                                  ? `${row.ref} — needs snippet`
+                                  : row.status === "unused"
+                                    ? `${row.ref} — not placed`
+                                    : row.ref}
+                              </span>
+                            </button>
+                            <div
+                              className={clsx(
+                                "flex items-center shrink-0 opacity-0 pointer-events-none transition-opacity duration-100 group-hover:opacity-100 group-hover:pointer-events-auto",
+                                isBusy && "opacity-100 pointer-events-auto",
+                              )}
+                            >
+                              {isBusy ? (
+                                <span
+                                  className="inline-block w-[14px] h-[14px] border-2 border-slate-300 border-t-emerald-500 rounded-full animate-[spin_0.8s_linear_infinite]"
+                                  role="status"
+                                  aria-label="Duplicating snippet"
+                                  title="Duplicating…"
+                                />
+                              ) : (
+                                <DivisionMenu items={snippetMenuItems(row)} />
+                              )}
+                            </div>
+                          </li>
+                        );
+                      })}
+                    </ul>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+
+          {onOpenSnippetPicker && (
+            <div className="block w-full bg-transparent border-none border-t border-[#dde0e6] py-[7px] px-2.5 font-[inherit] text-[0.78rem] text-left shrink-0 flex justify-around">
+              <button
+                type="button"
+                data-testid="toc-snippets-btn"
+                className="bg-transparent border-none text-blue-600 cursor-pointer hover:bg-blue-50 hover:underline"
+                onClick={() => onOpenSnippetPicker()}
+              >
+                Manage
+              </button>
+              <button
+                type="button"
+                data-testid="toc-snippets-btn"
+                className="bg-transparent border-none text-blue-600 cursor-pointer hover:bg-blue-50 hover:underline"
+                onClick={() => onOpenSnippetPicker("add")}
+              >
+                Add
+              </button>
+            </div>
+          )}
+        </>
       )}
 
       {/* Asset refs — kept separate from divisions */}

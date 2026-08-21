@@ -1,4 +1,7 @@
 class Division < ApplicationRecord
+  include HasUniqueRef
+  ref_sibling_classes "Asset", "Snippet"
+
   # touch: bumps source_updated_at *and* updated_at on the project. The editor saves
   # divisions through nested attributes, which leaves the projects row itself unchanged,
   # so without this neither "last edited" nor build staleness has a timestamp to trust.
@@ -6,9 +9,6 @@ class Division < ApplicationRecord
   enum :source_format, { pretext: 0, latex: 1, markdown: 2 }, default: :pretext, suffix: true, validate: true
 
   validates :is_root, uniqueness: { scope: :project_id, message: "root division already exists for this project" }, if: :is_root?
-
-  validates :ref, format: REF_REGEX, presence: true, uniqueness: { scope: :project }
-  validate :ref_unique_among_assets
 
   before_create :set_default_source
 
@@ -45,13 +45,5 @@ class Division < ApplicationRecord
   # <slideshow> root would be invalid markup.
   def slideshow_root?
     is_root? && project&.slideshow_document_type?
-  end
-
-  def ref_unique_among_assets
-    return unless project_id && ref
-
-    if Asset.where(project_id: project_id, ref: ref).exists?
-      errors.add(:ref, "has already been taken")
-    end
   end
 end

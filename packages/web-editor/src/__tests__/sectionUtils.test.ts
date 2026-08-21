@@ -30,6 +30,7 @@ import {
   wrapDivisionForPreview,
 } from '../sectionUtils'
 import type { Division } from '../types/sections'
+import type { Asset, Snippet } from '../types/editor'
 
 const ARTICLE = `<article xml:id="a1">
 \t<title>My Article</title>
@@ -740,5 +741,88 @@ describe('per-division conversion caching', () => {
     )
     expect(projectA).toContain('Project A.')
     expect(projectB).toContain('Project B.')
+  })
+})
+
+// A `<plus:snippet ref="..."/>` placeholder splices in the named Snippet's own
+// resolved content, recursively -- unlike an asset (a leaf), a snippet can
+// itself embed further snippet/image refs.
+describe('snippet resolution in assembleFullProjectSource', () => {
+  const div = (source: string): Division => ({
+    id: '1',
+    xmlId: 'a1',
+    title: 'My Article',
+    type: 'article',
+    sourceFormat: 'pretext',
+    source,
+  })
+
+  const snippet = (ref: string, source: string, sourceFormat: Snippet['sourceFormat'] = 'pretext'): Snippet => ({
+    id: ref,
+    ref,
+    source,
+    sourceFormat,
+  })
+
+  it('splices the snippet source in place of the placeholder', () => {
+    const source = ARTICLE.replace('<p>Body one</p>', '<p>Body one</p><plus:snippet ref="note"/>')
+    const xml = assembleFullProjectSource([div(source)], 'a1', '', [], undefined, [
+      snippet('note', '<p>A shared note.</p>'),
+    ])
+    expect(xml).toContain('<p>A shared note.</p>')
+    expect(xml).not.toContain('<plus:snippet')
+  })
+
+  it('renders a comment for a ref with no matching snippet', () => {
+    const source = ARTICLE.replace('<p>Body one</p>', '<p>Body one</p><plus:snippet ref="missing"/>')
+    const xml = assembleFullProjectSource([div(source)], 'a1', '', [], undefined, [])
+    expect(xml).toContain('<!-- missing snippet: missing -->')
+  })
+
+  it('renders a comment rather than recursing forever on a snippet that includes itself', () => {
+    const source = ARTICLE.replace('<p>Body one</p>', '<p>Body one</p><plus:snippet ref="loop"/>')
+    const xml = assembleFullProjectSource([div(source)], 'a1', '', [], undefined, [
+      snippet('loop', '<p>before</p><plus:snippet ref="loop"/><p>after</p>'),
+    ])
+    expect(xml).toContain('<!-- circular reference: loop -->')
+  })
+
+  it('recursively resolves a further snippet ref inside a snippet', () => {
+    const source = ARTICLE.replace('<p>Body one</p>', '<p>Body one</p><plus:snippet ref="outer"/>')
+    const xml = assembleFullProjectSource([div(source)], 'a1', '', [], undefined, [
+      snippet('outer', '<p>outer</p><plus:snippet ref="inner"/>'),
+      snippet('inner', '<p>inner</p>'),
+    ])
+    expect(xml).toContain('<p>outer</p>')
+    expect(xml).toContain('<p>inner</p>')
+    expect(xml).not.toContain('<plus:snippet')
+  })
+
+  it('resolves an image ref embedded inside a snippet', () => {
+    const asset: Asset = { id: 'img-1', ref: 'photo', title: 'Photo', isFile: true, fileRef: 'photo.png' }
+    const source = ARTICLE.replace('<p>Body one</p>', '<p>Body one</p><plus:snippet ref="figure"/>')
+    const xml = assembleFullProjectSource([div(source)], 'a1', '', [asset], undefined, [
+      snippet('figure', '<plus:image ref="photo"/>'),
+    ])
+    expect(xml).toContain('source="photo.png"')
+  })
+
+  it('converts a latex/markdown snippet to PreTeXt before splicing it in', () => {
+    const source = ARTICLE.replace('<p>Body one</p>', '<p>Body one</p><plus:snippet ref="tex-note"/>')
+    const xml = assembleFullProjectSource([div(source)], 'a1', '', [], undefined, [
+      snippet('tex-note', '\\section{Hi}', 'latex'),
+    ])
+    expect(xml).toContain('<title>Hi</title>')
+  })
+
+  it('a placeholder may repeat, resolving the same snippet each time', () => {
+    const source = ARTICLE.replace(
+      '<p>Body one</p>',
+      '<p>Body one</p><plus:snippet ref="note"/><plus:snippet ref="note"/>',
+    )
+    const xml = assembleFullProjectSource([div(source)], 'a1', '', [], undefined, [
+      snippet('note', '<p>shared</p>'),
+    ])
+    expect(xml.match(/<p>shared<\/p>/g)).toHaveLength(2)
   })
 })

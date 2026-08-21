@@ -20,12 +20,16 @@ import {
   railsDivisionToEditor,
   railsAssetToEditor,
   toEditorAsset,
+  railsSnippetToEditor,
+  toEditorSnippet,
 } from "./railsProjectMapping";
 
 /** @typedef {import("@pretextbook/web-editor").Asset} Asset */
 /** @typedef {import("@pretextbook/web-editor").Division} Division */
+/** @typedef {import("@pretextbook/web-editor").Snippet} Snippet */
 /** @typedef {import("./railsProjectMapping").RailsDivision} RailsDivision */
 /** @typedef {import("./railsProjectMapping").RailsAsset} RailsAsset */
+/** @typedef {import("./railsProjectMapping").RailsSnippet} RailsSnippet */
 /** @typedef {import("./railsProjectMapping").EditorDivision} EditorDivision */
 
 /**
@@ -39,6 +43,7 @@ import {
  * @property {string} [language]
  * @property {RailsDivision[]} [divisions]
  * @property {RailsAsset[]} [assets]
+ * @property {RailsSnippet[]} [snippets]
  */
 
 /**
@@ -53,6 +58,7 @@ import {
  * @property {"article"|"book"|"slideshow"} projectType
  * @property {EditorDivision[]} divisions
  * @property {Asset[]} [projectAssets]
+ * @property {Snippet[]} [projectSnippets]
  * @property {string} [rootDivisionId]
  */
 
@@ -154,6 +160,7 @@ function railsToEditorState(json) {
     projectType,
     divisions: (json.divisions ?? []).map((d) => railsDivisionToEditor(d, rootMeta)),
     projectAssets: (json.assets ?? []).map(railsAssetToEditor),
+    projectSnippets: (json.snippets ?? []).map(railsSnippetToEditor),
     // rootDivisionId is the root division's *xmlId* (its ref), which is how the
     // web-editor identifies divisions, not the database id.
     rootDivisionId: root ? (root.ref ?? "") : undefined,
@@ -196,9 +203,10 @@ function effectiveDocinfo(state) {
 /**
  * @param {EditorState} state
  * @param {Asset[]} projectAssets
+ * @param {Snippet[]} projectSnippets
  * @returns {string}
  */
-function assembleFullPretextSource(state, projectAssets) {
+function assembleFullPretextSource(state, projectAssets, projectSnippets) {
   if (!state.rootDivisionId) return "";
   return assembleFullProjectSource(
     state.divisions,
@@ -206,6 +214,7 @@ function assembleFullPretextSource(state, projectAssets) {
     effectiveDocinfo(state),
     projectAssets.map(toEditorAsset),
     state.language,
+    projectSnippets.map(toEditorSnippet),
   );
 }
 
@@ -225,24 +234,26 @@ function assembleFullPretextSource(state, projectAssets) {
 // naming a row that is already gone), which is what makes a removal survive the
 // acting client's own request failing or its tab closing mid-flight.
 //
-// Asset *content* is NOT in this payload: an asset's bytes can't ride in the
-// shared doc, so the client that uploads one persists it immediately through
-// its own single-entry `assets_attributes` PATCH (see the asset callbacks).
-// Only asset *destroys* are re-sent from here.  We still pass `projectAssets`
-// so the assembled `pretext_source` can resolve image refs.
+// Asset/snippet *content* is NOT in this payload: an asset's bytes can't
+// ride in the shared doc, and a snippet is persisted immediately per edit
+// the same way (see the asset/snippet callbacks) so its content stays out of
+// the deferred bulk save too. Only asset/snippet *destroys* are re-sent from
+// here. We still pass `projectAssets`/`projectSnippets` so the assembled
+// `pretext_source` can resolve image/snippet refs.
 /**
  * @param {EditorState} state
  * @param {Asset[]} projectAssets
- * @param {{id: string, kind: "division"|"asset"}[]} [deletes] - Records to destroy.
+ * @param {Snippet[]} projectSnippets
+ * @param {{id: string, kind: "division"|"asset"|"snippet"}[]} [deletes] - Records to destroy.
  * @returns {{project: Object}}
  */
-function editorStateToRailsPayload(state, projectAssets, deletes = []) {
+function editorStateToRailsPayload(state, projectAssets, projectSnippets, deletes = []) {
   const project = {
     title: state.title,
     docinfo: state.docinfo,
     use_common_docinfo: state.useCommonDocinfo,
     language: state.language,
-    pretext_source: assembleFullPretextSource(state, projectAssets),
+    pretext_source: assembleFullPretextSource(state, projectAssets, projectSnippets),
     divisions_attributes: [
       ...state.divisions.map((d) => ({
         id: d.id,
@@ -259,6 +270,10 @@ function editorStateToRailsPayload(state, projectAssets, deletes = []) {
     .filter((d) => d.kind === "asset")
     .map(({ id }) => ({ id, _destroy: true }));
   if (assetDeletes.length) project.assets_attributes = assetDeletes;
+  const snippetDeletes = deletes
+    .filter((d) => d.kind === "snippet")
+    .map(({ id }) => ({ id, _destroy: true }));
+  if (snippetDeletes.length) project.snippets_attributes = snippetDeletes;
   return { project };
 }
 
@@ -337,6 +352,7 @@ function editorStateToCollabSeed(state) {
       type: d.type,
     })),
     assets: (state.projectAssets ?? []).filter((a) => a.id).map(toEditorAsset),
+    snippets: (state.projectSnippets ?? []).filter((s) => s.id).map(toEditorSnippet),
   };
 }
 
@@ -379,6 +395,8 @@ function collabEditorState(doc, base) {
     // save only needs them to resolve <plus:* ref="..."/> placeholders in the
     // assembled source, since asset rows are written by whoever uploaded them.
     projectAssets: shared.assets.slice().sort((a, b) => (a.id < b.id ? -1 : 1)),
+    // Same reasoning as `projectAssets`, for snippets.
+    projectSnippets: shared.snippets.slice().sort((a, b) => (a.id < b.id ? -1 : 1)),
     // Tombstones, sorted for a stable dirty-check comparison.
     deletes: shared.deleted.slice().sort((a, b) => (a.id < b.id ? -1 : 1)),
     rootDivisionId: root?.xmlId ?? base.rootDivisionId,
@@ -451,6 +469,8 @@ function EditorApp({ config }) {
   // we keep no asset working copy here -- this is just the latest server snapshot,
   // refreshed whenever an asset mutation invalidates the project query.
   const serverAssets = useRef([]);
+  // Same as `serverAssets`, for snippets.
+  const serverSnippets = useRef([]);
   // The project's spell-check dictionary, mirrored the same way: the checker
   // reads it whenever it registers (on mount, and again on a format switch), so
   // going through a ref is what lets a later registration see words a
@@ -486,6 +506,7 @@ function EditorApp({ config }) {
   }
   if (projectQuery.data) {
     serverAssets.current = projectQuery.data.projectAssets;
+    serverSnippets.current = projectQuery.data.projectSnippets;
     dictionaryWords.current = projectQuery.data.dictionaryWords;
   }
 
@@ -534,8 +555,8 @@ function EditorApp({ config }) {
 
   // ----- WRITE: save via TanStack mutation ---------------------------------
   const saveMutation = useMutation({
-    mutationFn: async ({ state, assets, deletes }) => {
-      const payload = editorStateToRailsPayload(state, assets, deletes);
+    mutationFn: async ({ state, assets, snippets, deletes }) => {
+      const payload = editorStateToRailsPayload(state, assets, snippets, deletes);
       const res = await fetch(apiBase, {
         method: "PATCH",
         headers: {
@@ -590,6 +611,7 @@ function EditorApp({ config }) {
             // added an asset whose placeholder is already in the source, and
             // the assembled document has to be able to resolve it.
             assets: snapshot.projectAssets,
+            snippets: snapshot.projectSnippets,
             deletes: snapshot.deletes,
           });
           // Rails has now dropped those rows, so the tombstones have done their
@@ -609,8 +631,9 @@ function EditorApp({ config }) {
       if (!hard && !isDirty()) return true;
       const snapshot = structuredClone(working.current);
       const assets = serverAssets.current;
+      const snippets = serverSnippets.current;
       try {
-        await saveMutation.mutateAsync({ state: snapshot, assets, deletes: [] });
+        await saveMutation.mutateAsync({ state: snapshot, assets, snippets, deletes: [] });
         serverSnapshot.current = snapshot;
         return true;
       } catch (error) {
@@ -845,14 +868,15 @@ function EditorApp({ config }) {
   }, [queryClient, projectId]);
 
   // Pick a project-unique ref from a desired slug.  A ref must be unique among
-  // both the project's assets and its divisions (Asset enforces both), so
-  // we dedupe against the live server assets and the working divisions, suffixing
-  // `-2`, `-3`, ... on collision.  Read from refs at call time, so no deps.
+  // the project's divisions, assets, AND snippets (HasUniqueRef enforces all
+  // three), so we dedupe against all three live pools, suffixing `-2`, `-3`,
+  // ... on collision.  Read from refs at call time, so no deps.
   const uniqueRef = useCallback((desired) => {
     const base = slugifyRef(desired) || "asset";
     const taken = new Set([
       ...(working.current?.divisions ?? []).map((d) => d.xmlId),
       ...(serverAssets.current ?? []).map((p) => p.ref),
+      ...(serverSnippets.current ?? []).map((p) => p.ref),
     ]);
     if (!taken.has(base)) return base;
     let n = 2;
@@ -1026,6 +1050,66 @@ function EditorApp({ config }) {
     return (data?.projectAssets ?? []).map(toEditorAsset);
   }, [projectQuery.refetch]);
 
+  // ----- Snippets ------------------------------------------------------------
+  // Mirrors "Assets" above: the web-editor owns the live project-snippet pool,
+  // so these callbacks are pure persistence, each its own single-entry
+  // `snippets_attributes` PATCH, followed by invalidating the project query so
+  // the `projectSnippets` prop reconciles to server truth.
+
+  const invalidateSnippetQueries = useCallback(() => {
+    queryClient.invalidateQueries({ queryKey: ["project", projectId] });
+  }, [queryClient, projectId]);
+
+  // Unlike an asset (whose ref is derived from a title), a snippet's ref is
+  // typed directly by the user in the snippet manager -- already sanitized and
+  // checked against the live pools there. The server (HasUniqueRef) is still
+  // the final authority; a collision surfaces as a normal rejected PATCH.
+  const onCreateSnippet = useCallback(
+    async (ref) => {
+      const json = await patchProjectJson({
+        snippets_attributes: [ { ref, source: "", source_format: "pretext" } ],
+      });
+      const created = (json.snippets ?? []).find((s) => s.ref === ref);
+      invalidateSnippetQueries();
+      return toEditorSnippet(railsSnippetToEditor(created));
+    },
+    [patchProjectJson, invalidateSnippetQueries],
+  );
+
+  // Persists an edit to an existing snippet -- its `ref`, `source`, and
+  // `source_format` -- keyed by `id` (stable across renames), mirroring
+  // onAssetUpdate.
+  const onSnippetUpdate = useCallback(
+    async (snippet) => {
+      await patchProjectJson({
+        snippets_attributes: [ {
+          id: snippet.id,
+          ref: snippet.ref,
+          source: snippet.source ?? "",
+          source_format: snippet.sourceFormat,
+        } ],
+      });
+      invalidateSnippetQueries();
+    },
+    [patchProjectJson, invalidateSnippetQueries],
+  );
+
+  // Drop this snippet from the project entirely. Mirrors onAssetRemove: the
+  // editor has already removed it from its pool, so this is fire-and-forget
+  // persistence, then a reconcile via invalidate.
+  const onSnippetRemove = useCallback(
+    (snippet) =>
+      patchProjectJson({ snippets_attributes: [{ id: snippet.id, _destroy: true }] })
+        .then(() => invalidateSnippetQueries())
+        .catch((error) => {
+          console.error("Error removing snippet:", error);
+          if (!providerRef.current) {
+            alert("An error occurred while removing the snippet.");
+          }
+        }),
+    [patchProjectJson, invalidateSnippetQueries],
+  );
+
   const onTitleChange = useCallback((value) => {
     const w = working.current;
     if (!w) return;
@@ -1157,6 +1241,12 @@ function EditorApp({ config }) {
     [projectQuery.data],
   );
 
+  // Same reasoning as `projectAssets`, for snippets.
+  const projectSnippets = useMemo(
+    () => (projectQuery.data?.projectSnippets ?? []).map(toEditorSnippet),
+    [projectQuery.data],
+  );
+
   // ----- Render ------------------------------------------------------------
   if (projectQuery.isPending) {
     return <div className="flex h-full items-center justify-center">
@@ -1208,6 +1298,7 @@ function EditorApp({ config }) {
           : undefined
       }
       projectAssets={projectAssets}
+      projectSnippets={projectSnippets}
       projectUrl={projectUrl}
       saveButtonLabel="Save and manage"
       cancelButtonLabel="Cancel"
@@ -1222,6 +1313,9 @@ function EditorApp({ config }) {
       onAssetUpdate={onAssetUpdate}
       onAssetRemove={onAssetRemove}
       onLoadAssets={onLoadAssets}
+      onCreateSnippet={onCreateSnippet}
+      onSnippetUpdate={onSnippetUpdate}
+      onSnippetRemove={onSnippetRemove}
       onTitleChange={onTitleChange}
       onLanguageChange={onLanguageChange}
       onUseCommonDocinfoChange={onUseCommonDocinfoChange}

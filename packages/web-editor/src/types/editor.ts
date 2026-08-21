@@ -86,6 +86,34 @@ export interface Asset {
   contentType?: string;
 }
 
+/**
+ * A reusable source fragment owned by a single project, spliced into division
+ * content wherever it's referenced by `<plus:snippet ref="..."/>` (which may
+ * be repeated across, or within, divisions).
+ */
+export interface Snippet {
+  /**
+   * Stable server-assigned identifier (hidden from users). Snippets are
+   * persisted through the project's nested `snippets_attributes`, so a
+   * freshly-created snippet has **no** `id` until the project is saved and
+   * the server mints one — the *absence* of an `id` is the signal that a
+   * snippet is new. The editor keys snippet identity on `ref` (never `id`),
+   * so an id-less snippet is fully usable the instant it's added.
+   */
+  id?: string;
+  /**
+   * Short reference used when authoring references, e.g. `"euler-formula"`.
+   * Authors write e.g. `<plus:snippet ref="euler-formula"/>` and the build
+   * system splices in this snippet's resolved `source`. Unique across every
+   * Division, Asset, and Snippet in the project.
+   */
+  ref: string;
+  /** The snippet's own source content, in `sourceFormat`. */
+  source: string;
+  /** The source format `source` is authored in. */
+  sourceFormat: SourceFormat;
+}
+
 /** Payload emitted when a user submits feedback from the editor UI. */
 export interface FeedbackSubmission {
   /** Location where feedback was submitted (for example, "main-editor"). */

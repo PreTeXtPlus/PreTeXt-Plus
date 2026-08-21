@@ -32,19 +32,23 @@
 import * as Y from "yjs";
 import type { Division } from "../types/sections";
 import type { DivisionChanges, EditorStoreInstance } from "../store/editorStore";
-import type { Asset } from "../types/editor";
+import type { Asset, Snippet } from "../types/editor";
 import type { CollabSession } from "./types";
 import {
   applyAssetFields,
+  applySnippetFields,
   assetEntryToSnapshot,
   entryToSnapshot,
   getAssetsMap,
   getDeletedMap,
   getDivisionsMap,
   getMetaMap,
+  getSnippetsMap,
   makeAssetEntry,
   makeDivisionEntry,
+  makeSnippetEntry,
   markDeleted,
+  snippetEntryToSnapshot,
   type CollabDivisionSnapshot,
 } from "./schema";
 import { diffReplace } from "./textDiff";
@@ -104,6 +108,9 @@ export class CollabBridge {
    */
   private readonly keyToAssetRef = new Map<string, string>();
   private readonly assetRefToKey = new Map<string, string>();
+  /** Snippet entry key (record id) ↔ current `ref`, both directions. Same reason as assets. */
+  private readonly keyToSnippetRef = new Map<string, string>();
+  private readonly snippetRefToKey = new Map<string, string>();
   private attached = false;
 
   // A tiny external-store handle so React re-renders when the set of doc
@@ -143,6 +150,7 @@ export class CollabBridge {
     this.session.awareness.setLocalStateField("user", this.session.user);
     getDivisionsMap(this.doc).observeDeep(this.onDivisionsEvents);
     getAssetsMap(this.doc).observeDeep(this.onAssetsEvents);
+    getSnippetsMap(this.doc).observeDeep(this.onSnippetsEvents);
     getMetaMap(this.doc).observe(this.onMetaEvent);
     this.reconcileFromDoc();
   }
@@ -152,6 +160,7 @@ export class CollabBridge {
     this.attached = false;
     getDivisionsMap(this.doc).unobserveDeep(this.onDivisionsEvents);
     getAssetsMap(this.doc).unobserveDeep(this.onAssetsEvents);
+    getSnippetsMap(this.doc).unobserveDeep(this.onSnippetsEvents);
     getMetaMap(this.doc).unobserve(this.onMetaEvent);
   }
 
@@ -326,6 +335,70 @@ export class CollabBridge {
     return previous;
   }
 
+  /**
+   * Mirror a locally created project snippet into the doc, synchronously —
+   * unlike an asset, a snippet has no bytes waiting on the host, so it's
+   * published the moment it's created, the same as a division.
+   */
+  localSnippetAdd(snippet: Snippet): void {
+    if (!snippet.id) return;
+    const snippets = getSnippetsMap(this.doc);
+    this.doc.transact(() => {
+      const existing = snippets.get(snippet.id as string);
+      if (existing) applySnippetFields(existing, snippet);
+      else snippets.set(snippet.id as string, makeSnippetEntry(snippet));
+      getDeletedMap(this.doc).delete(snippet.id as string);
+    }, this.localOrigin);
+    this.trackSnippetKey(snippet.id, snippet);
+    this.bump();
+  }
+
+  /**
+   * Mirror an edit to a snippet's fields. `previousRef` names the ref the
+   * snippet had before this edit, when the edit renames it.
+   */
+  localSnippetUpdate(snippet: Snippet, previousRef?: string): void {
+    const key =
+      snippet.id ?? this.snippetRefToKey.get(previousRef ?? snippet.ref ?? "");
+    if (!key) return;
+    const snippets = getSnippetsMap(this.doc);
+    this.doc.transact(() => {
+      const entry = snippets.get(key);
+      if (entry) applySnippetFields(entry, snippet);
+      else snippets.set(key, makeSnippetEntry(snippet));
+    }, this.localOrigin);
+    this.trackSnippetKey(key, snippet);
+    this.bump();
+  }
+
+  localSnippetRemove(snippet: Snippet): void {
+    const key = snippet.id ?? this.snippetRefToKey.get(snippet.ref ?? "");
+    if (!key) return;
+    this.doc.transact(() => {
+      getSnippetsMap(this.doc).delete(key);
+      markDeleted(this.doc, "snippet", key);
+    }, this.localOrigin);
+    this.untrackSnippetKey(key);
+    this.bump();
+  }
+
+  private trackSnippetKey(key: string, snippet: Snippet): void {
+    this.untrackSnippetKey(key);
+    const current = snippet.ref ?? "";
+    this.keyToSnippetRef.set(key, current);
+    this.snippetRefToKey.set(current, key);
+  }
+
+  /** Mirrors {@link untrackAssetKey} — see there for why the ownership check matters. */
+  private untrackSnippetKey(key: string): string | undefined {
+    const previous = this.keyToSnippetRef.get(key);
+    this.keyToSnippetRef.delete(key);
+    if (previous === undefined) return undefined;
+    if (this.snippetRefToKey.get(previous) !== key) return undefined;
+    this.snippetRefToKey.delete(previous);
+    return previous;
+  }
+
   localTitleChange(title: string): void {
     this.doc.transact(() => {
       getMetaMap(this.doc).set("title", title);
@@ -433,6 +506,29 @@ export class CollabBridge {
       if (!asset.id) continue;
       if (deleted.get(asset.id) === "asset") state.removeAssetFromPool(asset);
       else if (!assets.has(asset.id)) this.localAssetAdd(asset);
+    }
+
+    const snippets = getSnippetsMap(this.doc);
+    snippets.forEach((entry, key) => {
+      const snapshot = snippetEntryToSnapshot(key, entry);
+      this.trackSnippetKey(key, snapshot);
+      const pooled = this.store
+        .getState()
+        .projectSnippets?.find((s) => s.id === key);
+      if (pooled && pooled.ref !== snapshot.ref) {
+        state.renameSnippetInPool(pooled.ref, snapshot);
+      } else {
+        state.updateSnippetInPool(snapshot);
+      }
+    });
+
+    for (const snippet of [...(this.store.getState().projectSnippets ?? [])]) {
+      if (!snippet.id) continue;
+      if (deleted.get(snippet.id) === "snippet") {
+        state.removeSnippetFromPool(snippet);
+      } else if (!snippets.has(snippet.id)) {
+        this.localSnippetAdd(snippet);
+      }
     }
 
     const meta = getMetaMap(this.doc);
@@ -599,6 +695,60 @@ export class CollabBridge {
       state.updateAssetInPool(asset);
     }
     this.trackAssetKey(key, asset);
+  }
+
+  /** Mirrors {@link onAssetsEvents} — see there for the ref-keyed-pool reasoning. */
+  private onSnippetsEvents = (
+    events: Y.YEvent<any>[],
+    transaction: Y.Transaction,
+  ): void => {
+    if (this.isLocal(transaction)) return;
+    const state = this.store.getState();
+    const snippets = getSnippetsMap(this.doc);
+
+    for (const event of events) {
+      if (event.target === snippets) {
+        event.changes.keys.forEach((change, key) => {
+          if (change.action === "delete") {
+            const previous = this.untrackSnippetKey(key);
+            if (previous === undefined) return;
+            state.removeSnippetFromPool({
+              id: key,
+              ref: previous,
+              source: "",
+              sourceFormat: "pretext",
+            });
+            return;
+          }
+          const entry = snippets.get(key);
+          if (!entry) return;
+          this.applyRemoteSnippet(key, snippetEntryToSnapshot(key, entry));
+        });
+      } else if (event.target instanceof Y.Map && event.path.length === 1) {
+        const key = String(event.path[0]);
+        const entry = snippets.get(key);
+        if (!entry) continue;
+        this.applyRemoteSnippet(key, snippetEntryToSnapshot(key, entry));
+      }
+    }
+
+    this.bump();
+  };
+
+  private applyRemoteSnippet(key: string, snippet: Snippet): void {
+    const state = this.store.getState();
+    const previous = this.keyToSnippetRef.get(key);
+    const current = snippet.ref ?? "";
+    if (
+      previous !== undefined &&
+      previous !== current &&
+      this.snippetRefToKey.get(previous) === key
+    ) {
+      state.renameSnippetInPool(previous, snippet);
+    } else {
+      state.updateSnippetInPool(snippet);
+    }
+    this.trackSnippetKey(key, snippet);
   }
 
   private onMetaEvent = (

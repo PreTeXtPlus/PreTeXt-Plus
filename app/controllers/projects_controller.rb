@@ -287,7 +287,8 @@ class ProjectsController < ApplicationController
       permitted = [
         :title, :pretext_source, :docinfo, :use_common_docinfo, :visibility, :language, :description,
         divisions_attributes: [ [ :id, :source, :source_format, :is_root, :ref, :_destroy ] ],
-        assets_attributes: [ [ :id, :ref, :kind, :file, :source, :short_description, :description, :title, :_destroy ] ]
+        assets_attributes: [ [ :id, :ref, :kind, :file, :source, :short_description, :description, :title, :_destroy ] ],
+        snippets_attributes: [ [ :id, :source, :source_format, :ref, :_destroy ] ]
       ]
       permitted << :document_type if action_name == "create"
       params.expect(project: permitted)
@@ -306,7 +307,8 @@ class ProjectsController < ApplicationController
         :title, :docinfo, :document_type,
         divisions_attributes: [ [ :ref, :source, :source_format, :is_root ] ],
         assets_attributes: [ [ :ref, :kind, :title, :short_description,
-                               { file: [ :filename, :content_type, :data ] } ] ]
+                               { file: [ :filename, :content_type, :data ] } ] ],
+        snippets_attributes: [ [ :ref, :source, :source_format ] ]
       ]).to_h.deep_symbolize_keys
 
       if attrs[:assets_attributes].present?

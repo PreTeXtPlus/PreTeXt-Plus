@@ -9,7 +9,7 @@
 import { fromXml } from "xast-util-from-xml";
 import { toXml } from "xast-util-to-xml";
 import type { Element, ElementContent, Root } from "xast";
-import type { Asset, SourceFormat } from "./types/editor";
+import type { Asset, Snippet, SourceFormat } from "./types/editor";
 import type {
   Division,
   DivisionType,
@@ -1864,6 +1864,102 @@ export function assetEmbedCode(
   return `<plus:image ref="${ref}"/>`;
 }
 
+// ---------------------------------------------------------------------------
+// Snippet ref utilities — `<plus:snippet ref="..."/>` placeholder parsing
+// ---------------------------------------------------------------------------
+
+/** A `<plus:snippet ref="..."/>` snippet placeholder. */
+export interface SnippetRef {
+  ref: string;
+}
+
+/**
+ * Parse every snippet placeholder out of `content`, in document order, without
+ * de-duplicating (a snippet ref may legitimately appear more than once). The
+ * PreTeXt form (`<plus:snippet ref="..."/>`), the Markdown leaf-directive form
+ * (`::snippet{ref="..."}`) and the LaTeX macro form (`\plus{snippet}{...}`)
+ * are all matched.
+ *
+ * Snippet placeholders share the same shape as division/asset refs (see
+ * {@link DIVISION_REF_TAGS}) but are deliberately parsed by a separate,
+ * disjoint tag (`snippet`) so the three kinds of include are never conflated.
+ */
+export function parseSnippetRefs(
+  content: string,
+  sourceFormat: SourceFormat,
+): SnippetRef[] {
+  const refs: SnippetRef[] = [];
+  const source: Record<SourceFormat, string> = {
+    pretext: `<plus:snippet\\b[^>]*\\bref="([^"]+)"`,
+    markdown: `::snippet(?:\\[[^\\]]*\\])?\\{[^}]*\\bref="([^"]+)"[^}]*\\}`,
+    latex: `\\\\plus\\{snippet\\}\\{([^}]+)\\}`,
+  };
+  const re = new RegExp(source[sourceFormat], "g");
+  const scanned = blankVerbatim(content, sourceFormat);
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(scanned)) !== null) {
+    refs.push({ ref: m[1] });
+  }
+  return refs;
+}
+
+/**
+ * Rewrite every snippet placeholder for `oldRef` in `content` to use `newRef`
+ * instead, leaving any other attributes untouched. The PreTeXt
+ * (`<plus:snippet ref="..."/>`), Markdown (`::snippet{ref="..."}`) and LaTeX
+ * (`\plus{snippet}{...}`) forms are all rewritten in place. Used when a
+ * snippet's `ref` is renamed, so the source stays in sync with the
+ * project-snippet pool across every division.
+ */
+export function renameSnippetRef(
+  content: string,
+  oldRef: string,
+  newRef: string,
+): string {
+  const oldR = escapeRegex(oldRef);
+  const xmlRe = new RegExp(`(<plus:snippet\\b[^>]*?\\bref=")${oldR}(")`, "g");
+  const mdRe = new RegExp(
+    `(::snippet(?:\\[[^\\]]*\\])?\\{[^}]*?\\bref=")${oldR}(")`,
+    "g",
+  );
+  const latexRe = new RegExp(`(\\\\plus\\{snippet\\}\\{)${oldR}(\\})`, "g");
+  return content
+    .replace(xmlRe, `$1${newRef}$2`)
+    .replace(mdRe, `$1${newRef}$2`)
+    .replace(latexRe, `$1${newRef}$2`);
+}
+
+/**
+ * Remove every snippet placeholder for `ref` from `content`, in the PreTeXt
+ * (`<plus:snippet ref="..."/>`), Markdown (`::snippet{ref="..."}`) or LaTeX
+ * (`\plus{snippet}{...}`) form. Used when removing an unresolved placeholder
+ * (one with no backing snippet) directly from the source.
+ */
+export function removeSnippetRef(content: string, ref: string): string {
+  const r = escapeRegex(ref);
+  const xmlRe = new RegExp(`<plus:snippet\\b[^>]*?\\bref="${r}"[^>]*/?>`, "g");
+  const mdRe = new RegExp(
+    `::snippet(?:\\[[^\\]]*\\])?\\{[^}]*?\\bref="${r}"[^}]*\\}`,
+    "g",
+  );
+  const latexRe = new RegExp(`\\\\plus\\{snippet\\}\\{${r}\\}`, "g");
+  return content.replace(xmlRe, "").replace(mdRe, "").replace(latexRe, "");
+}
+
+/**
+ * Build the embed code a user copies (or types) to place a snippet
+ * placeholder, matched to the target division's source format. Mirrors
+ * {@link assetEmbedCode}.
+ */
+export function snippetEmbedCode(
+  ref: string,
+  sourceFormat: SourceFormat = "pretext",
+): string {
+  if (sourceFormat === "markdown") return `::snippet{ref="${ref}"}`;
+  if (sourceFormat === "latex") return `\\plus{snippet}{${ref}}`;
+  return `<plus:snippet ref="${ref}"/>`;
+}
+
 /**
  * Create a minimal Division record for a given `xmlId` and `type`.
  * Used when the user types a new `<plus:TYPE ref="id"/>` placeholder into a
@@ -2514,6 +2610,41 @@ function divisionToPretext(division: Division): string {
 }
 
 /**
+ * Scan `xml` for every `<plus:* ref="..."/>` placeholder and expand each one:
+ * `image` resolves against `assets`, `snippet` resolves (recursively —
+ * see {@link resolveSnippetRef}) against `snippets`, and anything else is
+ * treated as a division ref and resolved via {@link resolveDivisionXml}.
+ *
+ * Shared by both division and snippet resolution, since a snippet's own
+ * content can itself embed further snippet/image/division refs. `ancestors`
+ * is a single set of refs shared across all three kinds — Division, Asset,
+ * and Snippet refs are unique against each other project-wide, so one set
+ * safely guards cycles across all three without risk of collision.
+ */
+function expandRefs(
+  xml: string,
+  divisions: Division[],
+  snippets: Snippet[],
+  assets: Asset[],
+  ancestors: Set<string>,
+): string {
+  return xml.replace(
+    /<plus:([a-z-]+)\s([^>]*ref="[^"]+"[^>]*?)(?:\/>|>\s*<\/plus:\1>)/g,
+    (_match, tag: string, attrs: string) => {
+      const ref = /ref="([^"]+)"/.exec(attrs)?.[1] ?? "";
+      if (tag === "image") {
+        const width = /width="([^"]+)"/.exec(attrs)?.[1];
+        return resolveAssetRef(ref, assets, width);
+      }
+      if (tag === "snippet") {
+        return resolveSnippetRef(ref, snippets, divisions, assets, ancestors);
+      }
+      return resolveDivisionXml(ref, divisions, snippets, assets, ancestors);
+    },
+  );
+}
+
+/**
  * Resolve a single division to its final PreTeXt XML, then recursively expand
  * any `<plus:* ref="..."/>` placeholders found inside it.
  *
@@ -2531,35 +2662,47 @@ function divisionToPretext(division: Division): string {
 function resolveDivisionXml(
   xmlId: string,
   divisions: Division[],
-  ancestors: Set<string>,
+  snippets: Snippet[],
   assets: Asset[],
+  ancestors: Set<string>,
 ): string {
   const division = divisions.find((d) => d.xmlId === xmlId);
   if (!division) return `<!-- missing division: ${xmlId} -->`;
   if (ancestors.has(xmlId)) return `<!-- circular reference: ${xmlId} -->`;
 
   const xml = divisionToPretext(division);
-
-  // Expand child `<plus:* ref="..."/>` placeholders against the *derived*
-  // PreTeXt, whatever the source format was. Markdown includes authored as
-  // `::section{ref="x"}` and LaTeX includes as `\plus{section}{x}` (and the
-  // asset variants `::image{ref="x"}` / `\plus{image}{x}`) are converted to
-  // `<plus:… ref="x"/>` by `@pretextbook/remark-pretext` /
-  // `@pretextbook/latex-pretext` before we reach here, so a Markdown/LaTeX
-  // division is no longer a leaf — its resolved XML must be scanned for refs
-  // exactly like a native PreTeXt division's.
   const nextAncestors = new Set(ancestors).add(xmlId);
-  return xml.replace(
-    /<plus:([a-z-]+)\s([^>]*ref="[^"]+"[^>]*?)(?:\/>|>\s*<\/plus:\1>)/g,
-    (_match, tag: string, attrs: string) => {
-      const ref = /ref="([^"]+)"/.exec(attrs)?.[1] ?? "";
-      if (tag !== "image") {
-        return resolveDivisionXml(ref, divisions, nextAncestors, assets);
-      }
-      const width = /width="([^"]+)"/.exec(attrs)?.[1];
-      return resolveAssetRef(ref, assets, width);
-    },
+  return expandRefs(xml, divisions, snippets, assets, nextAncestors);
+}
+
+/**
+ * Resolve a single `<plus:snippet ref="..."/>` placeholder to its final
+ * PreTeXt markup by looking up the matching {@link Snippet} in `snippets`.
+ * The snippet's own source is converted to PreTeXt (format-aware, via
+ * {@link derivePretextContent}) and then itself scanned for further
+ * `<plus:snippet>` / `<plus:image>` refs, so a snippet can embed another
+ * snippet or an image. Falls back to an XML comment if no matching snippet
+ * is found, its own conversion fails, or it (directly or transitively)
+ * references itself.
+ */
+function resolveSnippetRef(
+  ref: string,
+  snippets: Snippet[],
+  divisions: Division[],
+  assets: Asset[],
+  ancestors: Set<string>,
+): string {
+  const snippet = snippets.find((s) => s.ref === ref);
+  if (!snippet) return `<!-- missing snippet: ${ref} -->`;
+  if (ancestors.has(ref)) return `<!-- circular reference: ${ref} -->`;
+
+  const { pretextSource, pretextError } = derivePretextContent(
+    snippet.source,
+    snippet.sourceFormat,
   );
+  const xml = pretextSource ?? `<!-- conversion error: ${pretextError} -->`;
+  const nextAncestors = new Set(ancestors).add(ref);
+  return expandRefs(xml, divisions, snippets, assets, nextAncestors);
 }
 
 /**
@@ -2579,9 +2722,10 @@ export function assembleProjectSource(
   divisions: Division[],
   rootXmlId: string,
   assets: Asset[] = [],
+  snippets: Snippet[] = [],
 ): string {
   return ensureRootLabel(
-    resolveDivisionXml(rootXmlId, divisions, new Set(), assets),
+    resolveDivisionXml(rootXmlId, divisions, snippets, assets, new Set()),
   );
 }
 
@@ -2617,8 +2761,9 @@ export function assembleFullProjectSource(
   docinfo: string,
   assets: Asset[] = [],
   lang?: string,
+  snippets: Snippet[] = [],
 ): string {
-  const body = resolveDivisionXml(rootXmlId, divisions, new Set(), assets);
+  const body = resolveDivisionXml(rootXmlId, divisions, snippets, assets, new Set());
   return wrapInPretextDocument(body, docinfo, lang);
 }
 

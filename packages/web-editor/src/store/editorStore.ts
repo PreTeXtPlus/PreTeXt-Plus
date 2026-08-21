@@ -26,7 +26,7 @@
  * they are stable while always calling the latest mode-routed callback.
  */
 import { createStore, type StoreApi } from "zustand/vanilla";
-import type { Asset, FeedbackSubmission, SourceFormat } from "../types/editor";
+import type { Asset, FeedbackSubmission, Snippet, SourceFormat } from "../types/editor";
 import type { Division, DivisionType } from "../types/sections";
 import type { EditDraft } from "../components/toc/types";
 import {
@@ -44,6 +44,13 @@ import {
  * pool mutation keys on.
  */
 const sameAssetRef = (a: Asset, b: Asset): boolean => a.ref === b.ref;
+
+/**
+ * Snippet identity within a project: a `<plus:snippet ref="..."/>` placeholder
+ * is resolved by `ref`, so that (not the host's `id`) is what every lookup and
+ * pool mutation keys on. Mirrors {@link sameAssetRef}.
+ */
+const sameSnippetRef = (a: Snippet, b: Snippet): boolean => a.ref === b.ref;
 
 /**
  * Breakpoint shared by `isNarrowScreen` (tabs vs. split layout) and the TOC's
@@ -107,6 +114,7 @@ export type DivisionChanges = {
 export interface ExternalUpdate {
   divisions?: Division[];
   projectAssets?: Asset[];
+  projectSnippets?: Snippet[];
   rootDivisionId?: string;
   activeDivisionId?: string | null;
   title?: string;
@@ -122,6 +130,7 @@ type ModalKey =
   | "isConvertDialogOpen"
   | "isDocinfoEditorOpen"
   | "isAssetPickerOpen"
+  | "isSnippetPickerOpen"
   | "isFullSourceOpen";
 
 /**
@@ -146,6 +155,13 @@ export interface EditorCallbacks {
   assetRefRemove?: (ref: string) => void;
   /** Duplicate a project asset under a fresh ref (host persists + pool add). */
   assetDuplicate?: (asset: Asset) => void | Promise<void>;
+  snippetInsert: (snippet: Snippet) => void;
+  /** Remove a project snippet (optimistic pool drop + host persistence). */
+  snippetRemove?: (snippet: Snippet) => void;
+  /** Remove every `<plus:snippet ref/>` placeholder for an unresolved ref from source. */
+  snippetRefRemove?: (ref: string) => void;
+  /** Duplicate a project snippet under a fresh ref (host persists + pool add). */
+  snippetDuplicate?: (snippet: Snippet) => void | Promise<void>;
   updateTitle: (title: string) => void;
   updateLanguage: (language: string) => void;
   feedbackSubmit?: (feedback: FeedbackSubmission) => void | Promise<void>;
@@ -168,6 +184,13 @@ export interface EditorStoreState {
    * it's added, without waiting for the host to echo it back.
    */
   projectAssets: Asset[] | undefined;
+  /**
+   * Authoritative project-snippet pool — owned by the store as a live editing
+   * buffer, exactly like {@link EditorStoreState.projectAssets}. Seeded once
+   * from the host's `projectSnippets` prop, then mutated optimistically by
+   * `addSnippetToPool`/`updateSnippetInPool`/`removeSnippetFromPool`.
+   */
+  projectSnippets: Snippet[] | undefined;
   title: string;
   docinfo: string;
   commonDocinfo: string;
@@ -193,6 +216,9 @@ export interface EditorStoreState {
   /** True when the host passed `onAssetDuplicate`. Controls whether Duplicate is offered. */
   hasAssetDuplicate: boolean;
 
+  /** True when the host passed `onSnippetDuplicate`. Controls whether Duplicate is offered. */
+  hasSnippetDuplicate: boolean;
+
   // ── UI state owned by the store ────────────────────────────────────────────
 
   isTocCollapsed: boolean;
@@ -204,6 +230,7 @@ export interface EditorStoreState {
   isConvertDialogOpen: boolean;
   isDocinfoEditorOpen: boolean;
   isAssetPickerOpen: boolean;
+  isSnippetPickerOpen: boolean;
   isFullSourceOpen: boolean;
 
   // TOC inline edit form
@@ -221,6 +248,16 @@ export interface EditorStoreState {
    * this `ref` instead of copying an embed code.
    */
   assetResolveTarget: { ref: string } | null;
+
+  /** The snippet currently open in the snippet edit modal, identified by ref. */
+  editingSnippetRef: { ref: string } | null;
+
+  /**
+   * An unresolved placeholder the user is resolving — opens the snippet
+   * manager in "resolve this ref" mode, where creating a snippet binds the
+   * result to this `ref` instead of copying an embed code.
+   */
+  snippetResolveTarget: { ref: string } | null;
 
   // ── Actions ────────────────────────────────────────────────────────────────
 
@@ -314,6 +351,40 @@ export interface EditorStoreState {
   renameAssetInPool: (oldRef: string, newAsset: Asset) => void;
   /** Optimistically remove the asset matching `asset` by ref from the pool. */
   removeAssetFromPool: (asset: Asset) => void;
+
+  // Snippets / content
+  insertSnippet: (snippet: Snippet) => void;
+  /** Open the snippet edit modal for the snippet identified by `ref`. */
+  openSnippetEditor: (ref: string) => void;
+  closeSnippetEditor: () => void;
+  /** Open the snippet manager in resolve mode for an unresolved `ref`. */
+  openSnippetResolver: (ref: string) => void;
+  closeSnippetResolver: () => void;
+  /** Remove a project snippet (pool + host persistence). */
+  removeSnippet: (snippet: Snippet) => void;
+  /** Remove every placeholder for an unresolved `ref` from the document. */
+  removeSnippetRefFromDocument: (ref: string) => void;
+  /** Duplicate a project snippet under a fresh ref. Resolves when the host settles. */
+  duplicateSnippet: (snippet: Snippet) => Promise<void>;
+  /**
+   * Optimistically add a snippet to the pool (no-op if one with the same
+   * ref already exists). Used when a snippet is created, added, or inserted,
+   * so it's editable immediately.
+   */
+  addSnippetToPool: (snippet: Snippet) => void;
+  /**
+   * Optimistically replace the pool entry matching `snippet` by ref (adding
+   * it if absent). Used when a snippet's content is edited.
+   */
+  updateSnippetInPool: (snippet: Snippet) => void;
+  /**
+   * Optimistically rename a snippet's `ref`: drop the pool entry matching
+   * `oldRef` and insert `newSnippet` (which carries the new ref).
+   */
+  renameSnippetInPool: (oldRef: string, newSnippet: Snippet) => void;
+  /** Optimistically remove the snippet matching `snippet` by ref from the pool. */
+  removeSnippetFromPool: (snippet: Snippet) => void;
+
   updateTitle: (title: string) => void;
   updateLanguage: (language: string) => void;
   feedbackSubmit: (feedback: FeedbackSubmission) => void;
@@ -337,6 +408,7 @@ export type EditorSyncableState = Pick<
   | "activeEditorSource"
   | "hasFeedback"
   | "hasAssetDuplicate"
+  | "hasSnippetDuplicate"
 >;
 
 // ── Factory ─────────────────────────────────────────────────────────────────
@@ -352,6 +424,8 @@ export interface EditorStoreInit {
   divisions: Division[];
   activeDivisionId: string | null;
   projectAssets: Asset[] | undefined;
+  /** Optional (unlike `projectAssets`) so existing hosts/tests need no change to keep compiling. */
+  projectSnippets?: Snippet[];
 }
 
 /** The Zustand vanilla store instance type. */
@@ -381,6 +455,7 @@ export function createEditorStore(init: EditorStoreInit): EditorStoreHandle {
       divisionContentChange: noop,
       handleDivisionContentChange: noop,
       assetInsert: noop,
+      snippetInsert: noop,
       updateTitle: noop,
       updateLanguage: noop,
     },
@@ -391,6 +466,7 @@ export function createEditorStore(init: EditorStoreInit): EditorStoreHandle {
     source: init.source,
     sourceFormat: init.sourceFormat,
     projectAssets: init.projectAssets,
+    projectSnippets: init.projectSnippets,
     title: init.title,
     docinfo: init.docinfo,
     commonDocinfo: init.commonDocinfo,
@@ -404,6 +480,7 @@ export function createEditorStore(init: EditorStoreInit): EditorStoreHandle {
     activeEditorSource: init.source,
     hasFeedback: false,
     hasAssetDuplicate: false,
+    hasSnippetDuplicate: false,
 
     // ── Initial UI state ───────────────────────────────────────────────────
     isTocCollapsed: defaultTocCollapsed(),
@@ -415,12 +492,15 @@ export function createEditorStore(init: EditorStoreInit): EditorStoreHandle {
     isConvertDialogOpen: false,
     isDocinfoEditorOpen: false,
     isAssetPickerOpen: false,
+    isSnippetPickerOpen: false,
     isFullSourceOpen: false,
     editingId: null,
     editDraft: null,
     editingIsNew: false,
     editingAssetRef: null,
     assetResolveTarget: null,
+    editingSnippetRef: null,
+    snippetResolveTarget: null,
 
     // ── Actions ────────────────────────────────────────────────────────────
     syncState: (partial) => set(partial),
@@ -623,6 +703,45 @@ export function createEditorStore(init: EditorStoreInit): EditorStoreHandle {
           (a) => !sameAssetRef(a, asset),
         ),
       })),
+
+    insertSnippet: (snippet) => bag.cbs.snippetInsert(snippet),
+    openSnippetEditor: (ref) => set({ editingSnippetRef: { ref } }),
+    closeSnippetEditor: () => set({ editingSnippetRef: null }),
+    openSnippetResolver: (ref) => set({ snippetResolveTarget: { ref } }),
+    closeSnippetResolver: () => set({ snippetResolveTarget: null }),
+    removeSnippet: (snippet) => bag.cbs.snippetRemove?.(snippet),
+    removeSnippetRefFromDocument: (ref) => bag.cbs.snippetRefRemove?.(ref),
+    duplicateSnippet: async (snippet) => {
+      await bag.cbs.snippetDuplicate?.(snippet);
+    },
+    addSnippetToPool: (snippet) =>
+      set((s) => {
+        const base = s.projectSnippets ?? [];
+        if (base.some((a) => sameSnippetRef(a, snippet))) return {};
+        return { projectSnippets: [...base, snippet] };
+      }),
+    updateSnippetInPool: (snippet) =>
+      set((s) => {
+        const base = s.projectSnippets ?? [];
+        return base.some((a) => sameSnippetRef(a, snippet))
+          ? { projectSnippets: base.map((a) => (sameSnippetRef(a, snippet) ? snippet : a)) }
+          : { projectSnippets: [...base, snippet] };
+      }),
+    renameSnippetInPool: (oldRef, newSnippet) =>
+      set((s) => {
+        const base = s.projectSnippets ?? [];
+        const filtered = base.filter(
+          (a) => a.ref !== oldRef && !sameSnippetRef(a, newSnippet),
+        );
+        return { projectSnippets: [...filtered, newSnippet] };
+      }),
+    removeSnippetFromPool: (snippet) =>
+      set((s) => ({
+        projectSnippets: (s.projectSnippets ?? []).filter(
+          (a) => !sameSnippetRef(a, snippet),
+        ),
+      })),
+
     updateTitle: (title) => bag.cbs.updateTitle(title),
     updateLanguage: (language) => bag.cbs.updateLanguage(language),
     feedbackSubmit: (feedback) => bag.cbs.feedbackSubmit?.(feedback),

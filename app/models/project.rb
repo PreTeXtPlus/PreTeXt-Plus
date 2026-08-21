@@ -31,14 +31,22 @@ class Project < ApplicationRecord
   # allow_destroy lets the editor remove a division by sending `_destroy: true`.
   accepts_nested_attributes_for :divisions, allow_destroy: true
 
-  # Both nested collections accept ids the editor minted itself; see
-  # #tolerate_client_minted_ids for why, and for what these two overrides do.
+  has_many :snippets, dependent: :destroy
+  # allow_destroy lets the editor remove a snippet by sending `_destroy: true`.
+  accepts_nested_attributes_for :snippets, allow_destroy: true
+
+  # All three nested collections accept ids the editor minted itself; see
+  # #tolerate_client_minted_ids for why, and for what these overrides do.
   def divisions_attributes=(attributes)
     super(tolerate_client_minted_ids(divisions, attributes))
   end
 
   def assets_attributes=(attributes)
     super(tolerate_client_minted_ids(assets, attributes))
+  end
+
+  def snippets_attributes=(attributes)
+    super(tolerate_client_minted_ids(snippets, attributes))
   end
 
   enum :document_type, { article: 0, book: 1, slideshow: 2 }, default: :article, suffix: true, validate: true
@@ -259,6 +267,9 @@ class Project < ApplicationRecord
     end
     divisions.each do |division|
       duplicate.divisions.build(division.dup.attributes)
+    end
+    snippets.each do |snippet|
+      duplicate.snippets.build(snippet.dup.attributes)
     end
     assets.each do |asset|
       # Each asset is owned directly by its project, so a duplicate needs a

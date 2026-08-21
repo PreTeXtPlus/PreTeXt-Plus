@@ -2,10 +2,15 @@ import React from "react";
 import ReactDOM from "react-dom/client";
 import { QueryClient, QueryClientProvider, useQuery } from "@tanstack/react-query";
 import { Editors } from "@pretextbook/web-editor";
-import { railsDivisionToEditor, railsAssetToEditor } from "./railsProjectMapping";
+import {
+  railsDivisionToEditor,
+  railsAssetToEditor,
+  railsSnippetToEditor,
+} from "./railsProjectMapping";
 
 /** @typedef {import("./railsProjectMapping").RailsDivision} RailsDivision */
 /** @typedef {import("./railsProjectMapping").RailsAsset} RailsAsset */
+/** @typedef {import("./railsProjectMapping").RailsSnippet} RailsSnippet */
 
 /**
  * The full project JSON returned by the `source.json` endpoint -- same shape
@@ -19,6 +24,7 @@ import { railsDivisionToEditor, railsAssetToEditor } from "./railsProjectMapping
  * @property {string} [language]
  * @property {RailsDivision[]} [divisions]
  * @property {RailsAsset[]} [assets]
+ * @property {RailsSnippet[]} [snippets]
  */
 
 // This host never saves anything, so unlike ./editor.jsx there's no working
@@ -41,6 +47,7 @@ function railsToReadOnlyState(json) {
     projectType,
     divisions: (json.divisions ?? []).map((d) => railsDivisionToEditor(d, rootMeta)),
     projectAssets: (json.assets ?? []).map(railsAssetToEditor),
+    projectSnippets: (json.snippets ?? []).map(railsSnippetToEditor),
     rootDivisionId: root ? (root.ref ?? "") : undefined,
   };
 }
@@ -96,6 +103,8 @@ function SharedSourceApp({ config }) {
       rootDivisionId={state.rootDivisionId}
       projectAssets={state.projectAssets}
       hideAssets
+      projectSnippets={state.projectSnippets}
+      hideSnippets
       onContentChange={() => {}}
     />
   );

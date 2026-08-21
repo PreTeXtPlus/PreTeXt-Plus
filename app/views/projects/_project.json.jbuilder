@@ -16,3 +16,6 @@ end
 json.assets project.assets do |asset|
   json.partial! "assets/asset", asset: asset
 end
+json.snippets project.snippets do |snippet|
+  json.partial! "snippets/snippet", snippet: snippet
+end
