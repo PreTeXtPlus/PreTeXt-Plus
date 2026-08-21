@@ -642,8 +642,11 @@ export function stripLatexSectionWrapper(
       .replace(/^\\begin\{section\}\s*\n?/, "")
       .replace(/\n?\\end\{section\}\s*$/, "");
   }
-  // Remove leading \section{…} or \section*{…} line
-  return content.replace(/^\\section\*?\{[^}]*\}\s*\n?/, "");
+  // Remove the leading `\section{…}` / `\worksheet{…}` header line, however
+  // malformed — `parseLatexDivisionHeader` reports its full extent.
+  const header = parseLatexDivisionHeader(content);
+  if (!header) return content;
+  return content.slice(header.length).replace(/^\s+/, "");
 }
 
 /**
@@ -669,7 +672,13 @@ export function rewrapLatexSection(
   if (originalContent?.trimStart().startsWith("\\begin{section}")) {
     return `\\begin{section}\n\n${inner}\n\n\\end{section}`;
   }
-  return `\\section{${title}}\n\n${inner}`;
+  // The header command is named after the division type, so a `<worksheet>`
+  // gets `\worksheet{…}` back rather than being demoted to a `\section{…}`.
+  const macro = ALL_DIVISION_TYPES.has(type) ? type : "section";
+  return joinLatexHeaderAndBody(
+    buildLatexDivisionHeader({ macro, title }),
+    inner,
+  );
 }
 
 /**
@@ -687,49 +696,199 @@ export function ensureLatexSectionWrapper(
   if (type === "introduction" || type === "conclusion") {
     return content; // no structural wrapper for these
   }
-  const trimmed = content.trimStart();
-  if (
-    trimmed.startsWith("\\section") ||
-    trimmed.startsWith("\\begin{section}")
-  ) {
-    return content;
-  }
+  if (content.trimStart().startsWith("\\begin{section}")) return content;
+  // Any recognised division macro counts as an intact header — not just
+  // `\section`, since the header is named after the division's own type.
+  const header = parseLatexDivisionHeader(content);
+  if (header && ALL_DIVISION_TYPES.has(header.macro)) return content;
   return rewrapLatexSection(content, type, title, originalContent);
 }
 
 /**
- * Matches a leading LaTeX division-header command — `\section{`, `\worksheet{`,
- * `\reading-questions{`, etc. — at the very start of a division's source.
+ * A LaTeX division's header, as read off the first line of its source.
  *
  * The macro name mirrors the PreTeXt division type (so `\worksheet{…}` reads as,
  * and is converted to, a `<worksheet>`), which is why hyphens are allowed even
  * though they aren't valid in a raw LaTeX command name — the header is only ever
- * rewritten from the TOC, never hand-typed. `\begin`/`\end` are excluded so the
- * environment style (`\begin{section}…\end{section}`) isn't mistaken for a
- * command-style header.
- *
- * Capture groups: 1 = leading whitespace, 2 = `*?{` (so the `*` of a starred
- * variant and the opening brace are preserved on rewrite).
+ * rewritten from the TOC, never hand-typed.
  */
-const LEADING_LATEX_DIVISION_MACRO =
-  /^(\s*)\\(?!begin\b|end\b)[A-Za-z][A-Za-z-]*(\*?\{)/;
+export interface LatexDivisionHeader {
+  /** The header command name without its backslash — the division type. */
+  macro: string;
+  /** Whether the command was starred (`\section*{…}`). */
+  starred: boolean;
+  /** The title argument, with any `\label{…}` written inside it removed. */
+  title: string;
+  /** The header's `\label{…}` value — a division's `xml:id` — or `""`. */
+  label: string;
+  /**
+   * How many characters of the source the header occupies, counting leading
+   * whitespace and any malformed leftovers (stray `}`, duplicate `\label`s).
+   * `source.slice(length)` is therefore the body, junk-free.
+   */
+  length: number;
+}
+
+/**
+ * Read a LaTeX division's header off the first line of `content`, returning
+ * `null` when there is none (an introduction/conclusion body, or the
+ * `\begin{section}…\end{section}` environment style, which `\begin`/`\end` are
+ * excluded so as not to be mistaken for a command header).
+ *
+ * This is deliberately *tolerant* rather than strict, because it is the only
+ * thing standing between a mangled header and a division the author can no
+ * longer fix: the header line is locked in the code editor, so whatever it
+ * reads here is the sole route back to a well-formed one. It therefore
+ * brace-matches the title argument rather than stopping at the first `}` (so
+ * `\section{Foo\label{s}}` — a common hand-written LaTeX idiom, and the shape an
+ * import can leave behind — yields the title `Foo` and the label `s` rather than
+ * a title containing half a `\label`), and then swallows any run of stray `}`,
+ * whitespace and further `\label{…}` commands that follows, since all of it is
+ * header wreckage rather than body content. The last word on the label goes to
+ * the one written *after* the argument, which is what the TOC form writes.
+ *
+ * Scanning never leaves the first line: a header is always written on one line,
+ * and everything below it is the author's body, which must never be eaten.
+ */
+export function parseLatexDivisionHeader(
+  content: string,
+): LatexDivisionHeader | null {
+  const lead = /^\s*/.exec(content)![0];
+  const afterLead = content.slice(lead.length);
+  const newline = afterLead.search(/\r?\n/);
+  const line = newline === -1 ? afterLead : afterLead.slice(0, newline);
+
+  const open = /^\\(?!begin\b|end\b)([A-Za-z][A-Za-z-]*)(\*?)\{/.exec(line);
+  if (!open) return null;
+
+  // Brace-match the title argument. An escaped pair (`\{`, `\}`) is copied
+  // through without touching the depth; an unterminated argument ends at the
+  // end of the line, taking whatever was there as the title.
+  let i = open[0].length;
+  let depth = 1;
+  let arg = "";
+  while (i < line.length) {
+    const ch = line[i];
+    if (ch === "\\" && i + 1 < line.length) {
+      arg += line.slice(i, i + 2);
+      i += 2;
+      continue;
+    }
+    if (ch === "{") depth++;
+    else if (ch === "}" && --depth === 0) {
+      i++;
+      break;
+    }
+    arg += ch;
+    i++;
+  }
+
+  // Trailing header wreckage: unmatched closing braces, and one or more
+  // `\label{…}` commands. Anything else ends the header and stays in the body.
+  const trailingLabels: string[] = [];
+  while (i < line.length) {
+    if (line[i] === " " || line[i] === "\t" || line[i] === "}") {
+      i++;
+      continue;
+    }
+    const label = /^\\label\{([^}]*)\}/.exec(line.slice(i));
+    if (!label) break;
+    trailingLabels.push(label[1].trim());
+    i += label[0].length;
+  }
+
+  const innerLabels: string[] = [];
+  const title = arg
+    .replace(/\\label\{([^}]*)\}/g, (_full, id: string) => {
+      innerLabels.push(id.trim());
+      return "";
+    })
+    .replace(/\s+/g, " ")
+    .trim();
+
+  return {
+    macro: open[1],
+    starred: open[2] === "*",
+    title,
+    label: trailingLabels[0] ?? innerLabels[0] ?? "",
+    length: lead.length + i,
+  };
+}
+
+/**
+ * Whether `line` opens a LaTeX division — a header command named after a real
+ * division type (`\section{`, `\worksheet{`, `\article{`, …).
+ *
+ * Stricter than {@link parseLatexDivisionHeader} on purpose: this is what
+ * decides whether a line may be locked and rewritten, and a division body that
+ * merely happens to start with a macro (`\emph{Once} upon a time.` at the top
+ * of an introduction) is prose, not structure.
+ */
+export function isLatexDivisionHeaderLine(line: string): boolean {
+  const header = parseLatexDivisionHeader(line);
+  return header !== null && ALL_DIVISION_TYPES.has(header.macro);
+}
+
+/** Render a division header from its parts — the inverse of {@link parseLatexDivisionHeader}. */
+export function buildLatexDivisionHeader(header: {
+  macro: string;
+  starred?: boolean;
+  title: string;
+  label?: string;
+}): string {
+  const star = header.starred ? "*" : "";
+  const label = header.label ? `\\label{${header.label}}` : "";
+  return `\\${header.macro}${star}{${header.title}}${label}`;
+}
+
+/**
+ * Join a rewritten header to the rest of a division's source, always separated
+ * by exactly one blank line.
+ *
+ * The blank line isn't cosmetic: `@pretextbook/latex-pretext` reads a first
+ * paragraph butted straight up against the header as part of the header rather
+ * than as a paragraph of its own, so a division saved without it converts
+ * wrongly. Every path that writes a header goes through here, and
+ * `computeLockedRegion` locks the blank line along with the header so it can't
+ * be typed away again.
+ */
+function joinLatexHeaderAndBody(header: string, rest: string): string {
+  const body = rest.replace(/^(?:[ \t]*\r?\n)+/, "").replace(/^[ \t]+/, "");
+  return body ? `${header}\n\n${body}` : `${header}\n\n`;
+}
+
+/**
+ * Rewrite a LaTeX division's header from what {@link parseLatexDivisionHeader}
+ * could recover from it, dropping anything malformed and guaranteeing the blank
+ * line below it. Idempotent, and a no-op for anything whose first line isn't a
+ * recognised division header — an introduction's prose, or a body that happens
+ * to open with some other macro, must be left exactly as the author wrote it.
+ */
+export function normalizeLatexDivisionSource(source: string): string {
+  const header = parseLatexDivisionHeader(source);
+  if (!header || !ALL_DIVISION_TYPES.has(header.macro)) return source;
+  return joinLatexHeaderAndBody(
+    buildLatexDivisionHeader(header),
+    source.slice(header.length),
+  );
+}
 
 /**
  * Replace (or insert) the section title in a LaTeX section string.
  *
- * - For command style (`\section{…}`, `\worksheet{…}`, …): updates the header
- *   command's argument.
+ * - For command style (`\section{…}`, `\worksheet{…}`, …): rewrites the header.
  * - For `\begin{section}` style: updates the `\title{…}` inside.
  */
 export function updateLatexSectionTitle(
   content: string,
   newTitle: string,
 ): string {
-  // Group 1 captures the leading whitespace + `\macro*?{`; the title argument
-  // (`[^}]*`, up to the closing brace) is replaced.
-  const headerArg = /^(\s*\\(?!begin\b|end\b)[A-Za-z][A-Za-z-]*\*?\{)[^}]*/;
-  if (headerArg.test(content)) {
-    return content.replace(headerArg, (_, prefix) => `${prefix}${newTitle}`);
+  const header = parseLatexDivisionHeader(content);
+  if (header) {
+    return joinLatexHeaderAndBody(
+      buildLatexDivisionHeader({ ...header, title: newTitle }),
+      content.slice(header.length),
+    );
   }
   if (content.includes("\\begin{section}")) {
     if (/\\title\{/.test(content)) {
@@ -750,9 +909,8 @@ export function updateLatexSectionTitle(
  * found (introduction/conclusion have none), so callers leave title as-is.
  */
 export function extractLatexDivisionTitle(content: string): string | null {
-  const headerMatch =
-    /^\s*\\(?!begin\b|end\b)[A-Za-z][A-Za-z-]*\*?\{([^}]*)\}/.exec(content);
-  if (headerMatch) return headerMatch[1].trim();
+  const header = parseLatexDivisionHeader(content);
+  if (header) return header.title;
   if (content.includes("\\begin{section}")) {
     const titleMatch = /\\title\{([^}]*)\}/.exec(content);
     if (titleMatch) return titleMatch[1].trim();
@@ -761,32 +919,31 @@ export function extractLatexDivisionTitle(content: string): string | null {
 }
 
 /**
- * Extract the `\label{…}` that immediately follows a LaTeX division's header
- * command — the LaTeX spelling of a division's `xml:id`, since
- * `@pretextbook/latex-pretext` maps `\label` → `xml:id`.  Only the header's
- * label is read (a `\label` inside the body is ignored).  Returns `""` when no
- * header label is present.
+ * Extract the `\label{…}` belonging to a LaTeX division's header — the LaTeX
+ * spelling of a division's `xml:id`, since `@pretextbook/latex-pretext` maps
+ * `\label` → `xml:id`.  Only the header's label is read (a `\label` inside the
+ * body is ignored).  Returns `""` when no header label is present.
  */
 export function extractLatexSectionLabel(content: string): string {
-  const m =
-    /^\s*\\(?!begin\b|end\b)[A-Za-z][A-Za-z-]*\*?\{[^}]*\}\s*\\label\{([^}]*)\}/.exec(
-      content,
-    );
-  return m?.[1]?.trim() ?? "";
+  return parseLatexDivisionHeader(content)?.label ?? "";
 }
 
 /**
- * Update a LaTeX division's header type, title, and/or `xml:id` in place.
+ * Update a LaTeX division's header type, title, and/or `xml:id`.
  *
- * - `type` rewrites the header command name (`\section{` → `\worksheet{`) so the
+ * - `type` renames the header command (`\section{` → `\worksheet{`) so the
  *   source reads as the division it represents.
- * - `title` rewrites the header command's argument.
- * - `xmlId` rewrites the `\label{…}` directly after the header — inserting it
- *   when absent, removing it when `null`/empty.
+ * - `title` becomes the header command's argument.
+ * - `xmlId` becomes the `\label{…}` after it — inserted when absent, dropped
+ *   when `null`/empty.
  *
- * Omit a key (or pass `undefined`) to leave it unchanged.  Only the
- * command-style header is handled — the style the code editor freezes and the
- * TOC form exposes for editing.  This is the LaTeX analogue of
+ * Omit a key (or pass `undefined`) to keep whatever the current header says.
+ * The header is rebuilt wholesale from those three values rather than patched
+ * field-by-field, so a division that arrived with a malformed one (a `\label`
+ * left inside the title argument, a doubled `}`) comes back well-formed — the
+ * only repair route there is, since the header line is locked in the code
+ * editor. Only the command-style header is handled; `\begin{section}` divisions
+ * keep the title-only update. This is the LaTeX analogue of
  * {@link updateSectionMetadata} and {@link updateMarkdownDivisionMetadata} —
  * same `(division, changes) => Division` shape — but LaTeX has no
  * representation for PreTeXt's separate `label` attribute, so `label` is
@@ -801,24 +958,20 @@ export function updateLatexDivisionMetadata(
     label?: string | null;
   },
 ): Division {
+  const header = parseLatexDivisionHeader(division.source);
   let source = division.source;
-  if (changes.type !== undefined) {
-    source = source.replace(
-      LEADING_LATEX_DIVISION_MACRO,
-      `$1\\${changes.type}$2`,
+  if (header) {
+    source = joinLatexHeaderAndBody(
+      buildLatexDivisionHeader({
+        macro: changes.type ?? header.macro,
+        starred: header.starred,
+        title: changes.title ?? header.title,
+        label: changes.xmlId === undefined ? header.label : (changes.xmlId ?? ""),
+      }),
+      division.source.slice(header.length),
     );
-  }
-  if (changes.title !== undefined) {
+  } else if (changes.title !== undefined) {
     source = updateLatexSectionTitle(source, changes.title);
-  }
-  if (changes.xmlId !== undefined) {
-    source = source.replace(
-      /^(\s*\\(?!begin\b|end\b)[A-Za-z][A-Za-z-]*\*?\{[^}]*\})(\s*\\label\{[^}]*\})?/,
-      (_full, header: string) =>
-        changes.xmlId == null || changes.xmlId === ""
-          ? header
-          : `${header}\\label{${changes.xmlId}}`,
-    );
   }
   return {
     ...division,
@@ -1994,7 +2147,7 @@ export function createDivisionContent(
     // Emit the `\label{…}` (LaTeX's spelling of `xml:id`) immediately after the
     // header, matching updateLatexDivisionMetadata, so a freshly created
     // division already carries its id rather than only gaining it on first edit.
-    return `\\${type}{${title}}\\label{${xmlId}}\n\n`;
+    return `${buildLatexDivisionHeader({ macro: type, title, label: xmlId })}\n\n`;
   }
   if (sourceFormat === "markdown") {
     return `${buildMarkdownFrontmatter({ type, xmlId, label: "", title })}\n\n`;
@@ -2907,11 +3060,18 @@ export function normalizeDivisionsOnLoad(
       // blank title from there so the TOC doesn't show "Untitled". There is no
       // type to recover: a LaTeX division's PreTeXt type isn't represented in
       // its source at all (it's applied when the conversion is tagged).
-      if (!division.title) {
-        const latexTitle = extractLatexDivisionTitle(division.source);
-        if (latexTitle) return { ...division, title: latexTitle };
-      }
-      return division;
+      //
+      // The header is also rewritten from what can be read out of it, which is
+      // where a division imported with a malformed one (a `\label` inside the
+      // title argument and so a stray `}` after it) gets repaired: the header
+      // line is locked in the code editor, so an author who never opens the
+      // properties form has no other way to reach it. This also installs the
+      // blank line the converter needs below the header.
+      const source = normalizeLatexDivisionSource(division.source);
+      const title =
+        division.title || extractLatexDivisionTitle(source) || division.title;
+      if (source === division.source && title === division.title) return division;
+      return { ...division, source, title };
     }
     if (division.sourceFormat !== "pretext") return division;
 

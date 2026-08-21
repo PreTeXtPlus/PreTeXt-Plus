@@ -22,6 +22,7 @@ import CodeEditorMenu from "./CodeEditorMenu";
 import { MonacoCollabBinding } from "../collab/monacoBinding";
 import { installEditGuard } from "../collab/editGuard";
 import { computeLockedRegion, findPretextHeaderEnd, isRangeWithin } from "./lockedRegion";
+import { isLatexDivisionHeaderLine } from "../sectionUtils";
 import { planSnippetInsertion } from "./editorConfigs/insertContext";
 import type { EditorSnippet } from "./editorConfigs/snippets";
 import type { CollabUser } from "../collab/types";
@@ -419,6 +420,42 @@ const CodeEditor = forwardRef<CodeEditorHandle, CodeEditorProps>(({
     });
   };
 
+  // A LaTeX division's header must be followed by a blank line:
+  // `@pretextbook/latex-pretext` reads a first paragraph butted straight
+  // against the header as part of the header, so a division imported without
+  // one converts wrongly — and since `computeLockedRegion` locks that blank
+  // line along with the header, it can't be typed away again once it's here.
+  // Insert it when it's missing. Flagged programmatic so it doesn't echo back
+  // to the host as a user edit; the same repair is applied at the source level
+  // by `normalizeLatexDivisionSource` when the division is loaded.
+  const ensureLatexHeaderBlankLine = (editor: any, model: any, monaco: any) => {
+    if (sourceFormat !== "latex") return;
+    if (!isLatexDivisionHeaderLine(model.getLineContent(1))) return;
+    if (model.getLineCount() >= 2 && model.getLineContent(2).trim() === "") {
+      return;
+    }
+
+    isProgrammaticUpdateRef.current = true;
+    // The insertion point is the end of the locked header line, so it has to
+    // skip the collab guard (which would otherwise reject its own repair).
+    guardBypassRef.current = true;
+    try {
+      const endCol = model.getLineMaxColumn(1);
+      editor.executeEdits("ensure-latex-header-gap", [
+        {
+          range: new monaco.Range(1, endCol, 1, endCol),
+          text: "\n",
+          forceMoveMarkers: true,
+        },
+      ]);
+    } finally {
+      guardBypassRef.current = false;
+    }
+    queueMicrotask(() => {
+      isProgrammaticUpdateRef.current = false;
+    });
+  };
+
   // An imported PreTeXt division can end with one or more trailing blank
   // lines after its closing tag (e.g. carried over from a file that ended
   // with a newline). `computeLockedRegion` always locks the model's last
@@ -504,6 +541,7 @@ const CodeEditor = forwardRef<CodeEditorHandle, CodeEditorProps>(({
       // cosmetic, self-limiting outcome (the condition stops holding once either
       // lands), and far cheaper than leaving the wrapper unguarded.
       ensurePretextBodyLine(editor, model, monaco);
+      ensureLatexHeaderBlankLine(editor, model, monaco);
     } finally {
       normalizingRef.current = false;
     }
