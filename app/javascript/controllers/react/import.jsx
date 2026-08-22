@@ -113,6 +113,16 @@ const IMPORT_OPTIONS = {};
 function ImportApp({ config }) {
   const { createUrl, csrfToken } = config;
 
+  // `defaultImportMode` opens the review step on "Keep as LaTeX" (or Markdown)
+  // rather than the wizard's own "Convert to PreTeXt" default: plus edits those
+  // sources natively, so the less destructive choice is to keep what was
+  // uploaded and let the reader opt into the conversion, not the other way
+  // round. The chooser is still shown — this sets which radio starts selected.
+  //
+  // A PreTeXt upload has no native alternative, and the wizard resolves that
+  // itself: it hides the chooser and hands `onConfirm` "converted" regardless of
+  // this preference.
+  //
   // projectForImportMode picks the division pool matching the user's choice at
   // the review step: the native LaTeX/Markdown pool when they keep the source
   // format, the converted PreTeXt pool otherwise (and for PreTeXt input, which
@@ -164,6 +174,7 @@ function ImportApp({ config }) {
     <ImportWizard
       onConfirm={onConfirm}
       importOptions={IMPORT_OPTIONS}
+      defaultImportMode="native"
       engines={[importEngine]}
     />
   );
