@@ -292,6 +292,7 @@ const CodeEditor = forwardRef<CodeEditorHandle, CodeEditorProps>(({
   const [isEditorMounted, setIsEditorMounted] = useState(false);
   const onRebuildRef = useRef(onRebuild);
   const onSaveRef = useRef(onSave);
+  const onOpenFindInProjectRef = useRef(onOpenFindInProject);
   const options = useMemo(
     () => ({ ...baseOptions, readOnly: !!readOnly }),
     [readOnly],
@@ -402,6 +403,10 @@ const CodeEditor = forwardRef<CodeEditorHandle, CodeEditorProps>(({
   useEffect(() => {
     onSaveRef.current = onSave;
   }, [onSave]);
+
+  useEffect(() => {
+    onOpenFindInProjectRef.current = onOpenFindInProject;
+  }, [onOpenFindInProject]);
 
   useEffect(() => {
     onCursorLineChangeRef.current = onCursorLineChange;
@@ -888,6 +893,16 @@ const CodeEditor = forwardRef<CodeEditorHandle, CodeEditorProps>(({
     editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyS, () => {
       onSaveRef.current?.();
     });
+
+    // Register Ctrl+Shift+F to open the project-wide Find/Replace drawer.
+    // Unbound in standalone Monaco (it's a VS Code-workbench shortcut, not a
+    // core editor one), so this doesn't shadow anything.
+    editor.addCommand(
+      monaco.KeyMod.CtrlCmd | monaco.KeyMod.Shift | monaco.KeyCode.KeyF,
+      () => {
+        onOpenFindInProjectRef.current?.();
+      },
+    );
 
     // Take over Mod+A so select-all stops at the editable body. A dynamic
     // keybinding outweighs Monaco's built-in `editor.action.selectAll`, which

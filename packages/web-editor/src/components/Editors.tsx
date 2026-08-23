@@ -2103,10 +2103,17 @@ const EditorsInner = (props: EditorsInnerProps) => {
     />
   );
 
-  // Docked next to the TOC (see FindReplaceDrawer) rather than sharing its
-  // tab bar — independent of isTocCollapsed, closed with its own ✕/Escape.
-  // A normal flex sibling, not an absolute overlay, so it can never cover the
-  // code editor regardless of whether the TOC is collapsed or expanded.
+  // Docked next to the TOC (see FindReplaceDrawer), not sharing its tab bar —
+  // closed with its own ✕/Escape. A normal flex sibling, not an absolute
+  // overlay, so it never covers the code editor.
+  //
+  // Its relationship to the TOC depends on whether the TOC has its own space
+  // to give up: when the TOC is expanded, the drawer takes that same slot
+  // (replacing it, rather than adding another 300px next to it and squeezing
+  // the editor/preview panes); when the TOC is collapsed to its thin rail,
+  // there's nothing to replace, so the drawer sits beside the rail as an
+  // extra sibling and the editor slides over for it, same as any other panel
+  // opening.
   const findDrawer = isFindPanelOpen ? (
     <FindReplaceDrawer
       onClose={() => closeModal("isFindPanelOpen")}
@@ -2115,6 +2122,7 @@ const EditorsInner = (props: EditorsInnerProps) => {
       readOnly={props.readOnly}
     />
   ) : null;
+  const showTocSidebar = !(isFindPanelOpen && !isTocCollapsed);
 
   // ── Layout ────────────────────────────────────────────────────────────────
   const editorTabId = "pretext-plus-tab-editor";
@@ -2125,7 +2133,7 @@ const EditorsInner = (props: EditorsInnerProps) => {
   if (isNarrowScreen) {
     editorDisplays = (
       <div className="h-full w-full flex flex-row overflow-hidden">
-        {tocSidebar}
+        {showTocSidebar && tocSidebar}
         {findDrawer}
         <div className="flex flex-col flex-1 min-w-0 h-full">
           <div className="flex border-b border-[#ddd] bg-[#f8f8f8]" role="tablist">
@@ -2178,7 +2186,7 @@ const EditorsInner = (props: EditorsInnerProps) => {
   } else {
     editorDisplays = (
       <div className="flex flex-row w-full h-full overflow-hidden">
-        {tocSidebar}
+        {showTocSidebar && tocSidebar}
         {findDrawer}
         <Group orientation="horizontal" className="h-full w-full">
           <Panel

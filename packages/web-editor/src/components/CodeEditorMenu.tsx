@@ -244,6 +244,7 @@ const CodeEditorMenu: React.FC<CodeEditorMenuProps> = ({
           key: "find-in-project",
           label: "Find in Project…",
           title: "Search and replace across every division",
+          shortcut: formatShortcut("Mod+Shift+F"),
           onSelect: onOpenFindInProject,
         },
       ]
