@@ -85,6 +85,8 @@ interface CodeEditorMenuProps {
   onOpenSnippets?: () => void;
   /** Opens the assembled-source modal. */
   onShowFullSource: () => void;
+  /** If provided, a "Find in Project…" item is shown after Monaco's own Find/Replace. */
+  onOpenFindInProject?: () => void;
   hideAssets?: boolean;
   hideSnippets?: boolean;
   /** When true, every editing action is hidden — only viewing actions remain. */
@@ -165,6 +167,7 @@ const CodeEditorMenu: React.FC<CodeEditorMenuProps> = ({
   onOpenSnippets,
   hideSnippets,
   onShowFullSource,
+  onOpenFindInProject,
   readOnly,
 }) => {
   // Which menu is open, so opening one closes the last and hovering across the
@@ -234,6 +237,18 @@ const CodeEditorMenu: React.FC<CodeEditorMenuProps> = ({
     onSelect: actions.selectAll,
   });
 
+  const findInProjectEntry: MenuEntry[] = onOpenFindInProject
+    ? [
+        {
+          kind: "item",
+          key: "find-in-project",
+          label: "Find in Project…",
+          title: "Search and replace across every division",
+          onSelect: onOpenFindInProject,
+        },
+      ]
+    : [];
+
   // A read-only buffer keeps the operations that only read: copying it,
   // selecting it, searching it.
   const editEntries: MenuEntry[] = readOnly
@@ -242,6 +257,7 @@ const CodeEditorMenu: React.FC<CodeEditorMenuProps> = ({
         selectAllEntry,
         separator("find"),
         commandEntry(MONACO_COMMANDS.find, run),
+        ...findInProjectEntry,
       ]
     : [
         commandEntry(MONACO_COMMANDS.undo, run, {
@@ -273,6 +289,7 @@ const CodeEditorMenu: React.FC<CodeEditorMenuProps> = ({
         separator("find"),
         commandEntry(MONACO_COMMANDS.find, run),
         commandEntry(MONACO_COMMANDS.replace, run),
+        ...findInProjectEntry,
       ];
 
   // ── Insert ────────────────────────────────────────────────────────────────

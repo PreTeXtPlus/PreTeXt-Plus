@@ -89,6 +89,8 @@ interface CodeEditorProps {
   onOpenAssets?: () => void;
   /** If provided, a "Snippets" button is shown in the toolbar (PreTeXt mode only). */
   onOpenSnippets?: () => void;
+  /** If provided, a "Find in Project…" item is shown in the Tools menu. */
+  onOpenFindInProject?: () => void;
   /** Called when the user clicks "Display Full Source" to open the assembled-source modal. */
   onShowFullSource: () => void;
   /**
@@ -133,6 +135,34 @@ export interface CodeEditorHandle {
   focus: () => void;
   /** Put the cursor on `line`, scrolling it into view if it is off-screen. */
   revealLine: (line: number) => void;
+  /**
+   * Select `[startLine:startCol, endLine:endCol]` (1-based), scrolling it into
+   * view if it is off-screen. Used to highlight a project-wide find match,
+   * which — unlike a preview-sync click — names a span, not just a line.
+   */
+  revealRange: (
+    startLine: number,
+    startCol: number,
+    endLine: number,
+    endCol: number,
+  ) => void;
+  /**
+   * Apply `edits` to the current model as one undoable step — the same
+   * `pushStackElement`-bracketed `pushEditOperations` idiom `applyCleanFixes`
+   * uses, so the batch is one Ctrl+Z rather than one per replacement, and
+   * (in collab mode) reaches the shared doc through the same guarded path a
+   * keystroke would. Returns `false` with no effect if there's no live model
+   * to edit — the caller's target division isn't the one currently open.
+   */
+  applyEdits: (
+    edits: {
+      startLine: number;
+      startCol: number;
+      endLine: number;
+      endCol: number;
+      text: string;
+    }[],
+  ) => boolean;
   /**
    * Source-cleanup findings for the buffer as it stands, one row per rule.
    * Empty for a format with no cleanup engine. Read (not pushed) because the
@@ -187,6 +217,7 @@ const CodeEditor = forwardRef<CodeEditorHandle, CodeEditorProps>(({
   canConvertToPretext,
   onOpenAssets,
   onOpenSnippets,
+  onOpenFindInProject,
   onShowFullSource,
   onRequestWrapperEdit,
   hideAssets,
@@ -300,6 +331,46 @@ const CodeEditor = forwardRef<CodeEditorHandle, CodeEditorProps>(({
         suppressCursorReportRef.current = false;
       }
       lastCursorLineRef.current = line;
+    },
+    revealRange: (startLine, startCol, endLine, endCol) => {
+      const editor = editorRef.current;
+      if (!editor) return;
+      editor.focus();
+      suppressCursorReportRef.current = true;
+      try {
+        const range = {
+          startLineNumber: startLine,
+          startColumn: startCol,
+          endLineNumber: endLine,
+          endColumn: endCol,
+        };
+        editor.revealRangeInCenterIfOutsideViewport(range);
+        editor.setSelection(range);
+      } finally {
+        suppressCursorReportRef.current = false;
+      }
+      lastCursorLineRef.current = endLine;
+    },
+    applyEdits: (edits) => {
+      const model = editorRef.current?.getModel?.();
+      if (!model || edits.length === 0) return false;
+      model.pushStackElement();
+      model.pushEditOperations(
+        [],
+        edits.map((e) => ({
+          range: {
+            startLineNumber: e.startLine,
+            startColumn: e.startCol,
+            endLineNumber: e.endLine,
+            endColumn: e.endCol,
+          },
+          text: e.text,
+          forceMoveMarkers: true,
+        })),
+        () => null,
+      );
+      model.pushStackElement();
+      return true;
     },
     // Both cleanup methods read the format from its ref rather than closing
     // over the prop: this handle is built once (`[]`), while the editor lives
@@ -1000,6 +1071,7 @@ const CodeEditor = forwardRef<CodeEditorHandle, CodeEditorProps>(({
         canConvertToPretext={canConvertToPretext}
         onOpenAssets={onOpenAssets}
         onOpenSnippets={onOpenSnippets}
+        onOpenFindInProject={onOpenFindInProject}
         onShowFullSource={onShowFullSource}
         hideAssets={hideAssets}
         hideSnippets={hideSnippets}

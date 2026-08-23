@@ -31,7 +31,10 @@ import SnippetManagerModal, { type SnippetManagerMainTab } from "./SnippetManage
 import SnippetEditModal from "./SnippetEditModal";
 import MenuBar from "./MenuBar";
 import TableOfContents from "./TableOfContents";
+import FindReplaceDrawer from "./toc/FindReplaceDrawer";
 import ErrorBoundary from "./ErrorBoundary";
+import { applyReplacements } from "./projectFind";
+import type { ProjectMatch } from "../types/projectScan";
 
 import { derivePretextContent } from "../contentConversion";
 import { DEFAULT_LANGUAGE } from "../languages";
@@ -558,6 +561,7 @@ const EditorsInner = (props: EditorsInnerProps) => {
   const isTocCollapsed = useEditorStore((s) => s.isTocCollapsed);
   const setIsTocCollapsed = useEditorStore((s) => s.setIsTocCollapsed);
   const toggleTocCollapsed = useEditorStore((s) => s.toggleTocCollapsed);
+  const isFindPanelOpen = useEditorStore((s) => s.isFindPanelOpen);
   const isLatexDialogOpen = useEditorStore((s) => s.isLatexDialogOpen);
   const isCleanDialogOpen = useEditorStore((s) => s.isCleanDialogOpen);
   const isConvertDialogOpen = useEditorStore((s) => s.isConvertDialogOpen);
@@ -703,6 +707,28 @@ const EditorsInner = (props: EditorsInnerProps) => {
     // before their parent's), so its model holds this division's source.
     pendingRevealRef.current = null;
     codeEditorRef.current?.revealLine(pending.line);
+  }, [activeDivision?.xmlId, divisionActiveSource]);
+
+  // ── Cross-division find-result jump ──────────────────────────────────────
+  // Mirrors pendingRevealRef above, for a click in the project-wide Find panel:
+  // that click names a span (not just a line), and the target division may not
+  // be the one currently open.
+  const pendingFindRevealRef = useRef<{
+    xmlId: string;
+    range: ProjectMatch["range"];
+  } | null>(null);
+
+  useEffect(() => {
+    const pending = pendingFindRevealRef.current;
+    if (!pending || activeDivision?.xmlId !== pending.xmlId) return;
+    pendingFindRevealRef.current = null;
+    const { range } = pending;
+    codeEditorRef.current?.revealRange(
+      range.startLine,
+      range.startCol,
+      range.endLine,
+      range.endCol,
+    );
   }, [activeDivision?.xmlId, divisionActiveSource]);
 
   // Per-division line maps for the document currently on screen. Built lazily
@@ -899,6 +925,65 @@ const EditorsInner = (props: EditorsInnerProps) => {
     setActiveDivisionId(xmlId);
     props.onDivisionSelect?.(xmlId);
   };
+
+  // ── Project-wide find/replace ────────────────────────────────────────────
+  const handleJumpToMatch = (match: ProjectMatch) => {
+    if (match.divisionId === activeDivision?.xmlId) {
+      codeEditorRef.current?.revealRange(
+        match.range.startLine,
+        match.range.startCol,
+        match.range.endLine,
+        match.range.endCol,
+      );
+      return;
+    }
+    pendingFindRevealRef.current = { xmlId: match.divisionId, range: match.range };
+    applyDivisionSelect(match.divisionId);
+  };
+
+  // Replace every one of `matches` with `replacement`, grouped by division so
+  // each division's source is spliced once and emitted as a single content
+  // change — mirrors `renameAssetRefEverywhere`'s "loop divisions, rewrite,
+  // emit if changed" shape.
+  const handleReplaceMatches = (matches: ProjectMatch[], replacement: string) => {
+    const byDivision = new Map<string, ProjectMatch[]>();
+    for (const match of matches) {
+      const list = byDivision.get(match.divisionId) ?? [];
+      list.push(match);
+      byDivision.set(match.divisionId, list);
+    }
+    for (const [xmlId, divisionMatches] of byDivision) {
+      const division = divisions.find((d) => d.xmlId === xmlId);
+      if (!division) continue;
+
+      // The open division has a live Monaco model: route the replacement
+      // through it (an ordinary, undoable model edit — the onChange this
+      // fires carries it into the store exactly like typing would) rather
+      // than overwriting the pool directly. A division that isn't open has
+      // no buffer to undo, so it falls back to the direct rewrite below —
+      // the same "loop divisions, rewrite, emit if changed" shape as
+      // renameAssetRefEverywhere.
+      if (xmlId === activeDivision?.xmlId) {
+        const applied = codeEditorRef.current?.applyEdits(
+          divisionMatches.map((m) => ({
+            startLine: m.range.startLine,
+            startCol: m.range.startCol,
+            endLine: m.range.endLine,
+            endCol: m.range.endCol,
+            text: replacement,
+          })),
+        );
+        if (applied) continue;
+      }
+
+      const next = applyReplacements(division.source, divisionMatches, replacement);
+      if (next !== division.source) {
+        emitContentChange(xmlId, next, division.sourceFormat);
+      }
+    }
+  };
+
+  const handleOpenFindPanel = () => openModal("isFindPanelOpen");
 
   // The active division's source converted to a complete, correctly-typed
   // PreTeXt element. Markdown's frontmatter already yields a full element; LaTeX
@@ -1933,6 +2018,7 @@ const EditorsInner = (props: EditorsInnerProps) => {
           : undefined
       }
       onShowFullSource={() => openModal("isFullSourceOpen")}
+      onOpenFindInProject={handleOpenFindPanel}
       // Every format now locks its structural lines (the PreTeXt wrapper tag +
       // title, the Markdown frontmatter, the LaTeX `\section` header) and a
       // single click on them opens the division's properties form in the TOC.
@@ -2017,6 +2103,19 @@ const EditorsInner = (props: EditorsInnerProps) => {
     />
   );
 
+  // Docked next to the TOC (see FindReplaceDrawer) rather than sharing its
+  // tab bar — independent of isTocCollapsed, closed with its own ✕/Escape.
+  // A normal flex sibling, not an absolute overlay, so it can never cover the
+  // code editor regardless of whether the TOC is collapsed or expanded.
+  const findDrawer = isFindPanelOpen ? (
+    <FindReplaceDrawer
+      onClose={() => closeModal("isFindPanelOpen")}
+      onJumpToMatch={handleJumpToMatch}
+      onReplaceMatches={handleReplaceMatches}
+      readOnly={props.readOnly}
+    />
+  ) : null;
+
   // ── Layout ────────────────────────────────────────────────────────────────
   const editorTabId = "pretext-plus-tab-editor";
   const previewTabId = "pretext-plus-tab-preview";
@@ -2027,6 +2126,7 @@ const EditorsInner = (props: EditorsInnerProps) => {
     editorDisplays = (
       <div className="h-full w-full flex flex-row overflow-hidden">
         {tocSidebar}
+        {findDrawer}
         <div className="flex flex-col flex-1 min-w-0 h-full">
           <div className="flex border-b border-[#ddd] bg-[#f8f8f8]" role="tablist">
             <button
@@ -2079,6 +2179,7 @@ const EditorsInner = (props: EditorsInnerProps) => {
     editorDisplays = (
       <div className="flex flex-row w-full h-full overflow-hidden">
         {tocSidebar}
+        {findDrawer}
         <Group orientation="horizontal" className="h-full w-full">
           <Panel
             className="flex flex-col min-h-0 relative overflow-visible z-[1]"
