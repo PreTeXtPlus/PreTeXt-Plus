@@ -2,6 +2,13 @@ class ApplicationController < ActionController::Base
   include ActiveStorage::SetCurrent
   before_action :authenticate_user!
   around_action :set_time_zone
+  # Every authenticated page shows account-specific content, so opt it out of the
+  # browser's back/forward cache (bfcache) -- otherwise switching accounts (sign out,
+  # sign in as someone else) can show a stale bfcache-restored page from the previous
+  # session without ever hitting the network. Chrome only excludes a page from bfcache
+  # when it sees "no-store"; "private, must-revalidate" alone (Rails' default here)
+  # isn't enough.
+  after_action :prevent_caching, if: :user_signed_in?
 
   rescue_from CanCan::AccessDenied do |exception|
     if request.format.json?
@@ -37,6 +44,10 @@ class ApplicationController < ActionController::Base
   end
 
   private
+
+  def prevent_caching
+    response.headers["Cache-Control"] = "no-store"
+  end
 
   # Swaps a DigitalOcean Spaces origin host for the Spaces CDN's custom
   # subdomain, leaving path and query (which carries the presigned signature)

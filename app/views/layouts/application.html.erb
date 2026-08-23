@@ -6,6 +6,12 @@
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="application-name" content="Pretext Plus">
     <meta name="mobile-web-app-capable" content="yes">
+    <%# Almost every page requires sign-in and shows account-specific content -- disable
+        Turbo's client-side snapshot cache so switching accounts (sign out, sign in as
+        someone else) can't show a cached page from the previous session. %>
+    <% if user_signed_in? %>
+      <meta name="turbo-cache-control" content="no-cache">
+    <% end %>
     <%= csrf_meta_tags %>
     <%= csp_meta_tag %>
 
