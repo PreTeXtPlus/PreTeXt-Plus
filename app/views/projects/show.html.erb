@@ -64,7 +64,7 @@
   <% end %>
   <% if current_user&.admin? %>
     <%= link_to "🔒 View as admin", admin_project_path(@project),
-          class: "#{button_classes(color: "gray", outlined: true)} px-3.5 py-2" %>
+          class: "#{button_classes(color: "orange", outlined: true)} px-3.5 py-2" %>
   <% end %>
 <% end %>
 

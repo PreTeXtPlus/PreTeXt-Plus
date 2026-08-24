@@ -1,5 +1,5 @@
 <% content_for :title, @project.title %>
-<% content_for :heading, @project.title %>
+<% content_for :heading, "🔒 "+@project.title %>
 <% content_for :subtitle do %>
   Read-only support view for this project. Owner:
   <%= link_to @project.user.email, admin_user_path(@project.user), class: "text-blue-600 hover:underline" %>
