@@ -62,6 +62,10 @@
           class: "#{button_classes(color: "gray", outlined: true)} px-3.5 py-2",
           data: { turbo: false } %>
   <% end %>
+  <% if current_user&.admin? %>
+    <%= link_to "🔒 View as admin", admin_project_path(@project),
+          class: "#{button_classes(color: "gray", outlined: true)} px-3.5 py-2" %>
+  <% end %>
 <% end %>
 
 <%# Subscribes the dashboard to this project's target rows. Build#mark! broadcasts here
