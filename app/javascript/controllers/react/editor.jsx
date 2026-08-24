@@ -423,6 +423,9 @@ function EditorApp({ config }) {
   // Rails routes the React side needs.  Kept here (rather than in many data
   // attributes) since they're derivable from the project id.
   const projectUrl = `/projects/${projectId}`;
+  // Absolute variant for contexts like the feedback email, which is read
+  // outside the app and needs a link that resolves without an origin.
+  const feedbackProjectUrl = `${window.location.origin}${projectUrl}`;
   const previewUrl = `/projects/${projectId}/preview`;
   const copyUrl = `/projects/${projectId}/copy_conversion`;
   // Feedback is a collection route, not a member one: the action doesn't load a
@@ -1299,7 +1302,7 @@ function EditorApp({ config }) {
       }
       projectAssets={projectAssets}
       projectSnippets={projectSnippets}
-      projectUrl={projectUrl}
+      projectUrl={feedbackProjectUrl}
       saveButtonLabel="Save and manage"
       cancelButtonLabel="Cancel"
       onContentChange={onContentChange}

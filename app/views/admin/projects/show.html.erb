@@ -1,11 +1,12 @@
 <% content_for :title, @project.title %>
-<% content_for :heading, @project.title %>
+<% content_for :heading, "🔒 "+@project.title %>
 <% content_for :subtitle do %>
   Read-only support view for this project. Owner:
   <%= link_to @project.user.email, admin_user_path(@project.user), class: "text-blue-600 hover:underline" %>
 <% end %>
 <% content_for :actions do %>
   <%= link_to "View project page", project_path(@project), class: "#{button_classes(color: "blue")} px-3.5 py-2" %>
+  <%= link_to "View project source", share_source_project_path(@project), class: "#{button_classes(color: "gray", outlined: true)} px-3.5 py-2" %>
   <%= link_to "Back to user", admin_user_path(@project.user), class: "#{button_classes(color: "gray")} px-3.5 py-2" %>
 <% end %>
 
@@ -44,15 +45,4 @@
       </div>
       <%= form.submit "Save template settings", class: "#{button_classes(color: "blue")} px-4 py-2" %>
     <% end %>
-  </section>
-
-  <section class="mt-8 grid gap-6 xl:grid-cols-2">
-    <div class="rounded-xl border border-gray-200 bg-white p-6 shadow-sm">
-      <h2 class="text-2xl font-semibold">PreTeXt preview</h2>
-      <% if @project.pretext_source.present? %>
-        <pre class="mt-4 overflow-x-auto rounded-lg bg-gray-950 p-4 text-sm text-gray-100"><%= truncate(@project.pretext_source, length: 1500) %></pre>
-      <% else %>
-        <p class="mt-4 text-gray-600">No converted PreTeXt source stored for this project.</p>
-      <% end %>
-    </div>
   </section>

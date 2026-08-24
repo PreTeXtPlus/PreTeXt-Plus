@@ -1,5 +1,5 @@
 <% content_for :title, @user.email %>
-<% content_for :heading, @user.name_with_email %>
+<% content_for :heading, "🔒 "+@user.name_with_email %>
 <% content_for :subtitle, "Read-only support view for account activity, access state, and projects." %>
 <% content_for :actions do %>
   <%= link_to "Back to users", admin_users_path, class: "#{button_classes(color: "gray")} px-3.5 py-2" %>

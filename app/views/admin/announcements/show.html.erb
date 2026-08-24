@@ -1,5 +1,5 @@
 <% content_for :title, @announcement.title %>
-<% content_for :heading, @announcement.title %>
+<% content_for :heading, "🔒 "+@announcement.title %>
 <% content_for :subtitle do %>
   <% if @announcement.published? %>
     Published on <%= local_time_tag(@announcement.published_at, date_only: true) %>

@@ -201,7 +201,7 @@ const FeedbackLink = ({
 
               {resolvedProjectUrl ? (
                 <p className="m-0 text-slate-500 text-[0.8rem]">
-                  Project link will be included.
+                  Project link <a href={resolvedProjectUrl}>{resolvedProjectUrl}</a> will be included.
                 </p>
               ) : (
                 <p className="m-0 text-slate-500 text-[0.8rem]">
