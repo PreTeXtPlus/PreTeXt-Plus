@@ -18,7 +18,7 @@ module SubscriptionExtensions
   end
 
   def grants_privileges?
-    return false if invoiced? && !invoice_paid?
+    return false if invoiced? && !invoice_paid? && !user.honor_invoices?
     active? or on_trial?
   end
 

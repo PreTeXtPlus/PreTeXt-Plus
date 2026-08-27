@@ -144,4 +144,28 @@ class Admin::UsersControllerTest < ActionDispatch::IntegrationTest
     assert_includes response.body, "test_user@example.com"
     assert_not_includes response.body, "testxuser@example.com"
   end
+
+  test "redirects non-admin users from toggle_honor_invoices" do
+    sign_in @non_admin
+
+    patch toggle_honor_invoices_admin_user_path(users(:subscribed))
+
+    assert_redirected_to projects_path
+  end
+
+  test "admin enables and disables invoice honoring" do
+    sign_in @admin
+    target = users(:subscribed)
+    assert_not target.honor_invoices?
+
+    patch toggle_honor_invoices_admin_user_path(target)
+    assert_redirected_to admin_user_path(target)
+    assert_match(/Enabled invoice honoring/, flash[:notice])
+    assert target.reload.honor_invoices?
+
+    patch toggle_honor_invoices_admin_user_path(target)
+    assert_redirected_to admin_user_path(target)
+    assert_match(/Disabled invoice honoring/, flash[:notice])
+    assert_not target.reload.honor_invoices?
+  end
 end

@@ -28,4 +28,12 @@ class Pay::SubscriptionTest < ActiveSupport::TestCase
     subscription.object = { "collection_method" => "charge_automatically", "latest_invoice" => { "status" => "open" } }
     assert subscription.grants_privileges?
   end
+
+  test "invoiced subscription with unpaid invoice grants privileges when user honors invoices" do
+    subscription = pay_subscriptions(:one)
+    subscription.object = { "collection_method" => "send_invoice", "latest_invoice" => { "status" => "open" } }
+    assert !subscription.grants_privileges?
+    subscription.user.honor_invoices = true
+    assert subscription.grants_privileges?
+  end
 end
