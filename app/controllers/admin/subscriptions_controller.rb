@@ -55,8 +55,15 @@ class Admin::SubscriptionsController < Admin::BaseController
       return redirect_to admin_user_path(@user), alert: "Invoice #{invoice.number || invoice.id} is #{invoice.status}, not open."
     end
 
-    Stripe::Invoice.pay(invoice.id, paid_out_of_band: true)
+    paid_invoice = Stripe::Invoice.pay(invoice.id, paid_out_of_band: true)
     Pay::Stripe::Subscription.sync(@subscription.processor_id)
+    AdminSubscriptionNotifier.new(
+      subscription: @subscription,
+      amount_cents: paid_invoice.amount_paid,
+      currency: paid_invoice.currency,
+      billing_reason: paid_invoice.billing_reason,
+      manual: true
+    ).notify!
     redirect_to admin_user_path(@user), notice: "Marked invoice #{invoice.number || invoice.id} as paid outside Stripe."
   rescue Stripe::StripeError => e
     redirect_to admin_user_path(@user), alert: "Could not mark invoice as paid: #{e.message}"
