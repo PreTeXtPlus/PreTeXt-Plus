@@ -1,5 +1,5 @@
 class Admin::UsersController < Admin::BaseController
-  before_action :set_user, only: %i[show confirm reset_password update_email]
+  before_action :set_user, only: %i[show confirm reset_password update_email toggle_honor_invoices]
 
   def index
     @filters = filter_params.to_h
@@ -33,6 +33,11 @@ class Admin::UsersController < Admin::BaseController
     else
       redirect_to admin_user_path(@user), alert: @user.errors.full_messages.to_sentence
     end
+  end
+
+  def toggle_honor_invoices
+    @user.update!(honor_invoices: !@user.honor_invoices)
+    redirect_to admin_user_path(@user), notice: "#{@user.honor_invoices? ? "Enabled" : "Disabled"} invoice honoring for #{@user.email}."
   end
 
   private

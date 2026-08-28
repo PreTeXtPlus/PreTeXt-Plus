@@ -52,6 +52,15 @@
           <dt class="font-medium text-gray-500">Admin</dt>
           <dd><%= @user.admin? ? "Yes" : "No" %></dd>
         </div>
+        <div>
+          <dt class="font-medium text-gray-500">Grant privileges for unpaid subscription invoices?</dt>
+          <dd class="flex items-center gap-2">
+            <%= @user.honor_invoices? ? "Yes" : "No" %>
+            <%= button_to (@user.honor_invoices? ? "Disable" : "Enable"),
+              toggle_honor_invoices_admin_user_path(@user), method: :patch,
+              class: "#{button_classes(color: "gray")} px-2.5 py-1 text-xs", form_class: "inline-block" %>
+          </dd>
+        </div>
       </dl>
     </div>
 

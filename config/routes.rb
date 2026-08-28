@@ -62,6 +62,7 @@ Rails.application.routes.draw do
         post :confirm
         post :reset_password
         patch :update_email
+        patch :toggle_honor_invoices
       end
       resources :subscriptions, only: [ :create ], controller: "subscriptions" do
         member do
