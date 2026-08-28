@@ -1,3 +1,4 @@
+import { registerMathAutoConvert } from "./mathAutoConvert";
 import { registerCodeEditorCompletions } from "./pretextCompletions";
 import { registerConfiguredSpellCheck } from "./spellcheck";
 import type { FormatEditorConfig } from "./types";
@@ -16,9 +17,13 @@ export const pretextConfig: FormatEditorConfig = {
       PRETEXT_MONACO_LANGUAGE_ID,
       "pretext",
     );
+    // $math$ / $$math$$ -> <m>/<md> live, PreTeXt only — LaTeX and Markdown
+    // treat those delimiters as their own native syntax.
+    const mathAutoConvert = registerMathAutoConvert(monaco, editor);
 
     return {
       dispose: () => {
+        mathAutoConvert?.dispose();
         spelling?.dispose();
         completions?.dispose?.();
       },
