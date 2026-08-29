@@ -16,7 +16,7 @@
  */
 import { computeLockedRegion } from "../lockedRegion";
 import { SCOPE_ELEMENTS } from "./spellcheck/scopes";
-import { findTagEnd, isNameStart, readName } from "./xmlTags";
+import { isXmlTextPosition } from "./xmlTags";
 
 /**
  * Elements whose contents should never be auto-converted: verbatim/code
@@ -29,73 +29,13 @@ const NEVER_CONVERT_ELEMENTS = new Set(Object.values(SCOPE_ELEMENTS).flat());
 /**
  * Whether `offset` sits in ordinary text — not inside a tag, comment, CDATA
  * section or processing instruction, and not inside an element from
- * {@link NEVER_CONVERT_ELEMENTS}. Walks `source` from the start using the
- * same tolerant, half-typed-markup-safe primitives as
- * `spellcheck/xmlRegions.ts`'s `findCheckableRegions`.
+ * {@link NEVER_CONVERT_ELEMENTS}. A thin wrapper around
+ * `xmlTags.ts`'s `isXmlTextPosition`, the shared walker.
  */
 export const isMathConvertibleContext = (
   source: string,
   offset: number,
-): boolean => {
-  const stack: string[] = [];
-  let index = 0;
-
-  const isSuppressed = () => {
-    const top = stack[stack.length - 1];
-    return top !== undefined && NEVER_CONVERT_ELEMENTS.has(top);
-  };
-
-  while (index < offset) {
-    const lt = source.indexOf("<", index);
-    if (lt === -1 || lt >= offset) return !isSuppressed();
-    // From here on, lt < offset.
-
-    if (source.startsWith("<!--", lt)) {
-      const close = source.indexOf("-->", lt + 4);
-      if (close === -1) return false;
-      const end = close + 3;
-      if (offset < end) return false;
-      index = end;
-    } else if (source.startsWith("<![CDATA[", lt)) {
-      const close = source.indexOf("]]>", lt + 9);
-      if (close === -1) return false;
-      const end = close + 3;
-      if (offset < end) return false;
-      index = end;
-    } else if (source.startsWith("<?", lt)) {
-      const close = source.indexOf("?>", lt + 2);
-      if (close === -1) return false;
-      const end = close + 2;
-      if (offset < end) return false;
-      index = end;
-    } else if (source.startsWith("<!", lt)) {
-      const close = source.indexOf(">", lt + 2);
-      if (close === -1) return false;
-      const end = close + 1;
-      if (offset < end) return false;
-      index = end;
-    } else if (source.startsWith("</", lt)) {
-      const end = findTagEnd(source, lt);
-      if (offset < end) return false;
-      const name = readName(source, lt + 2);
-      const opened = stack.lastIndexOf(name);
-      if (opened !== -1) stack.length = opened;
-      index = end;
-    } else if (isNameStart(source[lt + 1])) {
-      const end = findTagEnd(source, lt);
-      if (offset < end) return false;
-      const name = readName(source, lt + 1);
-      const selfClosing = source[end - 2] === "/";
-      if (!selfClosing) stack.push(name);
-      index = end;
-    } else {
-      // A stray '<' that doesn't open a tag — ordinary text; keep scanning.
-      index = lt + 1;
-    }
-  }
-
-  return !isSuppressed();
-};
+): boolean => isXmlTextPosition(source, offset, NEVER_CONVERT_ELEMENTS);
 
 export interface LineMathMatch {
   /** 1-based, inclusive — start of the opening delimiter. */
