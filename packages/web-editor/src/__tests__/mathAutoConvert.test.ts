@@ -1,4 +1,4 @@
-import { describe, it, expect, vi } from "vitest";
+import { describe, it, expect } from "vitest";
 import {
   findLineMathMatch,
   isMathConvertibleContext,
@@ -146,6 +146,7 @@ describe("registerMathAutoConvert", () => {
   /** A stand-in for Monaco's text model, backed by mutable lines. */
   const makeModel = (initial: string) => {
     const lines = initial.split("\n");
+    let pushStackElementCalls = 0;
     return {
       getLineCount: () => lines.length,
       getLineContent: (n: number) => lines[n - 1] ?? "",
@@ -175,24 +176,26 @@ describe("registerMathAutoConvert", () => {
         lines[idx] =
           line.slice(0, range.startColumn - 1) + text + line.slice(range.endColumn - 1);
       },
+      // Real Monaco closes off an undo group so a conversion becomes its own
+      // atomic undo step, distinct from the typing that produced it — this
+      // just counts calls, since the fake model has no real undo stack.
+      pushStackElement: () => {
+        pushStackElementCalls += 1;
+      },
+      getPushStackElementCalls: () => pushStackElementCalls,
     };
   };
 
   type FakeModel = ReturnType<typeof makeModel>;
 
-  /** A stand-in for a Monaco editor: records the two listeners this module registers. */
+  /** A stand-in for a Monaco editor: records the content listener this module registers. */
   const makeEditor = (model: FakeModel) => {
     let contentListener: ((event: unknown) => void) | null = null;
-    let keyListener: ((event: unknown) => void) | null = null;
     return {
       getModel: () => model,
       onDidChangeModelContent: (cb: (event: unknown) => void) => {
         contentListener = cb;
         return { dispose: () => (contentListener = null) };
-      },
-      onKeyDown: (cb: (event: unknown) => void) => {
-        keyListener = cb;
-        return { dispose: () => (keyListener = null) };
       },
       executeEdits: (_source: string, edits: any[]) => {
         for (const edit of edits) model.applyEdit(edit.range, edit.text);
@@ -207,26 +210,6 @@ describe("registerMathAutoConvert", () => {
         model.applyEdit(range, "$");
         contentListener?.({ changes: [{ range, rangeLength: 0, text: "$" }] });
       },
-      /** Types an arbitrary single character — used to simulate an unrelated edit. */
-      type: (line: number, column: number, text: string) => {
-        const range = {
-          startLineNumber: line,
-          startColumn: column,
-          endLineNumber: line,
-          endColumn: column,
-        };
-        model.applyEdit(range, text);
-        contentListener?.({ changes: [{ range, rangeLength: 0, text }] });
-      },
-      pressEscape: () => {
-        const event = {
-          keyCode: monaco.KeyCode.Escape,
-          preventDefault: vi.fn(),
-          stopPropagation: vi.fn(),
-        };
-        keyListener?.(event);
-        return event;
-      },
     };
   };
 
@@ -238,9 +221,9 @@ describe("registerMathAutoConvert", () => {
       public endColumn: number,
     ) {}
   }
-  const monaco = { Range: FakeRange, KeyCode: { Escape: 9 } };
+  const monaco = { Range: FakeRange };
 
-  it("converts on the closing $ and reverts it on Escape", () => {
+  it("converts on the closing $ and closes off an undo group on both sides", () => {
     const model = makeModel(
       ['<section xml:id="s">', "The value $x^2", "</section>"].join("\n"),
     );
@@ -249,32 +232,14 @@ describe("registerMathAutoConvert", () => {
 
     editor.typeDollar(2, model.getLineContent(2).length + 1);
     expect(model.getLineContent(2)).toBe("The value <m>x^2</m>");
-
-    const event = editor.pressEscape();
-    expect(event.preventDefault).toHaveBeenCalled();
-    expect(model.getLineContent(2)).toBe("The value $x^2$");
+    // One call before the edit (so it doesn't merge into the user's typing
+    // that produced "$x^2$") and one after (so later typing doesn't merge
+    // into it either) — without both, undo would delete the converted text
+    // outright instead of reverting it to "$x^2$".
+    expect(model.getPushStackElementCalls()).toBe(2);
   });
 
-  it("forfeits the Escape-undo once another edit happens", () => {
-    const model = makeModel(
-      ['<section xml:id="s">', "The value $x^2", "</section>"].join("\n"),
-    );
-    const editor = makeEditor(model);
-    registerMathAutoConvert(monaco, editor);
-
-    editor.typeDollar(2, model.getLineContent(2).length + 1);
-    expect(model.getLineContent(2)).toBe("The value <m>x^2</m>");
-
-    editor.type(2, model.getLineContent(2).length + 1, "!");
-    const afterEdit = model.getLineContent(2);
-    expect(afterEdit).toBe("The value <m>x^2</m>!");
-
-    const event = editor.pressEscape();
-    expect(event.preventDefault).not.toHaveBeenCalled();
-    expect(model.getLineContent(2)).toBe(afterEdit);
-  });
-
-  it("does nothing on a locked line", () => {
+  it("does nothing on a locked line, and touches no undo boundary", () => {
     const model = makeModel(
       ['<section xml:id="s">$x^2', "body", "</section>"].join("\n"),
     );
@@ -283,5 +248,6 @@ describe("registerMathAutoConvert", () => {
 
     editor.typeDollar(1, model.getLineContent(1).length + 1);
     expect(model.getLineContent(1)).toBe('<section xml:id="s">$x^2$');
+    expect(model.getPushStackElementCalls()).toBe(0);
   });
 });

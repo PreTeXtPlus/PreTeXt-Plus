@@ -11,8 +11,8 @@
  * comment/CDATA block, or an element whose content is verbatim or already
  * math, and never when the closing delimiter is preceded by whitespace (that
  * shape is far more likely to be an unrelated `$…` starting, e.g. "$5 or
- * $10", than the end of real math). A conversion can be undone immediately
- * by pressing Escape.
+ * $10", than the end of real math). A conversion is rejected the same way
+ * any other edit is: Ctrl+Z/Cmd+Z, via Monaco's own undo stack.
  */
 import { computeLockedRegion } from "../lockedRegion";
 import { SCOPE_ELEMENTS } from "./spellcheck/scopes";
@@ -174,32 +174,26 @@ export const findLineMathMatch = (
   };
 };
 
-/** What Escape can undo: the range the conversion produced, and what it replaced. */
-interface PendingRevert {
-  range: unknown;
-  original: string;
-}
-
 /**
  * Wires {@link isMathConvertibleContext} and {@link findLineMathMatch} into a
  * live Monaco editor. Registered from `pretextConfig.ts`'s
  * `registerMonacoExtensions`, alongside completions and spell check.
+ *
+ * No custom undo is wired up here: an explicit `model.pushStackElement()` on
+ * each side of the conversion edit (see below) is enough to make Ctrl+Z/
+ * Cmd+Z immediately after a conversion revert just the conversion, via
+ * Monaco's ordinary undo stack — no bespoke mechanism needed.
  */
 export const registerMathAutoConvert = (
   monaco: any,
   editor: any,
 ): { dispose: () => void } => {
-  // Guards the listener against the content-change events our own edits
-  // (conversion and revert) synchronously trigger.
+  // Guards the listener against the content-change event our own conversion
+  // edit synchronously triggers.
   let isApplying = false;
-  let pending: PendingRevert | null = null;
 
   const contentListener = editor.onDidChangeModelContent((event: any) => {
     if (isApplying) return;
-    // Any further edit forfeits the Escape-undo window for the previous
-    // conversion — it doesn't try to track a pending range across an
-    // unrelated edit.
-    if (pending) pending = null;
 
     const changes = event?.changes;
     if (!Array.isArray(changes) || changes.length !== 1) return;
@@ -228,6 +222,14 @@ export const registerMathAutoConvert = (
       line,
       match.endColumn,
     );
+    // Left alone, this edit lands inside the same undo group as the user's
+    // just-typed "$" (and whatever typing preceded it), since it runs
+    // synchronously inside that keystroke's content-change handler — so one
+    // Ctrl+Z would delete the converted text outright instead of reverting
+    // it to "$math$"/"$$math$$". Closing the undo group off on both sides
+    // (the same `pushStackElement` idiom `latexClean.ts` uses) makes the
+    // conversion its own atomic undo step.
+    model.pushStackElement();
     isApplying = true;
     try {
       editor.executeEdits("math-auto-convert", [
@@ -236,42 +238,12 @@ export const registerMathAutoConvert = (
     } finally {
       isApplying = false;
     }
-
-    pending = {
-      range: new monaco.Range(
-        line,
-        match.startColumn,
-        line,
-        match.startColumn + match.replacement.length,
-      ),
-      original: lineText.slice(match.startColumn - 1, match.endColumn - 1),
-    };
-  });
-
-  const keyListener = editor.onKeyDown((event: any) => {
-    if (event.keyCode !== monaco.KeyCode.Escape || !pending) return;
-    // Consume the keystroke only when there's something to undo, so Monaco's
-    // default Escape handling (closing suggestion/find widgets, etc.) is
-    // untouched the rest of the time.
-    event.preventDefault();
-    event.stopPropagation();
-
-    const revert = pending;
-    pending = null;
-    isApplying = true;
-    try {
-      editor.executeEdits("math-auto-convert-undo", [
-        { range: revert.range, text: revert.original, forceMoveMarkers: true },
-      ]);
-    } finally {
-      isApplying = false;
-    }
+    model.pushStackElement();
   });
 
   return {
     dispose: () => {
       contentListener?.dispose?.();
-      keyListener?.dispose?.();
     },
   };
 };
