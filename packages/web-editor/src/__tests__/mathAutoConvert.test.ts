@@ -72,6 +72,28 @@ describe("findLineMathMatch", () => {
   it("rejects an empty inline span", () => {
     expect(findLineMathMatch("$$", 2)).toBeNull();
   });
+
+  it("does not treat an unrelated $ as closing an earlier inline mention", () => {
+    // The "$" before "10" isn't closing "$5" — it's opening its own mention.
+    const line = "Tickets cost $5 or $10.";
+    const secondDollar = line.indexOf("$", line.indexOf("$") + 1);
+    expect(findLineMathMatch(line, secondDollar + 2)).toBeNull();
+  });
+
+  it("does not treat an unrelated $$ as closing an earlier display mention", () => {
+    const line = "Tickets cost $$5 or $$10.";
+    const secondPair = line.indexOf("$$10");
+    expect(findLineMathMatch(line, secondPair + 3)).toBeNull();
+  });
+
+  it("still converts when the content merely contains interior whitespace", () => {
+    const line = "$x + y$";
+    expect(findLineMathMatch(line, line.length + 1)).toEqual({
+      startColumn: 1,
+      endColumn: line.length + 1,
+      replacement: "<m>x + y</m>",
+    });
+  });
 });
 
 describe("isMathConvertibleContext", () => {
