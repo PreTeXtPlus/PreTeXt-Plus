@@ -7,9 +7,12 @@
  * up only from `pretextConfig.ts`.
  *
  * Matching is deliberately narrow: only within the same line and the same
- * XML text node (never spanning a tag boundary), and never inside markup, a
+ * XML text node (never spanning a tag boundary), never inside markup, a
  * comment/CDATA block, or an element whose content is verbatim or already
- * math. A conversion can be undone immediately by pressing Escape.
+ * math, and never when the closing delimiter is preceded by whitespace (that
+ * shape is far more likely to be an unrelated `$…` starting, e.g. "$5 or
+ * $10", than the end of real math). A conversion can be undone immediately
+ * by pressing Escape.
  */
 import { computeLockedRegion } from "../lockedRegion";
 import { SCOPE_ELEMENTS } from "./spellcheck/scopes";
@@ -135,7 +138,10 @@ export const findLineMathMatch = (
       return null;
     }
     const content = lineText.slice(openIdx + 2, closerStart);
-    if (content.length === 0) return null;
+    // A closer preceded by whitespace is far more likely to be the start of
+    // an unrelated `$…` (e.g. "$5 or $$10") than the end of real math, which
+    // essentially never ends its content right on a trailing space.
+    if (content.length === 0 || /\s$/.test(content)) return null;
     return {
       startColumn: openIdx + 1,
       endColumn: column,
@@ -157,7 +163,10 @@ export const findLineMathMatch = (
   if (openIdx > searchStart && lineText[openIdx - 1] === "$") return null;
   if (openIdx > searchStart && lineText[openIdx - 1] === "\\") return null;
   const content = lineText.slice(openIdx + 1, closerIdx);
-  if (content.length === 0) return null;
+  // See the display branch above: a closer preceded by whitespace is more
+  // likely to be an unrelated `$…` starting (e.g. "$5 or $10") than the end
+  // of real math.
+  if (content.length === 0 || /\s$/.test(content)) return null;
   return {
     startColumn: openIdx + 1,
     endColumn: column,
