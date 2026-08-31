@@ -1,5 +1,4 @@
-import { registerAngleBracketAutoConvert } from "./angleBracketAutoConvert";
-import { registerMathAutoConvert } from "./mathAutoConvert";
+import { registerAutoConvert } from "./autoConvert";
 import { registerCodeEditorCompletions } from "./pretextCompletions";
 import { registerConfiguredSpellCheck } from "./spellcheck";
 import type { FormatEditorConfig } from "./types";
@@ -18,18 +17,15 @@ export const pretextConfig: FormatEditorConfig = {
       PRETEXT_MONACO_LANGUAGE_ID,
       "pretext",
     );
-    // $math$ / $$math$$ -> <m>/<md> live, PreTeXt only — LaTeX and Markdown
-    // treat those delimiters as their own native syntax.
-    const mathAutoConvert = registerMathAutoConvert(monaco, editor);
-    // Stray "< " -> "&lt; " and " >" -> " &gt;" live, PreTeXt only — a
-    // literal < in XML text content is a hard well-formedness error; > is
-    // legal bare but escaped too for clarity.
-    const angleBracketAutoConvert = registerAngleBracketAutoConvert(monaco, editor);
+    // $math$/$$math$$ -> <m>/<md>, stray "< "/" >" -> "&lt;"/"&gt;", and
+    // stray "& " -> "&amp;" — all live, PreTeXt only, from one shared
+    // content-change subscription (see autoConvert.ts for why they must
+    // share one rather than each registering separately).
+    const autoConvert = registerAutoConvert(monaco, editor);
 
     return {
       dispose: () => {
-        angleBracketAutoConvert?.dispose();
-        mathAutoConvert?.dispose();
+        autoConvert?.dispose();
         spelling?.dispose();
         completions?.dispose?.();
       },

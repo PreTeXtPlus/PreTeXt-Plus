@@ -1,8 +1,8 @@
 import { describe, it, expect } from "vitest";
 import {
   findLineMathMatch,
+  handleMathAutoConvert,
   isMathConvertibleContext,
-  registerMathAutoConvert,
 } from "../components/editorConfigs/mathAutoConvert";
 
 describe("findLineMathMatch", () => {
@@ -142,7 +142,7 @@ describe("isMathConvertibleContext", () => {
   });
 });
 
-describe("registerMathAutoConvert", () => {
+describe("handleMathAutoConvert", () => {
   /** A stand-in for Monaco's text model, backed by mutable lines. */
   const makeModel = (initial: string) => {
     const lines = initial.split("\n");
@@ -188,30 +188,13 @@ describe("registerMathAutoConvert", () => {
 
   type FakeModel = ReturnType<typeof makeModel>;
 
-  /** A stand-in for a Monaco editor: records the content listener this module registers. */
-  const makeEditor = (model: FakeModel) => {
-    let contentListener: ((event: unknown) => void) | null = null;
-    return {
-      getModel: () => model,
-      onDidChangeModelContent: (cb: (event: unknown) => void) => {
-        contentListener = cb;
-        return { dispose: () => (contentListener = null) };
-      },
-      executeEdits: (_source: string, edits: any[]) => {
-        for (const edit of edits) model.applyEdit(edit.range, edit.text);
-      },
-      typeDollar: (line: number, column: number) => {
-        const range = {
-          startLineNumber: line,
-          startColumn: column,
-          endLineNumber: line,
-          endColumn: column,
-        };
-        model.applyEdit(range, "$");
-        contentListener?.({ changes: [{ range, rangeLength: 0, text: "$" }] });
-      },
-    };
-  };
+  /** A stand-in for a Monaco editor. */
+  const makeEditor = (model: FakeModel) => ({
+    getModel: () => model,
+    executeEdits: (_source: string, edits: any[]) => {
+      for (const edit of edits) model.applyEdit(edit.range, edit.text);
+    },
+  });
 
   class FakeRange {
     constructor(
@@ -223,14 +206,26 @@ describe("registerMathAutoConvert", () => {
   }
   const monaco = { Range: FakeRange };
 
+  /** Applies the raw "$" keystroke to the model and returns the change describing it. */
+  const typeDollar = (model: FakeModel, line: number, column: number) => {
+    const range = {
+      startLineNumber: line,
+      startColumn: column,
+      endLineNumber: line,
+      endColumn: column,
+    };
+    model.applyEdit(range, "$");
+    return { range, rangeLength: 0, text: "$" };
+  };
+
   it("converts on the closing $ and closes off an undo group on both sides", () => {
     const model = makeModel(
       ['<section xml:id="s">', "The value $x^2", "</section>"].join("\n"),
     );
     const editor = makeEditor(model);
-    registerMathAutoConvert(monaco, editor);
 
-    editor.typeDollar(2, model.getLineContent(2).length + 1);
+    const change = typeDollar(model, 2, model.getLineContent(2).length + 1);
+    expect(handleMathAutoConvert(monaco, editor, change)).toBe(true);
     expect(model.getLineContent(2)).toBe("The value <m>x^2</m>");
     // One call before the edit (so it doesn't merge into the user's typing
     // that produced "$x^2$") and one after (so later typing doesn't merge
@@ -244,9 +239,9 @@ describe("registerMathAutoConvert", () => {
       ['<section xml:id="s">$x^2', "body", "</section>"].join("\n"),
     );
     const editor = makeEditor(model);
-    registerMathAutoConvert(monaco, editor);
 
-    editor.typeDollar(1, model.getLineContent(1).length + 1);
+    const change = typeDollar(model, 1, model.getLineContent(1).length + 1);
+    expect(handleMathAutoConvert(monaco, editor, change)).toBe(false);
     expect(model.getLineContent(1)).toBe('<section xml:id="s">$x^2$');
     expect(model.getPushStackElementCalls()).toBe(0);
   });

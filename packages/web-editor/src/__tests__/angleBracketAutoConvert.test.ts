@@ -2,7 +2,7 @@ import { describe, it, expect } from "vitest";
 import {
   findGreaterThanEscape,
   findLessThanEscape,
-  registerAngleBracketAutoConvert,
+  handleAngleBracketAutoConvert,
 } from "../components/editorConfigs/angleBracketAutoConvert";
 import { isXmlTextPosition } from "../components/editorConfigs/xmlTags";
 
@@ -112,7 +112,7 @@ describe("isXmlTextPosition with no suppressed elements", () => {
   });
 });
 
-describe("registerAngleBracketAutoConvert", () => {
+describe("handleAngleBracketAutoConvert", () => {
   /** A stand-in for Monaco's text model, backed by mutable lines. */
   const makeModel = (initial: string) => {
     const lines = initial.split("\n");
@@ -155,30 +155,13 @@ describe("registerAngleBracketAutoConvert", () => {
 
   type FakeModel = ReturnType<typeof makeModel>;
 
-  /** A stand-in for a Monaco editor: records the content listener this module registers. */
-  const makeEditor = (model: FakeModel) => {
-    let contentListener: ((event: unknown) => void) | null = null;
-    return {
-      getModel: () => model,
-      onDidChangeModelContent: (cb: (event: unknown) => void) => {
-        contentListener = cb;
-        return { dispose: () => (contentListener = null) };
-      },
-      executeEdits: (_source: string, edits: any[]) => {
-        for (const edit of edits) model.applyEdit(edit.range, edit.text);
-      },
-      typeChar: (line: number, column: number, text: string) => {
-        const range = {
-          startLineNumber: line,
-          startColumn: column,
-          endLineNumber: line,
-          endColumn: column,
-        };
-        model.applyEdit(range, text);
-        contentListener?.({ changes: [{ range, rangeLength: 0, text }] });
-      },
-    };
-  };
+  /** A stand-in for a Monaco editor. */
+  const makeEditor = (model: FakeModel) => ({
+    getModel: () => model,
+    executeEdits: (_source: string, edits: any[]) => {
+      for (const edit of edits) model.applyEdit(edit.range, edit.text);
+    },
+  });
 
   class FakeRange {
     constructor(
@@ -190,14 +173,31 @@ describe("registerAngleBracketAutoConvert", () => {
   }
   const monaco = { Range: FakeRange };
 
+  /** Applies a raw single-character keystroke to the model and returns the change describing it. */
+  const typeChar = (
+    model: FakeModel,
+    line: number,
+    column: number,
+    text: string,
+  ) => {
+    const range = {
+      startLineNumber: line,
+      startColumn: column,
+      endLineNumber: line,
+      endColumn: column,
+    };
+    model.applyEdit(range, text);
+    return { range, rangeLength: 0, text };
+  };
+
   it("converts a stray < to &lt; and closes off an undo group on both sides", () => {
     const model = makeModel(
       ['<section xml:id="s">', "if x <", "</section>"].join("\n"),
     );
     const editor = makeEditor(model);
-    registerAngleBracketAutoConvert(monaco, editor);
 
-    editor.typeChar(2, model.getLineContent(2).length + 1, " ");
+    const change = typeChar(model, 2, model.getLineContent(2).length + 1, " ");
+    expect(handleAngleBracketAutoConvert(monaco, editor, change)).toBe(true);
     expect(model.getLineContent(2)).toBe("if x &lt; ");
     expect(model.getPushStackElementCalls()).toBe(2);
   });
@@ -210,9 +210,9 @@ describe("registerAngleBracketAutoConvert", () => {
       ['<section xml:id="s">', "if x <>", "</section>"].join("\n"),
     );
     const editor = makeEditor(model);
-    registerAngleBracketAutoConvert(monaco, editor);
 
-    editor.typeChar(2, "if x <".length + 1, " ");
+    const change = typeChar(model, 2, "if x <".length + 1, " ");
+    expect(handleAngleBracketAutoConvert(monaco, editor, change)).toBe(true);
     expect(model.getLineContent(2)).toBe("if x &lt; ");
     expect(model.getPushStackElementCalls()).toBe(2);
   });
@@ -222,9 +222,9 @@ describe("registerAngleBracketAutoConvert", () => {
       ['<section xml:id="s">', "if x ", "</section>"].join("\n"),
     );
     const editor = makeEditor(model);
-    registerAngleBracketAutoConvert(monaco, editor);
 
-    editor.typeChar(2, model.getLineContent(2).length + 1, ">");
+    const change = typeChar(model, 2, model.getLineContent(2).length + 1, ">");
+    expect(handleAngleBracketAutoConvert(monaco, editor, change)).toBe(true);
     expect(model.getLineContent(2)).toBe("if x &gt;");
     expect(model.getPushStackElementCalls()).toBe(2);
   });
@@ -236,9 +236,9 @@ describe("registerAngleBracketAutoConvert", () => {
       ),
     );
     const editor = makeEditor(model);
-    registerAngleBracketAutoConvert(monaco, editor);
 
-    editor.typeChar(2, model.getLineContent(2).length + 1, " ");
+    const change = typeChar(model, 2, model.getLineContent(2).length + 1, " ");
+    expect(handleAngleBracketAutoConvert(monaco, editor, change)).toBe(false);
     expect(model.getLineContent(2)).toBe("<!-- if x < ");
     expect(model.getPushStackElementCalls()).toBe(0);
   });
@@ -250,9 +250,9 @@ describe("registerAngleBracketAutoConvert", () => {
       ),
     );
     const editor = makeEditor(model);
-    registerAngleBracketAutoConvert(monaco, editor);
 
-    editor.typeChar(2, model.getLineContent(2).length + 1, ">");
+    const change = typeChar(model, 2, model.getLineContent(2).length + 1, ">");
+    expect(handleAngleBracketAutoConvert(monaco, editor, change)).toBe(false);
     expect(model.getLineContent(2)).toBe("<!-- if x >");
     expect(model.getPushStackElementCalls()).toBe(0);
   });
@@ -262,9 +262,9 @@ describe("registerAngleBracketAutoConvert", () => {
       ['<section xml:id="s">', '<p xml:id="x" ', "</section>"].join("\n"),
     );
     const editor = makeEditor(model);
-    registerAngleBracketAutoConvert(monaco, editor);
 
-    editor.typeChar(2, model.getLineContent(2).length + 1, ">");
+    const change = typeChar(model, 2, model.getLineContent(2).length + 1, ">");
+    expect(handleAngleBracketAutoConvert(monaco, editor, change)).toBe(false);
     expect(model.getLineContent(2)).toBe('<p xml:id="x" >');
     expect(model.getPushStackElementCalls()).toBe(0);
   });
@@ -274,31 +274,33 @@ describe("registerAngleBracketAutoConvert", () => {
       ['<section xml:id="s">if x < and y ', "body", "</section>"].join("\n"),
     );
     const editor = makeEditor(model);
-    registerAngleBracketAutoConvert(monaco, editor);
 
-    editor.typeChar(1, model.getLineContent(1).length + 1, " ");
+    const change1 = typeChar(model, 1, model.getLineContent(1).length + 1, " ");
+    expect(handleAngleBracketAutoConvert(monaco, editor, change1)).toBe(false);
     expect(model.getLineContent(1)).toBe(
       '<section xml:id="s">if x < and y  ',
     );
 
-    editor.typeChar(1, model.getLineContent(1).length + 1, ">");
+    const change2 = typeChar(model, 1, model.getLineContent(1).length + 1, ">");
+    expect(handleAngleBracketAutoConvert(monaco, editor, change2)).toBe(false);
     expect(model.getLineContent(1)).toBe(
       '<section xml:id="s">if x < and y  >',
     );
     expect(model.getPushStackElementCalls()).toBe(0);
   });
 
-  it("handles a < conversion followed by a > conversion from the same registration", () => {
+  it("handles a < conversion followed by a > conversion from separate calls", () => {
     const model = makeModel(
       ['<section xml:id="s">', "if x <", "</section>"].join("\n"),
     );
     const editor = makeEditor(model);
-    registerAngleBracketAutoConvert(monaco, editor);
 
-    editor.typeChar(2, model.getLineContent(2).length + 1, " ");
+    const change1 = typeChar(model, 2, model.getLineContent(2).length + 1, " ");
+    expect(handleAngleBracketAutoConvert(monaco, editor, change1)).toBe(true);
     expect(model.getLineContent(2)).toBe("if x &lt; ");
 
-    editor.typeChar(2, model.getLineContent(2).length + 1, ">");
+    const change2 = typeChar(model, 2, model.getLineContent(2).length + 1, ">");
+    expect(handleAngleBracketAutoConvert(monaco, editor, change2)).toBe(true);
     expect(model.getLineContent(2)).toBe("if x &lt; &gt;");
     expect(model.getPushStackElementCalls()).toBe(4);
   });

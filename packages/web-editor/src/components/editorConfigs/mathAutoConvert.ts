@@ -3,8 +3,9 @@
  * author types: `$math$` → `<m>math</m>`, `$$math$$` → `<md>math</md>`.
  *
  * PreTeXt-only — LaTeX and Markdown source treat `$`/`$$` as their own valid
- * native syntax (see `latexSyntax.ts`, `markdownSyntax.ts`), so this is wired
- * up only from `pretextConfig.ts`.
+ * native syntax (see `latexSyntax.ts`, `markdownSyntax.ts`), so this trigger
+ * is only tried from `autoConvert.ts`'s shared subscription, which
+ * `pretextConfig.ts` registers.
  *
  * Matching is deliberately narrow: only within the same line and the same
  * XML text node (never spanning a tag boundary), never inside markup, a
@@ -115,75 +116,58 @@ export const findLineMathMatch = (
 };
 
 /**
- * Wires {@link isMathConvertibleContext} and {@link findLineMathMatch} into a
- * live Monaco editor. Registered from `pretextConfig.ts`'s
- * `registerMonacoExtensions`, alongside completions and spell check.
+ * Applies {@link isMathConvertibleContext} and {@link findLineMathMatch}
+ * against one Monaco content-change `change` — called from
+ * `autoConvert.ts`'s single shared `onDidChangeModelContent` subscription
+ * (alongside the other PreTeXt auto-convert triggers; see that file for why
+ * they all share one subscription rather than each registering their own).
+ * Returns `true` if it matched and applied its edit.
  *
  * No custom undo is wired up here: an explicit `model.pushStackElement()` on
  * each side of the conversion edit (see below) is enough to make Ctrl+Z/
  * Cmd+Z immediately after a conversion revert just the conversion, via
  * Monaco's ordinary undo stack — no bespoke mechanism needed.
  */
-export const registerMathAutoConvert = (
+export const handleMathAutoConvert = (
   monaco: any,
   editor: any,
-): { dispose: () => void } => {
-  // Guards the listener against the content-change event our own conversion
-  // edit synchronously triggers.
-  let isApplying = false;
+  change: any,
+): boolean => {
+  if (change.text !== "$" || change.rangeLength !== 0) return false;
 
-  const contentListener = editor.onDidChangeModelContent((event: any) => {
-    if (isApplying) return;
+  const model = editor.getModel();
+  if (!model) return false;
 
-    const changes = event?.changes;
-    if (!Array.isArray(changes) || changes.length !== 1) return;
-    const change = changes[0];
-    if (change.text !== "$" || change.rangeLength !== 0) return;
+  const line = change.range.startLineNumber;
+  const column = change.range.startColumn + 1;
 
-    const model = editor.getModel();
-    if (!model) return;
+  const region = computeLockedRegion(model, "pretext");
+  if (region?.lockedLines.includes(line)) return false;
 
-    const line = change.range.startLineNumber;
-    const column = change.range.startColumn + 1;
+  const offset = model.getOffsetAt({ lineNumber: line, column });
+  if (!isMathConvertibleContext(model.getValue(), offset)) return false;
 
-    const region = computeLockedRegion(model, "pretext");
-    if (region?.lockedLines.includes(line)) return;
+  const lineText = model.getLineContent(line);
+  const match = findLineMathMatch(lineText, column);
+  if (!match) return false;
 
-    const offset = model.getOffsetAt({ lineNumber: line, column });
-    if (!isMathConvertibleContext(model.getValue(), offset)) return;
-
-    const lineText = model.getLineContent(line);
-    const match = findLineMathMatch(lineText, column);
-    if (!match) return;
-
-    const range = new monaco.Range(
-      line,
-      match.startColumn,
-      line,
-      match.endColumn,
-    );
-    // Left alone, this edit lands inside the same undo group as the user's
-    // just-typed "$" (and whatever typing preceded it), since it runs
-    // synchronously inside that keystroke's content-change handler — so one
-    // Ctrl+Z would delete the converted text outright instead of reverting
-    // it to "$math$"/"$$math$$". Closing the undo group off on both sides
-    // (the same `pushStackElement` idiom `latexClean.ts` uses) makes the
-    // conversion its own atomic undo step.
-    model.pushStackElement();
-    isApplying = true;
-    try {
-      editor.executeEdits("math-auto-convert", [
-        { range, text: match.replacement, forceMoveMarkers: true },
-      ]);
-    } finally {
-      isApplying = false;
-    }
-    model.pushStackElement();
-  });
-
-  return {
-    dispose: () => {
-      contentListener?.dispose?.();
-    },
-  };
+  const range = new monaco.Range(
+    line,
+    match.startColumn,
+    line,
+    match.endColumn,
+  );
+  // Left alone, this edit lands inside the same undo group as the user's
+  // just-typed "$" (and whatever typing preceded it), since it runs
+  // synchronously inside that keystroke's content-change handler — so one
+  // Ctrl+Z would delete the converted text outright instead of reverting
+  // it to "$math$"/"$$math$$". Closing the undo group off on both sides
+  // (the same `pushStackElement` idiom `latexClean.ts` uses) makes the
+  // conversion its own atomic undo step.
+  model.pushStackElement();
+  editor.executeEdits("math-auto-convert", [
+    { range, text: match.replacement, forceMoveMarkers: true },
+  ]);
+  model.pushStackElement();
+  return true;
 };
