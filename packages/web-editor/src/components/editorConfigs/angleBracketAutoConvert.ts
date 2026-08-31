@@ -20,7 +20,8 @@
  * left alone.
  *
  * PreTeXt-only — LaTeX and Markdown source aren't XML and don't need this —
- * so this is wired up only from `pretextConfig.ts`.
+ * so this trigger is only tried from `autoConvert.ts`'s shared subscription,
+ * which `pretextConfig.ts` registers.
  */
 import { computeLockedRegion } from "../lockedRegion";
 import { isXmlTextPosition } from "./xmlTags";
@@ -90,15 +91,17 @@ export const findGreaterThanEscape = (
 };
 
 /**
- * Wires {@link findLessThanEscape} and {@link findGreaterThanEscape} into a
- * live Monaco editor, both guarded by {@link isXmlTextPosition} so a
- * bracket that's already legitimately raw — inside a comment, a CDATA
- * section, or an attribute value, or genuinely part of a real tag — is left
- * alone. One listener handles both directions, since they can never both
- * match the same keystroke (a single inserted character is either `>` or
- * whitespace, never both). Registered from `pretextConfig.ts`'s
- * `registerMonacoExtensions`, alongside completions, spell check, and math
- * auto-convert.
+ * Applies {@link findLessThanEscape} and {@link findGreaterThanEscape}
+ * against one Monaco content-change `change`, both guarded by
+ * {@link isXmlTextPosition} so a bracket that's already legitimately raw —
+ * inside a comment, a CDATA section, or an attribute value, or genuinely
+ * part of a real tag — is left alone. Handles both directions, since they
+ * can never both match the same keystroke (a single inserted character is
+ * either `>` or whitespace, never both). Called from `autoConvert.ts`'s
+ * single shared `onDidChangeModelContent` subscription (alongside the other
+ * PreTeXt auto-convert triggers; see that file for why they all share one
+ * subscription rather than each registering their own). Returns `true` if
+ * it matched and applied its edit.
  *
  * No custom undo is wired up here: an explicit `model.pushStackElement()`
  * on each side of the edit (see below) is enough to make Ctrl+Z/Cmd+Z
@@ -106,78 +109,58 @@ export const findGreaterThanEscape = (
  * ordinary undo stack — the same fix `mathAutoConvert.ts` needed, applied
  * here from the start.
  */
-export const registerAngleBracketAutoConvert = (
+export const handleAngleBracketAutoConvert = (
   monaco: any,
   editor: any,
-): { dispose: () => void } => {
-  // Guards the listener against the content-change event our own edit
-  // synchronously triggers.
-  let isApplying = false;
+  change: any,
+): boolean => {
+  if (change.rangeLength !== 0 || change.text?.length !== 1) return false;
 
-  const contentListener = editor.onDidChangeModelContent((event: any) => {
-    if (isApplying) return;
+  const model = editor.getModel();
+  if (!model) return false;
 
-    const changes = event?.changes;
-    if (!Array.isArray(changes) || changes.length !== 1) return;
-    const change = changes[0];
-    if (change.rangeLength !== 0 || change.text?.length !== 1) return;
+  const line = change.range.startLineNumber;
+  const lineText = model.getLineContent(line);
 
-    const model = editor.getModel();
-    if (!model) return;
-
-    const line = change.range.startLineNumber;
-    const lineText = model.getLineContent(line);
-
-    // The range/replacement to apply, in terms of columns on `line`.
-    let startColumn: number;
-    let endColumn: number; // exclusive
-    let replacement: string;
-    if (change.text === ">") {
-      const column = findGreaterThanEscape(lineText, change.range.startColumn);
-      if (column === null) return;
-      startColumn = column;
-      endColumn = column + 1;
-      replacement = "&gt;";
-    } else if (/\s/.test(change.text)) {
-      const match = findLessThanEscape(lineText, change.range.startColumn);
-      if (!match) return;
-      startColumn = match.column;
-      if (match.danglingGreaterThanColumn === null) {
-        endColumn = match.column + 1;
-        replacement = "&lt;";
-      } else {
-        // Sweep the auto-closed ">" Monaco left behind into the same edit
-        // (see LessThanEscapeMatch), keeping the whitespace the author
-        // actually typed.
-        endColumn = match.danglingGreaterThanColumn + 1;
-        replacement = "&lt;" + change.text;
-      }
+  // The range/replacement to apply, in terms of columns on `line`.
+  let startColumn: number;
+  let endColumn: number; // exclusive
+  let replacement: string;
+  if (change.text === ">") {
+    const column = findGreaterThanEscape(lineText, change.range.startColumn);
+    if (column === null) return false;
+    startColumn = column;
+    endColumn = column + 1;
+    replacement = "&gt;";
+  } else if (/\s/.test(change.text)) {
+    const match = findLessThanEscape(lineText, change.range.startColumn);
+    if (!match) return false;
+    startColumn = match.column;
+    if (match.danglingGreaterThanColumn === null) {
+      endColumn = match.column + 1;
+      replacement = "&lt;";
     } else {
-      return;
+      // Sweep the auto-closed ">" Monaco left behind into the same edit
+      // (see LessThanEscapeMatch), keeping the whitespace the author
+      // actually typed.
+      endColumn = match.danglingGreaterThanColumn + 1;
+      replacement = "&lt;" + change.text;
     }
+  } else {
+    return false;
+  }
 
-    const region = computeLockedRegion(model, "pretext");
-    if (region?.lockedLines.includes(line)) return;
+  const region = computeLockedRegion(model, "pretext");
+  if (region?.lockedLines.includes(line)) return false;
 
-    const offset = model.getOffsetAt({ lineNumber: line, column: startColumn });
-    if (!isXmlTextPosition(model.getValue(), offset)) return;
+  const offset = model.getOffsetAt({ lineNumber: line, column: startColumn });
+  if (!isXmlTextPosition(model.getValue(), offset)) return false;
 
-    const range = new monaco.Range(line, startColumn, line, endColumn);
-    model.pushStackElement();
-    isApplying = true;
-    try {
-      editor.executeEdits("angle-bracket-auto-convert", [
-        { range, text: replacement, forceMoveMarkers: true },
-      ]);
-    } finally {
-      isApplying = false;
-    }
-    model.pushStackElement();
-  });
-
-  return {
-    dispose: () => {
-      contentListener?.dispose?.();
-    },
-  };
+  const range = new monaco.Range(line, startColumn, line, endColumn);
+  model.pushStackElement();
+  editor.executeEdits("angle-bracket-auto-convert", [
+    { range, text: replacement, forceMoveMarkers: true },
+  ]);
+  model.pushStackElement();
+  return true;
 };
