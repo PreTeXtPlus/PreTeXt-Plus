@@ -6,7 +6,8 @@ class Admin::DashboardController < Admin::BaseController
       { label: "Subscribed users", value: subscribed_users.count, detail: "Active or trialing subscription access" },
       { label: "Projects", value: Project.count, detail: "All user-owned projects" },
       { label: "Recent sign-ins", value: User.where("last_sign_in_at >= ?", 7.days.ago).count, detail: "Unique users who signed in within the last 7 days" },
-      { label: "Unconfirmed emails", value: User.where(confirmed_at: nil).count, detail: "Accounts that have not confirmed their email" }
+      { label: "Unconfirmed emails", value: User.where(confirmed_at: nil).count, detail: "Accounts that have not confirmed their email" },
+      { label: "Confirmed .edu domains", value: confirmed_edu_domain_count, detail: "Distinct .edu email domains among confirmed accounts" }
     ]
 
     @recent_users = User.where.not(last_sign_in_at: nil).order(last_sign_in_at: :desc).limit(5)
@@ -20,5 +21,11 @@ class Admin::DashboardController < Admin::BaseController
     User.joins(subscription_seats: :subscription)
       .where(pay_subscriptions: { status: %w[active trialing] })
       .distinct
+  end
+
+  def confirmed_edu_domain_count
+    User.where.not(confirmed_at: nil)
+      .where("email ILIKE ?", "%.edu")
+      .count("DISTINCT split_part(email, '@', 2)")
   end
 end
