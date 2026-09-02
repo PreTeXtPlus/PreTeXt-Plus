@@ -115,7 +115,7 @@ class Build < ApplicationRecord
   # out of the queue), so every pending build gets both.
   def start!
     FullBuildJob.perform_later(self)
-    BuildRecheckJob.set(wait: BuildRecheckJob::RECHECK_AFTER).perform_later(self)
+    BuildRecheckJob.set(wait: BuildRecheckJob::RECHECK_SCHEDULE.first).perform_later(self)
   end
 
   # The only way a build's status should ever change.

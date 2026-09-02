@@ -28,6 +28,9 @@ application.register("project-visibility", ProjectVisibilityController)
 import SharedSourceController from "./shared_source_controller"
 application.register("shared-source", SharedSourceController)
 
+import StreamReconnectController from "./stream_reconnect_controller"
+application.register("stream-reconnect", StreamReconnectController)
+
 import TabsController from "./tabs_controller"
 application.register("tabs", TabsController)
 

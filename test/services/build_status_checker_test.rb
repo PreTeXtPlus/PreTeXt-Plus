@@ -72,6 +72,22 @@ class BuildStatusCheckerTest < ActiveJob::TestCase
     assert_match(/reported errors/, result.message)
   end
 
+  # The webhook and a poll can both be asking the same question at once -- see
+  # BuildRecheckJob's early schedule, which now checks back seconds after a build
+  # starts rather than half a minute in. If the webhook wins while this request was
+  # still on the wire, importing the artifact a second time here would collide with
+  # it on BuildFile's unique index and mark! a build that actually succeeded failed.
+  test "a build the webhook already moved past sent_to_server while this was in flight is left alone" do
+    result = stub_status("status" => "success", "log" => "the whole build log",
+                         "artifact_url" => "/builds/job-123/artifact") do
+      build.update_column(:status, Build.statuses.fetch("received_from_server"))
+      BuildStatusChecker.new(build).check!
+    end
+
+    assert result.ok?
+    assert_no_enqueued_jobs(only: FullBuildArtifactJob)
+  end
+
   test "a build still running is reported, not moved" do
     result = stub_status("status" => "running") { BuildStatusChecker.new(build).check! }
 

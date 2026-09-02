@@ -135,6 +135,23 @@ class BuildCallbacksControllerTest < ActionDispatch::IntegrationTest
     assert_match(/"completed"/, logged.join("\n"))
   end
 
+  # BuildStatusChecker#check! polls the same server this callback describes, and can
+  # win the race to an answer if a build finishes fast enough -- see BuildRecheckJob's
+  # early schedule. If it already claimed this build, the webhook must not import the
+  # same artifact a second time: that collides on BuildFile's unique index and marks
+  # a build that actually succeeded failed.
+  test "a callback for a build the poll already claimed is acknowledged but changes nothing" do
+    @build.mark!(:received_from_server, log: "Success! Built requested target(s) without errors.")
+
+    assert_no_enqueued_jobs(only: FullBuildArtifactJob) do
+      post_callback(success_payload)
+    end
+
+    assert_response :success
+    assert @build.reload.received_from_server?
+    assert_equal "Success! Built requested target(s) without errors.", @build.log
+  end
+
   test "a callback for a canceled build is acknowledged but changes nothing" do
     @build.mark!(:canceled, log: "Build canceled.")
 

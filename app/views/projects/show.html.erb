@@ -69,8 +69,11 @@
 <% end %>
 
 <%# Subscribes the dashboard to this project's target rows. Build#mark! broadcasts here
-      on every status transition, which is what replaced the old <meta refresh>. %>
-  <%= turbo_stream_from [ @project, :targets ] %>
+      on every status transition, which is what replaced the old <meta refresh>.
+      stream-reconnect morphs the page back in from the server whenever this
+      subscription reconnects, to pick up anything broadcast while it was down --
+      see app/javascript/controllers/stream_reconnect_controller.js. %>
+  <%= turbo_stream_from [ @project, :targets ], data: { controller: "stream-reconnect" } %>
 
   <div class="mt-8 flex flex-wrap items-center justify-between gap-3">
     <h2 class="font-mono text-xs font-semibold uppercase tracking-widest text-gray-500">

@@ -24,10 +24,15 @@ class BuildCallbacksController < ApplicationController
     build = Build.find(params[:id])
     payload = JSON.parse(body) rescue {}
 
-    # A build the author cancelled is finished, whatever the server decided a moment
-    # later. Cancelling races a build that was already wrapping up, and the output of a
-    # build nobody is waiting for must not be imported over the top of what is published.
-    return head(:ok) if build.canceled?
+    # Only a build still waiting on an answer can use one. A cancel that landed first
+    # is the original reason for this, but BuildStatusChecker#check! claims a build
+    # the same way this does -- it polls the same server this callback describes, and
+    # can win the race to an answer if a build finishes fast enough (it guards itself
+    # symmetrically, reloading before it acts on the server's response). Whichever
+    # gets there first wins; letting the loser through here too would import the same
+    # artifact twice, which collides on BuildFile's unique index and mark! this build
+    # failed right after the winner marked it succeeded.
+    return head(:ok) unless %w[ pending in_progress sent_to_server ].include?(build.reload.status)
 
     case payload["status"]
     when "success"
