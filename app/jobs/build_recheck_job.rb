@@ -25,19 +25,28 @@ class BuildRecheckJob < ApplicationJob
   # from under scheduled jobs by design.
   discard_on ActiveJob::DeserializationError
 
-  # How long to leave a build alone before the first look, and between looks after that.
-  # Most builds are done well inside one interval, so in the ordinary case this runs
-  # once, finds a finished build, re-broadcasts it and stops.
-  RECHECK_AFTER = 30.seconds
+  # How long after the build starts each look happens, front-loaded: most builds that
+  # are going to finish quickly do so within the first few seconds of being asked, and a
+  # dashboard sitting on a missed broadcast should not have to wait 30s to find out for
+  # something that fast. Four minutes of looking is plenty for a genuinely missed
+  # message -- past that a build is the build server's problem rather than ours, and in
+  # production BuildWatchdogJob still sweeps sent_to_server builds that never call back.
+  # The last two entries exist to give STALL_AFTER, below, somewhere to actually fire:
+  # without a check still scheduled after that threshold passes, a stalled import would
+  # never be noticed by this job at all.
+  RECHECK_SCHEDULE = [ 3.seconds, 7.seconds, 15.seconds, 30.seconds, 60.seconds,
+                       90.seconds, 120.seconds, 150.seconds, 180.seconds, 210.seconds,
+                       240.seconds ].freeze
 
-  # Roughly fifteen minutes of looking. Past that a build is the build server's problem
-  # rather than a missed message, and in production BuildWatchdogJob still sweeps.
-  MAX_ATTEMPTS = 30
+  MAX_ATTEMPTS = RECHECK_SCHEDULE.size
 
   # How long an import may go without producing anything before it is treated as dead.
   # Measured against real progress (see #last_progress_at), not against the clock, so a
-  # slow but living import of a large site is never cut off part way.
-  STALL_AFTER = 5.minutes
+  # slow but living import of a large site is never cut off part way. Kept under
+  # RECHECK_SCHEDULE's four-minute span -- specifically with two looks (210s, 240s) still
+  # to come once it passes -- so this job's own checks are actually still running when a
+  # stall crosses the threshold, rather than the window having already closed.
+  STALL_AFTER = 3.minutes
 
   # Appended to the CLI's own log, which by this point says the build succeeded -- the
   # part that failed is ours, and saying so is better than a bare "Failed".
@@ -55,7 +64,8 @@ class BuildRecheckJob < ApplicationJob
       build.target.broadcast_row
       build.target.broadcast_drawer
     elsif attempt < MAX_ATTEMPTS
-      self.class.set(wait: RECHECK_AFTER).perform_later(build, attempt: attempt + 1)
+      wait = RECHECK_SCHEDULE[attempt] - RECHECK_SCHEDULE[attempt - 1]
+      self.class.set(wait: wait).perform_later(build, attempt: attempt + 1)
     end
   end
 

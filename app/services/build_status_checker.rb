@@ -50,6 +50,17 @@ class BuildStatusChecker
       return Result.new(ok: false, message: "Build server returned HTTP #{response.code}: #{response.body.to_s.truncate(300)}")
     end
 
+    # Reload before acting on any of this: the webhook this same response describes
+    # may have landed while that request was in flight, and it moves a build to
+    # received_from_server the same way the branches below do. Racing it means
+    # importing the same artifact twice, which collides on BuildFile's unique index --
+    # and the loser calls mark!(:failed) on a build that actually succeeded (see
+    # FullBuildArtifactJob). The webhook got there first, so there is nothing left here
+    # to do but say so the way the branch below would have.
+    if @build.reload.received_from_server?
+      return Result.new(ok: true, message: "Build server reports success -- importing files now.")
+    end
+
     data = JSON.parse(response.body)
     case data["status"]
     when "success"
