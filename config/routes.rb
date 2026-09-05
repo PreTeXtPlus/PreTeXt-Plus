@@ -191,7 +191,14 @@ Rails.application.routes.draw do
   post "tryit/preview" => "projects#preview", as: "tryit_preview"
   get "(tryit)/external/icon" => redirect("/icon.svg")
 
+  # Where the editor reports collaboration failures only the browser can see.
+  resources :collab_incidents, only: :create
+
   get "up" => "rails/health#show", as: :rails_health_check
+  # Deliberately *not* folded into /up: this one can fail while the app is
+  # perfectly healthy, and restarting the app over it would be the worse outage.
+  # Point a monitor at it and alert on it. See CableHealthController.
+  get "up/cable" => "cable_health#show", as: :cable_health_check
 
   root "pages#home"
 end

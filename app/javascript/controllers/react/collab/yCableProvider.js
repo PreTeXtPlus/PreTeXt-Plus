@@ -7,6 +7,7 @@ import {
   removeAwarenessStates,
 } from "y-protocols/awareness";
 import { seedDocFromState } from "@pretextbook/web-editor";
+import { reportCollabIncident } from "./reportIncident";
 
 /**
  * Yjs provider over ActionCable + the project-doc HTTP endpoints.
@@ -29,22 +30,38 @@ import { seedDocFromState } from "@pretextbook/web-editor";
  * full doc state with the highest update id it has incorporated; the server
  * swaps the snapshot and deletes only rows up to that id.
  *
+ * Relay watchdog: the channel broadcasts to every subscriber *including the
+ * sender*, so this client's own awareness heartbeat comes back to it every
+ * AWARENESS_HEARTBEAT_MS. That makes inbound traffic a liveness signal for the
+ * whole relay even in a session of one, and its absence the one symptom that
+ * distinguishes "nobody is typing" from "broadcasts are going nowhere" -- the
+ * August 2026 outage, where solid_cable's listener thread had died in a Puma
+ * worker and every HTTP request kept succeeding. See `startWatchdog`.
+ *
  * @typedef {Object} ProviderConfig
  * @property {string} projectId
  * @property {string} [csrfToken]
  * @property {{name: string, color: string}} user
+ * @property {(status: "ready"|"stalled") => void} [onRelayStatusChange]
  */
 
 const AWARENESS_HEARTBEAT_MS = 15000; // y-protocols expires peers after 30s
 const COMPACTION_INTERVAL_MS = 60000;
 const COMPACTION_MIN_UPDATES = 20;
+// How often the watchdog looks, and how much silence it takes to call the relay
+// stalled. Two and a half missed heartbeats: long enough that one dropped
+// message or a slow poll is not an incident, short enough that a user is still
+// looking at the screen when the banner appears.
+const RELAY_WATCHDOG_MS = 10000;
+const RELAY_SILENCE_MS = AWARENESS_HEARTBEAT_MS * 2.5;
 
 export class YCableProvider {
   /** @param {ProviderConfig} config */
-  constructor({ projectId, csrfToken, user }) {
+  constructor({ projectId, csrfToken, user, onRelayStatusChange }) {
     this.projectId = projectId;
     this.csrfToken = csrfToken;
     this.user = user;
+    this.onRelayStatusChange = onRelayStatusChange ?? (() => {});
     this.doc = new Y.Doc();
     this.awareness = new Awareness(this.doc);
     // Per-tab identity for filtering our own cable echoes (we still read the
@@ -64,6 +81,11 @@ export class YCableProvider {
     this.consumer = null;
     this.subscription = null;
     this.intervals = [];
+    // Watchdog state. `relayStatus` is "ready" until proven otherwise, so a
+    // session that never stalls never mentions the relay to anyone.
+    this.relayStatus = "ready";
+    this.lastInboundAt = 0;
+    this.stalledSince = null;
   }
 
   /**
@@ -117,12 +139,95 @@ export class YCableProvider {
       setInterval(() => this.maybeCompact(), COMPACTION_INTERVAL_MS),
     );
 
+    this.startWatchdog();
+
     // Best-effort presence cleanup; if it doesn't get out, peers expire us
     // after the awareness timeout anyway.
     this.onPageHide = () => {
       removeAwarenessStates(this.awareness, [this.awareness.clientID], "pagehide");
     };
     window.addEventListener("pagehide", this.onPageHide);
+  }
+
+  // ── Relay watchdog ─────────────────────────────────────────────────────────
+
+  /**
+   * Watches for the relay going quiet, and keeps the session usable when it
+   * does.
+   *
+   * The signal is plain silence. Our own awareness heartbeat is echoed back to
+   * us by the channel every AWARENESS_HEARTBEAT_MS, so a healthy relay cannot be
+   * quiet for RELAY_SILENCE_MS no matter how idle the humans are; a quiet relay
+   * is a broken one. That is what makes this catch the failure that HTTP checks
+   * cannot see, in a session of one as readily as in a session of five.
+   *
+   * While stalled it re-fetches over HTTP on every tick. This is not just
+   * bookkeeping: when the relay dies the way it died in August, the *broadcast*
+   * leg is what's gone -- `doc_update` still reaches the server and is still
+   * appended to `project_doc_updates` -- so peers' edits are all still there to
+   * be read. Polling turns a silently diverging session into a slow one.
+   * @returns {void}
+   */
+  startWatchdog() {
+    this.lastInboundAt = Date.now();
+
+    // A hidden tab has its timers throttled, our heartbeat included, so silence
+    // measured across a spell in the background says nothing about the relay.
+    this.onVisibilityChange = () => {
+      if (document.visibilityState === "visible") this.lastInboundAt = Date.now();
+    };
+    document.addEventListener("visibilitychange", this.onVisibilityChange);
+
+    this.intervals.push(
+      setInterval(() => this.checkRelay(), RELAY_WATCHDOG_MS),
+    );
+  }
+
+  /** @returns {void} */
+  checkRelay() {
+    if (this.destroyed) return;
+    if (typeof document !== "undefined" && document.visibilityState === "hidden") return;
+
+    const silentFor = Date.now() - this.lastInboundAt;
+    if (silentFor < RELAY_SILENCE_MS) return;
+
+    if (this.relayStatus === "ready") {
+      this.relayStatus = "stalled";
+      this.stalledSince = this.lastInboundAt;
+      this.onRelayStatusChange("stalled");
+      reportCollabIncident({
+        kind: "relay_stalled",
+        projectId: this.projectId,
+        csrfToken: this.csrfToken,
+        detail: "No cable message received since the last awareness heartbeat echo.",
+        silentForSeconds: Math.round(silentFor / 1000),
+      });
+    }
+
+    // Every tick while stalled, not just on the transition: this is the session's
+    // only remaining path to peers' edits.
+    this.scheduleResync();
+  }
+
+  /**
+   * Any inbound cable message is proof the relay is delivering. Called for every
+   * message, including ones buffered before the session is ready.
+   * @returns {void}
+   */
+  noteInbound() {
+    this.lastInboundAt = Date.now();
+    if (this.relayStatus !== "stalled") return;
+
+    const silentFor = this.stalledSince ? Date.now() - this.stalledSince : null;
+    this.relayStatus = "ready";
+    this.stalledSince = null;
+    this.onRelayStatusChange("ready");
+    reportCollabIncident({
+      kind: "relay_recovered",
+      projectId: this.projectId,
+      csrfToken: this.csrfToken,
+      silentForSeconds: silentFor ? Math.round(silentFor / 1000) : undefined,
+    });
   }
 
   /** True when this client should run session-wide chores (autosave, compaction). */
@@ -137,6 +242,7 @@ export class YCableProvider {
   destroy() {
     this.destroyed = true;
     window.removeEventListener("pagehide", this.onPageHide ?? (() => {}));
+    document.removeEventListener("visibilitychange", this.onVisibilityChange ?? (() => {}));
     this.intervals.forEach(clearInterval);
     this.intervals = [];
     removeAwarenessStates(this.awareness, [this.awareness.clientID], "destroy");
@@ -175,6 +281,7 @@ export class YCableProvider {
             }
           },
           received: (message) => {
+            this.noteInbound();
             if (!this.ready) {
               this.buffered.push(message);
               return;

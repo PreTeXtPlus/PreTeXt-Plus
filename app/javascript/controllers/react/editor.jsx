@@ -16,6 +16,7 @@ import {
   DEFAULT_LANGUAGE,
 } from "@pretextbook/web-editor";
 import { YCableProvider } from "./collab/yCableProvider";
+import { reportCollabIncident } from "./collab/reportIncident";
 import {
   railsDivisionToEditor,
   railsAssetToEditor,
@@ -525,6 +526,10 @@ function EditorApp({ config }) {
   // the collab-mode dirty-check baseline, mirroring serverSnapshot.
   const collabServerSnapshot = useRef(null);
   const [collabStatus, setCollabStatus] = useState("off"); // off|connecting|ready|error
+  // Whether live relay is currently flowing. Separate from collabStatus: the
+  // session is joined and fully usable, it just isn't hearing peers in real time
+  // (see YCableProvider.startWatchdog), so this warns rather than blocks.
+  const [relayStalled, setRelayStalled] = useState(false);
 
   useEffect(() => {
     const data = projectQuery.data;
@@ -536,6 +541,7 @@ function EditorApp({ config }) {
         name: data.editorUser?.name || "Anonymous",
         color: colorForUser(data.editorUser?.id),
       },
+      onRelayStatusChange: (status) => setRelayStalled(status === "stalled"),
     });
     providerRef.current = provider;
     setCollabStatus("connecting");
@@ -551,6 +557,15 @@ function EditorApp({ config }) {
       .catch((error) => {
         console.error("Failed to join collaborative session:", error);
         setCollabStatus("error");
+        // The user sees a "please reload" screen and will usually just reload,
+        // so without this the only record of a session nobody could join is a
+        // message in a console nobody is reading.
+        reportCollabIncident({
+          kind: "join_failed",
+          projectId,
+          csrfToken,
+          detail: error?.message ?? String(error),
+        });
       });
   }, [projectQuery.data, projectId, csrfToken]);
 
@@ -1282,54 +1297,68 @@ function EditorApp({ config }) {
   const state = initial.current;
   const provider = providerRef.current;
   return (
-    <Editors
-      title={state.title}
-      docinfo={state.docinfo}
-      commonDocinfo={state.commonDocinfo}
-      useCommonDocinfo={state.useCommonDocinfo}
-      language={state.language}
-      projectType={state.projectType}
-      divisions={state.divisions}
-      rootDivisionId={state.rootDivisionId}
-      collaboration={
-        provider
-          ? {
-              doc: provider.doc,
-              awareness: provider.awareness,
-              user: provider.user,
-            }
-          : undefined
-      }
-      projectAssets={projectAssets}
-      projectSnippets={projectSnippets}
-      projectUrl={feedbackProjectUrl}
-      saveButtonLabel="Save and manage"
-      cancelButtonLabel="Cancel"
-      onContentChange={onContentChange}
-      onDivisionAdd={onDivisionAdd}
-      onDivisionRemove={onDivisionRemove}
-      onDivisionUpdate={onDivisionUpdate}
-      onAssetInsert={onAssetInsert}
-      onAssetUpload={onAssetUpload}
-      onAssetFetchUrl={onAssetFetchUrl}
-      onCreateAuthored={onCreateAuthored}
-      onAssetUpdate={onAssetUpdate}
-      onAssetRemove={onAssetRemove}
-      onLoadAssets={onLoadAssets}
-      onCreateSnippet={onCreateSnippet}
-      onSnippetUpdate={onSnippetUpdate}
-      onSnippetRemove={onSnippetRemove}
-      onTitleChange={onTitleChange}
-      onLanguageChange={onLanguageChange}
-      onUseCommonDocinfoChange={onUseCommonDocinfoChange}
-      onCommonDocinfoChange={onCommonDocinfoChange}
-      onSave={() => save()}
-      onSaveButton={onSaveButton}
-      onCancelButton={onCancelButton}
-      onPreviewRebuild={onPreviewRebuild}
-      onCreatePretextProjectCopy={onCreatePretextProjectCopy}
-      onFeedbackSubmit={onFeedbackSubmit}
-    />
+    <>
+      {/* Positioned rather than laid out, so a banner that appears mid-session
+          cannot reflow the editor under the user's cursor. Reassuring on
+          purpose: their work is safe and still being saved -- what they have
+          lost is only the *live* view of collaborators, and telling them that
+          plainly is better than letting them discover it by contradiction. */}
+      {relayStalled && (
+        <div class="fixed top-2 left-1/2 z-50 -translate-x-1/2 rounded-md border border-amber-300 bg-amber-50 px-4 py-2 text-sm text-amber-900 shadow-md">
+          Live collaboration is interrupted — your work is still being saved, and
+          collaborators’ changes will now take a few seconds to appear.
+        </div>
+      )}
+      <Editors
+        title={state.title}
+        docinfo={state.docinfo}
+        commonDocinfo={state.commonDocinfo}
+        useCommonDocinfo={state.useCommonDocinfo}
+        language={state.language}
+        projectType={state.projectType}
+        divisions={state.divisions}
+        rootDivisionId={state.rootDivisionId}
+        collaboration={
+          provider
+            ? {
+                doc: provider.doc,
+                awareness: provider.awareness,
+                user: provider.user,
+              }
+            : undefined
+        }
+        projectAssets={projectAssets}
+        projectSnippets={projectSnippets}
+        projectUrl={feedbackProjectUrl}
+        saveButtonLabel="Save and manage"
+        cancelButtonLabel="Cancel"
+        onContentChange={onContentChange}
+        onDivisionAdd={onDivisionAdd}
+        onDivisionRemove={onDivisionRemove}
+        onDivisionUpdate={onDivisionUpdate}
+        onAssetInsert={onAssetInsert}
+        onAssetUpload={onAssetUpload}
+        onAssetFetchUrl={onAssetFetchUrl}
+        onCreateAuthored={onCreateAuthored}
+        onAssetUpdate={onAssetUpdate}
+        onAssetRemove={onAssetRemove}
+        onLoadAssets={onLoadAssets}
+        onCreateSnippet={onCreateSnippet}
+        onSnippetUpdate={onSnippetUpdate}
+        onSnippetRemove={onSnippetRemove}
+        onTitleChange={onTitleChange}
+        onLanguageChange={onLanguageChange}
+        onUseCommonDocinfoChange={onUseCommonDocinfoChange}
+        onCommonDocinfoChange={onCommonDocinfoChange}
+        onSave={() => save()}
+        onSaveButton={onSaveButton}
+        onCancelButton={onCancelButton}
+        onPreviewRebuild={onPreviewRebuild}
+        onCreatePretextProjectCopy={onCreatePretextProjectCopy}
+        onFeedbackSubmit={onFeedbackSubmit}
+      />
+    </>
+
   );
 }
 
