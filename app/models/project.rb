@@ -193,6 +193,30 @@ class Project < ApplicationRecord
     :shared if collaborators.include?(user)
   end
 
+  # Hands the project to `new_owner`, an existing accepted collaborator, and
+  # folds the previous owner into the roster in their place. Available
+  # regardless of the new owner's subscription tier -- benefits already follow
+  # whoever owns the project (collaborator_limit, target_quota, ...), so a
+  # transfer just moves whose plan the project runs on. skip_limit_check keeps
+  # the swap from tripping the new owner's own limit: the collaborator count
+  # never actually grows.
+  def transfer_ownership_to!(new_owner)
+    previous_owner = user
+    return false if new_owner == previous_owner
+
+    transaction do
+      collaborations.find_by!(user: new_owner).destroy!
+      update!(user: new_owner)
+      collaborations.create!(
+        user: previous_owner, invited_email: previous_owner.email,
+        accepted_at: Time.current, skip_limit_check: true
+      )
+    end
+    true
+  rescue ActiveRecord::RecordInvalid, ActiveRecord::RecordNotFound
+    false
+  end
+
   # Real-time collaborative editing is on whenever anyone besides the owner
   # holds (or is invited to) edit access. The editor also runs collaboratively
   # for the owner's own solo sessions on such a project, so the shared doc

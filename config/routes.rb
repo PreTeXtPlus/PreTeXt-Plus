@@ -115,7 +115,11 @@ Rails.application.routes.draw do
     member do
       get "download" => "projects#download", as: "download"
     end
-    resources :collaborations, only: [ :create, :destroy ]
+    resources :collaborations, only: [ :create, :destroy ] do
+      member do
+        patch "transfer_ownership" => "collaborations#transfer_ownership", as: "transfer_ownership"
+      end
+    end
     # Words the editor's spell checker has been taught. Written one at a time as
     # the author adds them; they are read back with the project itself (show.json).
     resources :dictionary_words, only: [ :create ]

@@ -73,9 +73,10 @@ class Ability
     can :manage, Snippet, project: { user_id: user.id }
     can :manage, Snippet, project: { collaborations: { user_id: user.id } }
 
-    # Only the owner manages who collaborates; a collaborator may remove
-    # (only) their own row to leave the project.
-    can [ :create, :destroy ], Collaboration, project: { user_id: user.id }
+    # Only the owner manages who collaborates, including handing ownership to
+    # one of them; a collaborator may remove (only) their own row to leave
+    # the project.
+    can [ :create, :destroy, :transfer_ownership ], Collaboration, project: { user_id: user.id }
     can :destroy, Collaboration, user_id: user.id
 
     # Targets and builds belonging to own projects. Build volume is bounded by the rate

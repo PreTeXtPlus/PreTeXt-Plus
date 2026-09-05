@@ -48,6 +48,27 @@ class CollaborationsController < ApplicationController
     end
   end
 
+  # PATCH /projects/:project_id/collaborations/:id/transfer_ownership
+  # Owner-only. Hands the project to this (accepted) collaborator and demotes
+  # the current owner to a collaborator in their place.
+  def transfer_ownership
+    collaboration = @project.collaborations.find(params[:id])
+    authorize! :transfer_ownership, collaboration
+
+    new_owner = collaboration.user
+    if new_owner.nil?
+      redirect_to @project, alert: "Can't transfer ownership to a pending invitation." and return
+    end
+
+    previous_owner = current_user
+    if @project.transfer_ownership_to!(new_owner)
+      CollaborationMailer.ownership_transferred(@project, previous_owner).deliver_later
+      redirect_to @project, notice: "Ownership transferred to #{new_owner.name_with_email}. You are now a collaborator on this project."
+    else
+      redirect_to @project, alert: "Couldn't transfer ownership."
+    end
+  end
+
   private
 
   def set_project
