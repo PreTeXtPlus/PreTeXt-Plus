@@ -124,6 +124,23 @@ export interface ExternalUpdate {
   language?: string;
 }
 
+/** The find/replace drawer's inputs — see `EditorStoreState.findPanelState`. */
+export interface FindPanelState {
+  query: string;
+  replacement: string;
+  matchCase: boolean;
+  wholeWord: boolean;
+  useRegex: boolean;
+}
+
+const initialFindPanelState: FindPanelState = {
+  query: "",
+  replacement: "",
+  matchCase: false,
+  wholeWord: false,
+  useRegex: false,
+};
+
 type ModalKey =
   | "isLatexDialogOpen"
   | "isCleanDialogOpen"
@@ -131,7 +148,8 @@ type ModalKey =
   | "isDocinfoEditorOpen"
   | "isAssetPickerOpen"
   | "isSnippetPickerOpen"
-  | "isFullSourceOpen";
+  | "isFullSourceOpen"
+  | "isFindPanelOpen";
 
 /**
  * All callbacks wired by Editors.tsx that deep components need to call.
@@ -232,6 +250,20 @@ export interface EditorStoreState {
   isAssetPickerOpen: boolean;
   isSnippetPickerOpen: boolean;
   isFullSourceOpen: boolean;
+  /**
+   * The project-wide find/replace panel — a dismissible drawer docked next to
+   * the TOC (opened from the Tools menu), not a tab it shares equal billing
+   * with. Modeled as a `ModalKey` like the other dialogs since it's exactly
+   * that shape: open, closed, nothing else to track here.
+   */
+  isFindPanelOpen: boolean;
+  /**
+   * The find/replace drawer's query, replacement text and option toggles.
+   * Kept in the store (rather than the drawer's own `useState`) so closing
+   * and reopening it — the drawer unmounts, since it's only rendered while
+   * `isFindPanelOpen` — doesn't lose what the author typed.
+   */
+  findPanelState: FindPanelState;
 
   // TOC inline edit form
   editingId: string | null;
@@ -313,6 +345,9 @@ export interface EditorStoreState {
   // TOC inline edit form
   startSectionEdit: (section: Division, options?: { isNew?: boolean }) => void;
   setEditDraft: (draft: EditDraft) => void;
+
+  /** Merge `partial` into the find/replace drawer's inputs. */
+  setFindPanelState: (partial: Partial<FindPanelState>) => void;
   commitSectionEdit: () => void;
   cancelSectionEdit: () => void;
 
@@ -494,6 +529,8 @@ export function createEditorStore(init: EditorStoreInit): EditorStoreHandle {
     isAssetPickerOpen: false,
     isSnippetPickerOpen: false,
     isFullSourceOpen: false,
+    isFindPanelOpen: false,
+    findPanelState: initialFindPanelState,
     editingId: null,
     editDraft: null,
     editingIsNew: false,
@@ -617,6 +654,9 @@ export function createEditorStore(init: EditorStoreInit): EditorStoreHandle {
       });
     },
     setEditDraft: (editDraft) => set({ editDraft }),
+
+    setFindPanelState: (partial) =>
+      set((s) => ({ findPanelState: { ...s.findPanelState, ...partial } })),
     commitSectionEdit: () => {
       const { editingId, editDraft, divisions } = get();
       if (editingId && editDraft) {

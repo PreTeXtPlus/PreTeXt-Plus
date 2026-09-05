@@ -89,6 +89,8 @@ interface CodeEditorProps {
   onOpenAssets?: () => void;
   /** If provided, a "Snippets" button is shown in the toolbar (PreTeXt mode only). */
   onOpenSnippets?: () => void;
+  /** If provided, a "Find in Project…" item is shown in the Tools menu. */
+  onOpenFindInProject?: () => void;
   /** Called when the user clicks "Display Full Source" to open the assembled-source modal. */
   onShowFullSource: () => void;
   /**
@@ -133,6 +135,34 @@ export interface CodeEditorHandle {
   focus: () => void;
   /** Put the cursor on `line`, scrolling it into view if it is off-screen. */
   revealLine: (line: number) => void;
+  /**
+   * Select `[startLine:startCol, endLine:endCol]` (1-based), scrolling it into
+   * view if it is off-screen. Used to highlight a project-wide find match,
+   * which — unlike a preview-sync click — names a span, not just a line.
+   */
+  revealRange: (
+    startLine: number,
+    startCol: number,
+    endLine: number,
+    endCol: number,
+  ) => void;
+  /**
+   * Apply `edits` to the current model as one undoable step — the same
+   * `pushStackElement`-bracketed `pushEditOperations` idiom `applyCleanFixes`
+   * uses, so the batch is one Ctrl+Z rather than one per replacement, and
+   * (in collab mode) reaches the shared doc through the same guarded path a
+   * keystroke would. Returns `false` with no effect if there's no live model
+   * to edit — the caller's target division isn't the one currently open.
+   */
+  applyEdits: (
+    edits: {
+      startLine: number;
+      startCol: number;
+      endLine: number;
+      endCol: number;
+      text: string;
+    }[],
+  ) => boolean;
   /**
    * Source-cleanup findings for the buffer as it stands, one row per rule.
    * Empty for a format with no cleanup engine. Read (not pushed) because the
@@ -187,6 +217,7 @@ const CodeEditor = forwardRef<CodeEditorHandle, CodeEditorProps>(({
   canConvertToPretext,
   onOpenAssets,
   onOpenSnippets,
+  onOpenFindInProject,
   onShowFullSource,
   onRequestWrapperEdit,
   hideAssets,
@@ -261,6 +292,14 @@ const CodeEditor = forwardRef<CodeEditorHandle, CodeEditorProps>(({
   const [isEditorMounted, setIsEditorMounted] = useState(false);
   const onRebuildRef = useRef(onRebuild);
   const onSaveRef = useRef(onSave);
+  const onOpenFindInProjectRef = useRef(onOpenFindInProject);
+  // Monaco's own find-widget controller, so the toolbar can close it when the
+  // author switches to Find in Project instead of leaving both UIs open.
+  const findControllerRef = useRef<any>(null);
+  const findStateListenerRef = useRef<{ dispose: () => void } | null>(null);
+  // Drives the toolbar's "Finding in file" status, read from Monaco's own
+  // find contribution rather than watching its DOM.
+  const [isFindingInFile, setIsFindingInFile] = useState(false);
   const options = useMemo(
     () => ({ ...baseOptions, readOnly: !!readOnly }),
     [readOnly],
@@ -301,6 +340,46 @@ const CodeEditor = forwardRef<CodeEditorHandle, CodeEditorProps>(({
       }
       lastCursorLineRef.current = line;
     },
+    revealRange: (startLine, startCol, endLine, endCol) => {
+      const editor = editorRef.current;
+      if (!editor) return;
+      editor.focus();
+      suppressCursorReportRef.current = true;
+      try {
+        const range = {
+          startLineNumber: startLine,
+          startColumn: startCol,
+          endLineNumber: endLine,
+          endColumn: endCol,
+        };
+        editor.revealRangeInCenterIfOutsideViewport(range);
+        editor.setSelection(range);
+      } finally {
+        suppressCursorReportRef.current = false;
+      }
+      lastCursorLineRef.current = endLine;
+    },
+    applyEdits: (edits) => {
+      const model = editorRef.current?.getModel?.();
+      if (!model || edits.length === 0) return false;
+      model.pushStackElement();
+      model.pushEditOperations(
+        [],
+        edits.map((e) => ({
+          range: {
+            startLineNumber: e.startLine,
+            startColumn: e.startCol,
+            endLineNumber: e.endLine,
+            endColumn: e.endCol,
+          },
+          text: e.text,
+          forceMoveMarkers: true,
+        })),
+        () => null,
+      );
+      model.pushStackElement();
+      return true;
+    },
     // Both cleanup methods read the format from its ref rather than closing
     // over the prop: this handle is built once (`[]`), while the editor lives
     // across division switches, so a captured `sourceFormat` would go stale.
@@ -331,6 +410,10 @@ const CodeEditor = forwardRef<CodeEditorHandle, CodeEditorProps>(({
   useEffect(() => {
     onSaveRef.current = onSave;
   }, [onSave]);
+
+  useEffect(() => {
+    onOpenFindInProjectRef.current = onOpenFindInProject;
+  }, [onOpenFindInProject]);
 
   useEffect(() => {
     onCursorLineChangeRef.current = onCursorLineChange;
@@ -376,6 +459,7 @@ const CodeEditor = forwardRef<CodeEditorHandle, CodeEditorProps>(({
       constrainedRef.current?.disposeConstrainer?.();
       editGuardRef.current?.();
       editGuardRef.current = null;
+      findStateListenerRef.current?.dispose?.();
       if (debounceRef.current) clearTimeout(debounceRef.current);
     };
   }, []);
@@ -818,6 +902,32 @@ const CodeEditor = forwardRef<CodeEditorHandle, CodeEditorProps>(({
       onSaveRef.current?.();
     });
 
+    // Register Ctrl+Shift+F to open the project-wide Find/Replace drawer.
+    // Unbound in standalone Monaco (it's a VS Code-workbench shortcut, not a
+    // core editor one), so this doesn't shadow anything.
+    editor.addCommand(
+      monaco.KeyMod.CtrlCmd | monaco.KeyMod.Shift | monaco.KeyCode.KeyF,
+      () => {
+        onOpenFindInProjectRef.current?.();
+      },
+    );
+
+    // Track Monaco's own find widget through its contribution's state model
+    // (rather than watching its DOM) so the toolbar can show "Finding in
+    // file" while it's open, and close it from there when switching to Find
+    // in Project.
+    findStateListenerRef.current?.dispose?.();
+    const findController = editor.getContribution?.(
+      "editor.contrib.findController",
+    );
+    findControllerRef.current = findController ?? null;
+    const findState = findController?.getState?.();
+    setIsFindingInFile(!!findState?.isRevealed);
+    findStateListenerRef.current =
+      findState?.onFindReplaceStateChange((e: any) => {
+        if (e.isRevealed) setIsFindingInFile(!!findState.isRevealed);
+      }) ?? null;
+
     // Take over Mod+A so select-all stops at the editable body. A dynamic
     // keybinding outweighs Monaco's built-in `editor.action.selectAll`, which
     // stays registered for the command palette; the Edit menu reaches this
@@ -976,6 +1086,13 @@ const CodeEditor = forwardRef<CodeEditorHandle, CodeEditorProps>(({
     insertSnippet: insertSnippetInContext,
   };
 
+  // Closes Monaco's own find widget before handing off to Find in Project,
+  // so switching between the two never leaves both open at once.
+  const handleSwitchToFindInProject = () => {
+    findControllerRef.current?.closeFindWidget?.();
+    onOpenFindInProjectRef.current?.();
+  };
+
   return (
     <div style={{ display: "flex", flexDirection: "column", height: "100%" }}>
       <CodeEditorMenu
@@ -1000,6 +1117,11 @@ const CodeEditor = forwardRef<CodeEditorHandle, CodeEditorProps>(({
         canConvertToPretext={canConvertToPretext}
         onOpenAssets={onOpenAssets}
         onOpenSnippets={onOpenSnippets}
+        onOpenFindInProject={onOpenFindInProject}
+        isFindingInFile={isFindingInFile}
+        onSwitchToFindInProject={
+          onOpenFindInProject ? handleSwitchToFindInProject : undefined
+        }
         onShowFullSource={onShowFullSource}
         hideAssets={hideAssets}
         hideSnippets={hideSnippets}

@@ -36,10 +36,10 @@ export const MONACO_COMMANDS = {
     label: "Select All",
     shortcut: "Mod+A",
   },
-  find: { id: "actions.find", label: "Find…", shortcut: "Mod+F" },
+  find: { id: "actions.find", label: "Find in File…", shortcut: "Mod+F" },
   replace: {
     id: "editor.action.startFindReplaceAction",
-    label: "Find and Replace…",
+    label: "Replace in File…",
     shortcut: "Mod+H",
   },
   commandPalette: {

@@ -85,6 +85,15 @@ interface CodeEditorMenuProps {
   onOpenSnippets?: () => void;
   /** Opens the assembled-source modal. */
   onShowFullSource: () => void;
+  /** If provided, a "Find in Project…" item is shown after Monaco's own Find/Replace. */
+  onOpenFindInProject?: () => void;
+  /** Whether Monaco's own find widget is currently open. */
+  isFindingInFile?: boolean;
+  /**
+   * If provided (alongside `isFindingInFile`), a "Switch to Find in Project"
+   * link is shown in the toolbar while Monaco's find widget is open.
+   */
+  onSwitchToFindInProject?: () => void;
   hideAssets?: boolean;
   hideSnippets?: boolean;
   /** When true, every editing action is hidden — only viewing actions remain. */
@@ -165,6 +174,9 @@ const CodeEditorMenu: React.FC<CodeEditorMenuProps> = ({
   onOpenSnippets,
   hideSnippets,
   onShowFullSource,
+  onOpenFindInProject,
+  isFindingInFile,
+  onSwitchToFindInProject,
   readOnly,
 }) => {
   // Which menu is open, so opening one closes the last and hovering across the
@@ -234,6 +246,19 @@ const CodeEditorMenu: React.FC<CodeEditorMenuProps> = ({
     onSelect: actions.selectAll,
   });
 
+  const findInProjectEntry: MenuEntry[] = onOpenFindInProject
+    ? [
+        {
+          kind: "item",
+          key: "find-in-project",
+          label: "Find/Replace in Project…",
+          title: "Search and replace across every division",
+          shortcut: formatShortcut("Mod+Shift+F"),
+          onSelect: onOpenFindInProject,
+        },
+      ]
+    : [];
+
   // A read-only buffer keeps the operations that only read: copying it,
   // selecting it, searching it.
   const editEntries: MenuEntry[] = readOnly
@@ -242,6 +267,7 @@ const CodeEditorMenu: React.FC<CodeEditorMenuProps> = ({
         selectAllEntry,
         separator("find"),
         commandEntry(MONACO_COMMANDS.find, run),
+        ...findInProjectEntry,
       ]
     : [
         commandEntry(MONACO_COMMANDS.undo, run, {
@@ -273,6 +299,7 @@ const CodeEditorMenu: React.FC<CodeEditorMenuProps> = ({
         separator("find"),
         commandEntry(MONACO_COMMANDS.find, run),
         commandEntry(MONACO_COMMANDS.replace, run),
+        ...findInProjectEntry,
       ];
 
   // ── Insert ────────────────────────────────────────────────────────────────
@@ -404,6 +431,24 @@ const CodeEditorMenu: React.FC<CodeEditorMenuProps> = ({
           className="min-w-0 truncate text-[12px] leading-[1.3] text-[#8a4b08] pl-2"
         >
           {notice}
+        </span>
+      )}
+
+      {isFindingInFile && (
+        <span
+          role="status"
+          className="flex items-center gap-1.5 shrink-0 text-[12px] leading-[1.3] text-[#555] pl-2"
+        >
+          Searching file
+          {onSwitchToFindInProject && (
+            <button
+              type="button"
+              className="text-[#3567d0] hover:underline cursor-pointer bg-transparent border-none p-0 text-[12px]"
+              onClick={onSwitchToFindInProject}
+            >
+              Switch to full Project
+            </button>
+          )}
         </span>
       )}
 
