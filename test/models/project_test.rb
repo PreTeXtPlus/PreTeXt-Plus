@@ -435,4 +435,54 @@ class ProjectTest < ActiveSupport::TestCase
     assert project.add_dictionary_word("Cauchy")
     assert_not_includes project.reload.dictionary_words, "Cauchy"
   end
+
+  test "transfer_ownership_to! hands the project to a collaborator and demotes the previous owner" do
+    project = projects(:one) # owner: users(:one); collaborator: users(:two) (fixture :accepted)
+
+    assert project.transfer_ownership_to!(users(:two))
+    project.reload
+
+    assert_equal users(:two), project.user
+    assert_not project.collaborations.exists?(user: users(:two))
+    demoted = project.collaborations.find_by!(user: users(:one))
+    assert demoted.accepted?
+    assert_equal users(:one).email, demoted.invited_email
+  end
+
+  test "transfer_ownership_to! is a no-op when handing the project to its current owner" do
+    project = projects(:one)
+
+    assert_not project.transfer_ownership_to!(users(:one))
+    assert_equal users(:one), project.reload.user
+  end
+
+  test "transfer_ownership_to! returns false for a user who is not a collaborator" do
+    project = projects(:one)
+
+    assert_not project.transfer_ownership_to!(users(:subscribed))
+    assert_equal users(:one), project.reload.user
+  end
+
+  test "transfer_ownership_to! succeeds even when it leaves the new owner over their own collaborator_limit" do
+    # A subscriber's project (cap 5) fully staffed, including one free-tier
+    # collaborator. Transferring to that free-tier user (cap 1) must still
+    # succeed -- the swap doesn't grow the roster, it only changes whose
+    # collaboration row is missing from it.
+    project = Project.create!(user: users(:subscribed), title: "Team book")
+    free_user = users(:one)
+    project.collaborations.create!(user: free_user, invited_email: free_user.email, accepted_at: Time.current)
+    4.times do |n|
+      other = User.create!(name: "Collaborator #{n}", email: "collab#{n}@example.com",
+                            password: "password123", confirmed_at: Time.current)
+      project.collaborations.create!(user: other, invited_email: other.email, accepted_at: Time.current)
+    end
+    assert_equal 5, project.collaborations.count
+
+    assert project.transfer_ownership_to!(free_user)
+    project.reload
+
+    assert_equal free_user, project.user
+    assert_equal 1, project.collaborator_limit
+    assert_equal 5, project.collaborations.count, "the swap should not have changed the roster size"
+  end
 end

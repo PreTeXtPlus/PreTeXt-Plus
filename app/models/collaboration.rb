@@ -7,6 +7,12 @@ class Collaboration < ApplicationRecord
   belongs_to :project
   belongs_to :user, optional: true
 
+  # Set by Project#transfer_ownership_to! when re-creating the previous
+  # owner's row as a collaborator: that swap never grows the collaborator
+  # count (one row is destroyed for every one created), so it shouldn't be
+  # blocked by a limit meant to cap net additions.
+  attr_accessor :skip_limit_check
+
   normalizes :invited_email, with: ->(e) { e.strip.downcase }
 
   validates :invited_email, presence: true,
@@ -15,7 +21,7 @@ class Collaboration < ApplicationRecord
   validate :not_the_owner, if: -> { project.present? }
   # The cap applies only when adding someone new: a project already over its
   # limit (owner's subscription lapsed) keeps its existing collaborators.
-  validate :within_collaborator_limit, on: :create, if: -> { project.present? }
+  validate :within_collaborator_limit, on: :create, if: -> { project.present? && !skip_limit_check }
 
   scope :accepted, -> { where.not(user_id: nil) }
   scope :pending, -> { where(user_id: nil) }

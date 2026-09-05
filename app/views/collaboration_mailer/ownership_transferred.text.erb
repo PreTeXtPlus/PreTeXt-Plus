@@ -1,0 +1,13 @@
+You're now the owner of a project
+==================================
+
+<%= @previous_owner.name_with_email %> made you the owner of
+"<%= @project.title %>" on PreTeXt.Plus. You can now manage its
+collaborators and settings, and its quotas and limits follow your own
+account from now on. <%= @previous_owner.name_with_email %> is now a
+collaborator on the project:
+
+<%= project_url(@project) %>
+
+You are receiving this because you have an account on PreTeXt.Plus
+(https://pretext.plus).

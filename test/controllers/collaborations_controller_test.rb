@@ -144,4 +144,42 @@ class CollaborationsControllerTest < ActionDispatch::IntegrationTest
       delete project_url(projects(:one))
     end
   end
+
+  test "owner transfers ownership to an accepted collaborator" do
+    sign_in users(:one) # owner of project one; users(:two) is its accepted collaborator
+
+    perform_enqueued_jobs do
+      patch transfer_ownership_project_collaboration_url(projects(:one), collaborations(:accepted))
+    end
+
+    assert_redirected_to projects(:one)
+    assert_match(/Ownership transferred/, flash[:notice])
+
+    project = projects(:one).reload
+    assert_equal users(:two), project.user
+    demoted = project.collaborations.find_by!(user: users(:one))
+    assert demoted.accepted?
+
+    mail = ActionMailer::Base.deliveries.last
+    assert_equal [ users(:two).email ], mail.to
+    assert_match "You're now the owner", mail.subject
+  end
+
+  test "owner cannot transfer ownership to a pending invitation" do
+    sign_in users(:subscribed) # owner of project team; holds the :pending invite
+
+    patch transfer_ownership_project_collaboration_url(projects(:team), collaborations(:pending))
+
+    assert_redirected_to projects(:team)
+    assert_match(/pending invitation/, flash[:alert])
+    assert_equal users(:subscribed), projects(:team).reload.user
+  end
+
+  test "non-owner cannot transfer ownership" do
+    sign_in users(:two) # collaborator, not owner, of project one
+
+    patch transfer_ownership_project_collaboration_url(projects(:one), collaborations(:accepted))
+
+    assert_equal users(:one), projects(:one).reload.user
+  end
 end
