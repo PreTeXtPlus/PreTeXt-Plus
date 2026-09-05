@@ -1,0 +1,13 @@
+<slideshow xml:id="document">
+    <title>New PreTeXt slideshow</title>
+
+<!-- This is a new PreTeXt slideshow. Each <slide> below is one slide in the
+     deck. You can group slides into <section> elements, or leave them here at
+     the top level for a short deck. -->
+
+    <slide>
+        <title>First slide</title>
+        <p>Add your content here.</p>
+    </slide>
+
+</slideshow>

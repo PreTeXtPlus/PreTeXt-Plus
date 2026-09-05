@@ -26,6 +26,30 @@ class BuildFilesControllerTest < ActionDispatch::IntegrationTest
     assert_match "Chapter One", response.body
   end
 
+  # The private route is reached by author-only links, but the served page itself
+  # carries no such indication -- so it has to say so, in case the tab is shared or
+  # revisited later once the build is stale or the target is unpublished.
+  test "html served privately carries a banner marking it a preview" do
+    attach("index.html", "<html><body><h1>Chapter One</h1></body></html>", "text/html")
+
+    get build_file_url(@build, "index.html")
+
+    assert_response :success
+    assert_match "Chapter One", response.body
+    assert_match "This private preview", response.body
+  end
+
+  # Build output is not guaranteed to be a full document -- see the fixture above, which
+  # has no <body> at all -- so the banner has to land somewhere even then.
+  test "the private preview banner still appears on a bodyless fragment" do
+    attach("index.html", "<h1>Chapter One</h1>", "text/html")
+
+    get build_file_url(@build, "index.html")
+
+    assert_response :success
+    assert_match "This private preview", response.body
+  end
+
   # What the dashboard's "Download" links to for anything that is not a site. Routed
   # through here rather than at the blob so rendering a row costs no extra query.
   test "an explicit attachment disposition hands over the file itself" do

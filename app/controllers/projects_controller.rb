@@ -8,6 +8,11 @@ class ProjectsController < ApplicationController
              with: -> { render plain: "Preview limit reached. Please wait a few minutes and try again, or create an account to continue writing and save your work!", status: :too_many_requests },
              if: -> { !authenticated? }
 
+  # Conversions the lite build server accepts on #preview. Its own vocabulary,
+  # which is the PreTeXt CLI's -- the editor speaks pretext-html's ("slides")
+  # and translates in `onPreviewRebuild`.
+  PREVIEW_TARGETS = %w[ html revealjs ].freeze
+
   # GET /projects
   def index
     @query = params[:q].to_s.strip
@@ -46,7 +51,13 @@ class ProjectsController < ApplicationController
   end
 
   # GET /projects/1 or /projects/1.json
+  # Preloaded rather than left to render on @project.targets: index/owned/shared
+  # already eager-load current_build/latest_build for the same reason, and the
+  # dashboard's bulk-build button (bulk_build_label) needs every row's state anyway to
+  # decide whether to show itself. TargetsController#show preloads the same way before
+  # rendering this same template from behind the drawer.
   def show
+    @targets = @project.targets.includes(:current_build, :latest_build).to_a
   end
 
   # GET /projects/new
@@ -112,6 +123,12 @@ class ProjectsController < ApplicationController
 
   # PATCH/PUT /projects/1 or /projects/1.json
   def update
+    # Visibility stays with the owner even though the rest of :update is shared with
+    # collaborators (see Ability) -- dropped here rather than in project_params, which
+    # load_and_authorize_resource also uses to build a brand-new project on :create,
+    # before @project.user is ever assigned.
+    params[:project]&.delete(:visibility) if cannot?(:update_visibility, @project)
+
     respond_to do |format|
       if @project.update(project_params)
         format.json { render :show, status: :ok, location: @project }
@@ -207,6 +224,12 @@ class ProjectsController < ApplicationController
       source: params[:source],
       token: Rails.application.credentials.dig(:preview_build, :token)
     }
+    # `target` is optional server-side: absent, the build server detects the
+    # conversion from the source, which is the safer default and the only thing
+    # /tryit/preview (which shares this action and posts no target) can rely on.
+    # So an unrecognised value is dropped rather than forwarded -- sending junk
+    # would turn a working detection into a failed build.
+    post_params[:target] = params[:target] if PREVIEW_TARGETS.include?(params[:target])
     uri = URI.parse("https://#{Rails.application.credentials.dig(:preview_build, :host)}")
     response = Net::HTTP.start(
       uri.host,
@@ -253,12 +276,22 @@ class ProjectsController < ApplicationController
 
   private
     # Only allow a list of trusted parameters through.
+    # `document_type` is permitted on create and *only* on create. Whether a project is a
+    # deck is fixed when it is made: changing it would mean rewriting the source,
+    # invalidating every target, and re-deciding what each division means. Enforcing that
+    # here rather than leaning on Project#targets_supported_by_document_type keeps the
+    # rule where it can be read, and keeps the model's guard as the backstop it is meant
+    # to be. Article-vs-book is deliberately *not* on this axis -- that lives in the root
+    # element, where the TOC switches it freely.
     def project_params
-      params.expect(project: [
-        :title, :pretext_source, :docinfo, :use_common_docinfo, :visibility,
+      permitted = [
+        :title, :pretext_source, :docinfo, :use_common_docinfo, :visibility, :language, :description,
         divisions_attributes: [ [ :id, :source, :source_format, :is_root, :ref, :_destroy ] ],
-        assets_attributes: [ [ :id, :ref, :kind, :file, :source, :short_description, :description, :title, :_destroy ] ]
-      ])
+        assets_attributes: [ [ :id, :ref, :kind, :file, :source, :short_description, :description, :title, :_destroy ] ],
+        snippets_attributes: [ [ :id, :source, :source_format, :ref, :_destroy ] ]
+      ]
+      permitted << :document_type if action_name == "create"
+      params.expect(project: permitted)
     end
 
     # The import wizard posts what @pretextbook/import already emits, in this
@@ -274,7 +307,8 @@ class ProjectsController < ApplicationController
         :title, :docinfo, :document_type,
         divisions_attributes: [ [ :ref, :source, :source_format, :is_root ] ],
         assets_attributes: [ [ :ref, :kind, :title, :short_description,
-                               { file: [ :filename, :content_type, :data ] } ] ]
+                               { file: [ :filename, :content_type, :data ] } ] ],
+        snippets_attributes: [ [ :ref, :source, :source_format ] ]
       ]).to_h.deep_symbolize_keys
 
       if attrs[:assets_attributes].present?

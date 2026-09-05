@@ -17,7 +17,7 @@ function renderWithStore(ui: (wrap: (children: ReactNode) => ReactNode) => React
     docinfo: "",
     commonDocinfo: "",
     useCommonDocinfo: false,
-    projectType: "article",
+    language: "en-US",
     divisions: [],
     activeDivisionId: null,
     projectAssets: undefined,
@@ -31,8 +31,10 @@ function renderWithStore(ui: (wrap: (children: ReactNode) => ReactNode) => React
     divisionContentChange: noop,
     handleDivisionContentChange: noop,
     assetInsert: noop,
+    snippetInsert: noop,
     // Stands in for the host: a title edit lands back in the store.
     updateTitle: (title) => store.getState().setTitle(title),
+    updateLanguage: (language) => store.getState().setLanguage(language),
   });
   const wrap = (children: ReactNode) => (
     <EditorStoreProvider store={store}>{children}</EditorStoreProvider>

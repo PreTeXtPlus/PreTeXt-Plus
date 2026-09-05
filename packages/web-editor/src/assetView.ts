@@ -2,7 +2,7 @@
  * The unified project-asset view: a single join of the two things the editor
  * tracks for assets, which can otherwise drift apart —
  *
- *   1. `<plus:KIND ref="..."/>` placeholders parsed out of division content
+ *   1. `<plus:image ref="..."/>` placeholders parsed out of division content
  *      (what the document *references*), and
  *   2. the DB-backed project-asset pool (what actually *exists*).
  *
@@ -11,7 +11,7 @@
  * UI can act on (link an unresolved ref, copy the embed code for an unused
  * asset, etc.).
  */
-import type { Asset, AssetKind } from "./types/editor";
+import type { Asset } from "./types/editor";
 import type { Division } from "./types/sections";
 import { parseAssetRefs } from "./sectionUtils";
 
@@ -25,13 +25,12 @@ import { parseAssetRefs } from "./sectionUtils";
  */
 export type AssetStatus = "linked" | "unlinked" | "unused";
 
-/** One row of the joined project-asset view, keyed by `kind` + `ref`. */
+/** One row of the joined project-asset view, keyed by `ref`. */
 export interface AssetRow {
-  kind: AssetKind;
   ref: string;
   /** The backing project asset, when one exists (`linked` / `unused`). */
   asset?: Asset;
-  /** Whether a `<plus:KIND ref/>` placeholder for this row exists in source. */
+  /** Whether a `<plus:image ref/>` placeholder for this row exists in source. */
   inDocument: boolean;
   status: AssetStatus;
 }
@@ -39,7 +38,7 @@ export interface AssetRow {
 /**
  * Build the joined asset view for a project: the union of every placeholder
  * referenced across all divisions and every asset in the project pool, keyed by
- * `kind:ref`, in a stable order (document references first in document order,
+ * `ref`, in a stable order (document references first in document order,
  * then any remaining unused assets).
  */
 export function buildProjectAssetView(
@@ -47,21 +46,18 @@ export function buildProjectAssetView(
   projectAssets: Asset[] | undefined,
 ): AssetRow[] {
   const assets = projectAssets ?? [];
-  const findAsset = (kind: AssetKind, ref: string) =>
-    assets.find((a) => a.kind === kind && a.ref === ref);
+  const findAsset = (ref: string) => assets.find((a) => a.ref === ref);
 
   const rows: AssetRow[] = [];
   const seen = new Set<string>();
 
   // 1. Document references, in document order, deduplicated across divisions.
   for (const division of divisions ?? []) {
-    for (const { kind, ref } of parseAssetRefs(division.source, division.sourceFormat)) {
-      const key = `${kind}:${ref}`;
-      if (seen.has(key)) continue;
-      seen.add(key);
-      const asset = findAsset(kind, ref);
+    for (const { ref } of parseAssetRefs(division.source, division.sourceFormat)) {
+      if (seen.has(ref)) continue;
+      seen.add(ref);
+      const asset = findAsset(ref);
       rows.push({
-        kind,
         ref,
         asset,
         inDocument: true,
@@ -73,11 +69,9 @@ export function buildProjectAssetView(
   // 2. Project assets not referenced anywhere yet — "unused".
   for (const asset of assets) {
     if (!asset.ref) continue;
-    const key = `${asset.kind}:${asset.ref}`;
-    if (seen.has(key)) continue;
-    seen.add(key);
+    if (seen.has(asset.ref)) continue;
+    seen.add(asset.ref);
     rows.push({
-      kind: asset.kind,
       ref: asset.ref,
       asset,
       inDocument: false,

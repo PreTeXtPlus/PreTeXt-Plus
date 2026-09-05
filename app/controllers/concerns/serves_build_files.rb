@@ -15,12 +15,13 @@ module ServesBuildFiles
   # an <img src="diagram.svg"> in built output downloads instead of rendering.
   INLINE_OVERRIDE_CONTENT_TYPES = %w[ image/svg+xml ].freeze
 
+
   private
 
     # `disposition: "attachment"` is how a single-file output (a PDF, a SCORM package) is
     # downloaded as itself rather than browsed. It redirects to storage like any other
     # non-html file, so a large package never occupies a web worker.
-    def serve_build_file(build, relative_path, disposition: "inline")
+    def serve_build_file(build, relative_path, disposition: "inline", private_preview: false)
       file_data = cached_file_data(build, relative_path)
       raise ActiveRecord::RecordNotFound unless file_data
 
@@ -28,10 +29,33 @@ module ServesBuildFiles
         redirect_to_cdn_url blob_signed_url(file_data, disposition: "attachment")
       elsif file_data[:content_type] == "text/html"
         content = ActiveStorage::Blob.service.download(file_data[:blob_key])
+        content = inject_private_preview_banner(content, project_path(build.project)) if private_preview
         send_data content, type: "text/html", disposition: "inline"
       else
         redirect_to_cdn_url blob_signed_url(file_data, disposition: "inline")
       end
+    end
+
+    # A fixed banner survives whatever CSS the built page ships, so a private preview can
+    # never be mistaken for the finished public site while it's open in a tab.
+    def private_preview_banner(manage_path)
+      (
+        "<style>@media print { .no-print { display: none !important; }}</style>" \
+        '<div class="no-print" style="background:#4e6172;color:#aad4f9;font:14px/1.4 sans-serif;' \
+        'text-align:center;padding:8px 12px;">' \
+        "This private preview is only available to authors. This link won't work for anyone else. " \
+        "<a href='#{manage_path}' style='color:#fff'>[Manage project]</a>" \
+        "</div>"
+      ).freeze
+    end
+
+    # Nokogiri's HTML5 parser always resolves a real <body> to prepend into -- even for a
+    # bodyless fragment, which build output can be (see the fixtures) -- so there is no
+    # separate fallback path to maintain the way a regex against "<body>" would need.
+    def inject_private_preview_banner(html, manage_path)
+      doc = Nokogiri::HTML5(html)
+      doc.at_css("body")&.prepend_child(Nokogiri::HTML5.fragment(private_preview_banner(manage_path)))
+      doc.to_html
     end
 
     def cached_file_data(build, path, reattempt = true)

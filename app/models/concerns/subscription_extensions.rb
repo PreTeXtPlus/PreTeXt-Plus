@@ -18,7 +18,16 @@ module SubscriptionExtensions
   end
 
   def grants_privileges?
+    return false if invoiced? && !invoice_paid? && !user.honor_invoices?
     active? or on_trial?
+  end
+
+  def invoiced?
+    object&.dig("collection_method") == "send_invoice"
+  end
+
+  def invoice_paid?
+    object&.dig("latest_invoice", "status") == "paid"
   end
 
   def price

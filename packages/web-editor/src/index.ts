@@ -15,10 +15,10 @@ export {
 } from "./contentConversion";
 export type {
   Asset,
-  AssetKind,
   EditorContentChange,
   EditorContentState,
   FeedbackSubmission,
+  Snippet,
   SourceFormat,
 } from "./types/editor";
 export type {
@@ -33,11 +33,14 @@ export type {
   DocumentChapter,
 } from "./types/sections";
 export type { DivisionTreeNode } from "./sectionUtils";
+export { LANGUAGES, DEFAULT_LANGUAGE } from "./languages";
+export type { LanguageOption } from "./languages";
 export {
   assembleProjectSource,
   assembleFullProjectSource,
   // Division ref utilities (new architecture)
   parseDivisionRefs,
+  divisionRefTag,
   insertDivisionRef,
   removeDivisionRef,
   moveDivisionRef,
@@ -68,10 +71,23 @@ export {
   ensureLatexSectionWrapper,
   updateLatexSectionTitle,
   extractLatexDivisionTitle,
+  parseLatexDivisionHeader,
+  buildLatexDivisionHeader,
+  normalizeLatexDivisionSource,
   createNewLatexSection,
   createLatexIntroduction,
   createLatexConclusion,
+  // Snippet ref utilities
+  parseSnippetRefs,
+  renameSnippetRef,
+  removeSnippetRef,
+  snippetEmbedCode,
 } from "./sectionUtils";
+export {
+  buildProjectSnippetView,
+  makeUniqueSnippetRef,
+} from "./snippetView";
+export type { SnippetRow, SnippetStatus } from "./snippetView";
 
 // Collaboration: the shared-doc schema (hosts seed/serialize through these)
 // and the session types the `collaboration` prop expects. The host owns the
@@ -82,12 +98,14 @@ export {
   clearDeletions,
   getDivisionsMap,
   getAssetsMap,
+  getSnippetsMap,
   getMetaMap,
   getDeletedMap,
   getDivisionText,
 } from "./collab/schema";
 export type {
   CollabAssetSnapshot,
+  CollabSnippetSnapshot,
   CollabDeletedKind,
   CollabDeletion,
   CollabDivisionSnapshot,
@@ -98,6 +116,22 @@ export type { CollabSession, CollabUser } from "./collab/types";
 // Record ids are minted client-side (see `onDivisionAdd`); exported so a host
 // can mint one for a record it creates outside the editor's own flows.
 export { newRecordId } from "./recordId";
+
+// Spell checking: hosts configure it once at startup (dictionary location,
+// which PreTeXt constructs to look inside, where "Add to dictionary" persists).
+// Serving the Hunspell files is the host's job — see the README.
+export {
+  configureSpellCheck,
+  DEFAULT_SPELL_CHECK_SCOPES,
+  DEFAULT_DICTIONARY_SOURCE,
+} from "./components/editorConfigs/spellcheck";
+export type {
+  SpellCheckSettings,
+  SpellCheckScope,
+  SpellCheckScopeSetting,
+  DictionarySource,
+  UserWordStore,
+} from "./components/editorConfigs/spellcheck";
 
 // Export components
 export { default as CodeEditor } from "./components/CodeEditor";
@@ -110,3 +144,6 @@ export type {
   DocinfoEditorCloseValue,
 } from "./components/DocinfoEditor";
 export { postToIframe } from "./components/postToIframe";
+// PreTeXt diagnostics fetch their RELAX NG grammar from jsDelivr by default;
+// a host that needs to self-host (offline use, a strict CSP) redirects it.
+export { setPretextSchemaUrl } from "./components/editorConfigs/pretextSchema";

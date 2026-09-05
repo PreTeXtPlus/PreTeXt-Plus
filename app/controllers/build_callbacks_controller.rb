@@ -24,23 +24,38 @@ class BuildCallbacksController < ApplicationController
     build = Build.find(params[:id])
     payload = JSON.parse(body) rescue {}
 
-    # A build the author cancelled is finished, whatever the server decided a moment
-    # later. Cancelling races a build that was already wrapping up, and the output of a
-    # build nobody is waiting for must not be imported over the top of what is published.
-    return head(:ok) if build.canceled?
+    # Only a build still waiting on an answer can use one. A cancel that landed first
+    # is the original reason for this, but BuildStatusChecker#check! claims a build
+    # the same way this does -- it polls the same server this callback describes, and
+    # can win the race to an answer if a build finishes fast enough (it guards itself
+    # symmetrically, reloading before it acts on the server's response). Whichever
+    # gets there first wins; letting the loser through here too would import the same
+    # artifact twice, which collides on BuildFile's unique index and mark! this build
+    # failed right after the winner marked it succeeded.
+    return head(:ok) unless %w[ pending in_progress sent_to_server ].include?(build.reload.status)
 
     case payload["status"]
     when "success"
-      # artifact_url from the build server is a path relative to itself (e.g.
-      # "/builds/<id>/artifact"), not an absolute URL -- resolve it against the
-      # configured host before handing it to the job.
       build.mark!(:received_from_server, log: inline_log(payload))
-      FullBuildArtifactJob.perform_later(build, FullBuildServer.url_for(payload["artifact_url"]))
+      import_artifact(build, payload)
       fetch_full_log_later(build, payload)
     when "failed"
-      build.mark!(:failed, log: inline_log(payload))
+      # A failed build that still produced output. The server zips whatever landed in
+      # output/ whatever the exit code was, and sends `artifact_url` whenever that zip
+      # exists -- so its presence, not the status word, is what decides whether there is
+      # anything to import. Imported the same way a success is, and flagged so the
+      # dashboard, the drawer and the log page can warn that what an author is about to
+      # preview (or publish) came out of a build that reported errors.
+      if payload["artifact_url"].present?
+        build.mark!(:received_from_server, log: inline_log(payload), completed_with_errors: true)
+        import_artifact(build, payload)
+        Rails.logger.warn("Build #{build.id} exited #{payload["exit_code"].inspect} on the build " \
+                          "server but produced output -- importing it and flagging the build.")
+      else
+        build.mark!(:failed, log: inline_log(payload))
+        Rails.logger.error("Build #{build.id} failed on build server: #{payload["log_tail"] || body}")
+      end
       fetch_full_log_later(build, payload)
-      Rails.logger.error("Build #{build.id} failed on build server: #{payload["log_tail"] || body}")
     else
       # Nothing recorded and nothing broadcast, so the row goes on saying Building: the
       # symptom of a status word drifting apart from the two this understands is a build
@@ -55,6 +70,13 @@ class BuildCallbacksController < ApplicationController
   end
 
   private
+
+    # artifact_url from the build server is a path relative to itself (e.g.
+    # "/builds/<id>/artifact"), not an absolute URL -- resolve it against the
+    # configured host before handing it to the job.
+    def import_artifact(build, payload)
+      FullBuildArtifactJob.perform_later(build, FullBuildServer.url_for(payload["artifact_url"]))
+    end
 
     # The build server never sends the whole log inline. Its payload carries `log_tail`
     # (the last CALLBACK_LOG_TAIL_CHARS characters, 4000 by default), a `log_truncated`

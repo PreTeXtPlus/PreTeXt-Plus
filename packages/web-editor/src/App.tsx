@@ -8,7 +8,7 @@ import type {
   FeedbackSubmission,
   SourceFormat,
 } from "./types/editor";
-import type { Division, DivisionType } from "./types/sections";
+import type { Division, DivisionType, RootDivisionType } from "./types/sections";
 import { assembleProjectSource } from "./sectionUtils";
 
 /** A self-contained placeholder image (no network dependency) for demo image assets. */
@@ -489,7 +489,6 @@ function App() {
       id: "asset-1",
       title: "Euler Formula",
       ref: "euler-formula",
-      kind: "image",
       isFile: true,
       url: demoImageDataUrl("Euler Formula", "#0e639c"),
       contentType: "image/svg+xml",
@@ -499,7 +498,6 @@ function App() {
       id: "asset-2",
       title: "Markdown Logo",
       ref: "markdown-logo",
-      kind: "image",
       isFile: true,
       url: demoImageDataUrl("Markdown Logo", "#0f766e"),
       contentType: "image/svg+xml",
@@ -509,7 +507,6 @@ function App() {
       id: "asset-3",
       title: "PreTeXt Logo",
       ref: "pretext-logo",
-      kind: "image",
       isFile: true,
       url: demoImageDataUrl("PreTeXt Logo", "#7c3aed"),
       contentType: "image/svg+xml",
@@ -517,7 +514,7 @@ function App() {
     },
   ]);
 
-  const [projectType, setProjectType] = useState<"article" | "book">("article");
+  const [projectType, setProjectType] = useState<RootDivisionType>("article");
   const [demoLabel, setDemoLabel] = useState("Article");
   // Collaboration demo: two editors sharing one (in-memory-relayed) Y.Doc.
   // Keyed so each entry builds a fresh session pair.
@@ -660,7 +657,6 @@ function App() {
       // (no id = insert) and the server mints one on save.
       title: title?.trim() || file.name.replace(/\.[^.]+$/, ""),
       ref: file.name,
-      kind: "image",
       isFile: true,
       url: URL.createObjectURL(file),
       contentType: file.type,
@@ -687,28 +683,30 @@ function App() {
     }
   };
 
-  const handleCreateDoenet = async (title: string, ref: string): Promise<Asset> => {
-    console.log("Creating Doenet activity:", title, ref);
+  const handleCreateAuthored = async (title: string): Promise<Asset> => {
+    console.log("Creating authored asset:", title);
     await new Promise((resolve) => setTimeout(resolve, 400));
-    // No `id` — same new-asset convention as uploads.
-    const newAsset: Asset = { title, ref, kind: "doenet" };
+    // No `id` — same new-asset convention as uploads. `source` starts empty;
+    // the user fills it in via the asset editor's "Additional source" field.
+    // A real host derives the ref itself (see onAssetUpload's `uniqueRef`);
+    // this demo does a simple lowercase/dash slug of the title.
+    const ref = title.toLowerCase().trim().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "") || "asset";
+    const newAsset: Asset = { title, ref };
     setProjectAssets((prev) => [...prev, newAsset]);
     return newAsset;
   };
 
-  // Assets are keyed by kind+ref, not id — a new asset may not have an id yet.
+  // Assets are keyed by ref, not id — a new asset may not have an id yet.
   const handleAssetRemove = (asset: Asset) => {
     console.log("Removing asset from project:", asset.ref);
-    setProjectAssets((prev) =>
-      prev.filter((a) => !(a.kind === asset.kind && a.ref === asset.ref)),
-    );
+    setProjectAssets((prev) => prev.filter((a) => a.ref !== asset.ref));
   };
 
   const handleAssetUpdate = async (asset: Asset) => {
     console.log("Updating asset:", asset.ref, asset.source);
     await new Promise((resolve) => setTimeout(resolve, 300));
     setProjectAssets((prev) =>
-      prev.map((a) => (a.kind === asset.kind && a.ref === asset.ref ? asset : a)),
+      prev.map((a) => (a.ref === asset.ref ? asset : a)),
     );
   };
 
@@ -718,30 +716,27 @@ function App() {
 
   const toolbarLabel = `Demo: ${demoLabel}`;
 
+  const toolbarButtonClasses =
+    "border border-blue-300 bg-white text-blue-700 rounded py-[0.45rem] px-3 cursor-pointer hover:bg-blue-100";
+
   return (
     <>
-      <div className="app-demo-toolbar">
-        <span className="app-demo-toolbar__label">{toolbarLabel}</span>
-        <button
-          className="app-demo-toolbar__button"
-          onClick={loadDivisionsDemo}
-        >
+      <div className="flex items-center gap-3 py-3 px-4 bg-blue-50 border-b border-blue-200">
+        <span className="font-semibold text-blue-900">{toolbarLabel}</span>
+        <button className={toolbarButtonClasses} onClick={loadDivisionsDemo}>
           Load Article Demo
         </button>
-        <button className="app-demo-toolbar__button" onClick={loadBookDemo}>
+        <button className={toolbarButtonClasses} onClick={loadBookDemo}>
           Load Book Demo
         </button>
-        <button className="app-demo-toolbar__button" onClick={loadLatexDemo}>
+        <button className={toolbarButtonClasses} onClick={loadLatexDemo}>
           Load LaTeX Demo
         </button>
-        <button
-          className="app-demo-toolbar__button"
-          onClick={loadMarkdownDemo}
-        >
+        <button className={toolbarButtonClasses} onClick={loadMarkdownDemo}>
           Load Markdown Demo
         </button>
         <button
-          className="app-demo-toolbar__button"
+          className={toolbarButtonClasses}
           onClick={() => {
             setShowCollab((v) => !v);
             setCollabKey((k) => k + 1);
@@ -751,19 +746,19 @@ function App() {
           {showCollab ? "Exit Collab Demo" : "Load Collab Demo"}
         </button>
         <button
-          className="app-demo-toolbar__button"
+          className={toolbarButtonClasses}
           onClick={() => setShowBuildPayload((v) => !v)}
         >
           {showBuildPayload ? "Hide Build Payload" : "Show Build Payload"}
         </button>
       </div>
       {showBuildPayload && fullBuildPayload && (
-        <div className="app-build-payload-overlay">
-          <div className="app-build-payload-overlay__header">
+        <div className="fixed top-0 right-0 bottom-0 w-[min(48%,720px)] z-[1000] flex flex-col bg-[#0b1021] text-slate-200 shadow-[-4px_0_16px_rgba(0,0,0,0.35)]">
+          <div className="flex items-center justify-between gap-3 py-[0.6rem] px-[0.9rem] bg-slate-800 border-b border-slate-700 font-semibold">
             <span>Full Build Payload (live, updates as divisions change)</span>
-            <div className="app-build-payload-overlay__actions">
+            <div className="flex gap-2">
               <button
-                className="app-demo-toolbar__button"
+                className={toolbarButtonClasses}
                 onClick={() =>
                   navigator.clipboard.writeText(
                     JSON.stringify(fullBuildPayload, null, 2),
@@ -773,14 +768,14 @@ function App() {
                 Copy JSON
               </button>
               <button
-                className="app-demo-toolbar__button"
+                className={toolbarButtonClasses}
                 onClick={() => setShowBuildPayload(false)}
               >
                 Close
               </button>
             </div>
           </div>
-          <pre className="app-build-payload-overlay__body">
+          <pre className="flex-1 m-0 p-[0.9rem] overflow-auto font-mono text-[0.8rem] whitespace-pre-wrap break-words">
             {JSON.stringify(fullBuildPayload, null, 2)}
           </pre>
         </div>
@@ -809,7 +804,7 @@ function App() {
         onAssetInsert={handleAssetInsert}
         onAssetUpload={handleAssetUpload}
         onAssetFetchUrl={handleAssetFetchUrl}
-        onCreateDoenet={handleCreateDoenet}
+        onCreateAuthored={handleCreateAuthored}
         onAssetRemove={handleAssetRemove}
         onAssetUpdate={handleAssetUpdate}
         divisions={divisions}

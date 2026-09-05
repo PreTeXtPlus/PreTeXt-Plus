@@ -22,11 +22,19 @@ import {
   extractLatexDivisionTitle,
   extractLatexSectionLabel,
   updateLatexDivisionMetadata,
+  parseLatexDivisionHeader,
+  normalizeLatexDivisionSource,
+  ensureLatexSectionWrapper,
+  stripLatexSectionWrapper,
   splitLatexDocument,
   mergeLatexDocument,
   normalizeDivisionsOnLoad,
+  assembleProjectSource,
+  assembleFullProjectSource,
+  wrapDivisionForPreview,
 } from '../sectionUtils'
-import type { DocumentSection } from '../types/sections'
+import type { Division } from '../types/sections'
+import type { Asset, Snippet } from '../types/editor'
 
 const ARTICLE = `<article xml:id="a1">
 \t<title>My Article</title>
@@ -182,7 +190,7 @@ describe('division factories', () => {
 })
 
 describe('updateSectionMetadata', () => {
-  const section: DocumentSection = {
+  const section: Division = {
     id: '1',
     xmlId: 's1',
     title: 'Old',
@@ -417,6 +425,130 @@ describe('latex divisions', () => {
     )
   })
 
+  it('always leaves a blank line between the header and the body', () => {
+    const tight = { ...division, source: '\\section{Hello}\\label{s1}\nbody' }
+    expect(updateLatexDivisionMetadata(tight, { title: 'Bye' }).source).toBe(
+      '\\section{Bye}\\label{s1}\n\nbody',
+    )
+    expect(normalizeLatexDivisionSource(tight.source)).toBe(
+      '\\section{Hello}\\label{s1}\n\nbody',
+    )
+    // …and never piles up more than one.
+    expect(
+      normalizeLatexDivisionSource('\\section{Hello}\n\n\n\n  body'),
+    ).toBe('\\section{Hello}\n\nbody')
+  })
+})
+
+describe('parseLatexDivisionHeader', () => {
+  it('reads a well-formed header', () => {
+    expect(parseLatexDivisionHeader('\\section{Hello}\\label{s1}\n\nbody')).toEqual({
+      macro: 'section',
+      starred: false,
+      title: 'Hello',
+      label: 's1',
+      length: '\\section{Hello}\\label{s1}'.length,
+    })
+  })
+
+  it('keeps the star of a starred header', () => {
+    const header = parseLatexDivisionHeader('\\section*{Hi}\nbody')
+    expect(header!.starred).toBe(true)
+    expect(header!.macro).toBe('section')
+  })
+
+  it('brace-matches the title argument rather than stopping at the first }', () => {
+    // The hand-written LaTeX idiom: the label lives inside the section argument.
+    const header = parseLatexDivisionHeader('\\section{Hello\\label{sec:hi}}\nbody')
+    expect(header!.title).toBe('Hello')
+    expect(header!.label).toBe('sec:hi')
+    expect(header!.length).toBe('\\section{Hello\\label{sec:hi}}'.length)
+  })
+
+  it('swallows the wreckage of a doubly-labelled header', () => {
+    // The reported bug: an import left `\label{…}}` inside the argument and the
+    // editor then appended the division's own label after it.
+    const broken = '\\section{Hello\\label{sec:hi}}\\label{s1}\nbody'
+    const header = parseLatexDivisionHeader(broken)
+    expect(header!.title).toBe('Hello')
+    // The label the TOC form wrote wins over the one buried in the argument.
+    expect(header!.label).toBe('s1')
+    expect(broken.slice(header!.length)).toBe('\nbody')
+  })
+
+  it('does not read past the end of the first line', () => {
+    const header = parseLatexDivisionHeader('\\section{Unclosed\nbody')
+    expect(header!.title).toBe('Unclosed')
+    expect(header!.length).toBe('\\section{Unclosed'.length)
+  })
+
+  it('ignores an environment-style division', () => {
+    expect(parseLatexDivisionHeader('\\begin{section}\nbody\n\\end{section}')).toBeNull()
+    expect(parseLatexDivisionHeader('% Introduction\n\nbody')).toBeNull()
+  })
+})
+
+describe('normalizeLatexDivisionSource', () => {
+  it('rebuilds a mangled header into a well-formed one', () => {
+    expect(
+      normalizeLatexDivisionSource('\\section{Hello\\label{sec:hi}}\\label{s1}\nbody'),
+    ).toBe('\\section{Hello}\\label{s1}\n\nbody')
+  })
+
+  it('is idempotent', () => {
+    const clean = '\\worksheet{W}\\label{w1}\n\nbody'
+    expect(normalizeLatexDivisionSource(clean)).toBe(clean)
+  })
+
+  it('leaves a body that merely opens with some other macro alone', () => {
+    // `\emph` is not a division type, so this is prose, not a broken header.
+    const prose = '\\emph{Once} upon a time.\nMore prose.'
+    expect(normalizeLatexDivisionSource(prose)).toBe(prose)
+  })
+
+  it('repairs a division as it is loaded, without an author touching it', () => {
+    const [division] = normalizeDivisionsOnLoad(
+      [
+        {
+          id: '1',
+          xmlId: 's1',
+          title: '',
+          type: 'section',
+          sourceFormat: 'latex',
+          source: '\\section{Hello\\label{sec:hi}}\\label{s1}\nbody',
+        } as Division,
+      ],
+      undefined,
+      'article',
+    )
+    expect(division.source).toBe('\\section{Hello}\\label{s1}\n\nbody')
+    expect(division.title).toBe('Hello')
+  })
+})
+
+describe('latex section wrappers', () => {
+  it('recognises any division macro as an intact header', () => {
+    const worksheet = '\\worksheet{W}\\label{w1}\n\nbody'
+    expect(ensureLatexSectionWrapper(worksheet, 'worksheet', 'W')).toBe(worksheet)
+  })
+
+  it('restores a header named after the division type', () => {
+    expect(ensureLatexSectionWrapper('body', 'worksheet', 'W')).toBe(
+      '\\worksheet{W}\n\nbody',
+    )
+  })
+
+  it('strips a malformed header along with its wreckage', () => {
+    expect(
+      stripLatexSectionWrapper(
+        '\\section{Hello\\label{sec:hi}}\\label{s1}\n\nbody',
+        'section',
+      ),
+    ).toBe('body')
+  })
+})
+
+describe('latex documents', () => {
   it('splits a document at \\section commands and keeps the preamble', () => {
     const latex =
       '\\documentclass{article}\n\\begin{document}\nintro\n\\section{One}\nbody1\n\\section{Two}\nbody2\n\\end{document}'
@@ -440,7 +572,7 @@ describe('latex divisions', () => {
 // name — so hosts hand the editor records without one. Recovering it on load
 // is what lets the TOC label a row and restrict what its children may be.
 describe('normalizeDivisionsOnLoad type backfill', () => {
-  const root: DocumentSection = {
+  const root: Division = {
     id: '1',
     xmlId: 'bk',
     title: 'Book',
@@ -453,9 +585,9 @@ describe('normalizeDivisionsOnLoad type backfill', () => {
   const untyped = (
     xmlId: string,
     source: string,
-    sourceFormat: DocumentSection['sourceFormat'] = 'pretext',
+    sourceFormat: Division['sourceFormat'] = 'pretext',
   ) =>
-    ({ id: xmlId, xmlId, title: '', source, sourceFormat }) as DocumentSection
+    ({ id: xmlId, xmlId, title: '', source, sourceFormat }) as Division
 
   it('reads a pretext division type from its wrapper element', () => {
     const [, chapter, sub] = normalizeDivisionsOnLoad(
@@ -518,5 +650,307 @@ describe('normalizeDivisionsOnLoad type backfill', () => {
 
     expect(tex.type).toBeUndefined()
     expect(tex.title).toBe('Hello')
+  })
+})
+
+describe('assembleFullProjectSource / wrapDivisionForPreview — xml:lang', () => {
+  const root: Division = {
+    id: '1',
+    xmlId: 'a1',
+    title: 'My Article',
+    type: 'article',
+    sourceFormat: 'pretext',
+    source: ARTICLE,
+  }
+
+  it('writes @xml:lang on the root <pretext> element when a lang is given', () => {
+    const xml = assembleFullProjectSource([root], 'a1', '', [], 'af-ZA')
+    expect(xml).toMatch(/^<pretext xml:lang="af-ZA">/)
+    expectWellFormed(xml)
+  })
+
+  it('omits @xml:lang entirely when no lang is given', () => {
+    const xml = assembleFullProjectSource([root], 'a1', '', [])
+    expect(xml).toMatch(/^<pretext>/)
+    expect(xml).not.toContain('xml:lang')
+  })
+
+  it('writes @xml:lang for a division-scoped preview too', () => {
+    const xml = wrapDivisionForPreview('article', ARTICLE, '', 'My Article', 'fr-CA')
+    expect(xml).toMatch(/^<pretext xml:lang="fr-CA">/)
+    expectWellFormed(xml)
+  })
+})
+
+// Unit-tested rather than checked by eye because the failure mode is an *empty*
+// preview, not an error: the renderer sees the <slide> elements, selects the
+// reveal.js conversion, and hands it a root element it has no template for. A
+// visual check on a deck that legitimately has no content yet looks identical.
+describe('wrapDivisionForPreview — the project root type', () => {
+  const SLIDES =
+    '<section xml:id="sec"><title>Sec</title><slide><title>One</title><p>Hi</p></slide></section>'
+
+  /** The wrapper element's tag name — it also carries a root `@label`. */
+  const wrapperTag = (xml: string) =>
+    xml.match(/^<pretext[^>]*>\s*<([a-z-]+)/)?.[1]
+
+  it('wraps a non-root division of a slideshow in <slideshow>', () => {
+    const xml = wrapDivisionForPreview('section', SLIDES, '', 'My Deck', undefined, 'slideshow')
+    expect(wrapperTag(xml)).toBe('slideshow')
+    expect(xml).toContain('<title>My Deck</title>')
+    expectWellFormed(xml)
+  })
+
+  it('still wraps a non-root division of an article in <article>', () => {
+    const xml = wrapDivisionForPreview('section', SLIDES, '', 'My Article', undefined, 'article')
+    expect(wrapperTag(xml)).toBe('article')
+    expectWellFormed(xml)
+  })
+
+  it('defaults to <article> when the root type is not given', () => {
+    const xml = wrapDivisionForPreview('section', SLIDES, '', 'My Article')
+    expect(wrapperTag(xml)).toBe('article')
+    expectWellFormed(xml)
+  })
+
+  // part/chapter can only occur in a book, so a slideshow root never reaches
+  // this branch in practice — but the book rule must not be lost either.
+  it('keeps the <book> wrapper for a chapter', () => {
+    const chapter = '<chapter xml:id="ch"><title>Ch</title><p>Hi</p></chapter>'
+    const xml = wrapDivisionForPreview('chapter', chapter, '', 'My Book', undefined, 'book')
+    expect(wrapperTag(xml)).toBe('book')
+    expectWellFormed(xml)
+  })
+
+  // A <slideshow> root division is already a complete top-level element, so it
+  // must be passed through rather than nested inside a second one.
+  it('adds no wrapper to a slideshow root division', () => {
+    const deck = '<slideshow xml:id="d"><title>D</title><slide><p>Hi</p></slide></slideshow>'
+    const xml = wrapDivisionForPreview('slideshow', deck, '', 'D', undefined, 'slideshow')
+    expect(xml.match(/<slideshow\b/g)).toHaveLength(1)
+    expect(xml).not.toContain('<title>D</title>\n<slideshow')
+    expectWellFormed(xml)
+  })
+})
+
+// The root `@label` is what the previewer matches the root division on, and it
+// is added by scanning for the root element's start tag rather than parsing the
+// document — assembling a book means assembling the whole project, and parsing
+// all of it to reach one attribute dominated every preview rebuild. These pin
+// down the constructs that scan has to survive.
+describe('root @label on an assembled document', () => {
+  const div = (source: string, type: Division['type'] = 'article'): Division => ({
+    id: '1',
+    xmlId: 'a1',
+    title: 'My Article',
+    type,
+    sourceFormat: 'pretext',
+    source,
+  })
+
+  const rootTagOf = (xml: string) =>
+    /<(?:book|article|slideshow)\b[^>]*>/.exec(xml)?.[0] ?? ''
+
+  it('copies the root @xml:id into a @label', () => {
+    const xml = assembleFullProjectSource([div(ARTICLE)], 'a1', '')
+    expect(rootTagOf(xml)).toContain('label="a1"')
+  })
+
+  it('leaves an existing @label alone', () => {
+    const source = ARTICLE.replace(
+      '<article xml:id="a1">',
+      '<article xml:id="a1" label="chosen">',
+    )
+    const xml = assembleFullProjectSource([div(source)], 'a1', '')
+    expect(rootTagOf(xml)).toContain('label="chosen"')
+    expect(rootTagOf(xml)).not.toContain('label="a1"')
+  })
+
+  it('changes nothing but the root start tag', () => {
+    const xml = assembleFullProjectSource([div(ARTICLE)], 'a1', '')
+    // Everything after the root's own `>` is byte-for-byte what went in, which
+    // is what keeps preview line numbers aligned with the editor buffer.
+    expect(xml).toContain(ARTICLE.slice(ARTICLE.indexOf('>') + 1))
+    expectWellFormed(xml)
+  })
+
+  it('falls back to "main" when the root has no @xml:id, avoiding collisions', () => {
+    const noId = ARTICLE.replace('<article xml:id="a1">', '<article>')
+    expect(rootTagOf(assembleFullProjectSource([div(noId)], 'a1', ''))).toContain(
+      'label="main"',
+    )
+
+    const taken = noId.replace('<section xml:id="s1">', '<section label="main">')
+    expect(rootTagOf(assembleFullProjectSource([div(taken)], 'a1', ''))).toContain(
+      'label="main-1"',
+    )
+  })
+
+  it('finds the root division past <docinfo> and its subtree', () => {
+    const docinfo = `<docinfo>
+  <macros>\\newcommand{\\R}{\\mathbb{R}}</macros>
+  <cross-references text="type-global"/>
+</docinfo>`
+    const xml = assembleFullProjectSource([div(ARTICLE)], 'a1', docinfo)
+    expect(rootTagOf(xml)).toContain('label="a1"')
+    expect(xml).toContain('<macros>')
+    expectWellFormed(xml)
+  })
+
+  // Asserted on the whole document rather than via `rootTagOf`: a naive tag
+  // regex is fooled by exactly these two constructs, which is the point.
+  it('is not fooled by a comment that mentions a root element', () => {
+    const source = `<!-- an <article> in a comment, and a <book> too -->\n${ARTICLE}`
+    const xml = assembleFullProjectSource([div(source)], 'a1', '')
+    expect(xml).toContain('<article xml:id="a1" label="a1">')
+    expect(xml).toContain('<!-- an <article> in a comment, and a <book> too -->')
+  })
+
+  it('is not fooled by a > inside an attribute value', () => {
+    const source = ARTICLE.replace(
+      '<article xml:id="a1">',
+      '<article xml:id="a1" data-note="a > b">',
+    )
+    const xml = assembleFullProjectSource([div(source)], 'a1', '')
+    expect(xml).toContain('<article xml:id="a1" data-note="a > b" label="a1">')
+    expectWellFormed(xml)
+  })
+
+  it('leaves a bare division fragment untouched', () => {
+    const section = '<section xml:id="s1"><title>First</title><p>Body</p></section>'
+    expect(assembleProjectSource([div(section, 'section')], 'a1')).toBe(section)
+  })
+})
+
+// Assembly walks the whole project on every keystroke while only the division
+// being typed in has changed, so conversions are cached per division. The cache
+// is keyed on xml:id and validated against the source, so the risk it carries
+// is serving a stale conversion — which is what these cover.
+describe('per-division conversion caching', () => {
+  const latexDivision = (source: string): Division => ({
+    id: '1',
+    xmlId: 'sec-1',
+    title: 'A Section',
+    type: 'section',
+    sourceFormat: 'latex',
+    source,
+  })
+
+  it('reflects an edit to a division it has already converted', () => {
+    const first = assembleProjectSource(
+      [latexDivision('\\section{A Section}\\label{sec-1}\n\nBefore the edit.')],
+      'sec-1',
+    )
+    expect(first).toContain('Before the edit.')
+
+    const second = assembleProjectSource(
+      [latexDivision('\\section{A Section}\\label{sec-1}\n\nAfter the edit.')],
+      'sec-1',
+    )
+    expect(second).toContain('After the edit.')
+    expect(second).not.toContain('Before the edit.')
+  })
+
+  it('returns the same conversion for unchanged source', () => {
+    const division = latexDivision('\\section{A Section}\\label{sec-1}\n\nStable.')
+    expect(assembleProjectSource([division], 'sec-1')).toBe(
+      assembleProjectSource([division], 'sec-1'),
+    )
+  })
+
+  it('does not confuse two divisions that share an xml:id across projects', () => {
+    const projectA = assembleProjectSource(
+      [latexDivision('\\section{A Section}\\label{sec-1}\n\nProject A.')],
+      'sec-1',
+    )
+    const projectB = assembleProjectSource(
+      [latexDivision('\\section{A Section}\\label{sec-1}\n\nProject B.')],
+      'sec-1',
+    )
+    expect(projectA).toContain('Project A.')
+    expect(projectB).toContain('Project B.')
+  })
+})
+
+// A `<plus:snippet ref="..."/>` placeholder splices in the named Snippet's own
+// resolved content, recursively -- unlike an asset (a leaf), a snippet can
+// itself embed further snippet/image refs.
+describe('snippet resolution in assembleFullProjectSource', () => {
+  const div = (source: string): Division => ({
+    id: '1',
+    xmlId: 'a1',
+    title: 'My Article',
+    type: 'article',
+    sourceFormat: 'pretext',
+    source,
+  })
+
+  const snippet = (ref: string, source: string, sourceFormat: Snippet['sourceFormat'] = 'pretext'): Snippet => ({
+    id: ref,
+    ref,
+    source,
+    sourceFormat,
+  })
+
+  it('splices the snippet source in place of the placeholder', () => {
+    const source = ARTICLE.replace('<p>Body one</p>', '<p>Body one</p><plus:snippet ref="note"/>')
+    const xml = assembleFullProjectSource([div(source)], 'a1', '', [], undefined, [
+      snippet('note', '<p>A shared note.</p>'),
+    ])
+    expect(xml).toContain('<p>A shared note.</p>')
+    expect(xml).not.toContain('<plus:snippet')
+  })
+
+  it('renders a comment for a ref with no matching snippet', () => {
+    const source = ARTICLE.replace('<p>Body one</p>', '<p>Body one</p><plus:snippet ref="missing"/>')
+    const xml = assembleFullProjectSource([div(source)], 'a1', '', [], undefined, [])
+    expect(xml).toContain('<!-- missing snippet: missing -->')
+  })
+
+  it('renders a comment rather than recursing forever on a snippet that includes itself', () => {
+    const source = ARTICLE.replace('<p>Body one</p>', '<p>Body one</p><plus:snippet ref="loop"/>')
+    const xml = assembleFullProjectSource([div(source)], 'a1', '', [], undefined, [
+      snippet('loop', '<p>before</p><plus:snippet ref="loop"/><p>after</p>'),
+    ])
+    expect(xml).toContain('<!-- circular reference: loop -->')
+  })
+
+  it('recursively resolves a further snippet ref inside a snippet', () => {
+    const source = ARTICLE.replace('<p>Body one</p>', '<p>Body one</p><plus:snippet ref="outer"/>')
+    const xml = assembleFullProjectSource([div(source)], 'a1', '', [], undefined, [
+      snippet('outer', '<p>outer</p><plus:snippet ref="inner"/>'),
+      snippet('inner', '<p>inner</p>'),
+    ])
+    expect(xml).toContain('<p>outer</p>')
+    expect(xml).toContain('<p>inner</p>')
+    expect(xml).not.toContain('<plus:snippet')
+  })
+
+  it('resolves an image ref embedded inside a snippet', () => {
+    const asset: Asset = { id: 'img-1', ref: 'photo', title: 'Photo', isFile: true, fileRef: 'photo.png' }
+    const source = ARTICLE.replace('<p>Body one</p>', '<p>Body one</p><plus:snippet ref="figure"/>')
+    const xml = assembleFullProjectSource([div(source)], 'a1', '', [asset], undefined, [
+      snippet('figure', '<plus:image ref="photo"/>'),
+    ])
+    expect(xml).toContain('source="photo.png"')
+  })
+
+  it('converts a latex/markdown snippet to PreTeXt before splicing it in', () => {
+    const source = ARTICLE.replace('<p>Body one</p>', '<p>Body one</p><plus:snippet ref="tex-note"/>')
+    const xml = assembleFullProjectSource([div(source)], 'a1', '', [], undefined, [
+      snippet('tex-note', '\\section{Hi}', 'latex'),
+    ])
+    expect(xml).toContain('<title>Hi</title>')
+  })
+
+  it('a placeholder may repeat, resolving the same snippet each time', () => {
+    const source = ARTICLE.replace(
+      '<p>Body one</p>',
+      '<p>Body one</p><plus:snippet ref="note"/><plus:snippet ref="note"/>',
+    )
+    const xml = assembleFullProjectSource([div(source)], 'a1', '', [], undefined, [
+      snippet('note', '<p>shared</p>'),
+    ])
+    expect(xml.match(/<p>shared<\/p>/g)).toHaveLength(2)
   })
 })

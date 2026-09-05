@@ -20,9 +20,9 @@ class AssetEditSyncTest < ApplicationSystemTestCase
 
     fill_in "am-edit-title", with: "Euler Portrait"
     fill_in "am-edit-ref", with: "euler-portrait"
-    within("[aria-label^='Edit asset']") { click_button "Save" }
+    within("[aria-label^='Manage asset']") { click_button "Save" }
 
-    assert_no_selector "[aria-label^='Edit asset']", wait: 10
+    assert_no_selector "[aria-label^='Manage asset']", wait: 10
 
     assert_asset_eventually(ref: "euler-portrait", title: "Euler Portrait")
   end
@@ -33,16 +33,28 @@ class AssetEditSyncTest < ApplicationSystemTestCase
     # The content editor is Monaco, which only accepts keystrokes once its
     # hidden textarea has focus -- and it only takes focus from a click on a
     # concrete `.view-line`, never the `.view-lines` container.
-    within(".pretext-plus-editor__am-edit-editor") do
+    find("details[data-testid='asset-edit-advanced']").click
+    within("[data-testid='asset-edit-source-editor']") do
       assert_selector ".view-line", wait: 10
       first(".view-line").click
     end
-    page.send_keys "<shortdescription>A portrait</shortdescription>"
-    within("[aria-label^='Edit asset']") { click_button "Save" }
+    page.send_keys "<description>A portrait</description>"
+    within("[aria-label^='Manage asset']") { click_button "Save" }
 
-    assert_no_selector "[aria-label^='Edit asset']", wait: 10
+    assert_no_selector "[aria-label^='Manage asset']", wait: 10
 
-    assert_asset_eventually(source: "<shortdescription>A portrait</shortdescription>")
+    assert_asset_eventually(source: "<description>A portrait</description>")
+  end
+
+  test "editing an asset's short description persists it" do
+    open_asset_editor_for(@asset.ref)
+
+    fill_in "am-edit-short-description", with: "A portrait of Euler"
+    within("[aria-label^='Manage asset']") { click_button "Save" }
+
+    assert_no_selector "[aria-label^='Manage asset']", wait: 10
+
+    assert_asset_eventually(short_description: "A portrait of Euler")
   end
 
   test "replacing an asset's file hands the replacement the old asset's id" do
@@ -51,7 +63,7 @@ class AssetEditSyncTest < ApplicationSystemTestCase
 
     assert_selector "[aria-label='Asset manager']", wait: 10
     attach_file(Rails.root.join("test/fixtures/files/test_image.png"), make_visible: true) do
-      find(".pretext-plus-editor__am-drop-zone").click
+      find("[aria-label='Paste an image, drag and drop to upload, or click to browse files']").click
     end
     click_button "Add to Project"
 
@@ -70,6 +82,44 @@ class AssetEditSyncTest < ApplicationSystemTestCase
     assert_not Asset.exists?(@asset.id), "the replaced asset's row should be gone"
   end
 
+  test "authoring a new asset creates it without a file, and editing its source persists it" do
+    # The ref is server-derived from the title (slugifyRef), not typed in.
+    ref = "authored-diagram"
+
+    visit edit_project_path(@project)
+    assert_selector "button[data-testid='toc-assets-btn']", text: "Add", wait: 20
+    find("button[data-testid='toc-assets-btn']", text: "Add").click
+
+    assert_selector "[aria-label='Asset manager']", wait: 10
+    click_button "Custom"
+
+    fill_in "am-author-title", with: "Authored Diagram"
+    click_button "Create"
+
+    # A bare authored asset (no source yet) is created, then the standalone
+    # asset editor opens on it automatically -- same hand-off as upload/URL.
+    assert_no_selector "[aria-label='Asset manager']", wait: 10
+    assert_selector "[aria-label^='Manage asset']", wait: 10
+
+    # Unlike a file-backed asset, an authored asset's source editor is shown
+    # directly rather than tucked behind a collapsed "Advanced" disclosure --
+    # it's the asset's entire content, not an optional extra.
+    within("[data-testid='asset-edit-source-editor']") do
+      assert_selector ".view-line", wait: 10
+      first(".view-line").click
+    end
+    page.send_keys "<latex-image>tikzpicture</latex-image>"
+    within("[aria-label^='Manage asset']") { click_button "Save" }
+
+    assert_no_selector "[aria-label^='Manage asset']", wait: 10
+
+    asset = eventually { @project.assets.reload.find_by(ref: ref) }
+    assert asset, "expected an authored asset to have been created with ref #{ref}"
+    assert_equal "authored", asset.kind
+    assert_not asset.file.attached?
+    assert_equal "<latex-image>tikzpicture</latex-image>", asset.source
+  end
+
   private
     def sign_in_through_form
       visit new_user_session_path
@@ -86,14 +136,14 @@ class AssetEditSyncTest < ApplicationSystemTestCase
     # asset manager -- the only route a user has to it.
     def open_asset_editor_for(ref)
       visit edit_project_path(@project)
-      assert_selector "button.pretext-plus-editor__toc-assets-btn", text: "Manage", wait: 20
-      find("button.pretext-plus-editor__toc-assets-btn", text: "Manage").click
+      assert_selector "button[data-testid='toc-assets-btn']", text: "Manage", wait: 20
+      find("button[data-testid='toc-assets-btn']", text: "Manage").click
 
       assert_selector "[aria-label='Asset manager']", wait: 10
-      find(".pretext-plus-editor__am-doc-row", text: ref, wait: 10)
-        .find("button.pretext-plus-editor__am-row-info").click
+      find("[data-testid='am-doc-row']", text: ref, wait: 10)
+        .find("button[data-testid='am-row-info-btn']").click
 
-      assert_selector "[aria-label^='Edit asset']", wait: 10
+      assert_selector "[aria-label^='Manage asset']", wait: 10
     end
 
     # The save is a PATCH the browser fires after the modal closes, so the row

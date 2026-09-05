@@ -14,12 +14,21 @@ class BuildStatusChecker
     alias_method :ok?, :ok
   end
 
+  # Both ok: true, because the output is there. What differs is whose move it is.
+  AWAITING_REVIEW = "The build reported errors. Its output is imported and ready to " \
+                    "preview, but readers do not see it until you choose to use it.".freeze
+  BUILT_WITH_ERRORS = "The build reported errors. You chose to use its output, so it is " \
+                      "what readers see.".freeze
+
   def initialize(build)
     @build = build
   end
 
   def check!
     if @build.success?
+      return Result.new(ok: true, message: AWAITING_REVIEW) if @build.awaiting_review?
+      return Result.new(ok: true, message: BUILT_WITH_ERRORS) if @build.completed_with_errors?
+
       return Result.new(ok: true, message: "Build was successful!")
     end
 
@@ -41,6 +50,17 @@ class BuildStatusChecker
       return Result.new(ok: false, message: "Build server returned HTTP #{response.code}: #{response.body.to_s.truncate(300)}")
     end
 
+    # Reload before acting on any of this: the webhook this same response describes
+    # may have landed while that request was in flight, and it moves a build to
+    # received_from_server the same way the branches below do. Racing it means
+    # importing the same artifact twice, which collides on BuildFile's unique index --
+    # and the loser calls mark!(:failed) on a build that actually succeeded (see
+    # FullBuildArtifactJob). The webhook got there first, so there is nothing left here
+    # to do but say so the way the branch below would have.
+    if @build.reload.received_from_server?
+      return Result.new(ok: true, message: "Build server reports success -- importing files now.")
+    end
+
     data = JSON.parse(response.body)
     case data["status"]
     when "success"
@@ -55,6 +75,16 @@ class BuildStatusChecker
       Result.new(ok: true, message: "Build server reports success -- importing files now.")
     when "failed"
       Rails.logger.warn("Build #{@build.id} was in_progress locally but build server already reports failure -- full_callback was likely never received.")
+      # Same rule as the webhook: the server offers `artifact_url` whenever the build
+      # left an output.zip behind, failure or not, so that -- not the status word -- is
+      # what says whether there is output to import. See BuildCallbacksController.
+      if data["artifact_url"].present?
+        @build.mark!(:received_from_server, log: remote_log(data), completed_with_errors: true)
+        FullBuildArtifactJob.perform_later(@build, FullBuildServer.url_for(data["artifact_url"]))
+        return Result.new(ok: true, message: "The build reported errors but still produced output -- " \
+                                             "importing it now. It won't go live until you choose to use it.")
+      end
+
       @build.mark!(:failed, log: remote_log(data))
       Result.new(ok: false, message: "Build server reports failure: #{remote_log(data).truncate(300)}")
     else

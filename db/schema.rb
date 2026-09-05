@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_07_31_160954) do
+ActiveRecord::Schema[8.1].define(version: 2026_08_27_222821) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
   enable_extension "pgcrypto"
@@ -77,8 +77,10 @@ ActiveRecord::Schema[8.1].define(version: 2026_07_31_160954) do
   end
 
   create_table "builds", id: :uuid, default: -> { "gen_random_uuid()" }, force: :cascade do |t|
+    t.boolean "completed_with_errors", default: false, null: false
     t.datetime "created_at", null: false
     t.string "entry_path"
+    t.boolean "errors_accepted", default: false, null: false
     t.text "log"
     t.uuid "project_id", null: false
     t.string "remote_status_url"
@@ -228,10 +230,13 @@ ActiveRecord::Schema[8.1].define(version: 2026_07_31_160954) do
 
   create_table "projects", id: :uuid, default: -> { "gen_random_uuid()" }, force: :cascade do |t|
     t.datetime "created_at", null: false
+    t.text "description"
+    t.string "dictionary_words", default: [], null: false, array: true
     t.text "docinfo"
     t.integer "document_type", default: 0, null: false
     t.text "html_source"
     t.boolean "is_template", default: false, null: false
+    t.integer "language", default: 0, null: false
     t.text "pretext_source"
     t.jsonb "publication_settings", default: {}, null: false
     t.datetime "source_updated_at", default: -> { "CURRENT_TIMESTAMP" }, null: false
@@ -244,6 +249,16 @@ ActiveRecord::Schema[8.1].define(version: 2026_07_31_160954) do
     t.index ["is_template"], name: "index_projects_on_is_template"
     t.index ["user_id", "visibility"], name: "index_projects_on_user_id_and_visibility"
     t.index ["user_id"], name: "index_projects_on_user_id"
+  end
+
+  create_table "snippets", id: :uuid, default: -> { "gen_random_uuid()" }, force: :cascade do |t|
+    t.datetime "created_at", null: false
+    t.uuid "project_id", null: false
+    t.string "ref"
+    t.text "source"
+    t.integer "source_format", default: 0, null: false
+    t.datetime "updated_at", null: false
+    t.index ["project_id"], name: "index_snippets_on_project_id"
   end
 
   create_table "subscription_seats", id: :uuid, default: -> { "gen_random_uuid()" }, force: :cascade do |t|
@@ -303,6 +318,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_07_31_160954) do
     t.string "current_sign_in_ip"
     t.string "email", null: false
     t.string "encrypted_password", null: false
+    t.boolean "honor_invoices", default: false
     t.datetime "last_sign_in_at"
     t.string "last_sign_in_ip"
     t.string "name"
@@ -340,6 +356,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_07_31_160954) do
   add_foreign_key "project_doc_updates", "projects"
   add_foreign_key "project_docs", "projects"
   add_foreign_key "projects", "users"
+  add_foreign_key "snippets", "projects"
   add_foreign_key "subscription_seats", "pay_subscriptions"
   add_foreign_key "subscription_seats", "users"
   add_foreign_key "targets", "projects"

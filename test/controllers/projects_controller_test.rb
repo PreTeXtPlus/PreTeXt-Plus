@@ -61,6 +61,15 @@ class ProjectsControllerTest < ActionDispatch::IntegrationTest
     assert_response :success
   end
 
+  test "the new-project dialog offers both document types, defaulting to document" do
+    get new_project_url
+
+    assert_select "input[type=radio][name='project[document_type]'][value=article][checked]"
+    assert_select "input[type=radio][name='project[document_type]'][value=slideshow]"
+    # Decision: the two axes are independent, so no markup style is gated on the type.
+    assert_select "input[name='project[divisions_attributes][0][source_format]']", count: 3
+  end
+
   test "should create project and redirect to editor" do
     stub_build_server do
       assert_difference("Project.count") do
@@ -83,6 +92,49 @@ class ProjectsControllerTest < ActionDispatch::IntegrationTest
     assert Project.exists?(title: "New Project", user: @user)
   end
 
+  # The blocker this lifts: project_params permitted no document_type at all, so nothing
+  # outside the import wizard could make a deck.
+  test "create accepts document_type and builds a slideshow" do
+    stub_build_server do
+      assert_difference("Project.count") do
+        post projects_url, params: { project: { title: "My Deck", document_type: "slideshow" } }
+      end
+    end
+
+    created = Project.find_by!(title: "My Deck", user: @user)
+    assert created.slideshow_document_type?
+    assert_equal "revealjs", created.targets.sole.kind
+  end
+
+  test "create defaults to a document when no document_type is posted" do
+    stub_build_server do
+      post projects_url, params: { project: { title: "Plain" } }
+    end
+
+    assert Project.find_by!(title: "Plain", user: @user).article_document_type?
+  end
+
+  # Write-once: a deck cannot become a document or the reverse, because that would mean
+  # rewriting the source and invalidating every target. The parameter is dropped rather
+  # than rejected, so an update carrying one still succeeds -- it just does nothing.
+  test "update ignores document_type" do
+    assert @project.article_document_type?
+
+    patch project_url(@project), params: { project: { title: "Renamed", document_type: "slideshow" } }
+
+    @project.reload
+    assert_equal "Renamed", @project.title
+    assert @project.article_document_type?
+  end
+
+  test "update cannot turn a slideshow into a document" do
+    deck = projects(:slides)
+
+    patch project_url(deck), params: { project: { document_type: "article" } }
+
+    assert deck.reload.slideshow_document_type?
+  end
+
   test "should show project" do
     get project_url(@project)
     assert_response :success
@@ -101,6 +153,59 @@ class ProjectsControllerTest < ActionDispatch::IntegrationTest
 
     assert_response :success
     assert_select "a[href=?]", share_project_path(@project)
+  end
+
+  # one_instructor and one_print have never been built. Build all is a subscriber
+  # feature (see Ability#build_all), so a subscribed owner sees the button...
+  test "show offers Build all when the owner is subscribed and a target has never been built" do
+    subscription_seats(:one).update!(user: @user)
+
+    get project_url(@project)
+
+    assert_response :success
+    assert_match "Build all", response.body
+  end
+
+  # ...and an unsubscribed owner sees a Subscribe upsell in its place instead.
+  test "show offers a Subscribe upsell instead of Build all when the owner is not subscribed" do
+    get project_url(@project)
+
+    assert_response :success
+    assert_no_match "Build all", response.body
+    assert_match "Subscribe", response.body
+  end
+
+  test "show has no bulk button when every target already needs individual attention" do
+    sign_in users(:two) # two_web's only build failed -- neither never nor stale
+
+    get project_url(projects(:two))
+
+    assert_response :success
+    assert_no_match "Build all", response.body
+    assert_no_match "Rebuild outdated", response.body
+  end
+
+  test "show carries a Shared pill for a collaborator, not for the owner" do
+    get project_url(@project)
+    assert_response :success
+    assert_no_match "Shared", response.body
+
+    sign_in users(:two) # accepted collaborator on @project (see collaborations.yml)
+    get project_url(@project)
+
+    assert_response :success
+    assert_match "Shared", response.body
+  end
+
+  test "a collaborator sees nothing once the project is at its target quota" do
+    (@user.target_quota - @project.targets.count).times { |i| @project.targets.create!(name: "Extra #{i}", kind: "website") }
+
+    sign_in users(:two) # accepted collaborator on @project
+    get project_url(@project)
+
+    assert_response :success
+    assert_no_match "reached", response.body
+    assert_no_match "+ Add an output", response.body
   end
 
   test "should get edit" do
@@ -252,6 +357,19 @@ class ProjectsControllerTest < ActionDispatch::IntegrationTest
     patch project_url(other_project), params: { project: { visibility: "public" } }
     assert_redirected_to projects_path
     assert other_project.reload.private_visibility?
+  end
+
+  test "collaborator can update the project but not its visibility" do
+    sign_out :user
+    sign_in users(:two) # accepted collaborator on @project
+    assert @project.private_visibility?
+
+    patch project_url(@project), params: { project: { title: "Edited by collaborator", visibility: "public" } }
+
+    assert_redirected_to project_url(@project)
+    @project.reload
+    assert_equal "Edited by collaborator", @project.title
+    assert @project.private_visibility?
   end
 
   # --- Divisions (nested attributes; the /divisions endpoint was removed) ---
@@ -673,6 +791,28 @@ class ProjectsControllerTest < ActionDispatch::IntegrationTest
     assert_includes response.body, "Hello World"
   end
 
+  # The build server takes `target` as an *optional* override and otherwise
+  # detects the conversion from the source. That makes forwarding junk strictly
+  # worse than forwarding nothing, so the action filters rather than passes through.
+  test "preview forwards a recognised target to the build server" do
+    assert_equal "revealjs",
+                 captured_preview_body(target: "revealjs")["target"]
+    assert_equal "html", captured_preview_body(target: "html")["target"]
+  end
+
+  test "preview drops an unrecognised target instead of forwarding it" do
+    assert_nil captured_preview_body(target: "slides")["target"]
+    assert_nil captured_preview_body(target: "; rm -rf /")["target"]
+  end
+
+  # /tryit/preview shares this action and posts no target, which is the reason
+  # the parameter has to stay optional rather than defaulting to "html".
+  test "preview omits target entirely when none is posted" do
+    body = captured_preview_body
+    assert_nil body["target"]
+    assert_equal "<section/>", body["source"]
+  end
+
   test "preview with no project_id renders the build server response with no base tag" do
     stub_preview_server(body: "<html><body>stub</body></html>") do
       post preview_project_url(@project), params: { source: "<section/>", title: "Test" }
@@ -949,4 +1089,26 @@ class ProjectsControllerTest < ActionDispatch::IntegrationTest
     end
     assert_redirected_to new_user_session_path
   end
+
+  private
+    # POST to #preview and return the form body it sent *upstream*, parsed. The
+    # shared stub only fakes a response; what matters here is the request, since
+    # the whole point of the filter is what does and doesn't leave our server.
+    def captured_preview_body(extra_params = {})
+      captured = nil
+      fake_response = Struct.new(:body).new("<html><body>stub</body></html>")
+      fake_response.define_singleton_method(:code) { "200" }
+      fake_http = Object.new
+      fake_http.define_singleton_method(:request) do |req|
+        captured = req.body
+        fake_response
+      end
+
+      Net::HTTP.stub(:start, proc { |*_args, &blk| blk.call(fake_http) }) do
+        post preview_project_url(@project),
+             params: { source: "<section/>", title: "Test" }.merge(extra_params)
+      end
+      assert_response :success
+      Rack::Utils.parse_nested_query(captured)
+    end
 end

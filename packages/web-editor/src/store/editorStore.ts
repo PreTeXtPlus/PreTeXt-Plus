@@ -17,7 +17,7 @@
  *     edit.
  *
  * Derived/config fields that are never edited locally (`source`, `sourceFormat`,
- * `projectAssets`, `projectType`, `rootDivisionId`, …) are still mirrored from
+ * `projectAssets`, `rootDivisionId`, …) are still mirrored from
  * props every render via `syncState()`.
  *
  * Callback stability: createEditorStore returns a `bindCallbacks` function that
@@ -26,7 +26,7 @@
  * they are stable while always calling the latest mode-routed callback.
  */
 import { createStore, type StoreApi } from "zustand/vanilla";
-import type { Asset, AssetKind, FeedbackSubmission, SourceFormat } from "../types/editor";
+import type { Asset, FeedbackSubmission, Snippet, SourceFormat } from "../types/editor";
 import type { Division, DivisionType } from "../types/sections";
 import type { EditDraft } from "../components/toc/types";
 import {
@@ -39,12 +39,18 @@ import {
 // ── Helpers ─────────────────────────────────────────────────────────────────
 
 /**
- * Asset identity within a project: a `<plus:KIND ref="..."/>` placeholder is
- * resolved by kind+ref, so that pair (not the host's `id`) is what every
- * lookup and pool mutation keys on.
+ * Asset identity within a project: a `<plus:image ref="..."/>` placeholder is
+ * resolved by `ref`, so that (not the host's `id`) is what every lookup and
+ * pool mutation keys on.
  */
-const sameAssetRef = (a: Asset, b: Asset): boolean =>
-  a.kind === b.kind && a.ref === b.ref;
+const sameAssetRef = (a: Asset, b: Asset): boolean => a.ref === b.ref;
+
+/**
+ * Snippet identity within a project: a `<plus:snippet ref="..."/>` placeholder
+ * is resolved by `ref`, so that (not the host's `id`) is what every lookup and
+ * pool mutation keys on. Mirrors {@link sameAssetRef}.
+ */
+const sameSnippetRef = (a: Snippet, b: Snippet): boolean => a.ref === b.ref;
 
 /**
  * Breakpoint shared by `isNarrowScreen` (tabs vs. split layout) and the TOC's
@@ -55,6 +61,40 @@ export const NARROW_SCREEN_MAX_WIDTH = 800;
 
 export const isNarrowViewport = (): boolean =>
   typeof window !== "undefined" && window.innerWidth < NARROW_SCREEN_MAX_WIDTH;
+
+/**
+ * Where a deliberate show/hide of the TOC is remembered across sessions, so an
+ * author who never uses the sidebar can keep it shut. Only a *wide-screen*
+ * toggle is written here: on narrow screens the TOC is a drawer over the
+ * editor, which always starts closed, and the programmatic collapses (the
+ * breakpoint crossing, expanding to show the properties form) aren't the
+ * author expressing a preference either.
+ */
+const TOC_COLLAPSED_KEY = "pretext-plus:toc-collapsed";
+
+/** The stored preference, or `null` if never set / storage unavailable. */
+const readStoredTocCollapsed = (): boolean | null => {
+  try {
+    const stored = localStorage.getItem(TOC_COLLAPSED_KEY);
+    return stored === null ? null : stored === "true";
+  } catch {
+    // Storage blocked (private mode, third-party iframe): fall back to the
+    // viewport default, exactly as before it was persisted.
+    return null;
+  }
+};
+
+const writeStoredTocCollapsed = (collapsed: boolean): void => {
+  try {
+    localStorage.setItem(TOC_COLLAPSED_KEY, String(collapsed));
+  } catch {
+    // Storage blocked — the choice just doesn't outlive this session.
+  }
+};
+
+/** Collapsed on narrow screens; otherwise the remembered choice, else open. */
+export const defaultTocCollapsed = (): boolean =>
+  isNarrowViewport() ? true : (readStoredTocCollapsed() ?? false);
 
 // ── Types ───────────────────────────────────────────────────────────────────
 
@@ -74,20 +114,42 @@ export type DivisionChanges = {
 export interface ExternalUpdate {
   divisions?: Division[];
   projectAssets?: Asset[];
+  projectSnippets?: Snippet[];
   rootDivisionId?: string;
   activeDivisionId?: string | null;
   title?: string;
   docinfo?: string;
   commonDocinfo?: string;
   useCommonDocinfo?: boolean;
+  language?: string;
 }
+
+/** The find/replace drawer's inputs — see `EditorStoreState.findPanelState`. */
+export interface FindPanelState {
+  query: string;
+  replacement: string;
+  matchCase: boolean;
+  wholeWord: boolean;
+  useRegex: boolean;
+}
+
+const initialFindPanelState: FindPanelState = {
+  query: "",
+  replacement: "",
+  matchCase: false,
+  wholeWord: false,
+  useRegex: false,
+};
 
 type ModalKey =
   | "isLatexDialogOpen"
+  | "isCleanDialogOpen"
   | "isConvertDialogOpen"
   | "isDocinfoEditorOpen"
   | "isAssetPickerOpen"
-  | "isFullSourceOpen";
+  | "isSnippetPickerOpen"
+  | "isFullSourceOpen"
+  | "isFindPanelOpen";
 
 /**
  * All callbacks wired by Editors.tsx that deep components need to call.
@@ -107,11 +169,19 @@ export interface EditorCallbacks {
   assetInsert: (asset: Asset) => void;
   /** Remove a project asset (optimistic pool drop + host persistence). */
   assetRemove?: (asset: Asset) => void;
-  /** Remove every `<plus:KIND ref/>` placeholder for an unresolved ref from source. */
-  assetRefRemove?: (kind: AssetKind, ref: string) => void;
+  /** Remove every `<plus:image ref/>` placeholder for an unresolved ref from source. */
+  assetRefRemove?: (ref: string) => void;
   /** Duplicate a project asset under a fresh ref (host persists + pool add). */
   assetDuplicate?: (asset: Asset) => void | Promise<void>;
+  snippetInsert: (snippet: Snippet) => void;
+  /** Remove a project snippet (optimistic pool drop + host persistence). */
+  snippetRemove?: (snippet: Snippet) => void;
+  /** Remove every `<plus:snippet ref/>` placeholder for an unresolved ref from source. */
+  snippetRefRemove?: (ref: string) => void;
+  /** Duplicate a project snippet under a fresh ref (host persists + pool add). */
+  snippetDuplicate?: (snippet: Snippet) => void | Promise<void>;
   updateTitle: (title: string) => void;
+  updateLanguage: (language: string) => void;
   feedbackSubmit?: (feedback: FeedbackSubmission) => void | Promise<void>;
   insertContentAtCursor?: (content: string) => void;
 }
@@ -132,11 +202,19 @@ export interface EditorStoreState {
    * it's added, without waiting for the host to echo it back.
    */
   projectAssets: Asset[] | undefined;
+  /**
+   * Authoritative project-snippet pool — owned by the store as a live editing
+   * buffer, exactly like {@link EditorStoreState.projectAssets}. Seeded once
+   * from the host's `projectSnippets` prop, then mutated optimistically by
+   * `addSnippetToPool`/`updateSnippetInPool`/`removeSnippetFromPool`.
+   */
+  projectSnippets: Snippet[] | undefined;
   title: string;
   docinfo: string;
   commonDocinfo: string;
   useCommonDocinfo: boolean;
-  projectType: "article" | "book" | undefined;
+  /** The document's content language (BCP-47 code, e.g. `"en-US"`), written as `@xml:lang` on the generated root element. */
+  language: string;
   projectUrl: string | undefined;
 
   // Divisions (host-controlled pool)
@@ -156,6 +234,9 @@ export interface EditorStoreState {
   /** True when the host passed `onAssetDuplicate`. Controls whether Duplicate is offered. */
   hasAssetDuplicate: boolean;
 
+  /** True when the host passed `onSnippetDuplicate`. Controls whether Duplicate is offered. */
+  hasSnippetDuplicate: boolean;
+
   // ── UI state owned by the store ────────────────────────────────────────────
 
   isTocCollapsed: boolean;
@@ -163,10 +244,26 @@ export interface EditorStoreState {
   isNarrowScreen: boolean;
   activeTab: "editor" | "preview";
   isLatexDialogOpen: boolean;
+  isCleanDialogOpen: boolean;
   isConvertDialogOpen: boolean;
   isDocinfoEditorOpen: boolean;
   isAssetPickerOpen: boolean;
+  isSnippetPickerOpen: boolean;
   isFullSourceOpen: boolean;
+  /**
+   * The project-wide find/replace panel — a dismissible drawer docked next to
+   * the TOC (opened from the Tools menu), not a tab it shares equal billing
+   * with. Modeled as a `ModalKey` like the other dialogs since it's exactly
+   * that shape: open, closed, nothing else to track here.
+   */
+  isFindPanelOpen: boolean;
+  /**
+   * The find/replace drawer's query, replacement text and option toggles.
+   * Kept in the store (rather than the drawer's own `useState`) so closing
+   * and reopening it — the drawer unmounts, since it's only rendered while
+   * `isFindPanelOpen` — doesn't lose what the author typed.
+   */
+  findPanelState: FindPanelState;
 
   // TOC inline edit form
   editingId: string | null;
@@ -174,15 +271,25 @@ export interface EditorStoreState {
   /** True while `editDraft` belongs to a just-created, not-yet-saved division. */
   editingIsNew: boolean;
 
-  /** The asset currently open in the asset edit modal, identified by kind+ref. */
-  editingAssetRef: { kind: AssetKind; ref: string } | null;
+  /** The asset currently open in the asset edit modal, identified by ref. */
+  editingAssetRef: { ref: string } | null;
 
   /**
    * An unresolved placeholder the user is resolving — opens the asset manager
    * in "resolve this ref" mode, where picking/uploading binds the result to
-   * this `kind`+`ref` instead of copying an embed code.
+   * this `ref` instead of copying an embed code.
    */
-  assetResolveTarget: { kind: AssetKind; ref: string } | null;
+  assetResolveTarget: { ref: string } | null;
+
+  /** The snippet currently open in the snippet edit modal, identified by ref. */
+  editingSnippetRef: { ref: string } | null;
+
+  /**
+   * An unresolved placeholder the user is resolving — opens the snippet
+   * manager in "resolve this ref" mode, where creating a snippet binds the
+   * result to this `ref` instead of copying an embed code.
+   */
+  snippetResolveTarget: { ref: string } | null;
 
   // ── Actions ────────────────────────────────────────────────────────────────
 
@@ -204,6 +311,8 @@ export interface EditorStoreState {
   setActiveDivisionId: (id: string | null) => void;
   /** Optimistically set the document title. */
   setTitle: (title: string) => void;
+  /** Optimistically set the document language. */
+  setLanguage: (language: string) => void;
   /** Optimistically set the docinfo-related fields together. */
   setDocinfo: (info: {
     docinfo: string;
@@ -215,7 +324,13 @@ export interface EditorStoreState {
   setShowLivePreview: (show: boolean) => void;
   setActiveTab: (tab: "editor" | "preview") => void;
   setIsNarrowScreen: (narrow: boolean) => void;
+  /** Set the TOC's collapsed state programmatically (not a saved preference). */
   setIsTocCollapsed: (value: boolean | ((prev: boolean) => boolean)) => void;
+  /**
+   * Flip the TOC open/closed on the user's behalf, remembering the new state
+   * for future sessions — see {@link TOC_COLLAPSED_KEY}.
+   */
+  toggleTocCollapsed: () => void;
   openModal: (modal: ModalKey) => void;
   closeModal: (modal: ModalKey) => void;
 
@@ -230,45 +345,83 @@ export interface EditorStoreState {
   // TOC inline edit form
   startSectionEdit: (section: Division, options?: { isNew?: boolean }) => void;
   setEditDraft: (draft: EditDraft) => void;
+
+  /** Merge `partial` into the find/replace drawer's inputs. */
+  setFindPanelState: (partial: Partial<FindPanelState>) => void;
   commitSectionEdit: () => void;
   cancelSectionEdit: () => void;
 
   // Assets / content
   insertAsset: (asset: Asset) => void;
   insertAtCursor: (content: string) => void;
-  /** Open the asset edit modal for the asset identified by `kind`+`ref`. */
-  openAssetEditor: (kind: AssetKind, ref: string) => void;
+  /** Open the asset edit modal for the asset identified by `ref`. */
+  openAssetEditor: (ref: string) => void;
   closeAssetEditor: () => void;
-  /** Open the asset manager in resolve mode for an unresolved `kind`+`ref`. */
-  openAssetResolver: (kind: AssetKind, ref: string) => void;
+  /** Open the asset manager in resolve mode for an unresolved `ref`. */
+  openAssetResolver: (ref: string) => void;
   closeAssetResolver: () => void;
   /** Remove a project asset (pool + host persistence). */
   removeAsset: (asset: Asset) => void;
-  /** Remove every placeholder for an unresolved `kind`+`ref` from the document. */
-  removeAssetRefFromDocument: (kind: AssetKind, ref: string) => void;
+  /** Remove every placeholder for an unresolved `ref` from the document. */
+  removeAssetRefFromDocument: (ref: string) => void;
   /** Duplicate a project asset under a fresh ref. Resolves when the host settles. */
   duplicateAsset: (asset: Asset) => Promise<void>;
   /**
    * Optimistically add an asset to the pool (no-op if one with the same
-   * kind+ref already exists). Used when an asset is uploaded, created, added
+   * ref already exists). Used when an asset is uploaded, created, added
    * from the library, or inserted, so it's editable immediately.
    */
   addAssetToPool: (asset: Asset) => void;
   /**
-   * Optimistically replace the pool entry matching `asset` by kind+ref (adding
+   * Optimistically replace the pool entry matching `asset` by ref (adding
    * it if absent). Used when an asset's content/source is edited.
    */
   updateAssetInPool: (asset: Asset) => void;
   /**
    * Optimistically rename an asset's `ref`: drop the pool entry matching
-   * `kind`+`oldRef` and insert `newAsset` (which carries the new ref). Used when
+   * `oldRef` and insert `newAsset` (which carries the new ref). Used when
    * an asset's `ref` is edited — a plain `updateAssetInPool` can't match it
-   * because the kind+ref key has changed.
+   * because the ref key has changed.
    */
-  renameAssetInPool: (kind: AssetKind, oldRef: string, newAsset: Asset) => void;
-  /** Optimistically remove the asset matching `asset` by kind+ref from the pool. */
+  renameAssetInPool: (oldRef: string, newAsset: Asset) => void;
+  /** Optimistically remove the asset matching `asset` by ref from the pool. */
   removeAssetFromPool: (asset: Asset) => void;
+
+  // Snippets / content
+  insertSnippet: (snippet: Snippet) => void;
+  /** Open the snippet edit modal for the snippet identified by `ref`. */
+  openSnippetEditor: (ref: string) => void;
+  closeSnippetEditor: () => void;
+  /** Open the snippet manager in resolve mode for an unresolved `ref`. */
+  openSnippetResolver: (ref: string) => void;
+  closeSnippetResolver: () => void;
+  /** Remove a project snippet (pool + host persistence). */
+  removeSnippet: (snippet: Snippet) => void;
+  /** Remove every placeholder for an unresolved `ref` from the document. */
+  removeSnippetRefFromDocument: (ref: string) => void;
+  /** Duplicate a project snippet under a fresh ref. Resolves when the host settles. */
+  duplicateSnippet: (snippet: Snippet) => Promise<void>;
+  /**
+   * Optimistically add a snippet to the pool (no-op if one with the same
+   * ref already exists). Used when a snippet is created, added, or inserted,
+   * so it's editable immediately.
+   */
+  addSnippetToPool: (snippet: Snippet) => void;
+  /**
+   * Optimistically replace the pool entry matching `snippet` by ref (adding
+   * it if absent). Used when a snippet's content is edited.
+   */
+  updateSnippetInPool: (snippet: Snippet) => void;
+  /**
+   * Optimistically rename a snippet's `ref`: drop the pool entry matching
+   * `oldRef` and insert `newSnippet` (which carries the new ref).
+   */
+  renameSnippetInPool: (oldRef: string, newSnippet: Snippet) => void;
+  /** Optimistically remove the snippet matching `snippet` by ref from the pool. */
+  removeSnippetFromPool: (snippet: Snippet) => void;
+
   updateTitle: (title: string) => void;
+  updateLanguage: (language: string) => void;
   feedbackSubmit: (feedback: FeedbackSubmission) => void;
 }
 
@@ -281,7 +434,7 @@ export type EditorSyncableState = Pick<
   | "docinfo"
   | "commonDocinfo"
   | "useCommonDocinfo"
-  | "projectType"
+  | "language"
   | "projectUrl"
   | "divisions"
   | "rootDivisionId"
@@ -290,6 +443,7 @@ export type EditorSyncableState = Pick<
   | "activeEditorSource"
   | "hasFeedback"
   | "hasAssetDuplicate"
+  | "hasSnippetDuplicate"
 >;
 
 // ── Factory ─────────────────────────────────────────────────────────────────
@@ -301,10 +455,12 @@ export interface EditorStoreInit {
   docinfo: string;
   commonDocinfo: string;
   useCommonDocinfo: boolean;
-  projectType: "article" | "book" | undefined;
+  language: string;
   divisions: Division[];
   activeDivisionId: string | null;
   projectAssets: Asset[] | undefined;
+  /** Optional (unlike `projectAssets`) so existing hosts/tests need no change to keep compiling. */
+  projectSnippets?: Snippet[];
 }
 
 /** The Zustand vanilla store instance type. */
@@ -334,7 +490,9 @@ export function createEditorStore(init: EditorStoreInit): EditorStoreHandle {
       divisionContentChange: noop,
       handleDivisionContentChange: noop,
       assetInsert: noop,
+      snippetInsert: noop,
       updateTitle: noop,
+      updateLanguage: noop,
     },
   };
 
@@ -343,11 +501,12 @@ export function createEditorStore(init: EditorStoreInit): EditorStoreHandle {
     source: init.source,
     sourceFormat: init.sourceFormat,
     projectAssets: init.projectAssets,
+    projectSnippets: init.projectSnippets,
     title: init.title,
     docinfo: init.docinfo,
     commonDocinfo: init.commonDocinfo,
     useCommonDocinfo: init.useCommonDocinfo,
-    projectType: init.projectType,
+    language: init.language,
     projectUrl: undefined,
     divisions: init.divisions,
     rootDivisionId: undefined,
@@ -356,22 +515,29 @@ export function createEditorStore(init: EditorStoreInit): EditorStoreHandle {
     activeEditorSource: init.source,
     hasFeedback: false,
     hasAssetDuplicate: false,
+    hasSnippetDuplicate: false,
 
     // ── Initial UI state ───────────────────────────────────────────────────
-    isTocCollapsed: isNarrowViewport(),
+    isTocCollapsed: defaultTocCollapsed(),
     showLivePreview: true,
     isNarrowScreen: isNarrowViewport(),
     activeTab: "editor",
     isLatexDialogOpen: false,
+    isCleanDialogOpen: false,
     isConvertDialogOpen: false,
     isDocinfoEditorOpen: false,
     isAssetPickerOpen: false,
+    isSnippetPickerOpen: false,
     isFullSourceOpen: false,
+    isFindPanelOpen: false,
+    findPanelState: initialFindPanelState,
     editingId: null,
     editDraft: null,
     editingIsNew: false,
     editingAssetRef: null,
     assetResolveTarget: null,
+    editingSnippetRef: null,
+    snippetResolveTarget: null,
 
     // ── Actions ────────────────────────────────────────────────────────────
     syncState: (partial) => set(partial),
@@ -421,6 +587,7 @@ export function createEditorStore(init: EditorStoreInit): EditorStoreHandle {
       })),
     setActiveDivisionId: (activeDivisionId) => set({ activeDivisionId }),
     setTitle: (title) => set({ title }),
+    setLanguage: (language) => set({ language }),
     setDocinfo: ({ docinfo, commonDocinfo, useCommonDocinfo }) =>
       set({ docinfo, commonDocinfo, useCommonDocinfo }),
 
@@ -432,6 +599,12 @@ export function createEditorStore(init: EditorStoreInit): EditorStoreHandle {
         isTocCollapsed:
           typeof value === "function" ? value(s.isTocCollapsed) : value,
       })),
+    toggleTocCollapsed: () =>
+      set((s) => {
+        const isTocCollapsed = !s.isTocCollapsed;
+        if (!s.isNarrowScreen) writeStoredTocCollapsed(isTocCollapsed);
+        return { isTocCollapsed };
+      }),
     openModal: (modal) => set({ [modal]: true } as Pick<EditorStoreState, ModalKey>),
     closeModal: (modal) => set({ [modal]: false } as Pick<EditorStoreState, ModalKey>),
 
@@ -481,6 +654,9 @@ export function createEditorStore(init: EditorStoreInit): EditorStoreHandle {
       });
     },
     setEditDraft: (editDraft) => set({ editDraft }),
+
+    setFindPanelState: (partial) =>
+      set((s) => ({ findPanelState: { ...s.findPanelState, ...partial } })),
     commitSectionEdit: () => {
       const { editingId, editDraft, divisions } = get();
       if (editingId && editDraft) {
@@ -531,12 +707,12 @@ export function createEditorStore(init: EditorStoreInit): EditorStoreHandle {
 
     insertAsset: (asset) => bag.cbs.assetInsert(asset),
     insertAtCursor: (content) => bag.cbs.insertContentAtCursor?.(content),
-    openAssetEditor: (kind, ref) => set({ editingAssetRef: { kind, ref } }),
+    openAssetEditor: (ref) => set({ editingAssetRef: { ref } }),
     closeAssetEditor: () => set({ editingAssetRef: null }),
-    openAssetResolver: (kind, ref) => set({ assetResolveTarget: { kind, ref } }),
+    openAssetResolver: (ref) => set({ assetResolveTarget: { ref } }),
     closeAssetResolver: () => set({ assetResolveTarget: null }),
     removeAsset: (asset) => bag.cbs.assetRemove?.(asset),
-    removeAssetRefFromDocument: (kind, ref) => bag.cbs.assetRefRemove?.(kind, ref),
+    removeAssetRefFromDocument: (ref) => bag.cbs.assetRefRemove?.(ref),
     duplicateAsset: async (asset) => {
       await bag.cbs.assetDuplicate?.(asset);
     },
@@ -553,11 +729,11 @@ export function createEditorStore(init: EditorStoreInit): EditorStoreHandle {
           ? { projectAssets: base.map((a) => (sameAssetRef(a, asset) ? asset : a)) }
           : { projectAssets: [...base, asset] };
       }),
-    renameAssetInPool: (kind, oldRef, newAsset) =>
+    renameAssetInPool: (oldRef, newAsset) =>
       set((s) => {
         const base = s.projectAssets ?? [];
         const filtered = base.filter(
-          (a) => !(a.kind === kind && a.ref === oldRef) && !sameAssetRef(a, newAsset),
+          (a) => a.ref !== oldRef && !sameAssetRef(a, newAsset),
         );
         return { projectAssets: [...filtered, newAsset] };
       }),
@@ -567,7 +743,47 @@ export function createEditorStore(init: EditorStoreInit): EditorStoreHandle {
           (a) => !sameAssetRef(a, asset),
         ),
       })),
+
+    insertSnippet: (snippet) => bag.cbs.snippetInsert(snippet),
+    openSnippetEditor: (ref) => set({ editingSnippetRef: { ref } }),
+    closeSnippetEditor: () => set({ editingSnippetRef: null }),
+    openSnippetResolver: (ref) => set({ snippetResolveTarget: { ref } }),
+    closeSnippetResolver: () => set({ snippetResolveTarget: null }),
+    removeSnippet: (snippet) => bag.cbs.snippetRemove?.(snippet),
+    removeSnippetRefFromDocument: (ref) => bag.cbs.snippetRefRemove?.(ref),
+    duplicateSnippet: async (snippet) => {
+      await bag.cbs.snippetDuplicate?.(snippet);
+    },
+    addSnippetToPool: (snippet) =>
+      set((s) => {
+        const base = s.projectSnippets ?? [];
+        if (base.some((a) => sameSnippetRef(a, snippet))) return {};
+        return { projectSnippets: [...base, snippet] };
+      }),
+    updateSnippetInPool: (snippet) =>
+      set((s) => {
+        const base = s.projectSnippets ?? [];
+        return base.some((a) => sameSnippetRef(a, snippet))
+          ? { projectSnippets: base.map((a) => (sameSnippetRef(a, snippet) ? snippet : a)) }
+          : { projectSnippets: [...base, snippet] };
+      }),
+    renameSnippetInPool: (oldRef, newSnippet) =>
+      set((s) => {
+        const base = s.projectSnippets ?? [];
+        const filtered = base.filter(
+          (a) => a.ref !== oldRef && !sameSnippetRef(a, newSnippet),
+        );
+        return { projectSnippets: [...filtered, newSnippet] };
+      }),
+    removeSnippetFromPool: (snippet) =>
+      set((s) => ({
+        projectSnippets: (s.projectSnippets ?? []).filter(
+          (a) => !sameSnippetRef(a, snippet),
+        ),
+      })),
+
     updateTitle: (title) => bag.cbs.updateTitle(title),
+    updateLanguage: (language) => bag.cbs.updateLanguage(language),
     feedbackSubmit: (feedback) => bag.cbs.feedbackSubmit?.(feedback),
   }));
 

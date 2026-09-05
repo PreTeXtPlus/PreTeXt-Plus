@@ -45,6 +45,49 @@ class BuildStatusCheckerTest < ActiveJob::TestCase
     assert_equal "ERROR fig-hasse.svg not found", build.log
   end
 
+  # The build server zips output/ whatever the exit code was, so a failure that carries
+  # an artifact_url has output worth importing -- flagged, not thrown away.
+  test "a server-side failure that still produced output imports it and flags the build" do
+    result = stub_status("status" => "failed", "exit_code" => 1, "log" => "ERROR one figure is missing",
+                         "artifact_url" => "/builds/job-123/artifact") do
+      BuildStatusChecker.new(build).check!
+    end
+
+    assert result.ok?
+    assert_match(/reported errors/, result.message)
+    assert build.reload.received_from_server?
+    assert build.completed_with_errors?
+    assert_enqueued_with(job: FullBuildArtifactJob,
+                         args: [ build, "https://#{Rails.application.credentials.dig(:full_build, :host)}/builds/job-123/artifact" ])
+  end
+
+  test "an already-imported build with errors reports the warning rather than a plain success" do
+    build.mark!(:success, completed_with_errors: true)
+
+    result = Net::HTTP.stub(:start, ->(*_args, **_kw) { flunk "should not call the build server" }) do
+      BuildStatusChecker.new(build).check!
+    end
+
+    assert result.ok?
+    assert_match(/reported errors/, result.message)
+  end
+
+  # The webhook and a poll can both be asking the same question at once -- see
+  # BuildRecheckJob's early schedule, which now checks back seconds after a build
+  # starts rather than half a minute in. If the webhook wins while this request was
+  # still on the wire, importing the artifact a second time here would collide with
+  # it on BuildFile's unique index and mark! a build that actually succeeded failed.
+  test "a build the webhook already moved past sent_to_server while this was in flight is left alone" do
+    result = stub_status("status" => "success", "log" => "the whole build log",
+                         "artifact_url" => "/builds/job-123/artifact") do
+      build.update_column(:status, Build.statuses.fetch("received_from_server"))
+      BuildStatusChecker.new(build).check!
+    end
+
+    assert result.ok?
+    assert_no_enqueued_jobs(only: FullBuildArtifactJob)
+  end
+
   test "a build still running is reported, not moved" do
     result = stub_status("status" => "running") { BuildStatusChecker.new(build).check! }
 

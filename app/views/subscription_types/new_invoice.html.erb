@@ -1,0 +1,25 @@
+<% content_for :title, "Pay by Invoice" %>
+<% content_for :subscription_notice do %><!-- no subscribe nudge on subscriptions pages --><% end %>
+<% content_for :breadcrumb do %>
+  <%= link_to "Subscriptions", subscriptions_path, class: "hover:underline" %> /
+<% end %>
+<% content_for :heading, "Pay by Invoice" %>
+
+<h3 class="my-3 text-lg font-thin">
+  <%= @subscription_type.name %>: <%= @subscription_type.price %>/seat/<%= @subscription_type.recurrence %>.
+</h3>
+<p class="my-3">
+  Choose how many seats you need — we'll create the subscription and email you an invoice.
+</p>
+
+<%= form_with url: invoice_subscription_type_path(@subscription_type), method: :post, class: "mb-4" do |form| %>
+    <%= label_tag :quantity, "Number of seats", class: "text-sm text-gray-700" %>
+    <%= number_field_tag :quantity, 1, min: 1, class: "ml-3 p-2 w-20 font-mono rounded-md border-1 bg-white border-gray-300 shadow-sm focus:border-blue-500 focus:ring focus:ring-blue-200 focus:ring-opacity-50" %>
+    <%= submit_tag "Create invoiced subscription", class: "#{button_classes(color: "gray", outlined: true)} inline-flex select-none items-center gap-2 ml-1 px-4 py-2 my-1 text-sm" %>
+<% end %>
+
+<p class="my-3">
+  Subscription will be managed by account
+  <span class="font-mono"><%= current_user.email %></span>, and
+  access begins once it's paid.
+</p>

@@ -11,7 +11,9 @@ import {
   Editors,
   assembleFullProjectSource,
   clearDeletions,
+  configureSpellCheck,
   docToState,
+  DEFAULT_LANGUAGE,
 } from "@pretextbook/web-editor";
 import { YCableProvider } from "./collab/yCableProvider";
 import { reportCollabIncident } from "./collab/reportIncident";
@@ -19,12 +21,16 @@ import {
   railsDivisionToEditor,
   railsAssetToEditor,
   toEditorAsset,
+  railsSnippetToEditor,
+  toEditorSnippet,
 } from "./railsProjectMapping";
 
 /** @typedef {import("@pretextbook/web-editor").Asset} Asset */
 /** @typedef {import("@pretextbook/web-editor").Division} Division */
+/** @typedef {import("@pretextbook/web-editor").Snippet} Snippet */
 /** @typedef {import("./railsProjectMapping").RailsDivision} RailsDivision */
 /** @typedef {import("./railsProjectMapping").RailsAsset} RailsAsset */
+/** @typedef {import("./railsProjectMapping").RailsSnippet} RailsSnippet */
 /** @typedef {import("./railsProjectMapping").EditorDivision} EditorDivision */
 
 /**
@@ -35,8 +41,10 @@ import {
  * @property {string} [common_docinfo]
  * @property {boolean} [use_common_docinfo]
  * @property {string} [document_type]
+ * @property {string} [language]
  * @property {RailsDivision[]} [divisions]
  * @property {RailsAsset[]} [assets]
+ * @property {RailsSnippet[]} [snippets]
  */
 
 /**
@@ -47,9 +55,11 @@ import {
  * @property {string} docinfo
  * @property {string} commonDocinfo
  * @property {boolean} useCommonDocinfo
- * @property {"article"|"book"} projectType
+ * @property {string} language
+ * @property {"article"|"book"|"slideshow"} projectType
  * @property {EditorDivision[]} divisions
  * @property {Asset[]} [projectAssets]
+ * @property {Snippet[]} [projectSnippets]
  * @property {string} [rootDivisionId]
  */
 
@@ -101,6 +111,11 @@ import {
 
 const AUTOSAVE_MS = 10000;
 
+// Root element tag names the editor understands, which is also exactly the set
+// of `Project#document_type` values -- see railsToEditorState for why the two
+// vocabularies are deliberately the same.
+const ROOT_ELEMENT_TYPES = [ "article", "book", "slideshow" ];
+
 // --- Rails JSON  <->  web-editor shapes ------------------------------------
 // railsDivisionToEditor / railsAssetToEditor / toEditorAsset now live in
 // ./railsProjectMapping, shared with ./shared_source.jsx.
@@ -128,16 +143,25 @@ function slugifyRef(value) {
 function railsToEditorState(json) {
   const root = (json.divisions ?? []).find((d) => d.is_root);
   const title = json.title ?? "";
-  const projectType = json.document_type === "book" ? "book" : "article";
+  // `document_type` and the editor's `projectType` are the same vocabulary --
+  // root element tag names -- so this is an identity map with a fallback, not a
+  // translation. That is deliberate: the editor synthesizes a wrapper element
+  // from this value, so it has to be a real tag name. Anything unrecognised
+  // becomes an article, since a wrong tag is worse than a default one.
+  const projectType = ROOT_ELEMENT_TYPES.includes(json.document_type)
+    ? json.document_type
+    : "article";
   const rootMeta = { type: projectType, title };
   return {
     title,
     docinfo: json.docinfo ?? "",
     commonDocinfo: json.common_docinfo ?? "",
     useCommonDocinfo: json.use_common_docinfo ?? false,
+    language: json.language ?? DEFAULT_LANGUAGE,
     projectType,
     divisions: (json.divisions ?? []).map((d) => railsDivisionToEditor(d, rootMeta)),
     projectAssets: (json.assets ?? []).map(railsAssetToEditor),
+    projectSnippets: (json.snippets ?? []).map(railsSnippetToEditor),
     // rootDivisionId is the root division's *xmlId* (its ref), which is how the
     // web-editor identifies divisions, not the database id.
     rootDivisionId: root ? (root.ref ?? "") : undefined,
@@ -147,6 +171,9 @@ function railsToEditorState(json) {
     // Real-time collaboration flag + the identity shown on remote cursors.
     collaborative: json.collaborative === true,
     editorUser: json.editor_user ?? null,
+    // Words the spell checker has been taught on this project. Read-only here,
+    // like the two fields above: additions go straight to their own endpoint.
+    dictionaryWords: json.dictionary_words ?? [],
   };
 }
 
@@ -177,15 +204,18 @@ function effectiveDocinfo(state) {
 /**
  * @param {EditorState} state
  * @param {Asset[]} projectAssets
+ * @param {Snippet[]} projectSnippets
  * @returns {string}
  */
-function assembleFullPretextSource(state, projectAssets) {
+function assembleFullPretextSource(state, projectAssets, projectSnippets) {
   if (!state.rootDivisionId) return "";
   return assembleFullProjectSource(
     state.divisions,
     state.rootDivisionId,
     effectiveDocinfo(state),
     projectAssets.map(toEditorAsset),
+    state.language,
+    projectSnippets.map(toEditorSnippet),
   );
 }
 
@@ -205,23 +235,26 @@ function assembleFullPretextSource(state, projectAssets) {
 // naming a row that is already gone), which is what makes a removal survive the
 // acting client's own request failing or its tab closing mid-flight.
 //
-// Asset *content* is NOT in this payload: an asset's bytes can't ride in the
-// shared doc, so the client that uploads one persists it immediately through
-// its own single-entry `assets_attributes` PATCH (see the asset callbacks).
-// Only asset *destroys* are re-sent from here.  We still pass `projectAssets`
-// so the assembled `pretext_source` can resolve image refs.
+// Asset/snippet *content* is NOT in this payload: an asset's bytes can't
+// ride in the shared doc, and a snippet is persisted immediately per edit
+// the same way (see the asset/snippet callbacks) so its content stays out of
+// the deferred bulk save too. Only asset/snippet *destroys* are re-sent from
+// here. We still pass `projectAssets`/`projectSnippets` so the assembled
+// `pretext_source` can resolve image/snippet refs.
 /**
  * @param {EditorState} state
  * @param {Asset[]} projectAssets
- * @param {{id: string, kind: "division"|"asset"}[]} [deletes] - Records to destroy.
+ * @param {Snippet[]} projectSnippets
+ * @param {{id: string, kind: "division"|"asset"|"snippet"}[]} [deletes] - Records to destroy.
  * @returns {{project: Object}}
  */
-function editorStateToRailsPayload(state, projectAssets, deletes = []) {
+function editorStateToRailsPayload(state, projectAssets, projectSnippets, deletes = []) {
   const project = {
     title: state.title,
     docinfo: state.docinfo,
     use_common_docinfo: state.useCommonDocinfo,
-    pretext_source: assembleFullPretextSource(state, projectAssets),
+    language: state.language,
+    pretext_source: assembleFullPretextSource(state, projectAssets, projectSnippets),
     divisions_attributes: [
       ...state.divisions.map((d) => ({
         id: d.id,
@@ -238,6 +271,10 @@ function editorStateToRailsPayload(state, projectAssets, deletes = []) {
     .filter((d) => d.kind === "asset")
     .map(({ id }) => ({ id, _destroy: true }));
   if (assetDeletes.length) project.assets_attributes = assetDeletes;
+  const snippetDeletes = deletes
+    .filter((d) => d.kind === "snippet")
+    .map(({ id }) => ({ id, _destroy: true }));
+  if (snippetDeletes.length) project.snippets_attributes = snippetDeletes;
   return { project };
 }
 
@@ -252,6 +289,7 @@ function persistableShape(state) {
     title: state.title,
     docinfo: state.docinfo,
     useCommonDocinfo: state.useCommonDocinfo,
+    language: state.language,
     divisions: state.divisions.map((d) => ({
       id: d.id,
       xmlId: d.xmlId,
@@ -305,6 +343,7 @@ function editorStateToCollabSeed(state) {
     title: state.title,
     docinfo: state.docinfo,
     useCommonDocinfo: state.useCommonDocinfo,
+    language: state.language,
     divisions: state.divisions.map((d) => ({
       id: d.id,
       xmlId: d.xmlId,
@@ -314,6 +353,7 @@ function editorStateToCollabSeed(state) {
       type: d.type,
     })),
     assets: (state.projectAssets ?? []).filter((a) => a.id).map(toEditorAsset),
+    snippets: (state.projectSnippets ?? []).filter((s) => s.id).map(toEditorSnippet),
   };
 }
 
@@ -349,12 +389,15 @@ function collabEditorState(doc, base) {
     docinfo: shared.docinfo,
     commonDocinfo: base.commonDocinfo,
     useCommonDocinfo: shared.useCommonDocinfo ?? base.useCommonDocinfo,
+    language: shared.language ?? base.language,
     projectType: base.projectType,
     divisions,
     // The doc's assets are the session's truth about which assets exist; the
     // save only needs them to resolve <plus:* ref="..."/> placeholders in the
     // assembled source, since asset rows are written by whoever uploaded them.
     projectAssets: shared.assets.slice().sort((a, b) => (a.id < b.id ? -1 : 1)),
+    // Same reasoning as `projectAssets`, for snippets.
+    projectSnippets: shared.snippets.slice().sort((a, b) => (a.id < b.id ? -1 : 1)),
     // Tombstones, sorted for a stable dirty-check comparison.
     deletes: shared.deleted.slice().sort((a, b) => (a.id < b.id ? -1 : 1)),
     rootDivisionId: root?.xmlId ?? base.rootDivisionId,
@@ -381,9 +424,15 @@ function EditorApp({ config }) {
   // Rails routes the React side needs.  Kept here (rather than in many data
   // attributes) since they're derivable from the project id.
   const projectUrl = `/projects/${projectId}`;
+  // Absolute variant for contexts like the feedback email, which is read
+  // outside the app and needs a link that resolves without an origin.
+  const feedbackProjectUrl = `${window.location.origin}${projectUrl}`;
   const previewUrl = `/projects/${projectId}/preview`;
   const copyUrl = `/projects/${projectId}/copy_conversion`;
-  const feedbackUrl = `/projects/${projectId}/feedback`;
+  // Feedback is a collection route, not a member one: the action doesn't load a
+  // project, it just mails what the form sends (the project is identified by the
+  // `project_url` in the body).
+  const feedbackUrl = "/projects/feedback";
   // Fetches the bytes of a remote image server-side (CORS workaround only --
   // does not persist anything; see onAssetFetchUrl below).
   const assetFetchUrl = "/asset_fetches";
@@ -424,13 +473,46 @@ function EditorApp({ config }) {
   // we keep no asset working copy here -- this is just the latest server snapshot,
   // refreshed whenever an asset mutation invalidates the project query.
   const serverAssets = useRef([]);
+  // Same as `serverAssets`, for snippets.
+  const serverSnippets = useRef([]);
+  // The project's spell-check dictionary, mirrored the same way: the checker
+  // reads it whenever it registers (on mount, and again on a format switch), so
+  // going through a ref is what lets a later registration see words a
+  // collaborator added and a refetch has since brought in.
+  const dictionaryWords = useRef([]);
 
   if (projectQuery.data && !initial.current) {
     initial.current = projectQuery.data;
     working.current = structuredClone(projectQuery.data);
     serverSnapshot.current = structuredClone(projectQuery.data);
+    configureSpellCheck({
+      // Words the author teaches the checker belong to the book, so they persist
+      // on the project and every collaborator sees them. The `add` is
+      // fire-and-forget by design: the editor has already accepted the word
+      // locally, and a failed write costs persistence only.
+      //
+      // Configured here rather than in an effect because <Editors> is not
+      // rendered until this branch has run, so the settings are always in place
+      // before Monaco mounts and the checker reads them.
+      userWordStore: {
+        load: () => dictionaryWords.current,
+        add: (word) =>
+          fetch(`/projects/${projectId}/dictionary_words`, {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              "X-CSRF-Token": csrfToken,
+            },
+            body: JSON.stringify({ word }),
+          }),
+      },
+    });
   }
-  if (projectQuery.data) serverAssets.current = projectQuery.data.projectAssets;
+  if (projectQuery.data) {
+    serverAssets.current = projectQuery.data.projectAssets;
+    serverSnippets.current = projectQuery.data.projectSnippets;
+    dictionaryWords.current = projectQuery.data.dictionaryWords;
+  }
 
   // ----- Real-time collaboration ------------------------------------------
   // When the project has collaborators, the buffer sync moves to a shared
@@ -491,8 +573,8 @@ function EditorApp({ config }) {
 
   // ----- WRITE: save via TanStack mutation ---------------------------------
   const saveMutation = useMutation({
-    mutationFn: async ({ state, assets, deletes }) => {
-      const payload = editorStateToRailsPayload(state, assets, deletes);
+    mutationFn: async ({ state, assets, snippets, deletes }) => {
+      const payload = editorStateToRailsPayload(state, assets, snippets, deletes);
       const res = await fetch(apiBase, {
         method: "PATCH",
         headers: {
@@ -547,6 +629,7 @@ function EditorApp({ config }) {
             // added an asset whose placeholder is already in the source, and
             // the assembled document has to be able to resolve it.
             assets: snapshot.projectAssets,
+            snippets: snapshot.projectSnippets,
             deletes: snapshot.deletes,
           });
           // Rails has now dropped those rows, so the tombstones have done their
@@ -566,8 +649,9 @@ function EditorApp({ config }) {
       if (!hard && !isDirty()) return true;
       const snapshot = structuredClone(working.current);
       const assets = serverAssets.current;
+      const snippets = serverSnippets.current;
       try {
-        await saveMutation.mutateAsync({ state: snapshot, assets, deletes: [] });
+        await saveMutation.mutateAsync({ state: snapshot, assets, snippets, deletes: [] });
         serverSnapshot.current = snapshot;
         return true;
       } catch (error) {
@@ -802,14 +886,15 @@ function EditorApp({ config }) {
   }, [queryClient, projectId]);
 
   // Pick a project-unique ref from a desired slug.  A ref must be unique among
-  // both the project's assets and its divisions (Asset enforces both), so
-  // we dedupe against the live server assets and the working divisions, suffixing
-  // `-2`, `-3`, ... on collision.  Read from refs at call time, so no deps.
+  // the project's divisions, assets, AND snippets (HasUniqueRef enforces all
+  // three), so we dedupe against all three live pools, suffixing `-2`, `-3`,
+  // ... on collision.  Read from refs at call time, so no deps.
   const uniqueRef = useCallback((desired) => {
     const base = slugifyRef(desired) || "asset";
     const taken = new Set([
       ...(working.current?.divisions ?? []).map((d) => d.xmlId),
       ...(serverAssets.current ?? []).map((p) => p.ref),
+      ...(serverSnippets.current ?? []).map((p) => p.ref),
     ]);
     if (!taken.has(base)) return base;
     let n = 2;
@@ -832,6 +917,26 @@ function EditorApp({ config }) {
       return { ...toEditorAsset(railsAssetToEditor(created)), contentType: file.type || undefined };
     },
     [uniqueRef, patchProjectAssetUpload, invalidateAssetQueries],
+  );
+
+  // Creates a file-less "authored" asset -- unlike onAssetUpload there's no
+  // file to multipart-upload, so this goes through patchProjectJson (like
+  // onDivisionAdd) instead of patchProjectAssetUpload. `title` comes from the
+  // asset manager's create form; the ref is derived from it exactly like
+  // onAssetUpload derives one from an uploaded file's title. `source` starts
+  // empty and is filled in afterward through onAssetUpdate, the same as any
+  // other edit.
+  const onCreateAuthored = useCallback(
+    async (title) => {
+      const ref = uniqueRef(slugifyRef(title));
+      const json = await patchProjectJson({
+        assets_attributes: [ { ref, kind: "authored", title, source: "" } ],
+      });
+      const created = (json.assets ?? []).find((a) => a.ref === ref);
+      invalidateAssetQueries();
+      return toEditorAsset(railsAssetToEditor(created));
+    },
+    [uniqueRef, patchProjectJson, invalidateAssetQueries],
   );
 
   // Fetches the image bytes server-side and hands back a File -- it does not
@@ -884,12 +989,13 @@ function EditorApp({ config }) {
   );
 
   // Persists an edit to an existing asset made through the web-editor's asset
-  // editor -- its `ref`, its `title`, and its authored `source` (an image's
-  // <shortdescription>/<description> XML).  Also the commit step of Duplicate
-  // and Replace, which upload a file first and then give the resulting asset
-  // its real ref/title/source.
+  // editor -- its `ref`, its `title`, its authored `source` (e.g. an image's
+  // <description> XML), and its `short_description` (an image's plain-text
+  // alt description, auto-rendered as <shortdescription>).  Also the commit
+  // step of Duplicate and Replace, which upload a file first and then give
+  // the resulting asset its real ref/title/source/short_description.
   //
-  // All three fields go every time, keyed by `id` (the UUID, stable across
+  // All fields go every time, keyed by `id` (the UUID, stable across
   // renames -- never `ref`, which is the thing being changed).  `ref`
   // especially: it is the name `<plus:* ref="..."/>` placeholders resolve
   // against, the `<image source="ref.ext">` the assembled pretext_source
@@ -898,8 +1004,10 @@ function EditorApp({ config }) {
   // -- meant a rename showed correctly in the editor while every build and
   // published page still looked the asset up under its old name.
   //
-  // JSON.stringify drops undefined values, so an asset that arrives without a
-  // title or ref simply leaves that column alone rather than nulling it.
+  // `source`/`short_description` fall back to "" (rather than being left
+  // `undefined`, which JSON.stringify would drop) so clearing either field in
+  // the editor persists the blank value instead of leaving the column
+  // untouched.
   const onAssetUpdate = useCallback(
     async (asset) => {
       await patchProjectJson({
@@ -908,6 +1016,7 @@ function EditorApp({ config }) {
           ref: asset.ref,
           title: asset.title,
           source: asset.source ?? "",
+          short_description: asset.shortDescription ?? "",
         } ],
       });
       invalidateAssetQueries();
@@ -959,6 +1068,66 @@ function EditorApp({ config }) {
     return (data?.projectAssets ?? []).map(toEditorAsset);
   }, [projectQuery.refetch]);
 
+  // ----- Snippets ------------------------------------------------------------
+  // Mirrors "Assets" above: the web-editor owns the live project-snippet pool,
+  // so these callbacks are pure persistence, each its own single-entry
+  // `snippets_attributes` PATCH, followed by invalidating the project query so
+  // the `projectSnippets` prop reconciles to server truth.
+
+  const invalidateSnippetQueries = useCallback(() => {
+    queryClient.invalidateQueries({ queryKey: ["project", projectId] });
+  }, [queryClient, projectId]);
+
+  // Unlike an asset (whose ref is derived from a title), a snippet's ref is
+  // typed directly by the user in the snippet manager -- already sanitized and
+  // checked against the live pools there. The server (HasUniqueRef) is still
+  // the final authority; a collision surfaces as a normal rejected PATCH.
+  const onCreateSnippet = useCallback(
+    async (ref) => {
+      const json = await patchProjectJson({
+        snippets_attributes: [ { ref, source: "", source_format: "pretext" } ],
+      });
+      const created = (json.snippets ?? []).find((s) => s.ref === ref);
+      invalidateSnippetQueries();
+      return toEditorSnippet(railsSnippetToEditor(created));
+    },
+    [patchProjectJson, invalidateSnippetQueries],
+  );
+
+  // Persists an edit to an existing snippet -- its `ref`, `source`, and
+  // `source_format` -- keyed by `id` (stable across renames), mirroring
+  // onAssetUpdate.
+  const onSnippetUpdate = useCallback(
+    async (snippet) => {
+      await patchProjectJson({
+        snippets_attributes: [ {
+          id: snippet.id,
+          ref: snippet.ref,
+          source: snippet.source ?? "",
+          source_format: snippet.sourceFormat,
+        } ],
+      });
+      invalidateSnippetQueries();
+    },
+    [patchProjectJson, invalidateSnippetQueries],
+  );
+
+  // Drop this snippet from the project entirely. Mirrors onAssetRemove: the
+  // editor has already removed it from its pool, so this is fire-and-forget
+  // persistence, then a reconcile via invalidate.
+  const onSnippetRemove = useCallback(
+    (snippet) =>
+      patchProjectJson({ snippets_attributes: [{ id: snippet.id, _destroy: true }] })
+        .then(() => invalidateSnippetQueries())
+        .catch((error) => {
+          console.error("Error removing snippet:", error);
+          if (!providerRef.current) {
+            alert("An error occurred while removing the snippet.");
+          }
+        }),
+    [patchProjectJson, invalidateSnippetQueries],
+  );
+
   const onTitleChange = useCallback((value) => {
     const w = working.current;
     if (!w) return;
@@ -968,6 +1137,10 @@ function EditorApp({ config }) {
     // itself rather than off the (nonexistent) XML.
     const root = w.divisions.find((d) => d.xmlId === w.rootDivisionId);
     if (root && root.sourceFormat !== "pretext") root.title = w.title;
+  }, []);
+
+  const onLanguageChange = useCallback((value) => {
+    if (working.current) working.current.language = value || DEFAULT_LANGUAGE;
   }, []);
 
   const onUseCommonDocinfoChange = useCallback(
@@ -1002,9 +1175,19 @@ function EditorApp({ config }) {
   // prepends to this project's own preview/external/:ref route (see
   // routes.rb) -- unlike the anonymous /tryit demo, which posts no
   // project_id and never has external assets to resolve.
+  // `target` arrives in pretext-html's vocabulary ("slides"), and the lite build
+  // server speaks the PreTeXt CLI's ("revealjs"). Translating here rather than
+  // upstream keeps the editor package independent of which build server a host
+  // happens to run.
   const onPreviewRebuild = useCallback(
-    (source, title, postToIframe) => {
-      postToIframe(previewUrl, { source, title, project_id: projectId, authenticity_token: csrfToken });
+    (source, title, postToIframe, target) => {
+      postToIframe(previewUrl, {
+        source,
+        title,
+        target: target === "slides" ? "revealjs" : "html",
+        project_id: projectId,
+        authenticity_token: csrfToken,
+      });
     },
     [previewUrl, projectId, csrfToken],
   );
@@ -1076,6 +1259,12 @@ function EditorApp({ config }) {
     [projectQuery.data],
   );
 
+  // Same reasoning as `projectAssets`, for snippets.
+  const projectSnippets = useMemo(
+    () => (projectQuery.data?.projectSnippets ?? []).map(toEditorSnippet),
+    [projectQuery.data],
+  );
+
   // ----- Render ------------------------------------------------------------
   if (projectQuery.isPending) {
     return <div className="flex h-full items-center justify-center">
@@ -1125,6 +1314,7 @@ function EditorApp({ config }) {
         docinfo={state.docinfo}
         commonDocinfo={state.commonDocinfo}
         useCommonDocinfo={state.useCommonDocinfo}
+        language={state.language}
         projectType={state.projectType}
         divisions={state.divisions}
         rootDivisionId={state.rootDivisionId}
@@ -1138,7 +1328,8 @@ function EditorApp({ config }) {
             : undefined
         }
         projectAssets={projectAssets}
-        projectUrl={projectUrl}
+        projectSnippets={projectSnippets}
+        projectUrl={feedbackProjectUrl}
         saveButtonLabel="Save and manage"
         cancelButtonLabel="Cancel"
         onContentChange={onContentChange}
@@ -1148,10 +1339,15 @@ function EditorApp({ config }) {
         onAssetInsert={onAssetInsert}
         onAssetUpload={onAssetUpload}
         onAssetFetchUrl={onAssetFetchUrl}
+        onCreateAuthored={onCreateAuthored}
         onAssetUpdate={onAssetUpdate}
         onAssetRemove={onAssetRemove}
         onLoadAssets={onLoadAssets}
+        onCreateSnippet={onCreateSnippet}
+        onSnippetUpdate={onSnippetUpdate}
+        onSnippetRemove={onSnippetRemove}
         onTitleChange={onTitleChange}
+        onLanguageChange={onLanguageChange}
         onUseCommonDocinfoChange={onUseCommonDocinfoChange}
         onCommonDocinfoChange={onCommonDocinfoChange}
         onSave={() => save()}
@@ -1162,6 +1358,7 @@ function EditorApp({ config }) {
         onFeedbackSubmit={onFeedbackSubmit}
       />
     </>
+
   );
 }
 

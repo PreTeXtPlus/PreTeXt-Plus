@@ -23,4 +23,16 @@ class CollaborationMailer < ApplicationMailer
       subject: "You can now edit \"#{@project.title}\" on PreTeXt.Plus"
     )
   end
+
+  # To a collaborator who has just been made the project's owner.
+  def ownership_transferred(project, previous_owner)
+    @project = project
+    @owner = project.user # already reassigned to the new owner
+    @previous_owner = previous_owner
+
+    mail(
+      to: @owner.email,
+      subject: "You're now the owner of \"#{@project.title}\" on PreTeXt.Plus"
+    )
+  end
 end

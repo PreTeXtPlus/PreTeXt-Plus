@@ -27,3 +27,4 @@ three:
   stripe_price_id: price_1TMTGEIprmvrFLashZcu8wkN
   order: 2
   stripe_price_id: institutional
+  invoiceable: true

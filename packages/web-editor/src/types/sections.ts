@@ -22,14 +22,20 @@ import type { SourceFormat } from "./editor";
  */
 
 /**
+ * A division type that is already a legal top-level PreTeXt element, and so can
+ * be a project's root. These are element *tag names*, not host-side project
+ * categories: a host that models article-vs-book differently (the Rails app
+ * carries a `document_type` column) still has to name one of these, because
+ * this is the literal tag a synthesized wrapper is written with.
+ */
+export type RootDivisionType = "book" | "article" | "slideshow";
+
+/**
  * The PreTeXt element type of a division.  Values match the XML tag name so
  * the type can be used directly when serialising (`<${type}>…</${type}>`).
  */
 export type DivisionType =
-  // Root types
-  | "book"
-  | "article"
-  | "slideshow"
+  | RootDivisionType
   // Book structure
   | "part"
   | "chapter"
@@ -46,7 +52,23 @@ export type DivisionType =
   | "glossary"
   | "solutions"
   | "reading-questions"
-  | "paragraphs";
+  | "paragraphs"
+  // Front and back matter. A book imported by `@pretextbook/import` splits at
+  // these too, so the editor has to at least *recognise* them — a
+  // `<plus:preface ref="…"/>` it cannot parse is a division record with
+  // nothing pointing at it, which the TOC shows as orphaned. They are
+  // deliberately absent from `SECTION_TAGS` in `sectionUtils.ts`: the editor's
+  // own splitter does not cut a pasted document at them.
+  | "frontmatter"
+  | "preface"
+  | "acknowledgement"
+  | "dedication"
+  | "biography"
+  | "contributors"
+  | "backmatter"
+  | "appendix"
+  | "index"
+  | "colophon";
 
 /**
  * A single division record, as stored in the host database and passed to

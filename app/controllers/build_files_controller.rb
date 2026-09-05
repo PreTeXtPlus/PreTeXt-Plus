@@ -11,7 +11,7 @@ class BuildFilesController < ApplicationController
   before_action :load_and_authorize_build
 
   def show
-    serve_build_file(@build, params[:relative_path], disposition: requested_disposition)
+    serve_build_file(@build, params[:relative_path], disposition: requested_disposition, private_preview: true)
   end
 
   # A site's "Download" is the whole output directory, zipped, rather than a single

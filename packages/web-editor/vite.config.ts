@@ -8,6 +8,17 @@ const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
 
 // https://vite.dev/config/
+// `@pretextbook/schema` (PreTeXt diagnostics) has no browser build: it
+// statically imports `path`/`url` and reaches for `fs`, none of which this
+// editor's use of it can ever execute. Point them at local stand-ins so a
+// browser bundle resolves. See src/nodeShims/README.md — this whole block
+// goes away when PreTeXtBook/pretext-tools#256 ships.
+const nodeShimAliases = {
+  path: path.resolve(__dirname, 'src/nodeShims/path.ts'),
+  url: path.resolve(__dirname, 'src/nodeShims/url.ts'),
+  fs: path.resolve(__dirname, 'src/nodeShims/fs.ts'),
+}
+
 export default defineConfig(({ mode }) => {
   if (mode === 'lib') {
     return {
@@ -15,6 +26,7 @@ export default defineConfig(({ mode }) => {
         react(),
         tailwindcss()
       ],
+      resolve: { alias: nodeShimAliases },
       build: {
         lib: {
           entry: path.resolve(__dirname, 'src/index.ts'),
@@ -77,6 +89,7 @@ export default defineConfig(({ mode }) => {
       react(),
       tailwindcss()
     ],
+    resolve: { alias: nodeShimAliases },
     // libxslt-wasm finds its 1.3MB binary with
     // `new URL("libxslt.wasm", import.meta.url)`. If Vite pre-bundles the
     // package into node_modules/.vite/deps/, that `import.meta.url` moves to

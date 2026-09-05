@@ -28,12 +28,10 @@
               method: :patch, params: { published: false },
               class: "cursor-pointer text-xs text-gray-500 hover:underline" %>
       <% elsif target.current_build.present? %>
-        <% publish_data = target.project.private_visibility? ?
-             { turbo_confirm: "Publishing will make this project's visibility Unlisted (it's currently Private). Continue?" } :
-             {} %>
         <%= button_to "Publish", publish_project_target_path(target.project, target),
               method: :patch, params: { published: true },
-              class: "cursor-pointer text-xs text-gray-600 hover:underline", data: publish_data %>
+              class: "cursor-pointer text-xs text-gray-600 hover:underline",
+              data: publish_confirm(target) %>
         <span class="text-xs text-gray-400">Not public</span>
       <% else %>
         <span class="text-xs text-gray-400">Build it before publishing</span>
@@ -47,10 +45,16 @@
           container for something else, so there is nothing worth opening. Same route
           either way -- ServesBuildFiles sends html inline and redirects the rest. %>
       <% if target.site? || target.viewable? %>
-        <%= link_to target.site? ? "Preview" : "Open",
-              build_file_path(target.current_build, target.entry_path),
-              class: "#{button_classes(color: "gray", outlined: true)} px-2.5 py-1.5 text-sm",
-              target: "_blank", rel: "noopener", data: { turbo: false } %>
+        <% if target.published? %>
+          <%= link_to "View", target_public_url(target),
+                class: "#{button_classes(color: "gray", outlined: true)} px-2.5 py-1.5 text-sm",
+                target: "_blank", rel: "noopener", data: { turbo: false } %>
+        <% else %>
+          <%= link_to target.site? ? "Preview (private)" : "Open (private)",
+                build_file_path(target.current_build, target.entry_path),
+                class: "#{button_classes(color: "gray", outlined: true)} px-2.5 py-1.5 text-sm",
+                target: "_blank", rel: "noopener", data: { turbo: false } %>
+        <% end %>
       <% end %>
 
       <%# Everything that is not a site is one artifact, so "Download" means that file --
@@ -72,10 +76,12 @@
             data: { turbo: false } %>
     <% end %>
 
-    <% if state == :building %>
+    <% if target.cancelable? %>
       <%# A build holds one of the author's concurrent slots for up to BUILD_TIMEOUT, so
-          the row that says it is running is also where it can be stopped. %>
-      <span class="text-sm text-gray-400">Building…</span>
+          the row that says it is running is also where it can be stopped. A queued build
+          holds no slot yet, but is stopped the same way -- BuildCanceller marks it
+          canceled locally with nothing to tell the server, since it was never sent. %>
+      <span class="text-sm text-gray-400"><%= state == :queued ? "Queued…" : "Building…" %></span>
       <%= button_to "Cancel", cancel_project_build_path(target.project, target.latest_build),
             class: "#{button_classes(color: "gray", outlined: true)} px-2.5 py-1.5 text-sm",
             data: { turbo_confirm: "Stop this build? Nothing that is already published changes." } %>

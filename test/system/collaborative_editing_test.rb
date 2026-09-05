@@ -9,7 +9,7 @@ require "application_system_test_case"
 class CollaborativeEditingTest < ApplicationSystemTestCase
   test "an edit in one editor client appears live in another" do
     user = users(:one)
-    project = user.projects.first
+    project = projects(:one)
     assert project.collaborative?, "fixture project should have a collaborator"
 
     visit new_user_session_path
@@ -29,11 +29,11 @@ class CollaborativeEditingTest < ApplicationSystemTestCase
       visit edit_project_path(project)
       assert_selector ".monaco-editor", wait: 30
       # The first window's client should be visible as a presence avatar.
-      assert_selector ".pretext-plus-editor__presence-avatar", wait: 15
+      assert_selector "[data-testid='presence-avatar']", wait: 15
     end
 
     # ...and vice versa.
-    assert_selector ".pretext-plus-editor__presence-avatar", wait: 15
+    assert_selector "[data-testid='presence-avatar']", wait: 15
 
     # Type a distinctive token into the first window's editor. Click on the
     # body text itself (not the generic `.view-lines` container): Monaco's

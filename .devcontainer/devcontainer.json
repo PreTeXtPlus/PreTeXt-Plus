@@ -28,7 +28,31 @@
   "forwardPorts": [3000, 5432, 5173],
 
   // Configure tool-specific properties.
-  // "customizations": {},
+  "customizations": {
+    "vscode": {
+      "settings": {
+        // "process" (real listening sockets only) instead of the default
+        // output-scanning behavior, which regex-matches terminal text for
+        // anything port-like. `bin/dev` streams Rails/Tailwind/esbuild logs
+        // through foreman, so every browser refresh prints new request logs;
+        // output-based scanning was misreading those lines as new candidate
+        // ports and auto-forwarding them.
+        "remote.autoForwardPortsSource": "process",
+        // Ports we didn't ask for (a stray candidate from the process scan,
+        // a sibling container from docker-outside-of-docker, etc.) should be
+        // left alone rather than auto-forwarded and surfaced in the Ports
+        // panel.
+        "remote.otherPortsAttributes": {
+          "onAutoForward": "ignore"
+        },
+        "remote.portsAttributes": {
+          "3000": { "label": "Rails server", "onAutoForward": "notify" },
+          "5432": { "label": "PostgreSQL", "onAutoForward": "silent" },
+          "5173": { "label": "Vite (web-editor demo)", "onAutoForward": "silent" }
+        }
+      }
+    }
+  },
 
   // Uncomment to connect as root instead. More info: https://containers.dev/implementors/json_reference/#remoteUser.
   // "remoteUser": "root",

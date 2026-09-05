@@ -42,10 +42,13 @@ should not assume they work:
 2. **Nothing has been published end-to-end through a browser.** `PublishedController` is
    covered by integration tests, but no real built site has been served through `/o/…`,
    so relative links, the search index and knowls are unverified in situ.
-3. **The drawer and live-updating rows are unverified in a browser.** There is no Chrome
-   in the dev container, so `bin/rails test:system` cannot run locally; CI has Chrome and
-   will exercise them. Integration tests assert the Stimulus/Turbo wiring those depend on,
-   which is not the same as watching it work.
+3. **The drawer and live-updating rows are unverified in a browser.** CI exercises them;
+   locally `bin/rails test:system` needs a Chrome on `PATH`, and the dev container has no
+   `google-chrome` of its own — but Playwright's copy is already installed, so
+   `sudo ln -sf ~/.cache/ms-playwright/chromium-*/chrome-linux64/chrome /usr/local/bin/google-chrome`
+   is enough for Selenium Manager to find it and fetch a matching driver. Integration
+   tests assert the Stimulus/Turbo wiring those depend on, which is not the same as
+   watching it work.
 
    The first browser report against this was the drawer blanking the project page, fixed
    by rendering the dashboard behind a full-page visit to a target URL (see *Traps*).
@@ -112,7 +115,7 @@ price, and it is the cheaper half of the trade.
 ```
 Project ──< Target ──< Build ──< BuildFile
                 │
-                ├── current_build ── the latest *successful* build (what readers see)
+                ├── current_build ── the newest build the target may serve (what readers see)
                 └── latest_build  ── the most recent attempt (what the pill reports)
 ```
 
@@ -140,7 +143,7 @@ success when a build is destroyed, so the button is a label over an existing gua
 One step deep, deliberately — deeper revert would mean keeping the history the pruning
 exists to drop, and an author who wants an older state rebuilds from source.
 
-### Six states
+### Eight states
 
 One state set, used identically on the projects list, the dashboard and the drawer. The seven
 database statuses collapse into these — `pending`, `in_progress`, `sent_to_server` and
@@ -149,6 +152,8 @@ database statuses collapse into these — `pending`, `in_progress`, `sent_to_ser
 | State | Meaning |
 |---|---|
 | `current` | Built after the last source edit. Nothing to do. |
+| `needs_review` | The newest build reported errors but produced output. It is imported and previewable, and **not** live until the author accepts it. See "A failure that still produced output". |
+| `warned` | Live output that came out of a build the CLI called a failure — accepted, and still worth a warning. |
 | `stale` | Source changed since this built. |
 | `building` | Queued or running. |
 | `failed` | Last attempt failed. Any previous good output stays live. |
@@ -163,6 +168,57 @@ must not take the published output down, and the row has to say both things at o
 different places: a failure means read the log, a cancel means nothing is wrong. It is also
 the state that gives a concurrency slot back — `Target::IN_FLIGHT` (and therefore
 `BuildsController::MAX_CONCURRENT_BUILDS`) no longer counts the build.
+
+### A failure that still produced output
+
+`pretext build` exiting nonzero does not mean nothing usable came out of it: one target of
+several can fail, or the failure can land after most of the output was written. The build
+server zips whatever is in `output/` regardless of exit code, and its callback carries
+`artifact_url` **whenever that zip exists** — not only on `status: "success"`.
+
+So the app decides on the key, not the status word. `BuildCallbacksController` (and
+`BuildStatusChecker`, for the same answer polled rather than pushed) treats a `failed`
+payload carrying an `artifact_url` exactly like a success — `received_from_server`,
+`FullBuildArtifactJob`, `success` — with one difference: it sets `builds.completed_with_errors`.
+
+That flag, rather than an eighth status, is what carries the warning. A build that imported
+output *is* a success as far as `prune_builds!`, the history table and the preview and
+download links are concerned, and giving success a second spelling would have meant teaching
+every one of those about it.
+
+`Build#built_with_errors?` is `success? && completed_with_errors?`, and the `success?` half
+matters: the flag survives on a build whose *import* later failed or stalled, and such a
+build has no output at all — it is simply failed.
+
+#### Going live is opt-in
+
+Importing is not publishing. Flagged output does **not** become `current_build` on its own,
+because a rebuild that reports errors must not silently replace working published output with
+output nobody has looked at. `Build.live_candidates` is the scope `sync_from_builds!` picks
+`current_build` from — clean successes, plus flagged ones whose `errors_accepted` the author
+has set — and `previous_successful_build` reads the same scope, so restoring is genuinely one
+step behind what is live.
+
+Until then the build is `awaiting_review?`: imported, previewable, live nowhere. The author
+accepts it in the drawer, next to a link that opens it — `BuildsController#accept` →
+`Build#accept_errors!`, which goes through `mark!` so the pointers recompute and the row and
+drawer re-render. A build that is not awaiting review (a rebuild landed, a drawer went stale)
+is refused with a flash rather than silently accepted. A clean rebuild makes the question
+moot: it becomes `current_build` normally and the flagged build is just history.
+
+`prune_builds!` keeps `current_build_id` explicitly, because unreviewed successes count
+against `KEPT_SUCCESSES` — two of them stacked ahead of the live build would otherwise
+delete the build the public link is serving.
+
+What the interface does with all this:
+
+| Where | What it shows |
+|---|---|
+| Row / projects list | **Needs review** (orange) + "The latest build has errors — review it in this output's details", or **Has errors** once accepted. No accept button on the row: previewing first is the point, and that is in the drawer. |
+| Drawer | Before: an orange banner with **Preview it** and **Use this build**. After: a banner saying it is what readers see. Plus "success, with errors" on the last-try line. |
+| Build log page | An orange banner saying it is not live and where to accept it — or, once accepted, that it is what readers see. |
+| History table | **Not live · errors**, then **Live · errors** / **Superseded · errors**. |
+| Publishing | `publish_confirm` adds a line to the confirm dialog, alongside the private-visibility one — reachable only once something flagged is live. |
 
 ### Cancelling a build
 
@@ -268,12 +324,14 @@ replaced the column with `kind`, which sidesteps the collision for the same reas
 | `targets` | new table, uuid pk | The persistent output. |
 | `targets.name` | string, not null | The author's name for it, free text ("Instructor edition"), and the only naming the form asks for. Unique per project so two rows are told apart by what an author reads them by. |
 | `targets.slug` | string, not null, unique per project | PreTeXt's name for it: `@name` in project.ptx, the `output-dir`, and the `/o/…` segment. Derived from `name` on create and never recomputed, so a rename cannot break a link. The unique index is here rather than on `name` because this is the one that addresses something. |
-| `targets.current_build_id` | uuid | Latest successful build — what readers see. |
+| `targets.current_build_id` | uuid | Latest build a target may serve (`Build.live_candidates`) — what readers see. Not simply the latest success: output from a build that reported errors waits to be accepted. |
 | `targets.latest_build_id` | uuid | Most recent attempt — what the state pill reports. Added in PR 2, once it became clear `Target#state` could not be query-free without it. |
 | `targets.kind` | string | What the author picked, at the author's altitude — `website`, `scorm`, `pdf`. `Target::Catalog` translates it into project.ptx attributes. A string, never an integer enum: retiring a value must not be a data migration. |
 | `targets.options` | jsonb | Per-target manifest attributes (a stringparam, an xsl). Open-ended so the next PreTeXt knob does not cost a column. |
 | `builds.target_id` | uuid, not null, fk | A build is an attempt at a target. `project_id` stays as a denormalization so existing nested routes keep working. |
 | `builds.entry_path` | string | What to open for this build — `index.html` for a site, the artifact for a pdf. Detected at import. Added in PR 4. |
+| `builds.completed_with_errors` | boolean, not null, default false | The build server called this build a failure but handed back output anyway. A flag rather than a status, so everything that asks "is this build usable?" keeps one answer. |
+| `builds.errors_accepted` | boolean, not null, default false | The author opted that output into being what readers see. Together with the column above it is what `Build.live_candidates` — and therefore `current_build` — is computed from. |
 | `projects.source_updated_at` | datetime, not null | When the author last changed source, docinfo or assets. |
 
 Both build pointers deliberately have **no** foreign key constraint. One would be circular
@@ -554,6 +612,10 @@ Still live — things future work can break:
   silently — `.presence` falls through to a fallback and nothing ever errors. That is
   exactly how the log stayed empty for months. When a log or an artifact goes missing,
   diff the key names against `_build_payload` before anything else.
+- **`artifact_url` is not a success signal.** The server sends it whenever an `output.zip`
+  exists, including on `status: "failed"`. Anything that decides "is there output to
+  import?" must ask for the key, not for the status word, or a build that produced usable
+  output gets thrown away as a failure.
 - **`builds.status` is an integer enum, so new values are additive only.** `canceled` is 6
   and cost no migration; renumbering or reusing an integer silently reinterprets every
   existing row.

@@ -62,6 +62,13 @@ Rails.application.routes.draw do
         post :confirm
         post :reset_password
         patch :update_email
+        patch :toggle_honor_invoices
+      end
+      resources :subscriptions, only: [ :create ], controller: "subscriptions" do
+        member do
+          patch :update_seats
+          post :mark_invoice_paid
+        end
       end
     end
     resources :projects, only: %i[show update]
@@ -92,8 +99,6 @@ Rails.application.routes.draw do
 
   get "tos" => "terms#tos", as: "tos"
   get "privacy" => "terms#privacy", as: "privacy"
-  get "subscriptions/invoice" => "subscriptions#invoice_request", as: "invoice_request"
-  post "subscriptions/invoice" => "subscriptions#submit_invoice_request", as: "submit_invoice_request"
   resources :subscriptions, only: [ :index, :show ] do
     member do
       post "seat" => "subscriptions#seat", as: "seat"
@@ -102,13 +107,22 @@ Rails.application.routes.draw do
   resources :subscription_types do
     member do
       get "checkout" => "subscription_types#checkout", as: "checkout"
+      get "invoice" => "subscription_types#new_invoice", as: "new_invoice"
+      post "invoice" => "subscription_types#invoice", as: "invoice"
     end
   end
   resources :projects do
     member do
       get "download" => "projects#download", as: "download"
     end
-    resources :collaborations, only: [ :create, :destroy ]
+    resources :collaborations, only: [ :create, :destroy ] do
+      member do
+        patch "transfer_ownership" => "collaborations#transfer_ownership", as: "transfer_ownership"
+      end
+    end
+    # Words the editor's spell checker has been taught. Written one at a time as
+    # the author adds them; they are read back with the project itself (show.json).
+    resources :dictionary_words, only: [ :create ]
     # Publisher options for every output of this project, overriding the owner's account
     # defaults; the one on a target below overrides these in turn.
     resource :publication_settings, only: [ :edit, :update ]
@@ -131,6 +145,14 @@ Rails.application.routes.draw do
         post "full_callback" => "build_callbacks#create", as: "full_callback"
         post "check_status" => "builds#check_status", as: "check_status"
         post "cancel" => "builds#cancel", as: "cancel"
+        # The author opting output from a build that reported errors into being what
+        # readers see; nothing serves it until they do (see Build.live_candidates).
+        patch "accept" => "builds#accept", as: "accept"
+      end
+      # The dashboard's one bulk action. Project-scoped, not target-scoped -- unlike
+      # every other build trigger, this one doesn't start from a single target.
+      collection do
+        post "build_all" => "builds#build_all", as: "build_all"
       end
     end
     collection do

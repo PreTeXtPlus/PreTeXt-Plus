@@ -21,6 +21,10 @@
       <%= project_shared_pill if shared %>
     </h3>
 
+    <% if project.description.present? %>
+      <p class="mt-1 text-sm text-gray-600 line-clamp-2"><%= project.description %></p>
+    <% end %>
+
     <%# The whole status report for this project at a glance: one chip per output,
         so scanning the column answers "what needs rebuilding?" across every project. %>
     <div class="mt-2 flex flex-wrap items-center gap-1.5">

@@ -31,8 +31,12 @@ class Project < ApplicationRecord
   # allow_destroy lets the editor remove a division by sending `_destroy: true`.
   accepts_nested_attributes_for :divisions, allow_destroy: true
 
-  # Both nested collections accept ids the editor minted itself; see
-  # #tolerate_client_minted_ids for why, and for what these two overrides do.
+  has_many :snippets, dependent: :destroy
+  # allow_destroy lets the editor remove a snippet by sending `_destroy: true`.
+  accepts_nested_attributes_for :snippets, allow_destroy: true
+
+  # All three nested collections accept ids the editor minted itself; see
+  # #tolerate_client_minted_ids for why, and for what these overrides do.
   def divisions_attributes=(attributes)
     super(tolerate_client_minted_ids(divisions, attributes))
   end
@@ -41,7 +45,21 @@ class Project < ApplicationRecord
     super(tolerate_client_minted_ids(assets, attributes))
   end
 
+  def snippets_attributes=(attributes)
+    super(tolerate_client_minted_ids(snippets, attributes))
+  end
+
   enum :document_type, { article: 0, book: 1, slideshow: 2 }, default: :article, suffix: true, validate: true
+
+  # The document's content language, written to the generated PreTeXt root
+  # element's @xml:lang. Keys are the literal BCP-47 codes so `language`
+  # itself is the attribute value -- no separate code lookup needed. Keep in
+  # sync with packages/web-editor/src/languages.ts, which drives the dropdown.
+  enum :language, {
+    "en-US": 0, "af-ZA": 1, "bg-BG": 2, "ca-ES": 3, "cs-CZ": 4, "de-DE": 5,
+    "es-ES": 6, "fi-FI": 7, "fr-CA": 8, "fr-FR": 9, "hu-HU": 10, "it-IT": 11,
+    "pt-BR": 12, "pt-PT": 13
+  }, default: "en-US", validate: true
 
   # Gates listing on the owner's /users/:username profile page only -- it does not
   # change who can open the project itself (see Ability). unlisted exists for a link
@@ -71,6 +89,10 @@ class Project < ApplicationRecord
   # Slug omitted deliberately: Target derives "website" from this name like it does for
   # every other output, so there is one rule rather than one rule and an exception.
   DEFAULT_TARGET = { name: "Website", kind: "website" }.freeze
+
+  # A website is a legal output for a slideshow, but it is not what someone who just
+  # asked for slides wants waiting for them on the dashboard.
+  DEFAULT_SLIDESHOW_TARGET = { name: "Slides", kind: "revealjs" }.freeze
 
   # The mirror of Target's own check, and the one that is easy to miss: Rails does not
   # re-validate children when the parent changes, so without this, converting a slideshow
@@ -111,6 +133,52 @@ class Project < ApplicationRecord
     user.has_subscriber_benefits? ? 5 : 1
   end
 
+  # Words the authors have taught the editor's spell checker ("Add to
+  # dictionary"). They live on the project, not on the browser or the user, for
+  # the same reason the source does: a co-author has to see the same book. A
+  # textbook is full of correct words no general dictionary carries -- notation,
+  # place and person names, the vocabulary of the field -- and without this the
+  # squiggles are noise by chapter two.
+  MAX_DICTIONARY_WORDS = 5000
+  MAX_DICTIONARY_WORD_LENGTH = 64
+  # A letter followed by letters, combining marks, apostrophes or hyphens.
+  # Anything else reaching this endpoint is a stray selection, not a word an
+  # author means to declare correct.
+  DICTIONARY_WORD_FORMAT = /\A\p{L}[\p{L}\p{M}'’-]*\z/
+
+  # Adds one word, idempotently. Returns false only if the word itself is
+  # unusable -- an addition dropped for already being there, or for the cap, is
+  # the outcome the caller wanted either way.
+  #
+  # The append happens in SQL rather than as a read-modify-write, because two
+  # collaborators (or one author in two tabs) adding words in the same moment
+  # would otherwise each save an array that omits the other's word. For the same
+  # reason the duplicate check is part of that statement instead of a Ruby-side
+  # `include?`.
+  #
+  # update_all, so no callbacks and no updated_at bump: teaching the checker a
+  # word is not an edit to the book, and must not restack the dashboard or make
+  # every built target look stale. It also leaves the in-memory record alone,
+  # which is what we want -- writing the attribute back would mark it dirty, and
+  # the next save of an unrelated change would push that now-stale array over
+  # whatever the other collaborators have added since.
+  def add_dictionary_word(word)
+    word = word.to_s.strip
+    return false unless word.length.between?(1, MAX_DICTIONARY_WORD_LENGTH)
+    return false unless word.match?(DICTIONARY_WORD_FORMAT)
+
+    # unscoped: `update_all` on the default ordered scope would carry an ORDER BY
+    # into an UPDATE, which Postgres rejects.
+    self.class.unscoped.where(id: id)
+      .where("cardinality(dictionary_words) < ?", MAX_DICTIONARY_WORDS)
+      .where.not(
+        "EXISTS (SELECT 1 FROM unnest(dictionary_words) AS existing WHERE lower(existing) = lower(?))",
+        word
+      )
+      .update_all([ "dictionary_words = array_append(dictionary_words, ?)", word ])
+    true
+  end
+
   def editable_by?(other_user)
     return false if other_user.nil?
     other_user == user || collaborators.include?(other_user)
@@ -123,6 +191,30 @@ class Project < ApplicationRecord
     return nil if user.nil?
     return :owned if user_id == user.id
     :shared if collaborators.include?(user)
+  end
+
+  # Hands the project to `new_owner`, an existing accepted collaborator, and
+  # folds the previous owner into the roster in their place. Available
+  # regardless of the new owner's subscription tier -- benefits already follow
+  # whoever owns the project (collaborator_limit, target_quota, ...), so a
+  # transfer just moves whose plan the project runs on. skip_limit_check keeps
+  # the swap from tripping the new owner's own limit: the collaborator count
+  # never actually grows.
+  def transfer_ownership_to!(new_owner)
+    previous_owner = user
+    return false if new_owner == previous_owner
+
+    transaction do
+      collaborations.find_by!(user: new_owner).destroy!
+      update!(user: new_owner)
+      collaborations.create!(
+        user: previous_owner, invited_email: previous_owner.email,
+        accepted_at: Time.current, skip_limit_check: true
+      )
+    end
+    true
+  rescue ActiveRecord::RecordInvalid, ActiveRecord::RecordNotFound
+    false
   end
 
   # Real-time collaborative editing is on whenever anyone besides the owner
@@ -185,15 +277,23 @@ class Project < ApplicationRecord
       duplicate.user = new_owner
     end
     duplicate.title = "Copy of #{title}"
+    duplicate.is_template = false
     # Carry the target *configuration* but none of its build history, and never the
-    # published flag -- a copy is not entitled to the original's public URLs.
+    # published flag -- a copy is not entitled to the original's public URLs. All three
+    # denormalized build pointers have to go: leaving latest_build_id behind (as this
+    # once did) points a fresh, build-less target at the *original* project's build --
+    # cancel, the log page, and every other build-scoped route then 404 for it, because
+    # that build's project_id is the original's, not the copy's.
     targets.each do |target|
       duplicate.targets.build(
-        target.dup.attributes.except("current_build_id", "last_built_at", "published")
+        target.dup.attributes.except("current_build_id", "latest_build_id", "last_built_at", "published")
       )
     end
     divisions.each do |division|
       duplicate.divisions.build(division.dup.attributes)
+    end
+    snippets.each do |snippet|
+      duplicate.snippets.build(snippet.dup.attributes)
     end
     assets.each do |asset|
       # Each asset is owned directly by its project, so a duplicate needs a
@@ -213,7 +313,6 @@ class Project < ApplicationRecord
   def instantiate_from_template_for(new_owner)
     copy = full_dup(new_owner)
     copy.title = "#{title} (generated from template)"
-    copy.is_template = false
     copy.template_description = nil
     copy
   end
@@ -291,10 +390,14 @@ class Project < ApplicationRecord
       self.source_updated_at = Time.current
     end
 
+    # Note this runs after validation, so what it builds is never checked against
+    # Target#kind_available_for_document_type. That is safe only because the kind is
+    # derived from the document type rather than taken from the caller -- this hook is
+    # not the place to trust user input, now or later.
     def build_default_target
       return if targets.any?
 
-      targets.build(**DEFAULT_TARGET)
+      targets.build(**(slideshow_document_type? ? DEFAULT_SLIDESHOW_TARGET : DEFAULT_TARGET))
     end
 
     def unpublish_targets_if_private

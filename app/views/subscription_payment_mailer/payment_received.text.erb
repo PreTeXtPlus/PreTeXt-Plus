@@ -1,0 +1,10 @@
+PreTeXt.Plus <%= @kind == :new ? "New Subscription" : "Subscription Renewal" %>
+
+A payment of <%= @amount %> was received<%= @manual ? ", recorded manually (not processed through Stripe)" : "" %>.
+
+---
+User:    <%= @user ? "#{@user.name} <#{@user.email}>" : "(unknown)" %>
+Plan:    <%= @plan_name || @subscription.processor_plan %>
+Billing: <%= @interval == "year" ? "Annual" : (@interval == "month" ? "Monthly" : "—") %>
+Amount:  <%= @amount %>
+---

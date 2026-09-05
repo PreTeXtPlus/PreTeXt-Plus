@@ -32,6 +32,26 @@ class TargetsControllerTest < ActionDispatch::IntegrationTest
     assert_match(/5 days/, response.body)
   end
 
+  # The drawer is where output from a build with errors is opted into being live, so the
+  # decision has to actually be on it -- and the dashboard row has to say to come here
+  # rather than offering the same button next to nothing worth looking at.
+  test "the drawer offers the build awaiting review, and the row points at the drawer" do
+    target = targets(:one_print)
+    build = target.builds.create!(created_at: 1.hour.ago)
+    build.mark!(:success, completed_with_errors: true)
+
+    get project_target_url(@project, target), headers: { "Turbo-Frame" => "drawer" }
+
+    assert_response :success
+    assert_select "form[action=?]", accept_project_build_path(@project, build)
+    assert_match(/latest build reported errors/, response.body)
+
+    get project_url(@project)
+
+    assert_select "form[action=?]", accept_project_build_path(@project, build), false
+    assert_match(/Needs review/, response.body)
+  end
+
   test "should show the drawer" do
     get project_target_url(@project, @target)
 
@@ -348,6 +368,29 @@ class TargetsControllerTest < ActionDispatch::IntegrationTest
 
     assert_redirected_to projects_path
     assert_not targets(:two_web).reload.published?
+  end
+
+  test "a published target's row offers View to the public URL instead of the private preview" do
+    sign_in users(:two)
+    target = targets(:two_web)
+
+    patch publish_project_target_url(projects(:two), target), params: { published: true }
+    assert target.reload.published?
+
+    get project_url(projects(:two))
+
+    assert_select "a[href=?]", published_url(projects(:two), target.slug, host: "pub.example.com"), text: "View"
+    assert_select "a", text: "Preview (private)", count: 0
+  end
+
+  test "an unpublished target's row still opens the private preview, not the public URL" do
+    sign_in users(:two)
+    target = targets(:two_web)
+
+    get project_url(projects(:two))
+
+    assert_select "a[href=?]", build_file_path(target.current_build, target.entry_path), text: "Preview (private)"
+    assert_select "a", text: "View", count: 0
   end
 
   test "cannot reach another user's target" do

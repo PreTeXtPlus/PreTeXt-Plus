@@ -42,6 +42,22 @@ class UserTest < ActiveSupport::TestCase
     assert_not user.has_subscriber_benefits?
   end
 
+  test "max_concurrent_builds is 1 for an unsubscribed user" do
+    user = users(:one)
+    user.admin = false
+    assert_equal 1, user.max_concurrent_builds
+  end
+
+  test "max_concurrent_builds is 5 for a subscribed user" do
+    assert_equal 5, users(:subscribed).max_concurrent_builds
+  end
+
+  test "max_concurrent_builds is 5 for an admin" do
+    user = users(:one)
+    user.admin = true
+    assert_equal 5, user.max_concurrent_builds
+  end
+
   test "name_with_email returns formatted string when name present" do
     user = users(:one)
     user.name = "Alice"

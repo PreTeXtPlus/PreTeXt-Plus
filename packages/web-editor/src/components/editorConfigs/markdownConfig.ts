@@ -4,6 +4,7 @@ import {
 } from "@pretextbook/markdown-style-pretext";
 import { registerMarkdownSyntax } from "./markdownSyntax";
 import { registerFlavorLanguage } from "./flavorLanguage";
+import { registerConfiguredSpellCheck } from "./spellcheck";
 import type { FormatEditorConfig } from "./types";
 
 export const markdownConfig: FormatEditorConfig = {
@@ -24,9 +25,18 @@ export const markdownConfig: FormatEditorConfig = {
       // nothing unless the position is genuinely directive-plausible.
       triggerCharacters: [":", "#", "\\", "{"],
     });
+    // Spelling reads the same scopes the PreTeXt editor does; what changes is
+    // how prose is told apart from markup (see `spellcheck/markdownRegions.ts`).
+    const spelling = registerConfiguredSpellCheck(
+      monaco,
+      editor,
+      PRETEXT_MARKDOWN_LANGUAGE_ID,
+      "markdown",
+    );
 
     return {
       dispose: () => {
+        spelling?.dispose();
         language.dispose();
         syntax.dispose();
       },

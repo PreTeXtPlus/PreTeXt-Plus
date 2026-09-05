@@ -32,6 +32,16 @@ export const TYPE_LABELS: Record<string, string> = {
   glossary: "Gls",
   solutions: "Sol",
   "reading-questions": "RQ",
+  frontmatter: "Front",
+  preface: "Pref",
+  acknowledgement: "Ack",
+  dedication: "Ded",
+  biography: "Bio",
+  contributors: "Contrib",
+  backmatter: "Back",
+  appendix: "App",
+  index: "Idx",
+  colophon: "Coloph",
 };
 
 /**
@@ -58,6 +68,16 @@ export const DIVISION_ID_PREFIXES: Record<DivisionType, string> = {
   solutions: "sol",
   "reading-questions": "rq",
   paragraphs: "para",
+  frontmatter: "front",
+  preface: "pref",
+  acknowledgement: "ack",
+  dedication: "ded",
+  biography: "bio",
+  contributors: "contrib",
+  backmatter: "back",
+  appendix: "app",
+  index: "idx",
+  colophon: "coloph",
 };
 
 export const TYPE_FULL_LABELS: Record<string, string> = {
@@ -79,6 +99,16 @@ export const TYPE_FULL_LABELS: Record<string, string> = {
   subsection: "Subsection",
   subsubsection: "Subsubsection",
   paragraphs: "Paragraphs",
+  frontmatter: "Front Matter",
+  preface: "Preface",
+  acknowledgement: "Acknowledgement",
+  dedication: "Dedication",
+  biography: "Biography",
+  contributors: "Contributors",
+  backmatter: "Back Matter",
+  appendix: "Appendix",
+  index: "Index",
+  colophon: "Colophon",
 };
 
 /**
@@ -169,6 +199,38 @@ export const ALLOWED_CHILD_DIVISION_TYPES: Record<
   solutions: [],
   "reading-questions": [],
   paragraphs: [],
+  // Front and back matter. Like `introduction`/`conclusion`, none of these
+  // appear in any *other* type's list: they are positionally constrained (a
+  // book has one frontmatter, first, and one backmatter, last), so they are
+  // never offered as a child to create. They arrive from an import, and
+  // `getSelectableDivisionTypes` keeps a division's own type selectable
+  // whether or not its parent lists it.
+  frontmatter: [
+    "preface",
+    "acknowledgement",
+    "dedication",
+    "biography",
+    "contributors",
+    "colophon",
+  ],
+  backmatter: [
+    "appendix",
+    "solutions",
+    "references",
+    "glossary",
+    "index",
+    "colophon",
+  ],
+  // An appendix divides like a chapter does.
+  appendix: ["section", ...FLEXIBLE_DIVISION_TYPES],
+  // The rest hold prose, not divisions.
+  preface: [],
+  acknowledgement: [],
+  dedication: [],
+  biography: [],
+  contributors: [],
+  index: [],
+  colophon: [],
 };
 
 /**

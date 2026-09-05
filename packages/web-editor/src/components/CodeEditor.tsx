@@ -1,16 +1,32 @@
 import { Editor } from "@monaco-editor/react";
 import { constrainedEditor } from "constrained-editor-plugin";
 import { useState, useRef, useEffect, useMemo, forwardRef, useImperativeHandle } from "react";
+import {
+  copySelection,
+  cutSelection,
+  insertSnippet,
+  pasteFromClipboard,
+  runEditorCommand,
+  selectEditableRegion,
+} from "./editorCommands";
+import type { EditorMenuActions } from "./CodeEditorMenu";
+import type { RootDivisionType } from "../types/sections";
 import type * as Y from "yjs";
 import type { Awareness } from "y-protocols/awareness";
 import { editorConfigs } from "./editorConfigs";
+import { applyCleanFixes, fixesForModel } from "./editorConfigs/latexClean";
+import { summarizeCleanFixes, type CleanFinding } from "../cleanFindings";
+import { usePretextDiagnostics } from "./editorConfigs/usePretextDiagnostics";
+import type { PretextValidationInput } from "./editorConfigs/pretextDiagnostics";
 import CodeEditorMenu from "./CodeEditorMenu";
 import { MonacoCollabBinding } from "../collab/monacoBinding";
 import { installEditGuard } from "../collab/editGuard";
-import { computeLockedRegion, findPretextHeaderEnd } from "./lockedRegion";
+import { computeLockedRegion, findPretextHeaderEnd, isRangeWithin } from "./lockedRegion";
+import { isLatexDivisionHeaderLine } from "../sectionUtils";
+import { planSnippetInsertion } from "./editorConfigs/insertContext";
+import type { EditorSnippet } from "./editorConfigs/snippets";
 import type { CollabUser } from "../collab/types";
 import type { SourceFormat } from "../types/editor";
-import "./CodeEditor.css";
 
 /** Live-collaboration wiring for the active division's shared text. */
 export interface CodeEditorCollab {
@@ -32,6 +48,11 @@ interface CodeEditorProps {
    * to `"xml"`, `"pretext-latex"`, or `"pretext-markdown"`.
    */
   sourceFormat: SourceFormat;
+  /**
+   * The project's root element, passed through to the Insert menu so it can
+   * offer the constructs that only exist under one (a `<slide>`).
+   */
+  rootType?: RootDivisionType;
   /** Called (debounced 500 ms) whenever the user edits the content. */
   onChange: (value: string | undefined) => void;
   /** If provided, Ctrl+Enter in the editor triggers this callback. */
@@ -46,6 +67,12 @@ interface CodeEditorProps {
   onCursorLineChange?: (line: number) => void;
   /** Called when the user clicks "Import LaTeX" in the toolbar. */
   onOpenLatexImport: () => void;
+  /**
+   * Called when the user clicks "Clean up LaTeX…" in the toolbar. The button is
+   * shown only when the active format has a cleanup engine (LaTeX) and the
+   * buffer is editable, so a host that omits this simply never offers it.
+   */
+  onOpenClean?: () => void;
   /** Called when the user clicks "Edit Macros" in the toolbar. */
   onOpenDocinfoEditor: () => void;
   /**
@@ -60,6 +87,10 @@ interface CodeEditorProps {
   canConvertToPretext?: boolean;
   /** If provided, an "Assets" button is shown in the toolbar (PreTeXt mode only). */
   onOpenAssets?: () => void;
+  /** If provided, a "Snippets" button is shown in the toolbar (PreTeXt mode only). */
+  onOpenSnippets?: () => void;
+  /** If provided, a "Find in Project…" item is shown in the Tools menu. */
+  onOpenFindInProject?: () => void;
   /** Called when the user clicks "Display Full Source" to open the assembled-source modal. */
   onShowFullSource: () => void;
   /**
@@ -70,6 +101,7 @@ interface CodeEditorProps {
    */
   onRequestWrapperEdit?: () => void;
   hideAssets?: boolean;
+  hideSnippets?: boolean;
   /** When true, Monaco is non-editable and the toolbar shows only "Display Full Source". */
   readOnly?: boolean;
   /**
@@ -82,6 +114,17 @@ interface CodeEditorProps {
    * `src/collab/editGuard.ts`.
    */
   collab?: CodeEditorCollab;
+  /**
+   * Texts for a PreTeXt schema lint pass: the buffer, and the assembled
+   * document built from it. Omit for non-PreTeXt formats (or to turn linting
+   * off) and any existing markers are cleared.
+   *
+   * Passed in rather than derived here because only `Editors` can assemble the
+   * document — see `editorConfigs/pretextDiagnostics.ts` for why the buffer
+   * alone cannot be validated. Memoize it; a new object identity each render
+   * would restart the debounce forever and never lint.
+   */
+  pretextValidation?: PretextValidationInput;
 }
 
 /** Imperative handle exposed via `forwardRef` for programmatic control. */
@@ -92,6 +135,46 @@ export interface CodeEditorHandle {
   focus: () => void;
   /** Put the cursor on `line`, scrolling it into view if it is off-screen. */
   revealLine: (line: number) => void;
+  /**
+   * Select `[startLine:startCol, endLine:endCol]` (1-based), scrolling it into
+   * view if it is off-screen. Used to highlight a project-wide find match,
+   * which — unlike a preview-sync click — names a span, not just a line.
+   */
+  revealRange: (
+    startLine: number,
+    startCol: number,
+    endLine: number,
+    endCol: number,
+  ) => void;
+  /**
+   * Apply `edits` to the current model as one undoable step — the same
+   * `pushStackElement`-bracketed `pushEditOperations` idiom `applyCleanFixes`
+   * uses, so the batch is one Ctrl+Z rather than one per replacement, and
+   * (in collab mode) reaches the shared doc through the same guarded path a
+   * keystroke would. Returns `false` with no effect if there's no live model
+   * to edit — the caller's target division isn't the one currently open.
+   */
+  applyEdits: (
+    edits: {
+      startLine: number;
+      startCol: number;
+      endLine: number;
+      endCol: number;
+      text: string;
+    }[],
+  ) => boolean;
+  /**
+   * Source-cleanup findings for the buffer as it stands, one row per rule.
+   * Empty for a format with no cleanup engine. Read (not pushed) because the
+   * dialog that renders it is opened on demand and must never show a list that
+   * predates the author's last keystroke.
+   */
+  getCleanFindings: () => CleanFinding[];
+  /**
+   * Apply the auto-fixable cleanup findings — all of them, or just `ruleIds` —
+   * as one undo step. A no-op for a format with no cleanup engine.
+   */
+  applyCleanFixes: (ruleIds?: string[]) => void;
 }
 
 /** Base Monaco editor options shared across all instances of this component. */
@@ -122,19 +205,25 @@ const baseOptions = {
 const CodeEditor = forwardRef<CodeEditorHandle, CodeEditorProps>(({
   content,
   sourceFormat,
+  rootType,
   onChange,
   onRebuild,
   onSave,
   onCursorLineChange,
   onOpenLatexImport,
+  onOpenClean,
   onOpenDocinfoEditor,
   onOpenConvertToPretext,
   canConvertToPretext,
   onOpenAssets,
+  onOpenSnippets,
+  onOpenFindInProject,
   onShowFullSource,
   onRequestWrapperEdit,
   hideAssets,
+  hideSnippets,
   readOnly,
+  pretextValidation,
   collab,
 }, ref) => {
   const editorRef = useRef<any>(null);
@@ -158,6 +247,9 @@ const CodeEditor = forwardRef<CodeEditorHandle, CodeEditorProps>(({
   // The live source format, read from inside the mount-time guard closure.
   const sourceFormatRef = useRef(sourceFormat);
   sourceFormatRef.current = sourceFormat;
+  // Read from the mount-time Mod+A handler, which is registered once.
+  const readOnlyRef = useRef(readOnly);
+  readOnlyRef.current = readOnly;
   const lockedDecorationsRef = useRef<any>(null);
   const lockedRef = useRef(false);
   // How many lines at the very top are locked (the wrapper tag + title for
@@ -176,6 +268,7 @@ const CodeEditor = forwardRef<CodeEditorHandle, CodeEditorProps>(({
   const contentListenerRef = useRef<{ dispose: () => void } | null>(null);
   const mouseListenerRef = useRef<{ dispose: () => void } | null>(null);
   const cursorListenerRef = useRef<{ dispose: () => void } | null>(null);
+  const selectionListenerRef = useRef<{ dispose: () => void } | null>(null);
   const onCursorLineChangeRef = useRef(onCursorLineChange);
   // Last line reported, so a cursor moving along one line stays quiet.
   const lastCursorLineRef = useRef<number | null>(null);
@@ -191,8 +284,22 @@ const CodeEditor = forwardRef<CodeEditorHandle, CodeEditorProps>(({
   const isProgrammaticUpdateRef = useRef(false);
   const [canUndo, setCanUndo] = useState(false);
   const [canRedo, setCanRedo] = useState(false);
+  // Drives the Edit menu's Cut/Copy, which act on the selection.
+  const [hasSelection, setHasSelection] = useState(false);
+  // Monaco arrives asynchronously (the loader fetches it), so effects that
+  // need the editor instance have to wait for it. The refs alone can't say
+  // when that happened — they don't re-render.
+  const [isEditorMounted, setIsEditorMounted] = useState(false);
   const onRebuildRef = useRef(onRebuild);
   const onSaveRef = useRef(onSave);
+  const onOpenFindInProjectRef = useRef(onOpenFindInProject);
+  // Monaco's own find-widget controller, so the toolbar can close it when the
+  // author switches to Find in Project instead of leaving both UIs open.
+  const findControllerRef = useRef<any>(null);
+  const findStateListenerRef = useRef<{ dispose: () => void } | null>(null);
+  // Drives the toolbar's "Finding in file" status, read from Monaco's own
+  // find contribution rather than watching its DOM.
+  const [isFindingInFile, setIsFindingInFile] = useState(false);
   const options = useMemo(
     () => ({ ...baseOptions, readOnly: !!readOnly }),
     [readOnly],
@@ -233,6 +340,67 @@ const CodeEditor = forwardRef<CodeEditorHandle, CodeEditorProps>(({
       }
       lastCursorLineRef.current = line;
     },
+    revealRange: (startLine, startCol, endLine, endCol) => {
+      const editor = editorRef.current;
+      if (!editor) return;
+      editor.focus();
+      suppressCursorReportRef.current = true;
+      try {
+        const range = {
+          startLineNumber: startLine,
+          startColumn: startCol,
+          endLineNumber: endLine,
+          endColumn: endCol,
+        };
+        editor.revealRangeInCenterIfOutsideViewport(range);
+        editor.setSelection(range);
+      } finally {
+        suppressCursorReportRef.current = false;
+      }
+      lastCursorLineRef.current = endLine;
+    },
+    applyEdits: (edits) => {
+      const model = editorRef.current?.getModel?.();
+      if (!model || edits.length === 0) return false;
+      model.pushStackElement();
+      model.pushEditOperations(
+        [],
+        edits.map((e) => ({
+          range: {
+            startLineNumber: e.startLine,
+            startColumn: e.startCol,
+            endLineNumber: e.endLine,
+            endColumn: e.endCol,
+          },
+          text: e.text,
+          forceMoveMarkers: true,
+        })),
+        () => null,
+      );
+      model.pushStackElement();
+      return true;
+    },
+    // Both cleanup methods read the format from its ref rather than closing
+    // over the prop: this handle is built once (`[]`), while the editor lives
+    // across division switches, so a captured `sourceFormat` would go stale.
+    getCleanFindings: () => {
+      const clean = editorConfigs[sourceFormatRef.current].clean;
+      if (!clean) return [];
+      return summarizeCleanFixes(
+        fixesForModel(editorRef.current?.getModel?.(), clean),
+        clean.describeFix,
+      );
+    },
+    applyCleanFixes: (ruleIds?: string[]) => {
+      const clean = editorConfigs[sourceFormatRef.current].clean;
+      if (!clean) return;
+      applyCleanFixes(monacoRef.current, editorRef.current, clean, {
+        sourceFormat: sourceFormatRef.current,
+        ruleIds,
+      });
+      // No host notification here: these are ordinary model edits, so Monaco's
+      // `onChange` fires and the debounce below reports them like any typing.
+    },
   }), []);
 
   useEffect(() => {
@@ -242,6 +410,10 @@ const CodeEditor = forwardRef<CodeEditorHandle, CodeEditorProps>(({
   useEffect(() => {
     onSaveRef.current = onSave;
   }, [onSave]);
+
+  useEffect(() => {
+    onOpenFindInProjectRef.current = onOpenFindInProject;
+  }, [onOpenFindInProject]);
 
   useEffect(() => {
     onCursorLineChangeRef.current = onCursorLineChange;
@@ -270,15 +442,24 @@ const CodeEditor = forwardRef<CodeEditorHandle, CodeEditorProps>(({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sourceFormat]);
 
+  usePretextDiagnostics(
+    monacoRef,
+    editorRef,
+    sourceFormat === "pretext" ? pretextValidation : undefined,
+    isEditorMounted,
+  );
+
   useEffect(() => {
     return () => {
       contentListenerRef.current?.dispose?.();
       languageExtensionsRef.current?.dispose?.();
       mouseListenerRef.current?.dispose?.();
       cursorListenerRef.current?.dispose?.();
+      selectionListenerRef.current?.dispose?.();
       constrainedRef.current?.disposeConstrainer?.();
       editGuardRef.current?.();
       editGuardRef.current = null;
+      findStateListenerRef.current?.dispose?.();
       if (debounceRef.current) clearTimeout(debounceRef.current);
     };
   }, []);
@@ -311,6 +492,42 @@ const CodeEditor = forwardRef<CodeEditorHandle, CodeEditorProps>(({
       editor.executeEdits("ensure-body-line", [
         {
           range: new monaco.Range(headerEnd, endCol, headerEnd, endCol),
+          text: "\n",
+          forceMoveMarkers: true,
+        },
+      ]);
+    } finally {
+      guardBypassRef.current = false;
+    }
+    queueMicrotask(() => {
+      isProgrammaticUpdateRef.current = false;
+    });
+  };
+
+  // A LaTeX division's header must be followed by a blank line:
+  // `@pretextbook/latex-pretext` reads a first paragraph butted straight
+  // against the header as part of the header, so a division imported without
+  // one converts wrongly — and since `computeLockedRegion` locks that blank
+  // line along with the header, it can't be typed away again once it's here.
+  // Insert it when it's missing. Flagged programmatic so it doesn't echo back
+  // to the host as a user edit; the same repair is applied at the source level
+  // by `normalizeLatexDivisionSource` when the division is loaded.
+  const ensureLatexHeaderBlankLine = (editor: any, model: any, monaco: any) => {
+    if (sourceFormat !== "latex") return;
+    if (!isLatexDivisionHeaderLine(model.getLineContent(1))) return;
+    if (model.getLineCount() >= 2 && model.getLineContent(2).trim() === "") {
+      return;
+    }
+
+    isProgrammaticUpdateRef.current = true;
+    // The insertion point is the end of the locked header line, so it has to
+    // skip the collab guard (which would otherwise reject its own repair).
+    guardBypassRef.current = true;
+    try {
+      const endCol = model.getLineMaxColumn(1);
+      editor.executeEdits("ensure-latex-header-gap", [
+        {
+          range: new monaco.Range(1, endCol, 1, endCol),
           text: "\n",
           forceMoveMarkers: true,
         },
@@ -408,6 +625,7 @@ const CodeEditor = forwardRef<CodeEditorHandle, CodeEditorProps>(({
       // cosmetic, self-limiting outcome (the condition stops holding once either
       // lands), and far cheaper than leaving the wrapper unguarded.
       ensurePretextBodyLine(editor, model, monaco);
+      ensureLatexHeaderBlankLine(editor, model, monaco);
     } finally {
       normalizingRef.current = false;
     }
@@ -562,6 +780,28 @@ const CodeEditor = forwardRef<CodeEditorHandle, CodeEditorProps>(({
     };
   }, []);
 
+  /**
+   * Select the editable body, leaving the locked structural lines out.
+   *
+   * Shared by the Edit menu's Select All and the Mod+A keybinding registered at
+   * mount, so both mean the same thing. The geometry is recomputed per
+   * invocation — the locked lines move as the body grows, and in collab mode a
+   * remote edit moves them with no local event.
+   *
+   * A read-only buffer selects everything instead: nothing there is editable,
+   * and selecting the whole document to copy it is the point.
+   */
+  const selectEditableContent = () => {
+    const editor = editorRef.current;
+    const model = editor?.getModel?.();
+    if (!editor || !model) return;
+    const editable = readOnlyRef.current
+      ? null
+      : (computeLockedRegion(model, sourceFormatRef.current)?.editableRange ??
+        null);
+    selectEditableRegion(editor, editable);
+  };
+
   const handleEditorMount = (editor: any, monaco: any) => {
     editorRef.current = editor;
     monacoRef.current = monaco;
@@ -607,6 +847,20 @@ const CodeEditor = forwardRef<CodeEditorHandle, CodeEditorProps>(({
       onCursorLineChangeRef.current?.(line);
     });
 
+    // Track whether anything is selected, so the Edit menu can disable Cut and
+    // Copy when there is nothing to act on.
+    selectionListenerRef.current?.dispose?.();
+    selectionListenerRef.current = editor.onDidChangeCursorSelection((e: any) => {
+      const selection = e?.selection;
+      setHasSelection(
+        !!selection &&
+          !(
+            selection.startLineNumber === selection.endLineNumber &&
+            selection.startColumn === selection.endColumn
+          ),
+      );
+    });
+
     // Subscribe to content changes to refresh undo/redo availability
     contentListenerRef.current?.dispose?.();
     contentListenerRef.current = editor.onDidChangeModelContent(() => {
@@ -648,6 +902,50 @@ const CodeEditor = forwardRef<CodeEditorHandle, CodeEditorProps>(({
       onSaveRef.current?.();
     });
 
+    // Register Ctrl+Shift+F to open the project-wide Find/Replace drawer.
+    // Unbound in standalone Monaco (it's a VS Code-workbench shortcut, not a
+    // core editor one), so this doesn't shadow anything.
+    editor.addCommand(
+      monaco.KeyMod.CtrlCmd | monaco.KeyMod.Shift | monaco.KeyCode.KeyF,
+      () => {
+        onOpenFindInProjectRef.current?.();
+      },
+    );
+
+    // Track Monaco's own find widget through its contribution's state model
+    // (rather than watching its DOM) so the toolbar can show "Finding in
+    // file" while it's open, and close it from there when switching to Find
+    // in Project.
+    findStateListenerRef.current?.dispose?.();
+    const findController = editor.getContribution?.(
+      "editor.contrib.findController",
+    );
+    findControllerRef.current = findController ?? null;
+    const findState = findController?.getState?.();
+    setIsFindingInFile(!!findState?.isRevealed);
+    findStateListenerRef.current =
+      findState?.onFindReplaceStateChange((e: any) => {
+        if (e.isRevealed) setIsFindingInFile(!!findState.isRevealed);
+      }) ?? null;
+
+    // Take over Mod+A so select-all stops at the editable body. A dynamic
+    // keybinding outweighs Monaco's built-in `editor.action.selectAll`, which
+    // stays registered for the command palette; the Edit menu reaches this
+    // same handler through `menuActions.selectAll`.
+    //
+    // Scoped to `editorTextFocus` — the buffer itself — rather than the
+    // built-in's `textInputFocus`, which also covers the editor's own widgets.
+    // Without that, Mod+A in the find box would select the document instead of
+    // the search term; with it, this rule simply doesn't match there and
+    // Monaco's own select-all takes the keystroke.
+    editor.addCommand(
+      monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyA,
+      () => {
+        selectEditableContent();
+      },
+      "editorTextFocus",
+    );
+
     languageExtensionsRef.current?.dispose?.();
     const config = editorConfigs[sourceFormat];
     languageExtensionsRef.current =
@@ -655,6 +953,7 @@ const CodeEditor = forwardRef<CodeEditorHandle, CodeEditorProps>(({
 
     applyConstraints();
     rebindCollab();
+    setIsEditorMounted(true);
   };
 
   /**
@@ -697,23 +996,135 @@ const CodeEditor = forwardRef<CodeEditorHandle, CodeEditorProps>(({
     updateUndoRedoState();
   };
 
+  /**
+   * Park the cursor inside the editable body before writing to it.
+   *
+   * The caret can legitimately sit on a locked structural line — clicking one
+   * opens the TOC properties form, but the click still moves the cursor there.
+   * An insert from that position would be reverted by the constrained-editor
+   * plugin (or refused by the collab guard) with nothing to show for it, so
+   * move to the first editable line instead of writing into a locked one.
+   */
+  const ensureCursorInEditableRegion = () => {
+    const editor = editorRef.current;
+    const model = editor?.getModel?.();
+    if (!editor || !model) return;
+    const region = computeLockedRegion(model, sourceFormatRef.current);
+    if (!region) return;
+    const selection = editor.getSelection();
+    if (selection && isRangeWithin(region.editableRange, selection)) return;
+    const [lineNumber, column] = region.editableRange;
+    editor.setPosition({ lineNumber, column });
+  };
+
+  /** Whether the caret may be placed here — nothing is locked, or this is body. */
+  const isEditablePosition = (
+    model: any,
+    position: { lineNumber: number; column: number },
+  ): boolean => {
+    const region = computeLockedRegion(model, sourceFormatRef.current);
+    if (!region) return true;
+    return isRangeWithin(region.editableRange, {
+      startLineNumber: position.lineNumber,
+      startColumn: position.column,
+      endLineNumber: position.lineNumber,
+      endColumn: position.column,
+    });
+  };
+
+  /**
+   * Insert a snippet where it is legal, rather than only where the caret is.
+   *
+   * `planSnippetInsertion` reads the cursor's surroundings and decides both the
+   * text and the spot: a list gains a `<p>` unless the cursor is already in one,
+   * a theorem moves past the paragraph it can't nest inside. The one thing it
+   * can't know about is the locked structural lines, so a move onto one — an
+   * unterminated `<p>` running past the division's body — is declined and the
+   * snippet goes in at the caret as written.
+   */
+  const insertSnippetInContext = (snippet: EditorSnippet) => {
+    ensureCursorInEditableRegion();
+    const editor = editorRef.current;
+    const model = editor?.getModel?.();
+    const position = editor?.getPosition?.();
+    if (!editor || !model || !position) return;
+
+    const offset = model.getOffsetAt(position);
+    const plan = planSnippetInsertion(
+      model.getValue(),
+      offset,
+      snippet,
+      sourceFormatRef.current,
+    );
+    if (plan.offset !== offset) {
+      const target = model.getPositionAt(plan.offset);
+      if (!isEditablePosition(model, target)) {
+        insertSnippet(editor, snippet.body);
+        return;
+      }
+      editor.setPosition(target);
+    }
+    insertSnippet(editor, plan.body);
+  };
+
+  // Rebuilt each render rather than memoized: every method reads the editor
+  // through `editorRef`, so there is no state to go stale and nothing below
+  // this is memoized on the object's identity.
+  const menuActions: EditorMenuActions = {
+    runCommand: (id) => {
+      runEditorCommand(editorRef.current, id);
+      // Undo/redo run through here too, and the model's stacks have moved.
+      updateUndoRedoState();
+    },
+    cut: () => cutSelection(editorRef.current),
+    copy: () => copySelection(editorRef.current),
+    selectAll: selectEditableContent,
+    paste: async () => {
+      ensureCursorInEditableRegion();
+      return pasteFromClipboard(editorRef.current);
+    },
+    insertSnippet: insertSnippetInContext,
+  };
+
+  // Closes Monaco's own find widget before handing off to Find in Project,
+  // so switching between the two never leaves both open at once.
+  const handleSwitchToFindInProject = () => {
+    findControllerRef.current?.closeFindWidget?.();
+    onOpenFindInProjectRef.current?.();
+  };
+
   return (
     <div style={{ display: "flex", flexDirection: "column", height: "100%" }}>
       <CodeEditorMenu
         content={content}
         sourceFormat={sourceFormat}
+        rootType={rootType}
         onContentChange={handleContentChange}
         onOpenLatexImport={onOpenLatexImport}
+        onOpenClean={
+          onOpenClean && !readOnly && editorConfigs[sourceFormat].clean
+            ? onOpenClean
+            : undefined
+        }
         onOpenDocinfoEditor={onOpenDocinfoEditor}
         onUndo={handleUndo}
         onRedo={handleRedo}
         canUndo={canUndo}
         canRedo={canRedo}
+        hasSelection={hasSelection}
+        actions={menuActions}
         onConvertToPretext={onOpenConvertToPretext}
         canConvertToPretext={canConvertToPretext}
         onOpenAssets={onOpenAssets}
+        onOpenSnippets={onOpenSnippets}
+        onOpenFindInProject={onOpenFindInProject}
+        isFindingInFile={isFindingInFile}
+        onSwitchToFindInProject={
+          onOpenFindInProject ? handleSwitchToFindInProject : undefined
+        }
         onShowFullSource={onShowFullSource}
         hideAssets={hideAssets}
+        hideSnippets={hideSnippets}
         readOnly={readOnly}
       />
       <div style={{ flex: 1 }}>

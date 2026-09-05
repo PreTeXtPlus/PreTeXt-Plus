@@ -15,32 +15,35 @@ class Target
   # It also makes illegal combinations unrepresentable rather than validated-against:
   # there is no way to spell "a PDF compressed as scorm", because no kind emits it.
   module Catalog
+    # What a kind serves when it says nothing: a manuscript, i.e. everything that is
+    # not a slide deck. Spelled out rather than left as "all types except slideshow" so adding
+    # a root element to Project#document_type is a decision made here, deliberately,
+    # rather than one that silently grants every output to a new kind of document.
+    MANUSCRIPT_DOCUMENT_TYPES = %i[ article book ].freeze
+
     Kind = Data.define(:slug, :label, :emits, :site, :viewable, :filename_ext, :extensions,
                        :document_types) do
       # Defaults live here rather than at each call site: most kinds are a single
-      # downloadable file available to every document type, and say so by omission.
+      # downloadable file built from prose (not slides), and say so by omission.
       #
       # `viewable` is whether opening the artifact in a browser means anything. A PDF or
       # a reveal.js deck is worth opening; a SCORM package or an EPUB is a container you
       # feed to something else, and offering to "open" it just downloads it with extra
       # steps. Every site is viewable by definition, so `site` implies it.
       def self.build(slug, label:, emits:, site: false, viewable: false, filename_ext: nil,
-                     extensions: [], document_types: nil)
+                     extensions: [], document_types: MANUSCRIPT_DOCUMENT_TYPES)
         new(slug: slug.to_s, label: label, emits: emits.freeze, site: site,
             viewable: site || viewable, filename_ext: filename_ext,
             extensions: extensions.freeze,
-            document_types: document_types&.map(&:to_s)&.freeze)
+            document_types: document_types.map(&:to_s).freeze)
       end
 
-      # nil means "every document type"; a list means only those. PreTeXt can only make
-      # slides out of a <slideshow>, so offering them elsewhere would queue a build that
-      # cannot succeed.
+      # Which document types this kind can be built from. The rule runs *both* ways and
+      # the pairing is exclusive: PreTeXt makes slides only out of a <slideshow>, and a
+      # <slideshow> builds only to slides. Either mismatch queues a build that cannot
+      # succeed, so a kind names the types it serves and the default names the others.
       def available_for?(document_type)
-        document_types.nil? || document_types.include?(document_type.to_s)
-      end
-
-      def restricted?
-        !document_types.nil?
+        document_types.include?(document_type.to_s)
       end
     end
 

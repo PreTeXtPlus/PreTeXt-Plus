@@ -9,16 +9,17 @@
 import { fromXml } from "xast-util-from-xml";
 import { toXml } from "xast-util-to-xml";
 import type { Element, ElementContent, Root } from "xast";
-import type { Asset, AssetKind, SourceFormat } from "./types/editor";
+import type { Asset, Snippet, SourceFormat } from "./types/editor";
 import type {
   Division,
   DivisionType,
   DocumentSection,
   DocumentSectionType,
   DocumentSplitResult,
+  RootDivisionType,
 } from "./types/sections";
 import { derivePretextContent } from "./contentConversion";
-import { ASSET_KINDS, resolveAssetRef } from "./assetTransforms";
+import { resolveAssetRef } from "./assetTransforms";
 import { escapeAttribute } from "./xmlUtils";
 
 // ---------------------------------------------------------------------------
@@ -67,6 +68,15 @@ const SECTION_TAGS: ReadonlySet<string> = new Set([
  * nested levels belong here: a division record can be any `DivisionType`, and
  * a `<subsection>` whose tag went unrecognised is a division whose type and
  * title can't be read back out of its own source.
+ *
+ * This set is also the *inbound* contract with `@pretextbook/import`, whose
+ * `PRETEXT_DIVISION_TAGS` decides which divisions an import splits into their
+ * own records. Whatever it splits at, it emits a `<plus:TAG ref="…"/>`
+ * placeholder for, and a tag missing from here is one
+ * {@link parseDivisionRefs} skips — leaving a real division record that no
+ * parent points at, which the TOC reports as orphaned. The front/back matter
+ * entries below exist for exactly that reason; `importDivisionTags.test.ts`
+ * pins the two lists together.
  */
 const ALL_DIVISION_TYPES: ReadonlySet<string> = new Set([
   "book",
@@ -77,6 +87,18 @@ const ALL_DIVISION_TYPES: ReadonlySet<string> = new Set([
   "subsection",
   "subsubsection",
   "paragraphs",
+  // Front and back matter — recognised as divisions, but not split at by this
+  // editor's own document splitter, so deliberately not in SECTION_TAGS.
+  "frontmatter",
+  "preface",
+  "acknowledgement",
+  "dedication",
+  "biography",
+  "contributors",
+  "backmatter",
+  "appendix",
+  "index",
+  "colophon",
   ...SECTION_TAGS,
 ]);
 
@@ -620,8 +642,11 @@ export function stripLatexSectionWrapper(
       .replace(/^\\begin\{section\}\s*\n?/, "")
       .replace(/\n?\\end\{section\}\s*$/, "");
   }
-  // Remove leading \section{…} or \section*{…} line
-  return content.replace(/^\\section\*?\{[^}]*\}\s*\n?/, "");
+  // Remove the leading `\section{…}` / `\worksheet{…}` header line, however
+  // malformed — `parseLatexDivisionHeader` reports its full extent.
+  const header = parseLatexDivisionHeader(content);
+  if (!header) return content;
+  return content.slice(header.length).replace(/^\s+/, "");
 }
 
 /**
@@ -647,7 +672,13 @@ export function rewrapLatexSection(
   if (originalContent?.trimStart().startsWith("\\begin{section}")) {
     return `\\begin{section}\n\n${inner}\n\n\\end{section}`;
   }
-  return `\\section{${title}}\n\n${inner}`;
+  // The header command is named after the division type, so a `<worksheet>`
+  // gets `\worksheet{…}` back rather than being demoted to a `\section{…}`.
+  const macro = ALL_DIVISION_TYPES.has(type) ? type : "section";
+  return joinLatexHeaderAndBody(
+    buildLatexDivisionHeader({ macro, title }),
+    inner,
+  );
 }
 
 /**
@@ -665,49 +696,199 @@ export function ensureLatexSectionWrapper(
   if (type === "introduction" || type === "conclusion") {
     return content; // no structural wrapper for these
   }
-  const trimmed = content.trimStart();
-  if (
-    trimmed.startsWith("\\section") ||
-    trimmed.startsWith("\\begin{section}")
-  ) {
-    return content;
-  }
+  if (content.trimStart().startsWith("\\begin{section}")) return content;
+  // Any recognised division macro counts as an intact header — not just
+  // `\section`, since the header is named after the division's own type.
+  const header = parseLatexDivisionHeader(content);
+  if (header && ALL_DIVISION_TYPES.has(header.macro)) return content;
   return rewrapLatexSection(content, type, title, originalContent);
 }
 
 /**
- * Matches a leading LaTeX division-header command — `\section{`, `\worksheet{`,
- * `\reading-questions{`, etc. — at the very start of a division's source.
+ * A LaTeX division's header, as read off the first line of its source.
  *
  * The macro name mirrors the PreTeXt division type (so `\worksheet{…}` reads as,
  * and is converted to, a `<worksheet>`), which is why hyphens are allowed even
  * though they aren't valid in a raw LaTeX command name — the header is only ever
- * rewritten from the TOC, never hand-typed. `\begin`/`\end` are excluded so the
- * environment style (`\begin{section}…\end{section}`) isn't mistaken for a
- * command-style header.
- *
- * Capture groups: 1 = leading whitespace, 2 = `*?{` (so the `*` of a starred
- * variant and the opening brace are preserved on rewrite).
+ * rewritten from the TOC, never hand-typed.
  */
-const LEADING_LATEX_DIVISION_MACRO =
-  /^(\s*)\\(?!begin\b|end\b)[A-Za-z][A-Za-z-]*(\*?\{)/;
+export interface LatexDivisionHeader {
+  /** The header command name without its backslash — the division type. */
+  macro: string;
+  /** Whether the command was starred (`\section*{…}`). */
+  starred: boolean;
+  /** The title argument, with any `\label{…}` written inside it removed. */
+  title: string;
+  /** The header's `\label{…}` value — a division's `xml:id` — or `""`. */
+  label: string;
+  /**
+   * How many characters of the source the header occupies, counting leading
+   * whitespace and any malformed leftovers (stray `}`, duplicate `\label`s).
+   * `source.slice(length)` is therefore the body, junk-free.
+   */
+  length: number;
+}
+
+/**
+ * Read a LaTeX division's header off the first line of `content`, returning
+ * `null` when there is none (an introduction/conclusion body, or the
+ * `\begin{section}…\end{section}` environment style, which `\begin`/`\end` are
+ * excluded so as not to be mistaken for a command header).
+ *
+ * This is deliberately *tolerant* rather than strict, because it is the only
+ * thing standing between a mangled header and a division the author can no
+ * longer fix: the header line is locked in the code editor, so whatever it
+ * reads here is the sole route back to a well-formed one. It therefore
+ * brace-matches the title argument rather than stopping at the first `}` (so
+ * `\section{Foo\label{s}}` — a common hand-written LaTeX idiom, and the shape an
+ * import can leave behind — yields the title `Foo` and the label `s` rather than
+ * a title containing half a `\label`), and then swallows any run of stray `}`,
+ * whitespace and further `\label{…}` commands that follows, since all of it is
+ * header wreckage rather than body content. The last word on the label goes to
+ * the one written *after* the argument, which is what the TOC form writes.
+ *
+ * Scanning never leaves the first line: a header is always written on one line,
+ * and everything below it is the author's body, which must never be eaten.
+ */
+export function parseLatexDivisionHeader(
+  content: string,
+): LatexDivisionHeader | null {
+  const lead = /^\s*/.exec(content)![0];
+  const afterLead = content.slice(lead.length);
+  const newline = afterLead.search(/\r?\n/);
+  const line = newline === -1 ? afterLead : afterLead.slice(0, newline);
+
+  const open = /^\\(?!begin\b|end\b)([A-Za-z][A-Za-z-]*)(\*?)\{/.exec(line);
+  if (!open) return null;
+
+  // Brace-match the title argument. An escaped pair (`\{`, `\}`) is copied
+  // through without touching the depth; an unterminated argument ends at the
+  // end of the line, taking whatever was there as the title.
+  let i = open[0].length;
+  let depth = 1;
+  let arg = "";
+  while (i < line.length) {
+    const ch = line[i];
+    if (ch === "\\" && i + 1 < line.length) {
+      arg += line.slice(i, i + 2);
+      i += 2;
+      continue;
+    }
+    if (ch === "{") depth++;
+    else if (ch === "}" && --depth === 0) {
+      i++;
+      break;
+    }
+    arg += ch;
+    i++;
+  }
+
+  // Trailing header wreckage: unmatched closing braces, and one or more
+  // `\label{…}` commands. Anything else ends the header and stays in the body.
+  const trailingLabels: string[] = [];
+  while (i < line.length) {
+    if (line[i] === " " || line[i] === "\t" || line[i] === "}") {
+      i++;
+      continue;
+    }
+    const label = /^\\label\{([^}]*)\}/.exec(line.slice(i));
+    if (!label) break;
+    trailingLabels.push(label[1].trim());
+    i += label[0].length;
+  }
+
+  const innerLabels: string[] = [];
+  const title = arg
+    .replace(/\\label\{([^}]*)\}/g, (_full, id: string) => {
+      innerLabels.push(id.trim());
+      return "";
+    })
+    .replace(/\s+/g, " ")
+    .trim();
+
+  return {
+    macro: open[1],
+    starred: open[2] === "*",
+    title,
+    label: trailingLabels[0] ?? innerLabels[0] ?? "",
+    length: lead.length + i,
+  };
+}
+
+/**
+ * Whether `line` opens a LaTeX division — a header command named after a real
+ * division type (`\section{`, `\worksheet{`, `\article{`, …).
+ *
+ * Stricter than {@link parseLatexDivisionHeader} on purpose: this is what
+ * decides whether a line may be locked and rewritten, and a division body that
+ * merely happens to start with a macro (`\emph{Once} upon a time.` at the top
+ * of an introduction) is prose, not structure.
+ */
+export function isLatexDivisionHeaderLine(line: string): boolean {
+  const header = parseLatexDivisionHeader(line);
+  return header !== null && ALL_DIVISION_TYPES.has(header.macro);
+}
+
+/** Render a division header from its parts — the inverse of {@link parseLatexDivisionHeader}. */
+export function buildLatexDivisionHeader(header: {
+  macro: string;
+  starred?: boolean;
+  title: string;
+  label?: string;
+}): string {
+  const star = header.starred ? "*" : "";
+  const label = header.label ? `\\label{${header.label}}` : "";
+  return `\\${header.macro}${star}{${header.title}}${label}`;
+}
+
+/**
+ * Join a rewritten header to the rest of a division's source, always separated
+ * by exactly one blank line.
+ *
+ * The blank line isn't cosmetic: `@pretextbook/latex-pretext` reads a first
+ * paragraph butted straight up against the header as part of the header rather
+ * than as a paragraph of its own, so a division saved without it converts
+ * wrongly. Every path that writes a header goes through here, and
+ * `computeLockedRegion` locks the blank line along with the header so it can't
+ * be typed away again.
+ */
+function joinLatexHeaderAndBody(header: string, rest: string): string {
+  const body = rest.replace(/^(?:[ \t]*\r?\n)+/, "").replace(/^[ \t]+/, "");
+  return body ? `${header}\n\n${body}` : `${header}\n\n`;
+}
+
+/**
+ * Rewrite a LaTeX division's header from what {@link parseLatexDivisionHeader}
+ * could recover from it, dropping anything malformed and guaranteeing the blank
+ * line below it. Idempotent, and a no-op for anything whose first line isn't a
+ * recognised division header — an introduction's prose, or a body that happens
+ * to open with some other macro, must be left exactly as the author wrote it.
+ */
+export function normalizeLatexDivisionSource(source: string): string {
+  const header = parseLatexDivisionHeader(source);
+  if (!header || !ALL_DIVISION_TYPES.has(header.macro)) return source;
+  return joinLatexHeaderAndBody(
+    buildLatexDivisionHeader(header),
+    source.slice(header.length),
+  );
+}
 
 /**
  * Replace (or insert) the section title in a LaTeX section string.
  *
- * - For command style (`\section{…}`, `\worksheet{…}`, …): updates the header
- *   command's argument.
+ * - For command style (`\section{…}`, `\worksheet{…}`, …): rewrites the header.
  * - For `\begin{section}` style: updates the `\title{…}` inside.
  */
 export function updateLatexSectionTitle(
   content: string,
   newTitle: string,
 ): string {
-  // Group 1 captures the leading whitespace + `\macro*?{`; the title argument
-  // (`[^}]*`, up to the closing brace) is replaced.
-  const headerArg = /^(\s*\\(?!begin\b|end\b)[A-Za-z][A-Za-z-]*\*?\{)[^}]*/;
-  if (headerArg.test(content)) {
-    return content.replace(headerArg, (_, prefix) => `${prefix}${newTitle}`);
+  const header = parseLatexDivisionHeader(content);
+  if (header) {
+    return joinLatexHeaderAndBody(
+      buildLatexDivisionHeader({ ...header, title: newTitle }),
+      content.slice(header.length),
+    );
   }
   if (content.includes("\\begin{section}")) {
     if (/\\title\{/.test(content)) {
@@ -728,9 +909,8 @@ export function updateLatexSectionTitle(
  * found (introduction/conclusion have none), so callers leave title as-is.
  */
 export function extractLatexDivisionTitle(content: string): string | null {
-  const headerMatch =
-    /^\s*\\(?!begin\b|end\b)[A-Za-z][A-Za-z-]*\*?\{([^}]*)\}/.exec(content);
-  if (headerMatch) return headerMatch[1].trim();
+  const header = parseLatexDivisionHeader(content);
+  if (header) return header.title;
   if (content.includes("\\begin{section}")) {
     const titleMatch = /\\title\{([^}]*)\}/.exec(content);
     if (titleMatch) return titleMatch[1].trim();
@@ -739,32 +919,31 @@ export function extractLatexDivisionTitle(content: string): string | null {
 }
 
 /**
- * Extract the `\label{…}` that immediately follows a LaTeX division's header
- * command — the LaTeX spelling of a division's `xml:id`, since
- * `@pretextbook/latex-pretext` maps `\label` → `xml:id`.  Only the header's
- * label is read (a `\label` inside the body is ignored).  Returns `""` when no
- * header label is present.
+ * Extract the `\label{…}` belonging to a LaTeX division's header — the LaTeX
+ * spelling of a division's `xml:id`, since `@pretextbook/latex-pretext` maps
+ * `\label` → `xml:id`.  Only the header's label is read (a `\label` inside the
+ * body is ignored).  Returns `""` when no header label is present.
  */
 export function extractLatexSectionLabel(content: string): string {
-  const m =
-    /^\s*\\(?!begin\b|end\b)[A-Za-z][A-Za-z-]*\*?\{[^}]*\}\s*\\label\{([^}]*)\}/.exec(
-      content,
-    );
-  return m?.[1]?.trim() ?? "";
+  return parseLatexDivisionHeader(content)?.label ?? "";
 }
 
 /**
- * Update a LaTeX division's header type, title, and/or `xml:id` in place.
+ * Update a LaTeX division's header type, title, and/or `xml:id`.
  *
- * - `type` rewrites the header command name (`\section{` → `\worksheet{`) so the
+ * - `type` renames the header command (`\section{` → `\worksheet{`) so the
  *   source reads as the division it represents.
- * - `title` rewrites the header command's argument.
- * - `xmlId` rewrites the `\label{…}` directly after the header — inserting it
- *   when absent, removing it when `null`/empty.
+ * - `title` becomes the header command's argument.
+ * - `xmlId` becomes the `\label{…}` after it — inserted when absent, dropped
+ *   when `null`/empty.
  *
- * Omit a key (or pass `undefined`) to leave it unchanged.  Only the
- * command-style header is handled — the style the code editor freezes and the
- * TOC form exposes for editing.  This is the LaTeX analogue of
+ * Omit a key (or pass `undefined`) to keep whatever the current header says.
+ * The header is rebuilt wholesale from those three values rather than patched
+ * field-by-field, so a division that arrived with a malformed one (a `\label`
+ * left inside the title argument, a doubled `}`) comes back well-formed — the
+ * only repair route there is, since the header line is locked in the code
+ * editor. Only the command-style header is handled; `\begin{section}` divisions
+ * keep the title-only update. This is the LaTeX analogue of
  * {@link updateSectionMetadata} and {@link updateMarkdownDivisionMetadata} —
  * same `(division, changes) => Division` shape — but LaTeX has no
  * representation for PreTeXt's separate `label` attribute, so `label` is
@@ -779,24 +958,20 @@ export function updateLatexDivisionMetadata(
     label?: string | null;
   },
 ): Division {
+  const header = parseLatexDivisionHeader(division.source);
   let source = division.source;
-  if (changes.type !== undefined) {
-    source = source.replace(
-      LEADING_LATEX_DIVISION_MACRO,
-      `$1\\${changes.type}$2`,
+  if (header) {
+    source = joinLatexHeaderAndBody(
+      buildLatexDivisionHeader({
+        macro: changes.type ?? header.macro,
+        starred: header.starred,
+        title: changes.title ?? header.title,
+        label: changes.xmlId === undefined ? header.label : (changes.xmlId ?? ""),
+      }),
+      division.source.slice(header.length),
     );
-  }
-  if (changes.title !== undefined) {
+  } else if (changes.title !== undefined) {
     source = updateLatexSectionTitle(source, changes.title);
-  }
-  if (changes.xmlId !== undefined) {
-    source = source.replace(
-      /^(\s*\\(?!begin\b|end\b)[A-Za-z][A-Za-z-]*\*?\{[^}]*\})(\s*\\label\{[^}]*\})?/,
-      (_full, header: string) =>
-        changes.xmlId == null || changes.xmlId === ""
-          ? header
-          : `${header}\\label{${changes.xmlId}}`,
-    );
   }
   return {
     ...division,
@@ -1477,9 +1652,9 @@ export function canEmbedDivisionRefs(sourceFormat: SourceFormat): boolean {
  * position a `Division` within its parent's content — i.e. every
  * `DivisionType` plus the generic `division` alias.
  *
- * Asset placeholders (`<plus:image ref="..."/>`, `<plus:doenet ref="..."/>`)
- * share the same `<plus:* ref="..."/>` shape but are NOT divisions — they
- * reference project assets and must be excluded here, otherwise asset refs
+ * Asset placeholders (`<plus:image ref="..."/>`) share the same
+ * `<plus:* ref="..."/>` shape but are NOT divisions — they reference project
+ * assets and must be excluded here, otherwise asset refs
  * get parsed as division children, auto-created as bogus Division records,
  * and shown/orphaned in the TOC.
  */
@@ -1533,37 +1708,25 @@ function latexDivisionRefSource(refValue: string | null): string {
 }
 
 /**
- * Build a regex source that matches a division-ref placeholder written in ANY
- * of the PreTeXt (`<plus:section ref="x"/>`), Markdown (`::section{ref="x"}`)
- * or LaTeX (`\plus{section}{x}`) forms.  The three syntaxes are textually
- * disjoint, so a combined pattern is unambiguous — letting every ref consumer
- * (TOC tree building, parent lookup, reorder/remove) work uniformly regardless
- * of the parent division's source format.
- *
- * Only matches tag names in {@link DIVISION_REF_TAGS} — asset placeholders
- * (`plus:image`, `plus:doenet`, ...) are deliberately excluded.
- *
- * When `refValue` is `null` the ref value is captured — in group 1 for the XML
- * form, group 2 for the Markdown form and group 3 for the LaTeX form (read as
- * `m[1] ?? m[2] ?? m[3]`); otherwise the pattern matches only that specific ref
- * (nothing captured).
- */
-function divisionRefSource(refValue: string | null): string {
-  return `(?:${xmlDivisionRefSource(refValue)}|${markdownDivisionRefSource(refValue)}|${latexDivisionRefSource(refValue)})`;
-}
-
-/**
  * Return the regex source for a division-ref placeholder written in the ONE
  * syntax that a division of `format` actually uses:
  *   - `pretext`  → `<plus:section ref="x"/>`
  *   - `markdown` → `::section{ref="x"}`
  *   - `latex`    → `\plus{section}{x}`
  *
- * Unlike {@link divisionRefSource}, which matches all three at once, this
- * restricts scanning to the parent's own format. A `::section{ref="x"}` typed
- * into a PreTeXt division (e.g. as literal example text, or by a Markdown
- * author pasting into the wrong pane) is then NOT mistaken for a real child
- * include — the false match that was producing spurious blank sections.
+ * Scanning is deliberately restricted to the holder's own format: there is no
+ * all-formats-at-once variant, because every consumer knows the format of the
+ * division whose source it is looking at, and a combined pattern silently
+ * turns a `\plus{section}{x}` typed into a PreTeXt division (as literal
+ * example text, or by a LaTeX author pasting into the wrong pane) into a real
+ * include — the false match that was producing spurious blank sections, and
+ * that made a stray macro copy inside a child look like its own parent.
+ *
+ * Only matches tag names in {@link DIVISION_REF_TAGS} — the asset placeholder
+ * (`plus:image`) is deliberately excluded.
+ *
+ * When `refValue` is `null` the ref value is captured in group 1; otherwise the
+ * pattern matches only that specific ref and captures nothing.
  */
 function divisionRefSourceForFormat(
   format: SourceFormat,
@@ -1662,21 +1825,42 @@ export function parseDivisionRefs(
   return refs;
 }
 
+/** A division ref together with the type its tag name names. */
+export interface DivisionRefWithType {
+  xmlId: string;
+  /** The division type the placeholder's tag names. */
+  type: DivisionType;
+  /**
+   * `true` when the placeholder used the generic `division` alias rather than
+   * naming a type, so `type` is the `"section"` fallback rather than something
+   * the author actually wrote.
+   *
+   * Callers that *create* a division from a ref can ignore this — they need
+   * some concrete type and `"section"` is the documented default. Callers that
+   * push the tag name onto an *existing* division must not: retyping a
+   * `worksheet` to `section` because someone wrote `<plus:division ref="…"/>`
+   * would silently destroy a type the author chose elsewhere.
+   */
+  generic: boolean;
+}
+
 /**
  * Like {@link parseDivisionRefs} but also returns the division type inferred
  * from the tag name (e.g. `<plus:chapter ref="x"/>` → `{ type: "chapter", xmlId: "x" }`).
- * Used to auto-create Division records when new refs appear in edited content.
+ * Used to auto-create Division records when new refs appear in edited content,
+ * and to push a retyped placeholder onto the division it points at.
  *
- * Only tag names in {@link DIVISION_REF_TAGS} are considered — asset
- * placeholders (`plus:image`, `plus:doenet`, ...) are not divisions and are
- * skipped. The generic `<plus:division ref="x"/>` alias falls back to type
- * `"section"`, matching {@link tagToType}'s default for unrecognised tags.
+ * Only tag names in {@link DIVISION_REF_TAGS} are considered — the asset
+ * placeholder (`plus:image`) is not a division and is skipped. The generic
+ * `<plus:division ref="x"/>` alias falls back to type
+ * `"section"`, matching {@link tagToType}'s default for unrecognised tags, and
+ * is flagged `generic` so callers can tell the fallback from a real choice.
  */
 export function parseDivisionRefsWithTypes(
   content: string,
   sourceFormat: SourceFormat,
-): { xmlId: string; type: DivisionType }[] {
-  const refs: { xmlId: string; type: DivisionType }[] = [];
+): DivisionRefWithType[] {
+  const refs: DivisionRefWithType[] = [];
   const tags = DIVISION_REF_TAG_ALTERNATION;
   const closeTag = `(?:${tags})`;
   // One alternative per format, each capturing tag in group 1 and ref in
@@ -1692,19 +1876,46 @@ export function parseDivisionRefsWithTypes(
   while ((m = re.exec(scanned)) !== null) {
     const tagName = m[1];
     const xmlId = m[2];
-    const type: DivisionType = tagName === "division" ? "section" : (tagName as DivisionType);
-    refs.push({ type, xmlId });
+    const generic = tagName === "division";
+    const type: DivisionType = generic ? "section" : (tagName as DivisionType);
+    refs.push({ type, xmlId, generic });
   }
   return refs;
 }
 
+/**
+ * Locate every division-ref placeholder for `xmlId` in `content`, returning the
+ * `[index, length)` span of each within `content` itself.
+ *
+ * The scan runs against a {@link blankVerbatim} copy of `content` and only in
+ * `sourceFormat`'s own include syntax, so it agrees exactly with
+ * {@link parseDivisionRefs} about what counts as a real include. Blanking
+ * preserves length, so offsets found in the blanked copy index the original
+ * unchanged — which is what lets the rewrite helpers below edit the real text
+ * while still ignoring examples inside verbatim spans.
+ */
+function locateDivisionRefs(
+  content: string,
+  xmlId: string,
+  sourceFormat: SourceFormat,
+): { index: number; length: number }[] {
+  const re = new RegExp(divisionRefSourceForFormat(sourceFormat, xmlId), "g");
+  const scanned = blankVerbatim(content, sourceFormat);
+  const spans: { index: number; length: number }[] = [];
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(scanned)) !== null) {
+    spans.push({ index: m.index, length: m[0].length });
+  }
+  return spans;
+}
+
+
 // ---------------------------------------------------------------------------
-// Asset ref utilities — `<plus:image|doenet ref="..."/>` placeholder parsing
+// Asset ref utilities — `<plus:image ref="..."/>` placeholder parsing
 // ---------------------------------------------------------------------------
 
-/** A `<plus:image ref="..."/>` / `<plus:doenet ref="..."/>` asset placeholder. */
+/** A `<plus:image ref="..."/>` asset placeholder. */
 export interface AssetRef {
-  kind: "image" | "doenet";
   ref: string;
 }
 
@@ -1718,30 +1929,26 @@ export interface AssetRef {
  *
  * Asset placeholders share the same shape as division refs (see
  * {@link DIVISION_REF_TAGS}) but are deliberately parsed by a separate,
- * disjoint tag set (`image`/`doenet`) so the two kinds of include are never
- * conflated.
+ * disjoint tag (`image`) so the two kinds of include are never conflated.
  */
 export function parseAssetRefs(
   content: string,
   sourceFormat: SourceFormat,
 ): AssetRef[] {
   const refs: AssetRef[] = [];
-  // One alternative per format, each capturing kind in group 1 and ref in
-  // group 2, so only the division's own asset-include syntax is recognised
-  // and example placeholders in verbatim spans are ignored.
+  // One alternative per format, capturing the ref in group 1, so only the
+  // division's own asset-include syntax is recognised and example
+  // placeholders in verbatim spans are ignored.
   const source: Record<SourceFormat, string> = {
-    pretext: `<plus:(image|doenet)\\b[^>]*\\bref="([^"]+)"`,
-    markdown: `::(image|doenet)(?:\\[[^\\]]*\\])?\\{[^}]*\\bref="([^"]+)"[^}]*\\}`,
-    latex: `\\\\plus\\{(image|doenet)\\}\\{([^}]+)\\}`,
+    pretext: `<plus:image\\b[^>]*\\bref="([^"]+)"`,
+    markdown: `::image(?:\\[[^\\]]*\\])?\\{[^}]*\\bref="([^"]+)"[^}]*\\}`,
+    latex: `\\\\plus\\{image\\}\\{([^}]+)\\}`,
   };
   const re = new RegExp(source[sourceFormat], "g");
   const scanned = blankVerbatim(content, sourceFormat);
   let m: RegExpExecArray | null;
   while ((m = re.exec(scanned)) !== null) {
-    refs.push({
-      kind: m[1] as AssetRef["kind"],
-      ref: m[2],
-    });
+    refs.push({ ref: m[1] });
   }
   return refs;
 }
@@ -1757,21 +1964,19 @@ export function parseAssetRefs(
  */
 export function renameAssetRef(
   content: string,
-  kind: AssetRef["kind"],
   oldRef: string,
   newRef: string,
 ): string {
-  const k = escapeRegex(kind);
   const oldR = escapeRegex(oldRef);
   // Match the placeholder opening and the specific ref separately so other
   // attributes between/around them are preserved verbatim. The three forms are
   // textually disjoint, so replacing each in turn never double-applies.
-  const xmlRe = new RegExp(`(<plus:${k}\\b[^>]*?\\bref=")${oldR}(")`, "g");
+  const xmlRe = new RegExp(`(<plus:image\\b[^>]*?\\bref=")${oldR}(")`, "g");
   const mdRe = new RegExp(
-    `(::${k}(?:\\[[^\\]]*\\])?\\{[^}]*?\\bref=")${oldR}(")`,
+    `(::image(?:\\[[^\\]]*\\])?\\{[^}]*?\\bref=")${oldR}(")`,
     "g",
   );
-  const latexRe = new RegExp(`(\\\\plus\\{${k}\\}\\{)${oldR}(\\})`, "g");
+  const latexRe = new RegExp(`(\\\\plus\\{image\\}\\{)${oldR}(\\})`, "g");
   return content
     .replace(xmlRe, `$1${newRef}$2`)
     .replace(mdRe, `$1${newRef}$2`)
@@ -1779,24 +1984,19 @@ export function renameAssetRef(
 }
 
 /**
- * Remove every asset placeholder for the given kind+ref from `content`, in the
- * PreTeXt (`<plus:image ref="..."/>`), Markdown (`::image{ref="..."}`) or LaTeX
+ * Remove every asset placeholder for `ref` from `content`, in the PreTeXt
+ * (`<plus:image ref="..."/>`), Markdown (`::image{ref="..."}`) or LaTeX
  * (`\plus{image}{...}`) form. Used when removing an unresolved placeholder
  * (one with no backing asset) directly from the source.
  */
-export function removeAssetRef(
-  content: string,
-  kind: AssetRef["kind"],
-  ref: string,
-): string {
-  const k = escapeRegex(kind);
+export function removeAssetRef(content: string, ref: string): string {
   const r = escapeRegex(ref);
-  const xmlRe = new RegExp(`<plus:${k}\\b[^>]*?\\bref="${r}"[^>]*/?>`, "g");
+  const xmlRe = new RegExp(`<plus:image\\b[^>]*?\\bref="${r}"[^>]*/?>`, "g");
   const mdRe = new RegExp(
-    `::${k}(?:\\[[^\\]]*\\])?\\{[^}]*?\\bref="${r}"[^}]*\\}`,
+    `::image(?:\\[[^\\]]*\\])?\\{[^}]*?\\bref="${r}"[^}]*\\}`,
     "g",
   );
-  const latexRe = new RegExp(`\\\\plus\\{${k}\\}\\{${r}\\}`, "g");
+  const latexRe = new RegExp(`\\\\plus\\{image\\}\\{${r}\\}`, "g");
   return content.replace(xmlRe, "").replace(mdRe, "").replace(latexRe, "");
 }
 
@@ -1806,16 +2006,111 @@ export function removeAssetRef(
  * leaf-directive form `::image{ref="x"}` and a LaTeX division the macro form
  * `\plus{image}{x}` — raw `<plus:image .../>` XML pasted into either does NOT
  * survive conversion (it is escaped as literal text). PreTeXt gets the
- * canonical `<plus:… ref="x"/>` form.
+ * canonical `<plus:image ref="x"/>` form.
  */
 export function assetEmbedCode(
-  kind: AssetRef["kind"],
   ref: string,
   sourceFormat: SourceFormat = "pretext",
 ): string {
-  if (sourceFormat === "markdown") return `::${kind}{ref="${ref}"}`;
-  if (sourceFormat === "latex") return `\\plus{${kind}}{${ref}}`;
-  return `<plus:${kind} ref="${ref}"/>`;
+  if (sourceFormat === "markdown") return `::image{ref="${ref}"}`;
+  if (sourceFormat === "latex") return `\\plus{image}{${ref}}`;
+  return `<plus:image ref="${ref}"/>`;
+}
+
+// ---------------------------------------------------------------------------
+// Snippet ref utilities — `<plus:snippet ref="..."/>` placeholder parsing
+// ---------------------------------------------------------------------------
+
+/** A `<plus:snippet ref="..."/>` snippet placeholder. */
+export interface SnippetRef {
+  ref: string;
+}
+
+/**
+ * Parse every snippet placeholder out of `content`, in document order, without
+ * de-duplicating (a snippet ref may legitimately appear more than once). The
+ * PreTeXt form (`<plus:snippet ref="..."/>`), the Markdown leaf-directive form
+ * (`::snippet{ref="..."}`) and the LaTeX macro form (`\plus{snippet}{...}`)
+ * are all matched.
+ *
+ * Snippet placeholders share the same shape as division/asset refs (see
+ * {@link DIVISION_REF_TAGS}) but are deliberately parsed by a separate,
+ * disjoint tag (`snippet`) so the three kinds of include are never conflated.
+ */
+export function parseSnippetRefs(
+  content: string,
+  sourceFormat: SourceFormat,
+): SnippetRef[] {
+  const refs: SnippetRef[] = [];
+  const source: Record<SourceFormat, string> = {
+    pretext: `<plus:snippet\\b[^>]*\\bref="([^"]+)"`,
+    markdown: `::snippet(?:\\[[^\\]]*\\])?\\{[^}]*\\bref="([^"]+)"[^}]*\\}`,
+    latex: `\\\\plus\\{snippet\\}\\{([^}]+)\\}`,
+  };
+  const re = new RegExp(source[sourceFormat], "g");
+  const scanned = blankVerbatim(content, sourceFormat);
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(scanned)) !== null) {
+    refs.push({ ref: m[1] });
+  }
+  return refs;
+}
+
+/**
+ * Rewrite every snippet placeholder for `oldRef` in `content` to use `newRef`
+ * instead, leaving any other attributes untouched. The PreTeXt
+ * (`<plus:snippet ref="..."/>`), Markdown (`::snippet{ref="..."}`) and LaTeX
+ * (`\plus{snippet}{...}`) forms are all rewritten in place. Used when a
+ * snippet's `ref` is renamed, so the source stays in sync with the
+ * project-snippet pool across every division.
+ */
+export function renameSnippetRef(
+  content: string,
+  oldRef: string,
+  newRef: string,
+): string {
+  const oldR = escapeRegex(oldRef);
+  const xmlRe = new RegExp(`(<plus:snippet\\b[^>]*?\\bref=")${oldR}(")`, "g");
+  const mdRe = new RegExp(
+    `(::snippet(?:\\[[^\\]]*\\])?\\{[^}]*?\\bref=")${oldR}(")`,
+    "g",
+  );
+  const latexRe = new RegExp(`(\\\\plus\\{snippet\\}\\{)${oldR}(\\})`, "g");
+  return content
+    .replace(xmlRe, `$1${newRef}$2`)
+    .replace(mdRe, `$1${newRef}$2`)
+    .replace(latexRe, `$1${newRef}$2`);
+}
+
+/**
+ * Remove every snippet placeholder for `ref` from `content`, in the PreTeXt
+ * (`<plus:snippet ref="..."/>`), Markdown (`::snippet{ref="..."}`) or LaTeX
+ * (`\plus{snippet}{...}`) form. Used when removing an unresolved placeholder
+ * (one with no backing snippet) directly from the source.
+ */
+export function removeSnippetRef(content: string, ref: string): string {
+  const r = escapeRegex(ref);
+  const xmlRe = new RegExp(`<plus:snippet\\b[^>]*?\\bref="${r}"[^>]*/?>`, "g");
+  const mdRe = new RegExp(
+    `::snippet(?:\\[[^\\]]*\\])?\\{[^}]*?\\bref="${r}"[^}]*\\}`,
+    "g",
+  );
+  const latexRe = new RegExp(`\\\\plus\\{snippet\\}\\{${r}\\}`, "g");
+  return content.replace(xmlRe, "").replace(mdRe, "").replace(latexRe, "");
+}
+
+/**
+ * Build the embed code a user copies (or types) to place a snippet
+ * placeholder, matched to the target division's source format. Mirrors
+ * {@link assetEmbedCode}.
+ */
+export function snippetEmbedCode(
+  ref: string,
+  sourceFormat: SourceFormat = "pretext",
+): string {
+  if (sourceFormat === "markdown") return `::snippet{ref="${ref}"}`;
+  if (sourceFormat === "latex") return `\\plus{snippet}{${ref}}`;
+  return `<plus:snippet ref="${ref}"/>`;
 }
 
 /**
@@ -1852,7 +2147,7 @@ export function createDivisionContent(
     // Emit the `\label{…}` (LaTeX's spelling of `xml:id`) immediately after the
     // header, matching updateLatexDivisionMetadata, so a freshly created
     // division already carries its id rather than only gaining it on first edit.
-    return `\\${type}{${title}}\\label{${xmlId}}\n\n`;
+    return `${buildLatexDivisionHeader({ macro: type, title, label: xmlId })}\n\n`;
   }
   if (sourceFormat === "markdown") {
     return `${buildMarkdownFrontmatter({ type, xmlId, label: "", title })}\n\n`;
@@ -1864,7 +2159,36 @@ export function createDivisionContent(
 }
 
 /**
- * Insert a `<plus:TYPE ref="xmlId"/>` placeholder into `content`.
+ * Render a division-ref placeholder in `sourceFormat`'s own include syntax: a
+ * Markdown holder stores its includes as `::type{ref="x"}` leaf directives, a
+ * LaTeX holder as `\plus{type}{x}` macros, and a PreTeXt holder as the
+ * canonical `<plus:type ref="x"/>` placeholder.
+ *
+ * Exported because the TOC emits the same three shapes when inserting a ref at
+ * the cursor, and the two spellings must not be able to drift apart.
+ *
+ * `type` accepts the generic `"division"` alias as well as a real
+ * {@link DivisionType}, for the fallback placeholder `moveDivisionRef` writes
+ * when the ref it was asked to move isn't present.
+ */
+export function divisionRefTag(
+  type: DivisionType | "division",
+  xmlId: string,
+  sourceFormat: SourceFormat,
+): string {
+  switch (sourceFormat) {
+    case "markdown":
+      return `::${type}{ref="${xmlId}"}`;
+    case "latex":
+      return `\\plus{${type}}{${xmlId}}`;
+    case "pretext":
+      return `<plus:${type} ref="${xmlId}"/>`;
+  }
+}
+
+/**
+ * Insert a `<plus:TYPE ref="xmlId"/>` placeholder into `content`, written in
+ * `sourceFormat`'s own include syntax.
  *
  * - When `afterXmlId` is `null` the ref is appended just before the closing
  *   tag of the outer element (or at the end of the string if none is found).
@@ -1879,22 +2203,12 @@ export function insertDivisionRef(
   afterXmlId: string | null,
   sourceFormat: SourceFormat = "pretext",
 ): string {
-  // Emit the include in the parent's own syntax: a Markdown parent stores its
-  // includes as `::type{ref="x"}` leaf directives, a LaTeX parent as
-  // `\plus{type}{x}` macros, and a PreTeXt parent as the canonical
-  // `<plus:type ref="x"/>` placeholder.
-  const tag =
-    sourceFormat === "markdown"
-      ? `::${type}{ref="${xmlId}"}`
-      : sourceFormat === "latex"
-        ? `\\plus{${type}}{${xmlId}}`
-        : `<plus:${type} ref="${xmlId}"/>`;
+  const tag = divisionRefTag(type, xmlId, sourceFormat);
 
   if (afterXmlId !== null) {
-    const afterRe = new RegExp(divisionRefSource(afterXmlId));
-    const m = afterRe.exec(content);
-    if (m) {
-      const pos = m.index + m[0].length;
+    const [anchor] = locateDivisionRefs(content, afterXmlId, sourceFormat);
+    if (anchor) {
+      const pos = anchor.index + anchor.length;
       return content.slice(0, pos) + "\n" + tag + content.slice(pos);
     }
   }
@@ -1909,14 +2223,37 @@ export function insertDivisionRef(
 
 /**
  * Remove the `<plus:* ref="xmlId"/>` placeholder for `xmlId` from `content`.
- * The surrounding newline/whitespace is cleaned up so the result stays tidy.
+ * The surrounding horizontal whitespace and trailing newline are swallowed too
+ * so the result stays tidy.
+ *
+ * Only placeholders written in `sourceFormat`'s own syntax and outside verbatim
+ * spans are removed, so unplacing a division cannot silently mangle a code
+ * sample that happens to show the same include (see {@link locateDivisionRefs}).
+ * The whitespace either side is trimmed from the *original* text rather than
+ * the blanked scan copy, so a placeholder sitting immediately after a verbatim
+ * span (`\verb|x|\plus{section}{a}`) takes only its own characters with it.
  */
-export function removeDivisionRef(content: string, xmlId: string): string {
-  const re = new RegExp(
-    `[ \t]*${divisionRefSource(xmlId)}[ \t]*\n?`,
-    "g",
-  );
-  return content.replace(re, "");
+export function removeDivisionRef(
+  content: string,
+  xmlId: string,
+  sourceFormat: SourceFormat = "pretext",
+): string {
+  const spans = locateDivisionRefs(content, xmlId, sourceFormat);
+  if (spans.length === 0) return content;
+
+  const isBlank = (ch: string | undefined) => ch === " " || ch === "\t";
+  let out = "";
+  let cursor = 0;
+  for (const { index, length } of spans) {
+    let start = index;
+    while (start > cursor && isBlank(content[start - 1])) start--;
+    let end = index + length;
+    while (end < content.length && isBlank(content[end])) end++;
+    if (content[end] === "\n") end++;
+    out += content.slice(cursor, start);
+    cursor = end;
+  }
+  return out + content.slice(cursor);
 }
 
 /**
@@ -1933,19 +2270,20 @@ export function moveDivisionRef(
   content: string,
   xmlId: string,
   afterXmlId: string | null,
+  sourceFormat: SourceFormat = "pretext",
 ): string {
   // Capture the original tag so we preserve its element name.
-  const captureRe = new RegExp(divisionRefSource(xmlId));
-  const m = captureRe.exec(content);
-  const originalTag = m ? m[0] : `<plus:division ref="${xmlId}"/>`;
+  const [span] = locateDivisionRefs(content, xmlId, sourceFormat);
+  const originalTag = span
+    ? content.slice(span.index, span.index + span.length)
+    : divisionRefTag("division", xmlId, sourceFormat);
 
-  const withoutRef = removeDivisionRef(content, xmlId);
+  const withoutRef = removeDivisionRef(content, xmlId, sourceFormat);
 
   if (afterXmlId !== null) {
-    const afterRe = new RegExp(divisionRefSource(afterXmlId));
-    const after = afterRe.exec(withoutRef);
-    if (after) {
-      const pos = after.index + after[0].length;
+    const [anchor] = locateDivisionRefs(withoutRef, afterXmlId, sourceFormat);
+    if (anchor) {
+      const pos = anchor.index + anchor.length;
       return (
         withoutRef.slice(0, pos) + "\n" + originalTag + withoutRef.slice(pos)
       );
@@ -1974,6 +2312,12 @@ export function moveDivisionRef(
  * child's own `xml:id`/type are edited directly in its source, so the
  * rename doesn't orphan the child from its parent.
  *
+ * Every placeholder for `oldXmlId` is rewritten, not just the first: after an
+ * id rename a missed one would dangle, and a duplicate include is already
+ * malformed enough without leaving half of it pointing at the old type. The
+ * rewrite is emitted in `sourceFormat`'s own syntax, and placeholders inside
+ * verbatim spans are left alone.
+ *
  * Returns `content` unchanged if no placeholder for `oldXmlId` is found.
  */
 export function renameDivisionRef(
@@ -1981,19 +2325,19 @@ export function renameDivisionRef(
   oldXmlId: string,
   newXmlId: string,
   newType: DivisionType,
+  sourceFormat: SourceFormat = "pretext",
 ): string {
-  const re = new RegExp(divisionRefSource(oldXmlId));
-  // Rewrite the placeholder in the SAME syntax it was found in: a Markdown
-  // parent's `::section{ref="x"}` stays a leaf directive, a LaTeX parent's
-  // `\plus{section}{x}` stays a macro, and a PreTeXt parent's
-  // `<plus:section ref="x"/>` stays XML. (`.replace` returns `content`
-  // unchanged when nothing matches.)
-  return content.replace(re, (match) => {
-    const trimmed = match.trimStart();
-    if (trimmed.startsWith("::")) return `::${newType}{ref="${newXmlId}"}`;
-    if (trimmed.startsWith("\\plus")) return `\\plus{${newType}}{${newXmlId}}`;
-    return `<plus:${newType} ref="${newXmlId}"/>`;
-  });
+  const spans = locateDivisionRefs(content, oldXmlId, sourceFormat);
+  if (spans.length === 0) return content;
+
+  const tag = divisionRefTag(newType, newXmlId, sourceFormat);
+  let out = "";
+  let cursor = 0;
+  for (const { index, length } of spans) {
+    out += content.slice(cursor, index) + tag;
+    cursor = index + length;
+  }
+  return out + content.slice(cursor);
 }
 
 /**
@@ -2001,13 +2345,26 @@ export function renameDivisionRef(
  * `<plus:* ref="xmlId"/>` placeholder for `xmlId` — i.e. `xmlId`'s parent in
  * the division tree.  Returns `null` if `xmlId` is unplaced (orphaned) or is
  * the root.
+ *
+ * Membership is decided by {@link parseDivisionRefs}, so this agrees exactly
+ * with the TOC tree about who a division's parent is. Two consequences are
+ * deliberate and load-bearing: a division is never its own parent (a stray
+ * `\plus{handout}{self}` pasted into a child's body is malformed, not a
+ * placement), and a division that only *mentions* the placeholder — inside a
+ * verbatim span, or in another format's syntax — is not a parent either.
+ * Without both, a ref-sync write could land on the wrong division's source.
  */
 export function findDivisionParent(
   divisions: Division[],
   xmlId: string,
 ): Division | null {
-  const re = new RegExp(divisionRefSource(xmlId));
-  return divisions.find((d) => re.test(d.source)) ?? null;
+  return (
+    divisions.find(
+      (d) =>
+        d.xmlId !== xmlId &&
+        parseDivisionRefs(d.source, d.sourceFormat).includes(xmlId),
+    ) ?? null
+  );
 }
 
 /**
@@ -2023,11 +2380,12 @@ export function findDivisionParent(
 export function reorderDivisionRefs(
   content: string,
   orderedXmlIds: string[],
+  sourceFormat: SourceFormat = "pretext",
 ): string {
   let result = content;
   let prev: string | null = null;
   for (const xmlId of orderedXmlIds) {
-    result = moveDivisionRef(result, xmlId, prev);
+    result = moveDivisionRef(result, xmlId, prev, sourceFormat);
     prev = xmlId;
   }
   return result;
@@ -2140,77 +2498,303 @@ export function getOrphanRoots(
 
 
 /** Root division types — already a valid top-level PreTeXt element on their own. */
-const ROOT_DIVISION_TYPES: ReadonlySet<DivisionType> = new Set([
+const ROOT_DIVISION_TYPES: ReadonlySet<DivisionType> = new Set<RootDivisionType>([
   "book",
   "article",
   "slideshow",
 ]);
 
 /**
- * Ensure that the provided xml string has a label on the root document element (Book, Article, or Slideshow).  We can generally assume there is an xml:id, but we should duplicate that as a label if it is missing.  This is important for the previewer, which uses the label to identify the root document element.
- * @param xml: Full XML for a pretext document, including <pretext> around the <book>/<article>/<slideshow> root element. 
+ * Narrow an arbitrary value to a {@link RootDivisionType}. Exists because the
+ * root type arrives from the *host*, which may be untyped JavaScript (the Rails
+ * app hands it over as a JSON string), so an unknown value has to fall back
+ * rather than be trusted into a template.
  */
-function ensureRootLabel(xml: string): string {
-  try {
-    const tree: Root = fromXml(xml);
-    const firstElement = tree.children.find((node): node is Element => node.type === "element");
-    const el = firstElement?.name === "pretext"
-      ? firstElement.children.find(
-        (node): node is Element =>
-          node.type === "element" && ROOT_DIVISION_TYPES.has(node.name as DivisionType),
-      )
-      : firstElement && ROOT_DIVISION_TYPES.has(firstElement.name as DivisionType)
-        ? firstElement
-        : undefined;
-    if (!el) return xml;
-    let xmlId = el.attributes["xml:id"];
-    if (!xmlId) {
-      xmlId = findUnusedLabel(tree, "main");
-    }
-    if (!el.attributes["label"]) {
-      el.attributes["label"] = xmlId;
-      return toXml(tree, XML_SERIALIZE_OPTIONS);
-    }
-    return xml;
-  } catch (error) {
-    console.error("Error ensuring label:", error);
-    return xml;
-  }
+export function isRootDivisionType(value: unknown): value is RootDivisionType {
+  return (
+    typeof value === "string" && ROOT_DIVISION_TYPES.has(value as DivisionType)
+  );
 }
 
 /**
- * Check if a label is already used in the document tree.
- * @param node: The node to search within.
- * @param label: The label to search for.
+ * The index just past a start/end tag beginning at `open`, or -1 if it never
+ * closes. Quoted attribute values are skipped, since an unescaped `>` is legal
+ * inside one and `indexOf(">")` would stop short.
  */
-function hasLabelInTree(node: Root | Element, label: string): boolean {
-  if (node.type === "element" && (node as Element).attributes?.label === label) {
-    return true;
+function tagEnd(xml: string, open: number): number {
+  let quote = "";
+  for (let i = open + 1; i < xml.length; i++) {
+    const char = xml[i];
+    if (quote) {
+      if (char === quote) quote = "";
+    } else if (char === '"' || char === "'") {
+      quote = char;
+    } else if (char === ">") {
+      return i + 1;
+    }
   }
-  if ("children" in node && node.children) {
-    return node.children.some((child) => {
-      if (child.type === "element") {
-        return hasLabelInTree(child as Element, label);
-      }
-      return false;
-    });
-  }
-  return false;
+  return -1;
+}
+
+/** Start of the next markup construct at or after `from`, skipping text. */
+const TAG_NAME_RE = /^<\/?([A-Za-z_][A-Za-z0-9_.:-]*)/;
+
+interface StartTag {
+  name: string;
+  /** Index of the `<`. */
+  open: number;
+  /** Index just past the `>`. */
+  close: number;
+  /** True for `<foo/>`, which has no matching end tag. */
+  selfClosing: boolean;
+  /** True for `</foo>`. */
+  closing: boolean;
 }
 
 /**
- * Utility to find a label that is not already used in the document.  If the desired label is already used, it will append a number to it until it finds an unused label.
- * @param tree: The root of the document tree.
- * @param desiredLabel: The label we want to use.
+ * The next tag at or after `from`, with comments, CDATA, processing
+ * instructions and the doctype skipped rather than reported. Returns
+ * `undefined` at end of input.
  */
-function findUnusedLabel(tree: Root, desiredLabel: string): string {
+function nextTag(xml: string, from: number): StartTag | undefined {
+  let i = from;
+  while (i < xml.length) {
+    const open = xml.indexOf("<", i);
+    if (open === -1) return undefined;
+    if (xml.startsWith("<!--", open)) {
+      const end = xml.indexOf("-->", open + 4);
+      if (end === -1) return undefined;
+      i = end + 3;
+      continue;
+    }
+    if (xml.startsWith("<![CDATA[", open)) {
+      const end = xml.indexOf("]]>", open + 9);
+      if (end === -1) return undefined;
+      i = end + 3;
+      continue;
+    }
+    if (xml.startsWith("<?", open) || xml.startsWith("<!", open)) {
+      const end = tagEnd(xml, open);
+      if (end === -1) return undefined;
+      i = end;
+      continue;
+    }
+    const name = TAG_NAME_RE.exec(xml.slice(open, open + 128))?.[1];
+    const close = tagEnd(xml, open);
+    if (!name || close === -1) return undefined;
+    return {
+      name,
+      open,
+      close,
+      selfClosing: xml[close - 2] === "/",
+      closing: xml[open + 1] === "/",
+    };
+  }
+  return undefined;
+}
+
+/**
+ * Locate the root division element's start tag — `<book>`, `<article>` or
+ * `<slideshow>` — as either the document's own first element or the first such
+ * child of a `<pretext>` wrapper (`<docinfo>`, its usual preceding sibling, is
+ * skipped over). Returns `undefined` when `xml` holds neither, which is the
+ * ordinary case for a bare division fragment.
+ *
+ * Deliberately a scanner rather than a parse. This runs on every assembly, and
+ * an assembled book is the whole project: parsing it to reach one attribute on
+ * the outermost element cost ~2.5s on a 900KB document and dominated every
+ * preview rebuild. The scan stops at the root division tag, so it reads the
+ * document's first few hundred bytes rather than all of it.
+ */
+function findRootDivisionTag(xml: string): StartTag | undefined {
+  const first = nextTag(xml, 0);
+  if (!first || first.closing) return undefined;
+  if (ROOT_DIVISION_TYPES.has(first.name as DivisionType)) return first;
+  if (first.name !== "pretext" || first.selfClosing) return undefined;
+
+  // Inside <pretext>: walk its direct children, skipping any that isn't a root
+  // division (in practice just <docinfo>) over its whole subtree.
+  let i = first.close;
+  for (;;) {
+    const tag = nextTag(xml, i);
+    if (!tag || tag.closing) return undefined; // </pretext>, or end of input
+    if (ROOT_DIVISION_TYPES.has(tag.name as DivisionType)) return tag;
+    if (tag.selfClosing) {
+      i = tag.close;
+      continue;
+    }
+    let depth = 1;
+    i = tag.close;
+    while (depth > 0) {
+      const inner = nextTag(xml, i);
+      if (!inner) return undefined;
+      i = inner.close;
+      if (inner.closing) depth--;
+      else if (!inner.selfClosing) depth++;
+    }
+  }
+}
+
+const LABEL_ATTR_RE = /\slabel\s*=\s*("([^"]*)"|'([^']*)')/g;
+const XML_ID_ATTR_RE = /\sxml:id\s*=\s*(?:"([^"]*)"|'([^']*)')/;
+
+/**
+ * A `label` value not already used anywhere in `xml`, starting from
+ * `desiredLabel` and appending `-1`, `-2`, … until one is free.
+ *
+ * Only reached for a root element with no `@xml:id` at all, so the one full
+ * pass over the document this costs is rare.
+ */
+function findUnusedLabel(xml: string, desiredLabel: string): string {
+  const used = new Set<string>();
+  for (const match of xml.matchAll(LABEL_ATTR_RE)) {
+    used.add(match[2] ?? match[3] ?? "");
+  }
   let label = desiredLabel;
   let i = 1;
-  while (hasLabelInTree(tree, label)) {
+  while (used.has(label)) {
     label = `${desiredLabel}-${i}`;
     i++;
   }
   return label;
+}
+
+/**
+ * Ensure that the provided xml string has a label on the root document element
+ * (book, article, or slideshow). We can generally assume there is an xml:id,
+ * but we should duplicate that as a label if it is missing. This is important
+ * for the previewer, which uses the label to identify the root document
+ * element.
+ *
+ * The label is spliced into the root element's start tag, so the rest of the
+ * document comes back byte-for-byte — which also keeps every line number
+ * intact for the preview's two-way sync.
+ *
+ * @param xml Full XML for a PreTeXt document, including `<pretext>` around the
+ * `<book>`/`<article>`/`<slideshow>` root element — or a bare division
+ * fragment, which has no root element and is returned untouched.
+ */
+function ensureRootLabel(xml: string): string {
+  const tag = findRootDivisionTag(xml);
+  if (!tag) return xml;
+  const startTag = xml.slice(tag.open, tag.close);
+  if (LABEL_ATTR_RE.test(startTag)) {
+    LABEL_ATTR_RE.lastIndex = 0; // /g regexes carry state between .test() calls
+    return xml;
+  }
+  LABEL_ATTR_RE.lastIndex = 0;
+  const xmlIdMatch = XML_ID_ATTR_RE.exec(startTag);
+  const label =
+    xmlIdMatch?.[1] ?? xmlIdMatch?.[2] ?? findUnusedLabel(xml, "main");
+  // Before the tag's own `>` or `/>`, so both forms stay well-formed.
+  const insertAt = tag.close - (tag.selfClosing ? 2 : 1);
+  return (
+    xml.slice(0, insertAt) +
+    ` label="${escapeAttribute(label)}"` +
+    xml.slice(insertAt)
+  );
+}
+
+/**
+ * Converted PreTeXt for one division, remembered alongside the exact source it
+ * came from.
+ *
+ * Keyed by `xml:id` rather than by source text, so the cache holds one entry
+ * per division and is bounded by the size of the project rather than by how
+ * long the author has been typing. A stale entry costs a re-conversion, never a
+ * wrong answer: the stored source must equal the division's current source for
+ * the entry to be used at all.
+ */
+interface ConvertedDivision {
+  source: string;
+  xml: string;
+}
+
+const conversionCache = new Map<string, ConvertedDivision>();
+
+/**
+ * Cap on remembered divisions. Reached only by a session that has cycled
+ * through several large projects, since a single project contributes one entry
+ * per division; clearing wholesale (rather than evicting one entry) keeps this
+ * free in the common case, where the limit is never approached.
+ */
+const CONVERSION_CACHE_LIMIT = 2000;
+
+/**
+ * A division's own PreTeXt XML: its source as-is when it is already PreTeXt,
+ * and the converter's output — the division's own element included — when it
+ * is LaTeX or Markdown. Conversion failures come back as an XML comment, so
+ * one bad division never takes the surrounding document down with it.
+ *
+ * Conversions are cached because assembly walks the *whole* project on every
+ * keystroke, while only the division being typed in has actually changed.
+ * Re-converting the other divisions each time cost 18s per keystroke on an
+ * 870KB LaTeX book; with the cache it is the ~25ms of converting the one that
+ * changed.
+ */
+function divisionToPretext(division: Division): string {
+  if (division.sourceFormat === "pretext") return division.source;
+
+  const cached = conversionCache.get(division.xmlId);
+  if (cached && cached.source === division.source) return cached.xml;
+
+  let xml: string;
+  if (division.sourceFormat === "markdown") {
+    // A markdown division is a full markdown file (frontmatter + body); the
+    // converter emits the complete `<type xml:id="..." label="...">` element
+    // from the frontmatter, so the source is converted as-is with no wrapper
+    // to strip or re-add here.
+    const { pretextSource, pretextError } = derivePretextContent(
+      division.source,
+      "markdown",
+    );
+    xml = pretextSource ?? `<!-- conversion error: ${pretextError} -->`;
+  } else {
+    // LaTeX: convert the source and tag it with the division's authored type
+    // (the `\label` becomes the `xml:id`) — see latexDivisionToTaggedPretext.
+    xml =
+      latexDivisionToTaggedPretext(division) ??
+      `<!-- conversion error: ${division.xmlId} -->`;
+  }
+
+  if (conversionCache.size >= CONVERSION_CACHE_LIMIT) conversionCache.clear();
+  conversionCache.set(division.xmlId, { source: division.source, xml });
+  return xml;
+}
+
+/**
+ * Scan `xml` for every `<plus:* ref="..."/>` placeholder and expand each one:
+ * `image` resolves against `assets`, `snippet` resolves (recursively —
+ * see {@link resolveSnippetRef}) against `snippets`, and anything else is
+ * treated as a division ref and resolved via {@link resolveDivisionXml}.
+ *
+ * Shared by both division and snippet resolution, since a snippet's own
+ * content can itself embed further snippet/image/division refs. `ancestors`
+ * is a single set of refs shared across all three kinds — Division, Asset,
+ * and Snippet refs are unique against each other project-wide, so one set
+ * safely guards cycles across all three without risk of collision.
+ */
+function expandRefs(
+  xml: string,
+  divisions: Division[],
+  snippets: Snippet[],
+  assets: Asset[],
+  ancestors: Set<string>,
+): string {
+  return xml.replace(
+    /<plus:([a-z-]+)\s([^>]*ref="[^"]+"[^>]*?)(?:\/>|>\s*<\/plus:\1>)/g,
+    (_match, tag: string, attrs: string) => {
+      const ref = /ref="([^"]+)"/.exec(attrs)?.[1] ?? "";
+      if (tag === "image") {
+        const width = /width="([^"]+)"/.exec(attrs)?.[1];
+        return resolveAssetRef(ref, assets, width);
+      }
+      if (tag === "snippet") {
+        return resolveSnippetRef(ref, snippets, divisions, assets, ancestors);
+      }
+      return resolveDivisionXml(ref, divisions, snippets, assets, ancestors);
+    },
+  );
 }
 
 /**
@@ -2231,54 +2815,47 @@ function findUnusedLabel(tree: Root, desiredLabel: string): string {
 function resolveDivisionXml(
   xmlId: string,
   divisions: Division[],
-  ancestors: Set<string>,
+  snippets: Snippet[],
   assets: Asset[],
+  ancestors: Set<string>,
 ): string {
   const division = divisions.find((d) => d.xmlId === xmlId);
   if (!division) return `<!-- missing division: ${xmlId} -->`;
   if (ancestors.has(xmlId)) return `<!-- circular reference: ${xmlId} -->`;
 
-  let xml: string;
-  if (division.sourceFormat === "pretext") {
-    xml = division.source;
-  } else if (division.sourceFormat === "markdown") {
-    // A markdown division is a full markdown file (frontmatter + body); the
-    // converter emits the complete `<type xml:id="..." label="...">` element
-    // from the frontmatter, so the source is converted as-is with no wrapper
-    // to strip or re-add here.
-    const { pretextSource, pretextError } = derivePretextContent(
-      division.source,
-      "markdown",
-    );
-    xml = pretextSource ?? `<!-- conversion error: ${pretextError} -->`;
-  } else {
-    // LaTeX: convert the source and tag it with the division's authored type
-    // (the `\label` becomes the `xml:id`) — see latexDivisionToTaggedPretext.
-    xml =
-      latexDivisionToTaggedPretext(division) ??
-      `<!-- conversion error: ${division.xmlId} -->`;
-  }
-
-  // Expand child `<plus:* ref="..."/>` placeholders against the *derived*
-  // PreTeXt, whatever the source format was. Markdown includes authored as
-  // `::section{ref="x"}` and LaTeX includes as `\plus{section}{x}` (and the
-  // asset variants `::image{ref="x"}` / `\plus{image}{x}`) are converted to
-  // `<plus:… ref="x"/>` by `@pretextbook/remark-pretext` /
-  // `@pretextbook/latex-pretext` before we reach here, so a Markdown/LaTeX
-  // division is no longer a leaf — its resolved XML must be scanned for refs
-  // exactly like a native PreTeXt division's.
+  const xml = divisionToPretext(division);
   const nextAncestors = new Set(ancestors).add(xmlId);
-  return xml.replace(
-    /<plus:([a-z-]+)\s([^>]*ref="[^"]+"[^>]*?)(?:\/>|>\s*<\/plus:\1>)/g,
-    (_match, tag: string, attrs: string) => {
-      const ref = /ref="([^"]+)"/.exec(attrs)?.[1] ?? "";
-      if (!ASSET_KINDS.has(tag as AssetKind)) {
-        return resolveDivisionXml(ref, divisions, nextAncestors, assets);
-      }
-      const width = /width="([^"]+)"/.exec(attrs)?.[1];
-      return resolveAssetRef(tag as AssetKind, ref, assets, width);
-    },
+  return expandRefs(xml, divisions, snippets, assets, nextAncestors);
+}
+
+/**
+ * Resolve a single `<plus:snippet ref="..."/>` placeholder to its final
+ * PreTeXt markup by looking up the matching {@link Snippet} in `snippets`.
+ * The snippet's own source is converted to PreTeXt (format-aware, via
+ * {@link derivePretextContent}) and then itself scanned for further
+ * `<plus:snippet>` / `<plus:image>` refs, so a snippet can embed another
+ * snippet or an image. Falls back to an XML comment if no matching snippet
+ * is found, its own conversion fails, or it (directly or transitively)
+ * references itself.
+ */
+function resolveSnippetRef(
+  ref: string,
+  snippets: Snippet[],
+  divisions: Division[],
+  assets: Asset[],
+  ancestors: Set<string>,
+): string {
+  const snippet = snippets.find((s) => s.ref === ref);
+  if (!snippet) return `<!-- missing snippet: ${ref} -->`;
+  if (ancestors.has(ref)) return `<!-- circular reference: ${ref} -->`;
+
+  const { pretextSource, pretextError } = derivePretextContent(
+    snippet.source,
+    snippet.sourceFormat,
   );
+  const xml = pretextSource ?? `<!-- conversion error: ${pretextError} -->`;
+  const nextAncestors = new Set(ancestors).add(ref);
+  return expandRefs(xml, divisions, snippets, assets, nextAncestors);
 }
 
 /**
@@ -2298,19 +2875,23 @@ export function assembleProjectSource(
   divisions: Division[],
   rootXmlId: string,
   assets: Asset[] = [],
+  snippets: Snippet[] = [],
 ): string {
   return ensureRootLabel(
-    resolveDivisionXml(rootXmlId, divisions, new Set(), assets),
+    resolveDivisionXml(rootXmlId, divisions, snippets, assets, new Set()),
   );
 }
 
 /**
  * Wrap a resolved document body in the outer `<pretext>` element with
  * `<docinfo>` inserted as its sibling, matching real PreTeXt document shape.
+ * `lang`, when provided (a BCP-47 code like `"en-US"`), is written as
+ * `@xml:lang` on the root `<pretext>` element.
  */
-function wrapInPretextDocument(body: string, docinfo: string): string {
+function wrapInPretextDocument(body: string, docinfo: string, lang?: string): string {
   const docinfoBlock = docinfo.trim() ? `${docinfo.trim()}\n` : "";
-  return ensureRootLabel(`<pretext>\n${docinfoBlock}${body}\n</pretext>`);
+  const langAttr = lang ? ` xml:lang="${lang}"` : "";
+  return ensureRootLabel(`<pretext${langAttr}>\n${docinfoBlock}${body}\n</pretext>`);
 }
 
 /**
@@ -2325,15 +2906,18 @@ function wrapInPretextDocument(body: string, docinfo: string): string {
  * rendered document — the `divisions` pool itself is never a valid build
  * input, since it's a flat list of fragments rather than a single document
  * tree.
+ * `lang`, when provided, is written as `@xml:lang` on the root `<pretext>` element.
  */
 export function assembleFullProjectSource(
   divisions: Division[],
   rootXmlId: string,
   docinfo: string,
   assets: Asset[] = [],
+  lang?: string,
+  snippets: Snippet[] = [],
 ): string {
-  const body = resolveDivisionXml(rootXmlId, divisions, new Set(), assets);
-  return wrapInPretextDocument(body, docinfo);
+  const body = resolveDivisionXml(rootXmlId, divisions, snippets, assets, new Set());
+  return wrapInPretextDocument(body, docinfo, lang);
 }
 
 // ---------------------------------------------------------------------------
@@ -2362,26 +2946,47 @@ const BOOK_CHILD_DIVISION_TYPES: ReadonlySet<DivisionType> = new Set([
  * `divisionType` determines the minimal wrapper needed around `divisionXml`:
  * root types (`book`/`article`/`slideshow`) need none, `chapter`/`part` are
  * wrapped in a bare `<book>`, and everything else in a bare `<article>`.
- * The PreTeXt schema requires `<book>`/`<article>` to have a `<title>` as
- * their first child, so a wrapper built here uses `wrapperTitle` for that —
- * without it the build server's schema validation rejects the document,
- * produces no output, and 500s.
+ * The PreTeXt schema requires `<book>`/`<article>`/`<slideshow>` to have a
+ * `<title>` as their first child, so a wrapper built here uses `wrapperTitle`
+ * for that — without it the build server's schema validation rejects the
+ * document, produces no output, and 500s.
  * `docinfo` (the full `<docinfo>...</docinfo>` element, or `""`) is inserted
  * as a sibling of the root element inside `<pretext>`, matching real PreTeXt
- * document shape.
+ * document shape. `lang`, when provided, is written as `@xml:lang` on the
+ * root `<pretext>` element.
+ *
+ * `rootType` is the type of the *project's* root division, which a division's
+ * own type cannot reveal: a `<section>` looks identical whether it lives in an
+ * article or in a deck. It matters only for a slideshow, and getting it wrong
+ * there **fails silently**. A section of slides wrapped in `<article>` still
+ * renders — the renderer detects the `<slide>` elements and selects the
+ * reveal.js conversion, which is then handed a root element it has no template
+ * for, and emits a deck-shaped page with no slides in it. An empty preview, not
+ * an error. Omit it and the article fallback is used, as before.
  */
 export function wrapDivisionForPreview(
   divisionType: DivisionType,
   divisionXml: string,
   docinfo: string,
   wrapperTitle: string,
+  lang?: string,
+  rootType?: RootDivisionType,
 ): string {
-  const body = ROOT_DIVISION_TYPES.has(divisionType)
-    ? divisionXml
-    : BOOK_CHILD_DIVISION_TYPES.has(divisionType)
-      ? `<book>\n<title>${wrapperTitle}</title>\n${divisionXml}\n</book>`
-      : `<article>\n<title>${wrapperTitle}</title>\n${divisionXml}\n</article>`;
-  return wrapInPretextDocument(body, docinfo);
+  // A root division is already a complete top-level element.
+  if (ROOT_DIVISION_TYPES.has(divisionType)) {
+    return wrapInPretextDocument(divisionXml, docinfo, lang);
+  }
+  const wrapper: RootDivisionType =
+    rootType === "slideshow"
+      ? "slideshow"
+      : BOOK_CHILD_DIVISION_TYPES.has(divisionType)
+        ? "book"
+        : "article";
+  return wrapInPretextDocument(
+    `<${wrapper}>\n<title>${wrapperTitle}</title>\n${divisionXml}\n</${wrapper}>`,
+    docinfo,
+    lang,
+  );
 }
 
 // ---------------------------------------------------------------------------
@@ -2398,12 +3003,12 @@ export function wrapDivisionForPreview(
  * though its source already has a real title. Backfill it here so the TOC
  * doesn't show "Untitled" for content that already has one.
  *
- * The root division additionally needs an `<article>`/`<book>` wrapper
- * element. A host that hands back a brand-new project's root division as a
- * bare body fragment (no wrapper at all) gets one added here, chosen from
- * `projectType` (`"book"` vs. the default `"article"`). The wrapper's
- * `<title>` falls back to the host's `projectTitle` when the fragment carries
- * no title of its own, rather than the placeholder `"Untitled"`.
+ * The root division additionally needs an `<article>`/`<book>`/`<slideshow>`
+ * wrapper element. A host that hands back a brand-new project's root division
+ * as a bare body fragment (no wrapper at all) gets one added here, named by
+ * `projectType` (defaulting to `"article"`). The wrapper's `<title>` falls back
+ * to the host's `projectTitle` when the fragment carries no title of its own,
+ * rather than the placeholder `"Untitled"`.
  */
 /**
  * Strip a leading `<title>...</title>` element off a bare (unwrapped) PreTeXt
@@ -2422,10 +3027,14 @@ function extractLeadingTitle(content: string): { title: string; body: string } {
 export function normalizeDivisionsOnLoad(
   divisions: Division[],
   rootDivisionId: string | undefined,
-  projectType: "article" | "book" | undefined,
+  projectType: RootDivisionType | undefined,
   projectTitle?: string,
 ): Division[] {
-  const wrapperType: DivisionType = projectType === "book" ? "book" : "article";
+  // Checked rather than cast: `projectType` comes from the host, which may be
+  // untyped JavaScript, and this value is written straight into a tag name.
+  const wrapperType: RootDivisionType = isRootDivisionType(projectType)
+    ? projectType
+    : "article";
 
   return divisions.map((division) => {
     if (division.sourceFormat === "markdown") {
@@ -2451,11 +3060,18 @@ export function normalizeDivisionsOnLoad(
       // blank title from there so the TOC doesn't show "Untitled". There is no
       // type to recover: a LaTeX division's PreTeXt type isn't represented in
       // its source at all (it's applied when the conversion is tagged).
-      if (!division.title) {
-        const latexTitle = extractLatexDivisionTitle(division.source);
-        if (latexTitle) return { ...division, title: latexTitle };
-      }
-      return division;
+      //
+      // The header is also rewritten from what can be read out of it, which is
+      // where a division imported with a malformed one (a `\label` inside the
+      // title argument and so a stray `}` after it) gets repaired: the header
+      // line is locked in the code editor, so an author who never opens the
+      // properties form has no other way to reach it. This also installs the
+      // blank line the converter needs below the header.
+      const source = normalizeLatexDivisionSource(division.source);
+      const title =
+        division.title || extractLatexDivisionTitle(source) || division.title;
+      if (source === division.source && title === division.title) return division;
+      return { ...division, source, title };
     }
     if (division.sourceFormat !== "pretext") return division;
 

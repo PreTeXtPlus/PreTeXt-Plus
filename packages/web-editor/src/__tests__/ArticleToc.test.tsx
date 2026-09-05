@@ -35,7 +35,7 @@ function renderToc(readOnly?: boolean, docDivisions: Division[] = divisions) {
     docinfo: "",
     commonDocinfo: "",
     useCommonDocinfo: false,
-    projectType: docDivisions[0].type === "book" ? "book" : "article",
+    language: "en-US",
     divisions: docDivisions,
     activeDivisionId: docDivisions[0].xmlId,
     projectAssets: undefined,
@@ -51,10 +51,10 @@ function renderToc(readOnly?: boolean, docDivisions: Division[] = divisions) {
 function openMenu(label: string) {
   // Matched on the row's own title element: once an edit form is open the
   // label also appears as an <option>, which a plain text query would hit.
-  const row = [...document.querySelectorAll("li.pretext-plus-editor__toc-item")]
+  const row = [...document.querySelectorAll('[data-testid^="toc-item-"]')]
     .find(
       (li) =>
-        li.querySelector(".pretext-plus-editor__toc-title")?.textContent ===
+        li.querySelector('[data-testid="toc-title"]')?.textContent ===
         label,
     ) as HTMLElement | undefined;
   if (!row) throw new Error(`no TOC row for "${label}"`);
@@ -71,6 +71,7 @@ function typeChoices(label: string) {
   const choices = {
     options: [...select.options].map((o) => o.value),
     value: select.value,
+    disabled: select.disabled,
   };
   fireEvent.click(within(row).getByText("Cancel"));
   return choices;
@@ -145,6 +146,7 @@ describe("ArticleToc division type choices", () => {
     expect(typeChoices("Book")).toEqual({
       options: ["article", "book"],
       value: "book",
+      disabled: false,
     });
   });
 
@@ -236,6 +238,41 @@ describe("ArticleToc division type choices", () => {
     expect(options).toContain("section");
     expect(options).not.toContain("chapter");
     expect(options).not.toContain("part");
+  });
+
+  it("lets an article root switch to a book", () => {
+    // Article and book hold the same children, so swapping the root tag leaves
+    // a valid document — this is the one root conversion that is offered.
+    renderToc(false, divisions);
+    const { options, value, disabled } = typeChoices("Document");
+    expect(value).toBe("article");
+    expect(options).toEqual(["article", "book"]);
+    expect(disabled).toBe(false);
+  });
+
+  // A one-line regression waiting to happen: the dropdown used to be built as
+  // `[draft.type, ...SWITCHABLE_ROOT_TYPES]` for any root outside the
+  // switchable set, which silently offered Article and Book to a slideshow.
+  // Taking either would strand <slide> elements in a root that cannot hold
+  // them and invalidate every reveal.js/Beamer target on the project.
+  it("offers a slideshow root no conversion target at all", () => {
+    const deck: Division[] = [
+      {
+        id: "1",
+        xmlId: "deck",
+        title: "My Deck",
+        type: "slideshow",
+        sourceFormat: "pretext",
+        source:
+          '<slideshow xml:id="deck"><title>My Deck</title><plus:section ref="sec"/></slideshow>',
+      },
+      divisions[1],
+    ];
+    renderToc(false, deck);
+    const { options, value, disabled } = typeChoices("My Deck");
+    expect(value).toBe("slideshow");
+    expect(options).toEqual(["slideshow"]);
+    expect(disabled).toBe(true);
   });
 
   it("renders divisions that arrive with no type at all", () => {

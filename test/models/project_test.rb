@@ -16,6 +16,17 @@ class ProjectTest < ActiveSupport::TestCase
     assert_not_includes Project.publicly_listed, projects(:one)
   end
 
+  test "language defaults to en-US" do
+    project = projects(:one)
+    assert_equal "en-US", project.language
+  end
+
+  test "language accepts any supported code" do
+    project = projects(:one)
+    project.update!(language: "fr-CA")
+    assert_equal "fr-CA", project.reload.language
+  end
+
   test "icon_asset is nil when the project has no icon asset" do
     assert_nil projects(:one).icon_asset
   end
@@ -158,6 +169,17 @@ class ProjectTest < ActiveSupport::TestCase
     assert_equal "website", target.kind
   end
 
+  # A website builds fine from a deck, so this is about what greets the author rather
+  # than about legality.
+  test "a new slideshow is created with a reveal.js target instead" do
+    project = Project.create!(user: users(:one), title: "Fresh Deck", document_type: :slideshow)
+
+    assert_equal 1, project.targets.count
+    target = project.targets.first
+    assert_equal "Slides", target.name
+    assert_equal "revealjs", target.kind
+  end
+
   # The trap this guard exists for: Rails does not re-validate children when the parent
   # changes, so without an explicit check on Project a slideshow could become an article
   # while keeping a reveal.js target that can never build again.
@@ -187,6 +209,9 @@ class ProjectTest < ActiveSupport::TestCase
   test "full_dup copies target configuration but no build history" do
     original = projects(:two)
     assert original.targets.first.update(published: true)
+    # two_web carries both denormalized pointers -- current_build_id (a success) and
+    # latest_build_id (a later failure) -- so this exercises both.
+    assert original.targets.first.latest_build_id.present?
 
     copy = original.full_dup(users(:one))
     assert copy.save
@@ -195,6 +220,12 @@ class ProjectTest < ActiveSupport::TestCase
     copy.targets.each do |target|
       assert_not target.published?, "a copy must not inherit the original's public URLs"
       assert_nil target.current_build_id
+      # A stale latest_build_id would point a fresh target at a build that belongs to
+      # the *original* project -- cancel, the log page, and everything else scoped to
+      # this copy's project_id would 404 trying to find it.
+      assert_nil target.latest_build_id
+      assert_nil target.last_built_at
+      assert_equal :never, target.state
       assert_empty target.builds
     end
   end
@@ -346,5 +377,112 @@ class ProjectTest < ActiveSupport::TestCase
     end
 
     assert_equal "keyed-asset", project.assets.find(id).ref
+  end
+
+  test "add_dictionary_word accepts words, including accented and hyphenated ones" do
+    project = projects(:one)
+
+    assert project.add_dictionary_word("Erdős")
+    assert project.add_dictionary_word("well-ordering")
+    assert project.add_dictionary_word("  Cauchy  ")
+
+    assert_equal [ "Erdős", "well-ordering", "Cauchy" ], project.reload.dictionary_words
+  end
+
+  test "add_dictionary_word rejects anything that is not a word" do
+    project = projects(:one)
+
+    assert_not project.add_dictionary_word("sec-intro-3")
+    assert_not project.add_dictionary_word("")
+    assert_not project.add_dictionary_word("a" * (Project::MAX_DICTIONARY_WORD_LENGTH + 1))
+
+    assert_empty project.reload.dictionary_words
+  end
+
+  test "add_dictionary_word ignores a word already stored, whatever its case" do
+    project = projects(:one)
+    project.add_dictionary_word("Cauchy")
+
+    assert project.add_dictionary_word("cauchy")
+    assert_equal [ "Cauchy" ], project.reload.dictionary_words
+  end
+
+  # The reason the append is done in SQL: a read-modify-write from two sessions
+  # holding the same record loses one of the words.
+  test "add_dictionary_word keeps words added concurrently from another session" do
+    project = projects(:one)
+    elsewhere = Project.find(project.id)
+
+    project.add_dictionary_word("Cauchy")
+    elsewhere.add_dictionary_word("Erdos")
+
+    assert_equal [ "Cauchy", "Erdos" ], project.reload.dictionary_words
+  end
+
+  test "add_dictionary_word does not touch updated_at" do
+    project = projects(:one)
+    before = project.updated_at
+
+    project.add_dictionary_word("Cauchy")
+
+    assert_equal before, project.reload.updated_at
+  end
+
+  test "add_dictionary_word stops at the cap" do
+    project = projects(:one)
+    project.update_column(:dictionary_words, Array.new(Project::MAX_DICTIONARY_WORDS) { |i| "word#{i}" })
+
+    assert project.add_dictionary_word("Cauchy")
+    assert_not_includes project.reload.dictionary_words, "Cauchy"
+  end
+
+  test "transfer_ownership_to! hands the project to a collaborator and demotes the previous owner" do
+    project = projects(:one) # owner: users(:one); collaborator: users(:two) (fixture :accepted)
+
+    assert project.transfer_ownership_to!(users(:two))
+    project.reload
+
+    assert_equal users(:two), project.user
+    assert_not project.collaborations.exists?(user: users(:two))
+    demoted = project.collaborations.find_by!(user: users(:one))
+    assert demoted.accepted?
+    assert_equal users(:one).email, demoted.invited_email
+  end
+
+  test "transfer_ownership_to! is a no-op when handing the project to its current owner" do
+    project = projects(:one)
+
+    assert_not project.transfer_ownership_to!(users(:one))
+    assert_equal users(:one), project.reload.user
+  end
+
+  test "transfer_ownership_to! returns false for a user who is not a collaborator" do
+    project = projects(:one)
+
+    assert_not project.transfer_ownership_to!(users(:subscribed))
+    assert_equal users(:one), project.reload.user
+  end
+
+  test "transfer_ownership_to! succeeds even when it leaves the new owner over their own collaborator_limit" do
+    # A subscriber's project (cap 5) fully staffed, including one free-tier
+    # collaborator. Transferring to that free-tier user (cap 1) must still
+    # succeed -- the swap doesn't grow the roster, it only changes whose
+    # collaboration row is missing from it.
+    project = Project.create!(user: users(:subscribed), title: "Team book")
+    free_user = users(:one)
+    project.collaborations.create!(user: free_user, invited_email: free_user.email, accepted_at: Time.current)
+    4.times do |n|
+      other = User.create!(name: "Collaborator #{n}", email: "collab#{n}@example.com",
+                            password: "password123", confirmed_at: Time.current)
+      project.collaborations.create!(user: other, invited_email: other.email, accepted_at: Time.current)
+    end
+    assert_equal 5, project.collaborations.count
+
+    assert project.transfer_ownership_to!(free_user)
+    project.reload
+
+    assert_equal free_user, project.user
+    assert_equal 1, project.collaborator_limit
+    assert_equal 5, project.collaborations.count, "the swap should not have changed the roster size"
   end
 end

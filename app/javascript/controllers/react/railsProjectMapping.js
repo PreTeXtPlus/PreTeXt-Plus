@@ -6,6 +6,7 @@
 
 /** @typedef {import("@pretextbook/web-editor").Asset} Asset */
 /** @typedef {import("@pretextbook/web-editor").Division} Division */
+/** @typedef {import("@pretextbook/web-editor").Snippet} Snippet */
 
 /**
  * A division record as returned by the Rails `divisions` JSON array.
@@ -23,15 +24,27 @@
  * @typedef {Object} RailsAsset
  * @property {string} id
  * @property {string} [ref]
- * @property {"file"|"authored"} [kind]
+ * @property {"file"|"authored"} kind
  * @property {string} [title]
  * @property {string} [source]
+ * @property {string} [short_description] - Plain-text image alt description; rendered as
+ *   `<shortdescription>` in the assembled PreTeXt.
  * @property {string} [path] - Fetchable share URL; present only when a file is attached.
  * @property {string} [extension] - Present only when a file is attached.
  * @property {string} [thumbnail_path] - Fetchable small-preview URL; present only when the
  *   attached file can be thumbnailed (see Asset#thumbnailable?).
  * @property {string} [content_type] - The attached file's MIME type; present only when a
  *   file is attached.
+ */
+
+/**
+ * A snippet record as returned by Rails' `snippets` JSON array
+ * (`snippets/_snippet.json.jbuilder`).
+ * @typedef {Object} RailsSnippet
+ * @property {string} id
+ * @property {string} [ref]
+ * @property {string} [source]
+ * @property {string} [source_format]
  */
 
 /**
@@ -104,7 +117,7 @@ export function railsDivisionToEditor(d, rootMeta) {
 //
 //  * `url` -- `path`, Rails' `share_asset_project_path` redirect. A real,
 //    fetchable URL to the full file. Used ONLY for the editor's own UI: the
-//    "Edit asset" dialog's live preview, and as a fallback thumbnail when
+//    "Manage asset" dialog's live preview, and as a fallback thumbnail when
 //    `thumbnailUrl` is unavailable.
 //
 //  * `thumbnailUrl` -- `thumbnail_path`, Rails' `share_asset_thumbnail_project_path`
@@ -121,12 +134,8 @@ export function railsDivisionToEditor(d, rootMeta) {
 //    resolve wherever the build's output is displayed.
 //
 // `isFile` distinguishes a file-backed asset from one defined purely by its
-// authored `source`; derived from `path`'s presence (only set when a file is
-// attached), not from Rails' `kind` column -- the web-editor's own `AssetKind`
-// no longer distinguishes a source-only image from a file-backed one (both are
-// just `"image"`), so `kind` below is always `"image"`; the only other kind it
-// supports, `"doenet"`, is a distinct, currently feature-flagged-off activity
-// type with no creation path wired up yet.
+// authored `source`; read straight from Rails' `kind` column (`file`/
+// `authored`), the single source of truth for that distinction.
 //
 // The bare `<ref>.<ext>` source filename for a file-backed asset, or undefined
 // for a non-file asset (which relies entirely on its authored `source`) or one
@@ -151,13 +160,13 @@ export function railsAssetToEditor(a) {
     id: String(a.id),
     ref: a.ref ?? "",
     title: a.title,
-    kind: "image",
     source: a.source ?? undefined,
+    shortDescription: a.short_description ?? undefined,
     url: a.path ?? undefined,
     thumbnailUrl: a.thumbnail_path ?? undefined,
     extension: a.extension ?? undefined,
     contentType: a.content_type ?? undefined,
-    isFile: Boolean(a.path),
+    isFile: a.kind === "file",
     fileRef: fileRefFor(a, a.ref),
   };
 }
@@ -175,16 +184,46 @@ export function toEditorAsset(rec) {
     id: rec.id,
     ref: rec.ref,
     title: rec.title,
-    kind: rec.kind,
     source: rec.source,
+    shortDescription: rec.shortDescription,
     url: rec.url,
     thumbnailUrl: rec.thumbnailUrl,
     extension: rec.extension,
     contentType: rec.contentType,
     fileRef: rec.fileRef,
-    // Recomputed from `url` rather than carried on `rec`, same reasoning as
-    // railsAssetToEditor: file-backed-ness is a property of the attachment,
-    // not of `kind`.
-    isFile: Boolean(rec.url),
+    // Already correctly set by railsAssetToEditor upstream (from Rails' real
+    // `kind` column) for every asset that reaches this function.
+    isFile: rec.isFile,
+  };
+}
+
+// Map one Rails snippet to the web-editor's Snippet shape. Simpler than an
+// asset's mapper -- no file/thumbnail/content-type fields, since a snippet is
+// always pure text.
+/**
+ * @param {RailsSnippet} s
+ * @returns {Snippet}
+ */
+export function railsSnippetToEditor(s) {
+  return {
+    id: String(s.id),
+    ref: s.ref ?? "",
+    source: s.source ?? "",
+    sourceFormat: s.source_format ?? "pretext",
+  };
+}
+
+// Strip a host project-snippet record down to the bare web-editor Snippet
+// shape. Mirrors `toEditorAsset`.
+/**
+ * @param {Snippet} rec
+ * @returns {Snippet}
+ */
+export function toEditorSnippet(rec) {
+  return {
+    id: rec.id,
+    ref: rec.ref,
+    source: rec.source,
+    sourceFormat: rec.sourceFormat,
   };
 }

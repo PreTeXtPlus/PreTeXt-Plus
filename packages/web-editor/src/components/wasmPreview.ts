@@ -26,29 +26,126 @@
 // Type-only, so this is erased at compile time and does not drag the WASM
 // entry (and its top-level await) onto the load path. The matching runtime
 // helper is reached through loadRenderer() instead — see findEntryForLine.
-import type { PtxSourceMap, SourceMapEntry } from "@pretextbook/pretext-html";
+import type {
+  PtxSourceMap,
+  RenderTarget,
+  SourceMapEntry,
+} from "@pretextbook/pretext-html";
+// `./reveal` and `./theme` are dependency-free leaf modules of the same
+// package — no libxslt-wasm, no top-level await — so unlike the renderer entry
+// these are imported statically. They only rewrite/describe HTML the renderer
+// already produced, which is what lets the slideshow view and the preview
+// theme change without paying for a re-render.
+import { injectRevealBridge, type RevealView } from "@pretextbook/pretext-html/reveal";
+import {
+  previewThemeMessage,
+  type PreviewTheme,
+} from "@pretextbook/pretext-html/theme";
+import {
+  injectPrintPreview,
+  type PrintoutInfo,
+} from "@pretextbook/pretext-html/printout";
+
+export type { PreviewTheme, RevealView, PrintoutInfo };
+export { previewThemeMessage };
 
 /**
- * Virtual path we render under. Nothing reads it from disk, but every
- * source-map entry is stamped with it, so sync lookups filter on this value.
+ * Virtual path the *editor's own buffer* is rendered under. Nothing reads it
+ * from disk; it exists so error messages and source-map entries have a name.
  */
-export const PREVIEW_SOURCE_PATH = "/source/main.ptx";
+export const PREVIEW_SOURCE_PATH = "/source/division.ptx";
+
+/**
+ * Virtual path the surrounding document is rendered under in context mode
+ * (see {@link LocalRenderOptions.contextSource}).
+ */
+export const PREVIEW_CONTEXT_PATH = "/source/main.ptx";
 
 /** Options accepted by a local render. Mirrors the subset we actually use. */
-interface LocalRenderOptions {
+export interface LocalRenderOptions {
   /** Light/dark theme for the rendered page; omit for its native behaviour. */
-  theme?: "light" | "dark" | "system";
+  theme?: PreviewTheme;
+  /**
+   * Text for the dismissible "this is a preview, not a build" banner the
+   * renderer injects across the top of the page. Omitted leaves the page
+   * without one.
+   */
+  bannerMessage?: string;
+  /**
+   * The complete project document to render `source` *inside of*, rather than
+   * standalone.
+   *
+   * This is what makes a single division's preview show the numbering the
+   * built book will have ("Theorem 3.2.1", not "Theorem 1.1") and resolve the
+   * `<xref>`s that leave it. `source` supplies the division's own — possibly
+   * unsaved — text; this supplies only the structure around it. The two are
+   * matched by `@xml:id`, so {@link LocalRenderOptions.divisionId} must name
+   * the fragment's root element; when that id is not in this document the
+   * renderer silently falls back to a standalone wrapper, which is the right
+   * answer for a division the author has only just created.
+   *
+   * Costs roughly 5-7x a standalone render, since the whole document is
+   * assembled to compute the numbering (measured: ~75ms standalone vs ~530ms
+   * in context, on a 160-section book).
+   */
+  contextSource?: string;
+  /**
+   * `@xml:id` of `source`'s root element. Required for
+   * {@link LocalRenderOptions.contextSource} to take effect, and used either
+   * way to trim the source map to the previewed division (see
+   * {@link subtreeSourceMap}).
+   */
+  divisionId?: string;
+  /** `<docinfo>` to give a standalone fragment: LaTeX macros, custom settings. */
+  docinfo?: string;
+  /**
+   * Render `source` as a fragment (a lone `<section>`, `<chapter>`, ...) that
+   * the renderer wraps in a minimal document, rather than as a complete
+   * `<pretext>` document. Required for context mode.
+   */
+  fragment?: boolean;
 }
+
+/*
+ * Deliberately no `revealView`/`revealZoom` here, though the renderer accepts
+ * both. A deck's presentation is applied by {@link applyRevealView} instead,
+ * and only there: `injectRevealBridge` does not stack, so bridging a page that
+ * was already bridged at render time strips the bridge rather than replacing
+ * it. One injector, on a freshly rendered page, is the only arrangement that
+ * cannot get that wrong — and it is the faster one anyway, since changing the
+ * view then costs a re-injection rather than a re-render.
+ */
 
 /** A rendered page plus the map that ties its elements back to the source. */
 export interface PreviewRender {
   /** Complete standalone HTML page. */
   html: string;
   /**
-   * One entry per element, in document order. Empty rather than absent when
-   * the renderer produced none, so callers never branch on undefined.
+   * One entry per element of the *previewed division*, in document order.
+   * Empty rather than absent when the renderer produced none, so callers never
+   * branch on undefined. Already trimmed by {@link subtreeSourceMap}, so its
+   * lines are all in `source`'s own coordinates.
    */
   sourceMap: PtxSourceMap;
+  /**
+   * Which conversion actually ran. "slides" means the page is a reveal.js
+   * deck, and the slideshow-only controls (view toggle, zoom) apply to it.
+   */
+  target: RenderTarget;
+  /**
+   * The printouts on the page — worksheets, handouts, projects — in document
+   * order, each of which can be laid out on paper by {@link applyPrintPreview}.
+   * Empty for a page with none, which is also when PreTeXt emits no paper-size
+   * controls and there is therefore no print preview to offer.
+   */
+  printouts: PrintoutInfo[];
+  /**
+   * The printout to open on paper by default: set only when the previewed
+   * document *is* a printout (editing `worksheet-3.ptx`) rather than merely
+   * containing some (a chapter with three worksheets in it, which should open
+   * as the chapter).
+   */
+  rootPrintout?: string;
 }
 
 type PretextHtmlModule = typeof import("@pretextbook/pretext-html");
@@ -104,15 +201,110 @@ export async function renderPreviewHtml(
   options: LocalRenderOptions = {},
 ): Promise<PreviewRender> {
   const { renderHtml } = await loadRenderer();
-  const { html, sourceMap } = await renderHtml({
+  const { html, sourceMap, target, printouts, rootPrintout } = await renderHtml({
     cssTheme: "default-modern",
     sourcePath: PREVIEW_SOURCE_PATH,
     projectDir: "/source",
     sourceContent: source,
     sourceMap: true,
+    ...(options.fragment ? { fragment: true } : {}),
+    ...(options.docinfo ? { docinfo: options.docinfo } : {}),
+    // Context mode needs both halves: the document to place the fragment in,
+    // and (via `divisionId`, matched on `@xml:id`) which division it replaces.
+    ...(options.contextSource && options.divisionId
+      ? {
+          contextSourcePath: PREVIEW_CONTEXT_PATH,
+          contextSourceContent: options.contextSource,
+        }
+      : {}),
     ...(options.theme ? { theme: options.theme } : {}),
+    ...(options.bannerMessage
+      ? { previewBanner: { message: options.bannerMessage } }
+      : {}),
   });
-  return { html, sourceMap: sourceMap ?? [] };
+  return {
+    html,
+    sourceMap: subtreeSourceMap(sourceMap ?? [], options.divisionId),
+    target,
+    printouts,
+    rootPrintout,
+  };
+}
+
+/**
+ * Trim a source map to the entries authored in the previewed division.
+ *
+ * Necessary because a context render's map describes two documents at once:
+ * the surrounding book (lines in *its* coordinates) and the fragment spliced
+ * into it (lines in the editor buffer's), all stamped with the same `file`.
+ * Feeding that mixture to `findSourceMapEntry` — which assumes one file, with
+ * non-decreasing start lines — makes an entry from a chapter elsewhere in the
+ * book shadow the one the author's cursor is actually in.
+ *
+ * The division's own entries are exactly those reachable from it through
+ * `parent`. Entries are in document order, so a parent always precedes its
+ * children and one forward pass collects the whole subtree.
+ *
+ * Returns `sourceMap` untouched when `rootId` names nothing in it — the
+ * renderer fell back to a standalone wrapper, or no division id was given —
+ * since an empty map would silently disable sync altogether.
+ */
+export function subtreeSourceMap(
+  sourceMap: PtxSourceMap,
+  rootId: string | undefined,
+): PtxSourceMap {
+  if (!rootId || !sourceMap.some((entry) => entry.id === rootId)) {
+    return sourceMap;
+  }
+  const kept = new Set<string>([rootId]);
+  return sourceMap.filter((entry) => {
+    if (entry.id === rootId) return true;
+    if (entry.parent === undefined || !kept.has(entry.parent)) return false;
+    kept.add(entry.id);
+    return true;
+  });
+}
+
+/**
+ * Re-present an already-rendered deck in the other view.
+ *
+ * Reveal reads `view` once, when it initializes, so this returns a new page
+ * rather than talking to the live one — but it is still far cheaper than a
+ * re-render, since the transform does not run again.
+ */
+export function applyRevealView(
+  html: string,
+  view: RevealView,
+  zoom: number,
+): string {
+  return injectRevealBridge(html, view, { zoom });
+}
+
+/**
+ * Re-present an already-rendered page as one of its printouts laid out for
+ * paper — or, with no id, as the ordinary page.
+ *
+ * pretext-core.js enters that layout by reading `?printpreview=<id>` from
+ * `location.search`, which a preview has no way to set: it is delivered into an
+ * iframe whose URL is not ours to write. `injectPrintPreview` supplies the
+ * parameter without the navigation, by patching the one reader that looks for
+ * it. See the printout module's own documentation for why rewriting the URL is
+ * not an option.
+ *
+ * Must be applied on **every** delivery, "off" included, and never skipped as
+ * a no-op: the injected bridge keeps its answer on a window property, so a page
+ * delivered without one inherits whatever the previous delivery said.
+ *
+ * The transformation itself is one-way — pretext-core.js runs it once from a
+ * DOMContentLoaded handler and rearranges the DOM destructively — which is why
+ * leaving print preview means re-delivering the pristine render rather than
+ * undoing anything.
+ */
+export function applyPrintPreview(
+  html: string,
+  printoutId: string | undefined,
+): string {
+  return injectPrintPreview(html, printoutId);
 }
 
 /**
