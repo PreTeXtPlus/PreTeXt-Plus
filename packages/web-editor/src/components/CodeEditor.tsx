@@ -293,6 +293,13 @@ const CodeEditor = forwardRef<CodeEditorHandle, CodeEditorProps>(({
   const onRebuildRef = useRef(onRebuild);
   const onSaveRef = useRef(onSave);
   const onOpenFindInProjectRef = useRef(onOpenFindInProject);
+  // Monaco's own find-widget controller, so the toolbar can close it when the
+  // author switches to Find in Project instead of leaving both UIs open.
+  const findControllerRef = useRef<any>(null);
+  const findStateListenerRef = useRef<{ dispose: () => void } | null>(null);
+  // Drives the toolbar's "Finding in file" status, read from Monaco's own
+  // find contribution rather than watching its DOM.
+  const [isFindingInFile, setIsFindingInFile] = useState(false);
   const options = useMemo(
     () => ({ ...baseOptions, readOnly: !!readOnly }),
     [readOnly],
@@ -452,6 +459,7 @@ const CodeEditor = forwardRef<CodeEditorHandle, CodeEditorProps>(({
       constrainedRef.current?.disposeConstrainer?.();
       editGuardRef.current?.();
       editGuardRef.current = null;
+      findStateListenerRef.current?.dispose?.();
       if (debounceRef.current) clearTimeout(debounceRef.current);
     };
   }, []);
@@ -904,6 +912,22 @@ const CodeEditor = forwardRef<CodeEditorHandle, CodeEditorProps>(({
       },
     );
 
+    // Track Monaco's own find widget through its contribution's state model
+    // (rather than watching its DOM) so the toolbar can show "Finding in
+    // file" while it's open, and close it from there when switching to Find
+    // in Project.
+    findStateListenerRef.current?.dispose?.();
+    const findController = editor.getContribution?.(
+      "editor.contrib.findController",
+    );
+    findControllerRef.current = findController ?? null;
+    const findState = findController?.getState?.();
+    setIsFindingInFile(!!findState?.isRevealed);
+    findStateListenerRef.current =
+      findState?.onFindReplaceStateChange((e: any) => {
+        if (e.isRevealed) setIsFindingInFile(!!findState.isRevealed);
+      }) ?? null;
+
     // Take over Mod+A so select-all stops at the editable body. A dynamic
     // keybinding outweighs Monaco's built-in `editor.action.selectAll`, which
     // stays registered for the command palette; the Edit menu reaches this
@@ -1062,6 +1086,13 @@ const CodeEditor = forwardRef<CodeEditorHandle, CodeEditorProps>(({
     insertSnippet: insertSnippetInContext,
   };
 
+  // Closes Monaco's own find widget before handing off to Find in Project,
+  // so switching between the two never leaves both open at once.
+  const handleSwitchToFindInProject = () => {
+    findControllerRef.current?.closeFindWidget?.();
+    onOpenFindInProjectRef.current?.();
+  };
+
   return (
     <div style={{ display: "flex", flexDirection: "column", height: "100%" }}>
       <CodeEditorMenu
@@ -1087,6 +1118,10 @@ const CodeEditor = forwardRef<CodeEditorHandle, CodeEditorProps>(({
         onOpenAssets={onOpenAssets}
         onOpenSnippets={onOpenSnippets}
         onOpenFindInProject={onOpenFindInProject}
+        isFindingInFile={isFindingInFile}
+        onSwitchToFindInProject={
+          onOpenFindInProject ? handleSwitchToFindInProject : undefined
+        }
         onShowFullSource={onShowFullSource}
         hideAssets={hideAssets}
         hideSnippets={hideSnippets}
