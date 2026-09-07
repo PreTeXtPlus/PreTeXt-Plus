@@ -185,10 +185,16 @@ module Publication
     # Narrows what the modal offers. Document type bounds the level options; an output's
     # kind decides whether a theme is worth showing at all. Both are nil at levels that
     # have no such thing, which Catalog.for reads as "do not filter".
+    # Memoized because every option asks: offers? checks it, and so do
+    # choices_for and label_for, which is dozens of times per panel. The answer
+    # is read out of the project's assembled source (Project#root_element_type),
+    # so it is worth reading once per modal rather than once per select.
     def document_type
-      case owner
-      when Target then owner.project.document_type
-      when Project then owner.document_type
+      return @document_type if defined?(@document_type)
+
+      @document_type = case owner
+      when Target then owner.project.structural_document_type
+      when Project then owner.structural_document_type
       end
     end
 

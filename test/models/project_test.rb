@@ -96,6 +96,75 @@ class ProjectTest < ActiveSupport::TestCase
     assert_equal "new-xml-id", division.ref
   end
 
+  # ---- structural_document_type ----
+  #
+  # The TOC lets an author switch a document between article and book by rewriting its
+  # source, without ever resaving document_type (see ProjectsController#project_params).
+  # This is what Publication::Settings reads instead, so numbering options stay in step
+  # with the document the author is actually looking at.
+
+  test "structural_document_type follows the assembled source even though document_type does not" do
+    project = projects(:one)
+    assert_equal "article", project.document_type
+
+    stub_build_server do
+      project.update!(pretext_source: "<pretext>\n<book xml:id=\"document\"><title>Hello</title></book>\n</pretext>")
+    end
+
+    assert_equal "article", project.reload.document_type,
+                 "document_type itself is untouched -- it is not on this axis"
+    assert_equal "book", project.structural_document_type
+  end
+
+  # Reading the assembled source rather than the root division's own is what makes this
+  # markup-agnostic: a latex/markdown project is converted to PreTeXt before it lands in
+  # pretext_source, so there is no second (or third) spelling of "book" to know about.
+  test "structural_document_type reads a latex-authored project the same way" do
+    project = projects(:two)
+    assert project.root_division.latex_source_format?
+    assert_equal "article", project.document_type
+
+    stub_build_server do
+      project.update!(pretext_source: "<pretext>\n<book xml:id=\"document\"><title>Welcome</title></book>\n</pretext>")
+    end
+
+    assert_equal "book", project.reload.structural_document_type
+  end
+
+  test "structural_document_type skips the docinfo the assembler puts first" do
+    project = projects(:one)
+
+    stub_build_server do
+      project.update!(pretext_source: "<pretext xml:lang=\"en-US\">\n<docinfo><macros>\\def\\z{1}</macros></docinfo>\n" \
+                                      "<book xml:id=\"document\"><title>Hello</title></book>\n</pretext>")
+    end
+
+    assert_equal "book", project.reload.structural_document_type
+  end
+
+  # Between creation/import and the first autosave there is no assembled source yet -- and
+  # the column is exactly as its author left it, so it is still the right answer.
+  test "structural_document_type falls back to document_type when there's no assembled source yet" do
+    project = Project.new(user: users(:one), document_type: :book)
+
+    assert_nil project.pretext_source
+    assert_equal "book", project.structural_document_type
+  end
+
+  # nil rather than a guess: a half-saved or hand-broken document must not override the
+  # column with junk.
+  test "structural_document_type falls back when the assembled source names no root element" do
+    project = projects(:one)
+
+    stub_build_server do
+      project.update!(pretext_source: "<pretext><docinfo/><section><title>Orphan</title></section></pretext>")
+    end
+    assert_equal "article", project.reload.structural_document_type
+
+    stub_build_server { project.update!(pretext_source: "<pretext><docinfo>& <unclosed") }
+    assert_equal "article", project.reload.structural_document_type
+  end
+
   # ---- source_updated_at ----
   #
   # Regression tests for a confirmed bug: the editor saves through nested
