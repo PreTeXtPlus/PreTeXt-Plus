@@ -26,6 +26,7 @@ function renderWithStore(ui: (wrap: (children: ReactNode) => ReactNode) => React
   bindCallbacks({
     selectDivision: noop,
     addDivision: noop,
+    createDivision: noop,
     removeDivision: noop,
     updateDivision: noop,
     divisionContentChange: noop,

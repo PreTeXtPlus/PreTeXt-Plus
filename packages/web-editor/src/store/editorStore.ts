@@ -159,8 +159,16 @@ type ModalKey =
  */
 export interface EditorCallbacks {
   selectDivision: (id: string) => void;
-  /** Add a new division as the last child of `parentXmlId` (or unplaced if `null`). */
+  /**
+   * Open a draft properties form for a new child of `parentXmlId` (or an
+   * unplaced one, if `null`). Nothing is created yet — see `createDivision`.
+   */
   addDivision: (parentXmlId: string | null) => void;
+  /**
+   * Create the division the draft describes and place it under
+   * `parentXmlId`. Fired by `commitSectionEdit` when the author saves a draft.
+   */
+  createDivision: (parentXmlId: string | null, draft: EditDraft) => void;
   removeDivision: (id: string) => void;
   updateDivision: (id: string, changes: DivisionChanges) => void;
   /** Emit a content change for a specific division (edit or structural reorder). */
@@ -268,8 +276,16 @@ export interface EditorStoreState {
   // TOC inline edit form
   editingId: string | null;
   editDraft: EditDraft | null;
-  /** True while `editDraft` belongs to a just-created, not-yet-saved division. */
-  editingIsNew: boolean;
+  /**
+   * Set while `editDraft` describes a division that does not exist yet, naming
+   * the parent it will be placed under (`null` for an unplaced one).
+   *
+   * A new division is *only* a draft until the author saves it: no record, no
+   * `<plus:* ref/>` in the parent, nothing sent to the host. That is what makes
+   * Cancel mean cancel, and it is why a new division never has to be renamed —
+   * it is created with the id the author chose. `editingId` is null throughout.
+   */
+  pendingNewDivision: { parentXmlId: string | null } | null;
 
   /** The asset currently open in the asset edit modal, identified by ref. */
   editingAssetRef: { ref: string } | null;
@@ -343,7 +359,9 @@ export interface EditorStoreState {
   divisionContentChange: (xmlId: string, content: string) => void;
 
   // TOC inline edit form
-  startSectionEdit: (section: Division, options?: { isNew?: boolean }) => void;
+  startSectionEdit: (section: Division) => void;
+  /** Open the properties form for a new, not-yet-created child of `parentXmlId`. */
+  startNewDivision: (parentXmlId: string | null, draft: EditDraft) => void;
   setEditDraft: (draft: EditDraft) => void;
 
   /** Merge `partial` into the find/replace drawer's inputs. */
@@ -485,6 +503,7 @@ export function createEditorStore(init: EditorStoreInit): EditorStoreHandle {
     cbs: {
       selectDivision: noop,
       addDivision: noop,
+      createDivision: noop,
       removeDivision: noop,
       updateDivision: noop,
       divisionContentChange: noop,
@@ -533,7 +552,7 @@ export function createEditorStore(init: EditorStoreInit): EditorStoreHandle {
     findPanelState: initialFindPanelState,
     editingId: null,
     editDraft: null,
-    editingIsNew: false,
+    pendingNewDivision: null,
     editingAssetRef: null,
     assetResolveTarget: null,
     editingSnippetRef: null,
@@ -617,7 +636,7 @@ export function createEditorStore(init: EditorStoreInit): EditorStoreHandle {
       bag.cbs.divisionContentChange?.(xmlId, content),
 
     // TOC inline edit form
-    startSectionEdit: (section, options) => {
+    startSectionEdit: (section) => {
       // Each format stores its xml:id/label differently: Markdown in YAML
       // frontmatter, LaTeX as the `\label` after `\section` (it has no separate
       // PreTeXt `label` attribute), and PreTeXt as the wrapper element's
@@ -650,43 +669,73 @@ export function createEditorStore(init: EditorStoreInit): EditorStoreHandle {
           label,
           sourceFormat: section.sourceFormat,
         },
-        editingIsNew: options?.isNew ?? false,
+        pendingNewDivision: null,
       });
     },
+    startNewDivision: (parentXmlId, editDraft) =>
+      set({
+        editingId: null,
+        editDraft,
+        pendingNewDivision: { parentXmlId },
+      }),
     setEditDraft: (editDraft) => set({ editDraft }),
 
     setFindPanelState: (partial) =>
       set((s) => ({ findPanelState: { ...s.findPanelState, ...partial } })),
     commitSectionEdit: () => {
-      const { editingId, editDraft, divisions } = get();
-      if (editingId && editDraft) {
-        const division = (divisions ?? []).find((d) => d.xmlId === editingId);
+      const { editingId, editDraft, divisions, pendingNewDivision } = get();
+      if (!editDraft) return;
 
-        // A division's `xml:id` is structural identity: it must be a non-empty,
-        // unique NCName because it's the target of every `<plus:* ref="..."/>`
-        // placeholder. Validate before committing so an empty or duplicate id
-        // can never break the project; keep the form open on failure. Every
-        // format now carries it (LaTeX spells it as the `\section`'s `\label`).
+      // A division's `xml:id` is structural identity: it must be a non-empty,
+      // unique NCName because it's the target of every `<plus:* ref="..."/>`
+      // placeholder. Validate before committing so an empty or duplicate id
+      // can never break the project; keep the form open on failure (returning
+      // `null`). Every format carries it — LaTeX spells it as the `\section`'s
+      // `\label`. `selfXmlId` is the division being renamed, which of course
+      // may keep the id it already has.
+      const validateXmlId = (selfXmlId: string | null): string | null => {
+        const sanitized = sanitizeXmlId(editDraft.xmlId);
+        if (!sanitized) {
+          window.alert(
+            "xml:id can't be empty — it identifies the division and is used by references to it.",
+          );
+          return null;
+        }
+        if (
+          (divisions ?? []).some(
+            (d) => d.xmlId !== selfXmlId && d.xmlId === sanitized,
+          )
+        ) {
+          window.alert(
+            `xml:id "${sanitized}" is already used by another division. Choose a unique id.`,
+          );
+          return null;
+        }
+        return sanitized;
+      };
+
+      // Saving a draft is where a new division is created — the first moment
+      // anything is written. It is created with the id, type and format the
+      // author chose, so nothing has to be renamed afterwards and the parent's
+      // placeholder is written once, already pointing at the right id.
+      if (pendingNewDivision) {
+        const xmlId = validateXmlId(null);
+        if (!xmlId) return;
+        bag.cbs.createDivision(pendingNewDivision.parentXmlId, {
+          ...editDraft,
+          title: editDraft.title.trim(),
+          xmlId,
+        });
+        set({ editingId: null, editDraft: null, pendingNewDivision: null });
+        return;
+      }
+
+      if (editingId) {
+        const division = (divisions ?? []).find((d) => d.xmlId === editingId);
         let xmlId: string | null = null;
         if (division) {
-          const sanitized = sanitizeXmlId(editDraft.xmlId);
-          if (!sanitized) {
-            window.alert(
-              "xml:id can't be empty — it identifies the division and is used by references to it.",
-            );
-            return;
-          }
-          if (
-            (divisions ?? []).some(
-              (d) => d.xmlId !== editingId && d.xmlId === sanitized,
-            )
-          ) {
-            window.alert(
-              `xml:id "${sanitized}" is already used by another division. Choose a unique id.`,
-            );
-            return;
-          }
-          xmlId = sanitized;
+          xmlId = validateXmlId(editingId);
+          if (!xmlId) return;
         }
 
         bag.cbs.updateDivision(editingId, {
@@ -694,16 +743,18 @@ export function createEditorStore(init: EditorStoreInit): EditorStoreHandle {
           type: editDraft.type,
           xmlId,
           label: editDraft.label.trim() || null,
-          // Only meaningfully different from the division's current format
-          // while `editingIsNew` — the form keeps this field read-only
-          // otherwise, so it's always a no-op patch for existing divisions.
+          // The form keeps this field read-only for an existing division — its
+          // source can't be losslessly translated — so it's always a no-op
+          // patch here. Only a draft chooses a format.
           sourceFormat: editDraft.sourceFormat,
         });
       }
-      set({ editingId: null, editDraft: null, editingIsNew: false });
+      set({ editingId: null, editDraft: null, pendingNewDivision: null });
     },
     cancelSectionEdit: () =>
-      set({ editingId: null, editDraft: null, editingIsNew: false }),
+      // Cancelling a draft leaves nothing behind: the division was never
+      // created and the parent's source was never touched.
+      set({ editingId: null, editDraft: null, pendingNewDivision: null }),
 
     insertAsset: (asset) => bag.cbs.assetInsert(asset),
     insertAtCursor: (content) => bag.cbs.insertContentAtCursor?.(content),

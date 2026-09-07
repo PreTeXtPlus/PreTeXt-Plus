@@ -1,22 +1,14 @@
 import { useRef } from "react";
 import type { SourceFormat } from "../../types/editor";
 import type { DivisionType } from "../../types/sections";
-import { slugifyTitle } from "../../sectionUtils";
 import {
-  DIVISION_ID_PREFIXES,
+  deriveXmlId,
   type EditDraft,
   getSelectableDivisionTypes,
   SOURCE_FORMAT_LABELS,
   SWITCHABLE_ROOT_TYPES,
   TYPE_FULL_LABELS,
 } from "./types";
-
-/** `<type-abbrev>-<title-slug>`, e.g. "ws-my-title" for a new worksheet. */
-function deriveXmlId(type: DivisionType, title: string): string {
-  const prefix = DIVISION_ID_PREFIXES[type] ?? "sec";
-  const slug = slugifyTitle(title);
-  return slug ? `${prefix}-${slug}` : prefix;
-}
 
 const FIELD_LABEL_CLASSES =
   "grid grid-cols-[52px_1fr] items-center gap-1 text-[0.76rem] text-[#555]";
@@ -66,12 +58,11 @@ const SectionEditForm = ({
 
   const typeOptions = isRoot ? rootTypeOptions : selectableTypes;
 
-  // A brand-new division starts with an opaque generated id (e.g.
-  // "sec-m5x2k9-a3f8z1"). Until the author edits the Id field directly, keep
-  // it in sync with the title they're typing instead — far more useful than
-  // a random string. Edit the Id field once and it's theirs: we stop
-  // overwriting it. Only relevant for `isNew`; an existing division's id is
-  // never auto-derived from its title.
+  // A division being drafted starts with an id derived from its placeholder
+  // title, and keeps following the title as the author types it. Edit the Id
+  // field once and it's theirs: we stop overwriting it. Only relevant for
+  // `isNew` — an existing division's id is never auto-derived from its title,
+  // since renaming it rewrites every reference to it.
   const idFollowsTitle = useRef(isNew);
 
   return (

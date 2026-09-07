@@ -17,8 +17,6 @@ interface SectionItemProps {
   onEditCommit: () => void;
   onEditCancel: () => void;
   menuItems: DivisionMenuItem[];
-  /** True while `editDraft` belongs to a division that hasn't been saved yet. */
-  isNew?: boolean;
   isRoot?: boolean;
   /** Type of the division this one is (or would be) nested under; `null` if unplaced. */
   parentType?: DivisionType | null;
@@ -37,7 +35,6 @@ const SectionItem = ({
   onEditCommit,
   onEditCancel,
   menuItems,
-  isNew = false,
   isRoot = false,
   parentType = null,
 }: SectionItemProps) => {
@@ -113,7 +110,6 @@ const SectionItem = ({
       {isEditing && editDraft && (
         <SectionEditForm
           draft={editDraft}
-          isNew={isNew}
           isRoot={isRoot}
           parentType={parentType}
           onDraftChange={onDraftChange}
