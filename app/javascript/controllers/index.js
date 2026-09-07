@@ -22,14 +22,14 @@ application.register("modal", ModalController)
 import NewProjectController from "./new_project_controller"
 application.register("new-project", NewProjectController)
 
+import PollRefreshController from "./poll_refresh_controller"
+application.register("poll-refresh", PollRefreshController)
+
 import ProjectVisibilityController from "./project_visibility_controller"
 application.register("project-visibility", ProjectVisibilityController)
 
 import SharedSourceController from "./shared_source_controller"
 application.register("shared-source", SharedSourceController)
-
-import StreamReconnectController from "./stream_reconnect_controller"
-application.register("stream-reconnect", StreamReconnectController)
 
 import TabsController from "./tabs_controller"
 application.register("tabs", TabsController)

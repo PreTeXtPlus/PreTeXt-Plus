@@ -109,10 +109,10 @@ class Build < ApplicationRecord
     mark!(:success, errors_accepted: true)
   end
 
-  # Hands a pending build to the build server and, because everything after that reaches
-  # the dashboard by being pushed to it and a push has no receipt, schedules the one thing
-  # that goes back and looks. Called wherever a build actually starts (fresh or promoted
-  # out of the queue), so every pending build gets both.
+  # Hands a pending build to the build server and schedules the one thing that goes back
+  # and looks, in case the server's own callback never arrives or the import it triggers
+  # stalls partway -- see BuildRecheckJob. Called wherever a build actually starts (fresh
+  # or promoted out of the queue), so every pending build gets both.
   def start!
     FullBuildJob.perform_later(self)
     BuildRecheckJob.set(wait: BuildRecheckJob::RECHECK_SCHEDULE.first).perform_later(self)
@@ -122,9 +122,8 @@ class Build < ApplicationRecord
   #
   # Every transition used to be a bare update_column, which skips callbacks -- fine while
   # nothing needed to react, but it means an after_update_commit hook silently never
-  # fires. Funnelling them here gives promotion (and, from PR 2, broadcasting the row and
-  # the open drawer) exactly one home, so adding a new transition cannot quietly skip any
-  # of them.
+  # fires. Funnelling them here gives promotion exactly one home, so adding a new
+  # transition cannot quietly skip it.
   #
   # Still update_columns underneath: these are called from jobs where bumping the
   # record's own updated_at is the only side effect we want.
@@ -138,8 +137,6 @@ class Build < ApplicationRecord
     update_columns(attrs.merge(status: Build.statuses.fetch(status.to_s),
                                updated_at: Time.current))
     target.sync_from_builds!
-    target.broadcast_row
-    target.broadcast_drawer
     promote_next_queued_build! unless in_flight?
     self
   end

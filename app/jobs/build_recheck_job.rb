@@ -1,23 +1,19 @@
 # Checks back on a build a little after it was started, and keeps checking until it has
 # actually landed. Scheduled by BuildsController#create, so every build has one.
 #
-# Everything about a build's progress reaches the dashboard by being pushed: the build
-# server calls our webhook, the webhook (or the artifact import behind it) moves the
-# build, and Build#mark! broadcasts the row. That chain is four hops long and every hop
-# is a place where a build finishes and the page does not notice:
+# The dashboard learns a build's state by polling for it directly (see poll-refresh in
+# app/javascript/controllers), so it needs nothing pushed to it -- but the state it polls
+# still has to be correct, and getting there is not fully in this app's hands:
 #
-#   * the callback never arrives, or we reject it -- the build sits in `sent_to_server`;
+#   * the callback never arrives, or we reject it -- the build sits in `sent_to_server`
+#     forever unless something asks the build server directly what happened;
 #   * the callback arrives and the artifact import then dies or hangs -- the build sits
 #     in `received_from_server`, which Target::IN_FLIGHT still reads as Building, so a
-#     server that reported "success" leaves the row saying Building anyway;
-#   * everything works and the broadcast goes out while a dashboard is not listening --
-#     asleep, offline, or reconnecting -- and Action Cable does not replay what was
-#     missed, so the row keeps whatever state it was rendered with.
+#     server that reported "success" leaves the row saying Building anyway until
+#     something notices the import stopped making progress.
 #
-# The last one is why this broadcasts again even when it finds nothing wrong: a build
-# that finished correctly is precisely the case where a stale row is invisible to us and
-# obvious to the author. A re-render of one row is cheap; being wrong about a build for
-# as long as a page stays open is not.
+# Both are the build server's or our own background job's problem, not the browser's, so
+# this job exists regardless of how (or whether) the dashboard watches for changes.
 class BuildRecheckJob < ApplicationJob
   queue_as :default
 
@@ -27,10 +23,11 @@ class BuildRecheckJob < ApplicationJob
 
   # How long after the build starts each look happens, front-loaded: most builds that
   # are going to finish quickly do so within the first few seconds of being asked, and a
-  # dashboard sitting on a missed broadcast should not have to wait 30s to find out for
-  # something that fast. Four minutes of looking is plenty for a genuinely missed
-  # message -- past that a build is the build server's problem rather than ours, and in
-  # production BuildWatchdogJob still sweeps sent_to_server builds that never call back.
+  # dropped callback for something that fast should be caught well before the dashboard's
+  # own poll would otherwise notice nothing is moving. Four minutes of looking is plenty
+  # for a genuinely dropped callback -- past that a build is the build server's problem
+  # rather than ours, and in production BuildWatchdogJob still sweeps sent_to_server
+  # builds that never call back.
   # The last two entries exist to give STALL_AFTER, below, somewhere to actually fire:
   # without a check still scheduled after that threshold passes, a stalled import would
   # never be noticed by this job at all.
@@ -57,13 +54,7 @@ class BuildRecheckJob < ApplicationJob
     advance(build)
     build.reload
 
-    if !build.in_flight?
-      # Terminal, so whatever moved it broadcast at the time. This is the second copy,
-      # for whoever was not listening then; a row re-rendered from the same record is
-      # identical to the one they should already have.
-      build.target.broadcast_row
-      build.target.broadcast_drawer
-    elsif attempt < MAX_ATTEMPTS
+    if build.in_flight? && attempt < MAX_ATTEMPTS
       wait = RECHECK_SCHEDULE[attempt] - RECHECK_SCHEDULE[attempt - 1]
       self.class.set(wait: wait).perform_later(build, attempt: attempt + 1)
     end

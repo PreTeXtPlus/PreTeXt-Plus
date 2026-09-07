@@ -76,10 +76,9 @@ class BuildsController < ApplicationController
         # on anyone who rebuilt from a row.
         #
         # update, not replace: replace swaps the <turbo-frame> element itself, and with
-        # it the src Turbo set when the drawer was opened -- which is the very thing
-        # Target#broadcast_drawer asks the frame to reload. A drawer that started its
-        # own build would then sit on "Building" for good, deaf to the broadcast that
-        # says the build finished, while the row behind it updated normally.
+        # it the src poll-refresh needs to reload it (see targets/_drawer.html.erb). A
+        # drawer that started its own build would then sit on "Building" for good, with
+        # nothing left to poll it, while the row behind it updated normally.
         if turbo_frame_request_id == "drawer"
           streams << turbo_stream.update("drawer",
             partial: "targets/drawer", locals: { project: @project, target: @target })

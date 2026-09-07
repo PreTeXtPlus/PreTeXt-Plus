@@ -1,6 +1,7 @@
-<%# One output row on the project dashboard, and the unit Target#broadcast_row replaces
-    as a build progresses. Rendered from a background job during a broadcast, so it has
-    no session: no `can?`, no current_user. Authorization lives on the actions. %>
+<%# One output row on the project dashboard, and the unit swapped in place whenever a
+    build progresses -- via poll-refresh's periodic page morph, or immediately from
+    BuildsController#create's own turbo_stream response. No `can?`, no current_user:
+    authorization lives on the actions, not on what a row chooses to show. %>
 <% state = target.state %>
 <div id="<%= dom_id target %>"
      class="flex flex-col gap-3 rounded-lg border border-gray-200 border-l-4 <%= target_state_stripe(state) %> bg-white p-4 md:flex-row md:items-center md:gap-4">

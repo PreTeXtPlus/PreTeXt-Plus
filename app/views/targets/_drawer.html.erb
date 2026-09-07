@@ -3,23 +3,24 @@
     request was a full-page visit to a target URL. Takes locals rather than ivars so both
     callers can supply them.
 
-    Always rendered from a real request, including when a finished build refreshes it:
-    that broadcast is a signal, and the frame around this panel re-fetches the content
-    itself (see Target#broadcast_drawer). Which is what lets this keep using `request`,
-    and lets the log and history below run to any size at all.
+    Always rendered from a real request, including when a poll picks up a finished build:
+    poll-refresh reloads the frame around this panel, which re-fetches the content over
+    ordinary HTTP. Which is what lets this keep using `request`, and lets the log and
+    history below run to any size at all.
 
-    The panel carries the id that broadcast aims at -- on the panel rather than the
-    overlay, so that the id says *which* target's drawer is open. %>
+    poll-refresh sits on the panel rather than the frame around it -- not the overlay, so
+    that the id it polls against says *which* target's drawer is open -- because a
+    rebuild started from inside this panel re-renders it via turbo_stream.update, which
+    replaces the panel but leaves the frame element's own attributes untouched. Attaching
+    here means the freshly rendered active value (Target#cancelable?) always lands
+    correctly no matter which of the three ways this partial gets rendered; refresh()
+    then walks up to the enclosing turbo-frame and reloads that. %>
 <div data-controller="drawer" class="fixed inset-0 z-30 flex justify-end">
   <div class="absolute inset-0 bg-gray-900/30" data-action="click->drawer#close"></div>
 
-  <%# data-drawer-url is the panel saying where it came from, so a reload_drawer broadcast
-      can put the frame's src back if something has re-rendered the frame without one.
-      Nothing should now -- both drawer re-renders go through turbo_stream.update, which
-      leaves the frame element alone -- but a drawer that silently stops live-updating is
-      a hard thing to notice, and this makes the recovery automatic. %>
   <div id="<%= dom_id(target, :drawer) %>"
-       data-drawer-url="<%= project_target_path(project, target) %>"
+       data-controller="poll-refresh"
+       data-poll-refresh-active-value="<%= target.cancelable? %>"
        role="dialog" aria-modal="true" aria-label="<%= target.name %> details"
        class="relative flex h-full w-full max-w-xl flex-col overflow-y-auto bg-white shadow-xl">
 

@@ -1,7 +1,7 @@
 require "test_helper"
 
 # Turbo's morph-based refreshes (turbo-frame refresh="morph",
-# session.refresh(method: "morph") in stream_reconnect_controller.js) can
+# session.refresh(method: "morph") in poll_refresh_controller.js) can
 # replace a DOM node between the moment Selenium resolves it and the moment
 # it acts on or re-inspects it. Chrome's DevTools Protocol reports that race
 # as a generic Selenium::WebDriver::Error::UnknownError wrapping an

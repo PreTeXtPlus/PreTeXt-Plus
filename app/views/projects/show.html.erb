@@ -68,13 +68,6 @@
   <% end %>
 <% end %>
 
-<%# Subscribes the dashboard to this project's target rows. Build#mark! broadcasts here
-      on every status transition, which is what replaced the old <meta refresh>.
-      stream-reconnect morphs the page back in from the server whenever this
-      subscription reconnects, to pick up anything broadcast while it was down --
-      see app/javascript/controllers/stream_reconnect_controller.js. %>
-  <%= turbo_stream_from [ @project, :targets ], data: { controller: "stream-reconnect" } %>
-
   <div class="mt-8 flex flex-wrap items-center justify-between gap-3">
     <h2 class="font-mono text-xs font-semibold uppercase tracking-widest text-gray-500">
       Outputs
@@ -104,7 +97,13 @@
     </div>
   </div>
 
-  <div id="targets" class="mt-3 flex flex-col gap-2">
+  <%# poll-refresh replaced the old <meta refresh> and, before that, an Action Cable
+      broadcast on every build status transition -- see Target#cancelable? for what
+      "still worth polling" means. Once nothing here is building or queued, the next
+      refresh comes back with active="false" and polling stops on its own. %>
+  <div id="targets" class="mt-3 flex flex-col gap-2"
+       data-controller="poll-refresh"
+       data-poll-refresh-active-value="<%= @targets.any?(&:cancelable?) %>">
     <%= render @targets %>
   </div>
 
@@ -181,9 +180,10 @@
     request that is not the frame asking. That is what gives the overlay something behind
     it: closing it then reveals the project, rather than emptying the whole document.
 
-    refresh: "morph" is what makes a build's reload_drawer broadcast morph this frame
-    rather than replace it, so a refresh mid-read leaves the panel's elements in place --
-    including the build log's own scroll box, which keeps its position.
+    refresh: "morph" is what makes poll-refresh's periodic frame.reload() (see the panel
+    in targets/_drawer.html.erb) morph this frame rather than replace it, so a refresh
+    mid-read leaves the panel's elements in place -- including the build log's own
+    scroll box, which keeps its position.
 
     On the inline render the src has to be set here, because no frame navigation set it:
     Turbo will not reload a frame that has no src, and that is the case an author lands in

@@ -18,9 +18,9 @@ class TargetsControllerTest < ActionDispatch::IntegrationTest
     assert_select "iframe", false, "the project page should no longer embed a preview"
   end
 
-  test "the dashboard subscribes to its targets stream so builds update in place" do
+  test "the dashboard polls for build updates rather than waiting on a push" do
     get project_url(@project)
-    assert_select "turbo-cable-stream-source"
+    assert_select "#targets[data-controller=poll-refresh]"
   end
 
   test "the dashboard reports the last edit, not the last rename" do
@@ -72,7 +72,7 @@ class TargetsControllerTest < ActionDispatch::IntegrationTest
     @project.targets.each do |target|
       assert_select "##{ActionView::RecordIdentifier.dom_id(target)}"
     end
-    assert_select "turbo-cable-stream-source"
+    assert_select "#targets[data-controller=poll-refresh]"
   end
 
   # The other half of the same rule: when the dashboard's own frame asks, it must get the
@@ -108,14 +108,12 @@ class TargetsControllerTest < ActionDispatch::IntegrationTest
     assert_select "turbo-frame#drawer [data-controller=drawer]", false
   end
 
-  # Target#broadcast_drawer aims at this id as a build progresses, and it has to sit on
-  # the panel inside the overlay: a stream that replaced the overlay would nest a second
-  # one inside it and disconnect the controller that closes it.
-  # The wiring a build's reload_drawer broadcast depends on: it finds the panel by this
-  # id, then reloads the frame around it. Without a src Turbo will not reload a frame at
-  # all, and without refresh="morph" the reload would replace rather than morph, throwing
-  # away the panel's scroll position on every build transition.
-  test "the drawer frame is set up for a build broadcast to reload it" do
+  # The wiring poll-refresh depends on to keep an open drawer current: it sits on the
+  # panel and calls the nearest frame's reload() while a build progresses. Without a src
+  # Turbo will not reload a frame at all, and without refresh="morph" the reload would
+  # replace rather than morph, throwing away the panel's scroll position on every build
+  # transition.
+  test "the drawer frame is set up for poll-refresh to reload it" do
     panel = "##{ActionView::RecordIdentifier.dom_id(@target, :drawer)}"
 
     # The frame response: morphing, but carrying no src. Turbo rejects a frame whose src

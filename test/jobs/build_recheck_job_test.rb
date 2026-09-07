@@ -7,26 +7,6 @@ class BuildRecheckJobTest < ActiveJob::TestCase
     builds(:in_progress)
   end
 
-  def stream_for(build)
-    Turbo::StreamsChannel.send(:stream_name_from, [ build.project, :targets ])
-  end
-
-  # A build server that reports success only moves a build to `received_from_server`;
-  # nothing gets it out of Building except the artifact import. So the check has to look
-  # past the status the callback wrote.
-  test "a finished build is re-broadcast for anyone who missed the first message" do
-    build.mark!(:success)
-
-    broadcasts = capture_broadcasts(stream_for(build)) do
-      perform_enqueued_jobs { BuildRecheckJob.perform_now(build) }
-    end
-
-    row, drawer = broadcasts.partition { |b| b.include?("turbo-stream action=\"replace\"") }
-    assert_equal 1, row.size
-    assert_equal 1, drawer.size
-    assert_match(/id="#{ActionView::RecordIdentifier.dom_id(build.target)}"/, row.first)
-  end
-
   test "a finished build is not chased any further" do
     build.mark!(:failed)
 
