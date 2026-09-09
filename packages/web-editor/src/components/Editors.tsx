@@ -559,6 +559,10 @@ const EditorsInner = (props: EditorsInnerProps) => {
   const activeTab = useEditorStore((s) => s.activeTab);
   const setActiveTab = useEditorStore((s) => s.setActiveTab);
   const isTocCollapsed = useEditorStore((s) => s.isTocCollapsed);
+  const pasteAutoConvert = useEditorStore((s) => s.pasteAutoConvert);
+  const togglePasteAutoConvert = useEditorStore(
+    (s) => s.togglePasteAutoConvert,
+  );
   const setIsTocCollapsed = useEditorStore((s) => s.setIsTocCollapsed);
   const toggleTocCollapsed = useEditorStore((s) => s.toggleTocCollapsed);
   const isFindPanelOpen = useEditorStore((s) => s.isFindPanelOpen);
@@ -2030,6 +2034,8 @@ const EditorsInner = (props: EditorsInnerProps) => {
       hideAssets={props.hideAssets}
       hideSnippets={props.hideSnippets}
       readOnly={props.readOnly}
+      pasteAutoConvert={pasteAutoConvert}
+      onTogglePasteAutoConvert={togglePasteAutoConvert}
     />
   );
 

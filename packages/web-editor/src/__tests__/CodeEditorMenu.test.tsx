@@ -354,4 +354,93 @@ describe("CodeEditorMenu", () => {
       expect(screen.getByRole("menu", { name: "Insert" })).toBeInTheDocument();
     });
   });
+  describe("paste auto-convert toggle", () => {
+    const checkboxItem = (name: string | RegExp) =>
+      screen.getByRole("menuitemcheckbox", { name });
+
+    it("reports its state so a screen reader can read it", async () => {
+      render(
+        <CodeEditorMenu
+          {...baseProps()}
+          sourceFormat="pretext"
+          pasteAutoConvert
+          onTogglePasteAutoConvert={vi.fn()}
+        />,
+      );
+      await openMenu("Edit");
+      expect(checkboxItem(/Convert Pasted/)).toBeChecked();
+    });
+
+    it("reports being off", async () => {
+      render(
+        <CodeEditorMenu
+          {...baseProps()}
+          sourceFormat="pretext"
+          pasteAutoConvert={false}
+          onTogglePasteAutoConvert={vi.fn()}
+        />,
+      );
+      await openMenu("Edit");
+      expect(checkboxItem(/Convert Pasted/)).not.toBeChecked();
+    });
+
+    it("flips the preference through the parent's handler", async () => {
+      const onTogglePasteAutoConvert = vi.fn();
+      render(
+        <CodeEditorMenu
+          {...baseProps()}
+          sourceFormat="pretext"
+          pasteAutoConvert
+          onTogglePasteAutoConvert={onTogglePasteAutoConvert}
+        />,
+      );
+      const user = await openMenu("Edit");
+      await user.click(checkboxItem(/Convert Pasted/));
+      expect(onTogglePasteAutoConvert).toHaveBeenCalledTimes(1);
+    });
+
+    // Only a PreTeXt buffer converts a paste, so offering the switch anywhere
+    // else would promise something that never happens.
+    it.each<SourceFormat>(["latex", "markdown"])(
+      "is absent in %s, where a paste is never converted",
+      async (sourceFormat) => {
+        render(
+          <CodeEditorMenu
+            {...baseProps()}
+            sourceFormat={sourceFormat}
+            pasteAutoConvert
+            onTogglePasteAutoConvert={vi.fn()}
+          />,
+        );
+        await openMenu("Edit");
+        expect(
+          screen.queryByRole("menuitemcheckbox", { name: /Convert Pasted/ }),
+        ).not.toBeInTheDocument();
+      },
+    );
+
+    it("is absent in a read-only buffer, which takes no pastes", async () => {
+      render(
+        <CodeEditorMenu
+          {...baseProps()}
+          sourceFormat="pretext"
+          readOnly
+          pasteAutoConvert
+          onTogglePasteAutoConvert={vi.fn()}
+        />,
+      );
+      await openMenu("Edit");
+      expect(
+        screen.queryByRole("menuitemcheckbox", { name: /Convert Pasted/ }),
+      ).not.toBeInTheDocument();
+    });
+
+    it("is absent when the host wires no handler", async () => {
+      render(<CodeEditorMenu {...baseProps()} sourceFormat="pretext" />);
+      await openMenu("Edit");
+      expect(
+        screen.queryByRole("menuitemcheckbox", { name: /Convert Pasted/ }),
+      ).not.toBeInTheDocument();
+    });
+  });
 });

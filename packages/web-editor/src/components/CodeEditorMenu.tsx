@@ -50,6 +50,13 @@ interface CodeEditorMenuProps {
   /** Opens the LaTeX import dialog. */
   onOpenLatexImport: () => void;
   /**
+   * Whether pasted LaTeX/Markdown is converted on the way in. Omitted for
+   * formats where the question doesn't arise, which hides the menu item.
+   */
+  pasteAutoConvert?: boolean;
+  /** Flip {@link pasteAutoConvert}. Omitted alongside it. */
+  onTogglePasteAutoConvert?: () => void;
+  /**
    * If provided, a "Clean up LaTeX…" item is shown.  Opens the review dialog
    * listing the legacy markup found in this division.  Omitted for formats with
    * no legacy dialect behind them, and on a read-only buffer.
@@ -159,6 +166,8 @@ const CodeEditorMenu: React.FC<CodeEditorMenuProps> = ({
   rootType,
   onContentChange,
   onOpenLatexImport,
+  pasteAutoConvert,
+  onTogglePasteAutoConvert,
   onOpenClean,
   onOpenDocinfoEditor,
   onUndo,
@@ -246,6 +255,26 @@ const CodeEditorMenu: React.FC<CodeEditorMenuProps> = ({
     onSelect: actions.selectAll,
   });
 
+  // Sits under Paste because it is a property of pasting, and that is where an
+  // author goes looking when a paste came out converted and they wanted it
+  // verbatim. Only offered where the conversion can actually happen: a
+  // read-only buffer takes no pastes, and only a PreTeXt division converts
+  // them (see `pasteConvert.ts`).
+  const convertPasteEntry: MenuEntry[] =
+    !readOnly && sourceFormat === "pretext" && onTogglePasteAutoConvert
+      ? [
+          {
+            kind: "item",
+            key: "paste-auto-convert",
+            label: "Convert Pasted LaTeX & Markdown",
+            title:
+              "When on, LaTeX or Markdown pasted into this division is converted to PreTeXt as it arrives",
+            checked: !!pasteAutoConvert,
+            onSelect: onTogglePasteAutoConvert,
+          },
+        ]
+      : [];
+
   const findInProjectEntry: MenuEntry[] = onOpenFindInProject
     ? [
         {
@@ -295,6 +324,7 @@ const CodeEditorMenu: React.FC<CodeEditorMenuProps> = ({
           actions.paste,
           "Your browser blocked reading the clipboard — use the keyboard shortcut to paste.",
         ),
+        ...convertPasteEntry,
         selectAllEntry,
         separator("find"),
         commandEntry(MONACO_COMMANDS.find, run),

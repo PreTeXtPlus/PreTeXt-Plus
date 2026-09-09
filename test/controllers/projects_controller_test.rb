@@ -1090,6 +1090,125 @@ class ProjectsControllerTest < ActionDispatch::IntegrationTest
     assert_redirected_to new_user_session_path
   end
 
+  # ── #pandoc: proxy to the lite build server's conversion endpoint ──────────
+  #
+  # The action exists to keep the shared build token off the client, so most of
+  # what is worth asserting is about the request that leaves this server and the
+  # response that comes back unmangled -- not about pandoc itself.
+
+  test "pandoc sends the build token the client never has" do
+    assert_match(/name="token"\r\n\r\ntest-preview-build-token/, captured_pandoc_request)
+  end
+
+  test "pandoc forwards the uploaded file under its own name" do
+    request = captured_pandoc_request
+
+    assert_match(/name="file"; filename="import_sample.md"/, request)
+    assert_includes request, "A Sample Document"
+  end
+
+  test "pandoc forwards the reader and standalone flag chosen by the wizard" do
+    request = captured_pandoc_request(from: "docx", standalone: "yes")
+
+    assert_match(/name="from"\r\n\r\ndocx/, request)
+    assert_match(/name="standalone"\r\n\r\nyes/, request)
+  end
+
+  test "pandoc omits from and standalone when the client sends neither" do
+    request = captured_pandoc_request
+
+    assert_no_match(/name="from"/, request)
+    assert_no_match(/name="standalone"/, request)
+  end
+
+  test "pandoc returns the converted source on success" do
+    stub_pandoc_server(body: "<pretext><article><p>Hi</p></article></pretext>") do
+      post pandoc_projects_url, params: { file: pandoc_upload }
+    end
+
+    assert_response :success
+    assert_equal "<pretext><article><p>Hi</p></article></pretext>", response.body
+  end
+
+  # The wizard words every failure differently for the author
+  # (`describeRemotePandocFailure`), and a 422's body carries pandoc's own
+  # stderr, so neither the status nor the body may be flattened on the way back.
+  test "pandoc passes a conversion failure through with its status and stderr" do
+    stderr = "<h2>Pandoc conversion failed</h2><pre>Could not parse line 3</pre>"
+    stub_pandoc_server(body: stderr, code: "422") do
+      post pandoc_projects_url, params: { file: pandoc_upload }
+    end
+
+    assert_response :unprocessable_entity
+    assert_includes response.body, "Could not parse line 3"
+  end
+
+  test "pandoc passes a missing-writer failure through as 503" do
+    stub_pandoc_server(body: "PreTeXt writer unavailable on this server", code: "503") do
+      post pandoc_projects_url, params: { file: pandoc_upload }
+    end
+
+    assert_response :service_unavailable
+  end
+
+  # Whatever the body was upstream, it comes back as characters rather than as
+  # markup a browser might render on this origin.
+  test "pandoc never returns its response as html" do
+    stub_pandoc_server(body: "<script>alert(1)</script>") do
+      post pandoc_projects_url, params: { file: pandoc_upload }
+    end
+
+    assert_equal "text/plain", response.media_type
+  end
+
+  test "pandoc rejects an oversized upload without calling the build server" do
+    Tempfile.create([ "oversized", ".md" ]) do |file|
+      file.write("#" * (ProjectsController::PANDOC_MAX_UPLOAD_BYTES + 1))
+      file.flush
+
+      Net::HTTP.stub(:start, ->(*_args, **_kw) { flunk "should not reach the build server" }) do
+        post pandoc_projects_url,
+             params: { file: Rack::Test::UploadedFile.new(file.path, "text/markdown") }
+      end
+    end
+
+    assert_response :content_too_large
+  end
+
+  test "pandoc rejects a request with no file" do
+    Net::HTTP.stub(:start, ->(*_args, **_kw) { flunk "should not reach the build server" }) do
+      post pandoc_projects_url, params: { from: "docx" }
+    end
+
+    assert_response :bad_request
+  end
+
+  test "pandoc answers 504 when the build server outruns the read timeout" do
+    Net::HTTP.stub(:start, ->(*_args, **_kw) { raise Net::ReadTimeout }) do
+      post pandoc_projects_url, params: { file: pandoc_upload }
+    end
+
+    assert_response :gateway_timeout
+  end
+
+  test "pandoc answers 502 when the build server cannot be reached" do
+    Net::HTTP.stub(:start, ->(*_args, **_kw) { raise SocketError }) do
+      post pandoc_projects_url, params: { file: pandoc_upload }
+    end
+
+    assert_response :bad_gateway
+  end
+
+  test "pandoc requires authentication" do
+    sign_out :user
+    Net::HTTP.stub(:start, ->(*_args, **_kw) { flunk "should not reach the build server" }) do
+      post pandoc_projects_url, params: { file: pandoc_upload }
+    end
+
+    assert_redirected_to new_user_session_path
+  end
+
+
   private
     # POST to #preview and return the form body it sent *upstream*, parsed. The
     # shared stub only fakes a response; what matters here is the request, since
@@ -1110,5 +1229,44 @@ class ProjectsControllerTest < ActionDispatch::IntegrationTest
       end
       assert_response :success
       Rack::Utils.parse_nested_query(captured)
+    end
+
+    def pandoc_upload
+      fixture_file_upload("import_sample.md", "text/markdown")
+    end
+
+    # Stub the build server for a #pandoc call, yielding to the test block.
+    def stub_pandoc_server(body: "<pretext/>", code: "200", &test_block)
+      response = Struct.new(:body).new(body)
+      response.define_singleton_method(:code) { code }
+      http = Object.new
+      http.define_singleton_method(:request) { |_req| response }
+
+      Net::HTTP.stub(:start, proc { |*_args, &http_block| http_block.call(http) }, &test_block)
+    end
+
+    # POST to #pandoc and return the request it actually wrote to the wire.
+    #
+    # `set_form` in multipart mode holds the fields as data and encodes them
+    # only while writing to the socket, so there is no body to read off the
+    # request object beforehand. Handing it a StringIO in place of a socket
+    # yields the real encoded request -- boundaries, filenames and all -- which
+    # is the half worth asserting on here: the build token is added on this side
+    # and must never be expected from (or echoed back to) the browser.
+    def captured_pandoc_request(extra_params = {})
+      wire = StringIO.new
+      response = Struct.new(:body).new("<pretext/>")
+      response.define_singleton_method(:code) { "200" }
+      http = Object.new
+      http.define_singleton_method(:request) do |req|
+        req.exec(wire, "1.1", "/pandoc/")
+        response
+      end
+
+      Net::HTTP.stub(:start, proc { |*_args, &http_block| http_block.call(http) }) do
+        post pandoc_projects_url, params: { file: pandoc_upload }.merge(extra_params)
+      end
+      assert_response :success
+      wire.string
     end
 end

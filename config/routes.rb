@@ -160,6 +160,9 @@ Rails.application.routes.draw do
       get "shared"
       post "from_template/:template_id" => "projects#create_from_template", as: "create_from_template"
       post "import" => "projects#create_from_import", as: "create_from_import"
+      # Proxy to the lite build server's pandoc endpoint, used by the import
+      # wizard. On the collection, not a member: no project exists yet.
+      post "pandoc" => "projects#pandoc", as: "pandoc"
       post "feedback" => "projects#feedback", as: "feedback"
       get "lunr-pretext-search-index.js", to: redirect("/ptx-search.js")
       get "*_/lunr-pretext-search-index.js", to: redirect("/ptx-search.js")
