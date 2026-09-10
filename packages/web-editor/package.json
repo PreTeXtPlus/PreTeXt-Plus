@@ -45,7 +45,6 @@
     "@pretextbook/pretext-html": "^0.15.0",
     "@pretextbook/remark-pretext": "^0.1.0",
     "@pretextbook/schema": "^0.7.0",
-    "@pretextbook/visual-editor": "^0.1.2",
     "@tailwindcss/vite": "^4.3.3",
     "clsx": "^2.1.1",
     "constrained-editor-plugin": "^1.4.0",

@@ -76,12 +76,6 @@ interface ImportDialogProps {
   onClose: () => void;
 }
 
-const FORMAT_LABELS: Record<SourceFormat, string> = {
-  latex: "LaTeX",
-  markdown: "Markdown",
-  pretext: "PreTeXt",
-};
-
 /**
  * What the author can tell the dialog the source is. Detection is right for
  * whole documents and for LaTeX, but a short Markdown snippet can read as
