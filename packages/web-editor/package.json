@@ -38,7 +38,7 @@
     "@monaco-editor/react": "^4.8.0-rc.3",
     "@pretextbook/completions": "^0.3.0",
     "@pretextbook/format": "^0.5.0",
-    "@pretextbook/import": "^0.11.0",
+    "@pretextbook/import": "^0.13.0",
     "@pretextbook/latex-pretext": "^0.3.1",
     "@pretextbook/latex-style-pretext": "^0.5.1",
     "@pretextbook/markdown-style-pretext": "^0.1.4",

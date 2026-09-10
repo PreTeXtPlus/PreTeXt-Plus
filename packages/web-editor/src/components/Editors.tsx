@@ -75,6 +75,9 @@ import { defaultChildDivisionType } from "./toc/types";
 import { buildProjectAssetView, makeUniqueAssetRef } from "../assetView";
 import { buildProjectSnippetView, makeUniqueSnippetRef } from "../snippetView";
 import { newRecordId } from "../recordId";
+import type { ImportEngine } from "@pretextbook/import/react";
+import InsertImportDialog from "./InsertImportDialog";
+import { takenRefs, type InsertImportPlan } from "../insertImport";
 import {
   createEditorStore,
   defaultTocCollapsed,
@@ -274,6 +277,18 @@ export interface editorProps {
   onDivisionAdd?: (
     division: Division,
   ) => void | string | Promise<string | undefined | void>;
+
+  /**
+   * Converters offered by "Import into…" in the TOC, which is hidden entirely
+   * when none are supplied. Order is precedence: the importer routes an upload
+   * to the first engine that reads its extension.
+   *
+   * They come from the host because they are the host's business — a remote
+   * converter needs its URL and its credentials — while what an import *does*
+   * once converted (new divisions, a rewritten parent, the shared doc) is this
+   * component's. See `insertImport.ts`.
+   */
+  importEngines?: ImportEngine[];
 
   /**
    * Called when the user deletes a division via the TOC UI.
@@ -567,6 +582,8 @@ const EditorsInner = (props: EditorsInnerProps) => {
   const toggleTocCollapsed = useEditorStore((s) => s.toggleTocCollapsed);
   const isFindPanelOpen = useEditorStore((s) => s.isFindPanelOpen);
   const isLatexDialogOpen = useEditorStore((s) => s.isLatexDialogOpen);
+  const isInsertImportOpen = useEditorStore((s) => s.isInsertImportOpen);
+  const insertImportTargetId = useEditorStore((s) => s.insertImportTargetId);
   const isCleanDialogOpen = useEditorStore((s) => s.isCleanDialogOpen);
   const isConvertDialogOpen = useEditorStore((s) => s.isConvertDialogOpen);
   const isDocinfoEditorOpen = useEditorStore((s) => s.isDocinfoEditorOpen);
@@ -1190,6 +1207,32 @@ const EditorsInner = (props: EditorsInnerProps) => {
     startSectionEdit(newDiv, { isNew: true });
   };
 
+  /**
+   * Apply an import into an existing division (see `insertImport.ts`).
+   *
+   * The generalisation of `handleDivisionAdd` above from one division to
+   * several, and for the same reason it is one transaction: peers must never
+   * see the parent's placeholders before the divisions those placeholders name.
+   *
+   * Each division reaches the host through the usual `onDivisionAdd`, so an
+   * import persists by exactly the path a division created by hand does — there
+   * is no separate bulk endpoint to keep in step.
+   */
+  const handleInsertImport = (plan: InsertImportPlan) => {
+    const parent = divisions.find((d) => d.xmlId === insertImportTargetId);
+    if (!parent) return;
+
+    collabTransact(() => {
+      for (const division of plan.divisions) applyDivisionAdd(division);
+      emitContentChange(parent.xmlId, plan.parentSource, parent.sourceFormat);
+    });
+
+    // Open the first thing imported rather than leaving the author on the
+    // division they imported *into*, which now shows only a placeholder.
+    const first = plan.divisions[0];
+    if (first) setActiveDivisionId(first.xmlId);
+  };
+
   // ── Asset embedding ─────────────────────────────────────────────────────
   // Assets are no longer inserted at the Monaco cursor (which silently fails
   // inside a division's locked header). Instead a newly added asset is dropped
@@ -1486,6 +1529,7 @@ const EditorsInner = (props: EditorsInnerProps) => {
       hasFeedback: props.onFeedbackSubmit !== undefined,
       hasAssetDuplicate: canDuplicateAsset,
       hasSnippetDuplicate: canDuplicateSnippet,
+      canInsertImport: (props.importEngines?.length ?? 0) > 0,
     });
   });
 
@@ -2240,6 +2284,22 @@ const EditorsInner = (props: EditorsInnerProps) => {
         {isLatexDialogOpen ? (
           <LatexImportDialog onClose={() => closeModal("isLatexDialogOpen")} />
         ) : null}
+        {isInsertImportOpen && props.importEngines?.length ? (() => {
+          const parent = divisions.find((d) => d.xmlId === insertImportTargetId);
+          return parent ? (
+            <InsertImportDialog
+              parent={parent}
+              defaultChildType={defaultChildDivisionType(parent.type)}
+              // All three pools share one ref namespace on the host, so an
+              // import told only about divisions could mint a name an image
+              // already holds and be rejected on save.
+              takenIds={takenRefs(divisions, projectAssets, projectSnippets)}
+              engines={props.importEngines}
+              onConfirm={handleInsertImport}
+              onClose={() => closeModal("isInsertImportOpen")}
+            />
+          ) : null;
+        })() : null}
         {isCleanDialogOpen ? (
           <LatexCleanDialog
             findings={cleanFindings}

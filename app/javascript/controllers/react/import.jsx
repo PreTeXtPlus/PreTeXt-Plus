@@ -2,151 +2,26 @@ import React, { useCallback, useMemo } from "react";
 import ReactDOM from "react-dom/client";
 import { ImportWizard } from "@pretextbook/import/react";
 import {
-  analyzeImportSources,
-  createRemotePandocEngine,
-  extractUpload,
-  importProjectFromFiles,
   projectForImportMode,
-  relayoutImport,
   serializeProjectToPlusPayload,
 } from "@pretextbook/import";
+import { buildImportEngines } from "./importEngines";
 import "@pretextbook/import/react.css";
 
 /** @typedef {import("@pretextbook/import").ImportedProjectSuccess} ImportedProjectSuccess */
-/** @typedef {import("@pretextbook/import").ImportedProjectResult} ImportedProjectResult */
-/** @typedef {import("@pretextbook/import").ImportProjectOptions} ImportProjectOptions */
 /** @typedef {import("@pretextbook/import").ImportMode} ImportMode */
-/** @typedef {import("@pretextbook/import/react").PreparedUpload} PreparedUpload */
-
-/**
- * How many levels of division to split out of the root, per document kind, so
- * that either kind splits down to its **subsections**.
- *
- * The depths differ because `resolveSplitLevel` counts levels below the root
- * element, and a book has a chapter layer an article does not: for a book 3 is
- * chapter → section → subsection, while for an article 2 is already
- * section → subsection (3 would carry on into subsubsections).
- *
- * Splitting this far is not a preference here, it's the storage model: a plus
- * project keeps each division as its own record, joined by `<plus:* ref="…"/>`
- * placeholders, and that is the unit of editing, of the table of contents, and
- * of collaborative locking. A division left unsplit is one nobody can open on
- * their own.
- */
-const SPLIT_LEVEL = { book: 3, article: 2 };
-
-/**
- * Convert an already-unpacked upload, splitting to subsection depth whatever
- * the document turns out to be.
- *
- * The kind is not knowable up front — `detectDocumentKind` reads *PreTeXt*
- * source, so a raw LaTeX or Markdown upload only classifies itself once
- * converted — so this converts at the book depth and repeats at the article
- * depth if that is what came back. The second pass only ever runs for
- * articles, which are the cheap case by definition; a book, the expensive one,
- * is right on the first try.
- *
- * @param {Record<string, string>} files
- * @param {ImportProjectOptions} options
- * @returns {ImportedProjectResult}
- */
-function importSplitToSubsections(files, options) {
-  const asBook = importProjectFromFiles(files, {
-    ...options,
-    splitLevel: SPLIT_LEVEL.book,
-  });
-  if ("pretextError" in asBook || asBook.documentKind === "book") return asBook;
-
-  return importProjectFromFiles(files, {
-    ...options,
-    splitLevel: SPLIT_LEVEL.article,
-  });
-}
-
-/**
- * The wizard's converter, replacing its built-in one so the split depth is
- * ours rather than the checkbox's.
- *
- * `prepare`/`convertPrepared` mirror the built-in engine exactly apart from
- * that; `convertFile` is required by the interface but unreachable, since the
- * wizard prefers the two-phase pair whenever an engine supplies it.
- *
- * @type {import("@pretextbook/import/react").ImportEngine}
- */
-const importEngine = {
-  id: "pretext-plus",
-  label: "Built-in converter",
-  description: "Create a new project starting with LaTeX, Markdown, or PreTeXt files.",
-  prepare: async (file) => {
-    const { files, assets } = await extractUpload(file);
-    return { fileName: file.name, files, assets, analysis: analyzeImportSources(files) };
-  },
-  convertPrepared: (prepared, options) =>
-    importSplitToSubsections(prepared.files, { ...options, assets: prepared.assets }),
-  convertFile: async (file, options) => {
-    const { files, assets } = await extractUpload(file);
-    return importSplitToSubsections(files, { ...options, assets });
-  },
-};
-
-/**
- * The second converter: pandoc, running on the lite build server.
- *
- * This is what brings Word, OpenOffice, EPUB, HTML, reStructuredText, Org and
- * Typst within reach — formats the in-browser pipeline cannot read at all. The
- * wizard shows an engine selector as soon as it is handed more than one engine,
- * so adding it here is the whole of the UI.
- *
- * `url` is our own Rails proxy (`projects#pandoc`), never the build server
- * itself, and `token` is deliberately absent: the shared build credential is
- * added server-side, which is the arrangement the option documents as "omit
- * when proxying". `credentials: "same-origin"` sends the session cookie the
- * proxy authenticates on, and the CSRF token rides alongside it.
- *
- * @param {ImportConfig} config
- * @returns {import("@pretextbook/import/react").ImportEngine}
- */
-function buildPandocEngine({ pandocUrl, csrfToken }) {
-  const engine = createRemotePandocEngine({
-    url: pandocUrl,
-    credentials: "same-origin",
-    headers: { "X-CSRF-Token": csrfToken },
-    label: "Pandoc converter",
-    description:
-      "Create a new project from Word, OpenOffice, EPUB, HTML, and other formats.",
-  });
-
-  return {
-    ...engine,
-    // Same subsection-depth rule as the built-in engine, reached differently.
-    // `importSplitToSubsections` can afford to convert twice because its second
-    // pass is local; here the conversion is a file upload and up to 25s of
-    // server time, so the article pass re-derives the layout from the result
-    // already in hand (`relayoutImport` is pure and re-splits the same
-    // converted source) rather than sending the document again.
-    convertFile: async (file, options) => {
-      const asBook = await engine.convertFile(file, {
-        ...options,
-        splitLevel: SPLIT_LEVEL.book,
-      });
-      if ("pretextError" in asBook || asBook.documentKind === "book") {
-        return asBook;
-      }
-      return relayoutImport(asBook, SPLIT_LEVEL.article);
-    },
-  };
-}
 
 /**
  * Fixed options, which also suppress the wizard's own document-kind and
- * "split sections into separate files" controls — the split depth is settled
- * above, and the kind is detected from the source, which it does more reliably
- * than a reader picking from a dropdown before seeing the document.
+ * "split sections into separate files" controls — the split depth is settled by
+ * the engines (see `importEngines.js`), and the kind is detected from the
+ * source, which it does more reliably than a reader picking from a dropdown
+ * before seeing the document.
  *
- * `splitLevel` is deliberately absent: `importEngine` overrides it per pass,
- * and a value here would only be shadowed.
+ * `splitLevel` is deliberately absent: the engines override it per pass, and a
+ * value here would only be shadowed.
  *
- * @type {ImportProjectOptions}
+ * @type {import("@pretextbook/import").ImportProjectOptions}
  */
 const IMPORT_OPTIONS = {};
 
@@ -164,17 +39,9 @@ const IMPORT_OPTIONS = {};
 function ImportApp({ config }) {
   const { createUrl, csrfToken } = config;
 
-  // Two converters, so the wizard renders its engine selector. The pandoc one
-  // is only offered when the host wired a proxy URL: without it there is
-  // nothing to convert against, and an engine that always fails is worse than
-  // one that was never listed.
-  const engines = useMemo(
-    () =>
-      config.pandocUrl
-        ? [importEngine, buildPandocEngine(config)]
-        : [importEngine],
-    [config],
-  );
+  // Shared with the editor's "Import into division…", so both offer the same
+  // converters at the same split depth — see `importEngines.js`.
+  const engines = useMemo(() => buildImportEngines(config), [config]);
 
   // `defaultImportMode` opens the review step on "Keep as LaTeX" (or Markdown)
   // rather than the wizard's own "Convert to PreTeXt" default: plus edits those

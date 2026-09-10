@@ -184,7 +184,8 @@ type ModalKey =
   | "isAssetPickerOpen"
   | "isSnippetPickerOpen"
   | "isFullSourceOpen"
-  | "isFindPanelOpen";
+  | "isFindPanelOpen"
+  | "isInsertImportOpen";
 
 /**
  * All callbacks wired by Editors.tsx that deep components need to call.
@@ -271,9 +272,21 @@ export interface EditorStoreState {
 
   /** True when the host passed `onSnippetDuplicate`. Controls whether Duplicate is offered. */
   hasSnippetDuplicate: boolean;
+  /**
+   * True when the host supplied converters, which is what makes "Import into…"
+   * worth offering: without one there is nothing to import *with*.
+   */
+  canInsertImport: boolean;
 
   // ── UI state owned by the store ────────────────────────────────────────────
 
+  /**
+   * The division an "Import into…" is aimed at, held while its dialog is open.
+   * Captured when the menu item is chosen rather than read from the selection
+   * later: the author may click elsewhere in the TOC while reviewing an import,
+   * and it must land where they said.
+   */
+  insertImportTargetId: string | null;
   isTocCollapsed: boolean;
   /** Convert LaTeX/Markdown pasted into a PreTeXt division — see {@link PASTE_AUTO_CONVERT_KEY}. */
   pasteAutoConvert: boolean;
@@ -294,6 +307,7 @@ export interface EditorStoreState {
    * that shape: open, closed, nothing else to track here.
    */
   isFindPanelOpen: boolean;
+  isInsertImportOpen: boolean;
   /**
    * The find/replace drawer's query, replacement text and option toggles.
    * Kept in the store (rather than the drawer's own `useState`) so closing
@@ -368,6 +382,8 @@ export interface EditorStoreState {
    * for future sessions — see {@link TOC_COLLAPSED_KEY}.
    */
   toggleTocCollapsed: () => void;
+  /** Open the import dialog aimed at `parentXmlId`. */
+  startInsertImport: (parentXmlId: string) => void;
   /**
    * Turn paste-and-convert on or off, remembering the choice for future
    * sessions — see {@link PASTE_AUTO_CONVERT_KEY}.
@@ -486,6 +502,7 @@ export type EditorSyncableState = Pick<
   | "hasFeedback"
   | "hasAssetDuplicate"
   | "hasSnippetDuplicate"
+  | "canInsertImport"
 >;
 
 // ── Factory ─────────────────────────────────────────────────────────────────
@@ -558,8 +575,10 @@ export function createEditorStore(init: EditorStoreInit): EditorStoreHandle {
     hasFeedback: false,
     hasAssetDuplicate: false,
     hasSnippetDuplicate: false,
+    canInsertImport: false,
 
     // ── Initial UI state ───────────────────────────────────────────────────
+    insertImportTargetId: null,
     isTocCollapsed: defaultTocCollapsed(),
     pasteAutoConvert: defaultPasteAutoConvert(),
     showLivePreview: true,
@@ -573,6 +592,7 @@ export function createEditorStore(init: EditorStoreInit): EditorStoreHandle {
     isSnippetPickerOpen: false,
     isFullSourceOpen: false,
     isFindPanelOpen: false,
+    isInsertImportOpen: false,
     findPanelState: initialFindPanelState,
     editingId: null,
     editDraft: null,
@@ -654,6 +674,8 @@ export function createEditorStore(init: EditorStoreInit): EditorStoreHandle {
         writeStoredPasteAutoConvert(pasteAutoConvert);
         return { pasteAutoConvert };
       }),
+    startInsertImport: (parentXmlId) =>
+      set({ insertImportTargetId: parentXmlId, isInsertImportOpen: true }),
     openModal: (modal) => set({ [modal]: true } as Pick<EditorStoreState, ModalKey>),
     closeModal: (modal) => set({ [modal]: false } as Pick<EditorStoreState, ModalKey>),
 

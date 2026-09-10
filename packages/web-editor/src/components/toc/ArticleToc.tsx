@@ -43,6 +43,8 @@ const ArticleToc = ({
 
   const selectSection = useEditorStore((s) => s.selectSection);
   const addSection = useEditorStore((s) => s.addSection);
+  const startInsertImport = useEditorStore((s) => s.startInsertImport);
+  const canInsertImport = useEditorStore((s) => s.canInsertImport);
   const removeSection = useEditorStore((s) => s.removeSection);
   const divisionContentChange = useEditorStore((s) => s.divisionContentChange);
   const insertAtCursor = useEditorStore((s) => s.insertAtCursor);
@@ -408,6 +410,17 @@ const ArticleToc = ({
                             label: "Add new division",
                             onClick: () => addSection(rootDivision.xmlId),
                           },
+                          // Same gate as adding one by hand: an import lands as
+                          // child divisions, so it needs a format that can hold
+                          // a ref placeholder just as much.
+                          ...(canInsertImport
+                            ? [
+                                {
+                                  label: "Import into division…",
+                                  onClick: () => startInsertImport(rootDivision.xmlId),
+                                },
+                              ]
+                            : []),
                         ]
                       : []),
                   ]
@@ -451,6 +464,15 @@ const ArticleToc = ({
                             label: "Add new division",
                             onClick: () => addSection(node.division.xmlId),
                           },
+                          ...(canInsertImport
+                            ? [
+                                {
+                                  label: "Import into division…",
+                                  onClick: () =>
+                                    startInsertImport(node.division.xmlId),
+                                },
+                              ]
+                            : []),
                         ]
                       : []),
                     {

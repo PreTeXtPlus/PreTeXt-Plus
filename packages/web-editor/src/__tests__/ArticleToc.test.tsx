@@ -27,7 +27,11 @@ const divisions: Division[] = [
   },
 ];
 
-function renderToc(readOnly?: boolean, docDivisions: Division[] = divisions) {
+function renderToc(
+  readOnly?: boolean,
+  docDivisions: Division[] = divisions,
+  configure?: (store: ReturnType<typeof createEditorStore>["store"]) => void,
+) {
   const { store } = createEditorStore({
     source: docDivisions[0].source,
     sourceFormat: "pretext",
@@ -40,6 +44,7 @@ function renderToc(readOnly?: boolean, docDivisions: Division[] = divisions) {
     activeDivisionId: docDivisions[0].xmlId,
     projectAssets: undefined,
   });
+  configure?.(store);
   return render(
     <EditorStoreProvider store={store}>
       <ArticleToc readOnly={readOnly} />
@@ -305,5 +310,55 @@ describe("ArticleToc division type choices", () => {
       expect(value, label).toBe(type);
       expect(options, label).toContain(type);
     }
+  });
+});
+
+/**
+ * "Import into division…" brings an outside document in as child divisions, so
+ * it is offered exactly where adding one by hand is — and only when the host
+ * actually supplied a converter to import with.
+ */
+describe("import into division", () => {
+  const withEngines = (store: ReturnType<typeof createEditorStore>["store"]) =>
+    store.setState({ canInsertImport: true });
+
+  it("is absent when the host supplied no converters", () => {
+    renderToc(undefined, divisions);
+    openMenu("A section");
+    expect(screen.getByText("Add new division")).toBeInTheDocument();
+    expect(screen.queryByText("Import into division…")).not.toBeInTheDocument();
+  });
+
+  it("is offered beside Add new division once converters exist", () => {
+    renderToc(undefined, divisions, withEngines);
+    openMenu("A section");
+    expect(screen.getByText("Import into division…")).toBeInTheDocument();
+  });
+
+  it("is offered on the root division too", () => {
+    renderToc(undefined, divisions, withEngines);
+    openMenu("Document");
+    expect(screen.getByText("Import into division…")).toBeInTheDocument();
+  });
+
+  it("aims the dialog at the division whose menu was used", () => {
+    let store!: ReturnType<typeof createEditorStore>["store"];
+    renderToc(undefined, divisions, (s) => {
+      store = s;
+      withEngines(s);
+    });
+    openMenu("A section");
+    fireEvent.click(screen.getByText("Import into division…"));
+
+    expect(store.getState().isInsertImportOpen).toBe(true);
+    expect(store.getState().insertImportTargetId).toBe("sec");
+  });
+
+  // Read-only goes further than hiding the item: the row's menu is not
+  // rendered at all, since every action in it mutates the project.
+  it("is unreachable in a read-only project", () => {
+    renderToc(true, divisions, withEngines);
+    expect(() => openMenu("A section")).toThrow();
+    expect(screen.queryByText("Import into division…")).not.toBeInTheDocument();
   });
 });

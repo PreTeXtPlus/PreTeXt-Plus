@@ -301,7 +301,20 @@ class ProjectsController < ApplicationController
                     status: :content_too_large
     end
 
-    uri = URI.parse("https://#{Rails.application.credentials.dig(:preview_build, :host)}/pandoc/")
+    host = Rails.application.credentials.dig(:preview_build, :host)
+    if host.blank?
+      Rails.logger.error("[pandoc] no preview_build host configured; check credentials")
+      return render plain: "The conversion service is not configured.", status: :bad_gateway
+    end
+    uri = URI.parse("https://#{host}/pandoc/")
+
+    # Rewind before handing the tempfile to `set_form`. Net::HTTP sizes the IO to
+    # set Content-Length but streams from wherever its position happens to be, so
+    # a handle any earlier reader left mid-file would announce more bytes than it
+    # sends -- and the server would then wait for the remainder until one side's
+    # timeout fired. Cheap insurance against a whole class of hang.
+    upload.tempfile.rewind
+
     # `from` and `standalone` are passed through rather than validated here: the
     # build server owns the list of formats it will read (and answers 400 with
     # the offending name), and duplicating it would leave two lists to drift.
@@ -314,6 +327,7 @@ class ProjectsController < ApplicationController
 
     request = Net::HTTP::Post.new(uri.request_uri)
     request.set_form(form, "multipart/form-data")
+    started = Process.clock_gettime(Process::CLOCK_MONOTONIC)
     response = Net::HTTP.start(
       uri.host,
       uri.port,
@@ -322,13 +336,25 @@ class ProjectsController < ApplicationController
       read_timeout: PANDOC_READ_TIMEOUT
     ) { |http| http.request(request) }
 
+    # Logged on every call, success included. "It timed out" is otherwise
+    # indistinguishable from a dozen different failures -- a cold build server, a
+    # conversion that outran its budget, a request that never left this host --
+    # and the wizard only ever sees the last of them.
+    Rails.logger.info(
+      "[pandoc] #{uri.host} #{params[:from].presence || 'auto'} " \
+      "#{upload.original_filename} (#{upload.size}B) -> #{response.code} " \
+      "in #{pandoc_elapsed(started)}s"
+    )
+
     # text/plain whatever the body turns out to be: a 422's body is a fragment
     # of the build server's HTML, and it must reach the wizard as characters to
     # parse rather than as markup a browser might render on this origin.
     render plain: response.body, status: response.code.to_i
-  rescue Net::OpenTimeout, Net::ReadTimeout
+  rescue Net::OpenTimeout, Net::ReadTimeout => e
+    Rails.logger.error("[pandoc] #{e.class} after #{pandoc_elapsed(started)}s (read timeout is #{PANDOC_READ_TIMEOUT}s)")
     render plain: "The conversion service did not respond in time.", status: :gateway_timeout
-  rescue SocketError, EOFError, IOError, Errno::ECONNREFUSED, Errno::EHOSTUNREACH, SystemCallError
+  rescue SocketError, EOFError, IOError, Errno::ECONNREFUSED, Errno::EHOSTUNREACH, SystemCallError => e
+    Rails.logger.error("[pandoc] #{e.class}: #{e.message} after #{pandoc_elapsed(started)}s")
     render plain: "Could not reach the conversion service.", status: :bad_gateway
   end
 
@@ -357,6 +383,11 @@ class ProjectsController < ApplicationController
   end
 
   private
+    # Seconds since `started`, or "?" when the failure came before the clock did.
+    def pandoc_elapsed(started)
+      started ? (Process.clock_gettime(Process::CLOCK_MONOTONIC) - started).round(1) : "?"
+    end
+
     # Only allow a list of trusted parameters through.
     # `document_type` is permitted on create and *only* on create. Whether a project is a
     # deck is fixed when it is made: changing it would mean rewriting the source,
