@@ -87,7 +87,7 @@ describe("ImportDialog", () => {
       target: { value: String.raw`\section{Intro}` + "\nHello $x$." },
     });
     expect(screen.getByLabelText("Source format")).toHaveDisplayValue(
-      "Auto-detect (LaTeX)",
+      "Auto-detect",
     );
 
     fireEvent.click(screen.getByRole("button", { name: "Convert" }));
@@ -193,7 +193,7 @@ describe("ImportDialog", () => {
     fireEvent.change(sourceBox(), { target: { value: "Let $x$ be *prime*." } });
     const select = screen.getByLabelText("Source format");
     // Ties go to LaTeX, which is why the override exists.
-    expect(select).toHaveDisplayValue("Auto-detect (LaTeX)");
+    expect(select).toHaveDisplayValue("Auto-detect");
     expect(
       within(select).queryByRole("option", { name: "PreTeXt" }),
     ).not.toBeInTheDocument();
