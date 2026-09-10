@@ -24,7 +24,7 @@ let actions: EditorMenuActions;
 const baseProps = () => ({
   content: "<article/>",
   onContentChange: vi.fn(),
-  onOpenLatexImport: vi.fn(),
+  onOpenImport: vi.fn(),
   onOpenDocinfoEditor: vi.fn(),
   onUndo: vi.fn(),
   onRedo: vi.fn(),
@@ -172,7 +172,7 @@ describe("CodeEditorMenu", () => {
       await openMenu("Tools");
 
       expect(menuItem("Format PreTeXt")).toBeInTheDocument();
-      expect(menuItem("Import LaTeX…")).toBeInTheDocument();
+      expect(menuItem("Import…")).toBeInTheDocument();
       expect(menuItem("Edit Macros…")).toBeInTheDocument();
       expect(menuItem("Display Full Source")).toBeInTheDocument();
       expect(queryMenuItem("Edit Preamble…")).not.toBeInTheDocument();
@@ -192,7 +192,7 @@ describe("CodeEditorMenu", () => {
       expect(menuItem("Clean up LaTeX…")).toBeInTheDocument();
       expect(menuItem("Edit Preamble…")).toBeInTheDocument();
       expect(queryMenuItem("Format PreTeXt")).not.toBeInTheDocument();
-      expect(queryMenuItem("Import LaTeX…")).not.toBeInTheDocument();
+      expect(queryMenuItem("Import…")).not.toBeInTheDocument();
     });
 
     it("offers the shared editor commands in every format", async () => {

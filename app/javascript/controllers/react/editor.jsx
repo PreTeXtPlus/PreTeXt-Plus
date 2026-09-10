@@ -690,8 +690,8 @@ function EditorApp({ config }) {
     if (change.docinfo !== undefined) w.docinfo = change.docinfo;
   }, []);
 
-  // Converters for the TOC's "Import into division…". Shared with the
-  // new-project dialog so both offer the same ones at the same split depth.
+  // Converters for the code editor's Tools → Import…. Shared with the
+  // new-project dialog so both read the same formats.
   const importEngines = useMemo(
     () => buildImportEngines({ pandocUrl, csrfToken }),
     [pandocUrl, csrfToken],

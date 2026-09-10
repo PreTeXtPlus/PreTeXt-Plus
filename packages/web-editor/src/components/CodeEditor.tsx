@@ -66,8 +66,8 @@ interface CodeEditorProps {
    * not on horizontal movement or on programmatic reveals.
    */
   onCursorLineChange?: (line: number) => void;
-  /** Called when the user clicks "Import LaTeX" in the toolbar. */
-  onOpenLatexImport: () => void;
+  /** Called when the user chooses Tools → Import…. */
+  onOpenImport: () => void;
   /**
    * Called when the user clicks "Clean up LaTeX…" in the toolbar. The button is
    * shown only when the active format has a cleanup engine (LaTeX) and the
@@ -218,7 +218,7 @@ const CodeEditor = forwardRef<CodeEditorHandle, CodeEditorProps>(({
   onRebuild,
   onSave,
   onCursorLineChange,
-  onOpenLatexImport,
+  onOpenImport,
   onOpenClean,
   onOpenDocinfoEditor,
   onOpenConvertToPretext,
@@ -1134,7 +1134,7 @@ const CodeEditor = forwardRef<CodeEditorHandle, CodeEditorProps>(({
         sourceFormat={sourceFormat}
         rootType={rootType}
         onContentChange={handleContentChange}
-        onOpenLatexImport={onOpenLatexImport}
+        onOpenImport={onOpenImport}
         pasteAutoConvert={pasteAutoConvert}
         onTogglePasteAutoConvert={onTogglePasteAutoConvert}
         onOpenClean={

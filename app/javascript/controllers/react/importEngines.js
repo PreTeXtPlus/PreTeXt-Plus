@@ -1,11 +1,13 @@
 /**
- * The converters this app offers the import wizard, shared by both places it
- * runs: the new-project dialog (`react/import.jsx`) and "Import into division…"
- * inside the editor (`<Editors importEngines>`).
+ * The converters this app offers, shared by both places that import: the
+ * new-project wizard (`react/import.jsx`) and the editor's Tools → Import…
+ * dialog (`<Editors importEngines>`), which converts a file for the author to
+ * paste into the division they are editing.
  *
- * They are built here rather than in either mount because the split depth below
- * is a property of how *this app stores a project*, not of which dialog is
- * open — and because two copies would be two chances to disagree about it.
+ * They are built here rather than in either mount because two copies would be
+ * two chances to disagree about which formats this deployment reads. The split
+ * depth below matters only to the wizard: the editor's dialog takes the whole
+ * converted document and never looks at the layout.
  */
 import {
   analyzeImportSources,
@@ -39,32 +41,18 @@ const SPLIT_LEVEL = { book: 3, article: 2 };
  * Convert an already-unpacked upload, splitting deeply enough that every
  * division it produces is its own record.
  *
- * **New project.** The document kind is not knowable up front —
+ * The document kind is not knowable up front —
  * `detectDocumentKind` reads *PreTeXt* source, so a raw LaTeX or Markdown
  * upload only classifies itself once converted — so this converts at the book
  * depth and repeats at the article depth if that is what came back. The second
  * pass only ever runs for articles, which are the cheap case by definition; a
  * book, the expensive one, is right on the first try.
  *
- * **Insert.** Neither of those applies: the wrapper is dropped in favour of its
- * children, so the document kind says nothing about how deep to cut, and the
- * importer's own default (1) would leave a section's subsections inside it as
- * one record — divisions the TOC could not open. The book depth is the floor
- * for anything that *can* be split, since retargeting pushes anything deeper
- * than `<subsubsection>` into `<paragraphs>`, which never becomes a file.
- *
  * @param {Record<string, string>} files
  * @param {ImportProjectOptions} options
  * @returns {ImportedProjectResult}
  */
 function importSplitToSubsections(files, options) {
-  if (options.destination?.kind === "insert") {
-    return importProjectFromFiles(files, {
-      ...options,
-      splitLevel: SPLIT_LEVEL.book,
-    });
-  }
-
   const asBook = importProjectFromFiles(files, {
     ...options,
     splitLevel: SPLIT_LEVEL.book,
@@ -154,11 +142,7 @@ function buildPandocEngine({ pandocUrl, csrfToken }) {
         ...options,
         splitLevel: SPLIT_LEVEL.book,
       });
-      if (
-        "pretextError" in asBook ||
-        asBook.documentKind === "book" ||
-        options.destination?.kind === "insert"
-      ) {
+      if ("pretextError" in asBook || asBook.documentKind === "book") {
         return asBook;
       }
       return relayoutImport(asBook, SPLIT_LEVEL.article);

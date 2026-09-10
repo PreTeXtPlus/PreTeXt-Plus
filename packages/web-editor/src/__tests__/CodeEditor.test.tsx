@@ -17,7 +17,7 @@ const baseProps = {
   content: "<article/>",
   sourceFormat: "pretext" as const,
   onChange: vi.fn(),
-  onOpenLatexImport: vi.fn(),
+  onOpenImport: vi.fn(),
   onOpenDocinfoEditor: vi.fn(),
   onShowFullSource: vi.fn(),
 };

@@ -39,8 +39,8 @@ const IMPORT_OPTIONS = {};
 function ImportApp({ config }) {
   const { createUrl, csrfToken } = config;
 
-  // Shared with the editor's "Import into division…", so both offer the same
-  // converters at the same split depth — see `importEngines.js`.
+  // Shared with the editor's Tools → Import…, so both read the same formats —
+  // see `importEngines.js`.
   const engines = useMemo(() => buildImportEngines(config), [config]);
 
   // `defaultImportMode` opens the review step on "Keep as LaTeX" (or Markdown)
