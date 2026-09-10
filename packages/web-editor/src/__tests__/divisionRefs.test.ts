@@ -365,6 +365,60 @@ describe('renameDivisionRef', () => {
     ).toBe('before\n\\plus{worksheet}{h1}\nafter')
   })
 
+  // A rename rewrites the placeholder in place rather than rebuilding it, so
+  // the pass-through attributes an author put on the include survive. Rebuilt
+  // from type and id, a `component="teacher"` would vanish silently -- no
+  // error, just a division that quietly starts appearing in every build.
+  it('preserves pass-through attributes on the placeholder', () => {
+    expect(
+      renameDivisionRef(
+        '<plus:handout ref="h1" component="teacher"/>',
+        'h1',
+        'h2',
+        'worksheet',
+        'pretext',
+      ),
+    ).toBe('<plus:worksheet ref="h2" component="teacher"/>')
+
+    expect(
+      renameDivisionRef(
+        '::handout{ref="h1" component="teacher"}',
+        'h1',
+        'h2',
+        'worksheet',
+        'markdown',
+      ),
+    ).toBe('::worksheet{ref="h2" component="teacher"}')
+
+    expect(
+      renameDivisionRef(
+        '\\plus[component=teacher]{handout}{h1}',
+        'h1',
+        'h2',
+        'worksheet',
+        'latex',
+      ),
+    ).toBe('\\plus[component=teacher]{worksheet}{h2}')
+  })
+
+  it('preserves attributes in the expanded-empty form, retagging both tags', () => {
+    expect(
+      renameDivisionRef(
+        '<plus:handout ref="h1" component="teacher"></plus:handout>',
+        'h1',
+        'h2',
+        'worksheet',
+        'pretext',
+      ),
+    ).toBe('<plus:worksheet ref="h2" component="teacher"></plus:worksheet>')
+  })
+
+  it('keeps a markdown label argument', () => {
+    expect(
+      renameDivisionRef('::handout[Intro]{ref="h1"}', 'h1', 'h2', 'worksheet', 'markdown'),
+    ).toBe('::worksheet[Intro]{ref="h2"}')
+  })
+
   it('leaves an example inside a verbatim span alone', () => {
     const source = '\\begin{verbatim}\n\\plus{handout}{h1}\n\\end{verbatim}\n\\plus{handout}{h1}\n'
     expect(renameDivisionRef(source, 'h1', 'h1', 'worksheet', 'latex')).toBe(
@@ -424,5 +478,63 @@ describe('insertDivisionRef', () => {
     expect(insertDivisionRef(source, 'b', 'worksheet', 'a', 'latex')).toBe(
       source + '\n\\plus{worksheet}{b}',
     )
+  })
+})
+
+// A LaTeX holder has nowhere inline to write the attributes a PreTeXt or
+// Markdown holder writes on the placeholder itself, so `\plus` takes them as
+// an optional argument: `@pretextbook/latex-pretext` converts
+// `\plus[component=teacher]{section}{x}` to
+// `<plus:section ref="x" component="teacher"/>`. Every helper that matches a
+// placeholder has to recognise that shape, or an include carrying attributes
+// stops being seen as an include at all -- it would vanish from the TOC and
+// be auto-recreated as a phantom division.
+describe('latex \\plus optional argument', () => {
+  it('is recognised as a division include', () => {
+    expect(parseDivisionRefs('\\plus[component=teacher]{section}{a}', 'latex')).toEqual(['a'])
+    expect(parseDivisionRefsWithTypes('\\plus[component=teacher]{chapter}{a}', 'latex')).toEqual([
+      { type: 'chapter', xmlId: 'a', generic: false },
+    ])
+  })
+
+  it('is recognised as an asset or snippet include', () => {
+    expect(parseAssetRefs('\\plus[width=50%]{image}{i1}', 'latex')).toEqual([{ ref: 'i1' }])
+    expect(parseSnippetRefs('\\plus[component=teacher]{snippet}{s1}', 'latex')).toEqual([
+      { ref: 's1' },
+    ])
+  })
+
+  it('is removed whole, optional argument included', () => {
+    expect(removeDivisionRef('a\n\\plus[component=teacher]{section}{x}\nb', 'x', 'latex')).toBe(
+      'a\nb',
+    )
+    expect(removeAssetRef('a\\plus[width=50%]{image}{x}b', 'x')).toBe('ab')
+    expect(removeSnippetRef('a\\plus[component=teacher]{snippet}{x}b', 'x')).toBe('ab')
+  })
+
+  it('keeps its optional argument through an asset or snippet rename', () => {
+    expect(renameAssetRef('\\plus[width=50%]{image}{old}', 'old', 'new')).toBe(
+      '\\plus[width=50%]{image}{new}',
+    )
+    expect(renameSnippetRef('\\plus[component=teacher]{snippet}{old}', 'old', 'new')).toBe(
+      '\\plus[component=teacher]{snippet}{new}',
+    )
+  })
+
+  it('is still ignored inside a verbatim span', () => {
+    expect(
+      parseDivisionRefs(
+        '\\begin{verbatim}\\plus[component=teacher]{section}{a}\\end{verbatim}',
+        'latex',
+      ),
+    ).toEqual([])
+  })
+
+  // The writers stay on the bare two-argument form: the optional argument is
+  // the author's to add, never something the editor invents.
+  it('is not emitted by the placeholder writers', () => {
+    expect(divisionRefTag('section', 'x', 'latex')).toBe('\\plus{section}{x}')
+    expect(assetEmbedCode('x', 'latex')).toBe('\\plus{image}{x}')
+    expect(snippetEmbedCode('x', 'latex')).toBe('\\plus{snippet}{x}')
   })
 })

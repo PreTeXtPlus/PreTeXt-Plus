@@ -954,3 +954,273 @@ describe('snippet resolution in assembleFullProjectSource', () => {
     expect(xml.match(/<p>shared<\/p>/g)).toHaveLength(2)
   })
 })
+
+// Every attribute on a `<plus:* ref/>` placeholder except `ref` belongs to the
+// element that replaces it, not to the placeholder. This is how `@component`
+// reaches a division that is included by reference rather than written inline
+// -- there is no other place to put it, since the division's own source is
+// shared by every include of it.
+describe('placeholder attribute pass-through', () => {
+  const article = (body: string): Division => ({
+    id: '1',
+    xmlId: 'a1',
+    title: 'My Article',
+    type: 'article',
+    sourceFormat: 'pretext',
+    source: `<article xml:id="a1"><title>My Article</title>${body}</article>`,
+  })
+
+  const section = (xmlId: string, body = '<p>Body</p>'): Division => ({
+    id: xmlId,
+    xmlId,
+    title: 'A Section',
+    type: 'section',
+    sourceFormat: 'pretext',
+    source: `<section xml:id="${xmlId}"><title>A Section</title>${body}</section>`,
+  })
+
+  const photo: Asset = { id: 'i', ref: 'photo', title: 'Photo', isFile: true, fileRef: 'photo.png' }
+
+  it('copies @component from the placeholder onto the included division', () => {
+    const xml = assembleProjectSource(
+      [article('<plus:section ref="s1" component="teacher"/>'), section('s1')],
+      'a1',
+    )
+    expect(xml).toContain('<section xml:id="s1" component="teacher">')
+    expectWellFormed(xml)
+  })
+
+  // The point of putting it on the include rather than on the record: one
+  // division embedded twice can carry a different component each time.
+  it('gives each include of the same division its own attributes', () => {
+    const xml = assembleProjectSource(
+      [
+        article(
+          '<plus:section ref="s1" component="teacher"/><plus:section ref="s1" component="student"/>',
+        ),
+        section('s1'),
+      ],
+      'a1',
+    )
+    expect(xml).toContain('component="teacher"')
+    expect(xml).toContain('component="student"')
+  })
+
+  // The conversion cache is keyed on xml:id, so an attribute applied before
+  // the cache would be shared by every reference to the division.
+  it('does not leak attributes through the conversion cache', () => {
+    const latexSection: Division = {
+      id: 's1',
+      xmlId: 's1',
+      title: 'A Section',
+      type: 'section',
+      sourceFormat: 'latex',
+      source: '\\section{A Section}\\label{s1}\n\nBody.\n',
+    }
+    const tagged = assembleProjectSource(
+      [article('<plus:section ref="s1" component="teacher"/>'), latexSection],
+      'a1',
+    )
+    expect(tagged).toContain('component="teacher"')
+
+    const plain = assembleProjectSource(
+      [article('<plus:section ref="s1"/>'), latexSection],
+      'a1',
+    )
+    expect(plain).not.toContain('component=')
+  })
+
+  // Only the outermost element: a @component on an include means "leave this
+  // division out", not "tag every paragraph inside it".
+  it('applies to the division element alone, not its descendants', () => {
+    const xml = assembleProjectSource(
+      [
+        article('<plus:section ref="s1" component="teacher"/>'),
+        section('s1', '<p>One</p><p>Two</p>'),
+      ],
+      'a1',
+    )
+    expect(xml).toContain('<section xml:id="s1" component="teacher">')
+    expect(xml).not.toContain('<p component=')
+  })
+
+  it('passes attributes down to a nested include independently', () => {
+    const xml = assembleProjectSource(
+      [
+        article('<plus:section ref="s1" component="teacher"/>'),
+        {
+          ...section('s1', '<plus:subsection ref="s2" component="student"/>'),
+        },
+        { ...section('s2'), type: 'subsection' as Division['type'] },
+      ],
+      'a1',
+    )
+    expect(xml).toContain('<section xml:id="s1" component="teacher">')
+    expect(xml).toContain('<section xml:id="s2" component="student">')
+  })
+
+  // The placeholder is the more local statement, and a duplicate attribute is
+  // not well-formed XML -- so it replaces rather than appends.
+  it('overrides an attribute the division already carries', () => {
+    const xml = assembleProjectSource(
+      [
+        article('<plus:section ref="s1" component="teacher"/>'),
+        {
+          ...section('s1'),
+          source: '<section xml:id="s1" component="student"><title>A</title></section>',
+        },
+      ],
+      'a1',
+    )
+    expect(xml).toContain('component="teacher"')
+    expect(xml).not.toContain('component="student"')
+    expectWellFormed(xml)
+  })
+
+  // `width` used to be plucked off the placeholder by name; it now rides the
+  // same general path, and must still land on the generated <image>.
+  it('carries @width onto a resolved image asset', () => {
+    const xml = assembleProjectSource(
+      [article('<p><plus:image ref="photo" width="50%"/></p>')],
+      'a1',
+      [photo],
+    )
+    expect(xml).toContain('source="photo.png"')
+    expect(xml).toContain('width="50%"')
+    expectWellFormed(xml)
+  })
+
+  it('carries @component onto a resolved image asset', () => {
+    const xml = assembleProjectSource(
+      [article('<p><plus:image ref="photo" component="teacher"/></p>')],
+      'a1',
+      [photo],
+    )
+    expect(xml).toContain('component="teacher"')
+  })
+
+  // A snippet is the one kind whose replacement can be several elements, with
+  // no single tag to hang the attribute on. Each top-level element gets it,
+  // which is what @component means.
+  it('applies to every top-level element of a multi-element snippet', () => {
+    const xml = assembleProjectSource(
+      [article('<plus:snippet ref="note" component="teacher"/>')],
+      'a1',
+      [],
+      [{ id: 'note', ref: 'note', source: '<p>One</p><p>Two</p>', sourceFormat: 'pretext' }],
+    )
+    expect(xml).toContain('<p component="teacher">One</p>')
+    expect(xml).toContain('<p component="teacher">Two</p>')
+    expectWellFormed(xml)
+  })
+
+  // A ref that resolves to nothing comes back as an XML comment, which has no
+  // element to write onto -- it must pass through untouched rather than being
+  // mangled into invalid markup.
+  it('leaves an unresolved ref comment alone', () => {
+    const xml = assembleProjectSource(
+      [article('<plus:section ref="missing" component="teacher"/>')],
+      'a1',
+    )
+    expect(xml).toContain('<!-- missing division: missing -->')
+    expect(xml).not.toContain('component=')
+    expectWellFormed(xml)
+  })
+
+  it('never copies the ref attribute itself', () => {
+    const xml = assembleProjectSource(
+      [article('<plus:section ref="s1"/>'), section('s1')],
+      'a1',
+    )
+    expect(xml).not.toContain('ref="s1"')
+  })
+
+  it('preserves escaping in a passed-through value', () => {
+    const xml = assembleProjectSource(
+      [article('<plus:section ref="s1" component="a &amp; b"/>'), section('s1')],
+      'a1',
+    )
+    expect(xml).toContain('component="a &amp; b"')
+    expectWellFormed(xml)
+  })
+
+  // Markdown and LaTeX holders write the same fact in their own syntax; both
+  // converters already emit it as an attribute on the placeholder.
+  it('reaches assembly from a markdown or latex holder', () => {
+    const markdownHolder: Division = {
+      id: '1',
+      xmlId: 'a1',
+      title: 'My Article',
+      type: 'article',
+      sourceFormat: 'markdown',
+      source: '---\ntype: article\nxml_id: a1\ntitle: My Article\n---\n\n::section{ref="s1" component="teacher"}\n',
+    }
+    expect(assembleProjectSource([markdownHolder, section('s1')], 'a1')).toContain(
+      'component="teacher"',
+    )
+
+    const latexHolder: Division = {
+      id: '1',
+      xmlId: 'a1',
+      title: 'My Article',
+      type: 'article',
+      sourceFormat: 'latex',
+      source: '\\article{My Article}\\label{a1}\n\n\\plus[component=teacher]{section}{s1}\n',
+    }
+    expect(assembleProjectSource([latexHolder, section('s1')], 'a1')).toContain(
+      'component="teacher"',
+    )
+  })
+})
+
+// A root division is wrapped on load only when it actually lacks a wrapper.
+// Deciding that from parsed metadata alone is what made a single typo compound:
+// normalization runs on every load, so an unparseable root gained another
+// wrapper each time, and the locked header lines the author is meant to edit
+// from the TOC were suddenly duplicated in the middle of their own document.
+describe('normalizeDivisionsOnLoad root wrapping', () => {
+  const root = (source: string): Division => ({
+    id: 'r',
+    xmlId: 'pandoc-article',
+    title: 'Imported Project',
+    type: 'article',
+    sourceFormat: 'pretext',
+    source,
+  })
+
+  const load = (source: string) =>
+    normalizeDivisionsOnLoad([root(source)], 'pandoc-article', 'article', 'Imported Project')[0]
+      .source
+
+  // The exact shape that produced the report: a `component` attribute written
+  // on an include with its closing quote missing.
+  it('does not re-wrap a wrapped root whose source is malformed', () => {
+    const source = [
+      '<article xml:id="pandoc-article">',
+      '<title>Imported Project</title>',
+      '<plus:section ref="sec-a" component="test/>',
+      '</article>',
+    ].join('\n')
+
+    expect(load(source)).toBe(source)
+  })
+
+  it('is idempotent over repeated loads of a malformed root', () => {
+    const source = '<article xml:id="pandoc-article">\n<title>T</title>\n<p attr="oops/>\n</article>'
+    expect(load(load(load(source)))).toBe(source)
+  })
+
+  it('still wraps a root that really is a bare fragment', () => {
+    const wrapped = load('<title>Imported Project</title>\n<p>Body</p>')
+    expect(wrapped).toContain('<article xml:id="pandoc-article">')
+    expect(wrapped).toContain('<p>Body</p>')
+    // The fragment's own title is lifted into the wrapper, not left behind.
+    expect(wrapped.match(/<title>/g)).toHaveLength(1)
+  })
+
+  it('leaves a well-formed wrapped root untouched', () => {
+    const source =
+      '<article xml:id="pandoc-article">\n<title>Imported Project</title>\n<p>Body</p>\n</article>'
+    expect(load(source)).toBe(source)
+  })
+})

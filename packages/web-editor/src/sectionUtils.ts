@@ -1700,11 +1700,19 @@ function markdownDivisionRefSource(refValue: string | null): string {
  * `\plus{section}{x}` macro that `@pretextbook/latex-pretext` converts to
  * `<plus:section ref="x"/>`.  The first brace group is the tag name, the
  * second the referenced `xml:id`.
+ *
+ * The optional argument is where a LaTeX author writes the pass-through
+ * attributes that a PreTeXt or Markdown holder writes inline:
+ * `\plus[component=teacher]{section}{x}` converts to
+ * `<plus:section ref="x" component="teacher"/>`.  It is tolerated — and
+ * preserved by the rewrite helpers — everywhere a placeholder is matched, but
+ * never emitted: the writers produce the bare two-argument form and leave the
+ * optional argument to the author.
  */
 function latexDivisionRefSource(refValue: string | null): string {
   const ref = refValue === null ? `([^}]+)` : escapeRegex(refValue);
   const tag = `(?:${DIVISION_REF_TAG_ALTERNATION})`;
-  return `\\\\plus\\{${tag}\\}\\{${ref}\\}`;
+  return `\\\\plus(?:\\[[^\\]]*\\])?\\{${tag}\\}\\{${ref}\\}`;
 }
 
 /**
@@ -1868,7 +1876,7 @@ export function parseDivisionRefsWithTypes(
   const source: Record<SourceFormat, string> = {
     pretext: `<plus:(${tags})\\s[^>]*ref="([^"]+)"[^>]*?(?:/>|>\\s*</plus:${closeTag}>)`,
     markdown: `::(${tags})(?:\\[[^\\]]*\\])?\\{[^}]*ref="([^"]+)"[^}]*\\}`,
-    latex: `\\\\plus\\{(${tags})\\}\\{([^}]+)\\}`,
+    latex: `\\\\plus(?:\\[[^\\]]*\\])?\\{(${tags})\\}\\{([^}]+)\\}`,
   };
   const re = new RegExp(source[sourceFormat], "g");
   const scanned = blankVerbatim(content, sourceFormat);
@@ -1942,7 +1950,7 @@ export function parseAssetRefs(
   const source: Record<SourceFormat, string> = {
     pretext: `<plus:image\\b[^>]*\\bref="([^"]+)"`,
     markdown: `::image(?:\\[[^\\]]*\\])?\\{[^}]*\\bref="([^"]+)"[^}]*\\}`,
-    latex: `\\\\plus\\{image\\}\\{([^}]+)\\}`,
+    latex: `\\\\plus(?:\\[[^\\]]*\\])?\\{image\\}\\{([^}]+)\\}`,
   };
   const re = new RegExp(source[sourceFormat], "g");
   const scanned = blankVerbatim(content, sourceFormat);
@@ -1976,7 +1984,7 @@ export function renameAssetRef(
     `(::image(?:\\[[^\\]]*\\])?\\{[^}]*?\\bref=")${oldR}(")`,
     "g",
   );
-  const latexRe = new RegExp(`(\\\\plus\\{image\\}\\{)${oldR}(\\})`, "g");
+  const latexRe = new RegExp(`(\\\\plus(?:\\[[^\\]]*\\])?\\{image\\}\\{)${oldR}(\\})`, "g");
   return content
     .replace(xmlRe, `$1${newRef}$2`)
     .replace(mdRe, `$1${newRef}$2`)
@@ -1996,7 +2004,7 @@ export function removeAssetRef(content: string, ref: string): string {
     `::image(?:\\[[^\\]]*\\])?\\{[^}]*?\\bref="${r}"[^}]*\\}`,
     "g",
   );
-  const latexRe = new RegExp(`\\\\plus\\{image\\}\\{${r}\\}`, "g");
+  const latexRe = new RegExp(`\\\\plus(?:\\[[^\\]]*\\])?\\{image\\}\\{${r}\\}`, "g");
   return content.replace(xmlRe, "").replace(mdRe, "").replace(latexRe, "");
 }
 
@@ -2045,7 +2053,7 @@ export function parseSnippetRefs(
   const source: Record<SourceFormat, string> = {
     pretext: `<plus:snippet\\b[^>]*\\bref="([^"]+)"`,
     markdown: `::snippet(?:\\[[^\\]]*\\])?\\{[^}]*\\bref="([^"]+)"[^}]*\\}`,
-    latex: `\\\\plus\\{snippet\\}\\{([^}]+)\\}`,
+    latex: `\\\\plus(?:\\[[^\\]]*\\])?\\{snippet\\}\\{([^}]+)\\}`,
   };
   const re = new RegExp(source[sourceFormat], "g");
   const scanned = blankVerbatim(content, sourceFormat);
@@ -2075,7 +2083,7 @@ export function renameSnippetRef(
     `(::snippet(?:\\[[^\\]]*\\])?\\{[^}]*?\\bref=")${oldR}(")`,
     "g",
   );
-  const latexRe = new RegExp(`(\\\\plus\\{snippet\\}\\{)${oldR}(\\})`, "g");
+  const latexRe = new RegExp(`(\\\\plus(?:\\[[^\\]]*\\])?\\{snippet\\}\\{)${oldR}(\\})`, "g");
   return content
     .replace(xmlRe, `$1${newRef}$2`)
     .replace(mdRe, `$1${newRef}$2`)
@@ -2095,7 +2103,7 @@ export function removeSnippetRef(content: string, ref: string): string {
     `::snippet(?:\\[[^\\]]*\\])?\\{[^}]*?\\bref="${r}"[^}]*\\}`,
     "g",
   );
-  const latexRe = new RegExp(`\\\\plus\\{snippet\\}\\{${r}\\}`, "g");
+  const latexRe = new RegExp(`\\\\plus(?:\\[[^\\]]*\\])?\\{snippet\\}\\{${r}\\}`, "g");
   return content.replace(xmlRe, "").replace(mdRe, "").replace(latexRe, "");
 }
 
@@ -2330,14 +2338,76 @@ export function renameDivisionRef(
   const spans = locateDivisionRefs(content, oldXmlId, sourceFormat);
   if (spans.length === 0) return content;
 
-  const tag = divisionRefTag(newType, newXmlId, sourceFormat);
   let out = "";
   let cursor = 0;
   for (const { index, length } of spans) {
-    out += content.slice(cursor, index) + tag;
+    const placeholder = content.slice(index, index + length);
+    out +=
+      content.slice(cursor, index) +
+      retagDivisionRef(placeholder, newType, newXmlId, sourceFormat);
     cursor = index + length;
   }
   return out + content.slice(cursor);
+}
+
+/**
+ * Rewrite one already-located division-ref placeholder in place, changing only
+ * its tag name and its `ref` value and leaving every other character alone.
+ *
+ * Editing the placeholder rather than rebuilding it from
+ * {@link divisionRefTag} is what keeps the pass-through attributes: a
+ * `<plus:section ref="old" component="teacher"/>` rebuilt from its type and id
+ * comes back as a bare `<plus:section ref="new"/>`, so renaming a division's
+ * `xml:id` would silently drop the `@component` the author put on the include
+ * — no error, just a division that quietly starts appearing in every build.
+ */
+function retagDivisionRef(
+  placeholder: string,
+  newType: DivisionType,
+  newXmlId: string,
+  sourceFormat: SourceFormat,
+): string {
+  switch (sourceFormat) {
+    case "pretext":
+      // Both the start tag and, in the expanded-empty shape, the end tag.
+      return replaceRefAttr(
+        placeholder.replace(/<(\/?)plus:[A-Za-z][\w-]*/g, (_m, slash: string) =>
+          `<${slash}plus:${newType}`,
+        ),
+        newXmlId,
+      );
+    case "markdown":
+      return replaceRefAttr(
+        placeholder.replace(/^::[A-Za-z][\w-]*/, () => `::${newType}`),
+        newXmlId,
+      );
+    case "latex":
+      // Group 1 holds `\plus` together with any optional argument, so the
+      // author's `[component=teacher]` survives the rename untouched.
+      return placeholder.replace(
+        /^(\\plus(?:\[[^\]]*\])?)\{[^}]*\}\{[^}]*\}$/,
+        (_whole, head: string) => `${head}{${newType}}{${newXmlId}}`,
+      );
+  }
+}
+
+/**
+ * `text` with the value of its first `ref` attribute set to `newRef`.
+ *
+ * Located with the shared {@link ATTR_RE} scan rather than a bare `ref="…"`
+ * search so that a `ref=` sitting inside another attribute's value, or the
+ * tail of a `data-ref`/`xref`, cannot be rewritten by mistake.
+ */
+function replaceRefAttr(text: string, newRef: string): string {
+  for (const m of text.matchAll(ATTR_RE)) {
+    if (m[1] !== "ref" || m.index === undefined) continue;
+    return (
+      text.slice(0, m.index) +
+      `ref="${newRef}"` +
+      text.slice(m.index + m[0].length)
+    );
+  }
+  return text;
 }
 
 /**
@@ -2762,11 +2832,176 @@ function divisionToPretext(division: Division): string {
   return xml;
 }
 
+// ---------------------------------------------------------------------------
+// Placeholder attribute pass-through
+// ---------------------------------------------------------------------------
+
+/**
+ * One XML attribute, as written in the source.
+ *
+ * `value` is the raw text between the quotes — already XML-escaped, since it
+ * came out of an attribute in real markup — so it is copied through verbatim
+ * rather than re-escaped, which is what preserves an authored `&amp;`.
+ */
+interface PlaceholderAttr {
+  name: string;
+  value: string;
+}
+
+/**
+ * A single `name="value"` (or `name='value'`) attribute. Scanned linearly, so
+ * a `foo="..."` sequence sitting *inside* another attribute's value is
+ * consumed as part of that value and can never be mistaken for an attribute
+ * of its own.
+ */
+const ATTR_RE = /([A-Za-z_:][-\w.:]*)\s*=\s*(?:"([^"]*)"|'([^']*)')/g;
+
+/**
+ * Attribute names a `<plus:*>` placeholder consumes itself, and which
+ * therefore must not be copied onto the element that replaces it. `ref` names
+ * the record being included; it has no meaning in real PreTeXt.
+ */
+const PLACEHOLDER_OWN_ATTRS: ReadonlySet<string> = new Set(["ref"]);
+
+/**
+ * Every attribute of a `<plus:*>` placeholder that belongs to the *element it
+ * resolves to* rather than to the placeholder itself — i.e. all of them but
+ * `ref`.
+ *
+ * This is deliberately a blanket rule rather than a list of known attributes.
+ * `@component`, `@width`, `@xml:lang` and whatever PreTeXt adds next are all
+ * the same kind of fact: a property of *this inclusion*, not of the included
+ * record, which is exactly what cannot be stored on the record itself when
+ * one division/asset/snippet is embedded in more than one place.
+ */
+function parsePlaceholderAttrs(attrs: string): PlaceholderAttr[] {
+  const out: PlaceholderAttr[] = [];
+  for (const m of attrs.matchAll(ATTR_RE)) {
+    const name = m[1];
+    if (PLACEHOLDER_OWN_ATTRS.has(name)) continue;
+    out.push({ name, value: m[2] ?? m[3] ?? "" });
+  }
+  return out;
+}
+
+/**
+ * `name="value"`, falling back to single quotes for a value that came from a
+ * single-quoted attribute and contains a `"` of its own.
+ */
+function renderAttr({ name, value }: PlaceholderAttr): string {
+  return value.includes('"') ? `${name}='${value}'` : `${name}="${value}"`;
+}
+
+/**
+ * `startTag` with each of `attrs` set on it: an attribute the tag already
+ * carries has its value replaced, one it doesn't is appended before the tag's
+ * own `>` or `/>`.
+ *
+ * Replacing rather than appending matters — a duplicated attribute is not
+ * well-formed XML and would fail the build rather than being ignored. The
+ * placeholder wins the collision: it is the more local statement, written at
+ * the point of inclusion by an author who can see the context, where the
+ * attribute on the record applies to every other inclusion too.
+ */
+function setAttributes(
+  startTag: string,
+  selfClosing: boolean,
+  attrs: PlaceholderAttr[],
+): string {
+  const existing = new Map<string, { start: number; end: number }>();
+  for (const m of startTag.matchAll(ATTR_RE)) {
+    if (m.index === undefined) continue;
+    if (!existing.has(m[1])) {
+      existing.set(m[1], { start: m.index, end: m.index + m[0].length });
+    }
+  }
+
+  const appended: PlaceholderAttr[] = [];
+  const replaced: { start: number; end: number; text: string }[] = [];
+  for (const attr of attrs) {
+    const span = existing.get(attr.name);
+    if (span) replaced.push({ ...span, text: renderAttr(attr) });
+    else appended.push(attr);
+  }
+
+  // Right-to-left, so each splice leaves the offsets of the ones still to come
+  // pointing at the same characters they did before.
+  let tag = startTag;
+  for (const { start, end, text } of replaced.sort((a, b) => b.start - a.start)) {
+    tag = tag.slice(0, start) + text + tag.slice(end);
+  }
+  if (appended.length === 0) return tag;
+
+  const insertAt = tag.length - (selfClosing ? 2 : 1);
+  const extra = appended.map((a) => ` ${renderAttr(a)}`).join("");
+  return tag.slice(0, insertAt) + extra + tag.slice(insertAt);
+}
+
+/**
+ * Copy `attrs` onto every *top-level* element of `xml` — the general form of
+ * "pass a placeholder's attributes to the thing that replaces it".
+ *
+ * A division or an asset always resolves to exactly one element, so for those
+ * "every top-level element" is just its root. A snippet is the case that
+ * makes the plural necessary: it resolves to a fragment that may have several
+ * siblings at the top, and there is no single tag to hang the attribute on.
+ * Applying to each is right for `@component` — the author means "leave all of
+ * this out" — and merely redundant for anything else, which is a better
+ * failure than silently dropping the attribute.
+ *
+ * Nested elements are skipped over wholesale, so a `@component` on an include
+ * lands on the division and not on every paragraph inside it.
+ *
+ * A resolution failure comes back as an XML comment (`<!-- missing division:
+ * x -->`) with no element in it at all. {@link nextTag} skips comments, so
+ * that case falls out as an untouched pass-through rather than needing a
+ * guard of its own.
+ */
+function applyPlaceholderAttrs(xml: string, attrs: PlaceholderAttr[]): string {
+  if (attrs.length === 0) return xml;
+
+  let out = "";
+  let copied = 0; // everything before this index is already in `out`
+  let i = 0;
+  for (;;) {
+    const tag = nextTag(xml, i);
+    if (!tag || tag.closing) break;
+
+    out +=
+      xml.slice(copied, tag.open) +
+      setAttributes(xml.slice(tag.open, tag.close), tag.selfClosing, attrs);
+    copied = tag.close;
+    i = tag.close;
+    if (tag.selfClosing) continue;
+
+    // Skip this element's whole subtree to reach its next sibling.
+    let depth = 1;
+    while (depth > 0) {
+      const inner = nextTag(xml, i);
+      if (!inner) return out + xml.slice(copied); // unbalanced: stop rewriting
+      i = inner.close;
+      if (inner.closing) depth--;
+      else if (!inner.selfClosing) depth++;
+    }
+  }
+  return out + xml.slice(copied);
+}
+
 /**
  * Scan `xml` for every `<plus:* ref="..."/>` placeholder and expand each one:
  * `image` resolves against `assets`, `snippet` resolves (recursively —
  * see {@link resolveSnippetRef}) against `snippets`, and anything else is
  * treated as a division ref and resolved via {@link resolveDivisionXml}.
+ *
+ * Every attribute of the placeholder *except* `ref` is then copied onto the
+ * markup that replaces it (see {@link applyPlaceholderAttrs}) — that is how a
+ * `@component` reaches a division that is included by reference rather than
+ * written inline, and how an `<image>` gets its per-embedding `@width`.
+ *
+ * The copy happens here, on the resolved output, rather than anywhere inside
+ * resolution: `divisionToPretext` caches its conversion per `xml:id`, so
+ * attributes baked in before that point would be shared by every reference to
+ * the same division instead of belonging to one include.
  *
  * Shared by both division and snippet resolution, since a snippet's own
  * content can itself embed further snippet/image/division refs. `ancestors`
@@ -2785,14 +3020,13 @@ function expandRefs(
     /<plus:([a-z-]+)\s([^>]*ref="[^"]+"[^>]*?)(?:\/>|>\s*<\/plus:\1>)/g,
     (_match, tag: string, attrs: string) => {
       const ref = /ref="([^"]+)"/.exec(attrs)?.[1] ?? "";
-      if (tag === "image") {
-        const width = /width="([^"]+)"/.exec(attrs)?.[1];
-        return resolveAssetRef(ref, assets, width);
-      }
-      if (tag === "snippet") {
-        return resolveSnippetRef(ref, snippets, divisions, assets, ancestors);
-      }
-      return resolveDivisionXml(ref, divisions, snippets, assets, ancestors);
+      const resolved =
+        tag === "image"
+          ? resolveAssetRef(ref, assets)
+          : tag === "snippet"
+            ? resolveSnippetRef(ref, snippets, divisions, assets, ancestors)
+            : resolveDivisionXml(ref, divisions, snippets, assets, ancestors);
+      return applyPlaceholderAttrs(resolved, parsePlaceholderAttrs(attrs));
     },
   );
 }
@@ -3017,6 +3251,23 @@ export function wrapDivisionForPreview(
  * one root element is allowed), so this matches by string rather than
  * parsing — mirroring {@link stripWrapperByRegex}'s fallback approach.
  */
+/**
+ * Whether `source` already opens with a root division element
+ * (`<article>`/`<book>`/`<slideshow>`).
+ *
+ * Deliberately a string test rather than a parse, because it has to hold for a
+ * source that is *not* well-formed — which is the whole case it exists to
+ * protect. One unterminated attribute value anywhere in the document (say a
+ * `component="teacher` missing its closing quote) is enough to make
+ * {@link extractDivisionMetadata} return null; reading that as "this root has
+ * no wrapper yet" wraps an already-wrapped document a second time, and since
+ * normalization runs on every load it does so again on every load.
+ */
+function hasRootDivisionWrapper(source: string): boolean {
+  const name = source.trimStart().match(/^<([A-Za-z_][\w.:-]*)/)?.[1];
+  return name !== undefined && ROOT_DIVISION_TYPES.has(name as DivisionType);
+}
+
 function extractLeadingTitle(content: string): { title: string; body: string } {
   const trimmed = content.trim();
   const m = trimmed.match(/^<title\b[^>]*>([\s\S]*?)<\/title>\s*/);
@@ -3077,7 +3328,14 @@ export function normalizeDivisionsOnLoad(
 
     const meta = extractDivisionMetadata(division.source);
 
-    if (division.xmlId === rootDivisionId && !(meta && ROOT_DIVISION_TYPES.has(meta.type))) {
+    if (
+      division.xmlId === rootDivisionId &&
+      !(meta && ROOT_DIVISION_TYPES.has(meta.type)) &&
+      // A root whose source is malformed parses to no metadata at all, which is
+      // indistinguishable here from a genuinely unwrapped fragment — so ask the
+      // text directly before adding a wrapper it may already have.
+      !hasRootDivisionWrapper(division.source)
+    ) {
       // The bare fragment may already carry its own leading <title> even
       // though it was never wrapped in <article>/<book> — use that ahead of
       // the host's project title (and "Untitled" only as a last resort) so a
