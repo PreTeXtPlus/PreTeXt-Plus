@@ -90,6 +90,20 @@ Splits and merges PreTeXt documents at section boundaries. Supported section typ
 - Book mode: chapter list with expandable sections
 - Drag-and-drop reordering via `@dnd-kit`
 - Hooks: `useBookChapters`, `useSectionDnd`, `useSectionEdit`
+- **"Add new division" creates nothing.** It opens a draft properties form
+  (`pendingNewDivision` in the store, rendered by `toc/NewDivisionRow.tsx` at the
+  position the division will take); the record, the parent's `<plus:* ref/>`
+  placeholder and the host notification all happen in one go when the form is
+  saved (`handleDivisionCreate` in `Editors.tsx`). So Cancel leaves the project
+  untouched, and a new division is never renamed — it is created with the id the
+  author chose, which is why only *existing* divisions reach
+  `syncParentDivisionRef`.
+- Any TOC action that rewrites a division's source computes it from the pool,
+  and the code editor reports typing on a 500 ms debounce — so it must call
+  `settledDivisions()` (flush the pending keystroke, then re-read the store)
+  rather than this render's `divisions`. Skipping that lets the late delivery
+  land on top of the structural write and undo it; see
+  `__tests__/pendingEditFlush.test.tsx`.
 
 ### Collaboration (`src/collab/`)
 

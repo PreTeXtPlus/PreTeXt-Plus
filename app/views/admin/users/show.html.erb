@@ -184,7 +184,8 @@
               <div class="flex items-center justify-between gap-4">
                 <div>
                   <p class="font-medium text-gray-900"><%= link_to project.title, admin_project_path(project), class: "text-blue-600 hover:underline" %></p>
-                  <p class="mt-1 text-sm text-gray-600"><%= project.document_type.to_s.humanize %></p>
+                  <%# Structural, not the column -- see admin/projects/show. %>
+                  <p class="mt-1 text-sm text-gray-600"><%= project.structural_document_type.to_s.humanize %></p>
                 </div>
                 <p class="text-sm text-gray-500">
                   <%= local_time_tag(project.updated_at, relative: true) %>

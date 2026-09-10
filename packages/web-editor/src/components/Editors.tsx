@@ -71,7 +71,11 @@ import {
   normalizeDivisionsOnLoad,
   isRootDivisionType,
 } from "../sectionUtils";
-import { defaultChildDivisionType } from "./toc/types";
+import {
+  defaultChildDivisionType,
+  deriveXmlId,
+  type EditDraft,
+} from "./toc/types";
 import { buildProjectAssetView, makeUniqueAssetRef } from "../assetView";
 import { buildProjectSnippetView, makeUniqueSnippetRef } from "../snippetView";
 import { newRecordId } from "../recordId";
@@ -84,7 +88,7 @@ import {
   type EditorStoreHandle,
 } from "../store/editorStore";
 import { EditorStoreProvider } from "../store/EditorStoreProvider";
-import { useEditorStore } from "../store/hooks";
+import { useEditorStore, useEditorStoreApi } from "../store/hooks";
 import { CollabBridge } from "../collab/bridge";
 import type { CollabSession } from "../collab/types";
 import PresenceAvatars from "../collab/PresenceAvatars";
@@ -619,6 +623,7 @@ const EditorsInner = (props: EditorsInnerProps) => {
   // anything back as new props.
   const divisionsRaw = useEditorStore((s) => s.divisions);
   const divisions = useMemo(() => divisionsRaw ?? [], [divisionsRaw]);
+  const storeApi = useEditorStoreApi();
   const activeDivisionId = useEditorStore((s) => s.activeDivisionId);
   const title = useEditorStore((s) => s.title);
   const docinfo = useEditorStore((s) => s.docinfo);
@@ -639,11 +644,28 @@ const EditorsInner = (props: EditorsInnerProps) => {
   const setTitle = useEditorStore((s) => s.setTitle);
   const setLanguage = useEditorStore((s) => s.setLanguage);
   const setDocinfo = useEditorStore((s) => s.setDocinfo);
-  const editingId = useEditorStore((s) => s.editingId);
-  const editingIsNew = useEditorStore((s) => s.editingIsNew);
+  const startNewDivision = useEditorStore((s) => s.startNewDivision);
 
   const livePreviewRef = useRef<LivePreviewHandle>(null);
   const codeEditorRef = useRef<CodeEditorHandle>(null);
+
+  /**
+   * Settle the code editor's debounced buffer into the pool, then read the pool
+   * back from the store.
+   *
+   * A structural rewrite computes a division's next source from its current one
+   * (append a `<plus:* ref/>`, rename the one already there), so it has to start
+   * from what the author has actually typed. For the 500 ms the code editor's
+   * debounce is holding a keystroke, `divisions` — this render's snapshot — is
+   * not that: the rewrite would be computed from superseded text, and the
+   * pending delivery would then land on top and undo it. Flushing first makes
+   * the buffer the starting point; re-reading from the store is what makes the
+   * flush visible here, since this render's `divisions` cannot change mid-event.
+   */
+  const settledDivisions = (): Division[] => {
+    codeEditorRef.current?.flushPendingChange();
+    return storeApi.getState().divisions ?? divisions;
+  };
 
   // Source-cleanup findings for the review dialog. Local UI state, and read
   // from the code editor rather than derived from `divisionActiveSource`: the
@@ -665,20 +687,6 @@ const EditorsInner = (props: EditorsInnerProps) => {
     codeEditorRef.current?.applyCleanFixes(ruleIds);
     refreshCleanFindings();
   };
-
-  // A brand-new division's properties form (title/format/id) opens immediately
-  // after creation — see handleDivisionAdd. Once the author closes it (Save or
-  // Cancel), drop focus straight into the code editor so they can start typing
-  // the body without an extra click.
-  const wasEditingNewRef = useRef(false);
-  useEffect(() => {
-    if (editingId && editingIsNew) {
-      wasEditingNewRef.current = true;
-    } else if (wasEditingNewRef.current) {
-      wasEditingNewRef.current = false;
-      codeEditorRef.current?.focus();
-    }
-  }, [editingId, editingIsNew]);
 
   // ── Active division (derived from the store's authoritative pool) ─────────
   const rootDivision = findRootDivision(divisions, props.rootDivisionId);
@@ -789,8 +797,12 @@ const EditorsInner = (props: EditorsInnerProps) => {
     oldXmlId: string,
     newXmlId: string,
     newType: DivisionType,
+    // The pool to resolve the parent in. Defaults to this render's snapshot;
+    // `applyDivisionMetadataEdit` passes the settled one, having flushed the
+    // editor buffer before it started rewriting sources.
+    pool: Division[] = divisions,
   ) => {
-    const parent = findDivisionParent(divisions, oldXmlId);
+    const parent = findDivisionParent(pool, oldXmlId);
     if (!parent) return;
     const newParentContent = renameDivisionRef(
       parent.source,
@@ -813,7 +825,13 @@ const EditorsInner = (props: EditorsInnerProps) => {
     xmlId: string,
     changes: DivisionChanges,
   ) => {
-    const division = divisions.find((d) => d.xmlId === xmlId);
+    // Both this division's own source and its parent's are about to be
+    // rewritten from what the pool holds, so the author's un-delivered
+    // keystrokes have to be in the pool first — otherwise the rewrite is
+    // computed from stale text and the debounce reinstates it a moment later,
+    // leaving the parent pointing at the pre-rename xml:id.
+    const pool = settledDivisions();
+    const division = pool.find((d) => d.xmlId === xmlId);
     // Every source format now carries its structural metadata in its own source
     // — the PreTeXt wrapper element, the Markdown YAML frontmatter, or the LaTeX
     // `\section`/`\label` commands — so they all share the rewrite/parent-sync
@@ -869,7 +887,7 @@ const EditorsInner = (props: EditorsInnerProps) => {
       // 3. Keep the parent's ref placeholder in sync with an id or type change
       //    so the division stays placed in the tree.
       if (newXmlId !== division.xmlId || updated.type !== division.type) {
-        syncParentDivisionRef(division.xmlId, newXmlId, updated.type);
+        syncParentDivisionRef(division.xmlId, newXmlId, updated.type, pool);
       }
     });
 
@@ -1148,21 +1166,56 @@ const EditorsInner = (props: EditorsInnerProps) => {
     startSectionEdit(activeDivision);
   };
 
-  // Adds a new PreTeXt division as the last child of `parentXmlId` (or
-  // unplaced, if `null`), then immediately opens its properties form flagged
-  // `isNew` so the user can pick a different source format before the
-  // division's first real edit — see SectionEditForm.
+  // Opens a properties form for a new child of `parentXmlId` (or an unplaced
+  // division, if `null`). Nothing is created here — the draft lives in the form
+  // until the author saves it, so Cancel leaves the project exactly as it was
+  // and the division is born with the id, type and format they chose rather
+  // than a generated one that then has to be renamed everywhere.
   const handleDivisionAdd = (parentXmlId: string | null) => {
     const parent = parentXmlId
       ? divisions.find((d) => d.xmlId === parentXmlId)
       : undefined;
-    // Start it out as a type the parent actually allows — a `<section>` under
-    // a `<book>` would be invalid the moment it's created, and would stay that
-    // way (placeholder included) if the author dismissed the form.
-    const newDiv = createNewSection(
-      undefined,
-      defaultChildDivisionType(parent?.type ?? null),
-    );
+    // Start it out as a type the parent actually allows — a `<section>` under a
+    // `<book>` is not a valid choice to be offering as the default.
+    const type = defaultChildDivisionType(parent?.type ?? null);
+    const title = "New Section";
+    startNewDivision(parentXmlId, {
+      title,
+      type,
+      xmlId: deriveXmlId(type, title),
+      label: "",
+      sourceFormat: "pretext",
+    });
+  };
+
+  // Creates the division a saved draft describes and places it under
+  // `parentXmlId`. This is the only moment a new division is written: the
+  // record, the parent's `<plus:* ref/>` placeholder and the host notification
+  // all happen here, once, naming the id the author settled on.
+  const handleDivisionCreate = (
+    parentXmlId: string | null,
+    draft: EditDraft,
+  ) => {
+    // The placeholder is appended to the parent's source, so that source has to
+    // include whatever the author typed into it in the last 500 ms — otherwise
+    // the pending keystroke lands afterwards and takes the placeholder back
+    // out, orphaning the division being created.
+    const parent = parentXmlId
+      ? settledDivisions().find((d) => d.xmlId === parentXmlId)
+      : undefined;
+    const newDiv: Division = {
+      id: draft.xmlId,
+      xmlId: draft.xmlId,
+      title: draft.title,
+      type: draft.type,
+      sourceFormat: draft.sourceFormat,
+      source: createDivisionContent(
+        draft.type,
+        draft.sourceFormat,
+        draft.title,
+        draft.xmlId,
+      ),
+    };
     // One transaction: the division's entry and the parent's `<plus:* ref/>`
     // placeholder pointing at it must reach peers together, or they briefly
     // render a reference to a division they don't have.
@@ -1183,7 +1236,10 @@ const EditorsInner = (props: EditorsInnerProps) => {
       }
     });
     setActiveDivisionId(newDiv.xmlId);
-    startSectionEdit(newDiv, { isNew: true });
+    // Drop focus straight into the code editor so the author can start typing
+    // the body without an extra click. Only on create: cancelling a draft
+    // leaves them where they were.
+    codeEditorRef.current?.focus();
   };
 
   // ── Asset embedding ─────────────────────────────────────────────────────
@@ -1431,6 +1487,8 @@ const EditorsInner = (props: EditorsInnerProps) => {
     bindCallbacks({
       selectDivision: handleDivisionSelect,
       addDivision: (parentXmlId) => handleDivisionAdd(parentXmlId),
+      createDivision: (parentXmlId, draft) =>
+        handleDivisionCreate(parentXmlId, draft),
       removeDivision: (xmlId) => applyDivisionRemove(xmlId),
       updateDivision: (xmlId, changes) =>
         applyDivisionMetadataEdit(xmlId, changes),

@@ -1,8 +1,11 @@
 /**
- * Adding a division from the TOC: the new division has to be a type its parent
- * actually allows, both in the record that's created and in the `<plus:* ref/>`
- * placeholder written into the parent — otherwise dismissing the properties
- * form leaves an invalid structure behind.
+ * Adding a division from the TOC: the type offered by default has to be one the
+ * parent actually allows — a `<section>` under a `<book>` is not a valid thing
+ * to be proposing — and that type has to survive into both the record created
+ * on save and the `<plus:* ref/>` placeholder written into the parent.
+ *
+ * Nothing is created until the draft is saved, so every assertion about the
+ * record or the parent's source comes after `saveDraft`.
  *
  * @vitest-environment jsdom
  */
@@ -77,6 +80,12 @@ function addDivisionUnder(label: string) {
   fireEvent.click(screen.getByText("Add new division"));
 }
 
+/** Save the open draft, creating the division. */
+function saveDraft() {
+  const row = screen.getByTestId("toc-new-division");
+  fireEvent.click(within(row).getByText("Save"));
+}
+
 /** The Type dropdown of the open properties form. */
 function openTypeSelect() {
   const label = screen.getByText("Type").parentElement!;
@@ -88,6 +97,17 @@ describe("adding a division", () => {
     const { added, changes } = renderEditors(bookDivisions);
     addDivisionUnder("Book");
 
+    // The form that opens offers only what a book accepts…
+    const select = openTypeSelect();
+    expect(select.value).toBe("chapter");
+    const options = [...select.options].map((o) => o.value);
+    expect(options).toContain("part");
+    expect(options).not.toContain("section");
+
+    // …and nothing exists yet.
+    expect(added).toHaveLength(0);
+
+    saveDraft();
     expect(added).toHaveLength(1);
     expect(added[0].type).toBe("chapter");
     expect(added[0].source).toContain("<chapter ");
@@ -97,22 +117,16 @@ describe("adding a division", () => {
     expect(parentChange?.source).toContain(
       `<plus:chapter ref="${added[0].xmlId}"/>`,
     );
-
-    // …and the form that opens offers only what a book accepts.
-    const select = openTypeSelect();
-    expect(select.value).toBe("chapter");
-    const options = [...select.options].map((o) => o.value);
-    expect(options).toContain("part");
-    expect(options).not.toContain("section");
   });
 
   it("creates a section under a chapter", () => {
     const { added } = renderEditors(bookDivisions);
     addDivisionUnder("Chapter one");
+    expect(openTypeSelect().value).toBe("section");
 
+    saveDraft();
     expect(added[0].type).toBe("section");
     expect(added[0].source).toContain("<section ");
-    expect(openTypeSelect().value).toBe("section");
   });
 
   it("restricts choices for divisions the host sent without a type", () => {
@@ -146,9 +160,11 @@ describe("adding a division", () => {
     ]);
     addDivisionUnder("Document");
 
-    expect(added[0].type).toBe("section");
     const options = [...openTypeSelect().options].map((o) => o.value);
     expect(options).toContain("section");
     expect(options).not.toContain("chapter");
+
+    saveDraft();
+    expect(added[0].type).toBe("section");
   });
 });
