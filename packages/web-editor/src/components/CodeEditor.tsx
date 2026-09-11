@@ -24,6 +24,7 @@ import { installEditGuard } from "../collab/editGuard";
 import { computeLockedRegion, findPretextHeaderEnd, isRangeWithin } from "./lockedRegion";
 import { isLatexDivisionHeaderLine } from "../sectionUtils";
 import { planSnippetInsertion } from "./editorConfigs/insertContext";
+import { planParagraphSplit } from "./editorConfigs/paragraphSplit";
 import type { EditorSnippet } from "./editorConfigs/snippets";
 import type { CollabUser } from "../collab/types";
 import type { SourceFormat } from "../types/editor";
@@ -924,6 +925,18 @@ const CodeEditor = forwardRef<CodeEditorHandle, CodeEditorProps>(({
       onRebuildRef.current?.();
     });
 
+    // Shift+Enter inside a <p> splits it into two paragraphs at the cursor
+    // (or appends an empty sibling when the cursor is nested inside inline
+    // markup that can't be split without guessing at attributes). Elsewhere
+    // — outside a <p>, or in LaTeX/Markdown — it's a plain newline, same as
+    // Monaco's own default for this combo, which addCommand fully overrides
+    // so the handler has to reproduce it itself.
+    editor.addCommand(monaco.KeyMod.Shift | monaco.KeyCode.Enter, () => {
+      if (sourceFormatRef.current !== "pretext" || !splitParagraphAtCursor()) {
+        editor.trigger("keyboard", "type", { text: "\n" });
+      }
+    });
+
     // Register Ctrl+S to save (and rebuild if a rebuild handler is set)
     editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyS, () => {
       onSaveRef.current?.();
@@ -1060,6 +1073,33 @@ const CodeEditor = forwardRef<CodeEditorHandle, CodeEditorProps>(({
   };
 
   /**
+   * Move to `offset` before inserting, unless it's already the caret — and
+   * decline the move (falling back to `fallbackBody` at the caret) when
+   * `offset` lands on a locked structural line, e.g. an unterminated `<p>`
+   * running past the division's body.
+   */
+  const insertSnippetAt = (
+    offset: number,
+    body: string,
+    fallbackBody: string = body,
+  ) => {
+    const editor = editorRef.current;
+    const model = editor?.getModel?.();
+    const position = editor?.getPosition?.();
+    if (!editor || !model || !position) return;
+
+    if (offset !== model.getOffsetAt(position)) {
+      const target = model.getPositionAt(offset);
+      if (!isEditablePosition(model, target)) {
+        insertSnippet(editor, fallbackBody);
+        return;
+      }
+      editor.setPosition(target);
+    }
+    insertSnippet(editor, body);
+  };
+
+  /**
    * Insert a snippet where it is legal, rather than only where the caret is.
    *
    * `planSnippetInsertion` reads the cursor's surroundings and decides both the
@@ -1083,15 +1123,27 @@ const CodeEditor = forwardRef<CodeEditorHandle, CodeEditorProps>(({
       snippet,
       sourceFormatRef.current,
     );
-    if (plan.offset !== offset) {
-      const target = model.getPositionAt(plan.offset);
-      if (!isEditablePosition(model, target)) {
-        insertSnippet(editor, snippet.body);
-        return;
-      }
-      editor.setPosition(target);
-    }
-    insertSnippet(editor, plan.body);
+    insertSnippetAt(plan.offset, plan.body, snippet.body);
+  };
+
+  /**
+   * Shift+Enter: split the `<p>` enclosing the cursor into two paragraphs, or
+   * append an empty sibling when the cursor is nested inside inline markup
+   * that can't be split safely — see `planParagraphSplit`. Returns `false`
+   * when the cursor isn't inside a `<p>` at all, so the caller can fall back
+   * to a plain newline.
+   */
+  const splitParagraphAtCursor = (): boolean => {
+    ensureCursorInEditableRegion();
+    const editor = editorRef.current;
+    const model = editor?.getModel?.();
+    const position = editor?.getPosition?.();
+    if (!editor || !model || !position) return false;
+
+    const plan = planParagraphSplit(model.getValue(), model.getOffsetAt(position));
+    if (!plan) return false;
+    insertSnippetAt(plan.offset, plan.body);
+    return true;
   };
 
   // Rebuilt each render rather than memoized: every method reads the editor
