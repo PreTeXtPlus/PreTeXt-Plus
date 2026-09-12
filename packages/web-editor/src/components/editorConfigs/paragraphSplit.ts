@@ -115,14 +115,18 @@ export const planParagraphSplit = (
   const originalClose =
     closeTagStart !== undefined ? source.slice(closeTagStart, end) : "";
 
-  const text = `${openTag}${before}</p>\n${indent}<p>${after}${originalClose}`;
+  const text = `${openTag}${before}\n${indent}</p>\n${indent}<p>\n${indent}    ${after}${originalClose}`;
   const cursorOffset =
     tagStart +
     openTag.length +
     before.length +
+    "\n".length +
+    indent.length +
     "</p>\n".length +
     indent.length +
-    "<p>".length;
+    "<p>\n".length +
+    indent.length +
+    "    ".length;
 
   return { range: { start: tagStart, end }, text, cursorOffset };
 };
