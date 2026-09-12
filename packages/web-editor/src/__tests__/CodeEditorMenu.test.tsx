@@ -130,6 +130,15 @@ describe("CodeEditorMenu", () => {
       await openMenu("File");
       expect(queryMenuItem("Document Properties…")).not.toBeInTheDocument();
     });
+
+    it("is hidden entirely when hideFileMenu is set", () => {
+      render(
+        <CodeEditorMenu {...baseProps()} sourceFormat="pretext" hideFileMenu />,
+      );
+      expect(
+        screen.queryByRole("button", { name: "File" }),
+      ).not.toBeInTheDocument();
+    });
   });
 
   describe("Edit", () => {

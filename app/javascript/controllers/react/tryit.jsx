@@ -112,12 +112,11 @@ function TryItApp({ config }) {
       onUseCommonDocinfoChange={noop}
       onCommonDocinfoChange={noop}
       onSave={noop}
-      onSaveButton={noop}
-      onCancelButton={noop}
       onPreviewRebuild={onPreviewRebuild}
       onCreatePretextProjectCopy={noopAsync}
       onFeedbackSubmit={noopAsync}
       hideAssets={true}
+      hideFileMenu={true}
     />
   );
 }

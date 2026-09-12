@@ -109,6 +109,8 @@ interface CodeEditorMenuProps {
   hideSnippets?: boolean;
   /** When true, every editing action is hidden — only viewing actions remain. */
   readOnly?: boolean;
+  /** When true, the File menu (Document Properties, Save, Cancel) is not shown. */
+  hideFileMenu?: boolean;
   /** If provided, a Save item is shown in the File menu. */
   onSaveButton?: () => void;
   /** Label for the Save item. Defaults to `"Save"`. */
@@ -310,6 +312,7 @@ const CodeEditorMenu: React.FC<CodeEditorMenuProps> = ({
   isFindingInFile,
   onSwitchToFindInProject,
   readOnly,
+  hideFileMenu,
   onSaveButton,
   saveButtonLabel,
   onCancelButton,
@@ -574,7 +577,9 @@ const CodeEditorMenu: React.FC<CodeEditorMenuProps> = ({
   ];
 
   const menus = [
-    { key: "file", label: "File", entries: fileEntries },
+    ...(hideFileMenu
+      ? []
+      : [{ key: "file", label: "File", entries: fileEntries }]),
     { key: "edit", label: "Edit", entries: editEntries },
     ...(readOnly
       ? []
@@ -647,8 +652,10 @@ const CodeEditorMenu: React.FC<CodeEditorMenuProps> = ({
             onClick={onConvertToPretext}
             disabled={canConvertToPretext === false}
             title="Create a new project copy using the converted PreTeXt source"
+            aria-label="Convert to PreTeXt"
           >
-            Convert to PreTeXt
+            <span className="hidden sm:inline">Convert to PreTeXt</span>
+            <span className="sm:hidden">Convert</span>
           </button>
         )}
         <span className="inline-flex items-center py-0.5 px-2 rounded-full bg-gray-200 text-gray-800 text-xs font-semibold">

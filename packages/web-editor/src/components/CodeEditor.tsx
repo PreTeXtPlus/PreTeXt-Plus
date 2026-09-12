@@ -112,6 +112,8 @@ interface CodeEditorProps {
   hideSnippets?: boolean;
   /** When true, Monaco is non-editable and the toolbar shows only "Display Full Source". */
   readOnly?: boolean;
+  /** When true, the File menu (Document Properties, Save, Cancel) is not shown. */
+  hideFileMenu?: boolean;
   /** If provided, a Save item is shown in the File menu. */
   onSaveButton?: () => void;
   /** Label for the Save item. Defaults to `"Save"`. */
@@ -264,6 +266,7 @@ const CodeEditor = forwardRef<CodeEditorHandle, CodeEditorProps>(({
   hideAssets,
   hideSnippets,
   readOnly,
+  hideFileMenu,
   onSaveButton,
   saveButtonLabel,
   onCancelButton,
@@ -1191,6 +1194,7 @@ const CodeEditor = forwardRef<CodeEditorHandle, CodeEditorProps>(({
         hideAssets={hideAssets}
         hideSnippets={hideSnippets}
         readOnly={readOnly}
+        hideFileMenu={hideFileMenu}
         onSaveButton={onSaveButton}
         saveButtonLabel={saveButtonLabel}
         onCancelButton={onCancelButton}

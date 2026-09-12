@@ -387,6 +387,13 @@ export interface editorProps {
   hideSnippets?: boolean;
 
   /**
+   * If true, the File menu (Document Properties, Save, Cancel) is not shown
+   * in the code editor's menu bar. Useful for a host with no save/cancel flow
+   * of its own, e.g. a read-only try-it demo.
+   */
+  hideFileMenu?: boolean;
+
+  /**
    * Real-time collaboration session. When provided, the editor binds its
    * buffers to the session's Y.Doc (per the schema in `src/collab/schema.ts`),
    * renders collaborator presence (avatar chips, remote cursors), and treats
@@ -2083,6 +2090,7 @@ const EditorsInner = (props: EditorsInnerProps) => {
       hideAssets={props.hideAssets}
       hideSnippets={props.hideSnippets}
       readOnly={props.readOnly}
+      hideFileMenu={props.hideFileMenu}
       onSaveButton={props.onSaveButton}
       saveButtonLabel={props.saveButtonLabel}
       onCancelButton={props.onCancelButton}
@@ -2097,7 +2105,11 @@ const EditorsInner = (props: EditorsInnerProps) => {
       language={language}
       onLanguageChange={updateLanguage}
       feedbackLink={
-        <StoreFeedbackLink label="Give feedback" context="main-editor" />
+        <StoreFeedbackLink
+          label="Give feedback"
+          shortLabel="Feedback"
+          context="main-editor"
+        />
       }
     />
   );
