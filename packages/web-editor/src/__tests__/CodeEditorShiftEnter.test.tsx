@@ -171,9 +171,9 @@ describe("Shift+Enter paragraph split", () => {
     shiftEnter();
 
     expect(harness!.getValue()).toBe(
-      "<article><p>The car is fa</p>\n<p>st.</p></article>",
+      "<article><p>The car is fa\n</p>\n<p>\n    st.</p></article>",
     );
-    const cursorColumn = "<article><p>The car is fa</p>\n<p>".length + 1;
+    const cursorColumn = "<article><p>The car is fa\n</p>\n<p>\n    ".length + 1;
     expect(harness!.getPosition()).toEqual({ lineNumber: 1, column: cursorColumn });
     expect(harness!.triggers).toEqual([]);
   });
@@ -186,7 +186,7 @@ describe("Shift+Enter paragraph split", () => {
     shiftEnter();
 
     expect(harness!.getValue()).toBe(
-      "<section>\n  <p>The car is fa</p>\n  <p>st.</p>\n</section>",
+      "<section>\n  <p>The car is fa\n  </p>\n  <p>\n      st.</p>\n</section>",
     );
   });
 
@@ -198,10 +198,10 @@ describe("Shift+Enter paragraph split", () => {
     shiftEnter();
 
     expect(harness!.getValue()).toBe(
-      "<article><p>Some <em>emphasized text</em> here.</p>\n<p></p></article>",
+      "<article><p>Some <em>emphasized text</em> here.</p>\n<p>\n    \n</p></article>",
     );
     const cursorColumn =
-      "<article><p>Some <em>emphasized text</em> here.</p>\n<p>".length + 1;
+      "<article><p>Some <em>emphasized text</em> here.</p>\n<p>\n    ".length + 1;
     expect(harness!.getPosition()).toEqual({ lineNumber: 1, column: cursorColumn });
     expect(harness!.triggers).toEqual([]);
   });

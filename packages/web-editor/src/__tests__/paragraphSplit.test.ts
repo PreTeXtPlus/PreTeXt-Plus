@@ -29,8 +29,8 @@ describe("planParagraphSplit", () => {
     const result = plan("<p>The car is fa|st.</p>");
     expect(result).toEqual({
       range: { start: 0, end: "<p>The car is fast.</p>".length },
-      text: "<p>The car is fa</p>\n<p>st.</p>",
-      cursorOffset: "<p>The car is fa</p>\n<p>".length,
+      text: "<p>The car is fa\n</p>\n<p>\n    st.</p>",
+      cursorOffset: "<p>The car is fa\n</p>\n<p>\n    ".length,
     });
   });
 
@@ -38,8 +38,8 @@ describe("planParagraphSplit", () => {
     const result = plan("<p>|prose</p>");
     expect(result).toEqual({
       range: { start: 0, end: "<p>prose</p>".length },
-      text: "<p></p>\n<p>prose</p>",
-      cursorOffset: "<p></p>\n<p>".length,
+      text: "<p>\n</p>\n<p>\n    prose</p>",
+      cursorOffset: "<p>\n</p>\n<p>\n    ".length,
     });
   });
 
@@ -47,8 +47,8 @@ describe("planParagraphSplit", () => {
     const result = plan("<p>prose|</p>");
     expect(result).toEqual({
       range: { start: 0, end: "<p>prose</p>".length },
-      text: "<p>prose</p>\n<p></p>",
-      cursorOffset: "<p>prose</p>\n<p>".length,
+      text: "<p>prose\n</p>\n<p>\n    </p>",
+      cursorOffset: "<p>prose\n</p>\n<p>\n    ".length,
     });
   });
 
@@ -56,8 +56,8 @@ describe("planParagraphSplit", () => {
     const result = plan("<p>The car is fa|st.");
     expect(result).toEqual({
       range: { start: 0, end: "<p>The car is fast.".length },
-      text: "<p>The car is fa</p>\n<p>st.",
-      cursorOffset: "<p>The car is fa</p>\n<p>".length,
+      text: "<p>The car is fa\n</p>\n<p>\n    st.",
+      cursorOffset: "<p>The car is fa\n</p>\n<p>\n    ".length,
     });
   });
 
@@ -67,19 +67,19 @@ describe("planParagraphSplit", () => {
     const result = plan(marked);
     expect(result).toEqual({
       range: { start: tagStart, end: tagStart + "<p>The car is fast.</p>".length },
-      text: "<p>The car is fa</p>\n  <p>st.</p>",
-      cursorOffset: tagStart + "<p>The car is fa</p>\n  <p>".length,
+      text: "<p>The car is fa\n  </p>\n  <p>\n      st.</p>",
+      cursorOffset: tagStart + "<p>The car is fa\n  </p>\n  <p>\n      ".length,
     });
   });
 
   it("doesn't invent indentation when the <p> isn't alone on its line", () => {
     const result = plan("<statement><p>The car is fa|st.</p></statement>");
-    expect(result?.text).toBe("<p>The car is fa</p>\n<p>st.</p>");
+    expect(result?.text).toBe("<p>The car is fa\n</p>\n<p>\n    st.</p>");
   });
 
   it("does not copy the original tag's attributes onto the new tag", () => {
     const result = plan('<p xml:id="p1">The car is fa|st.</p>');
-    expect(result?.text).toBe('<p xml:id="p1">The car is fa</p>\n<p>st.</p>');
+    expect(result?.text).toBe('<p xml:id="p1">The car is fa\n</p>\n<p>\n    st.</p>');
   });
 
   it("falls back to an empty sibling when the cursor is nested inside inline markup", () => {
@@ -87,8 +87,8 @@ describe("planParagraphSplit", () => {
     const marked = "<p>Some <em>emphasized te|xt</em> here.</p>";
     expect(plan(marked)).toEqual({
       range: { start: source.length, end: source.length },
-      text: "\n<p></p>",
-      cursorOffset: source.length + "\n<p>".length,
+      text: "\n<p>\n    \n</p>",
+      cursorOffset: source.length + "\n<p>\n    ".length,
     });
   });
 
@@ -98,13 +98,13 @@ describe("planParagraphSplit", () => {
     const source = "<p>Some <em>text</em> here.</p>";
     expect(plan("<p>Some <em>|text</em> here.</p>")).toEqual({
       range: { start: source.length, end: source.length },
-      text: "\n<p></p>",
-      cursorOffset: source.length + "\n<p>".length,
+      text: "\n<p>\n    \n</p>",
+      cursorOffset: source.length + "\n<p>\n    ".length,
     });
     expect(plan("<p>Some <em>text|</em> here.</p>")).toEqual({
       range: { start: source.length, end: source.length },
-      text: "\n<p></p>",
-      cursorOffset: source.length + "\n<p>".length,
+      text: "\n<p>\n    \n</p>",
+      cursorOffset: source.length + "\n<p>\n    ".length,
     });
   });
 
@@ -112,8 +112,8 @@ describe("planParagraphSplit", () => {
     const result = plan("<p>See <cline/>|here.</p>");
     expect(result).toEqual({
       range: { start: 0, end: "<p>See <cline/>here.</p>".length },
-      text: "<p>See <cline/></p>\n<p>here.</p>",
-      cursorOffset: "<p>See <cline/></p>\n<p>".length,
+      text: "<p>See <cline/>\n</p>\n<p>\n    here.</p>",
+      cursorOffset: "<p>See <cline/>\n</p>\n<p>\n    ".length,
     });
   });
 
@@ -122,8 +122,8 @@ describe("planParagraphSplit", () => {
     const paragraphEnd = "<section>\n  <p>Some <em>emphasized text</em> here.</p>".length;
     expect(plan(marked)).toEqual({
       range: { start: paragraphEnd, end: paragraphEnd },
-      text: "\n  <p></p>",
-      cursorOffset: paragraphEnd + "\n  <p>".length,
+      text: "\n  <p>\n      \n  </p>",
+      cursorOffset: paragraphEnd + "\n  <p>\n      ".length,
     });
   });
 
@@ -132,8 +132,8 @@ describe("planParagraphSplit", () => {
     const paragraphEnd = "<p>Some <em>text</em> here.</p>".length;
     expect(plan(marked)).toEqual({
       range: { start: paragraphEnd, end: paragraphEnd },
-      text: "\n<p></p>",
-      cursorOffset: paragraphEnd + "\n<p>".length,
+      text: "\n<p>\n    \n</p>",
+      cursorOffset: paragraphEnd + "\n<p>\n    ".length,
     });
   });
 });
