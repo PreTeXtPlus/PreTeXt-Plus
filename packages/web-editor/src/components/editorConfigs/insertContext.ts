@@ -28,8 +28,12 @@ import { findTagEnd, isNameStart, readName } from "./xmlTags";
 
 /** The `<p>` the cursor is standing in. */
 export interface EnclosingParagraph {
+  /** Offset where the paragraph's own `<p` begins. */
+  tagStart: number;
   /** Offset just past the `<p>` open tag. */
   contentStart: number;
+  /** Offset where the matching `</p` begins, or `undefined` if it has none (mid-edit). */
+  closeTagStart?: number;
   /** Offset just past the matching `</p>`, or the source's end if it has none. */
   end: number;
 }
@@ -52,17 +56,21 @@ export const enclosingParagraph = (
   offset: number,
 ): EnclosingParagraph | null => {
   // Open elements, innermost last.
-  const stack: { name: string; contentStart: number }[] = [];
+  const stack: { name: string; tagStart: number; contentStart: number }[] = [];
   // The paragraph enclosing the cursor, once the walk has reached it: its depth
   // in the stack, so the end tag that pops it can be recognised.
-  let paragraph: { depth: number; contentStart: number } | null = null;
+  let paragraph: { depth: number; tagStart: number; contentStart: number } | null = null;
   let reachedCursor = false;
 
   /** The innermost open `<p>`, once the walk has arrived at the cursor. */
   const openParagraph = () => {
     for (let depth = stack.length - 1; depth >= 0; depth--) {
       if (stack[depth].name === "p") {
-        return { depth, contentStart: stack[depth].contentStart };
+        return {
+          depth,
+          tagStart: stack[depth].tagStart,
+          contentStart: stack[depth].contentStart,
+        };
       }
     }
     return null;
@@ -103,14 +111,19 @@ export const enclosingParagraph = (
       // The paragraph closed here — either by its own end tag or by an ancestor
       // closing over it, which mid-edit markup does often enough to allow for.
       if (paragraph && stack.length <= paragraph.depth) {
-        return { contentStart: paragraph.contentStart, end };
+        return {
+          tagStart: paragraph.tagStart,
+          contentStart: paragraph.contentStart,
+          closeTagStart: lt,
+          end,
+        };
       }
       index = end;
     } else if (isNameStart(source[lt + 1])) {
       const end = findTagEnd(source, lt);
       // `<foo/>`: the `/` sits immediately before the closing `>`.
       if (source[end - 2] !== "/") {
-        stack.push({ name: readName(source, lt + 1), contentStart: end });
+        stack.push({ name: readName(source, lt + 1), tagStart: lt, contentStart: end });
       }
       index = end;
     } else {
@@ -122,7 +135,7 @@ export const enclosingParagraph = (
   if (!reachedCursor) paragraph = openParagraph();
   // An unterminated paragraph: it runs to the end of what has been written.
   return paragraph
-    ? { contentStart: paragraph.contentStart, end: source.length }
+    ? { tagStart: paragraph.tagStart, contentStart: paragraph.contentStart, end: source.length }
     : null;
 };
 
