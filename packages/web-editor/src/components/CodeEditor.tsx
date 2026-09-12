@@ -1,6 +1,14 @@
 import { Editor } from "@monaco-editor/react";
 import { constrainedEditor } from "constrained-editor-plugin";
-import { useState, useRef, useEffect, useMemo, forwardRef, useImperativeHandle } from "react";
+import {
+  useState,
+  useRef,
+  useEffect,
+  useMemo,
+  forwardRef,
+  useImperativeHandle,
+  type ReactNode,
+} from "react";
 import {
   copySelection,
   cutSelection,
@@ -104,6 +112,26 @@ interface CodeEditorProps {
   hideSnippets?: boolean;
   /** When true, Monaco is non-editable and the toolbar shows only "Display Full Source". */
   readOnly?: boolean;
+  /** If provided, a Save item is shown in the File menu. */
+  onSaveButton?: () => void;
+  /** Label for the Save item. Defaults to `"Save"`. */
+  saveButtonLabel?: string;
+  /** If provided, a Cancel item is shown in the File menu. */
+  onCancelButton?: () => void;
+  /** Label for the Cancel item. Defaults to `"Cancel"`. */
+  cancelButtonLabel?: string;
+  /** Collaborator presence indicator (avatar chips), rendered in the toolbar. */
+  presence?: ReactNode;
+  /** The document title, shown/edited via "Document Properties…" in the File menu. */
+  title: string;
+  /** Commits a new document title. */
+  onTitleChange: (value: string) => void;
+  /** The document's `@xml:lang`, edited alongside the title. */
+  language: string;
+  /** Commits a new document language. */
+  onLanguageChange: (value: string) => void;
+  /** Rendered feedback-link trigger (and its dialog), built by the host. */
+  feedbackLink?: ReactNode;
   /**
    * When set, the editor model is bound to this shared `Y.Text` instead of
    * being driven by the `content` prop: keystrokes emit CRDT deltas, remote
@@ -236,6 +264,16 @@ const CodeEditor = forwardRef<CodeEditorHandle, CodeEditorProps>(({
   hideAssets,
   hideSnippets,
   readOnly,
+  onSaveButton,
+  saveButtonLabel,
+  onCancelButton,
+  cancelButtonLabel,
+  presence,
+  title,
+  onTitleChange,
+  language,
+  onLanguageChange,
+  feedbackLink,
   pretextValidation,
   collab,
 }, ref) => {
@@ -1153,6 +1191,16 @@ const CodeEditor = forwardRef<CodeEditorHandle, CodeEditorProps>(({
         hideAssets={hideAssets}
         hideSnippets={hideSnippets}
         readOnly={readOnly}
+        onSaveButton={onSaveButton}
+        saveButtonLabel={saveButtonLabel}
+        onCancelButton={onCancelButton}
+        cancelButtonLabel={cancelButtonLabel}
+        presence={presence}
+        title={title}
+        onTitleChange={onTitleChange}
+        language={language}
+        onLanguageChange={onLanguageChange}
+        feedbackLink={feedbackLink}
       />
       <div style={{ flex: 1 }}>
         <Editor

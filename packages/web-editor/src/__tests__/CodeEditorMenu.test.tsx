@@ -33,10 +33,14 @@ const baseProps = () => ({
   hasSelection: true,
   onShowFullSource: vi.fn(),
   actions,
+  title: "My Document",
+  onTitleChange: vi.fn(),
+  language: "en-US",
+  onLanguageChange: vi.fn(),
 });
 
 /** Open one of the menubar menus and return a userEvent session. */
-async function openMenu(name: "Edit" | "Insert" | "Tools") {
+async function openMenu(name: "File" | "Edit" | "Insert" | "Tools") {
   const user = userEvent.setup();
   await user.click(screen.getByRole("button", { name }));
   return user;
@@ -54,14 +58,79 @@ beforeEach(() => {
 
 describe("CodeEditorMenu", () => {
   it.each<SourceFormat>(["pretext", "latex", "markdown"])(
-    "offers the same three menus in %s",
+    "offers the same four menus in %s",
     (sourceFormat) => {
       render(<CodeEditorMenu {...baseProps()} sourceFormat={sourceFormat} />);
-      for (const name of ["Edit", "Insert", "Tools"]) {
+      for (const name of ["File", "Edit", "Insert", "Tools"]) {
         expect(screen.getByRole("button", { name })).toBeInTheDocument();
       }
     },
   );
+
+  describe("File", () => {
+    it("edits the title and language through the Document Properties dialog", async () => {
+      const props = baseProps();
+      render(<CodeEditorMenu {...props} sourceFormat="pretext" />);
+      const user = await openMenu("File");
+      await user.click(menuItem("Document Properties…"));
+
+      const titleInput = screen.getByLabelText("Title");
+      expect(titleInput).toHaveValue("My Document");
+      await user.clear(titleInput);
+      await user.type(titleInput, "Renamed");
+      await user.selectOptions(
+        screen.getByLabelText("Language"),
+        "fr-FR",
+      );
+      await user.click(screen.getByRole("button", { name: "Save" }));
+
+      expect(props.onTitleChange).toHaveBeenCalledWith("Renamed");
+      expect(props.onLanguageChange).toHaveBeenCalledWith("fr-FR");
+      expect(screen.queryByLabelText("Title")).not.toBeInTheDocument();
+    });
+
+    it("discards edits when the dialog is cancelled", async () => {
+      const props = baseProps();
+      render(<CodeEditorMenu {...props} sourceFormat="pretext" />);
+      const user = await openMenu("File");
+      await user.click(menuItem("Document Properties…"));
+      await user.clear(screen.getByLabelText("Title"));
+      await user.type(screen.getByLabelText("Title"), "Discarded");
+      await user.click(screen.getByRole("button", { name: "Cancel" }));
+
+      expect(props.onTitleChange).not.toHaveBeenCalled();
+      expect(props.onLanguageChange).not.toHaveBeenCalled();
+    });
+
+    it("shows Save and Cancel items when the host provides them", async () => {
+      const props = baseProps();
+      const onSaveButton = vi.fn();
+      const onCancelButton = vi.fn();
+      render(
+        <CodeEditorMenu
+          {...props}
+          sourceFormat="pretext"
+          onSaveButton={onSaveButton}
+          saveButtonLabel="Save and manage"
+          onCancelButton={onCancelButton}
+        />,
+      );
+      const user = await openMenu("File");
+      await user.click(menuItem("Save and manage"));
+      expect(onSaveButton).toHaveBeenCalled();
+
+      await (await openMenu("File")).click(menuItem("Cancel"));
+      expect(onCancelButton).toHaveBeenCalled();
+    });
+
+    it("hides Document Properties and shows only viewing actions when read-only", async () => {
+      render(
+        <CodeEditorMenu {...baseProps()} sourceFormat="pretext" readOnly />,
+      );
+      await openMenu("File");
+      expect(queryMenuItem("Document Properties…")).not.toBeInTheDocument();
+    });
+  });
 
   describe("Edit", () => {
     it("runs undo and redo through the parent's handlers", async () => {

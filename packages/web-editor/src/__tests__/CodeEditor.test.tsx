@@ -20,6 +20,10 @@ const baseProps = {
   onOpenLatexImport: vi.fn(),
   onOpenDocinfoEditor: vi.fn(),
   onShowFullSource: vi.fn(),
+  title: "My Document",
+  onTitleChange: vi.fn(),
+  language: "en-US",
+  onLanguageChange: vi.fn(),
 };
 
 describe("CodeEditor", () => {

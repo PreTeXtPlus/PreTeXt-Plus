@@ -118,7 +118,6 @@ function TryItApp({ config }) {
       onCreatePretextProjectCopy={noopAsync}
       onFeedbackSubmit={noopAsync}
       hideAssets={true}
-      hideMenuBar={true}
     />
   );
 }

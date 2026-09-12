@@ -29,7 +29,6 @@ import AssetManagerModal, { type AssetManagerMainTab } from "./AssetManagerModal
 import AssetEditModal from "./AssetEditModal";
 import SnippetManagerModal, { type SnippetManagerMainTab } from "./SnippetManagerModal";
 import SnippetEditModal from "./SnippetEditModal";
-import MenuBar from "./MenuBar";
 import TableOfContents from "./TableOfContents";
 import FindReplaceDrawer from "./toc/FindReplaceDrawer";
 import ErrorBoundary from "./ErrorBoundary";
@@ -92,6 +91,7 @@ import { useEditorStore, useEditorStoreApi } from "../store/hooks";
 import { CollabBridge } from "../collab/bridge";
 import type { CollabSession } from "../collab/types";
 import PresenceAvatars from "../collab/PresenceAvatars";
+import StoreFeedbackLink from "./StoreFeedbackLink";
 
 /**
  * Default wording for the live preview's warning banner.
@@ -387,13 +387,6 @@ export interface editorProps {
   hideSnippets?: boolean;
 
   /**
-   * If true, the built-in menu bar (title field, Save/Cancel buttons,
-   * feedback link, presence avatars) is not rendered at all. Useful when
-   * the host renders its own header above the editor.
-   */
-  hideMenuBar?: boolean;
-
-  /**
    * Real-time collaboration session. When provided, the editor binds its
    * buffers to the session's Y.Doc (per the schema in `src/collab/schema.ts`),
    * renders collaborator presence (avatar chips, remote cursors), and treats
@@ -626,10 +619,12 @@ const EditorsInner = (props: EditorsInnerProps) => {
   const storeApi = useEditorStoreApi();
   const activeDivisionId = useEditorStore((s) => s.activeDivisionId);
   const title = useEditorStore((s) => s.title);
+  const updateTitle = useEditorStore((s) => s.updateTitle);
   const docinfo = useEditorStore((s) => s.docinfo);
   const commonDocinfo = useEditorStore((s) => s.commonDocinfo);
   const useCommonDocinfo = useEditorStore((s) => s.useCommonDocinfo);
   const language = useEditorStore((s) => s.language);
+  const updateLanguage = useEditorStore((s) => s.updateLanguage);
 
   // Editing-buffer mutators (optimistic; host callbacks fire as notifications).
   const applyExternalUpdate = useEditorStore((s) => s.applyExternalUpdate);
@@ -2088,6 +2083,22 @@ const EditorsInner = (props: EditorsInnerProps) => {
       hideAssets={props.hideAssets}
       hideSnippets={props.hideSnippets}
       readOnly={props.readOnly}
+      onSaveButton={props.onSaveButton}
+      saveButtonLabel={props.saveButtonLabel}
+      onCancelButton={props.onCancelButton}
+      cancelButtonLabel={props.cancelButtonLabel}
+      presence={
+        props.collaboration ? (
+          <PresenceAvatars awareness={props.collaboration.awareness} />
+        ) : undefined
+      }
+      title={title}
+      onTitleChange={updateTitle}
+      language={language}
+      onLanguageChange={updateLanguage}
+      feedbackLink={
+        <StoreFeedbackLink label="Give feedback" context="main-editor" />
+      }
     />
   );
 
@@ -2270,21 +2281,6 @@ const EditorsInner = (props: EditorsInnerProps) => {
       className="flex flex-col w-full h-full flex-1 min-h-0 relative"
       onKeyDown={handleKeyDown}
     >
-      {!props.hideMenuBar && (
-        <MenuBar
-          onSaveButton={props.onSaveButton}
-          saveButtonLabel={props.saveButtonLabel}
-          onCancelButton={props.onCancelButton}
-          cancelButtonLabel={props.cancelButtonLabel}
-          readOnly={props.readOnly}
-          showPreviewModeToggle={false}
-          presence={
-            props.collaboration ? (
-              <PresenceAvatars awareness={props.collaboration.awareness} />
-            ) : undefined
-          }
-        />
-      )}
       <div className="flex flex-1 min-h-0 flex-col relative">
         <ErrorBoundary resetKeys={[divisionActiveSource, activeDivisionId]}>
           {editorDisplays}
