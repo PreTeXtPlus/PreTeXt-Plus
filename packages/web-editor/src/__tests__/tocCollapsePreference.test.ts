@@ -21,7 +21,7 @@ const makeStore = () =>
     useCommonDocinfo: false,
     language: "en-US",
     divisions: [],
-    activeDivisionId: null,
+    activeRef: null,
     projectAssets: undefined,
   }).store;
 

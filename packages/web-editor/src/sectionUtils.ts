@@ -2989,6 +2989,33 @@ export function wrapDivisionForPreview(
   );
 }
 
+/**
+ * Wrap a snippet's own source, converted to PreTeXt and with any nested
+ * `<plus:image|snippet ref="...">` placeholders resolved, as the sole content
+ * of a plain, synthetic `<article>` — a minimal standalone document for
+ * previewing what a snippet renders as on its own, since (unlike a division)
+ * it has no home document to preview it inside of. No `docinfo` is included:
+ * this is deliberately a "plain" article, not the project's own preamble.
+ */
+export function wrapSnippetForPreview(
+  snippet: Snippet,
+  assets: Asset[] = [],
+  snippets: Snippet[] = [],
+  lang?: string,
+): string {
+  const { pretextSource, pretextError } = derivePretextContent(
+    snippet.source,
+    snippet.sourceFormat,
+  );
+  const xml = pretextSource ?? `<!-- conversion error: ${pretextError} -->`;
+  const resolved = expandRefs(xml, [], snippets, assets, new Set([snippet.ref]));
+  return wrapInPretextDocument(
+    `<article>\n<title>Snippet preview</title>\n${resolved}\n</article>`,
+    "",
+    lang,
+  );
+}
+
 // ---------------------------------------------------------------------------
 // Initial-load normalization
 // ---------------------------------------------------------------------------

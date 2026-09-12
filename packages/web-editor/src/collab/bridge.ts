@@ -585,7 +585,7 @@ export class CollabBridge {
             state.removeDivisionFromPool(xmlId);
             structureChanged = true;
             // Never leave the editor pointing at a removed division.
-            if (this.store.getState().activeDivisionId === xmlId) {
+            if (this.store.getState().activeRef === xmlId) {
               const remaining = this.store.getState().divisions ?? [];
               const fallback =
                 remaining.find(
@@ -594,7 +594,7 @@ export class CollabBridge {
                     d.type === "article" ||
                     d.type === "slideshow",
                 ) ?? remaining[0];
-              state.setActiveDivisionId(fallback?.xmlId ?? null);
+              state.setActiveRef(fallback?.xmlId ?? null);
             }
           }
         });
@@ -628,8 +628,8 @@ export class CollabBridge {
           this.keyToXmlId.set(key, changes.xmlId);
           this.xmlIdToKey.delete(oldXmlId);
           this.xmlIdToKey.set(changes.xmlId, key);
-          if (this.store.getState().activeDivisionId === oldXmlId) {
-            state.setActiveDivisionId(changes.xmlId);
+          if (this.store.getState().activeRef === oldXmlId) {
+            state.setActiveRef(changes.xmlId);
           }
           structureChanged = true;
         }

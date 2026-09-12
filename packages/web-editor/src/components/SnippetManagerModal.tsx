@@ -75,18 +75,18 @@ const SnippetManagerModal = ({
   onResolveRef,
 }: SnippetManagerModalProps) => {
   const divisions = useEditorStore((s) => s.divisions);
-  const activeDivisionId = useEditorStore((s) => s.activeDivisionId);
+  const activeRef = useEditorStore((s) => s.activeRef);
   // The embed code the user copies is matched to the division they're editing:
   // a Markdown division needs `::snippet{ref="x"}`, since raw `<plus:.../>`
   // XML pasted into Markdown doesn't survive conversion. Falls back to PreTeXt.
   const activeFormat =
-    divisions?.find((d) => d.xmlId === activeDivisionId)?.sourceFormat ??
+    divisions?.find((d) => d.xmlId === activeRef)?.sourceFormat ??
     "pretext";
   const embedFor = (ref: string) => snippetEmbedCode(ref, activeFormat);
   // Authoritative project-snippet pool, owned by the store.
   const projectSnippets = useEditorStore((s) => s.projectSnippets) ?? [];
   const projectAssets = useEditorStore((s) => s.projectAssets) ?? [];
-  const openSnippetEditor = useEditorStore((s) => s.openSnippetEditor);
+  const startSnippetEdit = useEditorStore((s) => s.startSnippetEdit);
   const openSnippetResolver = useEditorStore((s) => s.openSnippetResolver);
   const removeSnippetRefFromDocument = useEditorStore(
     (s) => s.removeSnippetRefFromDocument,
@@ -137,7 +137,7 @@ const SnippetManagerModal = ({
     }
     if (snippet.ref) {
       navigator.clipboard?.writeText(embedFor(snippet.ref)).catch(() => {});
-      openSnippetEditor(snippet.ref);
+      startSnippetEdit(snippet);
     }
     onClose();
   };
@@ -190,10 +190,10 @@ const SnippetManagerModal = ({
     const renderRow = (row: SnippetRow) => {
       const isDuplicating = duplicatingKey === row.ref;
       const onOpen = () => {
-        if (row.status === "unlinked") {
+        if (row.status === "unlinked" || !row.snippet) {
           openSnippetResolver(row.ref);
         } else {
-          openSnippetEditor(row.ref);
+          startSnippetEdit(row.snippet);
           onClose();
         }
       };

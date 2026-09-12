@@ -1,8 +1,8 @@
 import clsx from "clsx";
 import type { Division, DivisionType } from "../../types/sections";
-import SectionEditForm from "./SectionEditForm";
+import EditForm from "./EditForm";
 import DivisionMenu, { type DivisionMenuItem } from "./DivisionMenu";
-import { type EditDraft, TYPE_FULL_LABELS } from "./types";
+import { type DivisionEditDraft, TYPE_FULL_LABELS } from "./types";
 
 interface SectionItemProps {
   division: Division;
@@ -11,9 +11,9 @@ interface SectionItemProps {
   hasChildren: boolean;
   isExpanded: boolean;
   onToggleExpand: () => void;
-  editDraft: EditDraft | null;
+  editDraft: DivisionEditDraft | null;
   onSelect: () => void;
-  onDraftChange: (draft: EditDraft) => void;
+  onDraftChange: (draft: DivisionEditDraft) => void;
   onEditCommit: () => void;
   onEditCancel: () => void;
   menuItems: DivisionMenuItem[];
@@ -108,11 +108,11 @@ const SectionItem = ({
       </div>
 
       {isEditing && editDraft && (
-        <SectionEditForm
+        <EditForm
           draft={editDraft}
           isRoot={isRoot}
           parentType={parentType}
-          onDraftChange={onDraftChange}
+          onDraftChange={(d) => onDraftChange(d as DivisionEditDraft)}
           onCommit={onEditCommit}
           onCancel={onEditCancel}
         />

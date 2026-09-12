@@ -19,7 +19,7 @@ function renderWithStore(ui: (wrap: (children: ReactNode) => ReactNode) => React
     useCommonDocinfo: false,
     language: "en-US",
     divisions: [],
-    activeDivisionId: null,
+    activeRef: null,
     projectAssets: undefined,
   });
   const noop = () => { };
@@ -29,6 +29,10 @@ function renderWithStore(ui: (wrap: (children: ReactNode) => ReactNode) => React
     createDivision: noop,
     removeDivision: noop,
     updateDivision: noop,
+    createAsset: noop,
+    updateAsset: noop,
+    createSnippet: noop,
+    updateSnippet: noop,
     divisionContentChange: noop,
     handleDivisionContentChange: noop,
     assetInsert: noop,

@@ -138,17 +138,17 @@ const AssetManagerModal = ({
   onReplaceAsset,
 }: AssetManagerModalProps) => {
   const divisions = useEditorStore((s) => s.divisions);
-  const activeDivisionId = useEditorStore((s) => s.activeDivisionId);
+  const activeRef = useEditorStore((s) => s.activeRef);
   // The embed code the user copies is matched to the division they're editing:
   // a Markdown division needs `::image{ref="x"}`, since raw `<plus:.../>` XML
   // pasted into Markdown doesn't survive conversion. Falls back to PreTeXt.
   const activeFormat =
-    divisions?.find((d) => d.xmlId === activeDivisionId)?.sourceFormat ??
+    divisions?.find((d) => d.xmlId === activeRef)?.sourceFormat ??
     "pretext";
   const embedFor = (ref: string) => assetEmbedCode(ref, activeFormat);
   // Authoritative project-asset pool, owned by the store.
   const projectAssets = useEditorStore((s) => s.projectAssets) ?? [];
-  const openAssetEditor = useEditorStore((s) => s.openAssetEditor);
+  const startAssetEdit = useEditorStore((s) => s.startAssetEdit);
   const openAssetResolver = useEditorStore((s) => s.openAssetResolver);
   const removeAssetRefFromDocument = useEditorStore((s) => s.removeAssetRefFromDocument);
 
@@ -269,7 +269,7 @@ const AssetManagerModal = ({
     }
     if (asset.ref) {
       navigator.clipboard?.writeText(embedFor(asset.ref)).catch(() => {});
-      openAssetEditor(asset.ref);
+      startAssetEdit(asset);
     }
     onClose();
   };
@@ -363,13 +363,13 @@ const AssetManagerModal = ({
     const renderRow = (row: AssetRow) => {
       const isDuplicating = duplicatingKey === row.ref;
       const onOpen = () => {
-        if (row.status === "unlinked") {
+        if (row.status === "unlinked" || !row.asset) {
           // Switches this same modal into resolve mode (resolveTarget wins in render).
           openAssetResolver(row.ref);
         } else {
-          // Hand off to the standalone asset editor; close the manager so the
-          // two dialogs don't stack.
-          openAssetEditor(row.ref);
+          // Hand off to the inline asset editor; close the manager so the two
+          // surfaces don't stack.
+          startAssetEdit(row.asset);
           onClose();
         }
       };

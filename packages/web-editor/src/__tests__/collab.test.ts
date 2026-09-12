@@ -57,7 +57,7 @@ const makeStore = () =>
     useCommonDocinfo: false,
     language: "en-US",
     divisions: structuredClone(DIVISIONS),
-    activeDivisionId: "sec-a",
+    activeRef: "sec-a",
     projectAssets: undefined,
   });
 
@@ -258,14 +258,14 @@ describe("CollabBridge", () => {
     expect(renamed).toBeDefined();
     expect(renamed?.title).toBe("Alpha!");
     // B was viewing sec-a; it must follow the rename.
-    expect(storeB.store.getState().activeDivisionId).toBe("sec-a-renamed");
+    expect(storeB.store.getState().activeRef).toBe("sec-a-renamed");
 
     bridgeA.localDivisionRemove("sec-a-renamed");
     expect(
       storeB.store.getState().divisions?.some((d) => d.xmlId === "sec-a-renamed"),
     ).toBe(false);
     // Active falls back to the root rather than pointing at a ghost.
-    expect(storeB.store.getState().activeDivisionId).toBe("doc-root");
+    expect(storeB.store.getState().activeRef).toBe("doc-root");
   });
 
   it("mirrors title and docinfo, and does not echo local changes back", () => {
@@ -439,7 +439,7 @@ describe("CollabBridge", () => {
       useCommonDocinfo: false,
       language: "en-US",
       divisions: structuredClone(DIVISIONS),
-      activeDivisionId: "sec-a",
+      activeRef: "sec-a",
       projectAssets: [
         { id: "stale-asset", ref: "stale", title: "Stale" },
       ],

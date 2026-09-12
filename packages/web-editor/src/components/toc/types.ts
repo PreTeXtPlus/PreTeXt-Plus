@@ -2,12 +2,45 @@ import type { Division, DivisionType } from "../../types/sections";
 import type { SourceFormat } from "../../types/editor";
 import { slugifyTitle } from "../../sectionUtils";
 
-/** Draft state for the inline division edit form. */
-export interface EditDraft {
+/**
+ * Draft state for the shared inline edit form — a division, an asset, or a
+ * snippet. `kind` is the discriminator every reader switches on; it never
+ * changes for the lifetime of one draft (editing/creating a division never
+ * turns into editing an asset mid-form).
+ */
+export type EditDraft = DivisionEditDraft | AssetEditDraft | SnippetEditDraft;
+
+export interface DivisionEditDraft {
+  kind: "division";
   title: string;
   type: DivisionType;
   xmlId: string;
   label: string;
+  sourceFormat: SourceFormat;
+}
+
+/**
+ * `sourceKind`/`pendingFile`/`pendingUrl` only apply while creating a brand
+ * new asset (`isNew` on the form) — they say which of Upload/URL/Authored the
+ * author picked and stage the not-yet-uploaded value, mirroring what
+ * `AssetManagerModal`'s own "Add Asset" tab used to hold as local state.
+ * `pendingFile` is intentionally not persisted anywhere but this in-memory
+ * draft: a `File` can't round-trip through the store's otherwise-serializable
+ * state, and doesn't need to — the draft never outlives the browser tab.
+ */
+export interface AssetEditDraft {
+  kind: "asset";
+  title: string;
+  ref: string;
+  shortDescription: string;
+  sourceKind?: "upload" | "url" | "authored";
+  pendingFile?: File;
+  pendingUrl?: string;
+}
+
+export interface SnippetEditDraft {
+  kind: "snippet";
+  ref: string;
   sourceFormat: SourceFormat;
 }
 

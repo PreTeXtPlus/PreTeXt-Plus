@@ -29,7 +29,7 @@ import type { Asset } from "./types/editor";
  * since the same asset can be embedded at different widths in different
  * places.
  */
-function transformImageAsset(asset: Asset, ref: string, width?: string): string {
+export function transformImageAsset(asset: Asset, ref: string, width?: string): string {
   if (asset.isFile && !asset.fileRef && !asset.url) {
     return `<!-- image asset "${ref}" is marked as file-based but has no fileRef or url -->`;
   }
