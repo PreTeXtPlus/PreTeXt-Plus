@@ -598,66 +598,64 @@ const CodeEditorMenu: React.FC<CodeEditorMenuProps> = ({
       role="menubar"
       aria-label="Editor actions"
     >
-      <div className="flex items-center gap-1 min-w-0 flex-1 overflow-x-auto">
-        {menus.map((menu, index) => (
-          <MenuDropdown
-            key={menu.key}
-            label={menu.label}
-            entries={menu.entries}
-            isOpen={openMenu === menu.key}
-            onOpenChange={(open) => setOpenMenu(open ? menu.key : null)}
-            menubarActive={openMenu !== null}
-            onNavigate={(direction) => navigate(index, direction)}
-          />
-        ))}
+      {menus.map((menu, index) => (
+        <MenuDropdown
+          key={menu.key}
+          label={menu.label}
+          entries={menu.entries}
+          isOpen={openMenu === menu.key}
+          onOpenChange={(open) => setOpenMenu(open ? menu.key : null)}
+          menubarActive={openMenu !== null}
+          onNavigate={(direction) => navigate(index, direction)}
+        />
+      ))}
 
-        {notice && (
-          <span
-            role="status"
-            className="min-w-0 truncate text-[12px] leading-[1.3] text-[#8a4b08] pl-2"
-          >
-            {notice}
-          </span>
-        )}
+      {notice && (
+        <span
+          role="status"
+          className="min-w-0 truncate text-[12px] leading-[1.3] text-[#8a4b08] pl-2"
+        >
+          {notice}
+        </span>
+      )}
 
-        {isFindingInFile && (
-          <span
-            role="status"
-            className="flex items-center gap-1.5 shrink-0 text-[12px] leading-[1.3] text-[#555] pl-2"
-          >
-            Searching file
-            {onSwitchToFindInProject && (
-              <button
-                type="button"
-                className="text-[#3567d0] hover:underline cursor-pointer bg-transparent border-none p-0 text-[12px]"
-                onClick={onSwitchToFindInProject}
-              >
-                Switch to full Project
-              </button>
-            )}
-          </span>
-        )}
-
-        <span className="flex items-center gap-2 ml-auto pl-2 shrink-0">
-          {feedbackLink}
-          {onConvertToPretext && !readOnly && (
+      {isFindingInFile && (
+        <span
+          role="status"
+          className="flex items-center gap-1.5 shrink-0 text-[12px] leading-[1.3] text-[#555] pl-2"
+        >
+          Searching file
+          {onSwitchToFindInProject && (
             <button
               type="button"
-              className={CONVERT_BUTTON_CLASSES}
-              onClick={onConvertToPretext}
-              disabled={canConvertToPretext === false}
-              title="Create a new project copy using the converted PreTeXt source"
-              aria-label="Convert to PreTeXt"
+              className="text-[#3567d0] hover:underline cursor-pointer bg-transparent border-none p-0 text-[12px]"
+              onClick={onSwitchToFindInProject}
             >
-              <span className="hidden sm:inline">Convert to PreTeXt</span>
-              <span className="sm:hidden">Convert</span>
+              Switch to full Project
             </button>
           )}
-          <span className="inline-flex items-center py-0.5 px-2 rounded-full bg-gray-200 text-gray-800 text-xs font-semibold">
-            {FORMAT_LABELS[sourceFormat]}
-          </span>
         </span>
-      </div>
+      )}
+
+      <span className="flex items-center gap-2 ml-auto pl-2 shrink-0">
+        {feedbackLink}
+        {onConvertToPretext && !readOnly && (
+          <button
+            type="button"
+            className={CONVERT_BUTTON_CLASSES}
+            onClick={onConvertToPretext}
+            disabled={canConvertToPretext === false}
+            title="Create a new project copy using the converted PreTeXt source"
+            aria-label="Convert to PreTeXt"
+          >
+            <span className="hidden sm:inline">Convert to PreTeXt</span>
+            <span className="sm:hidden">Convert</span>
+          </button>
+        )}
+        <span className="inline-flex items-center py-0.5 px-2 rounded-full bg-gray-200 text-gray-800 text-xs font-semibold">
+          {FORMAT_LABELS[sourceFormat]}
+        </span>
+      </span>
 
       <span className="flex items-center gap-2 pl-2 shrink-0">
         {presence}
