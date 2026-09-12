@@ -1127,11 +1127,17 @@ const CodeEditor = forwardRef<CodeEditorHandle, CodeEditorProps>(({
   };
 
   /**
-   * Shift+Enter: split the `<p>` enclosing the cursor into two paragraphs, or
-   * append an empty sibling when the cursor is nested inside inline markup
-   * that can't be split safely — see `planParagraphSplit`. Returns `false`
-   * when the cursor isn't inside a `<p>` at all, so the caller can fall back
-   * to a plain newline.
+   * Shift+Enter: reconstruct the `<p>` enclosing the cursor as two
+   * well-formatted paragraphs (or append a matching-indentation empty sibling
+   * when the cursor is nested inside inline markup that can't be split
+   * safely) — see `planParagraphSplit`. Returns `false` when the cursor isn't
+   * inside a `<p>` at all, or the rewrite would touch a locked structural
+   * line, so the caller can fall back to a plain newline.
+   *
+   * This is a direct `executeEdits`, not a snippet insertion: the replacement
+   * text is a full reconstruction of real buffer content (attributes and all),
+   * and routing arbitrary content through Monaco's snippet syntax would mean
+   * escaping any `$`/`}`/`\` an author happened to type.
    */
   const splitParagraphAtCursor = (): boolean => {
     ensureCursorInEditableRegion();
@@ -1142,7 +1148,31 @@ const CodeEditor = forwardRef<CodeEditorHandle, CodeEditorProps>(({
 
     const plan = planParagraphSplit(model.getValue(), model.getOffsetAt(position));
     if (!plan) return false;
-    insertSnippetAt(plan.offset, plan.body);
+
+    const start = model.getPositionAt(plan.range.start);
+    const end = model.getPositionAt(plan.range.end);
+    if (!isEditablePosition(model, start) || !isEditablePosition(model, end)) {
+      return false;
+    }
+
+    editor.executeEdits("shift-enter-paragraph-split", [
+      {
+        range: {
+          startLineNumber: start.lineNumber,
+          startColumn: start.column,
+          endLineNumber: end.lineNumber,
+          endColumn: end.column,
+        },
+        text: plan.text,
+        forceMoveMarkers: true,
+      },
+    ]);
+    // `cursorOffset` is an offset into the *post-edit* document, so it must be
+    // converted back to a position only after `executeEdits` has updated the
+    // model — converting it against the stale pre-edit model would land on
+    // whatever used to be at that offset instead.
+    editor.setPosition(model.getPositionAt(plan.cursorOffset));
+    editor.focus?.();
     return true;
   };
 

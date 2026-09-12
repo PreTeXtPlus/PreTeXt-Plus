@@ -42,7 +42,9 @@ const plan = (marked: string, key: string, format: SourceFormat = "pretext") => 
 describe("enclosingParagraph", () => {
   it("finds the paragraph the cursor is inside", () => {
     expect(paragraphAt("<section><p>some pr|ose</p></section>")).toEqual({
+      tagStart: "<section>".length,
       contentStart: "<section><p>".length,
+      closeTagStart: "<section><p>some prose".length,
       end: "<section><p>some prose</p>".length,
     });
   });

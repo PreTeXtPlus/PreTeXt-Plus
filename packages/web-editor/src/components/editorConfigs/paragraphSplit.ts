@@ -2,25 +2,34 @@
  * Shift+Enter's paragraph split: word-processor-style "new paragraph" for the
  * `<p>` the cursor is standing in.
  *
- * A cursor directly in the paragraph's own text splits cleanly: `</p>\n<p>`
- * at the cursor turns one `<p>` into two. A cursor nested inside inline
- * markup (`<em>`, `<term>`, ...) can't be split the same way without closing
- * and reopening every open ancestor, and there's no safe way to do that
- * blind — an ancestor like `<xref ref="...">` carries an attribute a
- * reopened copy would either drop or duplicate. So that case degrades
- * instead of guessing, the same rule `enclosingParagraph` itself follows:
- * leave the paragraph's text untouched and append an empty sibling `<p>`
- * after it instead.
+ * A cursor directly in the paragraph's own text splits cleanly: the element is
+ * reconstructed as two well-formatted `<p>` elements, each on its own line at
+ * the same indentation as the original, with the text content split at the
+ * cursor between them. A cursor nested inside inline markup (`<em>`, `<term>`,
+ * ...) can't be split the same way without closing and reopening every open
+ * ancestor, and there's no safe way to do that blind — an ancestor like
+ * `<xref ref="...">` carries an attribute a reopened copy would either drop or
+ * duplicate. So that case degrades instead of guessing, the same rule
+ * `enclosingParagraph` itself follows: leave the paragraph's text untouched
+ * and append an empty, matching-indentation sibling `<p>` after it instead.
+ *
+ * Only the structural wrapper is reformatted. The original opening tag's text
+ * — attributes included — is copied verbatim onto the first resulting `<p>`;
+ * the second is always bare, since copying an `xml:id` onto both would
+ * collide.
  */
 import { enclosingParagraph } from "./insertContext";
 import { findTagEnd, isNameStart } from "./xmlTags";
 
-/** Where Shift+Enter should write, and what — offsets are into the source. */
+/** A span to replace, and what to replace it with. Offsets are into the source. */
 export interface ParagraphSplit {
-  /** Offset to insert at: the cursor for a real split, the paragraph's end for the fallback. */
-  offset: number;
-  /** Monaco snippet text; `$0` marks where the cursor should land. */
-  body: string;
+  /** The span being rewritten — the whole `<p>...</p>`, or a zero-width point
+   *  at its end for the nested-markup fallback (a pure insertion). */
+  range: { start: number; end: number };
+  /** Literal replacement text. */
+  text: string;
+  /** Absolute offset, in the *resulting* document, where the cursor lands. */
+  cursorOffset: number;
 }
 
 /**
@@ -67,6 +76,17 @@ const isDirectParagraphText = (
 };
 
 /**
+ * The whitespace `offset` sits after on its own line — the indentation to
+ * reuse for a new sibling line — or `""` if anything but whitespace precedes
+ * it there (the source is mid-edit; nothing to copy, so nothing is guessed).
+ */
+const lineIndent = (source: string, offset: number): string => {
+  const lineStart = source.lastIndexOf("\n", offset - 1) + 1;
+  const prefix = source.slice(lineStart, offset);
+  return /^[ \t]*$/.test(prefix) ? prefix : "";
+};
+
+/**
  * How Shift+Enter should act on the `<p>` enclosing `offset`, or `null` if
  * the cursor isn't inside one at all (the caller falls back to a plain
  * newline).
@@ -77,8 +97,32 @@ export const planParagraphSplit = (
 ): ParagraphSplit | null => {
   const paragraph = enclosingParagraph(source, offset);
   if (!paragraph) return null;
+  const { tagStart, contentStart, closeTagStart, end } = paragraph;
+  const indent = lineIndent(source, tagStart);
 
-  return isDirectParagraphText(source, paragraph.contentStart, offset)
-    ? { offset, body: "</p>\n<p>$0" }
-    : { offset: paragraph.end, body: "\n<p>$0</p>" };
+  if (!isDirectParagraphText(source, contentStart, offset)) {
+    const text = `\n${indent}<p></p>`;
+    return {
+      range: { start: end, end },
+      text,
+      cursorOffset: end + "\n".length + indent.length + "<p>".length,
+    };
+  }
+
+  const openTag = source.slice(tagStart, contentStart);
+  const before = source.slice(contentStart, offset);
+  const after = source.slice(offset, closeTagStart ?? end);
+  const originalClose =
+    closeTagStart !== undefined ? source.slice(closeTagStart, end) : "";
+
+  const text = `${openTag}${before}</p>\n${indent}<p>${after}${originalClose}`;
+  const cursorOffset =
+    tagStart +
+    openTag.length +
+    before.length +
+    "</p>\n".length +
+    indent.length +
+    "<p>".length;
+
+  return { range: { start: tagStart, end }, text, cursorOffset };
 };

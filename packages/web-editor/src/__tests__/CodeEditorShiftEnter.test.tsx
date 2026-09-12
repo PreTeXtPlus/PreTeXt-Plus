@@ -4,11 +4,13 @@
  * Shift+Enter's paragraph-split keybinding, registered in
  * `CodeEditor.tsx`'s `handleEditorMount`. `paragraphSplit.test.ts` covers the
  * pure decision logic; this covers the wiring — that the right Monaco
- * keybinding is registered, that it inserts what `planParagraphSplit` says
- * through the snippet controller, that it falls back to a plain newline
- * outside a `<p>` (Monaco's own default for the combo, which `addCommand`
- * fully overrides), and that Ctrl+Enter's existing rebuild shortcut is
- * unaffected by the new registration living right next to it.
+ * keybinding is registered, that it rewrites the buffer exactly as
+ * `planParagraphSplit` says via a plain `executeEdits` (not a snippet
+ * insertion — see `splitParagraphAtCursor`'s doc comment for why), that it
+ * falls back to a plain newline outside a `<p>` (Monaco's own default for the
+ * combo, which `addCommand` fully overrides), and that Ctrl+Enter's existing
+ * rebuild shortcut is unaffected by the new registration living right next to
+ * it.
  *
  * The heavier parts of `handleEditorMount` (constrained-editor-plugin, the
  * collab edit guard, per-format Monaco language extensions) are mocked out —
@@ -45,10 +47,16 @@ const monaco = {
   editor: { setModelMarkers: vi.fn() },
 };
 
-/** A single-line Monaco stand-in, cursor placed at `cursorOffset`. */
-const makeEditorStub = (content: string, cursorOffset: number) => {
+/**
+ * A single-line Monaco stand-in, cursor placed at `cursorOffset`. `content`
+ * is mutable and `executeEdits` actually splices it — using column-as-offset
+ * math, which stays valid throughout since the model always reports exactly
+ * one line, however many `\n`s the content ends up holding — so tests can
+ * assert on the resulting text directly instead of on recorded edit calls.
+ */
+const makeEditorStub = (initialContent: string, cursorOffset: number) => {
+  let content = initialContent;
   const commands = new Map<number, () => void>();
-  const inserted: string[] = [];
   const triggers: { source: string; handlerId: string; payload?: unknown }[] = [];
   let position = { lineNumber: 1, column: cursorOffset + 1 };
 
@@ -82,14 +90,24 @@ const makeEditorStub = (content: string, cursorOffset: number) => {
     addCommand: (keybinding: number, handler: () => void) => {
       commands.set(keybinding, handler);
     },
-    getContribution: (id: string) =>
-      id === "snippetController2"
-        ? { insert: (body: string) => inserted.push(body) }
-        : undefined,
+    getContribution: () => undefined,
     trigger: (source: string, handlerId: string, payload?: unknown) => {
       triggers.push({ source, handlerId, payload });
     },
-    executeEdits: () => {},
+    executeEdits: (
+      _source: string,
+      ops: {
+        range: { startColumn: number; endColumn: number };
+        text: string;
+      }[],
+    ) => {
+      for (const op of ops) {
+        content =
+          content.slice(0, op.range.startColumn - 1) +
+          op.text +
+          content.slice(op.range.endColumn - 1);
+      }
+    },
     focus: () => {},
     onMouseDown: () => ({ dispose: () => {} }),
     onDidChangeCursorPosition: () => ({ dispose: () => {} }),
@@ -97,7 +115,14 @@ const makeEditorStub = (content: string, cursorOffset: number) => {
     onDidChangeModelContent: () => ({ dispose: () => {} }),
   };
 
-  return { editor, model, commands, inserted, triggers, getPosition: () => position };
+  return {
+    editor,
+    model,
+    commands,
+    triggers,
+    getValue: () => content,
+    getPosition: () => position,
+  };
 };
 
 type Harness = ReturnType<typeof makeEditorStub>;
@@ -138,31 +163,46 @@ beforeEach(() => {
 });
 
 describe("Shift+Enter paragraph split", () => {
-  it("splits a plain paragraph at the cursor", () => {
+  it("reconstructs a plain paragraph as two siblings, split at the cursor", () => {
     const content = "<article><p>The car is fast.</p></article>";
     cursorOffsetForNextMount = content.indexOf("fast.") + 2; // "The car is fa|st."
     render(<CodeEditor {...baseProps} content={content} sourceFormat="pretext" />);
 
     shiftEnter();
 
-    expect(harness!.inserted).toEqual(["</p>\n<p>$0"]);
-    expect(harness!.getPosition()).toEqual({
-      lineNumber: 1,
-      column: cursorOffsetForNextMount + 1,
-    });
+    expect(harness!.getValue()).toBe(
+      "<article><p>The car is fa</p>\n<p>st.</p></article>",
+    );
+    const cursorColumn = "<article><p>The car is fa</p>\n<p>".length + 1;
+    expect(harness!.getPosition()).toEqual({ lineNumber: 1, column: cursorColumn });
     expect(harness!.triggers).toEqual([]);
   });
 
-  it("appends an empty sibling when the cursor is nested inside inline markup", () => {
+  it("reuses the original tag's indentation for the new line", () => {
+    const content = "<section>\n  <p>The car is fast.</p>\n</section>";
+    cursorOffsetForNextMount = content.indexOf("fast.") + 2;
+    render(<CodeEditor {...baseProps} content={content} sourceFormat="pretext" />);
+
+    shiftEnter();
+
+    expect(harness!.getValue()).toBe(
+      "<section>\n  <p>The car is fa</p>\n  <p>st.</p>\n</section>",
+    );
+  });
+
+  it("appends a matching-indentation empty sibling when the cursor is nested inside inline markup, leaving the original untouched", () => {
     const content = "<article><p>Some <em>emphasized text</em> here.</p></article>";
     cursorOffsetForNextMount = content.indexOf("emphasized te") + "emphasized te".length;
     render(<CodeEditor {...baseProps} content={content} sourceFormat="pretext" />);
 
     shiftEnter();
 
-    expect(harness!.inserted).toEqual(["\n<p>$0</p>"]);
-    const paragraphEnd = content.indexOf("</p>") + "</p>".length;
-    expect(harness!.getPosition()).toEqual({ lineNumber: 1, column: paragraphEnd + 1 });
+    expect(harness!.getValue()).toBe(
+      "<article><p>Some <em>emphasized text</em> here.</p>\n<p></p></article>",
+    );
+    const cursorColumn =
+      "<article><p>Some <em>emphasized text</em> here.</p>\n<p>".length + 1;
+    expect(harness!.getPosition()).toEqual({ lineNumber: 1, column: cursorColumn });
     expect(harness!.triggers).toEqual([]);
   });
 
@@ -173,7 +213,7 @@ describe("Shift+Enter paragraph split", () => {
 
     shiftEnter();
 
-    expect(harness!.inserted).toEqual([]);
+    expect(harness!.getValue()).toBe(content);
     expect(harness!.triggers).toEqual([
       { source: "keyboard", handlerId: "type", payload: { text: "\n" } },
     ]);
@@ -186,7 +226,7 @@ describe("Shift+Enter paragraph split", () => {
 
     shiftEnter();
 
-    expect(harness!.inserted).toEqual([]);
+    expect(harness!.getValue()).toBe(content);
     expect(harness!.triggers).toEqual([
       { source: "keyboard", handlerId: "type", payload: { text: "\n" } },
     ]);
@@ -208,6 +248,6 @@ describe("Shift+Enter paragraph split", () => {
     ctrlEnter();
 
     expect(onRebuild).toHaveBeenCalledTimes(1);
-    expect(harness!.inserted).toEqual([]);
+    expect(harness!.getValue()).toBe(content);
   });
 });
