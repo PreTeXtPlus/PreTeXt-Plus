@@ -33,6 +33,15 @@ class PublicationFileBuilderTest < ActiveSupport::TestCase
     assert_match(%r{<latex print="yes" sides="two"/>}, result)
   end
 
+  # $journal-name reads common/journal/@name -- under <common>, not under <latex>, even
+  # though only the LaTeX conversion acts on it. PreTeXt's script resolves the code into a
+  # texstyle file, so a wrong path here is a PDF that quietly builds in the default style.
+  test "a journal style lands under common, beside the other common options" do
+    result = xml("journal" => "trans-ams", "chunk_level" => "1")
+
+    assert_match(%r{<common>\s*<journal name="trans-ams"/>\s*<chunking level="1"/>\s*</common>}, result)
+  end
+
   # $components-fenced reads source/version/@include and splits it on spaces.
   test "version components land under source" do
     assert_match(%r{<version include="instructor solutions"/>},

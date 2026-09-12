@@ -63,6 +63,31 @@ class PublicationSettingsControllerTest < ActionDispatch::IntegrationTest
     assert_select "select[name='publication_settings[latex_sides]']"
   end
 
+  # The journal picker end to end: it renders for an article's PDF, offers PreTeXt's own
+  # codes as values, and saves one. The list is generated from PreTeXt's journals.xml, so
+  # this is also what would catch a refresh that wrote something the form cannot store.
+  test "an article's PDF offers the journal styles and saves one" do
+    get edit_project_target_publication_settings_url(@project, targets(:one_print)),
+      headers: modal_headers
+
+    assert_select "select[name='publication_settings[journal]'] option[value=trans-ams]",
+                  text: "Transactions of the American Mathematical Society"
+
+    # Seventeen journals read as two lists, not one: the publisher-wide styles first,
+    # because they are what an author reaches for when their own journal is not there.
+    select = "select[name='publication_settings[journal]']"
+    assert_select "#{select} optgroup", 2
+    assert_select "#{select} optgroup:first-of-type[label='Publisher-wide styles'] option", 4
+    assert_select "#{select} optgroup:last-of-type[label='Individual journals'] option[value=trans-ams]"
+    # The blank choice still leads, outside either heading -- it is how a level inherits.
+    assert_select "#{select} > option[value='']"
+
+    patch project_target_publication_settings_url(@project, targets(:one_print)),
+      params: { publication_settings: { journal: "trans-ams" } }
+
+    assert_equal "trans-ams", targets(:one_print).reload.publication_settings["journal"]
+  end
+
   test "a project's modal offers every format's tab" do
     get edit_project_publication_settings_url(@project), headers: modal_headers
 

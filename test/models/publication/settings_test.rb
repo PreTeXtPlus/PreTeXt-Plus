@@ -108,6 +108,59 @@ class Publication::SettingsTest < ActiveSupport::TestCase
     [ website, pdf ].each { |keys| assert_includes keys, "division_numbering_level" }
   end
 
+  # A journal style is bounded twice over, and by two different things: its family keeps it
+  # off a website, and PreTeXt's texstyle stylesheet -- one entry template, matching
+  # <article> -- keeps it off a book. Either alone would leave an author a setting that
+  # builds nothing.
+  test "a journal style is offered to an article's PDF and to nothing else" do
+    article_pdf = Publication::Settings.new(targets(:one_print))
+    article_web = Publication::Settings.new(targets(:one_web))
+    book = Publication::Settings.new(projects(:team))
+
+    assert_includes article_pdf.options.map(&:key), "journal"
+    assert_not_includes article_web.options.map(&:key), "journal"
+    assert_not_includes book.options.map(&:key), "journal"
+    assert_equal "book", book.document_type
+  end
+
+  # Every journal PreTeXt knows comes from its own journals.xml, refreshed into
+  # config/pretext_journals.yml by `bin/rails pretext:journals`. A picker that had gone
+  # empty -- a bad fetch, a moved file -- would take the option out of the modal with no
+  # error anywhere, so the codes are checked to be there and to be storable.
+  test "the journal codes come from the generated list and are all accepted" do
+    option = Publication::Catalog.find("journal")
+    codes = YAML.load_file(Rails.root.join("config/pretext_journals.yml")).map { |j| j["code"] }
+
+    assert_predicate codes, :any?
+    assert_equal codes.sort, option.values.sort
+    codes.each { |code| assert option.permits?(code), "#{code} is not accepted" }
+    assert_not option.permits?("not-a-journal")
+  end
+
+  # The headings are drawn from the same rows as the choices, so the two can only diverge
+  # by mistake -- and the mistake is silent, since a journal under no heading is simply
+  # absent from a grouped select. Exactly one heading each is what this pins.
+  test "every journal is offered under exactly one heading" do
+    option = Publication::Catalog.find("journal")
+    grouped = Publication::Settings.new(@user).select_choices_for(option)
+
+    assert_equal [ "Publisher-wide styles", "Individual journals" ], grouped.map(&:first)
+
+    offered = grouped.flat_map { |_, pairs| pairs.map(&:last) }
+    assert_equal option.values.sort, offered.sort
+    assert_equal offered.uniq, offered
+  end
+
+  # Grouping is one option's presentation, not a change to how a list is read. A flat
+  # option has to keep handing the select helper flat pairs -- nest them and every choice
+  # would come out under a heading named after its own label.
+  test "an option with no headings is still offered as a flat list" do
+    flat = Publication::Settings.new(@user).select_choices_for(Publication::Catalog.find("theme"))
+
+    assert_not Publication::Catalog.find("theme").grouped_choices?
+    assert_includes flat, [ "Salem", "salem" ]
+  end
+
   # The tabs. A project gets every format it could build -- which is the point of showing
   # braille and EPUB to someone who has built neither -- while an output gets General plus
   # its own, and never a tab for a format it is not.

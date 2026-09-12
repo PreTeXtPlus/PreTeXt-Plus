@@ -279,14 +279,16 @@ module Publication
     #                presence is what puts a checkbox beside the field; see EMPTY_MARKER,
     #                and empty_key for the box's own name in the form.
     Option = Data.define(:key, :label, :help, :element, :attribute, :family, :choices,
-                         :default_label, :group, :applied_default, :hint, :empty_label) do
+                         :default_label, :group, :applied_default, :hint, :empty_label,
+                         :choice_groups) do
       def self.build(key, label:, element:, attribute:, family:, choices:, help: nil,
                      default_label: nil, group: nil, applied_default: nil, hint: nil,
-                     empty_label: nil)
+                     empty_label: nil, choice_groups: nil)
         new(key: key.to_s, label: label, help: help, element: element.map(&:to_s).freeze,
             attribute: attribute.to_s, family: family.to_s, choices: choices.freeze,
             default_label: default_label, group: group&.to_s,
-            applied_default: applied_default, hint: hint, empty_label: empty_label)
+            applied_default: applied_default, hint: hint, empty_label: empty_label,
+            choice_groups: choice_groups&.freeze)
       end
 
       # Whether this option can be set to "write the attribute empty" at all -- which is
@@ -314,6 +316,18 @@ module Publication
       # it on, so "PreTeXt's default" there would name the opposite of what a build does.
       def default_note
         applied_default.present? ? "PreTeXt.Plus default" : "PreTeXt's default"
+      end
+
+      # Whether the picker breaks this option's list under headings -- `choice_groups` being
+      # [heading, [values]] in the order they are shown. Not to be confused with `group`,
+      # which is the disclosure the option itself sits in: one is about where the setting
+      # goes, this is about how its own list reads.
+      #
+      # Presentation and nothing else. `choices` stays flat whether or not this is set, so
+      # what a value means, what is permitted and what is written are all untouched by how
+      # the list is drawn.
+      def grouped_choices?
+        choice_groups.present?
       end
 
       # A number to type rather than a list to pick from.
@@ -621,6 +635,36 @@ module Publication
       [ "yes", "For physical printing" ]
     ].freeze
 
+    # The journals PreTeXt ships a LaTeX style for. Unlike every other list here these are
+    # not written out above: PreTeXt keeps journals/journals.xml as its one source of truth
+    # for them and resolves a journal code into a texstyle file from it, so the list is
+    # fetched from there by `bin/rails pretext:journals` and read back from the file it
+    # writes. Adding a journal to PreTeXt.Plus is running that task.
+    #
+    # Articles only, and that is PreTeXt's doing rather than a judgement of ours:
+    # xsl/latex/pretext-latex-texstyle.xsl has exactly one entry template and it matches
+    # <article>. A book sent through a journal style would build an empty PDF, so the
+    # option is simply not offered for one -- the same reason `custom` is missing from
+    # THEMES.
+    # Read once and used twice: the same rows give the picker its choices and the headings
+    # it breaks them under, so a journal cannot end up offered under no heading.
+    JOURNAL_LIST = YAML.load_file(Rails.root.join("config/pretext_journals.yml")).freeze
+
+    JOURNALS = {
+      "article" => JOURNAL_LIST.map { |journal| [ journal["code"], journal["name"] ] }.freeze
+    }.freeze
+
+    # What each kind in that file is called where an author reads it, in the order the
+    # picker shows them: the four publisher-wide styles first, then the individual titles,
+    # which is the order someone looks in -- you reach for "Elsevier journals" when your
+    # own journal is not listed. The kinds are the data's; the wording is ours, which is
+    # why it is here rather than in a generated file.
+    JOURNAL_GROUPS = { "publisher" => "Publisher-wide styles",
+                       "journal" => "Individual journals" }.filter_map do |kind, heading|
+      codes = JOURNAL_LIST.select { |journal| journal["group"] == kind }.map { |j| j["code"] }
+      [ heading, codes.freeze ] if codes.any?
+    end.freeze
+
     # html/@embed-button. PreTeXt's own default is "no"; ours is "yes" -- see the option's
     # applied_default below. A reader who wants a page inside their LMS should not have to
     # hand-write an iframe, and an author who does not want the button can say so.
@@ -922,6 +966,22 @@ module Publication
         choices: EMBED_BUTTON),
 
       *KNOWL_OPTIONS,
+
+      # common/journal/@name, which is where $journal-name reads it from -- <common>
+      # rather than <latex> despite reaching only the LaTeX conversion, which is why the
+      # family is declared rather than derived from the element path.
+      #
+      # It leads the PDF tab because it overrides the tab: a journal's texstyle brings its
+      # own document class, so the two settings under it are what PreTeXt falls back on
+      # when no journal is chosen.
+      Option.build(:journal,
+        label: "Journal style",
+        help: "Typesets a PDF to a journal's submission requirements, using the LaTeX " \
+              "style that journal publishes. Offered for articles, which is what " \
+              "PreTeXt's journal styles cover.",
+        element: %w[ common journal ], attribute: "name", family: :pdf,
+        default_label: "Not a journal submission",
+        choices: JOURNALS, choice_groups: JOURNAL_GROUPS),
 
       Option.build(:latex_print,
         label: "Intended use",
