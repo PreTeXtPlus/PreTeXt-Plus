@@ -3,7 +3,7 @@
  *
  * ARCHITECTURE NOTE — the store owns the live editing buffer:
  * `createEditorStore(init)` seeds the editing buffer (`divisions`, `title`,
- * `docinfo`, `activeDivisionId`, …) from the host's initial props *once*.
+ * `docinfo`, `activeRef`, …) from the host's initial props *once*.
  * After that, the store is authoritative for what's being edited:
  *   • Internal edit actions (`setDivisionContent`, `patchDivision`, `setTitle`,
  *     …) update the store optimistically and the host callbacks are fired
@@ -28,7 +28,12 @@
 import { createStore, type StoreApi } from "zustand/vanilla";
 import type { Asset, FeedbackSubmission, Snippet, SourceFormat } from "../types/editor";
 import type { Division, DivisionType } from "../types/sections";
-import type { EditDraft } from "../components/toc/types";
+import type {
+  EditDraft,
+  DivisionEditDraft,
+  AssetEditDraft,
+  SnippetEditDraft,
+} from "../components/toc/types";
 import {
   getSectionAttributes,
   extractLatexSectionLabel,
@@ -116,7 +121,7 @@ export interface ExternalUpdate {
   projectAssets?: Asset[];
   projectSnippets?: Snippet[];
   rootDivisionId?: string;
-  activeDivisionId?: string | null;
+  activeRef?: string | null;
   title?: string;
   docinfo?: string;
   commonDocinfo?: string;
@@ -166,11 +171,19 @@ export interface EditorCallbacks {
   addDivision: (parentXmlId: string | null) => void;
   /**
    * Create the division the draft describes and place it under
-   * `parentXmlId`. Fired by `commitSectionEdit` when the author saves a draft.
+   * `parentXmlId`. Fired by `commitEdit` when the author saves a draft.
    */
-  createDivision: (parentXmlId: string | null, draft: EditDraft) => void;
+  createDivision: (parentXmlId: string | null, draft: DivisionEditDraft) => void;
   removeDivision: (id: string) => void;
   updateDivision: (id: string, changes: DivisionChanges) => void;
+  /** Create the asset a new-asset draft describes (upload/fetch-url/authored, per `sourceKind`). */
+  createAsset: (draft: AssetEditDraft) => void;
+  /** Persist an existing asset's edited metadata (title/ref/shortDescription). `prevRef` is its ref before this edit. */
+  updateAsset: (prevRef: string, draft: AssetEditDraft) => void;
+  /** Create the snippet a new-snippet draft describes. */
+  createSnippet: (draft: SnippetEditDraft) => void;
+  /** Persist an existing snippet's edited metadata (ref/sourceFormat). `prevRef` is its ref before this edit. */
+  updateSnippet: (prevRef: string, draft: SnippetEditDraft) => void;
   /** Emit a content change for a specific division (edit or structural reorder). */
   divisionContentChange: (xmlId: string, content: string) => void;
   handleDivisionContentChange: (content: string | undefined) => void;
@@ -228,7 +241,15 @@ export interface EditorStoreState {
   // Divisions (host-controlled pool)
   divisions: Division[] | undefined;
   rootDivisionId: string | undefined;
-  activeDivisionId: string | null;
+  /**
+   * Which record — a division's `xml:id`, an asset's `ref`, or a snippet's
+   * `ref` — the main `CodeEditor`/preview pane currently shows. A ref is
+   * unique project-wide across all three pools (enforced wherever a ref is
+   * chosen/renamed), so this single field unambiguously names the active
+   * item with no separate "kind" tag or precedence rule needed: callers
+   * resolve it by looking it up in whichever pool matches.
+   */
+  activeRef: string | null;
 
   // Computed flags (re-derived each sync)
   canConvertToPretext: boolean;
@@ -241,6 +262,9 @@ export interface EditorStoreState {
 
   /** True when the host passed `onAssetDuplicate`. Controls whether Duplicate is offered. */
   hasAssetDuplicate: boolean;
+
+  /** True when the host supports replacing an asset's file. Controls whether Replace is offered. */
+  hasAssetReplace: boolean;
 
   /** True when the host passed `onSnippetDuplicate`. Controls whether Duplicate is offered. */
   hasSnippetDuplicate: boolean;
@@ -273,22 +297,29 @@ export interface EditorStoreState {
    */
   findPanelState: FindPanelState;
 
-  // TOC inline edit form
-  editingId: string | null;
+  // Shared inline edit form — one mechanism for a division, an asset, or a
+  // snippet (see `EditDraft`). `editingRef` names an *existing* record being
+  // edited; a brand-new, not-yet-created one is described by `pendingNew`
+  // instead, with `editingRef` staying null throughout (nothing has a ref to
+  // name yet).
+  editingRef: string | null;
   editDraft: EditDraft | null;
   /**
-   * Set while `editDraft` describes a division that does not exist yet, naming
-   * the parent it will be placed under (`null` for an unplaced one).
+   * Set while `editDraft` describes a record that does not exist yet. A
+   * division additionally names the parent it will be placed under (`null`
+   * for an unplaced one); an asset/snippet has no tree position to choose —
+   * it's always appended to its flat sidebar list.
    *
-   * A new division is *only* a draft until the author saves it: no record, no
-   * `<plus:* ref/>` in the parent, nothing sent to the host. That is what makes
-   * Cancel mean cancel, and it is why a new division never has to be renamed —
-   * it is created with the id the author chose. `editingId` is null throughout.
+   * A new record is *only* a draft until the author saves it: nothing is
+   * created, uploaded, or sent to the host until then. That is what makes
+   * Cancel mean cancel, and it is why a new record never has to be renamed —
+   * it is created with the ref the author chose.
    */
-  pendingNewDivision: { parentXmlId: string | null } | null;
-
-  /** The asset currently open in the asset edit modal, identified by ref. */
-  editingAssetRef: { ref: string } | null;
+  pendingNew:
+  | { kind: "division"; parentXmlId: string | null }
+  | { kind: "asset" }
+  | { kind: "snippet" }
+  | null;
 
   /**
    * An unresolved placeholder the user is resolving — opens the asset manager
@@ -297,8 +328,12 @@ export interface EditorStoreState {
    */
   assetResolveTarget: { ref: string } | null;
 
-  /** The snippet currently open in the snippet edit modal, identified by ref. */
-  editingSnippetRef: { ref: string } | null;
+  /**
+   * The asset the user is replacing — opens the asset manager in "replace
+   * this asset" mode, where whatever is picked/uploaded takes over this
+   * asset's ref. Set from the inline asset edit form's "Replace…" action.
+   */
+  assetReplaceTarget: Asset | null;
 
   /**
    * An unresolved placeholder the user is resolving — opens the snippet
@@ -323,8 +358,8 @@ export interface EditorStoreState {
   addDivisionToPool: (division: Division) => void;
   /** Optimistically remove a division from the local pool. */
   removeDivisionFromPool: (xmlId: string) => void;
-  /** Set the active (open-for-editing) division id. */
-  setActiveDivisionId: (id: string | null) => void;
+  /** Set the ref (division xml:id, asset ref, or snippet ref) shown in the main pane. */
+  setActiveRef: (ref: string | null) => void;
   /** Optimistically set the document title. */
   setTitle: (title: string) => void;
   /** Optimistically set the document language. */
@@ -358,26 +393,38 @@ export interface EditorStoreState {
   /** Update a parent division's content after a structural DnD change. */
   divisionContentChange: (xmlId: string, content: string) => void;
 
-  // TOC inline edit form
+  // Shared inline edit form — one mechanism for divisions, assets, and
+  // snippets (see `EditDraft`/`pendingNew`). `startXEdit`/`startNewX` are thin,
+  // typed adapters kept for ergonomic call sites; `setEditDraft`/`commitEdit`/
+  // `cancelEdit` are the single shared implementation every kind funnels
+  // through.
   startSectionEdit: (section: Division) => void;
+  startAssetEdit: (asset: Asset) => void;
+  startSnippetEdit: (snippet: Snippet) => void;
   /** Open the properties form for a new, not-yet-created child of `parentXmlId`. */
-  startNewDivision: (parentXmlId: string | null, draft: EditDraft) => void;
+  startNewDivision: (parentXmlId: string | null, draft: DivisionEditDraft) => void;
+  /** Open the properties form for a new, not-yet-created asset, appended to the Assets list. */
+  startNewAsset: () => void;
+  /** Open the properties form for a new, not-yet-created snippet, appended to the Snippets list. */
+  startNewSnippet: () => void;
   setEditDraft: (draft: EditDraft) => void;
 
   /** Merge `partial` into the find/replace drawer's inputs. */
   setFindPanelState: (partial: Partial<FindPanelState>) => void;
-  commitSectionEdit: () => void;
-  cancelSectionEdit: () => void;
+  /** Persist (or create) whatever `editDraft`/`pendingNew` currently describe. */
+  commitEdit: () => void;
+  /** Discard `editDraft`/`pendingNew` — nothing is created or persisted. */
+  cancelEdit: () => void;
 
   // Assets / content
   insertAsset: (asset: Asset) => void;
   insertAtCursor: (content: string) => void;
-  /** Open the asset edit modal for the asset identified by `ref`. */
-  openAssetEditor: (ref: string) => void;
-  closeAssetEditor: () => void;
   /** Open the asset manager in resolve mode for an unresolved `ref`. */
   openAssetResolver: (ref: string) => void;
   closeAssetResolver: () => void;
+  /** Open the asset manager in replace mode for an existing asset. */
+  openAssetReplacer: (asset: Asset) => void;
+  closeAssetReplacer: () => void;
   /** Remove a project asset (pool + host persistence). */
   removeAsset: (asset: Asset) => void;
   /** Remove every placeholder for an unresolved `ref` from the document. */
@@ -407,9 +454,6 @@ export interface EditorStoreState {
 
   // Snippets / content
   insertSnippet: (snippet: Snippet) => void;
-  /** Open the snippet edit modal for the snippet identified by `ref`. */
-  openSnippetEditor: (ref: string) => void;
-  closeSnippetEditor: () => void;
   /** Open the snippet manager in resolve mode for an unresolved `ref`. */
   openSnippetResolver: (ref: string) => void;
   closeSnippetResolver: () => void;
@@ -456,11 +500,12 @@ export type EditorSyncableState = Pick<
   | "projectUrl"
   | "divisions"
   | "rootDivisionId"
-  | "activeDivisionId"
+  | "activeRef"
   | "canConvertToPretext"
   | "activeEditorSource"
   | "hasFeedback"
   | "hasAssetDuplicate"
+  | "hasAssetReplace"
   | "hasSnippetDuplicate"
 >;
 
@@ -475,7 +520,7 @@ export interface EditorStoreInit {
   useCommonDocinfo: boolean;
   language: string;
   divisions: Division[];
-  activeDivisionId: string | null;
+  activeRef: string | null;
   projectAssets: Asset[] | undefined;
   /** Optional (unlike `projectAssets`) so existing hosts/tests need no change to keep compiling. */
   projectSnippets?: Snippet[];
@@ -506,6 +551,10 @@ export function createEditorStore(init: EditorStoreInit): EditorStoreHandle {
       createDivision: noop,
       removeDivision: noop,
       updateDivision: noop,
+      createAsset: noop,
+      updateAsset: noop,
+      createSnippet: noop,
+      updateSnippet: noop,
       divisionContentChange: noop,
       handleDivisionContentChange: noop,
       assetInsert: noop,
@@ -529,11 +578,12 @@ export function createEditorStore(init: EditorStoreInit): EditorStoreHandle {
     projectUrl: undefined,
     divisions: init.divisions,
     rootDivisionId: undefined,
-    activeDivisionId: init.activeDivisionId,
+    activeRef: init.activeRef,
     canConvertToPretext: true,
     activeEditorSource: init.source,
     hasFeedback: false,
     hasAssetDuplicate: false,
+    hasAssetReplace: false,
     hasSnippetDuplicate: false,
 
     // ── Initial UI state ───────────────────────────────────────────────────
@@ -550,12 +600,11 @@ export function createEditorStore(init: EditorStoreInit): EditorStoreHandle {
     isFullSourceOpen: false,
     isFindPanelOpen: false,
     findPanelState: initialFindPanelState,
-    editingId: null,
+    editingRef: null,
     editDraft: null,
-    pendingNewDivision: null,
-    editingAssetRef: null,
+    pendingNew: null,
     assetResolveTarget: null,
-    editingSnippetRef: null,
+    assetReplaceTarget: null,
     snippetResolveTarget: null,
 
     // ── Actions ────────────────────────────────────────────────────────────
@@ -604,7 +653,7 @@ export function createEditorStore(init: EditorStoreInit): EditorStoreHandle {
       set((s) => ({
         divisions: (s.divisions ?? []).filter((d) => d.xmlId !== xmlId),
       })),
-    setActiveDivisionId: (activeDivisionId) => set({ activeDivisionId }),
+    setActiveRef: (activeRef) => set({ activeRef }),
     setTitle: (title) => set({ title }),
     setLanguage: (language) => set({ language }),
     setDocinfo: ({ docinfo, commonDocinfo, useCommonDocinfo }) =>
@@ -635,7 +684,8 @@ export function createEditorStore(init: EditorStoreInit): EditorStoreHandle {
     divisionContentChange: (xmlId, content) =>
       bag.cbs.divisionContentChange?.(xmlId, content),
 
-    // TOC inline edit form
+    // Shared inline edit form — one mechanism for divisions, assets, and
+    // snippets; see `EditDraft`/`pendingNew` for why one field suffices.
     startSectionEdit: (section) => {
       // Each format stores its xml:id/label differently: Markdown in YAML
       // frontmatter, LaTeX as the `\label` after `\section` (it has no separate
@@ -661,107 +711,194 @@ export function createEditorStore(init: EditorStoreInit): EditorStoreHandle {
               return { xmlId: attrs.xmlId || section.xmlId, label: attrs.label };
             })();
       set({
-        editingId: section.xmlId,
+        editingRef: section.xmlId,
         editDraft: {
+          kind: "division",
           title: section.title,
           type: section.type as DivisionType,
           xmlId,
           label,
           sourceFormat: section.sourceFormat,
         },
-        pendingNewDivision: null,
+        pendingNew: null,
       });
     },
+    startAssetEdit: (asset) =>
+      set({
+        activeRef: asset.ref ?? null,
+        editingRef: asset.ref ?? null,
+        editDraft: {
+          kind: "asset",
+          title: asset.title,
+          ref: asset.ref ?? "",
+          shortDescription: asset.shortDescription ?? "",
+        },
+        pendingNew: null,
+      }),
+    startSnippetEdit: (snippet) =>
+      set({
+        activeRef: snippet.ref,
+        editingRef: snippet.ref,
+        editDraft: {
+          kind: "snippet",
+          ref: snippet.ref,
+          sourceFormat: snippet.sourceFormat,
+        },
+        pendingNew: null,
+      }),
     startNewDivision: (parentXmlId, editDraft) =>
       set({
-        editingId: null,
+        editingRef: null,
         editDraft,
-        pendingNewDivision: { parentXmlId },
+        pendingNew: { kind: "division", parentXmlId },
+      }),
+    startNewAsset: () =>
+      set({
+        editingRef: null,
+        editDraft: {
+          kind: "asset",
+          title: "",
+          ref: "",
+          shortDescription: "",
+          sourceKind: "upload",
+        },
+        pendingNew: { kind: "asset" },
+      }),
+    startNewSnippet: () =>
+      set({
+        editingRef: null,
+        editDraft: { kind: "snippet", ref: "", sourceFormat: "pretext" },
+        pendingNew: { kind: "snippet" },
       }),
     setEditDraft: (editDraft) => set({ editDraft }),
 
     setFindPanelState: (partial) =>
       set((s) => ({ findPanelState: { ...s.findPanelState, ...partial } })),
-    commitSectionEdit: () => {
-      const { editingId, editDraft, divisions, pendingNewDivision } = get();
+    commitEdit: () => {
+      const { editingRef, editDraft, divisions, projectAssets, projectSnippets, pendingNew } =
+        get();
       if (!editDraft) return;
 
-      // A division's `xml:id` is structural identity: it must be a non-empty,
-      // unique NCName because it's the target of every `<plus:* ref="..."/>`
-      // placeholder. Validate before committing so an empty or duplicate id
-      // can never break the project; keep the form open on failure (returning
-      // `null`). Every format carries it — LaTeX spells it as the `\section`'s
-      // `\label`. `selfXmlId` is the division being renamed, which of course
-      // may keep the id it already has.
-      const validateXmlId = (selfXmlId: string | null): string | null => {
-        const sanitized = sanitizeXmlId(editDraft.xmlId);
+      // A ref (division `xml:id`, asset `ref`, or snippet `ref`) is unique
+      // project-wide — it's the target every `<plus:* ref="..."/>` placeholder
+      // resolves against. Validate before committing so an empty or duplicate
+      // ref can never break the project; keep the form open on failure
+      // (returning `null`). `selfRef` is the record being renamed (which may
+      // of course keep the ref it already has), or `null` for one not yet
+      // created.
+      const validateRef = (
+        candidate: string,
+        selfRef: string | null,
+        label: string,
+      ): string | null => {
+        const sanitized = sanitizeXmlId(candidate);
         if (!sanitized) {
           window.alert(
-            "xml:id can't be empty — it identifies the division and is used by references to it.",
+            `${label} can't be empty — it identifies the item and is used by references to it.`,
           );
           return null;
         }
-        if (
-          (divisions ?? []).some(
-            (d) => d.xmlId !== selfXmlId && d.xmlId === sanitized,
-          )
-        ) {
+        const taken =
+          (divisions ?? []).some((d) => d.xmlId !== selfRef && d.xmlId === sanitized) ||
+          (projectAssets ?? []).some((a) => a.ref !== selfRef && a.ref === sanitized) ||
+          (projectSnippets ?? []).some((s) => s.ref !== selfRef && s.ref === sanitized);
+        if (taken) {
           window.alert(
-            `xml:id "${sanitized}" is already used by another division. Choose a unique id.`,
+            `"${sanitized}" is already used by another division, asset, or snippet. Choose a unique reference.`,
           );
           return null;
         }
         return sanitized;
       };
 
-      // Saving a draft is where a new division is created — the first moment
-      // anything is written. It is created with the id, type and format the
-      // author chose, so nothing has to be renamed afterwards and the parent's
-      // placeholder is written once, already pointing at the right id.
-      if (pendingNewDivision) {
-        const xmlId = validateXmlId(null);
-        if (!xmlId) return;
-        bag.cbs.createDivision(pendingNewDivision.parentXmlId, {
-          ...editDraft,
-          title: editDraft.title.trim(),
-          xmlId,
-        });
-        set({ editingId: null, editDraft: null, pendingNewDivision: null });
+      if (editDraft.kind === "division") {
+        // Saving a draft is where a new division is created — the first
+        // moment anything is written. It is created with the id, type and
+        // format the author chose, so nothing has to be renamed afterwards
+        // and the parent's placeholder is written once, already pointing at
+        // the right id.
+        if (pendingNew?.kind === "division") {
+          const xmlId = validateRef(editDraft.xmlId, null, "xml:id");
+          if (!xmlId) return;
+          bag.cbs.createDivision(pendingNew.parentXmlId, {
+            ...editDraft,
+            title: editDraft.title.trim(),
+            xmlId,
+          });
+          set({ editingRef: null, editDraft: null, pendingNew: null });
+          return;
+        }
+
+        if (editingRef) {
+          const division = (divisions ?? []).find((d) => d.xmlId === editingRef);
+          let xmlId: string | null = null;
+          if (division) {
+            xmlId = validateRef(editDraft.xmlId, editingRef, "xml:id");
+            if (!xmlId) return;
+          }
+
+          bag.cbs.updateDivision(editingRef, {
+            title: editDraft.title.trim() || undefined,
+            type: editDraft.type,
+            xmlId,
+            label: editDraft.label.trim() || null,
+            // The form keeps this field read-only for an existing division —
+            // its source can't be losslessly translated — so it's always a
+            // no-op patch here. Only a draft chooses a format.
+            sourceFormat: editDraft.sourceFormat,
+          });
+        }
+        set({ editingRef: null, editDraft: null, pendingNew: null });
         return;
       }
 
-      if (editingId) {
-        const division = (divisions ?? []).find((d) => d.xmlId === editingId);
-        let xmlId: string | null = null;
-        if (division) {
-          xmlId = validateXmlId(editingId);
-          if (!xmlId) return;
-        }
+      if (editDraft.kind === "asset") {
+        const ref = validateRef(
+          editDraft.ref,
+          pendingNew?.kind === "asset" ? null : editingRef,
+          "Reference",
+        );
+        if (!ref) return;
+        const draft = { ...editDraft, ref, title: editDraft.title.trim() || ref };
 
-        bag.cbs.updateDivision(editingId, {
-          title: editDraft.title.trim() || undefined,
-          type: editDraft.type,
-          xmlId,
-          label: editDraft.label.trim() || null,
-          // The form keeps this field read-only for an existing division — its
-          // source can't be losslessly translated — so it's always a no-op
-          // patch here. Only a draft chooses a format.
-          sourceFormat: editDraft.sourceFormat,
-        });
+        if (pendingNew?.kind === "asset") {
+          bag.cbs.createAsset(draft);
+        } else if (editingRef) {
+          bag.cbs.updateAsset(editingRef, draft);
+        }
+        set({ editingRef: null, editDraft: null, pendingNew: null });
+        return;
       }
-      set({ editingId: null, editDraft: null, pendingNewDivision: null });
+
+      // editDraft.kind === "snippet"
+      {
+        const ref = validateRef(
+          editDraft.ref,
+          pendingNew?.kind === "snippet" ? null : editingRef,
+          "Reference",
+        );
+        if (!ref) return;
+        const draft = { ...editDraft, ref };
+
+        if (pendingNew?.kind === "snippet") {
+          bag.cbs.createSnippet(draft);
+        } else if (editingRef) {
+          bag.cbs.updateSnippet(editingRef, draft);
+        }
+        set({ editingRef: null, editDraft: null, pendingNew: null });
+      }
     },
-    cancelSectionEdit: () =>
-      // Cancelling a draft leaves nothing behind: the division was never
-      // created and the parent's source was never touched.
-      set({ editingId: null, editDraft: null, pendingNewDivision: null }),
+    cancelEdit: () =>
+      // Cancelling a draft leaves nothing behind: nothing was created,
+      // uploaded, or persisted, and no existing record's source was touched.
+      set({ editingRef: null, editDraft: null, pendingNew: null }),
 
     insertAsset: (asset) => bag.cbs.assetInsert(asset),
     insertAtCursor: (content) => bag.cbs.insertContentAtCursor?.(content),
-    openAssetEditor: (ref) => set({ editingAssetRef: { ref } }),
-    closeAssetEditor: () => set({ editingAssetRef: null }),
     openAssetResolver: (ref) => set({ assetResolveTarget: { ref } }),
     closeAssetResolver: () => set({ assetResolveTarget: null }),
+    openAssetReplacer: (asset) => set({ assetReplaceTarget: asset }),
+    closeAssetReplacer: () => set({ assetReplaceTarget: null }),
     removeAsset: (asset) => bag.cbs.assetRemove?.(asset),
     removeAssetRefFromDocument: (ref) => bag.cbs.assetRefRemove?.(ref),
     duplicateAsset: async (asset) => {
@@ -796,8 +933,6 @@ export function createEditorStore(init: EditorStoreInit): EditorStoreHandle {
       })),
 
     insertSnippet: (snippet) => bag.cbs.snippetInsert(snippet),
-    openSnippetEditor: (ref) => set({ editingSnippetRef: { ref } }),
-    closeSnippetEditor: () => set({ editingSnippetRef: null }),
     openSnippetResolver: (ref) => set({ snippetResolveTarget: { ref } }),
     closeSnippetResolver: () => set({ snippetResolveTarget: null }),
     removeSnippet: (snippet) => bag.cbs.snippetRemove?.(snippet),

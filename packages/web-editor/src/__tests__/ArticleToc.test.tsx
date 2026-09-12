@@ -37,7 +37,7 @@ function renderToc(readOnly?: boolean, docDivisions: Division[] = divisions) {
     useCommonDocinfo: false,
     language: "en-US",
     divisions: docDivisions,
-    activeDivisionId: docDivisions[0].xmlId,
+    activeRef: docDivisions[0].xmlId,
     projectAssets: undefined,
   });
   return render(

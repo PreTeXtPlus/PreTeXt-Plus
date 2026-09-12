@@ -1,14 +1,14 @@
 import type { DivisionType } from "../../types/sections";
-import SectionEditForm from "./SectionEditForm";
-import { type EditDraft, TYPE_FULL_LABELS } from "./types";
+import EditForm from "./EditForm";
+import { type DivisionEditDraft, TYPE_FULL_LABELS } from "./types";
 
 interface NewDivisionRowProps {
-  draft: EditDraft;
+  draft: DivisionEditDraft;
   /** Indent level, matching the SectionItem it will become once saved. */
   depth: number;
   /** Type of the division it will be nested under; `null` if unplaced. */
   parentType: DivisionType | null;
-  onDraftChange: (draft: EditDraft) => void;
+  onDraftChange: (draft: DivisionEditDraft) => void;
   onCommit: () => void;
   onCancel: () => void;
 }
@@ -17,10 +17,10 @@ interface NewDivisionRowProps {
  * The placeholder row for a division that does not exist yet.
  *
  * A new division is a draft until its properties form is saved (see
- * `pendingNewDivision` in the store), so there is no `Division` for
- * `SectionItem` to render — and nothing to select, expand or open a menu on.
- * This stands in its place at the position the division will take, so the
- * author can see where it is going while they name it.
+ * `pendingNew` in the store), so there is no `Division` for `SectionItem` to
+ * render — and nothing to select, expand or open a menu on. This stands in
+ * its place at the position the division will take, so the author can see
+ * where it is going while they name it.
  */
 const NewDivisionRow = ({
   draft,
@@ -46,11 +46,11 @@ const NewDivisionRow = ({
       </span>
     </div>
 
-    <SectionEditForm
+    <EditForm
       draft={draft}
       isNew
       parentType={parentType}
-      onDraftChange={onDraftChange}
+      onDraftChange={(d) => onDraftChange(d as DivisionEditDraft)}
       onCommit={onCommit}
       onCancel={onCancel}
     />

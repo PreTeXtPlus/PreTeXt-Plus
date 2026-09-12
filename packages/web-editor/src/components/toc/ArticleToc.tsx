@@ -3,6 +3,9 @@ import clsx from "clsx";
 import type { Division } from "../../types/sections";
 import SectionItem from "./SectionItem";
 import NewDivisionRow from "./NewDivisionRow";
+import NewAssetRow from "./NewAssetRow";
+import NewSnippetRow from "./NewSnippetRow";
+import EditForm from "./EditForm";
 import DivisionMenu, { type DivisionMenuItem } from "./DivisionMenu";
 import { canContainDivisions } from "./types";
 
@@ -38,7 +41,7 @@ const ArticleToc = ({
 }: ArticleTocProps) => {
   const divisions = useEditorStore((s) => s.divisions);
   const rootDivisionId = useEditorStore((s) => s.rootDivisionId);
-  const activeDivisionId = useEditorStore((s) => s.activeDivisionId);
+  const activeRef = useEditorStore((s) => s.activeRef);
   const projectAssets = useEditorStore((s) => s.projectAssets) ?? [];
   const projectSnippets = useEditorStore((s) => s.projectSnippets) ?? [];
 
@@ -48,14 +51,14 @@ const ArticleToc = ({
   const divisionContentChange = useEditorStore((s) => s.divisionContentChange);
   const insertAtCursor = useEditorStore((s) => s.insertAtCursor);
 
-  const openAssetEditor = useEditorStore((s) => s.openAssetEditor);
   const openAssetResolver = useEditorStore((s) => s.openAssetResolver);
+  const openAssetReplacer = useEditorStore((s) => s.openAssetReplacer);
   const removeAsset = useEditorStore((s) => s.removeAsset);
   const removeAssetRefFromDocument = useEditorStore((s) => s.removeAssetRefFromDocument);
   const duplicateAsset = useEditorStore((s) => s.duplicateAsset);
   const hasAssetDuplicate = useEditorStore((s) => s.hasAssetDuplicate);
+  const hasAssetReplace = useEditorStore((s) => s.hasAssetReplace);
 
-  const openSnippetEditor = useEditorStore((s) => s.openSnippetEditor);
   const openSnippetResolver = useEditorStore((s) => s.openSnippetResolver);
   const removeSnippet = useEditorStore((s) => s.removeSnippet);
   const removeSnippetRefFromDocument = useEditorStore((s) => s.removeSnippetRefFromDocument);
@@ -63,12 +66,18 @@ const ArticleToc = ({
   const hasSnippetDuplicate = useEditorStore((s) => s.hasSnippetDuplicate);
 
   const startSectionEdit = useEditorStore((s) => s.startSectionEdit);
+  const startAssetEdit = useEditorStore((s) => s.startAssetEdit);
+  const startSnippetEdit = useEditorStore((s) => s.startSnippetEdit);
+  const startNewAsset = useEditorStore((s) => s.startNewAsset);
+  const startNewSnippet = useEditorStore((s) => s.startNewSnippet);
   const setEditDraft = useEditorStore((s) => s.setEditDraft);
-  const commitSectionEdit = useEditorStore((s) => s.commitSectionEdit);
-  const cancelSectionEdit = useEditorStore((s) => s.cancelSectionEdit);
-  const editingId = useEditorStore((s) => s.editingId);
+  const commitEdit = useEditorStore((s) => s.commitEdit);
+  const cancelEdit = useEditorStore((s) => s.cancelEdit);
+  const editingRef = useEditorStore((s) => s.editingRef);
   const editDraft = useEditorStore((s) => s.editDraft);
-  const pendingNewDivision = useEditorStore((s) => s.pendingNewDivision);
+  const pendingNew = useEditorStore((s) => s.pendingNew);
+  const pendingNewDivision =
+    pendingNew?.kind === "division" ? pendingNew : null;
 
   // ── Tree structure ──────────────────────────────────────────────────────────
   const rootDivision = divisions
@@ -146,14 +155,14 @@ const ArticleToc = ({
   // Auto-expand ancestors when the active division changes so it's always
   // visible. Done during render (with a previous-value guard) rather than in an
   // effect to avoid cascading renders.
-  const [prevActiveId, setPrevActiveId] = useState(activeDivisionId);
-  if (activeDivisionId !== prevActiveId) {
-    setPrevActiveId(activeDivisionId);
-    if (activeDivisionId && rootDivision) {
+  const [prevActiveId, setPrevActiveId] = useState(activeRef);
+  if (activeRef !== prevActiveId) {
+    setPrevActiveId(activeRef);
+    if (activeRef && rootDivision) {
       const nodeMap = new Map(treeNodes.map((n) => [n.division.xmlId, n]));
       const toReveal = new Set<string>();
       toReveal.add(rootDivision.xmlId);
-      let cur: string | null = activeDivisionId;
+      let cur: string | null = activeRef;
       while (cur) {
         const node = nodeMap.get(cur);
         if (!node?.parentXmlId) break;
@@ -255,7 +264,7 @@ const ArticleToc = ({
   // raw `<plus:.../>` XML doesn't survive their conversion. Defaults to PreTeXt
   // when nothing is active.
   const activeFormat =
-    divisions?.find((d) => d.xmlId === activeDivisionId)?.sourceFormat ??
+    divisions?.find((d) => d.xmlId === activeRef)?.sourceFormat ??
     "pretext";
 
   const handleInsertAtCursor = (division: Division) => {
@@ -280,22 +289,42 @@ const ArticleToc = ({
     (xmlId && divisions?.find((d) => d.xmlId === xmlId)?.type) || null;
 
   const draftRow =
-    draftPlacement && editDraft ? (
+    draftPlacement && editDraft && editDraft.kind === "division" ? (
       <NewDivisionRow
         draft={editDraft}
         depth={draftPlacement.depth}
         parentType={getDivisionType(pendingNewDivision!.parentXmlId)}
         onDraftChange={setEditDraft}
-        onCommit={commitSectionEdit}
-        onCancel={cancelSectionEdit}
+        onCommit={commitEdit}
+        onCancel={cancelEdit}
+      />
+    ) : null;
+
+  const newAssetRow =
+    pendingNew?.kind === "asset" && editDraft?.kind === "asset" ? (
+      <NewAssetRow
+        draft={editDraft}
+        onDraftChange={setEditDraft}
+        onCommit={commitEdit}
+        onCancel={cancelEdit}
+      />
+    ) : null;
+
+  const newSnippetRow =
+    pendingNew?.kind === "snippet" && editDraft?.kind === "snippet" ? (
+      <NewSnippetRow
+        draft={editDraft}
+        onDraftChange={setEditDraft}
+        onCommit={commitEdit}
+        onCancel={cancelEdit}
       />
     ) : null;
 
   // ── Asset row helpers ───────────────────────────────────────────────────────
   const openAssetRow = (row: AssetRow) =>
-    row.status === "unlinked"
+    row.status === "unlinked" || !row.asset
       ? openAssetResolver(row.ref)
-      : openAssetEditor(row.ref);
+      : startAssetEdit(row.asset);
 
   const copyAssetEmbed = (ref: string) => {
     navigator.clipboard
@@ -314,6 +343,12 @@ const ArticleToc = ({
         onClick: () => copyAssetEmbed(row.ref),
       },
     ];
+    if (hasAssetReplace && row.asset?.url) {
+      items.push({
+        label: "Replace image…",
+        onClick: () => openAssetReplacer(row.asset!),
+      });
+    }
     if (hasAssetDuplicate && row.asset) {
       items.push({
         label: "Duplicate asset",
@@ -356,9 +391,9 @@ const ArticleToc = ({
 
   // ── Snippet row helpers ─────────────────────────────────────────────────────
   const openSnippetRow = (row: SnippetRow) =>
-    row.status === "unlinked"
+    row.status === "unlinked" || !row.snippet
       ? openSnippetResolver(row.ref)
-      : openSnippetEditor(row.ref);
+      : startSnippetEdit(row.snippet);
 
   const copySnippetEmbed = (ref: string) => {
     navigator.clipboard
@@ -421,15 +456,15 @@ const ArticleToc = ({
           <SectionItem
             division={rootDivision}
             depth={0}
-            isActive={activeDivisionId === rootDivision.xmlId}
+            isActive={activeRef === rootDivision.xmlId}
             hasChildren={idsWithChildren.has(rootDivision.xmlId)}
             isExpanded={isExpanded(rootDivision.xmlId)}
             onToggleExpand={() => toggleExpand(rootDivision.xmlId)}
-            editDraft={editingId === rootDivision.xmlId ? editDraft : null}
+            editDraft={editingRef === rootDivision.xmlId && editDraft?.kind === "division" ? editDraft : null}
             onSelect={() => selectSection(rootDivision.xmlId)}
             onDraftChange={setEditDraft}
-            onEditCommit={commitSectionEdit}
-            onEditCancel={cancelSectionEdit}
+            onEditCommit={commitEdit}
+            onEditCancel={cancelEdit}
             menuItems={
               readOnly
                 ? []
@@ -463,15 +498,15 @@ const ArticleToc = ({
           <SectionItem
             division={node.division}
             depth={node.depth + 1}
-            isActive={activeDivisionId === node.division.xmlId}
+            isActive={activeRef === node.division.xmlId}
             hasChildren={idsWithChildren.has(node.division.xmlId)}
             isExpanded={isExpanded(node.division.xmlId)}
             onToggleExpand={() => toggleExpand(node.division.xmlId)}
-            editDraft={editingId === node.division.xmlId ? editDraft : null}
+            editDraft={editingRef === node.division.xmlId && editDraft?.kind === "division" ? editDraft : null}
             onSelect={() => selectSection(node.division.xmlId)}
             onDraftChange={setEditDraft}
-            onEditCommit={commitSectionEdit}
-            onEditCancel={cancelSectionEdit}
+            onEditCommit={commitEdit}
+            onEditCancel={cancelEdit}
             menuItems={
               readOnly
                 ? []
@@ -534,15 +569,15 @@ const ArticleToc = ({
                   <SectionItem
                     division={orphan}
                     depth={0}
-                    isActive={activeDivisionId === orphan.xmlId}
+                    isActive={activeRef === orphan.xmlId}
                     hasChildren={subtreeIdsWithChildren.has(orphan.xmlId)}
                     isExpanded={isExpanded(orphan.xmlId)}
                     onToggleExpand={() => toggleExpand(orphan.xmlId)}
-                    editDraft={editingId === orphan.xmlId ? editDraft : null}
+                    editDraft={editingRef === orphan.xmlId && editDraft?.kind === "division" ? editDraft : null}
                     onSelect={() => selectSection(orphan.xmlId)}
                     onDraftChange={setEditDraft}
-                    onEditCommit={commitSectionEdit}
-                    onEditCancel={cancelSectionEdit}
+                    onEditCommit={commitEdit}
+                    onEditCancel={cancelEdit}
                     menuItems={
                       readOnly
                         ? []
@@ -577,15 +612,15 @@ const ArticleToc = ({
                         key={node.division.xmlId}
                         division={node.division}
                         depth={node.depth + 1}
-                        isActive={activeDivisionId === node.division.xmlId}
+                        isActive={activeRef === node.division.xmlId}
                         hasChildren={subtreeIdsWithChildren.has(node.division.xmlId)}
                         isExpanded={isExpanded(node.division.xmlId)}
                         onToggleExpand={() => toggleExpand(node.division.xmlId)}
-                        editDraft={editingId === node.division.xmlId ? editDraft : null}
+                        editDraft={editingRef === node.division.xmlId && editDraft?.kind === "division" ? editDraft : null}
                         onSelect={() => selectSection(node.division.xmlId)}
                         onDraftChange={setEditDraft}
-                        onEditCommit={commitSectionEdit}
-                        onEditCancel={cancelSectionEdit}
+                        onEditCommit={commitEdit}
+                        onEditCancel={cancelEdit}
                         menuItems={
                           readOnly
                             ? []
@@ -640,18 +675,16 @@ const ArticleToc = ({
 
             {snippetsExpanded && (
               <div className="overflow-y-auto flex-1 min-h-0">
-                {snippetView.length === 0 ? (
+                {snippetView.length === 0 && !newSnippetRow ? (
                   <p className="m-0 py-2 px-3 text-slate-400 text-[0.78rem]">
                     No snippets in this project yet.{" "}
-                    {onOpenSnippetPicker && (
-                      <button
-                        type="button"
-                        className="bg-transparent border-none text-blue-600 cursor-pointer font-[inherit] text-[0.78rem] p-0 hover:underline"
-                        onClick={() => onOpenSnippetPicker("add")}
-                      >
-                        Add one
-                      </button>
-                    )}
+                    <button
+                      type="button"
+                      className="bg-transparent border-none text-blue-600 cursor-pointer font-[inherit] text-[0.78rem] p-0 hover:underline"
+                      onClick={startNewSnippet}
+                    >
+                      Add one
+                    </button>
                   </p>
                 ) : (
                   <div className="flex flex-col">
@@ -659,9 +692,17 @@ const ArticleToc = ({
                       {snippetView.map((row) => {
                         const isUnlinked = row.status === "unlinked";
                         const isBusy = duplicatingSnippetRef === row.ref;
+                        const isEditingRow =
+                          editingRef === row.ref && editDraft?.kind === "snippet";
                         return (
                           <li
                             key={row.ref}
+                            className={clsx(
+                              "flex flex-col",
+                              isEditingRow && "bg-[#f0f4ff]",
+                            )}
+                          >
+                          <div
                             className={clsx(
                               "group flex items-center gap-1.5 py-[3px] pr-1.5 pl-4 min-h-7 hover:bg-[#e8eaf0]",
                               isBusy && "opacity-60 pointer-events-none",
@@ -718,9 +759,27 @@ const ArticleToc = ({
                                 <DivisionMenu items={snippetMenuItems(row)} />
                               )}
                             </div>
+                          </div>
+                          {isEditingRow && (
+                            <EditForm
+                              draft={editDraft}
+                              onDraftChange={setEditDraft}
+                              onCommit={commitEdit}
+                              onCancel={cancelEdit}
+                              embedCode={snippetEmbedCode(row.ref, activeFormat)}
+                              onCopyEmbed={() => copySnippetEmbed(row.ref)}
+                              onDuplicate={
+                                hasSnippetDuplicate && row.snippet
+                                  ? () => handleDuplicateSnippet(row)
+                                  : undefined
+                              }
+                              duplicating={isBusy}
+                            />
+                          )}
                           </li>
                         );
                       })}
+                      {newSnippetRow}
                     </ul>
                   </div>
                 )}
@@ -742,7 +801,7 @@ const ArticleToc = ({
                 type="button"
                 data-testid="toc-snippets-btn"
                 className="bg-transparent border-none text-blue-600 cursor-pointer hover:bg-blue-50 hover:underline"
-                onClick={() => onOpenSnippetPicker("add")}
+                onClick={startNewSnippet}
               >
                 Add
               </button>
@@ -776,18 +835,16 @@ const ArticleToc = ({
 
             {assetsExpanded && (
               <div className="overflow-y-auto flex-1 min-h-0">
-                {assetView.length === 0 ? (
+                {assetView.length === 0 && !newAssetRow ? (
                   <p className="m-0 py-2 px-3 text-slate-400 text-[0.78rem]">
                     No assets in this project yet.{" "}
-                    {onOpenAssetPicker && (
-                      <button
-                        type="button"
-                        className="bg-transparent border-none text-blue-600 cursor-pointer font-[inherit] text-[0.78rem] p-0 hover:underline"
-                        onClick={() => onOpenAssetPicker("add")}
-                      >
-                        Add one
-                      </button>
-                    )}
+                    <button
+                      type="button"
+                      className="bg-transparent border-none text-blue-600 cursor-pointer font-[inherit] text-[0.78rem] p-0 hover:underline"
+                      onClick={startNewAsset}
+                    >
+                      Add one
+                    </button>
                   </p>
                 ) : (
                   <div className="flex flex-col">
@@ -797,9 +854,17 @@ const ArticleToc = ({
                             const isMissingShortDescription =
                               row.asset && !row.asset.shortDescription?.trim();
                             const isBusy = duplicatingRef === row.ref;
+                            const isEditingRow =
+                              editingRef === row.ref && editDraft?.kind === "asset";
                             return (
                               <li
                                 key={row.ref}
+                                className={clsx(
+                                  "flex flex-col",
+                                  isEditingRow && "bg-[#f0f4ff]",
+                                )}
+                              >
+                              <div
                                 className={clsx(
                                   "group flex items-center gap-1.5 py-[3px] pr-1.5 pl-4 min-h-7 hover:bg-[#e8eaf0]",
                                   isBusy && "opacity-60 pointer-events-none",
@@ -870,9 +935,32 @@ const ArticleToc = ({
                                     <DivisionMenu items={assetMenuItems(row)} />
                                   )}
                                 </div>
+                              </div>
+                              {isEditingRow && (
+                                <EditForm
+                                  draft={editDraft}
+                                  onDraftChange={setEditDraft}
+                                  onCommit={commitEdit}
+                                  onCancel={cancelEdit}
+                                  embedCode={assetEmbedCode(row.ref, activeFormat)}
+                                  onCopyEmbed={() => copyAssetEmbed(row.ref)}
+                                  onReplace={
+                                    hasAssetReplace && row.asset?.url
+                                      ? () => openAssetReplacer(row.asset!)
+                                      : undefined
+                                  }
+                                  onDuplicate={
+                                    hasAssetDuplicate && row.asset
+                                      ? () => handleDuplicateAsset(row)
+                                      : undefined
+                                  }
+                                  duplicating={isBusy}
+                                />
+                              )}
                               </li>
                             );
                           })}
+                          {newAssetRow}
                     </ul>
                   </div>
                 )}
@@ -894,7 +982,7 @@ const ArticleToc = ({
                 type="button"
                 data-testid="toc-assets-btn"
                 className="bg-transparent border-none text-blue-600 cursor-pointer hover:bg-blue-50 hover:underline"
-                onClick={() => onOpenAssetPicker("add")}
+                onClick={startNewAsset}
               >
                 Add
               </button>
