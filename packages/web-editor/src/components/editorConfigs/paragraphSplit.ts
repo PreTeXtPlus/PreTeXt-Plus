@@ -101,11 +101,12 @@ export const planParagraphSplit = (
   const indent = lineIndent(source, tagStart);
 
   if (!isDirectParagraphText(source, contentStart, offset)) {
-    const text = `\n${indent}<p></p>`;
+    const textStrings = ["\n", indent, "<p>\n", indent, "    "]
+    const text = textStrings.join("") + `\n${indent}</p>`;
     return {
       range: { start: end, end },
       text,
-      cursorOffset: end + "\n".length + indent.length + "<p>".length,
+      cursorOffset: end + textStrings.map(s=>s.length).reduce((a,c) => a+c, 0)
     };
   }
 
