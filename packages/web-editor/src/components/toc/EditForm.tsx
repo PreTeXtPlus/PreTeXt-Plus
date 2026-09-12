@@ -355,7 +355,10 @@ const EditForm = ({
       (draft.sourceKind === "url" && !draft.pendingUrl?.trim()));
 
   return (
-    <div className="flex flex-col gap-1.5 py-2 px-2 pl-2.5 bg-indigo-50 border-t border-indigo-200">
+    <div
+      data-testid="toc-edit-form"
+      className="flex flex-col gap-1.5 py-2 px-2 pl-2.5 bg-indigo-50 border-t border-indigo-200"
+    >
       {fields}
       {!isNew && embedRow}
       <div className="flex gap-1.5 mt-0.5">
