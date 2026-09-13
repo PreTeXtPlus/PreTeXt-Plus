@@ -24,27 +24,27 @@ import type { Asset } from "./types/editor";
  * `asset.source` is separate user-authored inner XML (e.g. `<description>`)
  * and is inserted verbatim after it as the element's remaining children.
  *
- * `width` comes from the placeholder's own `width="..."` attribute (e.g.
- * `<plus:image ref="..." width="50%"/>`) rather than from the asset itself,
- * since the same asset can be embedded at different widths in different
- * places.
+ * Per-embedding attributes such as `width="50%"` are NOT handled here: they
+ * are written on the placeholder (`<plus:image ref="..." width="50%"/>`) and
+ * copied onto the `<image>` element this returns by `applyPlaceholderAttrs`
+ * during assembly, so the same asset can be embedded with different
+ * attributes in different places.
  */
-function transformImageAsset(asset: Asset, ref: string, width?: string): string {
+function transformImageAsset(asset: Asset, ref: string): string {
   if (asset.isFile && !asset.fileRef && !asset.url) {
     return `<!-- image asset "${ref}" is marked as file-based but has no fileRef or url -->`;
   }
   const sourceAttr = asset.isFile
     ? ` source="${escapeAttribute(asset.fileRef || ref)}"`
     : "";
-  const widthAttr = width ? ` width="${escapeAttribute(width)}"` : "";
   const shortDescription = asset.shortDescription?.trim();
   const shortDescriptionTag = shortDescription
     ? `<shortdescription>${escapeText(shortDescription)}</shortdescription>`
     : "";
   const inner = [ shortDescriptionTag, asset.source?.trim() ].filter(Boolean).join("\n");
   return inner
-    ? `<image${sourceAttr}${widthAttr}>\n${inner}\n</image>`
-    : `<image${sourceAttr}${widthAttr}/>`;
+    ? `<image${sourceAttr}>\n${inner}\n</image>`
+    : `<image${sourceAttr}/>`;
 }
 
 /**
@@ -53,12 +53,8 @@ function transformImageAsset(asset: Asset, ref: string, width?: string): string 
  * back to an XML comment if no matching asset is found, so a stale/typo'd
  * ref fails loudly in the assembled source rather than silently vanishing.
  */
-export function resolveAssetRef(
-  ref: string,
-  assets: Asset[],
-  width?: string,
-): string {
+export function resolveAssetRef(ref: string, assets: Asset[]): string {
   const asset = assets.find((a) => a.ref === ref);
   if (!asset) return `<!-- missing asset: ${ref} -->`;
-  return transformImageAsset(asset, ref, width);
+  return transformImageAsset(asset, ref);
 }

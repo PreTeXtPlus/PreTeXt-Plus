@@ -84,6 +84,14 @@ Book projects add a chapter layer: the host passes a `chapters` array, and the e
 
 Splits and merges PreTeXt documents at section boundaries. Supported section types: `<section>`, `<introduction>`, `<worksheet>`, `<handout>`, `<exercises>`, `<references>`, `<glossary>`, `<solutions>`, `<reading-questions>`, `<conclusion>`.
 
+**Placeholder attributes pass through to the resolved element.** Every attribute on a `<plus:* ref/>` placeholder except `ref` is copied onto the markup that replaces it during assembly (`applyPlaceholderAttrs`). This is a blanket rule, not a list of known attributes: `@component`, `@width`, `@xml:lang` are all the same kind of fact — a property of *this inclusion*, not of the included record, which is exactly what cannot live on the record when one division/asset/snippet is embedded in more than one place. A `@component` on a division that is included by reference has nowhere else to go at all, since the division's own source is shared by every include of it.
+
+- The copy happens on resolution *output*, never inside resolution: `divisionToPretext` caches per `xml:id`, so attributes baked in earlier would be shared by every reference to that division.
+- It lands on each **top-level** element, so a `@component` tags the division and not every paragraph inside it. A snippet is the case that makes the plural necessary — it can resolve to several sibling elements with no single tag to hang the attribute on.
+- On a collision the placeholder wins, replacing the value rather than appending (a duplicated attribute is not well-formed XML).
+- A LaTeX holder has nowhere inline to write them, so `\plus` takes an optional argument: `\plus[component=teacher]{section}{x}`. Both converters already emit these as real attributes; the helpers here only have to tolerate and preserve the shape. The placeholder *writers* stay on the bare form — the optional argument is the author's to add.
+- `renameDivisionRef` rewrites a placeholder in place rather than rebuilding it from type and id, precisely so these attributes survive an `xml:id` rename. Rebuilding drops them silently, which shows up much later as a division that quietly starts appearing in every build.
+
 ### Table of Contents (`src/components/TableOfContents.tsx` + `src/components/toc/`)
 
 - Article mode: flat section list
