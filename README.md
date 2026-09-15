@@ -38,6 +38,28 @@ different migrations. If a branch's migrations left your DB in a mixed state, ro
 specific one back with `bin/rails db:rollback` before switching, or just run
 `bin/rails db:reset` on the new branch to start clean from its `schema.rb`.
 
+### Keeping up with PreTeXt
+
+```bash
+bin/rails pretext:journals    # Refresh config/pretext_journals.yml
+```
+
+The journal styles offered in build settings are PreTeXt's, not ours: PreTeXt keeps
+`journals/journals.xml` as its source of truth and resolves a publication file's
+`<journal name="..."/>` against it. This task fetches that file — from the same PreTeXt
+the app's XSL is pinned to, read out of
+`node_modules/@pretextbook/pretext-html/assets/upstream.json` — and rewrites
+`config/pretext_journals.yml`, which `Publication::Catalog` loads.
+
+**Run it after bumping `@pretextbook/pretext-html`, and commit the result.** It is
+deliberately not part of `npm run build`, which runs in watch mode all through
+development; the picker should not depend on the network being up.
+
+The picker shows the publisher-wide styles (`ams`, `elsevier`, …) above the individual
+journals. PreTeXt does not record that distinction — its own list is flat — so the task
+keeps it in a `publisher_wide` list, files anything unrecognised as an individual journal,
+and says so when a newly added journal looks like it belongs in the other group.
+
 ## Testing
 
 The test suite uses Rails' built-in Minitest framework.

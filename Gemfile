@@ -37,7 +37,7 @@ gem "kamal", require: false
 gem "thruster", require: false
 
 # Use Active Storage variants [https://guides.rubyonrails.org/active_storage_overview.html#transforming-images]
-gem "image_processing", "~> 2.0"
+gem "image_processing", "~> 2.1"
 gem "ruby-vips", "~> 2.2"
 
 # Guards against SSRF when fetching user-supplied URLs server-side [https://github.com/arkadiyt/ssrf_filter]
@@ -73,7 +73,7 @@ gem "tailwindcss-rails", "~> 4.4"
 
 gem "jsbundling-rails", "~> 1.3"
 
-gem "stripe", "~> 19.0"
+gem "stripe", "~> 19.6"
 
 gem "postmark-rails", "~> 0.22"
 
@@ -87,7 +87,7 @@ gem "cancancan", "~> 3.6"
 
 gem "kaminari", "~> 1.2"
 
-gem "rubyzip", "~> 3.4"
+gem "rubyzip", "~> 3.6"
 
 gem "honeybadger", "~> 6.9"
 
