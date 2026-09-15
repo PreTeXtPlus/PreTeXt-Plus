@@ -267,8 +267,9 @@ const CodeEditorMenu: React.FC<CodeEditorMenuProps> = ({
             kind: "item",
             key: "paste-auto-convert",
             label: "Convert Pasted LaTeX & Markdown",
-            title:
-              "When on, LaTeX or Markdown pasted into this division is converted to PreTeXt as it arrives",
+            title: `When on, LaTeX or Markdown pasted into this division is converted to PreTeXt as it arrives. ${formatShortcut(
+              "Mod+Shift+V",
+            )} pastes as plain text without converting.`,
             checked: !!pasteAutoConvert,
             onSelect: onTogglePasteAutoConvert,
           },

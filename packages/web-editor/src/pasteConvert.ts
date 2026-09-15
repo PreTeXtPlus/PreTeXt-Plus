@@ -19,6 +19,11 @@
  * Declining is free: the caller just pastes plainly. Guessing wrong mangles
  * text the author meant to keep verbatim.
  *
+ * An author who wants one particular paste left verbatim does not have to
+ * visit the Edit menu toggle first: Ctrl+Shift+V (Cmd+Shift+V on a Mac) pastes
+ * as plain text, which the listener below implements by standing aside and
+ * letting the browser's own plain-text paste land untouched.
+ *
  * Everything here is synchronous, which the caller depends on: both converters
  * (`markdownToPretext`, `latexToPretext`) return strings rather than promises,
  * so a paste can be converted and inserted inside the DOM event handler as a
@@ -131,6 +136,34 @@ export interface PasteEditor {
   ): void;
 }
 
+/**
+ * How long the plain-paste chord stays armed, in milliseconds.
+ *
+ * The browser dispatches the paste from the keystroke itself, so this only has
+ * to outlast one turn of the event loop. It is a window rather than a plain
+ * flag because a chord the browser answers with no paste at all — a clipboard
+ * it declines to read, focus leaving the window between the two events — must
+ * not leave the *next* ordinary Ctrl+V silently unconverted.
+ */
+const PLAIN_PASTE_ARM_MS = 1000;
+
+/**
+ * True for the paste-as-plain-text chord: Ctrl+Shift+V, or Cmd+Shift+V on a Mac.
+ *
+ * Nothing else claims this chord — browsers treat it as "paste without
+ * formatting", which in a plain-text editor is an ordinary paste, and Monaco
+ * binds only Ctrl/Cmd+V and Shift+Insert for pasting — so the text arrives on
+ * its own and all this listener has to do is decline to convert it.
+ *
+ * `code` is consulted alongside `key` because a shifted `v` reaches the
+ * handler as `"V"`, and on a non-Latin layout as neither.
+ */
+export function isPlainPasteChord(event: KeyboardEvent): boolean {
+  if (!event.shiftKey || event.altKey) return false;
+  if (!event.ctrlKey && !event.metaKey) return false;
+  return event.code === "KeyV" || event.key === "v" || event.key === "V";
+}
+
 export interface InstallPasteConvertOptions {
   /** The editor to act on, or `null` before it has mounted. */
   getEditor: () => PasteEditor | null;
@@ -162,13 +195,42 @@ export interface InstallPasteConvertOptions {
  *   both that arrangement and the older hidden-textarea one, and
  *   `hasTextFocus()` scopes the handler back to the editor that has focus, so
  *   several editors on one page do not fight over a paste.
+ *
+ * A keydown listener rides along on the same target and in the same phase, so
+ * that Ctrl+Shift+V (Cmd+Shift+V on a Mac) can paste verbatim without the
+ * author having to turn the feature off in the Edit menu first. The chord is
+ * recorded rather than acted on: the browser's own plain-text paste still
+ * delivers the text, and the arm only tells the paste below to keep its hands
+ * off it.
  */
 export function installPasteConvertListener({
   getEditor,
   isEnabled,
   target = document,
 }: InstallPasteConvertOptions): () => void {
+  // When the plain-paste chord was last seen, as a timestamp; 0 once the paste
+  // it armed has consumed it.
+  let plainPasteArmedAt = 0;
+
+  const onKeyDown = (event: KeyboardEvent) => {
+    if (isPlainPasteChord(event)) plainPasteArmedAt = Date.now();
+  };
+
+  /** Read the arm and clear it, so one chord covers exactly one paste. */
+  const takePlainPasteArm = (): boolean => {
+    const armed =
+      plainPasteArmedAt > 0 &&
+      Date.now() - plainPasteArmedAt <= PLAIN_PASTE_ARM_MS;
+    plainPasteArmedAt = 0;
+    return armed;
+  };
+
   const onPaste = (event: ClipboardEvent) => {
+    // Consumed before anything else, and whatever this paste turns out to be:
+    // an arm left standing because the paste went to some other element would
+    // strand the author's next Ctrl+V unconverted.
+    if (takePlainPasteArm()) return;
+
     const editor = getEditor();
     if (!editor?.hasTextFocus?.() || !isEnabled()) return;
 
@@ -207,7 +269,12 @@ export function installPasteConvertListener({
     model.pushStackElement();
   };
 
-  const listener = onPaste as EventListener;
-  target.addEventListener("paste", listener, true);
-  return () => target.removeEventListener("paste", listener, true);
+  const pasteListener = onPaste as EventListener;
+  const keyListener = onKeyDown as EventListener;
+  target.addEventListener("paste", pasteListener, true);
+  target.addEventListener("keydown", keyListener, true);
+  return () => {
+    target.removeEventListener("paste", pasteListener, true);
+    target.removeEventListener("keydown", keyListener, true);
+  };
 }

@@ -325,6 +325,114 @@ describe("installPasteConvertListener", () => {
     }
   });
 
+  /** The chord an author presses to paste verbatim, as the browser sends it. */
+  function plainPasteChord(
+    overrides: Partial<KeyboardEventInit> = {},
+  ): KeyboardEvent {
+    return new KeyboardEvent("keydown", {
+      bubbles: true,
+      cancelable: true,
+      key: "V",
+      code: "KeyV",
+      ctrlKey: true,
+      shiftKey: true,
+      ...overrides,
+    });
+  }
+
+  it("leaves a paste alone when Ctrl+Shift+V armed it", () => {
+    const editor = fakeEditor();
+    const dispose = installPasteConvertListener({
+      getEditor: () => editor,
+      isEnabled: () => true,
+    });
+    try {
+      dispatchFromDetachedTarget(plainPasteChord());
+      const event = pasteEvent(LATEX);
+      dispatchFromDetachedTarget(event);
+
+      expect(editor.edits).toHaveLength(0);
+      // Not cancelled either: the browser's own plain-text paste is what puts
+      // the LaTeX in the buffer.
+      expect(event.defaultPrevented).toBe(false);
+    } finally {
+      dispose();
+    }
+  });
+
+  it("accepts the Mac spelling of the chord", () => {
+    const editor = fakeEditor();
+    const dispose = installPasteConvertListener({
+      getEditor: () => editor,
+      isEnabled: () => true,
+    });
+    try {
+      dispatchFromDetachedTarget(
+        plainPasteChord({ ctrlKey: false, metaKey: true }),
+      );
+      dispatchFromDetachedTarget(pasteEvent(LATEX));
+      expect(editor.edits).toHaveLength(0);
+    } finally {
+      dispose();
+    }
+  });
+
+  // One chord, one paste: the arm must not linger and quietly swallow the
+  // conversion on the author's next ordinary Ctrl+V.
+  it("arms only the paste that follows it", () => {
+    const editor = fakeEditor();
+    const dispose = installPasteConvertListener({
+      getEditor: () => editor,
+      isEnabled: () => true,
+    });
+    try {
+      dispatchFromDetachedTarget(plainPasteChord());
+      dispatchFromDetachedTarget(pasteEvent(LATEX));
+      expect(editor.edits).toHaveLength(0);
+
+      dispatchFromDetachedTarget(pasteEvent(LATEX));
+      expect(editor.edits).toHaveLength(1);
+    } finally {
+      dispose();
+    }
+  });
+
+  it("does not treat a plain Ctrl+V as a request to skip conversion", () => {
+    const editor = fakeEditor();
+    const dispose = installPasteConvertListener({
+      getEditor: () => editor,
+      isEnabled: () => true,
+    });
+    try {
+      dispatchFromDetachedTarget(plainPasteChord({ shiftKey: false }));
+      dispatchFromDetachedTarget(pasteEvent(LATEX));
+      expect(editor.edits).toHaveLength(1);
+    } finally {
+      dispose();
+    }
+  });
+
+  it("stops listening for the chord once disposed", () => {
+    const editor = fakeEditor();
+    const dispose = installPasteConvertListener({
+      getEditor: () => editor,
+      isEnabled: () => true,
+    });
+    dispose();
+    dispatchFromDetachedTarget(plainPasteChord());
+    // Re-installed: a chord heard by a disposed listener must not reach this one.
+    const dispose2 = installPasteConvertListener({
+      getEditor: () => editor,
+      isEnabled: () => true,
+    });
+    try {
+      dispatchFromDetachedTarget(pasteEvent(LATEX));
+      expect(editor.edits).toHaveLength(1);
+    } finally {
+      dispose2();
+    }
+  });
+
   it("stops converting once disposed", () => {
     const editor = fakeEditor();
     installPasteConvertListener({
