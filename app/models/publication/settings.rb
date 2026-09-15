@@ -85,9 +85,22 @@ module Publication
       option.choices_for(document_type)
     end
 
-    # The same, in the [label, value] order Rails' select helper takes.
+    # The same, in the [label, value] order Rails' select helper takes -- and, for an option
+    # whose list reads better under headings, nested as [heading, pairs], which is the shape
+    # that helper draws as <optgroup>. A list of seventeen journals is the case for it:
+    # the four publisher-wide styles are the ones to reach for when your own journal is not
+    # there, and a flat alphabetical list buries them among the titles.
+    #
+    # A heading with nothing under it is dropped rather than drawn empty, which is also
+    # what keeps this right for a document type that offers only some of the list.
     def select_choices_for(option)
-      choices_for(option).map(&:reverse)
+      pairs = choices_for(option).map(&:reverse)
+      return pairs unless option.grouped_choices?
+
+      option.choice_groups.filter_map do |heading, values|
+        under = pairs.select { |_, value| values.include?(value) }
+        [ heading, under ] if under.any?
+      end
     end
 
     # What a value reads as here. Falls through to the value itself for an image no longer
