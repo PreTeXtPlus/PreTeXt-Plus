@@ -171,7 +171,7 @@ const MenuDropdown = ({
           ref={panelRef}
           role="menu"
           aria-label={label}
-          className="absolute top-[calc(100%+4px)] left-0 z-20 flex flex-col min-w-[220px] max-h-[70vh] overflow-y-auto p-1 bg-white border border-[#d0d0d0] rounded-md shadow-[0_6px_16px_rgba(0,0,0,0.14)]"
+          className="absolute top-[calc(100%+4px)] left-0 z-20 flex flex-col min-w-[220px] max-h-[66.6667vh] overflow-y-auto p-1 bg-white border border-[#d0d0d0] rounded-md shadow-[0_6px_16px_rgba(0,0,0,0.14)]"
           onKeyDown={handlePanelKeyDown}
         >
           {entries.map((entry) => {

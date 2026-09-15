@@ -17,6 +17,13 @@ const FEEDBACK_TRIGGER_CLASSES =
 interface FeedbackLinkProps {
   /** Link text shown where the trigger is rendered. */
   label?: string;
+  /**
+   * If provided, shown instead of `label` below the `sm` breakpoint (640px),
+   * for a toolbar too cramped for the full text. `label` stays the trigger's
+   * accessible name (via `aria-label`) either way, since which text is
+   * visible is purely a CSS media-query swap.
+   */
+  shortLabel?: string;
   /** Context string to help the host identify where feedback was submitted. */
   context: string;
   /** Called when the user submits feedback. */
@@ -43,6 +50,7 @@ const getFallbackUrl = () => {
 
 const FeedbackLink = ({
   label = "Give feedback",
+  shortLabel,
   context,
   onSubmit,
   projectUrl,
@@ -116,8 +124,16 @@ const FeedbackLink = ({
         type="button"
         className={className || FEEDBACK_TRIGGER_CLASSES}
         onClick={() => setIsOpen(true)}
+        aria-label={shortLabel ? label : undefined}
       >
-        {label}
+        {shortLabel ? (
+          <>
+            <span className="hidden sm:inline">{label}</span>
+            <span className="sm:hidden">{shortLabel}</span>
+          </>
+        ) : (
+          label
+        )}
       </button>
       {isOpen ? (
         <DialogOverlay onClick={closeDialog}>

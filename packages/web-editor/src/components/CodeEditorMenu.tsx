@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState, type ReactNode } from "react";
 import { formatPretext } from "@pretextbook/format";
 import type { SourceFormat } from "../types/editor";
 import type { RootDivisionType } from "../types/sections";
@@ -12,6 +12,17 @@ import {
   snippetGroupsFor,
   type EditorSnippet,
 } from "./editorConfigs/snippets";
+import { LANGUAGES } from "../languages";
+import {
+  DialogOverlay,
+  Dialog,
+  DialogHeader,
+  DialogTitle,
+  DialogClose,
+  DialogActions,
+  DialogButton,
+  DialogLabel,
+} from "./Dialog";
 
 /**
  * The editor operations the menus drive. Supplied by `CodeEditor`, which is
@@ -98,7 +109,127 @@ interface CodeEditorMenuProps {
   hideSnippets?: boolean;
   /** When true, every editing action is hidden — only viewing actions remain. */
   readOnly?: boolean;
+  /** When true, the File menu (Document Properties, Save, Cancel) is not shown. */
+  hideFileMenu?: boolean;
+  /** If provided, a Save item is shown in the File menu. */
+  onSaveButton?: () => void;
+  /** Label for the Save item. Defaults to `"Save"`. */
+  saveButtonLabel?: string;
+  /** If provided, a Cancel item is shown in the File menu. */
+  onCancelButton?: () => void;
+  /** Label for the Cancel item. Defaults to `"Cancel"`. */
+  cancelButtonLabel?: string;
+  /** Collaborator presence indicator (avatar chips), when collaboration is on. */
+  presence?: ReactNode;
+  /** The document title, shown/edited via "Document Properties…" in the File menu. */
+  title: string;
+  /** Commits a new document title. */
+  onTitleChange: (value: string) => void;
+  /** The document's `@xml:lang`, edited alongside the title. */
+  language: string;
+  /** Commits a new document language. */
+  onLanguageChange: (value: string) => void;
+  /** Rendered feedback-link trigger (and its dialog), built by the host. */
+  feedbackLink?: ReactNode;
 }
+
+/**
+ * The document title and language, edited together in one small dialog since
+ * neither fits a plain clickable menu item.
+ */
+const DocumentPropertiesDialog = ({
+  title,
+  onTitleChange,
+  language,
+  onLanguageChange,
+  onClose,
+}: {
+  title: string;
+  onTitleChange: (value: string) => void;
+  language: string;
+  onLanguageChange: (value: string) => void;
+  onClose: () => void;
+}) => {
+  const [draftTitle, setDraftTitle] = useState(title);
+  const [draftLanguage, setDraftLanguage] = useState(language);
+  const titleInputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    titleInputRef.current?.focus();
+    titleInputRef.current?.select();
+  }, []);
+
+  const handleSave = () => {
+    onTitleChange(draftTitle);
+    onLanguageChange(draftLanguage);
+    onClose();
+  };
+
+  return (
+    <DialogOverlay onClick={onClose}>
+      <Dialog
+        className="w-[min(96%,480px)] h-auto max-h-[min(90%,480px)]"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="document-properties-title"
+        onClick={(event) => event.stopPropagation()}
+      >
+        <DialogHeader>
+          <DialogTitle id="document-properties-title">
+            Document Properties
+          </DialogTitle>
+          <DialogClose onClick={onClose} aria-label="Close dialog">
+            Close
+          </DialogClose>
+        </DialogHeader>
+        <form
+          className="flex flex-col gap-3"
+          onSubmit={(event) => {
+            event.preventDefault();
+            handleSave();
+          }}
+        >
+          <div className="flex flex-col gap-1">
+            <DialogLabel htmlFor="document-properties-title-input">
+              Title
+            </DialogLabel>
+            <input
+              ref={titleInputRef}
+              id="document-properties-title-input"
+              type="text"
+              className="w-full py-1.5 px-2 rounded-[3px] border border-gray-400 bg-white focus:outline focus:outline-2 focus:outline-blue-500 focus:outline-offset-2"
+              value={draftTitle}
+              onChange={(e) => setDraftTitle(e.target.value)}
+            />
+          </div>
+          <div className="flex flex-col gap-1">
+            <DialogLabel htmlFor="document-properties-language-input">
+              Language
+            </DialogLabel>
+            <select
+              id="document-properties-language-input"
+              className="w-full py-1.5 px-2 rounded-[3px] border border-gray-400 bg-white focus:outline focus:outline-2 focus:outline-blue-500 focus:outline-offset-2"
+              value={draftLanguage}
+              onChange={(e) => setDraftLanguage(e.target.value)}
+            >
+              {LANGUAGES.map(({ code, label }) => (
+                <option key={code} value={code}>
+                  {label}
+                </option>
+              ))}
+            </select>
+          </div>
+          <DialogActions>
+            <DialogButton type="button" variant="secondary" onClick={onClose}>
+              Cancel
+            </DialogButton>
+            <DialogButton type="submit">Save</DialogButton>
+          </DialogActions>
+        </form>
+      </Dialog>
+    </DialogOverlay>
+  );
+};
 
 const CONVERT_BUTTON_CLASSES =
   "shrink-0 py-[5px] px-2.5 rounded-[3px] border border-transparent cursor-pointer text-[13px] font-medium leading-[1.3] transition-colors duration-150 ease-in-out bg-blue-600 text-white enabled:hover:bg-blue-700 disabled:bg-blue-300 disabled:cursor-not-allowed";
@@ -140,10 +271,13 @@ const commandEntry = (
 const separator = (key: string): MenuEntry => ({ kind: "separator", key });
 
 /**
- * The code editor's menu bar: Edit, Insert and Tools, plus the format badge.
+ * The code editor's menu bar: File, Edit, Insert and Tools, plus the format
+ * badge. This is the editor's only toolbar — document-level actions (rename,
+ * change language, save, cancel) live in File rather than a separate bar
+ * above it, alongside the presence avatars, read-only badge and feedback link.
  *
- * Every format gets the same three menus in the same order — what changes is
- * the contents, not the shape. Document actions that only make sense for one
+ * Every format gets the same menus in the same order — what changes is the
+ * contents, not the shape. Document actions that only make sense for one
  * format (Format PreTeXt, Import LaTeX, Clean up LaTeX) sit together at the
  * top of Tools, above the editor commands that are the same everywhere; the
  * Insert menu offers the same catalog of constructs written in whichever
@@ -178,6 +312,17 @@ const CodeEditorMenu: React.FC<CodeEditorMenuProps> = ({
   isFindingInFile,
   onSwitchToFindInProject,
   readOnly,
+  hideFileMenu,
+  onSaveButton,
+  saveButtonLabel,
+  onCancelButton,
+  cancelButtonLabel,
+  presence,
+  title,
+  onTitleChange,
+  language,
+  onLanguageChange,
+  feedbackLink,
 }) => {
   // Which menu is open, so opening one closes the last and hovering across the
   // bar switches between them.
@@ -185,6 +330,7 @@ const CodeEditorMenu: React.FC<CodeEditorMenuProps> = ({
   // A transient line of feedback, for the operations that can be refused
   // without any visible effect: the clipboard ones.
   const [notice, setNotice] = useState<string | null>(null);
+  const [isDocumentPropertiesOpen, setIsDocumentPropertiesOpen] = useState(false);
 
   useEffect(() => {
     if (!notice) return;
@@ -394,7 +540,46 @@ const CodeEditorMenu: React.FC<CodeEditorMenuProps> = ({
     commandEntry(MONACO_COMMANDS.unfoldAll, run),
   ];
 
+  // ── File ──────────────────────────────────────────────────────────────────
+  const fileEntries: MenuEntry[] = [
+    ...(readOnly
+      ? []
+      : [
+          {
+            kind: "item" as const,
+            key: "document-properties",
+            label: "Document Properties…",
+            title: "Edit the document title and language",
+            onSelect: () => setIsDocumentPropertiesOpen(true),
+          },
+          separator("file-document"),
+        ]),
+    ...(onSaveButton
+      ? [
+          {
+            kind: "item" as const,
+            key: "save",
+            label: saveButtonLabel || "Save",
+            onSelect: onSaveButton,
+          },
+        ]
+      : []),
+    ...(onCancelButton
+      ? [
+          {
+            kind: "item" as const,
+            key: "cancel",
+            label: cancelButtonLabel || "Cancel",
+            onSelect: onCancelButton,
+          },
+        ]
+      : []),
+  ];
+
   const menus = [
+    ...(hideFileMenu
+      ? []
+      : [{ key: "file", label: "File", entries: fileEntries }]),
     { key: "edit", label: "Edit", entries: editEntries },
     ...(readOnly
       ? []
@@ -452,7 +637,8 @@ const CodeEditorMenu: React.FC<CodeEditorMenuProps> = ({
         </span>
       )}
 
-      <span className="flex items-center gap-2 ml-auto pl-2">
+      <span className="flex items-center gap-2 ml-auto pl-2 shrink-0">
+        {feedbackLink}
         {onConvertToPretext && !readOnly && (
           <button
             type="button"
@@ -460,14 +646,35 @@ const CodeEditorMenu: React.FC<CodeEditorMenuProps> = ({
             onClick={onConvertToPretext}
             disabled={canConvertToPretext === false}
             title="Create a new project copy using the converted PreTeXt source"
+            aria-label="Convert to PreTeXt"
           >
-            Convert to PreTeXt
+            <span className="hidden sm:inline">Convert to PreTeXt</span>
+            <span className="sm:hidden">Convert</span>
           </button>
         )}
         <span className="inline-flex items-center py-0.5 px-2 rounded-full bg-gray-200 text-gray-800 text-xs font-semibold">
           {FORMAT_LABELS[sourceFormat]}
         </span>
       </span>
+
+      <span className="flex items-center gap-2 pl-2 shrink-0">
+        {presence}
+        {readOnly && (
+          <span className="inline-block py-0.5 px-2 rounded-[3px] bg-[#a32899] text-white text-xs font-semibold">
+            Read-only Mode
+          </span>
+        )}
+      </span>
+
+      {isDocumentPropertiesOpen && (
+        <DocumentPropertiesDialog
+          title={title}
+          onTitleChange={onTitleChange}
+          language={language}
+          onLanguageChange={onLanguageChange}
+          onClose={() => setIsDocumentPropertiesOpen(false)}
+        />
+      )}
     </div>
   );
 };
