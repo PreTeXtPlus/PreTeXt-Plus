@@ -1,5 +1,6 @@
 import type { Division, DivisionType } from "../../types/sections";
 import type { SourceFormat } from "../../types/editor";
+import { slugifyTitle } from "../../sectionUtils";
 
 /** Draft state for the inline division edit form. */
 export interface EditDraft {
@@ -79,6 +80,20 @@ export const DIVISION_ID_PREFIXES: Record<DivisionType, string> = {
   index: "idx",
   colophon: "coloph",
 };
+
+/**
+ * The `xml:id` a new division of `type` titled `title` should get:
+ * `<type-abbrev>-<title-slug>`, e.g. "ws-my-title" for a worksheet.
+ *
+ * Shared, rather than private to SectionEditForm, because a new division's
+ * draft is seeded with an id before the form is ever rendered — the two have
+ * to agree, or the id the author sees jumps the first time they touch Title.
+ */
+export function deriveXmlId(type: DivisionType, title: string): string {
+  const prefix = DIVISION_ID_PREFIXES[type] ?? "sec";
+  const slug = slugifyTitle(title);
+  return slug ? `${prefix}-${slug}` : prefix;
+}
 
 export const TYPE_FULL_LABELS: Record<string, string> = {
   book: "Book",

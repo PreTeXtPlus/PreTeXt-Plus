@@ -20,6 +20,8 @@ import {
   validatePretextDocument,
 } from "../components/editorConfigs/pretextSchema";
 import { computePretextMarkers } from "../components/editorConfigs/pretextDiagnostics";
+import { assembleFullProjectSource } from "../sectionUtils";
+import type { Division } from "../types/sections";
 
 const require = createRequire(import.meta.url);
 const GRAMMAR_URL = "https://test.invalid/pretext.json";
@@ -161,5 +163,49 @@ describe("computePretextMarkers", () => {
     });
 
     expect(markers).toEqual([]);
+  });
+});
+
+/**
+ * The point of the placeholder attribute pass-through is that the document it
+ * produces is real PreTeXt. `@component` on an *included* division has no
+ * other route into the assembled source — the division's own record is shared
+ * by every include of it — so this is the end-to-end check that the route
+ * works: placeholder attribute → assembled document → the real grammar.
+ */
+describe("assembled placeholder attributes", () => {
+  const division = (
+    xmlId: string,
+    type: Division["type"],
+    source: string,
+  ): Division => ({
+    id: xmlId,
+    xmlId,
+    title: xmlId,
+    type,
+    sourceFormat: "pretext",
+    source,
+  });
+
+  it("produces a schema-valid document for a @component on an include", async () => {
+    const xml = assembleFullProjectSource(
+      [
+        division(
+          "art-a",
+          "article",
+          `<article xml:id="art-a">\n<title>Doc</title>\n<plus:section ref="sec-a" component="teacher"/>\n</article>`,
+        ),
+        division(
+          "sec-a",
+          "section",
+          `<section xml:id="sec-a">\n<title>One</title>\n<p>Hi</p>\n</section>`,
+        ),
+      ],
+      "art-a",
+      "",
+    );
+
+    expect(xml).toContain('<section xml:id="sec-a" component="teacher">');
+    expect(await validatePretextDocument(xml)).toEqual([]);
   });
 });

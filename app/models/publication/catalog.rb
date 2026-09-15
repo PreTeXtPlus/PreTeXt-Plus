@@ -568,7 +568,7 @@ module Publication
       [ "footnotes",    "Footnotes",                 false, nil ],
       [ "exercises",    "Inline exercises",          true,  "Shared with blocks" ],
       [ "figures",      "Figures, tables, listings", true,  "Shared with blocks" ],
-      [ "projects",     "Projects and activities",   true,  "Its own" ],
+      [ "projects",     "Projects and activities",   true,  "Shared with blocks" ],
       [ "openproblems", "Open problems",             true,  "Shared with blocks" ]
     ].freeze
 

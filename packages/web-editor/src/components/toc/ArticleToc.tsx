@@ -2,6 +2,7 @@ import { Fragment, useState } from "react";
 import clsx from "clsx";
 import type { Division } from "../../types/sections";
 import SectionItem from "./SectionItem";
+import NewDivisionRow from "./NewDivisionRow";
 import DivisionMenu, { type DivisionMenuItem } from "./DivisionMenu";
 import { canContainDivisions } from "./types";
 
@@ -67,7 +68,7 @@ const ArticleToc = ({
   const cancelSectionEdit = useEditorStore((s) => s.cancelSectionEdit);
   const editingId = useEditorStore((s) => s.editingId);
   const editDraft = useEditorStore((s) => s.editDraft);
-  const editingIsNew = useEditorStore((s) => s.editingIsNew);
+  const pendingNewDivision = useEditorStore((s) => s.pendingNewDivision);
 
   // ── Tree structure ──────────────────────────────────────────────────────────
   const rootDivision = divisions
@@ -191,6 +192,33 @@ const ArticleToc = ({
     }
   }
 
+  // ── Where a not-yet-created division's draft row goes ──────────────────────
+  // At the end of its parent's visible subtree, which is where saving it will
+  // put the `<plus:* ref/>` placeholder — so the author sees the position they
+  // are about to fill rather than having the row appear somewhere else on save.
+  // `after` indexes into `visibleNodes`; -1 means "directly after the root row"
+  // and null means the parent isn't on screen (collapsed ancestor, or unplaced).
+  const draftPlacement = (() => {
+    if (!pendingNewDivision) return null;
+    const parentXmlId = pendingNewDivision.parentXmlId;
+    if (!parentXmlId) return { after: null, depth: 0 };
+    if (rootDivision && parentXmlId === rootDivision.xmlId) {
+      return { after: visibleNodes.length - 1, depth: 1 };
+    }
+    const start = visibleNodes.findIndex(
+      (n) => n.division.xmlId === parentXmlId,
+    );
+    if (start === -1) return null;
+    let end = start;
+    while (
+      end + 1 < visibleNodes.length &&
+      visibleNodes[end + 1].depth > visibleNodes[start].depth
+    ) {
+      end++;
+    }
+    return { after: end, depth: visibleNodes[start].depth + 2 };
+  })();
+
   // ── Actions ─────────────────────────────────────────────────────────────────
   const handleUnplace = (xmlId: string, parentXmlId: string) => {
     if (!divisions) return;
@@ -250,6 +278,18 @@ const ArticleToc = ({
 
   const getDivisionType = (xmlId: string | null) =>
     (xmlId && divisions?.find((d) => d.xmlId === xmlId)?.type) || null;
+
+  const draftRow =
+    draftPlacement && editDraft ? (
+      <NewDivisionRow
+        draft={editDraft}
+        depth={draftPlacement.depth}
+        parentType={getDivisionType(pendingNewDivision!.parentXmlId)}
+        onDraftChange={setEditDraft}
+        onCommit={commitSectionEdit}
+        onCancel={cancelSectionEdit}
+      />
+    ) : null;
 
   // ── Asset row helpers ───────────────────────────────────────────────────────
   const openAssetRow = (row: AssetRow) =>
@@ -412,14 +452,15 @@ const ArticleToc = ({
                       : []),
                   ]
             }
-            isNew={editingId === rootDivision.xmlId && editingIsNew}
             isRoot
           />
         )}
 
-        {visibleNodes.map((node) => (
+        {draftPlacement?.after === -1 && draftRow}
+
+        {visibleNodes.map((node, index) => (
+          <Fragment key={node.division.xmlId}>
           <SectionItem
-            key={node.division.xmlId}
             division={node.division}
             depth={node.depth + 1}
             isActive={activeDivisionId === node.division.xmlId}
@@ -464,10 +505,14 @@ const ArticleToc = ({
                     },
                   ]
             }
-            isNew={editingId === node.division.xmlId && editingIsNew}
             parentType={getDivisionType(node.parentXmlId)}
           />
+          {draftPlacement?.after === index && draftRow}
+          </Fragment>
         ))}
+
+        {/* An unplaced draft (no parent) has no subtree to sit at the end of. */}
+        {draftPlacement?.after === null && draftRow}
       </ul>
 
       {/* Unplaced divisions */}

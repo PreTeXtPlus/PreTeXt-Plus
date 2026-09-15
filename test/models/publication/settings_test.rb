@@ -528,6 +528,24 @@ class Publication::SettingsTest < ActiveSupport::TestCase
       .choices_for("slideshow")
   end
 
+  # Regression test for a confirmed bug: the numbering options are supposed to differ for
+  # articles vs books, but Publication::Settings#document_type was reading the stored
+  # Project#document_type column, which the TOC's article<->book switch never updates (it
+  # rewrites the document's source instead). A project switched to "book" kept being
+  # offered article-shaped choices.
+  test "choices follow a document switched to a book after creation, not the stale column" do
+    project = projects(:one)
+    assert_equal "article", project.document_type
+
+    project.update_column(:pretext_source, "<pretext>\n<book xml:id=\"document\"><title>Hello</title></book>\n</pretext>")
+
+    settings = Publication::Settings.new(project.reload)
+    assert_equal "book", settings.document_type
+    assert_equal 5, Publication::Catalog.find("division_numbering_level").choices_for(settings.document_type).size
+    assert_includes Publication::Catalog.find("division_numbering_level").choices_for(settings.document_type),
+                    [ "1", "Number chapters" ]
+  end
+
   # The account modal has no project, so it offers the widest list any document type
   # would. PreTeXt clamps an over-deep level, and the project's own modal will not offer
   # it, so the account default is never a build failure.

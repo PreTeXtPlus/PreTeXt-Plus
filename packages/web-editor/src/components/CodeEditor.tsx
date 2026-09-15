@@ -183,6 +183,19 @@ export interface CodeEditorHandle {
    * as one undo step. A no-op for a format with no cleanup engine.
    */
   applyCleanFixes: (ruleIds?: string[]) => void;
+  /**
+   * Deliver a debounced `onChange` that is still waiting, immediately, and
+   * cancel its timer. A no-op when nothing is pending.
+   *
+   * Typing reaches the store 500 ms late (see the debounce below), so for that
+   * window the buffer and the pool disagree — and a structural action taken in
+   * that window computes from a source the author has already moved on from,
+   * while the pending delivery lands *afterwards* and reinstates the
+   * pre-action text. Callers that are about to rewrite a division's source
+   * from the pool (adding a child, renaming an xml:id) flush first, so the
+   * author's keystrokes are the state those rewrites start from.
+   */
+  flushPendingChange: () => void;
 }
 
 /** Base Monaco editor options shared across all instances of this component. */
@@ -296,6 +309,11 @@ const CodeEditor = forwardRef<CodeEditorHandle, CodeEditorProps>(({
   // torn down and re-registered whenever the source format changes.
   const languageExtensionsRef = useRef<{ dispose: () => void } | null>(null);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // The delivery the debounce timer is holding, so `flushPendingChange` can
+  // send it early. It closes over the buffer *and* over the render that
+  // produced it — which is the point: a change belongs to the division that
+  // was open when it was typed, not to whichever one is open when it lands.
+  const pendingChangeRef = useRef<(() => void) | null>(null);
   const isProgrammaticUpdateRef = useRef(false);
   const [canUndo, setCanUndo] = useState(false);
   const [canRedo, setCanRedo] = useState(false);
@@ -415,6 +433,15 @@ const CodeEditor = forwardRef<CodeEditorHandle, CodeEditorProps>(({
       });
       // No host notification here: these are ordinary model edits, so Monaco's
       // `onChange` fires and the debounce below reports them like any typing.
+    },
+    flushPendingChange: () => {
+      if (debounceRef.current) {
+        clearTimeout(debounceRef.current);
+        debounceRef.current = null;
+      }
+      const pending = pendingChangeRef.current;
+      pendingChangeRef.current = null;
+      pending?.();
     },
   }), []);
 
@@ -1175,9 +1202,13 @@ const CodeEditor = forwardRef<CodeEditorHandle, CodeEditorProps>(({
               return;
             }
             if (debounceRef.current) clearTimeout(debounceRef.current);
-            debounceRef.current = setTimeout(() => {
+            const deliver = () => {
+              debounceRef.current = null;
+              pendingChangeRef.current = null;
               handleContentChange(value || "");
-            }, 500);
+            };
+            pendingChangeRef.current = deliver;
+            debounceRef.current = setTimeout(deliver, 500);
           }}
         />
       </div>
