@@ -14,8 +14,10 @@
  * `conclusion`), a `npm update` either keeps this green or tells us exactly
  * which tag we still owe a `DivisionType`.
  *
- * `@pretextbook/import` is a devDependency here for this file alone — the
- * library never imports it at runtime; only the host app runs the wizard.
+ * `@pretextbook/import` is a runtime dependency of this package (see
+ * `pasteConvert.ts`, which shares the importer's snippet detection and markup
+ * placement), so this test reaches for it directly rather than through a
+ * test-only install.
  */
 
 import { describe, it, expect } from "vitest";

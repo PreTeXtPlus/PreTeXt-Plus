@@ -96,6 +96,41 @@ const writeStoredTocCollapsed = (collapsed: boolean): void => {
 export const defaultTocCollapsed = (): boolean =>
   isNarrowViewport() ? true : (readStoredTocCollapsed() ?? false);
 
+/**
+ * Whether pasting LaTeX or Markdown into a PreTeXt division converts it on the
+ * way in (see `pasteConvert.ts`).
+ *
+ * On by default, because the detector only claims a snippet it is confident
+ * about and converting is the reason to paste LaTeX into a PreTeXt file at all.
+ * Remembered because the author who wants their markup kept verbatim — quoting
+ * TeX in a `<pre>`, say — wants that every time, not once.
+ */
+const PASTE_AUTO_CONVERT_KEY = "pretext-plus:paste-auto-convert";
+
+/** The stored preference, or `null` if never set / storage unavailable. */
+const readStoredPasteAutoConvert = (): boolean | null => {
+  try {
+    const stored = localStorage.getItem(PASTE_AUTO_CONVERT_KEY);
+    return stored === null ? null : stored === "true";
+  } catch {
+    // Storage blocked (private mode, third-party iframe): fall back to the
+    // default, exactly as before it was persisted.
+    return null;
+  }
+};
+
+const writeStoredPasteAutoConvert = (enabled: boolean): void => {
+  try {
+    localStorage.setItem(PASTE_AUTO_CONVERT_KEY, String(enabled));
+  } catch {
+    // Storage blocked — the choice just doesn't outlive this session.
+  }
+};
+
+/** The remembered choice, else on. */
+export const defaultPasteAutoConvert = (): boolean =>
+  readStoredPasteAutoConvert() ?? true;
+
 // ── Types ───────────────────────────────────────────────────────────────────
 
 export type DivisionChanges = {
@@ -142,7 +177,7 @@ const initialFindPanelState: FindPanelState = {
 };
 
 type ModalKey =
-  | "isLatexDialogOpen"
+  | "isImportDialogOpen"
   | "isCleanDialogOpen"
   | "isConvertDialogOpen"
   | "isDocinfoEditorOpen"
@@ -248,10 +283,12 @@ export interface EditorStoreState {
   // ── UI state owned by the store ────────────────────────────────────────────
 
   isTocCollapsed: boolean;
+  /** Convert LaTeX/Markdown pasted into a PreTeXt division — see {@link PASTE_AUTO_CONVERT_KEY}. */
+  pasteAutoConvert: boolean;
   showLivePreview: boolean;
   isNarrowScreen: boolean;
   activeTab: "editor" | "preview";
-  isLatexDialogOpen: boolean;
+  isImportDialogOpen: boolean;
   isCleanDialogOpen: boolean;
   isConvertDialogOpen: boolean;
   isDocinfoEditorOpen: boolean;
@@ -347,6 +384,11 @@ export interface EditorStoreState {
    * for future sessions — see {@link TOC_COLLAPSED_KEY}.
    */
   toggleTocCollapsed: () => void;
+  /**
+   * Turn paste-and-convert on or off, remembering the choice for future
+   * sessions — see {@link PASTE_AUTO_CONVERT_KEY}.
+   */
+  togglePasteAutoConvert: () => void;
   openModal: (modal: ModalKey) => void;
   closeModal: (modal: ModalKey) => void;
 
@@ -538,10 +580,11 @@ export function createEditorStore(init: EditorStoreInit): EditorStoreHandle {
 
     // ── Initial UI state ───────────────────────────────────────────────────
     isTocCollapsed: defaultTocCollapsed(),
+    pasteAutoConvert: defaultPasteAutoConvert(),
     showLivePreview: true,
     isNarrowScreen: isNarrowViewport(),
     activeTab: "editor",
-    isLatexDialogOpen: false,
+    isImportDialogOpen: false,
     isCleanDialogOpen: false,
     isConvertDialogOpen: false,
     isDocinfoEditorOpen: false,
@@ -623,6 +666,12 @@ export function createEditorStore(init: EditorStoreInit): EditorStoreHandle {
         const isTocCollapsed = !s.isTocCollapsed;
         if (!s.isNarrowScreen) writeStoredTocCollapsed(isTocCollapsed);
         return { isTocCollapsed };
+      }),
+    togglePasteAutoConvert: () =>
+      set((s) => {
+        const pasteAutoConvert = !s.pasteAutoConvert;
+        writeStoredPasteAutoConvert(pasteAutoConvert);
+        return { pasteAutoConvert };
       }),
     openModal: (modal) => set({ [modal]: true } as Pick<EditorStoreState, ModalKey>),
     closeModal: (modal) => set({ [modal]: false } as Pick<EditorStoreState, ModalKey>),

@@ -47,8 +47,15 @@ interface CodeEditorMenuProps {
   rootType?: RootDivisionType;
   /** Called with the formatted content after a successful format operation. */
   onContentChange: (newContent: string) => void;
-  /** Opens the LaTeX import dialog. */
-  onOpenLatexImport: () => void;
+  /** Opens the Import dialog (outside material converted to PreTeXt). */
+  onOpenImport: () => void;
+  /**
+   * Whether pasted LaTeX/Markdown is converted on the way in. Omitted for
+   * formats where the question doesn't arise, which hides the menu item.
+   */
+  pasteAutoConvert?: boolean;
+  /** Flip {@link pasteAutoConvert}. Omitted alongside it. */
+  onTogglePasteAutoConvert?: () => void;
   /**
    * If provided, a "Clean up LaTeX…" item is shown.  Opens the review dialog
    * listing the legacy markup found in this division.  Omitted for formats with
@@ -144,7 +151,7 @@ const separator = (key: string): MenuEntry => ({ kind: "separator", key });
  *
  * Every format gets the same three menus in the same order — what changes is
  * the contents, not the shape. Document actions that only make sense for one
- * format (Format PreTeXt, Import LaTeX, Clean up LaTeX) sit together at the
+ * format (Format PreTeXt, Import, Clean up LaTeX) sit together at the
  * top of Tools, above the editor commands that are the same everywhere; the
  * Insert menu offers the same catalog of constructs written in whichever
  * format is open (see `editorConfigs/snippets.ts`).
@@ -158,7 +165,9 @@ const CodeEditorMenu: React.FC<CodeEditorMenuProps> = ({
   sourceFormat,
   rootType,
   onContentChange,
-  onOpenLatexImport,
+  onOpenImport,
+  pasteAutoConvert,
+  onTogglePasteAutoConvert,
   onOpenClean,
   onOpenDocinfoEditor,
   onUndo,
@@ -246,6 +255,27 @@ const CodeEditorMenu: React.FC<CodeEditorMenuProps> = ({
     onSelect: actions.selectAll,
   });
 
+  // Sits under Paste because it is a property of pasting, and that is where an
+  // author goes looking when a paste came out converted and they wanted it
+  // verbatim. Only offered where the conversion can actually happen: a
+  // read-only buffer takes no pastes, and only a PreTeXt division converts
+  // them (see `pasteConvert.ts`).
+  const convertPasteEntry: MenuEntry[] =
+    !readOnly && sourceFormat === "pretext" && onTogglePasteAutoConvert
+      ? [
+          {
+            kind: "item",
+            key: "paste-auto-convert",
+            label: "Convert Pasted LaTeX & Markdown",
+            title: `When on, LaTeX or Markdown pasted into this division is converted to PreTeXt as it arrives. ${formatShortcut(
+              "Mod+Shift+V",
+            )} pastes as plain text without converting.`,
+            checked: !!pasteAutoConvert,
+            onSelect: onTogglePasteAutoConvert,
+          },
+        ]
+      : [];
+
   const findInProjectEntry: MenuEntry[] = onOpenFindInProject
     ? [
         {
@@ -295,6 +325,7 @@ const CodeEditorMenu: React.FC<CodeEditorMenuProps> = ({
           actions.paste,
           "Your browser blocked reading the clipboard — use the keyboard shortcut to paste.",
         ),
+        ...convertPasteEntry,
         selectAllEntry,
         separator("find"),
         commandEntry(MONACO_COMMANDS.find, run),
@@ -333,10 +364,11 @@ const CodeEditorMenu: React.FC<CodeEditorMenuProps> = ({
       });
       documentEntries.push({
         kind: "item",
-        key: "import-latex",
-        label: "Import LaTeX…",
-        title: "Convert pasted LaTeX into this division",
-        onSelect: onOpenLatexImport,
+        key: "import",
+        label: "Import…",
+        title:
+          "Convert LaTeX, Markdown or another document to PreTeXt for this division",
+        onSelect: onOpenImport,
       });
     }
     if (onOpenClean) {

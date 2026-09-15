@@ -19,7 +19,7 @@ import {
   divisionForElementId,
   type PreviewLineMap,
 } from "./previewSync";
-import LatexImportDialog from "./LatexImportDialog";
+import ImportDialog from "./ImportDialog";
 import LatexCleanDialog from "./LatexCleanDialog";
 import type { CleanFinding } from "../cleanFindings";
 import ConvertToPretextDialog from "./ConvertToPretextDialog";
@@ -79,6 +79,8 @@ import {
 import { buildProjectAssetView, makeUniqueAssetRef } from "../assetView";
 import { buildProjectSnippetView, makeUniqueSnippetRef } from "../snippetView";
 import { newRecordId } from "../recordId";
+import type { ImportEngine } from "@pretextbook/import/react";
+import { takenImportIds } from "../importConvert";
 import {
   createEditorStore,
   defaultTocCollapsed,
@@ -278,6 +280,18 @@ export interface editorProps {
   onDivisionAdd?: (
     division: Division,
   ) => void | string | Promise<string | undefined | void>;
+
+  /**
+   * Converters the Tools → Import… dialog runs a file through when it is not
+   * plain text — Word, EPUB, an archive of LaTeX. Order is precedence: a file
+   * goes to the first engine that reads its extension. Omit it and the dialog
+   * uses `@pretextbook/import`'s built-in converter alone.
+   *
+   * They come from the host because a remote converter needs its URL and its
+   * credentials; fitting the result to the division being edited is this
+   * component's. See `importConvert.ts`.
+   */
+  importEngines?: ImportEngine[];
 
   /**
    * Called when the user deletes a division via the TOC UI.
@@ -563,10 +577,14 @@ const EditorsInner = (props: EditorsInnerProps) => {
   const activeTab = useEditorStore((s) => s.activeTab);
   const setActiveTab = useEditorStore((s) => s.setActiveTab);
   const isTocCollapsed = useEditorStore((s) => s.isTocCollapsed);
+  const pasteAutoConvert = useEditorStore((s) => s.pasteAutoConvert);
+  const togglePasteAutoConvert = useEditorStore(
+    (s) => s.togglePasteAutoConvert,
+  );
   const setIsTocCollapsed = useEditorStore((s) => s.setIsTocCollapsed);
   const toggleTocCollapsed = useEditorStore((s) => s.toggleTocCollapsed);
   const isFindPanelOpen = useEditorStore((s) => s.isFindPanelOpen);
-  const isLatexDialogOpen = useEditorStore((s) => s.isLatexDialogOpen);
+  const isImportDialogOpen = useEditorStore((s) => s.isImportDialogOpen);
   const isCleanDialogOpen = useEditorStore((s) => s.isCleanDialogOpen);
   const isConvertDialogOpen = useEditorStore((s) => s.isConvertDialogOpen);
   const isDocinfoEditorOpen = useEditorStore((s) => s.isDocinfoEditorOpen);
@@ -2054,7 +2072,7 @@ const EditorsInner = (props: EditorsInnerProps) => {
       onRebuild={canPreview ? triggerRebuild : undefined}
       onSave={triggerSaveAndRebuild}
       onCursorLineChange={handleCursorLineChange}
-      onOpenLatexImport={() => openModal("isLatexDialogOpen")}
+      onOpenImport={() => openModal("isImportDialogOpen")}
       // The code editor hides this unless the active format has a cleanup
       // engine behind it (LaTeX) and the buffer is editable.
       onOpenClean={handleOpenCleanDialog}
@@ -2088,6 +2106,8 @@ const EditorsInner = (props: EditorsInnerProps) => {
       hideAssets={props.hideAssets}
       hideSnippets={props.hideSnippets}
       readOnly={props.readOnly}
+      pasteAutoConvert={pasteAutoConvert}
+      onTogglePasteAutoConvert={togglePasteAutoConvert}
     />
   );
 
@@ -2289,8 +2309,13 @@ const EditorsInner = (props: EditorsInnerProps) => {
         <ErrorBoundary resetKeys={[divisionActiveSource, activeDivisionId]}>
           {editorDisplays}
         </ErrorBoundary>
-        {isLatexDialogOpen ? (
-          <LatexImportDialog onClose={() => closeModal("isLatexDialogOpen")} />
+        {isImportDialogOpen ? (
+          <ImportDialog
+            engines={props.importEngines}
+            parentType={activeDivision?.type}
+            takenIds={takenImportIds(divisions, projectAssets, projectSnippets)}
+            onClose={() => closeModal("isImportDialogOpen")}
+          />
         ) : null}
         {isCleanDialogOpen ? (
           <LatexCleanDialog

@@ -1,17 +1,36 @@
 class ProjectsController < ApplicationController
   allow_unauthenticated_access only: %i[ share preview source ]
   require_unauthenticated_access only: %i[ tryit ]
-  load_and_authorize_resource except: %i[ index owned shared new tryit preview feedback create_from_template create_from_import ]
+  load_and_authorize_resource except: %i[ index owned shared new tryit preview pandoc feedback create_from_template create_from_import ]
   skip_authorize_resource only: %i[ share ]
   after_action :allow_iframe, only: :share
   rate_limit to: 25, within: 10.minutes, only: :preview,
              with: -> { render plain: "Preview limit reached. Please wait a few minutes and try again, or create an account to continue writing and save your work!", status: :too_many_requests },
              if: -> { !authenticated? }
+  # Applies to everyone, unlike #preview above: the import wizard is behind a
+  # login, so there is no anonymous tier to single out, and every conversion can
+  # occupy a build-server worker for up to its 25s budget.
+  rate_limit to: 20, within: 10.minutes, only: :pandoc,
+             with: -> { render plain: "Too many conversions in a short time. Please wait a few minutes and try again.", status: :too_many_requests }
 
   # Conversions the lite build server accepts on #preview. Its own vocabulary,
   # which is the PreTeXt CLI's -- the editor speaks pretext-html's ("slides")
   # and translates in `onPreviewRebuild`.
   PREVIEW_TARGETS = %w[ html revealjs ].freeze
+
+  # Largest upload #pandoc will relay. The build server sets no cap of its own,
+  # and its 25s conversion budget is the real ceiling anyway -- a file big
+  # enough to matter times out rather than converting -- so this exists to spend
+  # neither our bandwidth nor a worker slot on one that was never going to
+  # finish. 413 is the status the wizard words as "too large for the service".
+  PANDOC_MAX_UPLOAD_BYTES = 10.megabytes
+
+  # Sits above the build server's own 25s conversion limit so that, in the
+  # ordinary slow case, its explanatory 504 wins the race and reaches the author
+  # instead of our generic one -- and below the wizard's 30s client timeout, so
+  # whichever of the two fires still arrives as a real message rather than a
+  # bare abort. See DEFAULT_REMOTE_PANDOC_TIMEOUT_MS in @pretextbook/import.
+  PANDOC_READ_TIMEOUT = 28
 
   # GET /projects
   def index
@@ -250,6 +269,95 @@ class ProjectsController < ApplicationController
     render plain: "Preview build failed", status: :bad_gateway
   end
 
+
+  # POST /projects/pandoc
+  #
+  # Server-side proxy for the lite build server's `/pandoc/` endpoint, which
+  # converts Word, OpenOffice, EPUB, HTML, reStructuredText, Org, Typst and
+  # friends into PreTeXt for the import wizard.
+  #
+  # It exists so the shared build token stays on the server. The wizard runs in
+  # the browser, so pointing it straight at the build server would ship that
+  # token in the JS bundle; `@pretextbook/import` anticipates exactly this --
+  # its `token` option is documented "omit when proxying" -- so the client sends
+  # only the file and the credential is added here (see react/import.jsx).
+  #
+  # Statuses are forwarded verbatim, because the wizard words each one
+  # differently for the author (`describeRemotePandocFailure`): a 422 carries
+  # pandoc's own stderr inside a <pre>, a 504 means the file outran the server's
+  # conversion budget, and 401/403/404 say plainly that the fault is this
+  # service's rather than their document's. Collapsing them into one status
+  # would turn each of those into the same unhelpful sentence.
+  def pandoc
+    require "uri"
+    require "net/http"
+
+    upload = params[:file]
+    unless upload.respond_to?(:tempfile)
+      return render plain: "No file provided", status: :bad_request
+    end
+    if upload.size > PANDOC_MAX_UPLOAD_BYTES
+      return render plain: "That file is larger than the #{PANDOC_MAX_UPLOAD_BYTES / 1.megabyte}MB conversion limit.",
+                    status: :content_too_large
+    end
+
+    host = Rails.application.credentials.dig(:preview_build, :host)
+    if host.blank?
+      Rails.logger.error("[pandoc] no preview_build host configured; check credentials")
+      return render plain: "The conversion service is not configured.", status: :bad_gateway
+    end
+    uri = URI.parse("https://#{host}/pandoc/")
+
+    # Rewind before handing the tempfile to `set_form`. Net::HTTP sizes the IO to
+    # set Content-Length but streams from wherever its position happens to be, so
+    # a handle any earlier reader left mid-file would announce more bytes than it
+    # sends -- and the server would then wait for the remainder until one side's
+    # timeout fired. Cheap insurance against a whole class of hang.
+    upload.tempfile.rewind
+
+    # `from` and `standalone` are passed through rather than validated here: the
+    # build server owns the list of formats it will read (and answers 400 with
+    # the offending name), and duplicating it would leave two lists to drift.
+    form = [
+      [ "token", Rails.application.credentials.dig(:preview_build, :token) ],
+      [ "file", upload.tempfile, { filename: upload.original_filename, content_type: upload.content_type } ]
+    ]
+    form << [ "from", params[:from] ] if params[:from].present?
+    form << [ "standalone", params[:standalone] ] if params[:standalone].present?
+
+    request = Net::HTTP::Post.new(uri.request_uri)
+    request.set_form(form, "multipart/form-data")
+    started = Process.clock_gettime(Process::CLOCK_MONOTONIC)
+    response = Net::HTTP.start(
+      uri.host,
+      uri.port,
+      use_ssl: uri.scheme == "https",
+      open_timeout: 5,
+      read_timeout: PANDOC_READ_TIMEOUT
+    ) { |http| http.request(request) }
+
+    # Logged on every call, success included. "It timed out" is otherwise
+    # indistinguishable from a dozen different failures -- a cold build server, a
+    # conversion that outran its budget, a request that never left this host --
+    # and the wizard only ever sees the last of them.
+    Rails.logger.info(
+      "[pandoc] #{uri.host} #{params[:from].presence || 'auto'} " \
+      "#{upload.original_filename} (#{upload.size}B) -> #{response.code} " \
+      "in #{pandoc_elapsed(started)}s"
+    )
+
+    # text/plain whatever the body turns out to be: a 422's body is a fragment
+    # of the build server's HTML, and it must reach the wizard as characters to
+    # parse rather than as markup a browser might render on this origin.
+    render plain: response.body, status: response.code.to_i
+  rescue Net::OpenTimeout, Net::ReadTimeout => e
+    Rails.logger.error("[pandoc] #{e.class} after #{pandoc_elapsed(started)}s (read timeout is #{PANDOC_READ_TIMEOUT}s)")
+    render plain: "The conversion service did not respond in time.", status: :gateway_timeout
+  rescue SocketError, EOFError, IOError, Errno::ECONNREFUSED, Errno::EHOSTUNREACH, SystemCallError => e
+    Rails.logger.error("[pandoc] #{e.class}: #{e.message} after #{pandoc_elapsed(started)}s")
+    render plain: "Could not reach the conversion service.", status: :bad_gateway
+  end
+
   # GET /tryit
   def tryit
     @project = Project.tryit
@@ -275,6 +383,11 @@ class ProjectsController < ApplicationController
   end
 
   private
+    # Seconds since `started`, or "?" when the failure came before the clock did.
+    def pandoc_elapsed(started)
+      started ? (Process.clock_gettime(Process::CLOCK_MONOTONIC) - started).round(1) : "?"
+    end
+
     # Only allow a list of trusted parameters through.
     # `document_type` is permitted on create and *only* on create. Whether a project is a
     # deck is fixed when it is made: changing it would mean rewriting the source,

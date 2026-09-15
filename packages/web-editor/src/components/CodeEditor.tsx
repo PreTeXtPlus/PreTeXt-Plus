@@ -27,6 +27,7 @@ import { planSnippetInsertion } from "./editorConfigs/insertContext";
 import type { EditorSnippet } from "./editorConfigs/snippets";
 import type { CollabUser } from "../collab/types";
 import type { SourceFormat } from "../types/editor";
+import { installPasteConvertListener } from "../pasteConvert";
 
 /** Live-collaboration wiring for the active division's shared text. */
 export interface CodeEditorCollab {
@@ -65,8 +66,8 @@ interface CodeEditorProps {
    * not on horizontal movement or on programmatic reveals.
    */
   onCursorLineChange?: (line: number) => void;
-  /** Called when the user clicks "Import LaTeX" in the toolbar. */
-  onOpenLatexImport: () => void;
+  /** Called when the user chooses Tools → Import…. */
+  onOpenImport: () => void;
   /**
    * Called when the user clicks "Clean up LaTeX…" in the toolbar. The button is
    * shown only when the active format has a cleanup engine (LaTeX) and the
@@ -104,6 +105,13 @@ interface CodeEditorProps {
   hideSnippets?: boolean;
   /** When true, Monaco is non-editable and the toolbar shows only "Display Full Source". */
   readOnly?: boolean;
+  /**
+   * Convert LaTeX or Markdown pasted into a PreTeXt division on the way in.
+   * Defaults to on; the author's remembered choice lives in the store.
+   */
+  pasteAutoConvert?: boolean;
+  /** Flip {@link pasteAutoConvert}. Omit to hide the Edit-menu toggle. */
+  onTogglePasteAutoConvert?: () => void;
   /**
    * When set, the editor model is bound to this shared `Y.Text` instead of
    * being driven by the `content` prop: keystrokes emit CRDT deltas, remote
@@ -223,7 +231,7 @@ const CodeEditor = forwardRef<CodeEditorHandle, CodeEditorProps>(({
   onRebuild,
   onSave,
   onCursorLineChange,
-  onOpenLatexImport,
+  onOpenImport,
   onOpenClean,
   onOpenDocinfoEditor,
   onOpenConvertToPretext,
@@ -236,6 +244,8 @@ const CodeEditor = forwardRef<CodeEditorHandle, CodeEditorProps>(({
   hideAssets,
   hideSnippets,
   readOnly,
+  pasteAutoConvert = true,
+  onTogglePasteAutoConvert,
   pretextValidation,
   collab,
 }, ref) => {
@@ -263,6 +273,11 @@ const CodeEditor = forwardRef<CodeEditorHandle, CodeEditorProps>(({
   // Read from the mount-time Mod+A handler, which is registered once.
   const readOnlyRef = useRef(readOnly);
   readOnlyRef.current = readOnly;
+  // Read from the mount-time paste listener, likewise registered once.
+  const pasteAutoConvertRef = useRef(pasteAutoConvert);
+  pasteAutoConvertRef.current = pasteAutoConvert;
+  /** Removes the DOM paste listener; see `handleEditorMount`. */
+  const pasteListenerRef = useRef<(() => void) | null>(null);
   const lockedDecorationsRef = useRef<any>(null);
   const lockedRef = useRef(false);
   // How many lines at the very top are locked (the wrapper tag + title for
@@ -481,6 +496,8 @@ const CodeEditor = forwardRef<CodeEditorHandle, CodeEditorProps>(({
       contentListenerRef.current?.dispose?.();
       languageExtensionsRef.current?.dispose?.();
       mouseListenerRef.current?.dispose?.();
+      pasteListenerRef.current?.();
+      pasteListenerRef.current = null;
       cursorListenerRef.current?.dispose?.();
       selectionListenerRef.current?.dispose?.();
       constrainedRef.current?.disposeConstrainer?.();
@@ -903,6 +920,23 @@ const CodeEditor = forwardRef<CodeEditorHandle, CodeEditorProps>(({
     });
     updateUndoRedoState();
 
+    // Paste-and-convert: LaTeX or Markdown pasted into a PreTeXt division
+    // arrives as PreTeXt. The listener's placement and phase are both subtle
+    // and both explained in `pasteConvert.ts`; everything this component owns
+    // is the "should it run right now" answer below.
+    pasteListenerRef.current?.();
+    pasteListenerRef.current = installPasteConvertListener({
+      getEditor: () => editorRef.current,
+      // Read through the refs, not the props: this is registered once per
+      // mount while the editor outlives division switches. Converting a paste
+      // in a LaTeX or Markdown division would rewrite the author's own markup
+      // into another language, so only PreTeXt buffers do it.
+      isEnabled: () =>
+        !!pasteAutoConvertRef.current &&
+        !readOnlyRef.current &&
+        sourceFormatRef.current === "pretext",
+    });
+
     // Clicking any locked leading line (the PreTeXt opening tag/title, or the
     // Markdown frontmatter block) opens the division's properties editor in
     // the TOC, since the type/title/xml:id/label can't
@@ -1127,7 +1161,9 @@ const CodeEditor = forwardRef<CodeEditorHandle, CodeEditorProps>(({
         sourceFormat={sourceFormat}
         rootType={rootType}
         onContentChange={handleContentChange}
-        onOpenLatexImport={onOpenLatexImport}
+        onOpenImport={onOpenImport}
+        pasteAutoConvert={pasteAutoConvert}
+        onTogglePasteAutoConvert={onTogglePasteAutoConvert}
         onOpenClean={
           onOpenClean && !readOnly && editorConfigs[sourceFormat].clean
             ? onOpenClean

@@ -27,7 +27,11 @@ const divisions: Division[] = [
   },
 ];
 
-function renderToc(readOnly?: boolean, docDivisions: Division[] = divisions) {
+function renderToc(
+  readOnly?: boolean,
+  docDivisions: Division[] = divisions,
+  configure?: (store: ReturnType<typeof createEditorStore>["store"]) => void,
+) {
   const { store } = createEditorStore({
     source: docDivisions[0].source,
     sourceFormat: "pretext",
@@ -40,6 +44,7 @@ function renderToc(readOnly?: boolean, docDivisions: Division[] = divisions) {
     activeDivisionId: docDivisions[0].xmlId,
     projectAssets: undefined,
   });
+  configure?.(store);
   return render(
     <EditorStoreProvider store={store}>
       <ArticleToc readOnly={readOnly} />

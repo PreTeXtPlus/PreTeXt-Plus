@@ -15,6 +15,7 @@ import {
   docToState,
   DEFAULT_LANGUAGE,
 } from "@pretextbook/web-editor";
+import { buildImportEngines } from "./importEngines";
 import { YCableProvider } from "./collab/yCableProvider";
 import { reportCollabIncident } from "./collab/reportIncident";
 import {
@@ -411,6 +412,7 @@ function collabEditorState(doc, base) {
  * @typedef {Object} EditorConfig
  * @property {string} projectId
  * @property {string} apiBase - The editor-state endpoint URL (`editorStateUrl`).
+ * @property {string} [pandocUrl] - POST target that proxies pandoc conversions (projects#pandoc).
  * @property {string} [csrfToken]
  */
 
@@ -419,7 +421,7 @@ function collabEditorState(doc, base) {
  * @returns {JSX.Element}
  */
 function EditorApp({ config }) {
-  const { projectId, apiBase, csrfToken } = config;
+  const { projectId, apiBase, pandocUrl, csrfToken } = config;
 
   // Rails routes the React side needs.  Kept here (rather than in many data
   // attributes) since they're derivable from the project id.
@@ -687,6 +689,13 @@ function EditorApp({ config }) {
     // Document-wide docinfo edits arrive against the root division.
     if (change.docinfo !== undefined) w.docinfo = change.docinfo;
   }, []);
+
+  // Converters for the code editor's Tools → Import…. Shared with the
+  // new-project dialog so both read the same formats.
+  const importEngines = useMemo(
+    () => buildImportEngines({ pandocUrl, csrfToken }),
+    [pandocUrl, csrfToken],
+  );
 
   // ----- Shared PATCH helpers ------------------------------------------------
   // Every division/asset mutation below goes through the same `apiBase`
@@ -1333,6 +1342,7 @@ function EditorApp({ config }) {
         saveButtonLabel="Save and manage"
         cancelButtonLabel="Cancel"
         onContentChange={onContentChange}
+        importEngines={importEngines}
         onDivisionAdd={onDivisionAdd}
         onDivisionRemove={onDivisionRemove}
         onDivisionUpdate={onDivisionUpdate}

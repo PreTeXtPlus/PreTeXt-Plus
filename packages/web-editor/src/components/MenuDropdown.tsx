@@ -16,6 +16,12 @@ export type MenuEntry =
       /** Right-aligned shortcut hint, already formatted for this platform. */
       shortcut?: string;
       disabled?: boolean;
+      /**
+       * Present on an item that toggles a setting rather than performing an
+       * action: it renders as a checkbox item and reads as one. Absent on an
+       * ordinary action, which has no checked state to report.
+       */
+      checked?: boolean;
     }
   | { kind: "separator"; key: string }
   | { kind: "heading"; key: string; label: string };
@@ -199,7 +205,10 @@ const MenuDropdown = ({
               <button
                 key={entry.key}
                 type="button"
-                role="menuitem"
+                role={
+                  entry.checked === undefined ? "menuitem" : "menuitemcheckbox"
+                }
+                aria-checked={entry.checked}
                 data-menu-item
                 tabIndex={-1}
                 className={ITEM_CLASSES}
@@ -210,6 +219,13 @@ const MenuDropdown = ({
                   entry.onSelect();
                 }}
               >
+                {entry.checked !== undefined && (
+                  // Always occupies its width, so a checkbox item's label sits
+                  // on the same left edge whether or not it is ticked.
+                  <span aria-hidden className="w-3 shrink-0 text-[#1f1f1f]">
+                    {entry.checked ? "\u2713" : ""}
+                  </span>
+                )}
                 <span className="grow">{entry.label}</span>
                 {entry.shortcut && (
                   <span className="shrink-0 text-[11px] font-normal text-[#777]">

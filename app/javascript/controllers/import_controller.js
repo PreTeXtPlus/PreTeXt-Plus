@@ -10,7 +10,7 @@ import { Controller } from "@hotwired/stimulus"
  */
 export default class extends Controller {
   static targets = ["root"]
-  static values = { createUrl: String }
+  static values = { createUrl: String, pandocUrl: String }
 
   /** @returns {void} */
   initialize() {
@@ -23,6 +23,7 @@ export default class extends Controller {
     this.component = await this.componentPromise
     this.component.render(this.rootTarget, {
       createUrl: this.createUrlValue,
+      pandocUrl: this.pandocUrlValue,
       csrfToken: document.querySelector('meta[name="csrf-token"]')?.content,
     })
   }
