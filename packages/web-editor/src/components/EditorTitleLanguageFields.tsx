@@ -40,7 +40,7 @@ const EditorTitleLanguageFields = ({
 
   const titleTextClasses =
     size === "large"
-      ? "font-semibold text-[1.2rem] mr-3 overflow-hidden text-ellipsis whitespace-nowrap"
+      ? "font-semibold text-[1.2rem] mr-3 overflow-hidden text-ellipsis whitespace-nowrap hover:underline cursor-pointer"
       : "font-semibold text-[1.05rem] mr-3 overflow-hidden text-ellipsis whitespace-nowrap";
 
   return (
@@ -50,7 +50,7 @@ const EditorTitleLanguageFields = ({
       ) : editingTitle ? (
         <input
           ref={titleInputRef}
-          className="w-[40vw] py-1 px-2 inline-block shadow-[0_1px_2px_0_rgba(0,0,0,0.05)] rounded-[3px] border border-gray-400 font-mono bg-white focus:outline focus:outline-2 focus:outline-blue-500 focus:outline-offset-2"
+          className="w-[40vw] px-2 inline-block shadow-[0_1px_2px_0_rgba(0,0,0,0.05)] rounded-[3px] border border-gray-400 font-mono bg-white focus:outline focus:outline-2 focus:outline-blue-500 focus:outline-offset-2"
           type="text"
           aria-label="Title"
           value={title}
@@ -64,16 +64,13 @@ const EditorTitleLanguageFields = ({
         />
       ) : (
         <span className="flex items-baseline gap-2 min-w-0 pr-4 max-[500px]:w-full">
-          <span className={titleTextClasses}>{title || "Untitled"}</span>
-          {!readOnly && (
-            <button
-              type="button"
-              className="shrink-0 bg-transparent border-none p-0 text-[0.8rem] text-blue-600 underline cursor-pointer hover:text-blue-700"
-              onClick={() => setEditingTitle(true)}
-            >
-              edit
-            </button>
-          )}
+          <button
+            type="button"
+            className={titleTextClasses}
+            onClick={() => !readOnly && setEditingTitle(true)}
+          >
+            {title || "Untitled"}
+          </button>
         </span>
       )}
       <select
