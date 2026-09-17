@@ -129,7 +129,7 @@ describe("CodeEditorMenu", () => {
     it("opens Monaco's find widget", async () => {
       render(<CodeEditorMenu {...baseProps()} sourceFormat="pretext" />);
       const user = await openMenu("Edit");
-      await user.click(menuItem(/^Find in File…/));
+      await user.click(menuItem(/^Find in current editor…/));
       expect(actions.runCommand).toHaveBeenCalledWith(MONACO_COMMANDS.find.id);
     });
   });
@@ -258,7 +258,7 @@ describe("CodeEditorMenu", () => {
       await openMenu("Edit");
 
       expect(menuItem(/^Copy/)).toBeInTheDocument();
-      expect(menuItem(/^Find in File…/)).toBeInTheDocument();
+      expect(menuItem(/^Find in current editor…/)).toBeInTheDocument();
       expect(queryMenuItem(/^Undo/)).not.toBeInTheDocument();
       expect(queryMenuItem(/^Paste/)).not.toBeInTheDocument();
     });
@@ -326,7 +326,7 @@ describe("CodeEditorMenu", () => {
       expect(menuItem(/^Redo/)).toHaveFocus();
       await user.keyboard("{ArrowUp}{ArrowUp}");
       // Wrapped past the top to the last item.
-      expect(menuItem(/^Replace in File…/)).toHaveFocus();
+      expect(menuItem(/^Replace in current editor…/)).toHaveFocus();
     });
 
     it("skips disabled items", async () => {
@@ -441,6 +441,51 @@ describe("CodeEditorMenu", () => {
       expect(
         screen.queryByRole("menuitemcheckbox", { name: /Convert Pasted/ }),
       ).not.toBeInTheDocument();
+    });
+  });
+
+  describe("leadingMenus and showDocumentActionsInTools", () => {
+    it("prepends leadingMenus before Edit, sharing the bar's keyboard nav", async () => {
+      const onSelect = vi.fn();
+      render(
+        <CodeEditorMenu
+          {...baseProps()}
+          sourceFormat="pretext"
+          leadingMenus={[
+            {
+              key: "file",
+              label: "File",
+              entries: [{ kind: "item", key: "save", label: "Save", onSelect }],
+            },
+          ]}
+        />,
+      );
+      const buttons = screen.getAllByRole("button").map((b) => b.textContent);
+      expect(buttons).toEqual(["File", "Edit", "Insert", "Tools"]);
+      const user = userEvent.setup();
+      await user.click(screen.getByRole("button", { name: "File" }));
+      await user.click(menuItem("Save"));
+      expect(onSelect).toHaveBeenCalled();
+    });
+
+    it("omits the document-actions block from Tools when showDocumentActionsInTools is false", async () => {
+      render(
+        <CodeEditorMenu
+          {...baseProps()}
+          sourceFormat="pretext"
+          showDocumentActionsInTools={false}
+        />,
+      );
+      await openMenu("Tools");
+      expect(queryMenuItem("Display Full Source")).not.toBeInTheDocument();
+      expect(queryMenuItem("Format PreTeXt")).not.toBeInTheDocument();
+      expect(menuItem(/^Command Palette/)).toBeInTheDocument();
+    });
+
+    it("keeps the document-actions block in Tools by default", async () => {
+      render(<CodeEditorMenu {...baseProps()} sourceFormat="pretext" />);
+      await openMenu("Tools");
+      expect(menuItem("Display Full Source")).toBeInTheDocument();
     });
   });
 });

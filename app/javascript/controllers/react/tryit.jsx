@@ -1,6 +1,7 @@
 import React, { useCallback, useRef } from "react";
 import ReactDOM from "react-dom/client";
 import { Editors } from "@pretextbook/web-editor";
+import AccountArea from "./AccountArea";
 
 /**
  * @typedef {Object} RailsDivision
@@ -52,6 +53,9 @@ function railsDivisionToEditor(d) {
  * @typedef {Object} TryItConfig
  * @property {{title?: string, docinfo?: string, divisions?: RailsDivision[]}} project
  * @property {string} [csrfToken]
+ * @property {string} [rootPath]
+ * @property {string} [newUserPath]
+ * @property {string} [newSessionPath]
  */
 
 /**
@@ -59,7 +63,7 @@ function railsDivisionToEditor(d) {
  * @returns {JSX.Element}
  */
 function TryItApp({ config }) {
-  const { project, csrfToken } = config;
+  const { project, csrfToken, rootPath, newUserPath, newSessionPath } = config;
 
   const editorDivisions = (project.divisions ?? []).map(railsDivisionToEditor);
   const rootRef = (project.divisions ?? []).find((d) => d.is_root)?.ref ?? editorDivisions[0]?.xmlId ?? "";
@@ -82,6 +86,12 @@ function TryItApp({ config }) {
 
   const noop = useCallback(() => {}, []);
   const noopAsync = useCallback(async () => {}, []);
+
+  const logo = (
+    <a href={rootPath} className="flex items-center">
+      <img src="/icon.svg" className="h-14 mr-2" alt="PreTeXtPlus Logo" />
+    </a>
+  );
 
   const state = initial.current;
   return (
@@ -112,13 +122,21 @@ function TryItApp({ config }) {
       onUseCommonDocinfoChange={noop}
       onCommonDocinfoChange={noop}
       onSave={noop}
-      onSaveButton={noop}
-      onCancelButton={noop}
       onPreviewRebuild={onPreviewRebuild}
       onCreatePretextProjectCopy={noopAsync}
       onFeedbackSubmit={noopAsync}
       hideAssets={true}
-      hideMenuBar={true}
+      topBar={{
+        logo,
+        accountArea: (
+          <AccountArea
+            signedIn={false}
+            newUserPath={newUserPath}
+            newSessionPath={newSessionPath}
+          />
+        ),
+        titleOverride: "Try PreTeXt in Your Browser!",
+      }}
     />
   );
 }

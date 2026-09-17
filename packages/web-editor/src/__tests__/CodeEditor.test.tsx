@@ -2,7 +2,7 @@
  * @vitest-environment jsdom
  */
 import { describe, it, expect, vi } from "vitest";
-import { render } from "@testing-library/react";
+import { render, screen } from "@testing-library/react";
 import CodeEditor from "../components/CodeEditor";
 
 const monacoEditorMock = vi.fn((props: { options?: { readOnly?: boolean } }) => (
@@ -17,9 +17,6 @@ const baseProps = {
   content: "<article/>",
   sourceFormat: "pretext" as const,
   onChange: vi.fn(),
-  onOpenImport: vi.fn(),
-  onOpenDocinfoEditor: vi.fn(),
-  onShowFullSource: vi.fn(),
 };
 
 describe("CodeEditor", () => {
@@ -35,5 +32,49 @@ describe("CodeEditor", () => {
     const calls = monacoEditorMock.mock.calls;
     const call = calls[calls.length - 1]?.[0];
     expect(call?.options?.readOnly).toBe(false);
+  });
+
+  it("reports menu state via onMenuStateChange after mount", () => {
+    const onMenuStateChange = vi.fn();
+    render(<CodeEditor {...baseProps} onMenuStateChange={onMenuStateChange} />);
+    expect(onMenuStateChange).toHaveBeenCalled();
+    const state = onMenuStateChange.mock.calls[0][0];
+    expect(state).toEqual(
+      expect.objectContaining({
+        canUndo: expect.any(Boolean),
+        canRedo: expect.any(Boolean),
+        hasSelection: expect.any(Boolean),
+        isFindingInFile: expect.any(Boolean),
+        onUndo: expect.any(Function),
+        onRedo: expect.any(Function),
+        switchToFindInProject: expect.any(Function),
+        actions: expect.objectContaining({
+          runCommand: expect.any(Function),
+          cut: expect.any(Function),
+          copy: expect.any(Function),
+          paste: expect.any(Function),
+          selectAll: expect.any(Function),
+          insertSnippet: expect.any(Function),
+        }),
+      }),
+    );
+  });
+
+  it.each([
+    ["pretext", "PreTeXt"],
+    ["latex", "LaTeX"],
+    ["markdown", "Markdown"],
+  ] as const)(
+    "shows a floating %s format badge over the editor",
+    (sourceFormat, label) => {
+      render(<CodeEditor {...baseProps} sourceFormat={sourceFormat} />);
+      expect(screen.getByText(label)).toBeInTheDocument();
+    },
+  );
+
+  it("renders presence content next to the floating format badge", () => {
+    render(<CodeEditor {...baseProps} presence={<span>Presence chips</span>} />);
+    expect(screen.getByText("Presence chips")).toBeInTheDocument();
+    expect(screen.getByText("PreTeXt")).toBeInTheDocument();
   });
 });

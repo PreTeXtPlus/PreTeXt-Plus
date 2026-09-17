@@ -10,15 +10,18 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ```bash
 npm install          # Install dependencies
-npm run dev          # Start demo app at http://localhost:5173
 npm run build        # Build the library (dist/)
-npm run build:demo   # Build the standalone demo application
 npm run lint         # ESLint across all TypeScript/TSX files
 npm run typecheck    # tsc -b (covers src/, including tests)
 npm run test         # Run the Vitest suite once
 npm run test:watch   # Vitest in watch mode
 npm run test:coverage # Vitest with a v8 coverage report
 ```
+
+This package has no demo/dev app — its only real consumer, the PreTeXt-Plus
+Rails app, bundles this package's source directly via esbuild (see the root
+`package.json`'s `build` script), not the `dist/` build. `npm run build`
+exists for a future npm-publishing host.
 
 ## Testing
 
@@ -32,7 +35,7 @@ Tests run on **Vitest** and live in `src/__tests__/`. `.github/workflows/test.ym
 
 Coverage is concentrated on the source-manipulation layer (`sectionUtils.ts`, `contentConversion.ts`, `xmlUtils.ts`) and `ErrorBoundary`. Tests deliberately pin down the malformed-XML fallbacks and the per-format isolation of `<plus:* ref>` include parsing, since both are easy to regress silently.
 
-`npm run build:demo` is currently broken upstream (top-level await in `@pretextbook/libxslt-wasm` under the iife worker format) and is therefore not part of CI. For interactive checks use `npm run dev`, whose demo app (`src/App.tsx`) has four loaders covering PreTeXt, LaTeX, Markdown, and Book editing modes.
+There is no demo app for interactive checks — verify changes via the Vitest suite and, for anything the tests can't cover, the PreTeXt-Plus Rails app's editor/tryit pages.
 
 ## Architecture
 
@@ -59,7 +62,7 @@ Book projects add a chapter layer: the host passes a `chapters` array, and the e
 ### Sub-editors
 
 - **CodeEditor** (`src/components/CodeEditor.tsx`): Monaco Editor with PreTeXt/LaTeX/Markdown syntax highlighting and completions (`src/components/codeEditorCompletions.ts`)
-- **Editor menus** (`CodeEditorMenu.tsx`, `MenuDropdown.tsx`, `editorCommands.ts`, `editorConfigs/snippets.ts`): the code editor's **Edit / Insert / Tools** menu bar. Every format gets the same three menus in the same order — only their contents differ — with the format-specific document actions (Format PreTeXt, Import, Clean up LaTeX, Edit Macros vs. Edit Preamble, Assets) grouped at the top of Tools, above the Monaco commands that are identical everywhere. "Convert to PreTeXt" stays a button rather than a menu item: it's the one action that changes what the project *is*.
+- **Editor menus** (`TopBar.tsx`, `CodeEditorMenu.tsx`, `MenuDropdown.tsx`, `documentActionMenuEntries.ts`, `editorCommands.ts`, `editorConfigs/snippets.ts`): `TopBar` is the unified ~64px top bar — logo, a title/language row, and a File/Edit/Insert/Tools menubar (`CodeEditorMenu` rendered with a `File` `leadingMenus` entry and `showDocumentActionsInTools={false}`). `CodeEditor` no longer renders its own toolbar; it reports the Monaco-derived reactive state (`canUndo`/`canRedo`/`hasSelection`/the clipboard-select-all-insert actions/find-in-file status) up to `Editors` via `onMenuStateChange`, which `TopBar` renders from. Every format gets the same Edit/Insert/Tools shape — only contents differ — with the format-specific document actions (Format PreTeXt, Import, Clean up LaTeX, Edit Macros vs. Edit Preamble, Assets, Snippets, Display Full Source) built once by `buildDocumentActionEntries` in `documentActionMenuEntries.ts` and placed in File (Tools keeps only the generic Monaco commands). "Convert to PreTeXt" stays a button rather than a menu item: it's the one action that changes what the project *is*.
 - **Import dialog** (`ImportDialog.tsx`, `importConvert.ts`): Tools → Import… (PreTeXt divisions only) converts outside material and hands it back as text to copy — it never writes to the project, so the result reaches undo, collab, and the host as an ordinary paste. Text in the left pane (typed, pasted, or a `.tex`/`.md`/`.ptx` file) goes through this package's own converters, LaTeX clean-up included — or, if the author ticks "Convert with … instead", through the host's alternative engine for that format (`alternateTextEngine`, the same `alternateFor` pick the import wizard offers; pandoc in the Rails app), which receives the cleaned text as an `import.tex`/`import.md` file. The source-format override lists only LaTeX and Markdown: detection settles documents and LaTeX, but ties go to LaTeX, so short Markdown snippets with `$…$` math, blockquotes or pipe tables need it; PreTeXt is only ever a detection result, meaning "nothing to convert". Any other file goes to the host's `importEngines` (falling back to `@pretextbook/import`'s built-in converter) and the left pane shows only its name. Both paths end in `fitImportForDivision`: cut down to the body (an engine returns a whole `<pretext>` document), retarget divisions one rung below the open division, rename ids the project already uses (records *and* in-source `xml:id`s), wrap loose text in `<p>`. The importer's own insert destination is deliberately not used — it treats the whole document as the inserted division, keeping the `<article>` wrapper and pushing its sections two rungs down. Images an engine extracts are reported, not carried: a clipboard holds text only.
   - `editorCommands.ts` holds every Monaco action id in one place, plus the operations Monaco can't serve from a menu. Clipboard actions go through `navigator.clipboard` rather than Monaco's own `clipboardCopyAction` and friends, which copy whatever the *document* selection is — by the time a menu item is clicked that's the menu, not the buffer. Reading the clipboard is the one thing a browser may refuse outright, so `paste` resolves `false` and the menu says so instead of doing nothing. Select All is ours too (`selectEditableRegion`): it selects only the editable body (see `lockedRegion.ts`), since a selection covering the locked wrapper lines can't be typed over or cut. `CodeEditor` rebinds Mod+A to the same handler, scoped to `editorTextFocus` so Monaco's own select-all still serves the find box; a read-only buffer selects everything, there being nothing editable to narrow to.
   - The Insert menu is **one shared catalog** with per-format bodies, so a construct has the same label in the same group in all three formats and only the inserted text changes. A format omits a key its converter can't handle (Markdown has no table, figure or link support in `@pretextbook/remark-pretext` yet — they become `<TODO>` placeholders). `__tests__/snippets.test.ts` runs every body through the real PreTeXt schema and the real LaTeX/Markdown converters, so the catalog can't drift from what the pipeline accepts; that test is what caught PreTeXt requiring lists and displayed math *inside* a `<p>`, deprecating `<me>` for `<md>`, and `<program>` wanting `<code>` rather than `<input>`. A PreTeXt body is run through `assembleFullProjectSource` before it is validated, exactly as the schema linter does, since a body may contain a `<plus:* ref/>` placeholder (the Figure snippet writes one for its image) that only assembly can expand into something the grammar accepts.
@@ -127,8 +130,6 @@ Optional real-time co-editing via Yjs, activated by passing a `collaboration` pr
 - `editGuard.ts` — keeps a division's structural lines read-only in collab mode. The `constrained-editor-plugin` used for solo editing can't serve here: it reverts an out-of-range change with `model.undo()` from a content listener that can't distinguish local typing from a remote CRDT delta, so it would undo a peer's edit and re-broadcast that undo. The guard instead *prevents*, discriminating by entry point — local edits reach the model through `pushEditOperations`, remote deltas through `applyEdits`. Both modes read their geometry from `components/lockedRegion.ts`, so they lock the same lines.
 - In collab mode, `CodeEditor` swaps plugin enforcement for that guard, recomputes the locked lines on every content change (the plugin's own range tracking is gone, and a PreTeXt closing tag is always the last line), and skips the `content`-prop → model sync (the binding owns the model).
 - Record ids are minted by the editor (`src/recordId.ts`), not asked of the host. A new division therefore reaches the doc **synchronously**, in the same transaction as the placeholder referencing it, and the host persists it under the id it was given (`onDivisionAdd`'s return value is unused). Assets are the exception in one direction only: their bytes must reach the host first, so the uploader publishes the finished record — with the host's URL on it — once the upload returns. Peers learn of an asset from the doc, never from re-fetching the host, so the `projectAssets` prop's "new identity = authoritative reset" behavior is suppressed whenever a bridge is attached.
-
-The demo app's "Load Collab Demo" button renders two `Editors` relayed in-memory — the fastest way to exercise convergence, remote cursors, and structural sync without a host.
 
 ### Public API (`src/index.ts`)
 
