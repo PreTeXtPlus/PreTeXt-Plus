@@ -173,8 +173,4 @@ describe("TopBar", () => {
     await user.click(screen.getByRole("menuitem", { name: /^Select All/ }));
   });
 
-  it("renders presence content on the menu row", () => {
-    renderWithStore({ presence: <span>Presence chips</span> });
-    expect(screen.getByText("Presence chips")).toBeInTheDocument();
-  });
 });

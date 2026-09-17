@@ -71,4 +71,10 @@ describe("CodeEditor", () => {
       expect(screen.getByText(label)).toBeInTheDocument();
     },
   );
+
+  it("renders presence content next to the floating format badge", () => {
+    render(<CodeEditor {...baseProps} presence={<span>Presence chips</span>} />);
+    expect(screen.getByText("Presence chips")).toBeInTheDocument();
+    expect(screen.getByText("PreTeXt")).toBeInTheDocument();
+  });
 });

@@ -45,8 +45,6 @@ export interface TopBarProps {
    */
   titleOverride?: ReactNode;
   readOnly?: boolean;
-  /** Collaborator presence indicator (avatar chips), when collaboration is on. */
-  presence?: ReactNode;
 
   // ── File menu ──────────────────────────────────────────────────────────
   /** If provided, a "Save & Close" row is shown in the File menu. */
@@ -179,7 +177,6 @@ const TopBar = (props: TopBarProps) => {
             showDocumentActionsInTools={false}
           />
           <div className="flex items-center gap-3 pl-2 pr-2 shrink-0">
-            {props.presence}
             <StoreFeedbackLink label="Give feedback" context="main-editor" />
             {props.readOnly && (
               <span className="inline-block py-1 px-2.5 rounded-[3px] bg-[#a32899] text-white font-medium text-[13px]">

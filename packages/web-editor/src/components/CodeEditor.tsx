@@ -1,6 +1,6 @@
 import { Editor } from "@monaco-editor/react";
 import { constrainedEditor } from "constrained-editor-plugin";
-import { useState, useRef, useEffect, useMemo, useCallback, forwardRef, useImperativeHandle } from "react";
+import { useState, useRef, useEffect, useMemo, useCallback, forwardRef, useImperativeHandle, type ReactNode } from "react";
 import {
   copySelection,
   cutSelection,
@@ -110,6 +110,12 @@ interface CodeEditorProps {
    * would restart the debounce forever and never lint.
    */
   pretextValidation?: PretextValidationInput;
+  /**
+   * Collaborator presence indicator (avatar chips), when collaboration is on.
+   * Rendered floating over the editor's lower-right corner, next to the
+   * source-format badge.
+   */
+  presence?: ReactNode;
 }
 
 /**
@@ -239,6 +245,7 @@ const CodeEditor = forwardRef<CodeEditorHandle, CodeEditorProps>(({
   onMenuStateChange,
   pretextValidation,
   collab,
+  presence,
 }, ref) => {
   const editorRef = useRef<any>(null);
   const monacoRef = useRef<any>(null);
@@ -1195,9 +1202,12 @@ const CodeEditor = forwardRef<CodeEditorHandle, CodeEditorProps>(({
             debounceRef.current = setTimeout(deliver, 500);
           }}
         />
-        <span className="absolute bottom-2 right-4 z-10 inline-flex items-center py-0.5 px-2 rounded-full bg-gray-200/90 text-gray-800 text-xs font-semibold pointer-events-none shadow-sm">
-          {FORMAT_LABELS[sourceFormat]}
-        </span>
+        <div className="absolute bottom-2 right-4 z-10 flex items-center gap-2">
+          {presence}
+          <span className="inline-flex items-center py-0.5 px-2 rounded-full bg-gray-200/90 text-gray-800 text-xs font-semibold pointer-events-none shadow-sm">
+            {FORMAT_LABELS[sourceFormat]}
+          </span>
+        </div>
       </div>
     </div>
   );

@@ -2117,6 +2117,11 @@ const EditorsInner = (props: EditorsInnerProps) => {
       readOnly={props.readOnly}
       pasteAutoConvert={pasteAutoConvert}
       onMenuStateChange={setCodeEditorMenuState}
+      presence={
+        props.collaboration ? (
+          <PresenceAvatars awareness={props.collaboration.awareness} />
+        ) : undefined
+      }
     />
   );
 
@@ -2304,11 +2309,6 @@ const EditorsInner = (props: EditorsInnerProps) => {
         accountArea={props.topBar.accountArea}
         titleOverride={props.topBar.titleOverride}
         readOnly={props.readOnly}
-        presence={
-          props.collaboration ? (
-            <PresenceAvatars awareness={props.collaboration.awareness} />
-          ) : undefined
-        }
         onSaveAndClose={props.onSaveAndClose}
         saveAndCloseLabel={props.saveAndCloseLabel}
         content={divisionActiveSource}
