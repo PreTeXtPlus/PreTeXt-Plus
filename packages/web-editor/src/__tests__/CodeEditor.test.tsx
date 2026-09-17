@@ -17,9 +17,6 @@ const baseProps = {
   content: "<article/>",
   sourceFormat: "pretext" as const,
   onChange: vi.fn(),
-  onOpenImport: vi.fn(),
-  onOpenDocinfoEditor: vi.fn(),
-  onShowFullSource: vi.fn(),
 };
 
 describe("CodeEditor", () => {
@@ -35,5 +32,31 @@ describe("CodeEditor", () => {
     const calls = monacoEditorMock.mock.calls;
     const call = calls[calls.length - 1]?.[0];
     expect(call?.options?.readOnly).toBe(false);
+  });
+
+  it("reports menu state via onMenuStateChange after mount", () => {
+    const onMenuStateChange = vi.fn();
+    render(<CodeEditor {...baseProps} onMenuStateChange={onMenuStateChange} />);
+    expect(onMenuStateChange).toHaveBeenCalled();
+    const state = onMenuStateChange.mock.calls[0][0];
+    expect(state).toEqual(
+      expect.objectContaining({
+        canUndo: expect.any(Boolean),
+        canRedo: expect.any(Boolean),
+        hasSelection: expect.any(Boolean),
+        isFindingInFile: expect.any(Boolean),
+        onUndo: expect.any(Function),
+        onRedo: expect.any(Function),
+        switchToFindInProject: expect.any(Function),
+        actions: expect.objectContaining({
+          runCommand: expect.any(Function),
+          cut: expect.any(Function),
+          copy: expect.any(Function),
+          paste: expect.any(Function),
+          selectAll: expect.any(Function),
+          insertSnippet: expect.any(Function),
+        }),
+      }),
+    );
   });
 });

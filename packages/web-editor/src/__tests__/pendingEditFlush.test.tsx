@@ -113,6 +113,7 @@ function renderEditors(divisions: Division[]) {
       rootDivisionId="doc"
       projectType="article"
       title="Doc"
+      topBar={{}}
       onContentChange={(c) => changes.push(c)}
     />,
   );

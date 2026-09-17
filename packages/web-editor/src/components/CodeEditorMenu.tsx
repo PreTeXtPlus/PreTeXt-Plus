@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from "react";
-import { formatPretext } from "@pretextbook/format";
+import clsx from "clsx";
 import type { SourceFormat } from "../types/editor";
 import type { RootDivisionType } from "../types/sections";
 import MenuDropdown, { type MenuEntry } from "./MenuDropdown";
@@ -12,6 +12,7 @@ import {
   snippetGroupsFor,
   type EditorSnippet,
 } from "./editorConfigs/snippets";
+import { buildDocumentActionEntries } from "./documentActionMenuEntries";
 
 /**
  * The editor operations the menus drive. Supplied by `CodeEditor`, which is
@@ -105,6 +106,22 @@ interface CodeEditorMenuProps {
   hideSnippets?: boolean;
   /** When true, every editing action is hidden — only viewing actions remain. */
   readOnly?: boolean;
+  /**
+   * Extra menus rendered before Edit, sharing this bar's open/keyboard-nav
+   * state (so Left/Right cycles through them too). Used by `TopBar` to
+   * prepend a File menu built from the same entries `Tools` would otherwise
+   * show — see `showDocumentActionsInTools`.
+   */
+  leadingMenus?: { key: string; label: string; entries: MenuEntry[] }[];
+  /**
+   * When `false`, Tools omits the document-actions block (Format PreTeXt,
+   * Import, Clean up LaTeX, Edit Macros/Preamble, Assets, Snippets, Display
+   * Full Source) because a host is putting it elsewhere — e.g. `TopBar`'s
+   * File menu. Defaults to `true`.
+   */
+  showDocumentActionsInTools?: boolean;
+  /** Merged onto the root `role="menubar"` div, so a composing host (`TopBar`) can adjust layout. */
+  className?: string;
 }
 
 const CONVERT_BUTTON_CLASSES =
@@ -115,20 +132,6 @@ const FORMAT_LABELS: Record<SourceFormat, string> = {
   latex: "LaTeX",
   markdown: "Markdown",
 };
-
-/** The docinfo editor is named for what that format keeps in it. */
-const docinfoNaming = (
-  sourceFormat: SourceFormat,
-): { label: string; title: string } =>
-  sourceFormat === "latex"
-    ? {
-        label: "Edit Preamble…",
-        title: "Edit the LaTeX preamble shared by the whole project",
-      }
-    : {
-        label: "Edit Macros…",
-        title: "Edit the math macros shared by the whole project",
-      };
 
 /** Turn a Monaco command into a menu row. */
 const commandEntry = (
@@ -187,6 +190,9 @@ const CodeEditorMenu: React.FC<CodeEditorMenuProps> = ({
   isFindingInFile,
   onSwitchToFindInProject,
   readOnly,
+  leadingMenus,
+  showDocumentActionsInTools,
+  className,
 }) => {
   // Which menu is open, so opening one closes the last and hovering across the
   // bar switches between them.
@@ -209,15 +215,6 @@ const CodeEditorMenu: React.FC<CodeEditorMenuProps> = ({
     void operation().then((ok) => {
       if (!ok) setNotice(refusedMessage);
     });
-  };
-
-  const handleFormat = () => {
-    try {
-      onContentChange(formatPretext(content));
-    } catch (error) {
-      console.error("Error formatting:", error);
-      alert("Error formatting XML");
-    }
   };
 
   const run = actions.runCommand;
@@ -351,71 +348,29 @@ const CodeEditorMenu: React.FC<CodeEditorMenuProps> = ({
 
   // ── Tools ─────────────────────────────────────────────────────────────────
   // Document actions first (they differ by format), then the editor commands,
-  // which are the same in every format.
-  const documentEntries: MenuEntry[] = [];
-  if (!readOnly) {
-    if (sourceFormat === "pretext") {
-      documentEntries.push({
-        kind: "item",
-        key: "format",
-        label: "Format PreTeXt",
-        title: "Re-indent the PreTeXt source",
-        onSelect: handleFormat,
-      });
-      documentEntries.push({
-        kind: "item",
-        key: "import",
-        label: "Import…",
-        title:
-          "Convert LaTeX, Markdown or another document to PreTeXt for this division",
-        onSelect: onOpenImport,
-      });
-    }
-    if (onOpenClean) {
-      documentEntries.push({
-        kind: "item",
-        key: "clean",
-        label: "Clean up LaTeX…",
-        title: "Review LaTeX markup that does not belong in PreTeXt, and fix it",
-        onSelect: onOpenClean,
-      });
-    }
-    documentEntries.push({
-      kind: "item",
-      key: "docinfo",
-      ...docinfoNaming(sourceFormat),
-      onSelect: onOpenDocinfoEditor,
-    });
-    if (onOpenAssets && !hideAssets) {
-      documentEntries.push({
-        kind: "item",
-        key: "assets",
-        label: "Assets…",
-        title: "Manage the project's images and other assets",
-        onSelect: onOpenAssets,
-      });
-    }
-    if (onOpenSnippets && !hideSnippets) {
-      documentEntries.push({
-        kind: "item",
-        key: "snippets",
-        label: "Snippets…",
-        title: "Manage the project's reusable source snippets",
-        onSelect: onOpenSnippets,
-      });
-    }
-  }
-  documentEntries.push({
-    kind: "item",
-    key: "full-source",
-    label: "Display Full Source",
-    title: "Show the full assembled PreTeXt source for the project",
-    onSelect: onShowFullSource,
-  });
+  // which are the same in every format — unless a host (TopBar) is putting
+  // the document actions in its own File menu instead.
+  const documentEntries: MenuEntry[] =
+    showDocumentActionsInTools === false
+      ? []
+      : buildDocumentActionEntries({
+          content,
+          sourceFormat,
+          readOnly,
+          onContentChange,
+          onOpenImport,
+          onOpenClean,
+          onOpenDocinfoEditor,
+          onOpenAssets,
+          hideAssets,
+          onOpenSnippets,
+          hideSnippets,
+          onShowFullSource,
+        });
 
   const toolsEntries: MenuEntry[] = [
     ...documentEntries,
-    separator("editor-commands"),
+    ...(documentEntries.length > 0 ? [separator("editor-commands")] : []),
     commandEntry(MONACO_COMMANDS.commandPalette, run),
     commandEntry(MONACO_COMMANDS.gotoLine, run),
     ...(readOnly ? [] : [commandEntry(MONACO_COMMANDS.quickFix, run)]),
@@ -427,6 +382,7 @@ const CodeEditorMenu: React.FC<CodeEditorMenuProps> = ({
   ];
 
   const menus = [
+    ...(leadingMenus ?? []),
     { key: "edit", label: "Edit", entries: editEntries },
     ...(readOnly
       ? []
@@ -441,7 +397,10 @@ const CodeEditorMenu: React.FC<CodeEditorMenuProps> = ({
 
   return (
     <div
-      className="flex items-center gap-1 py-1.5 px-2.5 w-full bg-[#f3f3f3] border-b border-[#d6d6d6]"
+      className={clsx(
+        "flex items-center gap-1 py-1.5 px-2.5 w-full bg-[#f3f3f3] border-b border-[#d6d6d6]",
+        className,
+      )}
       role="menubar"
       aria-label="Editor actions"
     >
