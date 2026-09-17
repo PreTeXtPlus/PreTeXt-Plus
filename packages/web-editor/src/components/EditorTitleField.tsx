@@ -44,7 +44,7 @@ const EditorTitleField = ({
       ) : editingTitle ? (
         <input
           ref={titleInputRef}
-          className="w-[40vw] px-2 inline-block shadow-[0_1px_2px_0_rgba(0,0,0,0.05)] rounded-[3px] border border-gray-400 font-mono bg-white focus:outline focus:outline-2 focus:outline-blue-500 focus:outline-offset-2"
+          className="w-[40vw] px-2 mt-1 inline-block shadow-[0_1px_2px_0_rgba(0,0,0,0.05)] rounded-[3px] border border-gray-400 font-mono bg-white focus:outline focus:outline-2 focus:outline-blue-500 focus:outline-offset-2"
           type="text"
           aria-label="Title"
           value={title}
@@ -57,7 +57,7 @@ const EditorTitleField = ({
           }}
         />
       ) : (
-        <span className="flex items-baseline gap-2 min-w-0 pr-4 max-[500px]:w-full">
+        <span className="flex items-baseline gap-2 min-w-0 px-2 max-[500px]:w-full">
           <button
             type="button"
             className={titleTextClasses}
