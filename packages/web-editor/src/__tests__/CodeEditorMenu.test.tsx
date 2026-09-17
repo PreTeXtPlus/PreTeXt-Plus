@@ -129,7 +129,7 @@ describe("CodeEditorMenu", () => {
     it("opens Monaco's find widget", async () => {
       render(<CodeEditorMenu {...baseProps()} sourceFormat="pretext" />);
       const user = await openMenu("Edit");
-      await user.click(menuItem(/^Find in File…/));
+      await user.click(menuItem(/^Find in current editor…/));
       expect(actions.runCommand).toHaveBeenCalledWith(MONACO_COMMANDS.find.id);
     });
   });
@@ -258,7 +258,7 @@ describe("CodeEditorMenu", () => {
       await openMenu("Edit");
 
       expect(menuItem(/^Copy/)).toBeInTheDocument();
-      expect(menuItem(/^Find in File…/)).toBeInTheDocument();
+      expect(menuItem(/^Find in current editor…/)).toBeInTheDocument();
       expect(queryMenuItem(/^Undo/)).not.toBeInTheDocument();
       expect(queryMenuItem(/^Paste/)).not.toBeInTheDocument();
     });
@@ -326,7 +326,7 @@ describe("CodeEditorMenu", () => {
       expect(menuItem(/^Redo/)).toHaveFocus();
       await user.keyboard("{ArrowUp}{ArrowUp}");
       // Wrapped past the top to the last item.
-      expect(menuItem(/^Replace in File…/)).toHaveFocus();
+      expect(menuItem(/^Replace in current editor…/)).toHaveFocus();
     });
 
     it("skips disabled items", async () => {
