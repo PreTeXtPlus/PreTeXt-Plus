@@ -1197,10 +1197,7 @@ function EditorApp({ config }) {
 
   const logo = (
     <a href={rootPath} className="flex items-center">
-      <img src="/icon.svg" className="h-8 mr-2" alt="PreTeXtPlus Logo" />
-      <span className="text-lg font-semibold whitespace-nowrap">
-        PreTeXt.Plus
-      </span>
+      <img src="/icon.svg" className="h-14 mr-2" alt="PreTeXtPlus Logo" />
     </a>
   );
 
