@@ -112,11 +112,11 @@ const TopBar = (props: TopBarProps) => {
   ];
 
   return (
-    <div className="flex h-16 items-center bg-white border-b border-gray-300 max-[500px]:flex-wrap max-[500px]:h-auto">
+    <div className="flex h-20 items-center bg-white border-b border-gray-300 max-[500px]:flex-wrap max-[500px]:h-auto">
       <div className="flex items-center shrink-0 pl-4 pr-4 max-[500px]:basis-full max-[500px]:py-2">
         {props.logo ?? <span aria-hidden>✏️</span>}
       </div>
-      <div className="flex flex-1 min-w-0 flex-col justify-center gap-1 py-1.5">
+      <div className="flex flex-1 min-w-0 flex-col justify-center py-1.5">
         <EditorTitleLanguageFields
           readOnly={props.readOnly}
           titleOverride={props.titleOverride}

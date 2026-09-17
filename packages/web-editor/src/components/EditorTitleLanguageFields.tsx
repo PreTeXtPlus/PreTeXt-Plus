@@ -40,11 +40,11 @@ const EditorTitleLanguageFields = ({
 
   const titleTextClasses =
     size === "large"
-      ? "font-semibold text-[1.2rem] overflow-hidden text-ellipsis whitespace-nowrap"
-      : "font-semibold text-[1.05rem] overflow-hidden text-ellipsis whitespace-nowrap";
+      ? "font-semibold text-[1.2rem] mr-3 overflow-hidden text-ellipsis whitespace-nowrap"
+      : "font-semibold text-[1.05rem] mr-3 overflow-hidden text-ellipsis whitespace-nowrap";
 
   return (
-    <div className="flex items-center gap-4 max-[500px]:basis-full">
+    <div className="flex items-center mt-4 max-[500px]:basis-full">
       {titleOverride !== undefined ? (
         <span className={titleTextClasses}>{titleOverride}</span>
       ) : editingTitle ? (
