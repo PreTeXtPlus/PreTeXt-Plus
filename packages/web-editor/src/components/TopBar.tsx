@@ -1,9 +1,12 @@
 import type { ReactNode } from "react";
-import CodeEditorMenu, { type EditorMenuActions } from "./CodeEditorMenu";
+import CodeEditorMenu, { type EditorMenuActions, type BarMenu } from "./CodeEditorMenu";
+import type { MenuEntry } from "./MenuDropdown";
 import type { CodeEditorMenuState } from "./CodeEditor";
-import EditorTitleLanguageFields from "./EditorTitleLanguageFields";
+import EditorTitleField from "./EditorTitleField";
 import StoreFeedbackLink from "./StoreFeedbackLink";
 import { buildDocumentActionEntries } from "./documentActionMenuEntries";
+import { useEditorStore } from "../store/hooks";
+import { LANGUAGES } from "../languages";
 import type { SourceFormat } from "../types/editor";
 import type { RootDivisionType } from "../types/sections";
 
@@ -77,11 +80,29 @@ export interface TopBarProps {
 /**
  * The unified ~64px top bar for a host that wants one full-width bar in place
  * of the classic `MenuBar` + the code editor's own "Editor actions" toolbar:
- * logo, then a title/language row above a File/Edit/Insert/Tools menu row,
+ * logo, then a title row above a File/Edit/Insert/Tools/Language menu row,
  * with the host's Help/Account content flush right.
  */
 const TopBar = (props: TopBarProps) => {
   const state = props.menuState ?? DEFAULT_MENU_STATE;
+  const language = useEditorStore((s) => s.language);
+  const updateLanguage = useEditorStore((s) => s.updateLanguage);
+
+  const languageEntries: MenuEntry[] = LANGUAGES.map(({ code, label }) => ({
+    kind: "item",
+    key: code,
+    label,
+    checked: code === language,
+    onSelect: () => updateLanguage(code),
+  }));
+  const trailingMenus: BarMenu[] = [
+    {
+      key: "language",
+      label: "Language",
+      entries: languageEntries,
+      disabled: props.readOnly,
+    },
+  ];
 
   const fileEntries = [
     ...(props.onSaveAndClose
@@ -117,7 +138,7 @@ const TopBar = (props: TopBarProps) => {
         {props.logo ?? <span aria-hidden>✏️</span>}
       </div>
       <div className="flex flex-1 min-w-0 flex-col justify-center py-1.5">
-        <EditorTitleLanguageFields
+        <EditorTitleField
           readOnly={props.readOnly}
           titleOverride={props.titleOverride}
           size="large"
@@ -154,6 +175,7 @@ const TopBar = (props: TopBarProps) => {
             hideSnippets={props.hideSnippets}
             readOnly={props.readOnly}
             leadingMenus={[{ key: "file", label: "File", entries: fileEntries }]}
+            trailingMenus={trailingMenus}
             showDocumentActionsInTools={false}
           />
           <div className="flex items-center gap-3 pl-2 pr-2 shrink-0">

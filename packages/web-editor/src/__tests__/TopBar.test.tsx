@@ -69,10 +69,41 @@ describe("TopBar", () => {
     expect(screen.getByText("✏️")).toBeInTheDocument();
   });
 
-  it("shows the title and language controls", () => {
+  it("shows the title and a Language menu", () => {
     renderWithStore();
     expect(screen.getByText("My Document")).toBeInTheDocument();
-    expect(screen.getByLabelText("Language")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Language" })).toBeInTheDocument();
+  });
+
+  it("picks a language from the Language menu", async () => {
+    const user = userEvent.setup();
+    renderWithStore();
+    await user.click(screen.getByRole("button", { name: "Language" }));
+    const current = screen.getByRole("menuitemcheckbox", {
+      name: "English (United States)",
+    });
+    expect(current).toHaveAttribute("aria-checked", "true");
+    await user.click(
+      screen.getByRole("menuitemcheckbox", { name: "German (Germany)" }),
+    );
+    await user.click(screen.getByRole("button", { name: "Language" }));
+    expect(
+      screen.getByRole("menuitemcheckbox", { name: "German (Germany)" }),
+    ).toHaveAttribute("aria-checked", "true");
+  });
+
+  it("disables the Language menu when readOnly", () => {
+    renderWithStore({ readOnly: true });
+    expect(screen.getByRole("button", { name: "Language" })).toBeDisabled();
+  });
+
+  it("places Language on the lower menu row, to the right of Tools", () => {
+    renderWithStore();
+    const names = screen
+      .getByRole("menubar", { name: "Editor actions" })
+      .querySelectorAll("button");
+    const labels = Array.from(names).map((b) => b.textContent);
+    expect(labels).toEqual(["File", "Edit", "Insert", "Tools", "Language"]);
   });
 
   it("shows a static titleOverride instead of the editable title", () => {

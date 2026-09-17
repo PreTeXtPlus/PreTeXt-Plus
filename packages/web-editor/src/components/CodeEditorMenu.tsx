@@ -14,6 +14,15 @@ import {
 } from "./editorConfigs/snippets";
 import { buildDocumentActionEntries } from "./documentActionMenuEntries";
 
+/** A menu a host adds to this bar via `leadingMenus`/`trailingMenus`. */
+export interface BarMenu {
+  key: string;
+  label: string;
+  entries: MenuEntry[];
+  /** When true, the menu's trigger button is disabled and its panel never opens. */
+  disabled?: boolean;
+}
+
 /**
  * The editor operations the menus drive. Supplied by `CodeEditor`, which is
  * the only place that holds the Monaco instance; the menu stays a pure
@@ -112,7 +121,12 @@ interface CodeEditorMenuProps {
    * prepend a File menu built from the same entries `Tools` would otherwise
    * show — see `showDocumentActionsInTools`.
    */
-  leadingMenus?: { key: string; label: string; entries: MenuEntry[] }[];
+  leadingMenus?: BarMenu[];
+  /**
+   * Extra menus rendered after Tools, sharing this bar's open/keyboard-nav
+   * state. Used by `TopBar` to append a Language menu.
+   */
+  trailingMenus?: BarMenu[];
   /**
    * When `false`, Tools omits the document-actions block (Format PreTeXt,
    * Import, Clean up LaTeX, Edit Macros/Preamble, Assets, Snippets, Display
@@ -191,6 +205,7 @@ const CodeEditorMenu: React.FC<CodeEditorMenuProps> = ({
   onSwitchToFindInProject,
   readOnly,
   leadingMenus,
+  trailingMenus,
   showDocumentActionsInTools,
   className,
 }) => {
@@ -381,13 +396,14 @@ const CodeEditorMenu: React.FC<CodeEditorMenuProps> = ({
     commandEntry(MONACO_COMMANDS.unfoldAll, run),
   ];
 
-  const menus = [
+  const menus: BarMenu[] = [
     ...(leadingMenus ?? []),
     { key: "edit", label: "Edit", entries: editEntries },
     ...(readOnly
       ? []
       : [{ key: "insert", label: "Insert", entries: insertEntries }]),
     { key: "tools", label: "Tools", entries: toolsEntries },
+    ...(trailingMenus ?? []),
   ];
 
   /** Arrow Left/Right inside an open menu moves along the bar. */
@@ -413,6 +429,7 @@ const CodeEditorMenu: React.FC<CodeEditorMenuProps> = ({
           onOpenChange={(open) => setOpenMenu(open ? menu.key : null)}
           menubarActive={openMenu !== null}
           onNavigate={(direction) => navigate(index, direction)}
+          disabled={menu.disabled}
         />
       ))}
 

@@ -132,7 +132,7 @@ function AccountArea({
       : []),
     {
       key: "account",
-      label: signedIn ? `Account (${userEmail})` : "Account",
+      label: "Account",
       entries: accountEntries,
     },
   ];

@@ -1,9 +1,8 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { useEditorStore } from "../store/hooks";
-import { LANGUAGES } from "../languages";
 
-export interface EditorTitleLanguageFieldsProps {
-  /** When true, the title cannot be edited (the "edit" button is hidden). */
+export interface EditorTitleFieldProps {
+  /** When true, the title cannot be edited. */
   readOnly?: boolean;
   /**
    * Renders in place of the editable title control when set — e.g. a host
@@ -15,19 +14,14 @@ export interface EditorTitleLanguageFieldsProps {
   size?: "normal" | "large";
 }
 
-/**
- * The document title (click-to-edit) and language `<select>`, shared by
- * `MenuBar` and `TopBar` so the two can never drift apart.
- */
-const EditorTitleLanguageFields = ({
+/** The document title (click-to-edit), rendered by `TopBar`. */
+const EditorTitleField = ({
   readOnly,
   titleOverride,
   size = "normal",
-}: EditorTitleLanguageFieldsProps) => {
+}: EditorTitleFieldProps) => {
   const title = useEditorStore((s) => s.title);
   const updateTitle = useEditorStore((s) => s.updateTitle);
-  const language = useEditorStore((s) => s.language);
-  const updateLanguage = useEditorStore((s) => s.updateLanguage);
   const [editingTitle, setEditingTitle] = useState(false);
   const titleInputRef = useRef<HTMLInputElement>(null);
 
@@ -73,21 +67,8 @@ const EditorTitleLanguageFields = ({
           </button>
         </span>
       )}
-      <select
-        className="shrink-0 py-1 px-2 rounded-[3px] border border-gray-400 bg-white text-[0.85rem] focus:outline focus:outline-2 focus:outline-blue-500 focus:outline-offset-2 disabled:bg-gray-100 disabled:text-gray-500"
-        aria-label="Language"
-        value={language}
-        disabled={readOnly}
-        onChange={(e) => updateLanguage(e.target.value)}
-      >
-        {LANGUAGES.map(({ code, label }) => (
-          <option key={code} value={code}>
-            {label}
-          </option>
-        ))}
-      </select>
     </div>
   );
 };
 
-export default EditorTitleLanguageFields;
+export default EditorTitleField;

@@ -40,10 +40,12 @@ export interface MenuDropdownProps {
   menubarActive?: boolean;
   /** Move to the previous/next menu in the bar (Arrow Left/Right). */
   onNavigate?: (direction: -1 | 1) => void;
+  /** When true, the trigger button is disabled and the panel never opens. */
+  disabled?: boolean;
 }
 
 const BUTTON_CLASSES =
-  "shrink-0 py-[5px] px-2.5 border border-transparent rounded-[3px] cursor-pointer text-[13px] font-medium leading-[1.3] bg-transparent text-[#1f1f1f] transition-colors duration-150 ease-in-out hover:bg-[#e8e8e8]";
+  "shrink-0 py-[5px] px-2.5 border border-transparent rounded-[3px] cursor-pointer text-[13px] font-medium leading-[1.3] bg-transparent text-[#1f1f1f] transition-colors duration-150 ease-in-out enabled:hover:bg-[#e8e8e8] disabled:text-gray-400 disabled:cursor-not-allowed";
 
 const ITEM_CLASSES =
   "flex w-full items-center gap-6 py-1.5 px-2.5 text-left bg-transparent border-none rounded cursor-pointer text-[13px] font-medium leading-[1.3] whitespace-nowrap text-[#1f1f1f] enabled:hover:bg-[#e8e8e8] enabled:focus-visible:bg-[#e8e8e8] focus:outline-none disabled:text-gray-400 disabled:cursor-not-allowed";
@@ -64,6 +66,7 @@ const MenuDropdown = ({
   onOpenChange,
   menubarActive,
   onNavigate,
+  disabled,
 }: MenuDropdownProps) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const buttonRef = useRef<HTMLButtonElement>(null);
@@ -71,23 +74,26 @@ const MenuDropdown = ({
   // Set when hovering across the bar opened this menu, so the click that
   // usually follows doesn't immediately toggle it back shut.
   const hoverOpenedRef = useRef(false);
+  // A disabled menu never actually opens, even if a sibling's keyboard
+  // navigation (Arrow Left/Right) lands on it and asks it to.
+  const open = isOpen && !disabled;
 
   // Close on a click outside this menu. Pointer-down (not click) so the menu
   // is gone before the click lands on whatever is underneath.
   useEffect(() => {
-    if (!isOpen) return;
+    if (!open) return;
     const handlePointer = (e: MouseEvent) => {
       if (!containerRef.current?.contains(e.target as Node)) onOpenChange(false);
     };
     document.addEventListener("mousedown", handlePointer);
     return () => document.removeEventListener("mousedown", handlePointer);
-  }, [isOpen, onOpenChange]);
+  }, [open, onOpenChange]);
 
   // Focus the first item when the menu opens, so Up/Down work immediately.
   useEffect(() => {
-    if (!isOpen) return;
+    if (!open) return;
     panelRef.current?.querySelector<HTMLElement>("[data-menu-item]:not(:disabled)")?.focus();
-  }, [isOpen]);
+  }, [open]);
 
   const focusItem = (offset: number) => {
     const panel = panelRef.current;
@@ -142,19 +148,20 @@ const MenuDropdown = ({
       <button
         ref={buttonRef}
         type="button"
-        className={clsx(BUTTON_CLASSES, isOpen && "bg-[#e0e0e0] border-[#d0d0d0]")}
+        disabled={disabled}
+        className={clsx(BUTTON_CLASSES, open && "bg-[#e0e0e0] border-[#d0d0d0]")}
         aria-haspopup="menu"
-        aria-expanded={isOpen}
+        aria-expanded={open}
         onClick={() => {
           if (hoverOpenedRef.current) {
             hoverOpenedRef.current = false;
             return;
           }
-          onOpenChange(!isOpen);
+          onOpenChange(!open);
         }}
         // Once one menu is open, sliding across the bar switches between them.
         onMouseEnter={() => {
-          if (menubarActive && !isOpen) {
+          if (menubarActive && !open) {
             hoverOpenedRef.current = true;
             onOpenChange(true);
           }
@@ -163,7 +170,7 @@ const MenuDropdown = ({
           hoverOpenedRef.current = false;
         }}
         onKeyDown={(e) => {
-          if (e.key === "ArrowDown" && !isOpen) {
+          if (e.key === "ArrowDown" && !open) {
             e.preventDefault();
             onOpenChange(true);
           }
@@ -172,7 +179,7 @@ const MenuDropdown = ({
         {label}
       </button>
 
-      {isOpen && (
+      {open && (
         <div
           ref={panelRef}
           role="menu"
