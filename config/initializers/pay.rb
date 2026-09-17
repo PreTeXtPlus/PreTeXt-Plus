@@ -8,5 +8,4 @@ end
 
 Rails.application.config.to_prepare do
   Pay::Stripe::Subscription.include SubscriptionExtensions
-  Pay::Stripe::Charge.include ChargeExtensions
 end

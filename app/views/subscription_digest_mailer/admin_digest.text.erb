@@ -1,0 +1,26 @@
+PreTeXt.Plus Subscription Digest
+
+A summary of subscription activity over the last day.
+
+<% if @new_charges.any? %>
+New paying subscriptions:
+<% @new_charges.each do |charge| %>
+<% subscription = charge.subscription %>
+---
+User:    <%= subscription.user ? "#{subscription.user.name} <#{subscription.user.email}>" : "(unknown)" %>
+Plan:    <%= subscription.type&.name || subscription.processor_plan %><%= " (invoiced)" if subscription.invoiced? %>
+Billing: <% interval = subscription.type&.recurrence %><%= interval == "year" ? "Annual" : (interval == "month" ? "Monthly" : "—") %>
+Amount:  <%= Pay::Currency.format(charge.amount, currency: charge.currency) %>
+<% end %>
+---
+<% end %>
+<% if @canceled_subscriptions.any? %>
+Canceled subscriptions:
+<% @canceled_subscriptions.each do |subscription| %>
+---
+User:     <%= subscription.user ? "#{subscription.user.name} <#{subscription.user.email}>" : "(unknown)" %>
+Plan:     <%= subscription.type&.name || subscription.processor_plan %>
+Canceled: <%= subscription.updated_at.to_fs(:long) %>
+<% end %>
+---
+<% end %>
