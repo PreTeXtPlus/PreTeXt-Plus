@@ -398,7 +398,7 @@ const CodeEditorMenu: React.FC<CodeEditorMenuProps> = ({
   return (
     <div
       className={clsx(
-        "flex items-center gap-1 py-1.5 px-2.5 w-full bg-[#f3f3f3] border-b border-[#d6d6d6]",
+        "flex items-center gap-1 py-1.5 w-full border-b border-[#d6d6d6]",
         className,
       )}
       role="menubar"
