@@ -141,12 +141,6 @@ interface CodeEditorMenuProps {
 const CONVERT_BUTTON_CLASSES =
   "shrink-0 py-[5px] px-2.5 rounded-[3px] border border-transparent cursor-pointer text-[13px] font-medium leading-[1.3] transition-colors duration-150 ease-in-out bg-blue-600 text-white enabled:hover:bg-blue-700 disabled:bg-blue-300 disabled:cursor-not-allowed";
 
-const FORMAT_LABELS: Record<SourceFormat, string> = {
-  pretext: "PreTeXt",
-  latex: "LaTeX",
-  markdown: "Markdown",
-};
-
 /** Turn a Monaco command into a menu row. */
 const commandEntry = (
   command: MonacoCommand,
@@ -460,8 +454,8 @@ const CodeEditorMenu: React.FC<CodeEditorMenuProps> = ({
         </span>
       )}
 
-      <span className="flex items-center gap-2 ml-auto pl-2">
-        {onConvertToPretext && !readOnly && (
+      {onConvertToPretext && !readOnly && (
+        <span className="flex items-center ml-auto pl-2">
           <button
             type="button"
             className={CONVERT_BUTTON_CLASSES}
@@ -471,11 +465,8 @@ const CodeEditorMenu: React.FC<CodeEditorMenuProps> = ({
           >
             Convert to PreTeXt
           </button>
-        )}
-        <span className="inline-flex items-center py-0.5 px-2 rounded-full bg-gray-200 text-gray-800 text-xs font-semibold">
-          {FORMAT_LABELS[sourceFormat]}
         </span>
-      </span>
+      )}
     </div>
   );
 };

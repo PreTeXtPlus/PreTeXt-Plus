@@ -2,7 +2,7 @@
  * @vitest-environment jsdom
  */
 import { describe, it, expect, vi } from "vitest";
-import { render } from "@testing-library/react";
+import { render, screen } from "@testing-library/react";
 import CodeEditor from "../components/CodeEditor";
 
 const monacoEditorMock = vi.fn((props: { options?: { readOnly?: boolean } }) => (
@@ -59,4 +59,16 @@ describe("CodeEditor", () => {
       }),
     );
   });
+
+  it.each([
+    ["pretext", "PreTeXt"],
+    ["latex", "LaTeX"],
+    ["markdown", "Markdown"],
+  ] as const)(
+    "shows a floating %s format badge over the editor",
+    (sourceFormat, label) => {
+      render(<CodeEditor {...baseProps} sourceFormat={sourceFormat} />);
+      expect(screen.getByText(label)).toBeInTheDocument();
+    },
+  );
 });

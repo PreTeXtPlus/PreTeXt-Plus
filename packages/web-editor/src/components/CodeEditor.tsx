@@ -193,6 +193,13 @@ export interface CodeEditorHandle {
   flushPendingChange: () => void;
 }
 
+/** Labels for the floating source-format badge in the editor's lower-right corner. */
+const FORMAT_LABELS: Record<SourceFormat, string> = {
+  pretext: "PreTeXt",
+  latex: "LaTeX",
+  markdown: "Markdown",
+};
+
 /** Base Monaco editor options shared across all instances of this component. */
 const baseOptions = {
   automaticLayout: true,
@@ -1167,7 +1174,7 @@ const CodeEditor = forwardRef<CodeEditorHandle, CodeEditorProps>(({
 
   return (
     <div style={{ display: "flex", flexDirection: "column", height: "100%" }}>
-      <div style={{ flex: 1 }}>
+      <div style={{ flex: 1, position: "relative" }}>
         <Editor
           options={options}
           height="100%"
@@ -1188,6 +1195,9 @@ const CodeEditor = forwardRef<CodeEditorHandle, CodeEditorProps>(({
             debounceRef.current = setTimeout(deliver, 500);
           }}
         />
+        <span className="absolute bottom-2 right-4 z-10 inline-flex items-center py-0.5 px-2 rounded-full bg-gray-200/90 text-gray-800 text-xs font-semibold pointer-events-none shadow-sm">
+          {FORMAT_LABELS[sourceFormat]}
+        </span>
       </div>
     </div>
   );
