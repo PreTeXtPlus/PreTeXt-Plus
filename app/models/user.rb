@@ -93,6 +93,14 @@ class User < ApplicationRecord
     subscribed? || admin
   end
 
+  # Stripe has no one-trial-per-customer rule, so a trial is only offered to users who
+  # have never had a subscription of their own (any status, any customer record) --
+  # otherwise cancelling and re-subscribing would restart it. Being seated on someone
+  # else's subscription doesn't count.
+  def trial_eligible?
+    pay_subscriptions.none?
+  end
+
   def has_profile_page?
     username.present?
   end

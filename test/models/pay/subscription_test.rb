@@ -11,6 +11,21 @@ class Pay::SubscriptionTest < ActiveSupport::TestCase
     assert user.subscribed?
   end
 
+  test "trialing subscription grants privileges until the trial ends" do
+    subscription = pay_subscriptions(:one)
+    subscription.update_columns(status: "trialing", trial_ends_at: 3.days.from_now)
+    assert subscription.on_trial?
+    assert subscription.grants_privileges?
+    assert users(:subscribed).subscribed?
+  end
+
+  test "subscription whose trial ended without payment does not grant privileges" do
+    subscription = pay_subscriptions(:one)
+    subscription.update_columns(status: "past_due", trial_ends_at: 1.day.ago)
+    assert_not subscription.grants_privileges?
+    assert_not users(:subscribed).subscribed?
+  end
+
   test "invoiced subscription with unpaid invoice does not grant privileges" do
     subscription = pay_subscriptions(:one)
     subscription.object = { "collection_method" => "send_invoice", "latest_invoice" => { "status" => "open" } }

@@ -24,8 +24,24 @@ class SubscriptionDigestBuilder
   # can't be filtered in SQL and is checked in Ruby instead.
   def new_subscriptions
     Pay::Stripe::Charge.where(created_at: since..).where.not(subscription_id: nil).filter_map do |charge|
-      next unless charge.stripe_invoice&.billing_reason == "subscription_create"
+      next unless first_payment?(charge)
       NewSubscription.new(subscription: charge.subscription, charge: charge)
+    end
+  end
+
+  # A trial's signup invoice is $0 (so it never produces a charge); the first real charge
+  # is the trial converting, which Stripe labels subscription_cycle rather than
+  # subscription_create. Count it as new when it's the subscription's earliest charge.
+  def first_payment?(charge)
+    case charge.stripe_invoice&.billing_reason
+    when "subscription_create"
+      true
+    when "subscription_cycle"
+      !Pay::Stripe::Charge.where(subscription_id: charge.subscription_id)
+        .where("created_at < ? OR (created_at = ? AND id < ?)", charge.created_at, charge.created_at, charge.id)
+        .exists?
+    else
+      false
     end
   end
 

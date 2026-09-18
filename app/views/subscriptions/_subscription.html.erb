@@ -6,7 +6,7 @@
     <p class="text-gray-600">
         <span class="font-semibold">Status:</span>
         <span class="<% unless subscription.grants_privileges? %>text-yellow-600<% end %>">
-            <%= subscription.status.humanize.capitalize %>
+            <%= subscription.on_trial? ? "Free trial" : subscription.status.humanize.capitalize %>
         </span>
         <% if subscription.grants_privileges? and subscription.canceled? %>
             <span class="text-yellow-600">(set to expire)</span>
@@ -27,7 +27,17 @@
         <% end %>
         </span>
     </p>
-    <% if subscription.grants_privileges? %>
+    <% if subscription.grants_privileges? && subscription.on_trial? %>
+        <p class="text-gray-600">
+            <span class="font-semibold">Free trial ends:</span>
+            <%= local_time_tag(subscription.trial_ends_at, date_only: true) %>
+            <% if subscription.canceled? %>
+                <span class="text-yellow-600">(cancelled &mdash; you will not be charged)</span>
+            <% else %>
+                (your card will be charged then unless you cancel)
+            <% end %>
+        </p>
+    <% elsif subscription.grants_privileges? %>
         <p class="text-gray-600">
             <span class="font-semibold">
                 <% if subscription.cancelled? %>
