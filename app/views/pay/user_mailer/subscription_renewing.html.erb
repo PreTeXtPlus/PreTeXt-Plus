@@ -1,0 +1,24 @@
+<% subscription = params[:pay_subscription] %>
+<% type = subscription.type %>
+<% show_price = type&.stripe_price.present? %>
+<h1 style="margin-top: 0; color: #333333; font-size: 22px; font-weight: bold; text-align: left;">Thank you for your support of <%= Pay.application_name %>!</h1>
+
+<div style="color: #51545E; font-size: 16px; line-height: 1.625;">
+  <p>
+    Your <%= type ? type.name : Pay.application_name %> subscription<% if subscription.quantity.to_i > 1 %>
+    (<%= pluralize(subscription.quantity, "seat") %>)<% end %> will renew automatically on
+    <strong><%= params[:date].strftime("%B %-d, %Y") %></strong><% if show_price %>
+    at <%= number_to_currency(subscription.price) %>/<%= type.recurrence %><% end %>, and your payment
+    method on file will be charged.
+  </p>
+  <p>
+    To cancel or update your payment method before then, open your subscription page and
+    choose <strong>Manage payment info</strong>.
+  </p>
+  <p style="text-align: center; margin: 32px 0;">
+    <a href="<%= subscriptions_url %>" style="background-color: #16a34a; color: #ffffff; padding: 12px 24px; border-radius: 6px; text-decoration: none; font-weight: bold;">Manage subscription</a>
+  </p>
+  <p>
+    Questions? Please reply to this email.
+  </p>
+</div>
