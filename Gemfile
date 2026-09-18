@@ -41,7 +41,7 @@ gem "image_processing", "~> 2.1"
 gem "ruby-vips", "~> 2.2"
 
 # Guards against SSRF when fetching user-supplied URLs server-side [https://github.com/arkadiyt/ssrf_filter]
-gem "ssrf_filter", "~> 1.5"
+gem "ssrf_filter", "~> 1.6"
 
 group :development, :test do
   # See https://guides.rubyonrails.org/debugging_rails_applications.html#debugging-with-the-debug-gem
