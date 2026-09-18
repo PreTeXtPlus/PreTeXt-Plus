@@ -122,7 +122,7 @@ class SubscriptionTypesControllerTest < ActionDispatch::IntegrationTest
       get checkout_subscription_type_path(subscription_types(:two))
     end
 
-    assert_redirected_to subscriptions_path
+    assert_redirected_to projects_path
     assert_match(/confirm your email/i, flash[:alert])
   end
 
@@ -131,7 +131,7 @@ class SubscriptionTypesControllerTest < ActionDispatch::IntegrationTest
 
     get new_invoice_subscription_type_path(subscription_types(:three))
 
-    assert_redirected_to subscriptions_path
+    assert_redirected_to projects_path
     assert_match(/confirm your email/i, flash[:alert])
   end
 
@@ -144,7 +144,7 @@ class SubscriptionTypesControllerTest < ActionDispatch::IntegrationTest
       end
     end
 
-    assert_redirected_to subscriptions_path
+    assert_redirected_to projects_path
     assert_match(/confirm your email/i, flash[:alert])
   end
 

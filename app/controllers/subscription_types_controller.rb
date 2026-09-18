@@ -89,13 +89,6 @@ class SubscriptionTypesController < ApplicationController
       @subscription_type = SubscriptionType.find(params.expect(:id))
     end
 
-    # Subscribing is limited to confirmed emails, which (along with one trial per user)
-    # makes it harder to farm free trials with throwaway addresses.
-    def require_confirmed_email
-      return if current_user.confirmed?
-      redirect_to subscriptions_path, alert: "Please confirm your email address before subscribing."
-    end
-
     # Only allow a list of trusted parameters through.
     def subscription_type_params
       params.expect(subscription_type: [ :name, :description, :bulletpoints, :stripe_price_id, :order, :trial_days, :invoiceable ])
