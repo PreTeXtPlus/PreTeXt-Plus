@@ -1,7 +1,7 @@
 class SubscriptionType < ApplicationRecord
   after_commit :normalize_orders
-  # Stripe caps trial_period_days at 730.
-  validates :trial_days, numericality: { only_integer: true, in: 0..730 }
+  # Gate at 30 days (Stripe caps at 730 but we won't want a longer period)
+  validates :trial_days, numericality: { only_integer: true, in: 0..30 }
 
   def bulletpoints_list
     bulletpoints.to_s.split("\n").map(&:strip).reject(&:empty?)
