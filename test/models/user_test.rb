@@ -24,6 +24,20 @@ class UserTest < ActiveSupport::TestCase
     assert_equal Float::INFINITY, user.asset_quota
   end
 
+  test "trial_eligible? is true for a user who has never subscribed" do
+    assert users(:one).trial_eligible?
+  end
+
+  test "trial_eligible? is false for a user with a subscription" do
+    assert_not users(:subscribed).trial_eligible?
+  end
+
+  test "trial_eligible? stays false after the subscription is canceled" do
+    pay_subscriptions(:one).update_columns(status: "canceled", ends_at: 1.day.ago)
+
+    assert_not users(:subscribed).trial_eligible?
+  end
+
   test "has_subscriber_benefits? is true for admin" do
     user = users(:one)
     user.admin = true

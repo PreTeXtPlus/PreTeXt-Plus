@@ -1,6 +1,11 @@
   <p>
   <% if user.subscribed? %>
-    You are subscribed until <%= local_time_tag(user.subscribed_until, date_only: true) %>.
+    <% granting = user.subscription_seats.map(&:subscription).select(&:grants_privileges?) %>
+    <% if granting.all?(&:on_trial?) %>
+      Your free trial ends on <%= local_time_tag(granting.map(&:trial_ends_at).max, date_only: true) %>.
+    <% else %>
+      You are subscribed until <%= local_time_tag(user.subscribed_until, date_only: true) %>.
+    <% end %>
     <% if user.subscription_seats.first.subscription.user != user %>
       Your subscription is managed by <code><%= user.subscription_seats.first.subscription.user.email %></code>.
     <% else %>
