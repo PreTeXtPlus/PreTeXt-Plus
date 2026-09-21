@@ -710,7 +710,10 @@ describe("leader election", () => {
       encodeAwarenessUpdate(peerAwareness, [clientID]),
       "test",
     );
-    clearInterval(peerAwareness._checkInterval);
+    // The peer's own Awareness has served its purpose and holds a live timer.
+    // Destroying it does not disturb the copy of its state that the provider
+    // has already taken.
+    peerAwareness.destroy();
   };
 
   const lowerId = (provider) => provider.awareness.clientID - 1;
