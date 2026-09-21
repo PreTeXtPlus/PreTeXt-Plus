@@ -356,7 +356,7 @@ describe("staying level with the durable log", () => {
     applied(provider, [10, 11]);
     withStatus(provider, { seeded: true, snapshot_version: V1, update_ids: [10, 11] });
 
-    expect(await provider.isLevelWithLog()).toBe(true);
+    expect(await provider.compareWithLog()).toBe("level");
   });
 
   it("is behind when the server holds a row this client never read", async () => {
@@ -369,7 +369,7 @@ describe("staying level with the durable log", () => {
     withStatus(provider, { seeded: true, snapshot_version: V1, update_ids: [10, 11] });
 
     expect(provider.isDocComplete()).toBe(true);
-    expect(await provider.isLevelWithLog()).toBe(false);
+    expect(await provider.compareWithLog()).toBe("behind");
   });
 
   it("is behind when a compaction has moved the log into a newer snapshot", async () => {
@@ -379,7 +379,7 @@ describe("staying level with the durable log", () => {
     provider.snapshotVersion = V1;
     withStatus(provider, { seeded: true, snapshot_version: V2, update_ids: [] });
 
-    expect(await provider.isLevelWithLog()).toBe(false);
+    expect(await provider.compareWithLog()).toBe("behind");
   });
 
   it("is behind when it can no longer name the rows it applied", async () => {
@@ -388,22 +388,36 @@ describe("staying level with the durable log", () => {
     provider.appliedUpdateIds = null;
     withStatus(provider, { seeded: true, snapshot_version: V1, update_ids: [10] });
 
-    expect(await provider.isLevelWithLog()).toBe(false);
+    expect(await provider.compareWithLog()).toBe("behind");
   });
 
   it("is level against a doc nobody has seeded yet", async () => {
     const { provider } = makeProvider();
     withStatus(provider, { seeded: false, snapshot_version: null, update_ids: [] });
 
-    expect(await provider.isLevelWithLog()).toBe(true);
+    expect(await provider.compareWithLog()).toBe("level");
   });
 
-  it("does not claim to be level when the check itself fails", async () => {
+  it("says it cannot tell, rather than behind, when the check itself fails", async () => {
     const { provider } = makeProvider();
     vi.spyOn(provider, "fetchDocStatus").mockRejectedValue(new Error("offline"));
     vi.spyOn(console, "error").mockImplementation(() => {});
 
-    expect(await provider.isLevelWithLog()).toBe(false);
+    expect(await provider.compareWithLog()).toBe("unknown");
+  });
+
+  it("does not fetch the whole document because the status check failed", async () => {
+    const { provider } = makeProvider();
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    vi.spyOn(provider, "fetchDocStatus").mockRejectedValue(new Error("offline"));
+    const fullFetch = vi.spyOn(provider, "fetchAndApply").mockResolvedValue(undefined);
+
+    // The repair for being behind is the most expensive request here. Spending
+    // it because the cheap one failed would mean doing so on every autosave tick
+    // for as long as the network stayed unhappy -- on a book-shaped document,
+    // most of a megabyte every ten seconds, at the worst possible moment.
+    expect(await provider.catchUpWithLog()).toBe(false);
+    expect(fullFetch).not.toHaveBeenCalled();
   });
 
   it("catches up by resyncing, then re-checks against a fresh answer", async () => {
@@ -446,5 +460,135 @@ describe("staying level with the durable log", () => {
   });
 });
 
+describe("a session that loses an update in the relay", () => {
+  const VERSION = "2026-09-21T22:00:00.000000Z";
+
+  /**
+   * Two real providers over a relay that can be told to lose one message, and a
+   * durable log that keeps everything -- which is the shape of the failure this
+   * module exists for. Nothing here is mocked except the transport itself.
+   */
+  const makeSession = () => {
+    const rows = [];
+    const clients = [];
+    let nextId = 100;
+    let lost = null;
+    let snapshot = null;
+
+    // What `loadOrSeed` does for real: the seed becomes the server's snapshot,
+    // which is how a client joining later gets it.
+    const seedSession = (build) => {
+      const doc = new Y.Doc();
+      build(doc);
+      const update = Y.encodeStateAsUpdate(doc);
+      snapshot = Buffer.from(update).toString("base64");
+      for (const client of clients) Y.applyUpdate(client.doc, update, client);
+    };
+
+    const relay = (message) => {
+      for (const client of clients) {
+        const authored = message.sender === client.sender;
+        const drop =
+          !authored && lost && message.sender === lost.sender && message.seq === lost.seq;
+        if (!drop) client.receive(message);
+      }
+    };
+
+    const join = async () => {
+      const provider = new YCableProvider({
+        projectId: "p",
+        csrfToken: "c",
+        user: { name: "u", color: "#000000" },
+      });
+      provider.ready = true;
+      provider.subscription = {
+        perform: (action, data) => {
+          if (action === "doc_update") {
+            // The log records it even when the relay will not carry it.
+            const row = { id: nextId++, payload: data.payload };
+            rows.push(row);
+            relay({ type: "update", ...row, sender: data.sender, seq: data.seq });
+          }
+          return true;
+        },
+      };
+      provider.doc.on("update", (update, origin) => {
+        if (origin === provider) return;
+        provider.sendDocUpdate(update);
+      });
+      provider.fetchDocInfo = async () => ({
+        seeded: true,
+        snapshot_version: VERSION,
+        snapshot,
+        updates: rows.map((row) => ({ ...row })),
+      });
+      provider.fetchDocStatus = async () => ({
+        seeded: true,
+        snapshot_version: VERSION,
+        update_ids: rows.map((row) => row.id),
+      });
+      clients.push(provider);
+      await provider.fetchAndApply();
+      return provider;
+    };
+
+    return {
+      join,
+      rows,
+      seedSession,
+      lose: (provider, seq) => { lost = { sender: provider.sender, seq }; },
+    };
+  };
+
+  it("leaves the peer silently stale, then heals it from the log", async () => {
+    const session = makeSession();
+    const author = await session.join();
+    const peer = await session.join();
+
+    session.seedSession((doc) => doc.getText("t").insert(0, "x = 5"));
+
+    // The author replaces a number and stops. The relay loses the second of the
+    // two updates -- the insert, and the last thing this tab ever sends.
+    session.lose(author, 2);
+    author.doc.getText("t").delete(4, 1);
+    author.doc.getText("t").insert(4, "7");
+
+    expect(author.doc.getText("t").toString()).toBe("x = 7");
+    // The reported symptom, exactly: the deletion stuck, the replacement did not.
+    expect(peer.doc.getText("t").toString()).toBe("x = ");
+
+    // And nothing local gives the peer any reason to doubt itself. No later
+    // `seq` arrives to be missing, and nothing in its document depends on the
+    // update it lacks, so Yjs has nothing pending.
+    expect(peer.isDocComplete()).toBe(true);
+    expect(session.rows).toHaveLength(2);
+    expect(peer.appliedUpdateIds.size).toBe(1);
+
+    // The server is the only witness left, so ask it.
+    expect(await peer.compareWithLog()).toBe("behind");
+    expect(await peer.catchUpWithLog()).toBe(true);
+    expect(peer.doc.getText("t").toString()).toBe("x = 7");
+  });
+
+  it("carries the author's edits to a peer that joins after the drop", async () => {
+    const session = makeSession();
+    const author = await session.join();
+    const peer = await session.join();
+
+    session.seedSession((doc) => doc.getText("t").insert(0, "x = 5"));
+
+    session.lose(author, 1);
+    author.doc.getText("t").insert(5, "!");
+
+    // A latecomer reads the log rather than the relay, so a message the relay
+    // lost never reaches it as a gap in the first place.
+    const latecomer = await session.join();
+    expect(latecomer.doc.getText("t").toString()).toBe(author.doc.getText("t").toString());
+    expect(await latecomer.compareWithLog()).toBe("level");
+    expect(peer.doc.getText("t").toString()).not.toBe(author.doc.getText("t").toString());
+  });
+});
+
 const toBase64 = (doc) =>
   Buffer.from(Y.encodeStateAsUpdate(doc)).toString("base64");
+

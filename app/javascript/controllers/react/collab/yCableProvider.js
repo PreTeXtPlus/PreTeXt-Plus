@@ -603,8 +603,13 @@ export class YCableProvider {
   applyDocInfo(info) {
     if (info.snapshot) {
       Y.applyUpdate(this.doc, fromBase64(info.snapshot), this);
-      this.snapshotVersion = info.snapshot_version ?? this.snapshotVersion;
     }
+    // Recorded whether or not there were bytes to apply. It identifies the
+    // server's snapshot, and a doc row carrying no snapshot is still one this
+    // client is level with -- tying this to `info.snapshot` would leave the
+    // version null, which reads as "behind" and fetches the whole document on
+    // every save from then on.
+    if (info.snapshot_version) this.snapshotVersion = info.snapshot_version;
     // A fetch is a fresh, complete answer about which rows the server holds, so
     // it is also where a client that lost track of its claim set gets one back.
     if (this.appliedUpdateIds === null) this.appliedUpdateIds = new Set();
@@ -651,24 +656,32 @@ export class YCableProvider {
    *
    * A row that commits *after* this answer is not a gap: a save that precedes a
    * write is a save of the state before it, which is what saves are.
-   * @returns {Promise<boolean>}
+   *
+   * "unknown" is a third answer and not a synonym for "behind". The repair for
+   * being behind is fetching the whole document, which is the most expensive
+   * request this client makes; spending it because the *cheap* request just
+   * failed gets the response exactly backwards, and would do so once per
+   * autosave for as long as the network stayed unhappy.
+   * @returns {Promise<"level" | "behind" | "unknown">}
    */
-  async isLevelWithLog() {
+  async compareWithLog() {
     let status;
     try {
       status = await this.fetchDocStatus();
     } catch (error) {
-      // Cannot establish it, so do not claim it.
       console.error("Failed to read collaborative doc status:", error);
-      return false;
+      return "unknown";
     }
-    if (!status.seeded) return true;
+    if (!status.seeded) return "level";
     const version = status.snapshot_version;
     if (version && (this.snapshotVersion === null || this.snapshotVersion < version)) {
-      return false;
+      return "behind";
     }
-    if (this.appliedUpdateIds === null) return false;
-    return (status.update_ids ?? []).every((id) => this.appliedUpdateIds.has(id));
+    if (this.appliedUpdateIds === null) return "behind";
+    const hasEveryRow = (status.update_ids ?? []).every((id) =>
+      this.appliedUpdateIds.has(id),
+    );
+    return hasEveryRow ? "level" : "behind";
   }
 
   /**
@@ -681,9 +694,12 @@ export class YCableProvider {
    * @returns {Promise<boolean>}
    */
   async catchUpWithLog() {
-    if (await this.isLevelWithLog()) return true;
+    const before = await this.compareWithLog();
+    if (before === "level") return true;
+    // Not reachable is not the same as behind, and must not buy a full fetch.
+    if (before === "unknown") return false;
     await this.resyncNow();
-    return this.isLevelWithLog();
+    return (await this.compareWithLog()) === "level";
   }
 
   /**
