@@ -97,6 +97,19 @@ describe("outbound updates", () => {
     expect(sent.every((m) => m.action === "doc_update")).toBe(true);
   });
 
+  it("treats anything but an explicit refusal as delivered", () => {
+    const { provider } = makeProvider();
+    // Only `false` means ActionCable turned the message away. Reading any falsy
+    // value that way would queue every update and drain none, which looks from
+    // the outside like a tab that quietly stopped collaborating.
+    provider.subscription = { perform: () => undefined };
+
+    provider.sendDocUpdate(new Uint8Array([1]));
+
+    expect(provider.pendingSends).toEqual([]);
+    expect(provider.resendFullState).toBe(false);
+  });
+
   it("keeps an update the socket refuses and sends it on reconnect, in order", () => {
     const { provider, socket, sent } = makeProvider({ socketOpen: false });
 

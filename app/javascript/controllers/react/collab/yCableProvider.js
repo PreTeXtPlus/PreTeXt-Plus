@@ -364,9 +364,17 @@ export class YCableProvider {
    *   message to. It discards the message in that case and says so only through
    *   this return value, which for a `doc_update` is the difference between a
    *   delivered edit and one that exists in this tab alone.
+   *
+   *   Only an explicit `false` is read as a refusal, rather than anything
+   *   falsy. `Connection#send` returns a real boolean today (pinned by
+   *   actionCableContract.test.mjs), but the asymmetry is deliberate: a version
+   *   that returned `undefined` on success would, under a truthiness test,
+   *   queue every update and drain none -- a tab that silently stops
+   *   collaborating -- while the same drift read this way costs nothing.
    */
   perform(action, data) {
-    return this.subscription?.perform(action, { ...data, sender: this.sender }) ?? false;
+    if (!this.subscription) return false;
+    return this.subscription.perform(action, { ...data, sender: this.sender }) !== false;
   }
 
   /**
