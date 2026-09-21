@@ -209,6 +209,14 @@ describe("seq gap detection", () => {
 });
 
 describe("compaction bookkeeping", () => {
+  const compact = async (provider) => {
+    const fetchMock = vi.fn().mockResolvedValue({ ok: true });
+    vi.stubGlobal("fetch", fetchMock);
+    await provider.maybeCompact();
+    vi.unstubAllGlobals();
+    return fetchMock;
+  };
+
   it("does not claim a row whose content it has not read", () => {
     const { provider } = makeProvider();
     vi.spyOn(provider, "scheduleResync").mockImplementation(() => {});
@@ -216,17 +224,17 @@ describe("compaction bookkeeping", () => {
     provider.receive(
       peerMessage({ id: 10, seq: 1, payload: toBase64(new Y.Doc()) }),
     );
-    expect(provider.maxAppliedUpdateId).toBe(10);
+    expect([...provider.appliedUpdateIds]).toEqual([10]);
 
     // An oversized update is announced, not carried: its content only arrives
     // with the fetch that the announcement schedules.
     provider.receive(peerMessage({ type: "resync", id: 11, seq: 2 }));
 
     expect(provider.maxSeenUpdateId).toBe(11);
-    expect(provider.maxAppliedUpdateId).toBe(10);
+    expect([...provider.appliedUpdateIds]).toEqual([10]);
   });
 
-  it("offers the applied id, not the announced one", async () => {
+  it("names the rows it claims one by one, never a range", async () => {
     const { provider } = makeProvider();
     vi.spyOn(provider, "scheduleResync").mockImplementation(() => {});
     provider.receive(
@@ -235,14 +243,67 @@ describe("compaction bookkeeping", () => {
     provider.receive(peerMessage({ type: "resync", id: 11, seq: 2 }));
     provider.updatesSinceCompaction = 50;
 
-    const fetchMock = vi.fn().mockResolvedValue({ ok: true });
-    vi.stubGlobal("fetch", fetchMock);
-    await provider.maybeCompact();
-    vi.unstubAllGlobals();
+    const fetchMock = await compact(provider);
 
     expect(fetchMock).toHaveBeenCalledOnce();
     const body = JSON.parse(fetchMock.mock.calls[0][1].body);
-    expect(body.through_update_id).toBe(10);
+    expect(body.merged_update_ids).toEqual([10]);
+    expect(body).not.toHaveProperty("through_update_id");
+  });
+
+  it("leaves a row it never read out of the claim, whatever its id", async () => {
+    const { provider } = makeProvider();
+    // The case no other guard here catches: row 10 was the last thing its sender
+    // ever sent, so no later `seq` reveals it missing, and nothing in the doc
+    // depends on it, so the doc reports itself complete. A high-water mark taken
+    // from row 11 would have asked the server to delete row 10 as well.
+    provider.receive(
+      peerMessage({ id: 11, seq: 1, payload: toBase64(new Y.Doc()) }),
+    );
+    expect(provider.isDocComplete()).toBe(true);
+    provider.updatesSinceCompaction = 50;
+
+    const fetchMock = await compact(provider);
+
+    const body = JSON.parse(fetchMock.mock.calls[0][1].body);
+    expect(body.merged_update_ids).toEqual([11]);
+    expect(body.merged_update_ids).not.toContain(10);
+  });
+
+  it("stops claiming rows it can no longer name, until a fetch rebuilds the set", async () => {
+    const { provider } = makeProvider();
+    vi.spyOn(provider, "scheduleResync").mockImplementation(() => {});
+    for (let id = 1; id <= 10001; id++) provider.noteApplied(id);
+    expect(provider.appliedUpdateIds).toBeNull();
+
+    provider.updatesSinceCompaction = 50;
+    expect(await compact(provider)).not.toHaveBeenCalled();
+
+    provider.applyDocInfo({ snapshot: null, updates: [] });
+    expect([...provider.appliedUpdateIds]).toEqual([]);
+  });
+
+  it("keeps a row that landed while the compaction request was in flight", async () => {
+    const { provider } = makeProvider();
+    provider.receive(
+      peerMessage({ id: 10, seq: 1, payload: toBase64(new Y.Doc()) }),
+    );
+    provider.updatesSinceCompaction = 50;
+
+    const raced = 11;
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockImplementation(async () => {
+        provider.noteApplied(raced);
+        return { ok: true };
+      }),
+    );
+    await provider.maybeCompact();
+    vi.unstubAllGlobals();
+
+    // 10 was claimed and is gone from the set; 11 was not, so it stays to be
+    // claimed next time rather than being dropped on the floor.
+    expect([...provider.appliedUpdateIds]).toEqual([raced]);
   });
 
   it("does not compact a doc that is missing an update", async () => {
@@ -256,12 +317,9 @@ describe("compaction bookkeeping", () => {
     Y.applyUpdate(provider.doc, updates[1]); // the first never arrived
 
     provider.updatesSinceCompaction = 50;
-    provider.maxAppliedUpdateId = 42;
+    provider.noteApplied(42);
 
-    const fetchMock = vi.fn().mockResolvedValue({ ok: true });
-    vi.stubGlobal("fetch", fetchMock);
-    await provider.maybeCompact();
-    vi.unstubAllGlobals();
+    const fetchMock = await compact(provider);
 
     expect(provider.isDocComplete()).toBe(false);
     expect(fetchMock).not.toHaveBeenCalled();

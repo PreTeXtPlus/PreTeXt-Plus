@@ -6,23 +6,11 @@
 class ProjectDocsController < ApplicationController
   before_action :set_project
 
-  # How long a log row is kept past the point a client says it has merged it.
-  #
-  # `project_doc_updates.id` comes from a sequence, and a sequence value is
-  # allocated at INSERT, before COMMIT. So a reader ordering by id -- #show
-  # here, and solid_cable's broadcast poller on the other leg -- can pass over a
-  # row whose id is *lower* than one it has already returned, and a compacting
-  # client can end up claiming to have merged an update it never saw. Deleting
-  # that row would destroy the update for the whole session: the snapshot
-  # replacing it does not contain it, and nothing else does either.
-  #
-  # So the id a client offers is treated as a ceiling rather than a licence.
-  # Anything younger than this stays, whoever claims it, which leaves the skipped
-  # row in place for the catch-up fetch that yCableProvider's seq-gap detection
-  # triggers within a poll or two. Compaction runs once a minute and exists to
-  # bound the log, not to empty it, so the cost of holding a few more rows for
-  # this long is nothing.
-  COMPACTION_GRACE = 30.seconds
+  # The most rows one compaction may name. Matches the client's own cap on the
+  # set it tracks (yCableProvider's MAX_TRACKED_UPDATE_IDS); anything beyond it
+  # is ignored rather than rejected, since a shorter claim only ever means fewer
+  # deletions, and the rows left behind are collected by the next compaction.
+  MAX_MERGED_IDS = 10_000
 
   # GET /projects/:id/doc
   # Everything a joining client needs: the last compacted snapshot plus every
@@ -51,22 +39,28 @@ class ProjectDocsController < ApplicationController
   end
 
   # PUT /projects/:id/doc
-  # Compaction: replace the snapshot with a full state that has incorporated
-  # every update through `through_update_id`, and drop those rows once they are
-  # older than COMPACTION_GRACE. Updates that raced in with higher ids survive,
-  # as do ones too young to be safely claimed -- merges are commutative, so
-  # snapshot + surviving rows still yields the current document.
+  # Compaction: replace the snapshot with a full state, and delete exactly the
+  # rows that state was built from -- `merged_update_ids`, named one by one.
+  #
+  # Deliberately not a range. `project_doc_updates.id` comes from a sequence, and
+  # a sequence value is allocated at INSERT, before COMMIT, so a reader ordering
+  # by id can pass over a row whose id is lower than one it has already returned.
+  # A client asking to delete "everything through N" is therefore asserting
+  # something it cannot check, and getting it wrong destroys an update for the
+  # whole session: the snapshot replacing the row does not carry it, and by then
+  # nothing else does either. A list of ids asserts only what the client actually
+  # read, which it does know.
+  #
+  # Rows that raced in afterwards, and any the client never saw, are simply
+  # absent from the list and survive -- merges are commutative, so snapshot plus
+  # surviving rows still yields the current document.
   def update
     doc = @project.project_doc
     return head :conflict if doc.nil?
 
-    through_id = params.require(:through_update_id).to_i
     ActiveRecord::Base.transaction do
       doc.update!(snapshot: decoded_snapshot)
-      @project.project_doc_updates
-        .where(id: ..through_id)
-        .where(created_at: ...COMPACTION_GRACE.ago)
-        .delete_all
+      @project.project_doc_updates.where(id: merged_update_ids).delete_all if merged_update_ids.any?
     end
     head :no_content
   end
@@ -81,5 +75,12 @@ class ProjectDocsController < ApplicationController
 
   def decoded_snapshot
     Base64.strict_decode64(params.require(:snapshot))
+  end
+
+  # A client that sends none is compacting without claiming anything, which is
+  # legal and just means the snapshot is refreshed while the log stays put.
+  def merged_update_ids
+    @merged_update_ids ||=
+      Array(params[:merged_update_ids]).first(MAX_MERGED_IDS).map(&:to_i)
   end
 end

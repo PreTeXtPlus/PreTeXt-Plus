@@ -27,9 +27,9 @@ import { reportCollabIncident } from "./reportIncident";
  * independently duplication.
  *
  * Compaction: the leader (lowest awareness clientID) periodically PUTs the
- * full doc state with the highest update id it has incorporated; the server
- * swaps the snapshot and deletes only rows up to that id. "Incorporated" has to
- * mean *applied*, not *heard about* -- see `maxAppliedUpdateId`.
+ * full doc state together with the log rows that state carries; the server
+ * swaps the snapshot and deletes exactly the rows it named. Which rows those
+ * are has to be *known*, not inferred from an id range -- see `noteApplied`.
  *
  * Lost updates: a Yjs update that reaches nobody is not a missing keystroke, it
  * is a poisoned stream. Yjs integrates a peer's inserts in causal order, so one
@@ -51,10 +51,10 @@ import { reportCollabIncident } from "./reportIncident";
  *     *pulled* state. Undelivered updates are queued and flushed on reconnect
  *     (`sendDocUpdate`, `flushPendingSends`).
  *   * Compaction destroys it. The server deletes the log rows a compacting
- *     client claims to have merged, so a client that claims too much erases an
- *     update for everyone. `maxAppliedUpdateId` never counts a row this client
- *     has not actually applied, and the server keeps a grace window on top (see
- *     ProjectDocsController::COMPACTION_GRACE).
+ *     client says it has merged, so a client that claims too much erases an
+ *     update for everyone. The claim is the exact set of row ids whose payloads
+ *     are in the snapshot (`appliedUpdateIds`), never a range: a range has to be
+ *     *inferred* to be complete, and nothing on this side can do that soundly.
  *
  * Relay watchdog: the channel broadcasts to every subscriber *including the
  * sender*, so this client's own awareness heartbeat comes back to it every
@@ -86,6 +86,12 @@ const RELAY_SILENCE_MS = AWARENESS_HEARTBEAT_MS * 2.5;
 // message that covers every send this tab missed, however long it was off the
 // air. Generous, because replaying is much the cheaper of the two.
 const MAX_PENDING_SENDS = 200;
+// How many merged row ids to carry before giving up on naming them exactly. A
+// compacting leader clears its set every COMPACTION_INTERVAL_MS, so only a tab
+// that has spent a long session never leading can approach this; past it the tab
+// stops claiming anything until its next full fetch rebuilds the set, which
+// costs a slightly longer update log and nothing else.
+const MAX_TRACKED_UPDATE_IDS = 10000;
 
 export class YCableProvider {
   /** @param {ProviderConfig} config */
@@ -113,11 +119,16 @@ export class YCableProvider {
     // Set when `pendingSends` overflowed: the queue is dropped and the next
     // flush resends the whole doc in its place.
     this.resendFullState = false;
-    // The highest update-log row id this client has *applied*, and the highest
-    // it has merely heard announced. Compaction may only ever claim the former:
-    // the server deletes every row through the id it is given, so claiming one
-    // this client skipped destroys that update for the whole session.
-    this.maxAppliedUpdateId = 0;
+    /**
+     * The update-log rows whose payloads this client has actually applied, and
+     * so the exact set it may ask the server to delete at compaction. Null once
+     * it has grown past MAX_TRACKED_UPDATE_IDS, meaning "cannot name it any
+     * more" -- the next full fetch rebuilds it.
+     * @type {Set<number> | null}
+     */
+    this.appliedUpdateIds = new Set();
+    // The highest row id heard of, applied or not. Drives the compaction
+    // trigger only.
     this.maxSeenUpdateId = 0;
     this.updatesSinceCompaction = 0;
     this.ready = false;
@@ -449,20 +460,33 @@ export class YCableProvider {
   }
 
   /**
-   * Note that this client now holds the *content* of update-log row `id`. Only
-   * this value is ever offered to compaction.
+   * Note that this client now holds the *content* of update-log row `id`. This
+   * set, and nothing derived from it, is what compaction offers the server.
    *
-   * It cannot also verify that nothing below it was skipped: `project_doc_updates.id`
-   * comes from a sequence shared with every other project, so one project's row
-   * ids are never contiguous and a hole in them means nothing. Catching a skip
-   * is `noteSeq`'s job, and surviving one long enough to fix it is the server's
-   * compaction grace window.
+   * It used to be a high-water mark, which was unsound in a way no other guard
+   * here catches. `project_doc_updates.id` comes from a sequence shared with
+   * every project, so a hole in one project's ids means nothing and a mark
+   * cannot be checked for one; and a row can be missing from a `GET /doc`
+   * ordered by id, because a sequence hands out ids before the commits a reader
+   * needs to see. Apply a later row and the mark moves past the missing one.
+   *
+   * Neither `noteSeq` nor `isDocComplete` closes that. If the missing row was
+   * the last thing its sender sent, no later `seq` ever arrives to reveal the
+   * hole; and nothing in the doc causally depends on that row, so Yjs has
+   * nothing pending and reports a complete document. The mark would then license
+   * the server to delete the one remaining copy.
+   *
+   * Naming the rows exactly removes the inference: a row this client never read
+   * is simply not in the set, so it cannot be asked for.
    * @param {unknown} id
    * @returns {void}
    */
   noteApplied(id) {
-    if (typeof id === "number" && id > this.maxAppliedUpdateId) {
-      this.maxAppliedUpdateId = id;
+    if (typeof id !== "number" || this.appliedUpdateIds === null) return;
+    this.appliedUpdateIds.add(id);
+    if (this.appliedUpdateIds.size > MAX_TRACKED_UPDATE_IDS) {
+      this.appliedUpdateIds = null;
+      this.scheduleResync();
     }
   }
 
@@ -478,6 +502,10 @@ export class YCableProvider {
    * The row itself is still in `project_doc_updates`, so the repair is the
    * catch-up fetch that already exists. The report is what makes a drop
    * countable rather than a mystery a month later.
+   *
+   * This catches a drop early, but it is not what makes compaction safe -- a
+   * drop of a sender's *last* update leaves no later `seq` to be missing. See
+   * `noteApplied`.
    * @param {{sender?: string, seq?: unknown}} message
    * @returns {void}
    */
@@ -559,6 +587,9 @@ export class YCableProvider {
     if (info.snapshot) {
       Y.applyUpdate(this.doc, fromBase64(info.snapshot), this);
     }
+    // A fetch is a fresh, complete answer about which rows the server holds, so
+    // it is also where a client that lost track of its claim set gets one back.
+    if (this.appliedUpdateIds === null) this.appliedUpdateIds = new Set();
     for (const update of info.updates ?? []) {
       Y.applyUpdate(this.doc, fromBase64(update.payload), this);
       this.noteSeen(update.id);
@@ -613,18 +644,26 @@ export class YCableProvider {
     if (this.destroyed || !this.isLeader()) return;
     if (this.updatesSinceCompaction < COMPACTION_MIN_UPDATES) return;
     // A doc still holding unintegrated updates is missing something. Snapshotting
-    // it would hand the server a state that is authoritative and incomplete at
-    // once, and hand it the id range to delete on top of that. Waiting costs a
-    // minute; the resync that fills the hole is already scheduled.
+    // it would make a state that is authoritative and incomplete at once the one
+    // every future client starts from. Waiting costs a minute; the resync that
+    // fills the hole is already scheduled.
     if (!this.isDocComplete()) return;
-    const throughId = this.maxAppliedUpdateId;
+    if (this.appliedUpdateIds === null || this.appliedUpdateIds.size === 0) return;
+
+    // Snapshot and claim are taken together, and the claim is spelled out in
+    // full, so what the server deletes is exactly what this snapshot carries.
+    // Rows that land while the request is in flight are not in `merged` and stay
+    // claimed for next time.
+    const merged = [...this.appliedUpdateIds];
     const snapshot = toBase64(Y.encodeStateAsUpdate(this.doc));
     const res = await fetch(this.docUrl, {
       method: "PUT",
       headers: this.jsonHeaders(),
-      body: JSON.stringify({ snapshot, through_update_id: throughId }),
+      body: JSON.stringify({ snapshot, merged_update_ids: merged }),
     }).catch(() => null);
-    if (res?.ok) this.updatesSinceCompaction = 0;
+    if (!res?.ok) return;
+    for (const id of merged) this.appliedUpdateIds?.delete(id);
+    this.updatesSinceCompaction = 0;
   }
 
   jsonHeaders() {

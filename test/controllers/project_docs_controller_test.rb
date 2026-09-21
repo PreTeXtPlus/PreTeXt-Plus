@@ -10,6 +10,16 @@ class ProjectDocsControllerTest < ActionDispatch::IntegrationTest
     Base64.strict_encode64(bytes)
   end
 
+  def with_cap(size)
+    original = ProjectDocsController::MAX_MERGED_IDS
+    ProjectDocsController.send(:remove_const, :MAX_MERGED_IDS)
+    ProjectDocsController.const_set(:MAX_MERGED_IDS, size)
+    yield
+  ensure
+    ProjectDocsController.send(:remove_const, :MAX_MERGED_IDS)
+    ProjectDocsController.const_set(:MAX_MERGED_IDS, original)
+  end
+
   test "show reports an unseeded doc" do
     get doc_project_url(@project)
     assert_response :success
@@ -43,35 +53,61 @@ class ProjectDocsControllerTest < ActionDispatch::IntegrationTest
     assert_equal [ b64("u1"), b64("u2") ], body["updates"].map { |u| u["payload"] }
   end
 
-  test "compaction replaces the snapshot and deletes only rows through the given id" do
+  test "compaction replaces the snapshot and deletes exactly the rows it names" do
     @project.create_project_doc!(snapshot: "old")
-    merged = @project.project_doc_updates.create!(payload: "merged", created_at: 1.minute.ago)
-    raced = @project.project_doc_updates.create!(payload: "raced-in-later", created_at: 1.minute.ago)
+    merged = @project.project_doc_updates.create!(payload: "merged")
+    raced = @project.project_doc_updates.create!(payload: "raced-in-later")
 
-    put doc_project_url(@project), params: { snapshot: b64("new"), through_update_id: merged.id }, as: :json
+    put doc_project_url(@project),
+      params: { snapshot: b64("new"), merged_update_ids: [ merged.id ] }, as: :json
     assert_response :no_content
 
     assert_equal "new", @project.reload.project_doc.snapshot
     assert_equal [ raced.id ], @project.project_doc_updates.pluck(:id)
   end
 
-  test "compaction keeps a claimed row that is still inside the grace window" do
+  test "compaction keeps a row the client skipped, even below the ids it claims" do
     @project.create_project_doc!(snapshot: "old")
-    settled = @project.project_doc_updates.create!(payload: "settled", created_at: 1.minute.ago)
-    just_landed = @project.project_doc_updates.create!(payload: "just-landed")
+    skipped = @project.project_doc_updates.create!(payload: "never-read")
+    merged = @project.project_doc_updates.create!(payload: "merged")
 
+    # `skipped` has the lower id, so a "delete everything through N" claim would
+    # take it -- and it is the only copy of that update, since the snapshot being
+    # written was built without it. A client can end up here innocently: ids come
+    # from a sequence that hands them out before the commits a reader needs to
+    # see, so a read ordered by id can pass a row over. Naming ids one by one is
+    # what makes the claim checkable.
     put doc_project_url(@project),
-      params: { snapshot: b64("new"), through_update_id: just_landed.id }, as: :json
+      params: { snapshot: b64("new"), merged_update_ids: [ merged.id ] }, as: :json
     assert_response :no_content
 
-    # A client can hold an id without ever having read the row behind it: ids
-    # come from a sequence that hands them out before the commit a reader would
-    # need to see, so a reader ordering by id can pass one over. Honouring the
-    # claim immediately would delete an update that is still the only copy of
-    # somebody's edit, so a claim only takes effect once the row is old enough
-    # that no reader can still be racing it.
-    assert_equal [ just_landed.id ], @project.project_doc_updates.pluck(:id)
-    assert_nil ProjectDocUpdate.find_by(id: settled.id)
+    assert_equal [ skipped.id ], @project.project_doc_updates.pluck(:id)
+  end
+
+  test "compaction with nothing claimed refreshes the snapshot and keeps the log" do
+    @project.create_project_doc!(snapshot: "old")
+    row = @project.project_doc_updates.create!(payload: "u1")
+
+    put doc_project_url(@project), params: { snapshot: b64("new") }, as: :json
+    assert_response :no_content
+
+    assert_equal "new", @project.reload.project_doc.snapshot
+    assert_equal [ row.id ], @project.project_doc_updates.pluck(:id)
+  end
+
+  test "compaction ignores claimed ids beyond the cap rather than refusing them" do
+    @project.create_project_doc!(snapshot: "old")
+    rows = 3.times.map { |i| @project.project_doc_updates.create!(payload: "u#{i}") }
+
+    # A shorter claim only ever means fewer deletions, so truncating is safe and
+    # the remainder is collected next time round.
+    with_cap(2) do
+      put doc_project_url(@project),
+        params: { snapshot: b64("new"), merged_update_ids: rows.map(&:id) }, as: :json
+    end
+    assert_response :no_content
+
+    assert_equal [ rows.last.id ], @project.project_doc_updates.pluck(:id)
   end
 
   test "compaction on an unseeded doc conflicts" do
@@ -87,6 +123,20 @@ class ProjectDocsControllerTest < ActionDispatch::IntegrationTest
     sign_in users(:subscribed)
     get doc_project_url(@project), headers: { "Accept" => "application/json" }
     assert_response :forbidden
+  end
+
+  test "compaction only deletes rows belonging to the project it is called on" do
+    other = projects(:two)
+    @project.create_project_doc!(snapshot: "old")
+    mine = @project.project_doc_updates.create!(payload: "mine")
+    theirs = other.project_doc_updates.create!(payload: "theirs")
+
+    put doc_project_url(@project),
+      params: { snapshot: b64("new"), merged_update_ids: [ mine.id, theirs.id ] }, as: :json
+    assert_response :no_content
+
+    assert_empty @project.project_doc_updates.pluck(:id)
+    assert_equal [ theirs.id ], other.project_doc_updates.pluck(:id)
   end
 
   test "removing the last collaboration resets the doc" do
