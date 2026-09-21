@@ -22,7 +22,17 @@ class CollabIncidentsController < ApplicationController
   # problem, so mute it in Honeybadger if it turns out to be noisy -- but read it
   # first, because a stall that never recovers means the process stayed wedged,
   # which is the case that needs a restart.
-  KINDS = %w[ join_failed relay_stalled relay_recovered ].freeze
+  #
+  # `update_gap` and `doc_incomplete` are the two halves of a dropped Yjs update.
+  # The gap is the cause -- a peer's update that left its tab and arrived
+  # nowhere, which the receiving client notices only because updates carry a
+  # per-sender counter. The incomplete doc is the consequence, and the one that
+  # costs an author work: Yjs withholds every later insert from that peer while
+  # applying their deletes as normal, so the session quietly reads as though
+  # replacements were deleted and never retyped. Both self-heal now, so a report
+  # is a measurement rather than an emergency -- but the rate is the only way to
+  # know whether the relay is still losing messages.
+  KINDS = %w[ join_failed relay_stalled relay_recovered update_gap doc_incomplete ].freeze
 
   # Free text from the browser (an exception message, usually). Bounded because it
   # is written into an error tracker, and an unbounded field pointed at an error

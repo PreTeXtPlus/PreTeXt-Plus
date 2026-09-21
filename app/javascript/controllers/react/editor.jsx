@@ -604,6 +604,38 @@ function EditorApp({ config }) {
     return persistableShape(working.current) !== persistableShape(serverSnapshot.current);
   }, []);
 
+  // Guard against persisting a shared doc that is missing an update.
+  //
+  // Yjs withholds an update whose causal predecessor never arrived, so a client
+  // that missed one reads the document as though the author's replacements were
+  // never typed -- while their deletions, which have no such dependency, apply
+  // normally. In collab mode the doc *is* the save payload, so persisting one in
+  // that state writes the gap into the project's source for everybody. The
+  // durable update log is the repair; this pulls it and re-checks.
+  const ensureDocComplete = useCallback(
+    async (provider, hard) => {
+      if (provider.isDocComplete()) return true;
+      await provider.resyncNow();
+      if (provider.isDocComplete()) return true;
+      reportCollabIncident({
+        kind: "doc_incomplete",
+        projectId,
+        csrfToken,
+        detail: hard
+          ? "Saved from a doc still missing an update after a resync."
+          : "Held back an autosave from a doc still missing an update after a resync.",
+      });
+      // Autosave is the dangerous one: nobody asked for it, it runs every
+      // AUTOSAVE_MS on whichever tab is leader -- a collaborator's idle
+      // background tab qualifies -- and it would write this doc's version over
+      // source that is currently correct. Skipping costs one tick. An explicit
+      // save is the author asking for their own buffer to be written, and
+      // silently refusing that is worse than writing it.
+      return hard;
+    },
+    [projectId, csrfToken],
+  );
+
   // Save the current document.  `hard` saves even when not dirty (used by
   // the Save button and before copy-conversion).  Snapshots the buffer up
   // front so edits made *during* the in-flight save aren't mistakenly marked
@@ -623,6 +655,7 @@ function EditorApp({ config }) {
         if (!initial.current || !collabServerSnapshot.current) return false;
         if (!hard && !provider.isLeader()) return true;
         if (!hard && !isDirty()) return true;
+        if (!(await ensureDocComplete(provider, hard))) return true;
         const snapshot = collabEditorState(provider.doc, initial.current);
         try {
           await saveMutation.mutateAsync({
@@ -662,7 +695,7 @@ function EditorApp({ config }) {
         return false;
       }
     },
-    [isDirty, saveMutation],
+    [isDirty, saveMutation, ensureDocComplete],
   );
 
   // ----- Autosave: fire `save` every AUTOSAVE_MS, only when dirty ----------

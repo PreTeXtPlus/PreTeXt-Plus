@@ -9,6 +9,15 @@
 # Every client subscribes with a random per-tab `sender` id and ignores its
 # own broadcasts; Yjs updates are idempotent anyway, so a missed filter is
 # harmless.
+#
+# A `doc_update` also carries a `seq`, incremented by its sender and echoed back
+# untouched. The server has no use for it: it is there so a *receiver* can tell
+# that one of a peer's updates never arrived, which is not otherwise observable
+# from anywhere. The relay can drop a message silently -- solid_cable's listener
+# polls `solid_cable_messages` by id and skips a row whose id was handed out
+# before a commit that had not landed when it read -- and a dropped Yjs update
+# does not degrade gracefully: it strands every later insert from that peer,
+# unapplied, in each client that missed it. See yCableProvider's `noteSeq`.
 class ProjectDocChannel < ApplicationCable::Channel
   # The development cable adapter is postgresql, whose LISTEN/NOTIFY transport caps one
   # message at 8000 bytes and raises inside the broadcast where no one watching the
@@ -43,14 +52,16 @@ class ProjectDocChannel < ApplicationCable::Channel
       self.class.broadcast_to(@project, {
         type: "resync",
         id: update.id,
-        sender: data["sender"]
+        sender: data["sender"],
+        seq: data["seq"]&.to_i
       })
     else
       self.class.broadcast_to(@project, {
         type: "update",
         id: update.id,
         payload: payload,
-        sender: data["sender"]
+        sender: data["sender"],
+        seq: data["seq"]&.to_i
       })
     end
   end

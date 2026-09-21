@@ -41,6 +41,23 @@ class ProjectDocChannelTest < ActionCable::Channel::TestCase
     assert_equal "tab-1", message["sender"]
   end
 
+  test "a doc_update echoes the sender's seq, on both the carried and announced forms" do
+    project = projects(:one)
+    stub_connection current_user: users(:one)
+    subscribe project_id: project.id
+
+    # The server does nothing with `seq`. It is echoed so a *receiver* can tell
+    # that one of a peer's updates never arrived -- the one failure in this
+    # transport that is invisible from every other vantage point.
+    perform :doc_update, payload: Base64.strict_encode64("small"), sender: "tab-1", seq: 7
+    assert_equal 7, last_broadcast(project)["seq"]
+
+    big = Base64.strict_encode64("x" * ProjectDocChannel::MAX_BROADCAST_BYTES)
+    perform :doc_update, payload: big, sender: "tab-1", seq: 8
+    assert_equal "resync", last_broadcast(project)["type"]
+    assert_equal 8, last_broadcast(project)["seq"]
+  end
+
   test "an oversized update is persisted but announced rather than sent" do
     project = projects(:one)
     stub_connection current_user: users(:one)
@@ -85,4 +102,10 @@ class ProjectDocChannelTest < ActionCable::Channel::TestCase
       end
     end
   end
+
+  private
+
+    def last_broadcast(project)
+      JSON.parse(broadcasts(ProjectDocChannel.broadcasting_for(project)).last)
+    end
 end

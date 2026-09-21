@@ -13,7 +13,7 @@
  * gets out.
  *
  * @param {Object} incident
- * @param {"join_failed"|"relay_stalled"|"relay_recovered"} incident.kind
+ * @param {"join_failed"|"relay_stalled"|"relay_recovered"|"update_gap"|"doc_incomplete"} incident.kind
  * @param {string} incident.projectId
  * @param {string} [incident.csrfToken]
  * @param {string} [incident.detail] Free text, truncated server-side.
