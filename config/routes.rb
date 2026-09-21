@@ -171,6 +171,7 @@ Rails.application.routes.draw do
     member do
       # Collaborative-editing doc persistence (live relay is ProjectDocChannel).
       get "doc" => "project_docs#show", as: "doc"
+      get "doc/status" => "project_docs#status", as: "doc_status"
       post "doc/seed" => "project_docs#seed", as: "seed_doc"
       put "doc" => "project_docs#update"
       get "share" => "projects#share", as: "share"

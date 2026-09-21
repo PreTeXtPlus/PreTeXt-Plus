@@ -339,5 +339,112 @@ describe("compaction bookkeeping", () => {
   });
 });
 
+describe("staying level with the durable log", () => {
+  const withStatus = (provider, status) =>
+    vi.spyOn(provider, "fetchDocStatus").mockResolvedValue(status);
+
+  const applied = (provider, ids) => {
+    for (const id of ids) provider.noteApplied(id);
+  };
+
+  const V1 = "2026-09-21T22:00:00.000000Z";
+  const V2 = "2026-09-21T22:05:00.000000Z";
+
+  it("is level when the server lists only rows this client applied", async () => {
+    const { provider } = makeProvider();
+    provider.snapshotVersion = V1;
+    applied(provider, [10, 11]);
+    withStatus(provider, { seeded: true, snapshot_version: V1, update_ids: [10, 11] });
+
+    expect(await provider.isLevelWithLog()).toBe(true);
+  });
+
+  it("is behind when the server holds a row this client never read", async () => {
+    const { provider } = makeProvider();
+    // The case `isDocComplete` cannot see: row 10 was the last thing its sender
+    // sent, so nothing in the doc depends on it and Yjs has nothing pending.
+    // Locally this tab looks perfect; only the server knows otherwise.
+    provider.snapshotVersion = V1;
+    applied(provider, [11]);
+    withStatus(provider, { seeded: true, snapshot_version: V1, update_ids: [10, 11] });
+
+    expect(provider.isDocComplete()).toBe(true);
+    expect(await provider.isLevelWithLog()).toBe(false);
+  });
+
+  it("is behind when a compaction has moved the log into a newer snapshot", async () => {
+    const { provider } = makeProvider();
+    // Nothing is missing from `update_ids` -- those rows are gone, folded into a
+    // snapshot this client has never applied. Checking ids alone would miss it.
+    provider.snapshotVersion = V1;
+    withStatus(provider, { seeded: true, snapshot_version: V2, update_ids: [] });
+
+    expect(await provider.isLevelWithLog()).toBe(false);
+  });
+
+  it("is behind when it can no longer name the rows it applied", async () => {
+    const { provider } = makeProvider();
+    provider.snapshotVersion = V1;
+    provider.appliedUpdateIds = null;
+    withStatus(provider, { seeded: true, snapshot_version: V1, update_ids: [10] });
+
+    expect(await provider.isLevelWithLog()).toBe(false);
+  });
+
+  it("is level against a doc nobody has seeded yet", async () => {
+    const { provider } = makeProvider();
+    withStatus(provider, { seeded: false, snapshot_version: null, update_ids: [] });
+
+    expect(await provider.isLevelWithLog()).toBe(true);
+  });
+
+  it("does not claim to be level when the check itself fails", async () => {
+    const { provider } = makeProvider();
+    vi.spyOn(provider, "fetchDocStatus").mockRejectedValue(new Error("offline"));
+    vi.spyOn(console, "error").mockImplementation(() => {});
+
+    expect(await provider.isLevelWithLog()).toBe(false);
+  });
+
+  it("catches up by resyncing, then re-checks against a fresh answer", async () => {
+    const { provider } = makeProvider();
+    provider.snapshotVersion = V1;
+    const resync = vi.spyOn(provider, "resyncNow").mockImplementation(async () => {
+      provider.noteApplied(10);
+    });
+    const status = withStatus(provider, {
+      seeded: true,
+      snapshot_version: V1,
+      update_ids: [10],
+    });
+
+    expect(await provider.catchUpWithLog()).toBe(true);
+    expect(resync).toHaveBeenCalledOnce();
+    // Twice, not once: a compaction can land while the resync is in flight, and
+    // judging the result by the stale answer would misreport a current client.
+    expect(status).toHaveBeenCalledTimes(2);
+  });
+
+  it("reports failure when the resync does not close the gap", async () => {
+    const { provider } = makeProvider();
+    vi.spyOn(provider, "resyncNow").mockResolvedValue(undefined);
+    withStatus(provider, { seeded: true, snapshot_version: V2, update_ids: [] });
+
+    expect(await provider.catchUpWithLog()).toBe(false);
+  });
+
+  it("records the snapshot version it applied, so it can tell it is current", () => {
+    const { provider } = makeProvider();
+
+    provider.applyDocInfo({
+      snapshot: toBase64(new Y.Doc()),
+      snapshot_version: V2,
+      updates: [],
+    });
+
+    expect(provider.snapshotVersion).toBe(V2);
+  });
+});
+
 const toBase64 = (doc) =>
   Buffer.from(Y.encodeStateAsUpdate(doc)).toString("base64");

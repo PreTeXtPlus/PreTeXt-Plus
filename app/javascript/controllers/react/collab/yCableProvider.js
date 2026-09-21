@@ -127,6 +127,12 @@ export class YCableProvider {
      * @type {Set<number> | null}
      */
     this.appliedUpdateIds = new Set();
+    /**
+     * Which snapshot this client's document was built from, as the server names
+     * it. Fixed-width UTC, so `<` orders two of them. Null until one is applied.
+     * @type {string | null}
+     */
+    this.snapshotVersion = null;
     // The highest row id heard of, applied or not. Drives the compaction
     // trigger only.
     this.maxSeenUpdateId = 0;
@@ -575,6 +581,9 @@ export class YCableProvider {
     });
     if (res.status === 201) {
       Y.applyUpdate(this.doc, seedUpdate, this);
+      // Our own seed is now the snapshot; the response names it, so the seeder
+      // starts level with the log without fetching back the bytes it just sent.
+      this.snapshotVersion = (await res.json().catch(() => ({}))).snapshot_version ?? null;
     } else if (res.status === 409) {
       // Another client seeded first; adopt its state.
       this.applyDocInfo(await this.fetchDocInfo());
@@ -594,6 +603,7 @@ export class YCableProvider {
   applyDocInfo(info) {
     if (info.snapshot) {
       Y.applyUpdate(this.doc, fromBase64(info.snapshot), this);
+      this.snapshotVersion = info.snapshot_version ?? this.snapshotVersion;
     }
     // A fetch is a fresh, complete answer about which rows the server holds, so
     // it is also where a client that lost track of its claim set gets one back.
@@ -607,6 +617,73 @@ export class YCableProvider {
 
   async fetchAndApply() {
     this.applyDocInfo(await this.fetchDocInfo());
+  }
+
+  /**
+   * Ask what is persisted, without reading it. A few hundred bytes, so this is
+   * affordable on every save where a full fetch is not.
+   * @returns {Promise<{seeded: boolean, snapshot_version: string|null, update_ids: number[]}>}
+   */
+  async fetchDocStatus() {
+    const res = await fetch(`${this.docUrl}/status`, {
+      headers: { Accept: "application/json" },
+    });
+    if (!res.ok) throw new Error(`Failed to read collaborative doc status: ${res.status}`);
+    return res.json();
+  }
+
+  /**
+   * Whether this client holds everything the durable log currently holds.
+   *
+   * The question `isDocComplete` cannot answer. Yjs only knows an update is
+   * missing when something it *does* hold depends on it; an update nothing
+   * depends on -- the last one a peer sent before going quiet, say -- leaves
+   * both pending stores empty, and the client looks, to itself, perfectly
+   * healthy while its document is silently behind. The server is the only party
+   * that can see the difference, and this is it asking.
+   *
+   * Two ways to be behind: working from a snapshot older than the current one,
+   * or missing a row that sits on top of it. Both are checked, because
+   * compaction moves rows into the snapshot and either alone would miss half of
+   * the traffic. A client that can no longer name the rows it has applied
+   * counts as behind -- it cannot show otherwise, and a needless fetch is the
+   * cheap mistake here.
+   *
+   * A row that commits *after* this answer is not a gap: a save that precedes a
+   * write is a save of the state before it, which is what saves are.
+   * @returns {Promise<boolean>}
+   */
+  async isLevelWithLog() {
+    let status;
+    try {
+      status = await this.fetchDocStatus();
+    } catch (error) {
+      // Cannot establish it, so do not claim it.
+      console.error("Failed to read collaborative doc status:", error);
+      return false;
+    }
+    if (!status.seeded) return true;
+    const version = status.snapshot_version;
+    if (version && (this.snapshotVersion === null || this.snapshotVersion < version)) {
+      return false;
+    }
+    if (this.appliedUpdateIds === null) return false;
+    return (status.update_ids ?? []).every((id) => this.appliedUpdateIds.has(id));
+  }
+
+  /**
+   * Bring this client level with the durable log, and say whether that worked.
+   *
+   * The re-check runs against a *fresh* status rather than the one that found
+   * the gap: compaction may have moved rows into a new snapshot while the fetch
+   * was in flight, and judging the result by the older answer would report a
+   * client that is now perfectly current as still behind.
+   * @returns {Promise<boolean>}
+   */
+  async catchUpWithLog() {
+    if (await this.isLevelWithLog()) return true;
+    await this.resyncNow();
+    return this.isLevelWithLog();
   }
 
   /**

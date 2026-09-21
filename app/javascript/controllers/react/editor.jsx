@@ -606,24 +606,31 @@ function EditorApp({ config }) {
 
   // Guard against persisting a shared doc that is missing an update.
   //
-  // Yjs withholds an update whose causal predecessor never arrived, so a client
-  // that missed one reads the document as though the author's replacements were
-  // never typed -- while their deletions, which have no such dependency, apply
-  // normally. In collab mode the doc *is* the save payload, so persisting one in
-  // that state writes the gap into the project's source for everybody. The
-  // durable update log is the repair; this pulls it and re-checks.
+  // In collab mode the doc *is* the save payload, and the save runs on one tab
+  // for the whole session, so a doc with a hole in it writes that hole into the
+  // project's source for everybody.
+  //
+  // Two questions, and neither alone is enough. `catchUpWithLog` asks the server
+  // whether anything persisted is missing here: the only way to learn about an
+  // update that nothing in the document depends on, which Yjs cannot report
+  // because it has nothing pending for it -- the tab looks healthy to itself
+  // while being quietly behind. `isDocComplete` asks whether what we do hold is
+  // internally consistent, which the server cannot answer, since it never reads
+  // the payloads it stores.
   const ensureDocComplete = useCallback(
     async (provider, hard) => {
-      if (provider.isDocComplete()) return true;
-      await provider.resyncNow();
-      if (provider.isDocComplete()) return true;
+      const level = await provider.catchUpWithLog();
+      if (level && provider.isDocComplete()) return true;
       reportCollabIncident({
         kind: "doc_incomplete",
         projectId,
         csrfToken,
-        detail: hard
-          ? "Saved from a doc still missing an update after a resync."
-          : "Held back an autosave from a doc still missing an update after a resync.",
+        detail: [
+          hard ? "Saved" : "Held back an autosave",
+          level
+            ? "from a doc still missing an update after a resync."
+            : "from a doc still behind the persisted update log after a resync.",
+        ].join(" "),
       });
       // Autosave is the dangerous one: nobody asked for it, it runs every
       // AUTOSAVE_MS on whichever tab is leader -- a collaborator's idle

@@ -33,6 +33,10 @@ class ProjectDocsControllerTest < ActionDispatch::IntegrationTest
     post seed_doc_project_url(@project), params: { snapshot: b64("seed-a") }, as: :json
     assert_response :created
     assert_equal "seed-a", @project.reload.project_doc.snapshot
+    # The winner is told which snapshot version its seed became, so it starts
+    # level with the log instead of fetching back what it just sent.
+    assert_equal @project.project_doc.updated_at.utc.iso8601(6),
+      response.parsed_body["snapshot_version"]
 
     post seed_doc_project_url(@project), params: { snapshot: b64("seed-b") }, as: :json
     assert_response :conflict
@@ -110,6 +114,67 @@ class ProjectDocsControllerTest < ActionDispatch::IntegrationTest
     assert_equal [ rows.last.id ], @project.project_doc_updates.pluck(:id)
   end
 
+  test "status reports what is persisted without any of the payloads" do
+    @project.create_project_doc!(snapshot: "snap")
+    first = @project.project_doc_updates.create!(payload: "u1")
+    second = @project.project_doc_updates.create!(payload: "u2")
+
+    get doc_status_project_url(@project)
+    assert_response :success
+    body = response.parsed_body
+
+    assert body["seeded"]
+    assert_equal [ first.id, second.id ], body["update_ids"]
+    assert_equal @project.project_doc.updated_at.utc.iso8601(6), body["snapshot_version"]
+    # The point of the endpoint: a client can ask this on every save because the
+    # answer does not carry the document.
+    assert_not response.body.include?(b64("snap"))
+    assert_not response.body.include?(b64("u1"))
+  end
+
+  test "status reports an unseeded doc" do
+    get doc_status_project_url(@project)
+    assert_response :success
+    body = response.parsed_body
+
+    assert_equal false, body["seeded"]
+    assert_nil body["snapshot_version"]
+    assert_equal [], body["update_ids"]
+  end
+
+  test "status only counts the project it is asked about" do
+    @project.create_project_doc!(snapshot: "snap")
+    mine = @project.project_doc_updates.create!(payload: "mine")
+    projects(:two).project_doc_updates.create!(payload: "theirs")
+
+    get doc_status_project_url(@project)
+
+    assert_equal [ mine.id ], response.parsed_body["update_ids"]
+  end
+
+  test "show names the snapshot version a client is adopting" do
+    @project.create_project_doc!(snapshot: "snap")
+
+    get doc_project_url(@project)
+
+    assert_equal @project.project_doc.updated_at.utc.iso8601(6),
+      response.parsed_body["snapshot_version"]
+  end
+
+  test "compaction gives the snapshot a version a client can tell apart" do
+    @project.create_project_doc!(snapshot: "old")
+    get doc_status_project_url(@project)
+    before = response.parsed_body["snapshot_version"]
+
+    travel 1.minute do
+      put doc_project_url(@project), params: { snapshot: b64("new") }, as: :json
+      get doc_status_project_url(@project)
+    end
+
+    # Clients compare these as strings, so a compaction has to move it forward.
+    assert_operator response.parsed_body["snapshot_version"], :>, before
+  end
+
   test "compaction on an unseeded doc conflicts" do
     put doc_project_url(@project), params: { snapshot: b64("x"), through_update_id: 1 }, as: :json
     assert_response :conflict
@@ -119,9 +184,13 @@ class ProjectDocsControllerTest < ActionDispatch::IntegrationTest
     sign_in users(:two) # accepted collaborator on project one
     get doc_project_url(@project)
     assert_response :success
+    get doc_status_project_url(@project)
+    assert_response :success
 
     sign_in users(:subscribed)
     get doc_project_url(@project), headers: { "Accept" => "application/json" }
+    assert_response :forbidden
+    get doc_status_project_url(@project), headers: { "Accept" => "application/json" }
     assert_response :forbidden
   end
 
