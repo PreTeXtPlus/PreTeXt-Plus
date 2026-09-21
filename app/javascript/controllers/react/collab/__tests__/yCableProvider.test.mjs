@@ -1,5 +1,10 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import * as Y from "yjs";
+import {
+  Awareness,
+  applyAwarenessUpdate,
+  encodeAwarenessUpdate,
+} from "y-protocols/awareness";
 
 // The provider only needs `seedDocFromState` from the editor package, and
 // loading that package for real drags in React, Monaco and a stylesheet.
@@ -681,3 +686,123 @@ describe("a session that loses an update", () => {
 const toBase64 = (doc) =>
   Buffer.from(Y.encodeStateAsUpdate(doc)).toString("base64");
 
+describe("leader election", () => {
+  /** Put this tab in a given state and publish it, the way the real hooks do. */
+  const setSelf = (provider, { visible = true, active = false, stalled = false } = {}) => {
+    vi.stubGlobal("document", { visibilityState: visible ? "visible" : "hidden" });
+    provider.lastLocalEditAt = active ? Date.now() : 0;
+    provider.relayStatus = stalled ? "stalled" : "ready";
+    provider.publishWriterState();
+  };
+
+  /** Add a peer to this tab's awareness, as a real awareness update would. */
+  const joinPeer = (provider, clientID, writer) => {
+    const peerDoc = new Y.Doc();
+    peerDoc.clientID = clientID;
+    const peerAwareness = new Awareness(peerDoc);
+    // Every real peer publishes a `user` (the bridge sets it on attach), which
+    // is also what moves its awareness clock off the 0 that
+    // `applyAwarenessUpdate` declines to accept.
+    peerAwareness.setLocalStateField("user", { name: "Peer", color: "#999999" });
+    if (writer) peerAwareness.setLocalStateField("writer", writer);
+    applyAwarenessUpdate(
+      provider.awareness,
+      encodeAwarenessUpdate(peerAwareness, [clientID]),
+      "test",
+    );
+    clearInterval(peerAwareness._checkInterval);
+  };
+
+  const lowerId = (provider) => provider.awareness.clientID - 1;
+  const higherId = (provider) => provider.awareness.clientID + 1;
+
+  afterEach(() => vi.unstubAllGlobals());
+
+  it("prefers a foreground tab to a background one, whatever the clientIDs say", () => {
+    const { provider } = makeProvider();
+    setSelf(provider, { visible: true });
+    // Lower clientID used to win outright; it is now only the tie-break.
+    joinPeer(provider, lowerId(provider), { visible: false, active: false, stalled: false });
+
+    expect(provider.isLeader()).toBe(true);
+  });
+
+  it("stands down when a peer is in the foreground and this tab is not", () => {
+    const { provider } = makeProvider();
+    setSelf(provider, { visible: false });
+    joinPeer(provider, higherId(provider), { visible: true, active: false, stalled: false });
+
+    expect(provider.isLeader()).toBe(false);
+  });
+
+  it("prefers the tab being typed in to a window left open beside it", () => {
+    const { provider } = makeProvider();
+    setSelf(provider, { visible: true, active: true });
+    joinPeer(provider, lowerId(provider), { visible: true, active: false, stalled: false });
+
+    expect(provider.isLeader()).toBe(true);
+  });
+
+  it("stands down when stalled, even against a background peer", () => {
+    const { provider } = makeProvider();
+    // A stalled tab is the one least likely to hold the session's current state,
+    // so it loses to a healthy tab that is merely slow.
+    setSelf(provider, { visible: true, active: true, stalled: true });
+    joinPeer(provider, lowerId(provider), { visible: false, active: false, stalled: false });
+
+    expect(provider.isLeader()).toBe(false);
+  });
+
+  it("falls back to the clientID to break a tie", () => {
+    const equal = { visible: true, active: true, stalled: false };
+
+    const { provider: loses } = makeProvider();
+    setSelf(loses, { visible: true, active: true });
+    joinPeer(loses, lowerId(loses), equal);
+    expect(loses.isLeader()).toBe(false);
+
+    const { provider: wins } = makeProvider();
+    setSelf(wins, { visible: true, active: true });
+    joinPeer(wins, higherId(wins), equal);
+    expect(wins.isLeader()).toBe(true);
+  });
+
+  it("leads when it is the only tab, however poor a candidate it is", () => {
+    const { provider } = makeProvider();
+    setSelf(provider, { visible: false, active: false, stalled: true });
+
+    expect(provider.isLeader()).toBe(true);
+  });
+
+  it("ranks a peer that has published nothing as a background tab", () => {
+    const { provider } = makeProvider();
+    // Mid-join, or running a bundle from before this field existed. Ranking it
+    // out of the running would be worse than ranking it roughly.
+    setSelf(provider, { visible: false, active: false });
+    joinPeer(provider, lowerId(provider), null);
+    expect(provider.isLeader()).toBe(false);
+
+    setSelf(provider, { visible: true, active: true });
+    expect(provider.isLeader()).toBe(true);
+  });
+
+  it("publishes only when its own answer changes", () => {
+    const { provider } = makeProvider();
+    const published = vi.spyOn(provider.awareness, "setLocalStateField");
+
+    setSelf(provider, { visible: true });
+    expect(published).toHaveBeenCalledTimes(1);
+
+    // Keystrokes land here on the hot path, so a no-op has to stay a no-op.
+    provider.publishWriterState();
+    provider.publishWriterState();
+    expect(published).toHaveBeenCalledTimes(1);
+
+    setSelf(provider, { visible: false });
+    expect(published).toHaveBeenCalledTimes(2);
+    expect(published.mock.calls[1]).toEqual([
+      "writer",
+      { visible: false, active: false, stalled: false },
+    ]);
+  });
+});

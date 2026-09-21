@@ -26,10 +26,10 @@ import { reportCollabIncident } from "./reportIncident";
  * the winner's state). This is what prevents the classic two-clients-seed-
  * independently duplication.
  *
- * Compaction: the leader (lowest awareness clientID) periodically PUTs the
- * full doc state together with the log rows that state carries; the server
- * swaps the snapshot and deletes exactly the rows it named. Which rows those
- * are has to be *known*, not inferred from an id range -- see `noteApplied`.
+ * Compaction: the leader (see `isLeader`) periodically PUTs the full doc state
+ * together with the log rows that state carries; the server swaps the snapshot
+ * and deletes exactly the rows it named. Which rows those are has to be *known*,
+ * not inferred from an id range -- see `noteApplied`.
  *
  * Lost updates: a Yjs update that reaches nobody is not a missing keystroke, it
  * is a poisoned stream. Yjs integrates a peer's inserts in causal order, so one
@@ -96,6 +96,11 @@ const MAX_OUTBOX = 200;
 // stops claiming anything until its next full fetch rebuilds the set, which
 // costs a slightly longer update log and nothing else.
 const MAX_TRACKED_UPDATE_IDS = 10000;
+// How long after a local edit a tab still counts as one somebody is working in.
+// Long enough to cover reading, thinking and scrolling -- the point is to tell an
+// author's tab from one left open on a second monitor, not to track keystrokes --
+// and re-evaluated on the awareness heartbeat, so it moves in 15s steps.
+const WRITER_ACTIVE_MS = 120000;
 
 export class YCableProvider {
   /** @param {ProviderConfig} config */
@@ -168,6 +173,11 @@ export class YCableProvider {
     this.relayStatus = "ready";
     this.lastInboundAt = 0;
     this.stalledSince = null;
+    // What this tab last told its peers about its own fitness to write for the
+    // session, and the local clock reading that `active` is derived from. See
+    // `publishWriterState`.
+    this.writerState = null;
+    this.lastLocalEditAt = 0;
   }
 
   /**
@@ -183,6 +193,11 @@ export class YCableProvider {
     // remote updates) carry `this` as origin and stay local.
     this.doc.on("update", (update, origin) => {
       if (origin === this || this.destroyed) return;
+      // Anything not applied by us is somebody typing in this tab, which is what
+      // `active` means. Cheap on the keystroke path: publishing is a no-op
+      // unless the boolean actually flipped.
+      this.lastLocalEditAt = Date.now();
+      this.publishWriterState();
       this.sendDocUpdate(update);
     });
 
@@ -203,12 +218,16 @@ export class YCableProvider {
     await this.loadOrSeed(seedStateFactory);
     this.ready = true;
     for (const message of this.buffered.splice(0)) this.receive(message);
+    this.publishWriterState();
 
     // Presence heartbeat: rebroadcast our state so peers' 30s expiry never
     // fires while we're alive (awareness is unpersisted, so newcomers learn
     // about us from this too).
     this.intervals.push(
       setInterval(() => {
+        // Also the clock for `active` lapsing: nothing else fires when a tab
+        // simply stops being edited.
+        this.publishWriterState();
         this.perform("awareness", {
           payload: toBase64(
             encodeAwarenessUpdate(this.awareness, [this.awareness.clientID]),
@@ -257,6 +276,10 @@ export class YCableProvider {
     // measured across a spell in the background says nothing about the relay.
     this.onVisibilityChange = () => {
       if (document.visibilityState === "visible") this.lastInboundAt = Date.now();
+      // Immediately, not on the next heartbeat: a tab going to the background is
+      // exactly when the session wants to hand the writing to somebody else, and
+      // this tab's timers are about to be throttled.
+      this.publishWriterState();
     };
     document.addEventListener("visibilitychange", this.onVisibilityChange);
 
@@ -277,6 +300,7 @@ export class YCableProvider {
       this.relayStatus = "stalled";
       this.stalledSince = this.lastInboundAt;
       this.onRelayStatusChange("stalled");
+      this.publishWriterState();
       reportCollabIncident({
         kind: "relay_stalled",
         projectId: this.projectId,
@@ -304,6 +328,7 @@ export class YCableProvider {
     this.relayStatus = "ready";
     this.stalledSince = null;
     this.onRelayStatusChange("ready");
+    this.publishWriterState();
     reportCollabIncident({
       kind: "relay_recovered",
       projectId: this.projectId,
@@ -312,13 +337,76 @@ export class YCableProvider {
     });
   }
 
-  /** True when this client should run session-wide chores (autosave, compaction). */
+  /**
+   * Tell peers how well placed this tab is to write for the session, when that
+   * has changed.
+   *
+   * Three booleans, each computed by a tab about itself. Not a timestamp,
+   * because ranking tabs by one means trusting another machine's clock; not a
+   * precomputed rank, because that would put this policy into data that outlives
+   * the deploy which chose it. Every peer sees the same three booleans and
+   * applies the same `writerScore` to them, so they agree.
+   * @returns {void}
+   */
+  publishWriterState() {
+    if (this.destroyed) return;
+    const next = {
+      visible: typeof document === "undefined" || document.visibilityState === "visible",
+      active: Date.now() - this.lastLocalEditAt < WRITER_ACTIVE_MS,
+      stalled: this.relayStatus === "stalled",
+    };
+    const current = this.writerState;
+    if (
+      current &&
+      current.visible === next.visible &&
+      current.active === next.active &&
+      current.stalled === next.stalled
+    ) {
+      return;
+    }
+    this.writerState = next;
+    this.awareness.setLocalStateField("writer", next);
+  }
+
+  /**
+   * True when this client should run session-wide chores (autosave, compaction).
+   *
+   * The job goes to the best-placed tab rather than -- as it used to -- the one
+   * whose randomly assigned Yjs clientID happened to sort lowest. That number
+   * says nothing about a tab, and it handed the session's writing to whichever
+   * tab drew the low card: in practice, often a collaborator's window left open
+   * on another desktop while the author worked. Two things go wrong when it
+   * does. A backgrounded tab has its timers throttled to about once a minute, so
+   * the session's 10s autosave quietly becomes a 60s one and the project's
+   * source sits further behind the doc than anyone intends. And a tab whose
+   * relay has stalled is the one *least* likely to hold the session's current
+   * state, yet nothing stopped it writing that state out for everybody.
+   *
+   * So: healthy before stalled, foreground before background, being typed in
+   * before idle, and the old clientID comparison only to break a tie -- it is
+   * arbitrary, but every tab computes the same arbitrary answer, which is all a
+   * tie-break has to do.
+   *
+   * Tabs can briefly disagree, while a change to one tab's booleans is still in
+   * flight. That is safe in the direction it fails: disagreement needs two tabs
+   * to hold different views of the *same* published booleans, which makes "both
+   * of us lead" reachable and "neither of us leads" essentially not. Two leaders
+   * means two PATCHes derived from the same shared doc, and Rails does not even
+   * touch `source_updated_at` for a write that changes nothing.
+   * @returns {boolean}
+   */
   isLeader() {
-    let min = this.awareness.clientID;
-    this.awareness.getStates().forEach((_state, clientId) => {
-      if (clientId < min) min = clientId;
+    const states = this.awareness.getStates();
+    let bestId = this.awareness.clientID;
+    let bestScore = writerScore(states.get(bestId));
+    states.forEach((state, clientId) => {
+      const score = writerScore(state);
+      if (score < bestScore || (score === bestScore && clientId < bestId)) {
+        bestScore = score;
+        bestId = clientId;
+      }
     });
-    return min === this.awareness.clientID;
+    return bestId === this.awareness.clientID;
   }
 
   destroy() {
@@ -825,6 +913,23 @@ export class YCableProvider {
     };
   }
 }
+
+/**
+ * How poorly suited a tab is to doing the session's writing; lowest leads. See
+ * `YCableProvider#isLeader` for why these three and in this order.
+ *
+ * A peer that has published nothing is ranked as an ordinary background tab
+ * rather than excluded. It is either mid-join or running a bundle from before
+ * this field existed, and in a session where it is the only other candidate,
+ * ranking it last would be worse than ranking it roughly.
+ * @param {{writer?: {visible?: boolean, active?: boolean, stalled?: boolean}}} [state]
+ * @returns {number}
+ */
+const writerScore = (state) => {
+  const writer = state?.writer;
+  if (!writer) return 3;
+  return (writer.stalled ? 4 : 0) + (writer.visible ? 0 : 2) + (writer.active ? 0 : 1);
+};
 
 const toBase64 = (bytes) => {
   let binary = "";

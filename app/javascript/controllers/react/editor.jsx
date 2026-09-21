@@ -633,9 +633,10 @@ function EditorApp({ config }) {
         ].join(" "),
       });
       // Autosave is the dangerous one: nobody asked for it, it runs every
-      // AUTOSAVE_MS on whichever tab is leader -- a collaborator's idle
-      // background tab qualifies -- and it would write this doc's version over
-      // source that is currently correct. Skipping costs one tick. An explicit
+      // AUTOSAVE_MS on whichever tab leads, and a tab leads whenever it is the
+      // best one left in the session however little it turns out to know -- so
+      // it would write this doc's version over source that is currently
+      // correct. Skipping costs one tick. An explicit
       // save is the author asking for their own buffer to be written, and
       // silently refusing that is worse than writing it.
       return hard;
