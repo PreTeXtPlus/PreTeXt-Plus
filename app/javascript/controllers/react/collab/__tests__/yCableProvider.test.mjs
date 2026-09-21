@@ -87,6 +87,9 @@ describe("a Yjs update that reaches nobody", () => {
 });
 
 describe("outbound updates", () => {
+  const ack = (provider, seq) =>
+    provider.receive({ type: "update", sender: provider.sender, id: seq, seq });
+
   it("stamps a monotonic seq on each update", () => {
     const { provider, sent } = makeProvider();
 
@@ -97,17 +100,57 @@ describe("outbound updates", () => {
     expect(sent.every((m) => m.action === "doc_update")).toBe(true);
   });
 
-  it("treats anything but an explicit refusal as delivered", () => {
+  it("treats anything but an explicit refusal as handed to the socket", () => {
     const { provider } = makeProvider();
     // Only `false` means ActionCable turned the message away. Reading any falsy
-    // value that way would queue every update and drain none, which looks from
-    // the outside like a tab that quietly stopped collaborating.
+    // value that way would re-send every update on every reconnect.
     provider.subscription = { perform: () => undefined };
 
     provider.sendDocUpdate(new Uint8Array([1]));
 
-    expect(provider.pendingSends).toEqual([]);
-    expect(provider.resendFullState).toBe(false);
+    expect(provider.sentThrough).toBe(1);
+  });
+
+  it("holds an update until the server echoes it back", () => {
+    const { provider } = makeProvider();
+
+    provider.sendDocUpdate(new Uint8Array([1]));
+    provider.sendDocUpdate(new Uint8Array([2]));
+    // Handed to the socket is not delivered: `perform` reports that ActionCable
+    // took the bytes, which a connection dying moments later discards silently.
+    expect(provider.outbox.map((m) => m.seq)).toEqual([1, 2]);
+
+    ack(provider, 1);
+    expect(provider.outbox.map((m) => m.seq)).toEqual([2]);
+
+    ack(provider, 2);
+    expect(provider.outbox).toEqual([]);
+  });
+
+  it("re-sends what the dead socket never acknowledged", () => {
+    const { provider, sent } = makeProvider();
+    provider.sendDocUpdate(new Uint8Array([1]));
+    provider.sendDocUpdate(new Uint8Array([2]));
+    ack(provider, 1); // only the first came back
+    sent.length = 0;
+
+    provider.resendUnacked();
+
+    // The hole this closes: the socket accepted 2 and `perform` said so, then
+    // the connection died with it still buffered. Nothing else would ever have
+    // sent it again, and the author's edit would exist in this tab alone.
+    expect(sent.map((m) => m.seq)).toEqual([2]);
+  });
+
+  it("does not re-send what the server already acknowledged", () => {
+    const { provider, sent } = makeProvider();
+    provider.sendDocUpdate(new Uint8Array([1]));
+    ack(provider, 1);
+    sent.length = 0;
+
+    provider.resendUnacked();
+
+    expect(sent).toEqual([]);
   });
 
   it("keeps an update the socket refuses and sends it on reconnect, in order", () => {
@@ -118,28 +161,25 @@ describe("outbound updates", () => {
     expect(sent).toEqual([]);
 
     socket.open = true;
-    provider.flushPendingSends();
+    provider.resendUnacked();
 
     expect(sent.map((m) => m.seq)).toEqual([1, 2]);
     expect(sent.map((m) => Buffer.from(m.payload, "base64")[0])).toEqual([1, 2]);
-    expect(provider.pendingSends).toEqual([]);
   });
 
-  it("queues behind an undelivered update rather than sending out of order", () => {
+  it("sends the older update first when the socket returns mid-stream", () => {
     const { provider, socket, sent } = makeProvider({ socketOpen: false });
 
-    provider.sendDocUpdate(new Uint8Array([1]));
+    provider.sendDocUpdate(new Uint8Array([1])); // refused
     socket.open = true;
-    // A seq gap of this tab's own making would send every peer to the update
-    // log, so the newer update waits for the older one.
-    provider.sendDocUpdate(new Uint8Array([2]));
+    provider.sendDocUpdate(new Uint8Array([2])); // takes the backlog with it
 
-    expect(sent).toEqual([]);
-    provider.flushPendingSends();
+    // Order matters more than promptness here: a seq gap of this tab's own
+    // making would send every peer off to fetch the whole update log.
     expect(sent.map((m) => m.seq)).toEqual([1, 2]);
   });
 
-  it("keeps what it could not send when the flush is interrupted", () => {
+  it("keeps what it could not send when a drain is interrupted", () => {
     const { provider, socket, sent } = makeProvider({ socketOpen: false });
 
     provider.sendDocUpdate(new Uint8Array([1]));
@@ -151,29 +191,41 @@ describe("outbound updates", () => {
       return true;
     };
     socket.open = true;
-    provider.flushPendingSends();
+    provider.resendUnacked();
 
     expect(sent.map((m) => m.seq)).toEqual([1]);
-    expect(provider.pendingSends.map((m) => m.seq)).toEqual([2]);
+    expect(provider.outbox.map((m) => m.seq)).toEqual([1, 2]);
+    expect(provider.sentThrough).toBe(1);
   });
 
-  it("replaces an overflowing queue with one full state update", () => {
+  it("replaces an overflowing outbox with one full state update", () => {
     const { provider, socket, sent } = makeProvider({ socketOpen: false });
     provider.doc.getText("t").insert(0, "the whole document");
 
     for (let i = 0; i < 250; i++) provider.sendDocUpdate(new Uint8Array([i % 256]));
-    expect(provider.pendingSends).toEqual([]);
-    expect(provider.resendFullState).toBe(true);
+    expect(provider.outboxTruncated).toBe(true);
 
     socket.open = true;
-    provider.flushPendingSends();
+    provider.resendUnacked();
 
     expect(sent).toHaveLength(1);
-    expect(provider.resendFullState).toBe(false);
-    // Whatever the queue held, the state it produced is what the peers need.
+    expect(provider.outboxTruncated).toBe(false);
+    // Whatever the outbox held, the state it produced is what the peers need.
     const caughtUp = new Y.Doc();
     Y.applyUpdate(caughtUp, new Uint8Array(Buffer.from(sent[0].payload, "base64")));
     expect(caughtUp.getText("t").toString()).toBe("the whole document");
+  });
+
+  it("keeps sending live while the outbox is over its cap", () => {
+    const { provider, sent } = makeProvider();
+    // A relay whose broadcast leg has died still accepts updates; it just stops
+    // echoing them. Letting the overflow stop this tab sending would turn a
+    // one-way outage into a silent one.
+    for (let i = 0; i < 250; i++) provider.sendDocUpdate(new Uint8Array([1]));
+
+    expect(provider.outboxTruncated).toBe(true);
+    expect(sent).toHaveLength(250);
+    expect(provider.sentThrough).toBe(250);
   });
 });
 
@@ -460,7 +512,7 @@ describe("staying level with the durable log", () => {
   });
 });
 
-describe("a session that loses an update in the relay", () => {
+describe("a session that loses an update", () => {
   const VERSION = "2026-09-21T22:00:00.000000Z";
 
   /**
@@ -473,6 +525,7 @@ describe("a session that loses an update in the relay", () => {
     const clients = [];
     let nextId = 100;
     let lost = null;
+    let swallowed = null;
     let snapshot = null;
 
     // What `loadOrSeed` does for real: the seed becomes the server's snapshot,
@@ -504,6 +557,13 @@ describe("a session that loses an update in the relay", () => {
       provider.subscription = {
         perform: (action, data) => {
           if (action === "doc_update") {
+            const gone =
+              swallowed &&
+              data.sender === swallowed.sender &&
+              data.seq === swallowed.seq;
+            // A socket that buffered the bytes and then died: ActionCable
+            // reported success and the server never heard of it.
+            if (gone) return true;
             // The log records it even when the relay will not carry it.
             const row = { id: nextId++, payload: data.payload };
             rows.push(row);
@@ -537,6 +597,8 @@ describe("a session that loses an update in the relay", () => {
       rows,
       seedSession,
       lose: (provider, seq) => { lost = { sender: provider.sender, seq }; },
+      swallow: (provider, seq) => { swallowed = { sender: provider.sender, seq }; },
+      reconnect: () => { swallowed = null; lost = null; },
     };
   };
 
@@ -568,6 +630,33 @@ describe("a session that loses an update in the relay", () => {
     expect(await peer.compareWithLog()).toBe("behind");
     expect(await peer.catchUpWithLog()).toBe(true);
     expect(peer.doc.getText("t").toString()).toBe("x = 7");
+  });
+
+  it("re-sends an update the socket accepted but never delivered", async () => {
+    const session = makeSession();
+    const author = await session.join();
+    const peer = await session.join();
+    session.seedSession((doc) => doc.getText("t").insert(0, "x = 5"));
+
+    // `perform` says true, the bytes sit in the socket's buffer, the connection
+    // dies. Nobody is told, and the server never learns the update existed.
+    session.swallow(author, 2);
+    author.doc.getText("t").delete(4, 1);
+    author.doc.getText("t").insert(4, "7");
+
+    expect(author.doc.getText("t").toString()).toBe("x = 7");
+    expect(peer.doc.getText("t").toString()).toBe("x = ");
+    // Not even the durable log has it, so no amount of fetching would help.
+    expect(session.rows).toHaveLength(1);
+    expect(author.outbox.map((m) => m.seq)).toEqual([2]);
+
+    // The reconnect is the only thing that can save it.
+    session.reconnect();
+    author.resendUnacked();
+
+    expect(session.rows).toHaveLength(2);
+    expect(peer.doc.getText("t").toString()).toBe("x = 7");
+    expect(author.outbox).toEqual([]);
   });
 
   it("carries the author's edits to a peer that joins after the drop", async () => {

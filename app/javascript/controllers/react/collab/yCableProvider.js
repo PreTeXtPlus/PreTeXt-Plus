@@ -46,10 +46,13 @@ import { reportCollabIncident } from "./reportIncident";
  *     before COMMIT, so a row that commits late is passed over and delivered to
  *     nobody, ever. Every `doc_update` therefore carries a per-tab `seq`, and a
  *     peer that sees one skipped pulls the durable log over HTTP (`noteSeq`).
- *   * The send leg drops it. ActionCable's `perform` returns false and discards
- *     the message when the socket is not open, and reconnecting only ever
- *     *pulled* state. Undelivered updates are queued and flushed on reconnect
- *     (`sendDocUpdate`, `flushPendingSends`).
+ *   * The send leg drops it, in either of two ways. `perform` returns false and
+ *     discards the message when the socket is not open; and when it is open it
+ *     returns true for a message the socket has merely *buffered*, which a
+ *     connection that then dies discards without telling anyone. Reconnecting
+ *     only ever pulled state, so both were permanent. Updates are now held in
+ *     an outbox until the server echoes them back, and re-sent on reconnect
+ *     (`sendDocUpdate`, `noteAcked`, `resendUnacked`).
  *   * Compaction destroys it. The server deletes the log rows a compacting
  *     client says it has merged, so a client that claims too much erases an
  *     update for everyone. The claim is the exact set of row ids whose payloads
@@ -80,12 +83,13 @@ const COMPACTION_MIN_UPDATES = 20;
 // looking at the screen when the banner appears.
 const RELAY_WATCHDOG_MS = 10000;
 const RELAY_SILENCE_MS = AWARENESS_HEARTBEAT_MS * 2.5;
-// How many undelivered `doc_update` messages to hold before giving up on
-// replaying them one by one. Past this the queue is dropped and the reconnect
-// sends one full state update instead: far bigger, but a single idempotent
-// message that covers every send this tab missed, however long it was off the
-// air. Generous, because replaying is much the cheaper of the two.
-const MAX_PENDING_SENDS = 200;
+// How many unacknowledged `doc_update` messages to keep for replay. The outbox
+// normally holds one or two -- an echo comes back in a round trip -- and only
+// grows while this tab is off the air or the relay has stopped echoing. Past
+// this the oldest are dropped and the reconnect sends one full state update
+// instead: far bigger, but a single idempotent message that covers everything
+// that can no longer be replayed exactly.
+const MAX_OUTBOX = 200;
 // How many merged row ids to carry before giving up on naming them exactly. A
 // compacting leader clears its set every COMPACTION_INTERVAL_MS, so only a tab
 // that has spent a long session never leading can approach this; past it the tab
@@ -114,11 +118,22 @@ export class YCableProvider {
     this.outboundSeq = 0;
     /** @type {Map<string, number>} Highest `seq` seen from each peer tab. */
     this.lastSeqBySender = new Map();
-    /** @type {Array<{payload: string, seq: number}>} Sends the socket refused. */
-    this.pendingSends = [];
-    // Set when `pendingSends` overflowed: the queue is dropped and the next
-    // flush resends the whole doc in its place.
-    this.resendFullState = false;
+    /**
+     * Updates this tab has produced and the server has not yet echoed back,
+     * oldest first. An echo is the only evidence of delivery there is: `perform`
+     * reports that ActionCable handed the bytes to a socket, which a connection
+     * dying moments later discards without a word.
+     * @type {Array<{payload: string, seq: number}>}
+     */
+    this.outbox = [];
+    // Highest seq handed to a socket, and highest the server has echoed. They
+    // differ by whatever is in flight; on reconnect the first is rewound to the
+    // second, because a socket that died took everything it had not acknowledged
+    // with it.
+    this.sentThrough = 0;
+    this.ackedThrough = 0;
+    // Set when the outbox overflowed and the exact replay was lost with it.
+    this.outboxTruncated = false;
     /**
      * The update-log rows whose payloads this client has actually applied, and
      * so the exact set it may ask the server to delete at compaction. Null once
@@ -333,7 +348,7 @@ export class YCableProvider {
             // ones: `connect` starts listening for local doc updates before the
             // subscription confirms, so this tab can already be holding edits
             // that exist nowhere else.
-            this.flushPendingSends();
+            this.resendUnacked();
             if (!settled) {
               settled = true;
               this.hasConnectedOnce = true;
@@ -384,56 +399,90 @@ export class YCableProvider {
   }
 
   /**
-   * Hand a local update to the relay, keeping it if the relay will not take it.
+   * Put a local update in the outbox and try to send it.
    *
-   * Once anything is queued, everything queues until the flush drains it. That
-   * is cheaper than it looks: sending the newer update first would leave a hole
-   * in this tab's `seq` run, and every peer would answer that hole with a full
-   * fetch of the update log.
+   * It stays there until the server echoes it back. Dropping it at `perform`
+   * would trust a return value that means "the socket took these bytes", not
+   * "the server has them" -- and a socket that dies with bytes buffered
+   * discards them silently, which is a lost edit with nothing anywhere to
+   * suggest one happened.
    * @param {Uint8Array} update
    * @returns {void}
    */
   sendDocUpdate(update) {
-    if (this.resendFullState) return; // the queued full state will carry it
-    const message = { payload: toBase64(update), seq: (this.outboundSeq += 1) };
-    if (this.pendingSends.length === 0 && this.perform("doc_update", message)) return;
-    this.pendingSends.push(message);
-    if (this.pendingSends.length > MAX_PENDING_SENDS) {
-      this.pendingSends = [];
-      this.resendFullState = true;
+    this.outbox.push({ payload: toBase64(update), seq: (this.outboundSeq += 1) });
+    if (this.outbox.length > MAX_OUTBOX) {
+      this.outbox.shift();
+      this.outboxTruncated = true;
+    }
+    this.drainOutbox();
+  }
+
+  /**
+   * Hand the socket everything it has not been given yet, oldest first.
+   *
+   * Stops at the first refusal and keeps the rest: sending a newer update past
+   * a refused older one would leave a hole in this tab's `seq` run, and every
+   * peer would answer that hole with a fetch of the whole update log.
+   * @returns {void}
+   */
+  drainOutbox() {
+    if (this.destroyed) return;
+    for (const message of this.outbox) {
+      if (message.seq <= this.sentThrough) continue;
+      if (!this.perform("doc_update", message)) return;
+      this.sentThrough = message.seq;
     }
   }
 
   /**
-   * Send whatever the socket refused while it was down.
+   * Re-send whatever the last socket never acknowledged.
    *
-   * A partial flush is fine: the queue keeps what it could not send, in order,
-   * and the next `connected` picks up where this left off.
+   * Rewinding `sentThrough` to `ackedThrough` is the whole point: those updates
+   * were handed to a socket that has since died, and nothing distinguishes the
+   * ones it managed to flush from the ones it dropped on the floor. Re-sending
+   * a delivered update costs a duplicate row that compaction collects; not
+   * re-sending a dropped one costs somebody their edit.
    * @returns {void}
    */
-  flushPendingSends() {
+  resendUnacked() {
     if (this.destroyed) return;
-    if (this.resendFullState) {
-      // One update carrying the whole doc, standing in for a queue too long to
-      // replay. It is well past MAX_BROADCAST_BYTES, so peers will pull it over
-      // HTTP rather than read it off the cable -- the path oversized updates
-      // already take.
-      const payload = toBase64(Y.encodeStateAsUpdate(this.doc));
-      if (this.perform("doc_update", { payload, seq: (this.outboundSeq += 1) })) {
-        this.resendFullState = false;
-      }
-      return;
+    this.sentThrough = this.ackedThrough;
+    if (this.outboxTruncated) {
+      // One update carrying the whole doc, standing in for an outbox too long to
+      // replay. Well past MAX_BROADCAST_BYTES, so peers pull it over HTTP rather
+      // than read it off the cable -- the path oversized updates already take.
+      this.outboxTruncated = false;
+      this.outbox = [
+        {
+          payload: toBase64(Y.encodeStateAsUpdate(this.doc)),
+          seq: (this.outboundSeq += 1),
+        },
+      ];
     }
-    while (this.pendingSends.length > 0) {
-      if (!this.perform("doc_update", this.pendingSends[0])) return;
-      this.pendingSends.shift();
-    }
+    this.drainOutbox();
+  }
+
+  /**
+   * Note that the server has our update `seq`, and stop holding it.
+   *
+   * The channel creates the `project_doc_updates` row before it broadcasts, so
+   * an echo is proof of persistence and not merely of arrival. A lost echo only
+   * costs a duplicate on the next reconnect, which is the right way round.
+   * @param {unknown} seq
+   * @returns {void}
+   */
+  noteAcked(seq) {
+    if (typeof seq !== "number" || seq <= this.ackedThrough) return;
+    this.ackedThrough = seq;
+    while (this.outbox.length > 0 && this.outbox[0].seq <= seq) this.outbox.shift();
   }
 
   receive(message) {
     if (message.type === "update") {
       this.noteSeq(message);
       this.noteSeen(message.id);
+      if (message.sender === this.sender) this.noteAcked(message.seq);
       if (message.sender !== this.sender) {
         Y.applyUpdate(this.doc, fromBase64(message.payload), this);
       }
@@ -446,6 +495,7 @@ export class YCableProvider {
       this.noteSeq(message);
       this.noteSeen(message.id);
       if (message.sender === this.sender) {
+        this.noteAcked(message.seq);
         this.noteApplied(message.id);
       } else {
         // Deliberately not `noteApplied`: the content arrives with the fetch,
