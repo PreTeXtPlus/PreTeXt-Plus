@@ -1082,6 +1082,43 @@ class ProjectsControllerTest < ActionDispatch::IntegrationTest
     assert_equal Project.default_docinfo, project.docinfo
   end
 
+  test "create_from_import builds a slideshow project from a slideshow payload" do
+    # Shapes produced by @pretextbook/import for a deck, as the import wizard
+    # serializes them (app/javascript/controllers/react/importEngines.js): the
+    # same deck as PreTeXt, as LaTeX (beamer frames) and as Markdown. The
+    # JavaScript half of this is test/javascript/import_slideshow_test.mjs.
+    decks = {
+      "pretext" => %(<slideshow xml:id="document"><title>Deck</title><slide><title>One</title><p>Hi</p></slide></slideshow>),
+      "latex" => "\\slideshow{Deck}\\label{document}\n\\begin{frame}{One}\nHi\n\\end{frame}",
+      "markdown" => "---\ndivision: slideshow\nid: document\ntitle: Deck\n---\n\n## One\n\nHi"
+    }
+
+    decks.each do |format, source|
+      assert_difference("Project.count", 1, format) do
+        post create_from_import_projects_url,
+          params: {
+            project: {
+              title: "Deck #{format}",
+              docinfo: "",
+              document_type: "slideshow",
+              divisions_attributes: [
+                { ref: "document", source_format: format, is_root: true, source: source }
+              ],
+              assets_attributes: []
+            }
+          },
+          as: :json
+      end
+
+      assert_response :created, format
+      project = Project.find_by!(title: "Deck #{format}", user: @user)
+      assert project.slideshow_document_type?, format
+      assert_equal source, project.root_division.source, format
+      assert_equal format, project.root_division.source_format
+      assert_equal [ "revealjs" ], project.targets.map(&:kind), "#{format}: a deck's default target is the slides"
+    end
+  end
+
   test "create_from_import requires authentication" do
     sign_out :user
     assert_no_difference("Project.count") do

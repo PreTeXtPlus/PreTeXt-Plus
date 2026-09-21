@@ -34,8 +34,15 @@ import {
  * placeholders, and that is the unit of editing, of the table of contents, and
  * of collaborative locking. A division left unsplit is one nobody can open on
  * their own.
+ *
+ * A deck is the exception: it stays one record, sections and slides inline in
+ * the root. That is the package's own default for a slideshow (`splitLevel` 0),
+ * which the book depth below would otherwise override. Slides are not
+ * divisions, so there is nothing under a `<section>` to split out, and one
+ * record is the shape a new slideshow project starts in
+ * (`app/default_docs/slideshow.xml`).
  */
-const SPLIT_LEVEL = { book: 3, article: 2 };
+const SPLIT_LEVEL = { book: 3, article: 2, slideshow: 0 };
 
 /**
  * Convert an already-unpacked upload, splitting deeply enough that every
@@ -46,7 +53,9 @@ const SPLIT_LEVEL = { book: 3, article: 2 };
  * upload only classifies itself once converted — so this converts at the book
  * depth and repeats at the article depth if that is what came back. The second
  * pass only ever runs for articles, which are the cheap case by definition; a
- * book, the expensive one, is right on the first try.
+ * book, the expensive one, is right on the first try. A slideshow needs no
+ * second conversion either: only its layout differs, so it is re-split from the
+ * result already in hand.
  *
  * @param {Record<string, string>} files
  * @param {ImportProjectOptions} options
@@ -58,6 +67,9 @@ function importSplitToSubsections(files, options) {
     splitLevel: SPLIT_LEVEL.book,
   });
   if ("pretextError" in asBook || asBook.documentKind === "book") return asBook;
+  if (asBook.documentKind === "slideshow") {
+    return relayoutImport(asBook, SPLIT_LEVEL.slideshow);
+  }
 
   return importProjectFromFiles(files, {
     ...options,
@@ -144,6 +156,9 @@ function buildPandocEngine({ pandocUrl, csrfToken }) {
       });
       if ("pretextError" in asBook || asBook.documentKind === "book") {
         return asBook;
+      }
+      if (asBook.documentKind === "slideshow") {
+        return relayoutImport(asBook, SPLIT_LEVEL.slideshow);
       }
       return relayoutImport(asBook, SPLIT_LEVEL.article);
     },

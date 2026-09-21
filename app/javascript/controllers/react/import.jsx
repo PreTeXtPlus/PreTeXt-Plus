@@ -12,20 +12,6 @@ import "@pretextbook/import/react.css";
 /** @typedef {import("@pretextbook/import").ImportMode} ImportMode */
 
 /**
- * Fixed options, which also suppress the wizard's own document-kind and
- * "split sections into separate files" controls — the split depth is settled by
- * the engines (see `importEngines.js`), and the kind is detected from the
- * source, which it does more reliably than a reader picking from a dropdown
- * before seeing the document.
- *
- * `splitLevel` is deliberately absent: the engines override it per pass, and a
- * value here would only be shadowed.
- *
- * @type {import("@pretextbook/import").ImportProjectOptions}
- */
-const IMPORT_OPTIONS = {};
-
-/**
  * @typedef {Object} ImportConfig
  * @property {string} createUrl - POST target that creates the project (projects#create_from_import).
  * @property {string} pandocUrl - POST target that proxies pandoc conversions (projects#pandoc).
@@ -41,6 +27,17 @@ function ImportApp({ config }) {
 
   // Shared with the editor's Tools → Import…, so both read the same formats —
   // see `importEngines.js`.
+  //
+  // No `importOptions`: passing any, even `{}`, hides the wizard's "Document
+  // kind" dropdown, and that is the only way to import as a slideshow a source
+  // that does not announce itself as one (Markdown without `division:
+  // slideshow` frontmatter, chiefly). Left on "Auto detect" it detects, as
+  // before. The choice reaches the engines as `options.documentKind`.
+  //
+  // It unhides the review step's "Split into files" control too, which is the
+  // price: that control re-splits the converted result, so a reader can still
+  // land on a depth shallower than `importEngines.js` would pick. The engines
+  // set the default they arrive at, which is the one that matters.
   const engines = useMemo(() => buildImportEngines(config), [config]);
 
   // `defaultImportMode` opens the review step on "Keep as LaTeX" (or Markdown)
@@ -103,7 +100,6 @@ function ImportApp({ config }) {
   return (
     <ImportWizard
       onConfirm={onConfirm}
-      importOptions={IMPORT_OPTIONS}
       defaultImportMode="native"
       engines={engines}
     />
