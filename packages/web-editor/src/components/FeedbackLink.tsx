@@ -31,6 +31,14 @@ interface FeedbackLinkProps {
   title?: string;
   /** Optional class for the trigger button. */
   className?: string;
+  /**
+   * Controlled mode: when provided, this drives the dialog's open state and
+   * the built-in trigger button is not rendered — the caller supplies its
+   * own trigger (e.g. a "Give feedback" menu item) and calls `onOpenChange`.
+   */
+  open?: boolean;
+  /** Required alongside `open`. Called with the next open state. */
+  onOpenChange?: (open: boolean) => void;
 }
 
 const getFallbackUrl = () => {
@@ -50,13 +58,21 @@ const FeedbackLink = ({
   sourceFormat,
   title,
   className,
+  open,
+  onOpenChange,
 }: FeedbackLinkProps) => {
   const idBase = useId();
   const titleId = `${idBase}-title`;
   const emailId = `${idBase}-email`;
   const messageId = `${idBase}-message`;
   const sourceId = `${idBase}-source`;
-  const [isOpen, setIsOpen] = useState(false);
+  const controlled = open !== undefined;
+  const [internalOpen, setInternalOpen] = useState(false);
+  const isOpen = controlled ? open : internalOpen;
+  const setOpen = (value: boolean) => {
+    if (controlled) onOpenChange?.(value);
+    else setInternalOpen(value);
+  };
   const [email, setEmail] = useState("");
   const [message, setMessage] = useState("");
   const [includeCurrentSource, setIncludeCurrentSource] = useState(false);
@@ -69,7 +85,7 @@ const FeedbackLink = ({
   }, [projectUrl]);
 
   const closeDialog = () => {
-    setIsOpen(false);
+    setOpen(false);
     setError(null);
   };
 
@@ -98,7 +114,7 @@ const FeedbackLink = ({
       await onSubmit(payload);
       setMessage("");
       setIncludeCurrentSource(false);
-      setIsOpen(false);
+      setOpen(false);
     } catch (submitError) {
       const text =
         submitError instanceof Error
@@ -112,13 +128,15 @@ const FeedbackLink = ({
 
   return (
     <>
-      <button
-        type="button"
-        className={className || FEEDBACK_TRIGGER_CLASSES}
-        onClick={() => setIsOpen(true)}
-      >
-        {label}
-      </button>
+      {!controlled && (
+        <button
+          type="button"
+          className={className || FEEDBACK_TRIGGER_CLASSES}
+          onClick={() => setOpen(true)}
+        >
+          {label}
+        </button>
+      )}
       {isOpen ? (
         <DialogOverlay onClick={closeDialog}>
           <Dialog

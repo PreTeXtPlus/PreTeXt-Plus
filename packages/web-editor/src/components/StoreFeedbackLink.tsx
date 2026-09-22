@@ -5,10 +5,19 @@ interface StoreFeedbackLinkProps {
   label?: string;
   context: string;
   className?: string;
+  /** Controlled mode — see `FeedbackLink`'s `open`/`onOpenChange`. */
+  open?: boolean;
+  onOpenChange?: (open: boolean) => void;
 }
 
 /** Internal wrapper: reads all FeedbackLink data from the editor store. */
-const StoreFeedbackLink = ({ label, context, className }: StoreFeedbackLinkProps) => {
+const StoreFeedbackLink = ({
+  label,
+  context,
+  className,
+  open,
+  onOpenChange,
+}: StoreFeedbackLinkProps) => {
   const hasFeedback = useEditorStore((s) => s.hasFeedback);
   const projectUrl = useEditorStore((s) => s.projectUrl);
   const source = useEditorStore((s) => s.source);
@@ -28,6 +37,8 @@ const StoreFeedbackLink = ({ label, context, className }: StoreFeedbackLinkProps
       sourceFormat={sourceFormat}
       title={title}
       onSubmit={feedbackSubmit}
+      open={open}
+      onOpenChange={onOpenChange}
     />
   );
 };

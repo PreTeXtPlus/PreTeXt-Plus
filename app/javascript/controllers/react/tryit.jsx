@@ -128,7 +128,7 @@ function TryItApp({ config }) {
       hideAssets={true}
       topBar={{
         logo,
-        accountArea: (
+        accountArea: () => (
           <AccountArea
             signedIn={false}
             newUserPath={newUserPath}

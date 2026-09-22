@@ -39,14 +39,17 @@ const HELP_ENTRIES = [
 ];
 
 /**
- * The Help and Account menus for the unified editor top bar, matching the
- * equivalent menus in `app/views/layouts/application.html.erb` — same links,
- * same signed-in/signed-out Account contents — built from the same
- * `MenuDropdown` primitive the File/Edit/Insert/Tools menus use, so all of
- * them share one look and one set of keyboard behaviors.
+ * The Help & Feedback and Account menus for the unified editor top bar. Help
+ * matches the equivalent menu in `app/views/layouts/application.html.erb`
+ * (same links) but, unlike that nav-bar copy, always renders here regardless
+ * of sign-in state — Account still shows different entries when signed in vs.
+ * out. Both menus are built from the same `MenuDropdown` primitive the
+ * File/Edit/Insert/Tools menus use, so all of them share one look and one set
+ * of keyboard behaviors.
  *
  * @param {Object} props
- * @param {boolean} [props.signedIn] - Whether Help renders and Account shows the signed-in entries.
+ * @param {boolean} [props.signedIn] - Whether Account shows the signed-in entries.
+ * @param {() => void} [props.onGiveFeedback] - Opens the feedback dialog (from `TopBar`). Omit to hide the "Give feedback" entry, e.g. on tryit.
  * @param {string} [props.userEmail]
  * @param {boolean} [props.hasProfilePage]
  * @param {string} [props.profilePath]
@@ -59,6 +62,7 @@ const HELP_ENTRIES = [
  */
 function AccountArea({
   signedIn,
+  onGiveFeedback,
   userEmail,
   hasProfilePage,
   profilePath,
@@ -126,10 +130,27 @@ function AccountArea({
         },
       ];
 
-  const menus = [
-    ...(signedIn
-      ? [{ key: "help", label: "Help", entries: HELP_ENTRIES }]
+  const helpEntries = [
+    ...HELP_ENTRIES,
+    ...(onGiveFeedback
+      ? [
+          { kind: "separator", key: "feedback-sep" },
+          {
+            kind: "item",
+            key: "feedback",
+            label: "Give feedback",
+            onSelect: onGiveFeedback,
+          },
+        ]
       : []),
+  ];
+
+  const menus = [
+    {
+      key: "help",
+      label: onGiveFeedback ? "Help & Feedback" : "Help",
+      entries: helpEntries,
+    },
     {
       key: "account",
       label: "Account",

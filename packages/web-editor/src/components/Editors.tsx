@@ -29,7 +29,7 @@ import AssetManagerModal, { type AssetManagerMainTab } from "./AssetManagerModal
 import AssetEditModal from "./AssetEditModal";
 import SnippetManagerModal, { type SnippetManagerMainTab } from "./SnippetManagerModal";
 import SnippetEditModal from "./SnippetEditModal";
-import TopBar from "./TopBar";
+import TopBar, { type TopBarAccountAreaHelpers } from "./TopBar";
 import TableOfContents from "./TableOfContents";
 import FindReplaceDrawer from "./toc/FindReplaceDrawer";
 import ErrorBoundary from "./ErrorBoundary";
@@ -407,9 +407,11 @@ export interface editorProps {
     logo?: ReactNode;
     /**
      * Rendered flush right, spanning the bar's full height — e.g. the host's
-     * Help/Account dropdown menus. Omit to render no flush-right content.
+     * Help/Account dropdown menus. Called with helpers (e.g. `onGiveFeedback`)
+     * so the host's menu content can trigger actions this package owns. Omit
+     * to render no flush-right content.
      */
-    accountArea?: ReactNode;
+    accountArea?: (helpers: TopBarAccountAreaHelpers) => ReactNode;
     /**
      * Renders in place of the editable title control when set — e.g. a host
      * with nothing to persist a title edit to (a demo/tryit project).

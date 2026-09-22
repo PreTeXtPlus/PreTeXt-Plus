@@ -1367,9 +1367,10 @@ function EditorApp({ config }) {
         projectUrl={feedbackProjectUrl}
         topBar={{
           logo,
-          accountArea: (
+          accountArea: (helpers) => (
             <AccountArea
               signedIn
+              onGiveFeedback={helpers.onGiveFeedback}
               userEmail={userEmail}
               hasProfilePage={hasProfilePage}
               profilePath={profilePath}

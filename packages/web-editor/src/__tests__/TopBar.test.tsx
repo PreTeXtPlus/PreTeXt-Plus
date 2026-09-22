@@ -35,7 +35,9 @@ function renderWithStore(props: Partial<TopBarProps> = {}) {
     snippetInsert: noop,
     updateTitle: (title) => store.getState().setTitle(title),
     updateLanguage: (language) => store.getState().setLanguage(language),
+    feedbackSubmit: noop,
   });
+  store.getState().syncState({ hasFeedback: true });
 
   const baseProps: TopBarProps = {
     content: "<article/>",
@@ -58,10 +60,22 @@ describe("TopBar", () => {
   it("renders the supplied logo and account area, falling back to a placeholder logo", () => {
     renderWithStore({
       logo: <span>My Host Logo</span>,
-      accountArea: <span>Account stuff</span>,
+      accountArea: () => <span>Account stuff</span>,
     });
     expect(screen.getByText("My Host Logo")).toBeInTheDocument();
     expect(screen.getByText("Account stuff")).toBeInTheDocument();
+  });
+
+  it("lets the account area open the feedback dialog via the onGiveFeedback helper", async () => {
+    const user = userEvent.setup();
+    renderWithStore({
+      accountArea: (helpers) => (
+        <button onClick={helpers.onGiveFeedback}>Open feedback</button>
+      ),
+    });
+    expect(screen.queryByText("Provide Feedback")).not.toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Open feedback" }));
+    expect(screen.getByText("Provide Feedback")).toBeInTheDocument();
   });
 
   it("falls back to a placeholder when no logo is supplied", () => {

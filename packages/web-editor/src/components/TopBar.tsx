@@ -1,4 +1,4 @@
-import type { ReactNode } from "react";
+import { useState, type ReactNode } from "react";
 import CodeEditorMenu, { type EditorMenuActions, type BarMenu } from "./CodeEditorMenu";
 import type { MenuEntry } from "./MenuDropdown";
 import type { CodeEditorMenuState } from "./CodeEditor";
@@ -31,14 +31,21 @@ const DEFAULT_MENU_STATE: CodeEditorMenuState = {
   switchToFindInProject: () => {},
 };
 
+/** Capabilities `TopBar` hands to a host's `accountArea` render-prop. */
+export interface TopBarAccountAreaHelpers {
+  /** Opens the feedback dialog. Wire to a "Give feedback" menu entry. */
+  onGiveFeedback: () => void;
+}
+
 export interface TopBarProps {
   /** Rendered at the far left of the bar — e.g. the host's app logo/wordmark, linked to its home route. Falls back to a plain "✏️" when omitted. */
   logo?: ReactNode;
   /**
    * Rendered flush right, spanning the bar's full height — e.g. the host's
-   * Help/Account dropdown menus.
+   * Help/Account dropdown menus. Called with helpers (e.g. `onGiveFeedback`)
+   * so the host's menu content can trigger actions this package owns.
    */
-  accountArea?: ReactNode;
+  accountArea?: (helpers: TopBarAccountAreaHelpers) => ReactNode;
   /**
    * Renders in place of the editable title control when set — e.g. a host
    * with nothing to persist a title edit to.
@@ -85,6 +92,7 @@ const TopBar = (props: TopBarProps) => {
   const state = props.menuState ?? DEFAULT_MENU_STATE;
   const language = useEditorStore((s) => s.language);
   const updateLanguage = useEditorStore((s) => s.updateLanguage);
+  const [isFeedbackOpen, setIsFeedbackOpen] = useState(false);
 
   const languageEntries: MenuEntry[] = LANGUAGES.map(({ code, label }) => ({
     kind: "item",
@@ -177,7 +185,11 @@ const TopBar = (props: TopBarProps) => {
             showDocumentActionsInTools={false}
           />
           <div className="flex items-center gap-3 pl-2 pr-2 shrink-0">
-            <StoreFeedbackLink label="Give feedback" context="main-editor" />
+            <StoreFeedbackLink
+              context="main-editor"
+              open={isFeedbackOpen}
+              onOpenChange={setIsFeedbackOpen}
+            />
             {props.readOnly && (
               <span className="inline-block py-1 px-2.5 rounded-[3px] bg-[#a32899] text-white font-medium text-[13px]">
                 Read-only Mode
@@ -188,7 +200,9 @@ const TopBar = (props: TopBarProps) => {
       </div>
       {props.accountArea && (
         <div className="h-16 flex items-center border-l border-gray-200 px-2 shrink-0 max-[500px]:h-auto">
-          {props.accountArea}
+          {props.accountArea({
+            onGiveFeedback: () => setIsFeedbackOpen(true),
+          })}
         </div>
       )}
     </div>
