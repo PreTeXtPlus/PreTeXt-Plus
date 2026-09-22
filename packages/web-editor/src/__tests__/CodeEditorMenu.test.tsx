@@ -237,9 +237,6 @@ describe("CodeEditorMenu", () => {
         expect(
           screen.queryByRole("button", { name: "Insert" }),
         ).not.toBeInTheDocument();
-        expect(
-          screen.queryByRole("button", { name: "Convert to PreTeXt" }),
-        ).not.toBeInTheDocument();
 
         await openMenu("Tools");
         expect(menuItem("Display Full Source")).toBeInTheDocument();
@@ -248,6 +245,7 @@ describe("CodeEditorMenu", () => {
         expect(queryMenuItem("Edit Preamble…")).not.toBeInTheDocument();
         expect(queryMenuItem("Clean up LaTeX…")).not.toBeInTheDocument();
         expect(queryMenuItem("Assets…")).not.toBeInTheDocument();
+        expect(queryMenuItem("Convert to PreTeXt")).not.toBeInTheDocument();
       },
     );
 
@@ -264,29 +262,36 @@ describe("CodeEditorMenu", () => {
     });
   });
 
-  it("keeps Convert to PreTeXt a button, disabled when conversion failed", () => {
+  it("offers Convert to PreTeXt in Tools, disabled when conversion failed", async () => {
+    const onConvertToPretext = vi.fn();
     const { rerender } = render(
       <CodeEditorMenu
         {...baseProps()}
         sourceFormat="latex"
-        onConvertToPretext={vi.fn()}
+        onConvertToPretext={onConvertToPretext}
       />,
     );
-    expect(
-      screen.getByRole("button", { name: "Convert to PreTeXt" }),
-    ).toBeEnabled();
+    const user = await openMenu("Tools");
+    expect(menuItem("Convert to PreTeXt")).toBeEnabled();
+    await user.click(menuItem("Convert to PreTeXt"));
+    expect(onConvertToPretext).toHaveBeenCalledTimes(1);
 
     rerender(
       <CodeEditorMenu
         {...baseProps()}
         sourceFormat="latex"
-        onConvertToPretext={vi.fn()}
+        onConvertToPretext={onConvertToPretext}
         canConvertToPretext={false}
       />,
     );
-    expect(
-      screen.getByRole("button", { name: "Convert to PreTeXt" }),
-    ).toBeDisabled();
+    await openMenu("Tools");
+    expect(menuItem("Convert to PreTeXt")).toBeDisabled();
+  });
+
+  it("omits Convert to PreTeXt from Tools when no handler is provided", async () => {
+    render(<CodeEditorMenu {...baseProps()} sourceFormat="latex" />);
+    await openMenu("Tools");
+    expect(queryMenuItem("Convert to PreTeXt")).not.toBeInTheDocument();
   });
 
   it("only ever has one menu open", async () => {

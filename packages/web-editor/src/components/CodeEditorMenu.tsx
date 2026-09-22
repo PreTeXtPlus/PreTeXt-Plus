@@ -87,12 +87,12 @@ interface CodeEditorMenuProps {
   /** Monaco-side operations; see {@link EditorMenuActions}. */
   actions: EditorMenuActions;
   /**
-   * If provided, a "Convert to PreTeXt" button is shown.
-   * Called when the user clicks to promote the derived PreTeXt to the canonical source.
+   * If provided, a "Convert to PreTeXt" item is shown in Tools.
+   * Called when the user selects it to promote the derived PreTeXt to the canonical source.
    */
   onConvertToPretext?: () => void;
   /**
-   * Controls whether the "Convert to PreTeXt" button is enabled.
+   * Controls whether the "Convert to PreTeXt" item is enabled.
    * Should be `false` when conversion has failed.
    */
   canConvertToPretext?: boolean;
@@ -138,9 +138,6 @@ interface CodeEditorMenuProps {
   className?: string;
 }
 
-const CONVERT_BUTTON_CLASSES =
-  "shrink-0 py-[5px] px-2.5 rounded-[3px] border border-transparent cursor-pointer text-[13px] font-medium leading-[1.3] transition-colors duration-150 ease-in-out bg-blue-600 text-white enabled:hover:bg-blue-700 disabled:bg-blue-300 disabled:cursor-not-allowed";
-
 /** Turn a Monaco command into a menu row. */
 const commandEntry = (
   command: MonacoCommand,
@@ -167,9 +164,11 @@ const separator = (key: string): MenuEntry => ({ kind: "separator", key });
  * Insert menu offers the same catalog of constructs written in whichever
  * format is open (see `editorConfigs/snippets.ts`).
  *
- * "Convert to PreTeXt" stays a button rather than a menu item: it is the one
- * action here that changes what the project *is*, and it is the call to action
- * for an author working in an imported format.
+ * "Convert to PreTeXt" is the one action here that changes what the project
+ * *is*, and it is the call to action for an author working in an imported
+ * format — it lives as a button on the editor pane itself (see `CodeEditor`,
+ * next to the format badge), with a Tools entry alongside the other document
+ * actions as a second, more discoverable path to the same action.
  */
 const CodeEditorMenu: React.FC<CodeEditorMenuProps> = ({
   content,
@@ -388,6 +387,20 @@ const CodeEditorMenu: React.FC<CodeEditorMenuProps> = ({
     commandEntry(MONACO_COMMANDS.toggleWordWrap, run),
     commandEntry(MONACO_COMMANDS.foldAll, run),
     commandEntry(MONACO_COMMANDS.unfoldAll, run),
+    ...(onConvertToPretext && !readOnly
+      ? [
+          separator("convert"),
+          {
+            kind: "item",
+            key: "convert-to-pretext",
+            label: "Convert to PreTeXt",
+            title:
+              "Convert this division to use PreTeXt XML",
+            disabled: canConvertToPretext === false,
+            onSelect: onConvertToPretext,
+          } as MenuEntry,
+        ]
+      : []),
   ];
 
   const menus: BarMenu[] = [
@@ -451,20 +464,6 @@ const CodeEditorMenu: React.FC<CodeEditorMenuProps> = ({
               Switch to full Project
             </button>
           )}
-        </span>
-      )}
-
-      {onConvertToPretext && !readOnly && (
-        <span className="flex items-center ml-auto pl-2">
-          <button
-            type="button"
-            className={CONVERT_BUTTON_CLASSES}
-            onClick={onConvertToPretext}
-            disabled={canConvertToPretext === false}
-            title="Create a new project copy using the converted PreTeXt source"
-          >
-            Convert to PreTeXt
-          </button>
         </span>
       )}
     </div>

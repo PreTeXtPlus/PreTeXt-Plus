@@ -2122,6 +2122,8 @@ const EditorsInner = (props: EditorsInnerProps) => {
           <PresenceAvatars awareness={props.collaboration.awareness} />
         ) : undefined
       }
+      onConvertToPretext={onOpenConvertToPretext}
+      canConvertToPretext={canConvertToPretext}
     />
   );
 

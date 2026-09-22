@@ -116,6 +116,17 @@ interface CodeEditorProps {
    * source-format badge.
    */
   presence?: ReactNode;
+  /**
+   * If provided, a "Convert to PreTeXt" button is shown floating over the
+   * editor's lower-right corner, next to the source-format badge.
+   * Called when the user clicks to promote the derived PreTeXt to the canonical source.
+   */
+  onConvertToPretext?: () => void;
+  /**
+   * Controls whether the "Convert to PreTeXt" button is enabled.
+   * Should be `false` when conversion has failed.
+   */
+  canConvertToPretext?: boolean;
 }
 
 /**
@@ -206,6 +217,9 @@ const FORMAT_LABELS: Record<SourceFormat, string> = {
   markdown: "Markdown",
 };
 
+const CONVERT_BUTTON_CLASSES =
+  "shrink-0 py-0.5 px-1.5 rounded-[3px] border border-transparent cursor-pointer text-[13px] font-medium leading-[1.3] transition-colors duration-150 ease-in-out bg-blue-600 text-white enabled:hover:bg-blue-700 disabled:bg-blue-300 disabled:cursor-not-allowed";
+
 /** Base Monaco editor options shared across all instances of this component. */
 const baseOptions = {
   automaticLayout: true,
@@ -246,6 +260,8 @@ const CodeEditor = forwardRef<CodeEditorHandle, CodeEditorProps>(({
   pretextValidation,
   collab,
   presence,
+  onConvertToPretext,
+  canConvertToPretext,
 }, ref) => {
   const editorRef = useRef<any>(null);
   const monacoRef = useRef<any>(null);
@@ -1204,6 +1220,17 @@ const CodeEditor = forwardRef<CodeEditorHandle, CodeEditorProps>(({
         />
         <div className="absolute bottom-2 right-4 z-10 flex items-center gap-2">
           {presence}
+          {onConvertToPretext && !readOnly && (
+            <button
+              type="button"
+              className={CONVERT_BUTTON_CLASSES}
+              onClick={onConvertToPretext}
+              disabled={canConvertToPretext === false}
+              title="Convert this division to use PreTeXt XML"
+            >
+              Convert to PreTeXt
+            </button>
+          )}
           <span className="inline-flex items-center py-0.5 px-2 rounded-full bg-gray-200/90 text-gray-800 text-xs font-semibold pointer-events-none shadow-sm">
             {FORMAT_LABELS[sourceFormat]}
           </span>

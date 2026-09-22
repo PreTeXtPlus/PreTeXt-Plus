@@ -3,6 +3,7 @@
  */
 import { describe, it, expect, vi } from "vitest";
 import { render, screen } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import CodeEditor from "../components/CodeEditor";
 
 const monacoEditorMock = vi.fn((props: { options?: { readOnly?: boolean } }) => (
@@ -76,5 +77,45 @@ describe("CodeEditor", () => {
     render(<CodeEditor {...baseProps} presence={<span>Presence chips</span>} />);
     expect(screen.getByText("Presence chips")).toBeInTheDocument();
     expect(screen.getByText("PreTeXt")).toBeInTheDocument();
+  });
+
+  it("omits the Convert to PreTeXt button when no handler is provided", () => {
+    render(<CodeEditor {...baseProps} />);
+    expect(
+      screen.queryByRole("button", { name: "Convert to PreTeXt" }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("shows a Convert to PreTeXt button next to the format badge when a handler is provided", async () => {
+    const onConvertToPretext = vi.fn();
+    render(
+      <CodeEditor {...baseProps} onConvertToPretext={onConvertToPretext} />,
+    );
+    const button = screen.getByRole("button", { name: "Convert to PreTeXt" });
+    expect(button).toBeEnabled();
+    await userEvent.setup().click(button);
+    expect(onConvertToPretext).toHaveBeenCalledTimes(1);
+  });
+
+  it("disables the Convert to PreTeXt button when conversion has failed", () => {
+    render(
+      <CodeEditor
+        {...baseProps}
+        onConvertToPretext={vi.fn()}
+        canConvertToPretext={false}
+      />,
+    );
+    expect(
+      screen.getByRole("button", { name: "Convert to PreTeXt" }),
+    ).toBeDisabled();
+  });
+
+  it("hides the Convert to PreTeXt button when read-only", () => {
+    render(
+      <CodeEditor {...baseProps} onConvertToPretext={vi.fn()} readOnly />,
+    );
+    expect(
+      screen.queryByRole("button", { name: "Convert to PreTeXt" }),
+    ).not.toBeInTheDocument();
   });
 });
