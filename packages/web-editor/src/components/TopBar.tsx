@@ -42,10 +42,19 @@ export interface TopBarProps {
   logo?: ReactNode;
   /**
    * Rendered flush right, spanning the bar's full height — e.g. the host's
-   * Help/Account dropdown menus. Called with helpers (e.g. `onGiveFeedback`)
-   * so the host's menu content can trigger actions this package owns.
+   * Account dropdown menu.
    */
-  accountArea?: (helpers: TopBarAccountAreaHelpers) => ReactNode;
+  accountArea?: ReactNode;
+  /**
+   * Builds a "Help"/"Help & Feedback" menu rendered inline with
+   * File/Edit/Insert/Tools/Language, sharing that row's open/keyboard-nav
+   * state. Called with helpers (e.g. `onGiveFeedback`) so the host's Help
+   * entries can trigger the feedback dialog this package owns. Omit for no
+   * Help menu.
+   */
+  helpMenu?: (
+    helpers: TopBarAccountAreaHelpers,
+  ) => { label: string; entries: MenuEntry[] };
   /**
    * Renders in place of the editable title control when set — e.g. a host
    * with nothing to persist a title edit to.
@@ -85,8 +94,8 @@ export interface TopBarProps {
 /**
  * The unified ~64px top bar for a host that wants one full-width bar in place
  * of the classic `MenuBar` + the code editor's own "Editor actions" toolbar:
- * logo, then a title row above a File/Edit/Insert/Tools/Language menu row,
- * with the host's Help/Account content flush right.
+ * logo, then a title row above a File/Edit/Insert/Tools/Language/Help menu
+ * row, with the host's Account content flush right.
  */
 const TopBar = (props: TopBarProps) => {
   const state = props.menuState ?? DEFAULT_MENU_STATE;
@@ -101,6 +110,9 @@ const TopBar = (props: TopBarProps) => {
     checked: code === language,
     onSelect: () => updateLanguage(code),
   }));
+  const helpMenu = props.helpMenu?.({
+    onGiveFeedback: () => setIsFeedbackOpen(true),
+  });
   const trailingMenus: BarMenu[] = [
     {
       key: "language",
@@ -108,6 +120,7 @@ const TopBar = (props: TopBarProps) => {
       entries: languageEntries,
       disabled: props.readOnly,
     },
+    ...(helpMenu ? [{ key: "help", ...helpMenu }] : []),
   ];
 
   const fileEntries = [
@@ -200,9 +213,7 @@ const TopBar = (props: TopBarProps) => {
       </div>
       {props.accountArea && (
         <div className="h-16 flex items-center border-l border-gray-200 px-2 shrink-0 max-[500px]:h-auto">
-          {props.accountArea({
-            onGiveFeedback: () => setIsFeedbackOpen(true),
-          })}
+          {props.accountArea}
         </div>
       )}
     </div>

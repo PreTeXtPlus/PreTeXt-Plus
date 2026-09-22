@@ -2,54 +2,14 @@ import React, { useState } from "react";
 import { MenuDropdown } from "@pretextbook/web-editor";
 
 /**
- * Static help links, matching `app/views/layouts/_nav_dropdown.html.erb`'s
- * Help menu exactly (labels, targets, order).
- * @type {import("@pretextbook/web-editor").MenuEntry[]}
- */
-const HELP_ENTRIES = [
-  {
-    kind: "item",
-    key: "docs",
-    label: "PreTeXt.Plus Documentation",
-    onSelect: () => window.open("https://docs.pretext.plus", "_blank"),
-  },
-  {
-    kind: "item",
-    key: "guide",
-    label: "PreTeXt Guide",
-    onSelect: () =>
-      window.open("https://pretextbook.org/doc/guide/html/", "_blank"),
-  },
-  {
-    kind: "item",
-    key: "sample",
-    label: "PreTeXt Sample Article",
-    onSelect: () =>
-      window.open(
-        "https://pretextbook.org/examples/sample-article/annotated/",
-        "_blank",
-      ),
-  },
-  {
-    kind: "item",
-    key: "support",
-    label: "Email Support",
-    onSelect: () => window.open("mailto:support@pretext.plus", "_blank"),
-  },
-];
-
-/**
- * The Help & Feedback and Account menus for the unified editor top bar. Help
- * matches the equivalent menu in `app/views/layouts/application.html.erb`
- * (same links) but, unlike that nav-bar copy, always renders here regardless
- * of sign-in state — Account still shows different entries when signed in vs.
- * out. Both menus are built from the same `MenuDropdown` primitive the
+ * The Account menu for the unified editor top bar, matching the equivalent
+ * menu in `app/views/layouts/application.html.erb` — same signed-in/signed-out
+ * contents — built from the same `MenuDropdown` primitive the
  * File/Edit/Insert/Tools menus use, so all of them share one look and one set
  * of keyboard behaviors.
  *
  * @param {Object} props
  * @param {boolean} [props.signedIn] - Whether Account shows the signed-in entries.
- * @param {() => void} [props.onGiveFeedback] - Opens the feedback dialog (from `TopBar`). Omit to hide the "Give feedback" entry, e.g. on tryit.
  * @param {string} [props.userEmail]
  * @param {boolean} [props.hasProfilePage]
  * @param {string} [props.profilePath]
@@ -62,7 +22,6 @@ const HELP_ENTRIES = [
  */
 function AccountArea({
   signedIn,
-  onGiveFeedback,
   userEmail,
   hasProfilePage,
   profilePath,
@@ -130,27 +89,7 @@ function AccountArea({
         },
       ];
 
-  const helpEntries = [
-    ...HELP_ENTRIES,
-    ...(onGiveFeedback
-      ? [
-          { kind: "separator", key: "feedback-sep" },
-          {
-            kind: "item",
-            key: "feedback",
-            label: "Give feedback",
-            onSelect: onGiveFeedback,
-          },
-        ]
-      : []),
-  ];
-
   const menus = [
-    {
-      key: "help",
-      label: onGiveFeedback ? "Help & Feedback" : "Help",
-      entries: helpEntries,
-    },
     {
       key: "account",
       label: "Account",

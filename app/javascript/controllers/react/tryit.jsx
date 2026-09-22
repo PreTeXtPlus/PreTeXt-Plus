@@ -2,6 +2,7 @@ import React, { useCallback, useRef } from "react";
 import ReactDOM from "react-dom/client";
 import { Editors } from "@pretextbook/web-editor";
 import AccountArea from "./AccountArea";
+import { HELP_ENTRIES } from "./helpEntries";
 
 /**
  * @typedef {Object} RailsDivision
@@ -128,13 +129,14 @@ function TryItApp({ config }) {
       hideAssets={true}
       topBar={{
         logo,
-        accountArea: () => (
+        accountArea: (
           <AccountArea
             signedIn={false}
             newUserPath={newUserPath}
             newSessionPath={newSessionPath}
           />
         ),
+        helpMenu: () => ({ label: "Help", entries: HELP_ENTRIES }),
         titleOverride: "Try PreTeXt in Your Browser!",
       }}
     />

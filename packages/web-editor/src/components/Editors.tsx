@@ -30,6 +30,7 @@ import AssetEditModal from "./AssetEditModal";
 import SnippetManagerModal, { type SnippetManagerMainTab } from "./SnippetManagerModal";
 import SnippetEditModal from "./SnippetEditModal";
 import TopBar, { type TopBarAccountAreaHelpers } from "./TopBar";
+import type { MenuEntry } from "./MenuDropdown";
 import TableOfContents from "./TableOfContents";
 import FindReplaceDrawer from "./toc/FindReplaceDrawer";
 import ErrorBoundary from "./ErrorBoundary";
@@ -398,8 +399,8 @@ export interface editorProps {
 
   /**
    * The unified top bar: logo, then a title/language row above a
-   * File/Edit/Insert/Tools menu row, with the host's Help/Account content
-   * flush right. The host supplies the two host-specific slots this
+   * File/Edit/Insert/Tools/Help menu row, with the host's Account content
+   * flush right. The host supplies the host-specific slots this
    * host-agnostic package cannot build itself.
    */
   topBar: {
@@ -407,11 +408,18 @@ export interface editorProps {
     logo?: ReactNode;
     /**
      * Rendered flush right, spanning the bar's full height — e.g. the host's
-     * Help/Account dropdown menus. Called with helpers (e.g. `onGiveFeedback`)
-     * so the host's menu content can trigger actions this package owns. Omit
-     * to render no flush-right content.
+     * Account dropdown menu. Omit to render no flush-right content.
      */
-    accountArea?: (helpers: TopBarAccountAreaHelpers) => ReactNode;
+    accountArea?: ReactNode;
+    /**
+     * Builds a "Help"/"Help & Feedback" menu rendered inline with
+     * File/Edit/Insert/Tools/Language. Called with helpers (e.g.
+     * `onGiveFeedback`) so the host's Help entries can trigger the feedback
+     * dialog this package owns. Omit for no Help menu.
+     */
+    helpMenu?: (
+      helpers: TopBarAccountAreaHelpers,
+    ) => { label: string; entries: MenuEntry[] };
     /**
      * Renders in place of the editable title control when set — e.g. a host
      * with nothing to persist a title edit to (a demo/tryit project).
@@ -2311,6 +2319,7 @@ const EditorsInner = (props: EditorsInnerProps) => {
       <TopBar
         logo={props.topBar.logo}
         accountArea={props.topBar.accountArea}
+        helpMenu={props.topBar.helpMenu}
         titleOverride={props.topBar.titleOverride}
         readOnly={props.readOnly}
         onSaveAndClose={props.onSaveAndClose}

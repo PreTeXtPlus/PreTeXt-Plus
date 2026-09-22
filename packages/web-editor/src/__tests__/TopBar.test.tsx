@@ -60,22 +60,51 @@ describe("TopBar", () => {
   it("renders the supplied logo and account area, falling back to a placeholder logo", () => {
     renderWithStore({
       logo: <span>My Host Logo</span>,
-      accountArea: () => <span>Account stuff</span>,
+      accountArea: <span>Account stuff</span>,
     });
     expect(screen.getByText("My Host Logo")).toBeInTheDocument();
     expect(screen.getByText("Account stuff")).toBeInTheDocument();
   });
 
-  it("lets the account area open the feedback dialog via the onGiveFeedback helper", async () => {
+  it("renders a helpMenu inline with File/Edit/Insert/Tools/Language, wired to the feedback dialog", async () => {
     const user = userEvent.setup();
     renderWithStore({
-      accountArea: (helpers) => (
-        <button onClick={helpers.onGiveFeedback}>Open feedback</button>
-      ),
+      helpMenu: (helpers) => ({
+        label: "Help & Feedback",
+        entries: [
+          {
+            kind: "item",
+            key: "feedback",
+            label: "Give feedback",
+            onSelect: helpers.onGiveFeedback,
+          },
+        ],
+      }),
     });
+    const names = screen
+      .getByRole("menubar", { name: "Editor actions" })
+      .querySelectorAll("button");
+    const labels = Array.from(names).map((b) => b.textContent);
+    expect(labels).toEqual([
+      "File",
+      "Edit",
+      "Insert",
+      "Tools",
+      "Language",
+      "Help & Feedback",
+    ]);
+
     expect(screen.queryByText("Provide Feedback")).not.toBeInTheDocument();
-    await user.click(screen.getByRole("button", { name: "Open feedback" }));
+    await user.click(screen.getByRole("button", { name: "Help & Feedback" }));
+    await user.click(screen.getByRole("menuitem", { name: "Give feedback" }));
     expect(screen.getByText("Provide Feedback")).toBeInTheDocument();
+  });
+
+  it("omits the Help menu when helpMenu is not provided", () => {
+    renderWithStore();
+    expect(
+      screen.queryByRole("button", { name: /Help/ }),
+    ).not.toBeInTheDocument();
   });
 
   it("falls back to a placeholder when no logo is supplied", () => {

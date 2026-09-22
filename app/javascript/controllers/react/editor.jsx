@@ -26,6 +26,7 @@ import {
   toEditorSnippet,
 } from "./railsProjectMapping";
 import AccountArea from "./AccountArea";
+import { HELP_ENTRIES } from "./helpEntries";
 
 /** @typedef {import("@pretextbook/web-editor").Asset} Asset */
 /** @typedef {import("@pretextbook/web-editor").Division} Division */
@@ -1367,10 +1368,9 @@ function EditorApp({ config }) {
         projectUrl={feedbackProjectUrl}
         topBar={{
           logo,
-          accountArea: (helpers) => (
+          accountArea: (
             <AccountArea
               signedIn
-              onGiveFeedback={helpers.onGiveFeedback}
               userEmail={userEmail}
               hasProfilePage={hasProfilePage}
               profilePath={profilePath}
@@ -1379,6 +1379,19 @@ function EditorApp({ config }) {
               onSignOut={onSignOut}
             />
           ),
+          helpMenu: (helpers) => ({
+            label: "Help & Feedback",
+            entries: [
+              ...HELP_ENTRIES,
+              { kind: "separator", key: "feedback-sep" },
+              {
+                kind: "item",
+                key: "feedback",
+                label: "Give feedback",
+                onSelect: helpers.onGiveFeedback,
+              },
+            ],
+          }),
         }}
         onContentChange={onContentChange}
         importEngines={importEngines}
