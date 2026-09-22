@@ -1387,7 +1387,7 @@ function EditorApp({ config }) {
               {
                 kind: "item",
                 key: "feedback",
-                label: "Give feedback",
+                label: "Support / Feedback",
                 onSelect: helpers.onGiveFeedback,
               },
             ],

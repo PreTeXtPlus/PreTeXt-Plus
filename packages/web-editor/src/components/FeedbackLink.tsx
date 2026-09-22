@@ -148,7 +148,7 @@ const FeedbackLink = ({
           >
             <DialogHeader>
               <div>
-                <DialogTitle id={titleId}>Provide Feedback</DialogTitle>
+                <DialogTitle id={titleId}>Provide Feedback or Request Support</DialogTitle>
                 <DialogCopy>
                   Help us improve PreTeXt.plus! We'd love to hear from you.
                 </DialogCopy>

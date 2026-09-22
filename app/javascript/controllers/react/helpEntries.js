@@ -28,10 +28,4 @@ export const HELP_ENTRIES = [
         "_blank",
       ),
   },
-  {
-    kind: "item",
-    key: "support",
-    label: "Email Support",
-    onSelect: () => window.open("mailto:support@pretext.plus", "_blank"),
-  },
 ];
