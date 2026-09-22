@@ -1424,7 +1424,7 @@ function EditorApp({ config }) {
         onCommonDocinfoChange={onCommonDocinfoChange}
         onSave={() => save()}
         onSaveAndClose={onSaveAndClose}
-        saveAndCloseLabel="Save and manage"
+        saveAndCloseLabel="Save and manage project"
         onPreviewRebuild={onPreviewRebuild}
         onCreatePretextProjectCopy={onCreatePretextProjectCopy}
         onFeedbackSubmit={onFeedbackSubmit}

@@ -159,17 +159,6 @@ const TopBar = (props: TopBarProps) => {
   ];
 
   const fileEntries = [
-    ...(props.onSaveAndClose
-      ? [
-          {
-            kind: "item" as const,
-            key: "save-and-close",
-            label: props.saveAndCloseLabel || "Save & Close",
-            onSelect: props.onSaveAndClose,
-          },
-          { kind: "separator" as const, key: "save-and-close-sep" },
-        ]
-      : []),
     ...buildDocumentActionEntries({
       content: props.content,
       sourceFormat: props.sourceFormat,
@@ -184,6 +173,17 @@ const TopBar = (props: TopBarProps) => {
       hideSnippets: props.hideSnippets,
       onShowFullSource: props.onShowFullSource,
     }),
+    ...(props.onSaveAndClose
+      ? [
+          { kind: "separator" as const, key: "save-and-close-sep" },
+          {
+            kind: "item" as const,
+            key: "save-and-close",
+            label: props.saveAndCloseLabel || "Save & Close",
+            onSelect: props.onSaveAndClose,
+          },
+        ]
+      : []),
     ...(isCompact && props.accountMenuEntries?.length
       ? [
           { kind: "separator" as const, key: "account-sep" },
