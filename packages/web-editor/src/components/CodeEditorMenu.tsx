@@ -419,9 +419,14 @@ const CodeEditorMenu: React.FC<CodeEditorMenuProps> = ({
   };
 
   return (
+    // `relative` only below 500px: each MenuDropdown's own wrapper drops its
+    // `relative` there too (see MenuDropdown.tsx), so an open panel's
+    // `absolute` positioning falls through to this row — anchoring every
+    // panel to the row's (viewport-spanning) left edge instead of wherever
+    // its own trigger button sits.
     <div
       className={clsx(
-        "flex items-center gap-1 py-1.5 w-full border-b border-[#d6d6d6]",
+        "flex items-center gap-1 py-1.5 w-full border-b border-[#d6d6d6] max-[500px]:relative",
         className,
       )}
       role="menubar"

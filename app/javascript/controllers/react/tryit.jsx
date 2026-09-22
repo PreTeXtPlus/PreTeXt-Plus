@@ -3,6 +3,7 @@ import ReactDOM from "react-dom/client";
 import { Editors } from "@pretextbook/web-editor";
 import AccountArea from "./AccountArea";
 import { HELP_ENTRIES } from "./helpEntries";
+import { buildAccountEntries } from "./accountEntries";
 
 /**
  * @typedef {Object} RailsDivision
@@ -136,6 +137,11 @@ function TryItApp({ config }) {
             newSessionPath={newSessionPath}
           />
         ),
+        accountMenuEntries: buildAccountEntries({
+          signedIn: false,
+          newUserPath,
+          newSessionPath,
+        }),
         helpMenu: () => ({ label: "Help", entries: HELP_ENTRIES }),
         titleOverride: "Try PreTeXt in Your Browser!",
       }}

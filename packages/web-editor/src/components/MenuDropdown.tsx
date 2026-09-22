@@ -156,7 +156,10 @@ const MenuDropdown = ({
   };
 
   return (
-    <div className="relative inline-flex" ref={containerRef}>
+    // Below 500px, drop `relative` so an open panel's `absolute` positioning
+    // falls through to the menubar row itself (see CodeEditorMenu.tsx),
+    // anchoring it to the row's left edge rather than this specific button's.
+    <div className="relative inline-flex max-[500px]:static" ref={containerRef}>
       <button
         ref={buttonRef}
         type="button"
@@ -197,7 +200,7 @@ const MenuDropdown = ({
           role="menu"
           aria-label={label}
           className={clsx(
-            "absolute top-[calc(100%+4px)] z-20 flex flex-col min-w-[220px] max-h-[70vh] overflow-y-auto p-1 bg-white border border-[#d0d0d0] rounded-md shadow-[0_6px_16px_rgba(0,0,0,0.14)]",
+            "absolute top-[calc(100%+4px)] z-20 flex flex-col min-w-[220px] max-h-[70vh] w-full sm:w-auto overflow-y-auto p-1 bg-white border border-[#d0d0d0] rounded-md shadow-[0_6px_16px_rgba(0,0,0,0.14)]",
             align === "right" ? "right-0" : "left-0",
           )}
           onKeyDown={handlePanelKeyDown}

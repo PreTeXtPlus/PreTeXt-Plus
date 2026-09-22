@@ -27,6 +27,7 @@ import {
 } from "./railsProjectMapping";
 import AccountArea from "./AccountArea";
 import { HELP_ENTRIES } from "./helpEntries";
+import { buildAccountEntries } from "./accountEntries";
 
 /** @typedef {import("@pretextbook/web-editor").Asset} Asset */
 /** @typedef {import("@pretextbook/web-editor").Division} Division */
@@ -1380,6 +1381,14 @@ function EditorApp({ config }) {
               onSignOut={onSignOut}
             />
           ),
+          accountMenuEntries: buildAccountEntries({
+            signedIn: true,
+            hasProfilePage,
+            profilePath,
+            settingsPath,
+            subscriptionsPath,
+            onSignOut,
+          }),
           helpMenu: (helpers) => ({
             label: "Help & Feedback",
             entries: [

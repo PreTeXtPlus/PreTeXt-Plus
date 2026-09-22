@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import CodeEditorMenu, { type EditorMenuActions, type BarMenu } from "./CodeEditorMenu";
 import type { MenuEntry } from "./MenuDropdown";
 import type { CodeEditorMenuState } from "./CodeEditor";
@@ -42,9 +42,16 @@ export interface TopBarProps {
   logo?: ReactNode;
   /**
    * Rendered flush right, spanning the bar's full height — e.g. the host's
-   * Account dropdown menu.
+   * Account dropdown menu. Hidden below the compact-viewport breakpoint —
+   * see `accountMenuEntries`.
    */
   accountArea?: ReactNode;
+  /**
+   * The Account menu's entries. Folded into the File menu, with the separate
+   * `accountArea` hidden, below the compact-viewport breakpoint — above it,
+   * unused (the host's own `accountArea` renders them instead).
+   */
+  accountMenuEntries?: MenuEntry[];
   /**
    * Builds a "Help"/"Help & Feedback" menu rendered inline with
    * File/Edit/Insert/Tools/Language, sharing that row's open/keyboard-nav
@@ -92,6 +99,23 @@ export interface TopBarProps {
 }
 
 /**
+ * Below this width, `TopBar` folds the Account menu into File (see
+ * `accountMenuEntries`) and reflows into two rows — see the grid classes in
+ * the JSX below, which use the same value via Tailwind's `max-[500px]:`.
+ */
+const COMPACT_TOPBAR_MAX_WIDTH = 500;
+
+/**
+ * The `(max-width: …)` query backing `isCompact`, or `undefined` where
+ * `matchMedia` doesn't exist (e.g. this package's jsdom-based tests, unless a
+ * test stubs it) — callers treat that as "not compact".
+ */
+const compactMediaQuery = (): MediaQueryList | undefined =>
+  typeof window !== "undefined" && typeof window.matchMedia === "function"
+    ? window.matchMedia(`(max-width: ${COMPACT_TOPBAR_MAX_WIDTH}px)`)
+    : undefined;
+
+/**
  * The unified ~64px top bar for a host that wants one full-width bar in place
  * of the classic `MenuBar` + the code editor's own "Editor actions" toolbar:
  * logo, then a title row above a File/Edit/Insert/Tools/Language/Help menu
@@ -102,6 +126,17 @@ const TopBar = (props: TopBarProps) => {
   const language = useEditorStore((s) => s.language);
   const updateLanguage = useEditorStore((s) => s.updateLanguage);
   const [isFeedbackOpen, setIsFeedbackOpen] = useState(false);
+  const [isCompact, setIsCompact] = useState(
+    () => compactMediaQuery()?.matches ?? false,
+  );
+
+  useEffect(() => {
+    const mql = compactMediaQuery();
+    if (!mql) return;
+    const handler = () => setIsCompact(mql.matches);
+    mql.addEventListener("change", handler);
+    return () => mql.removeEventListener("change", handler);
+  }, []);
 
   const languageEntries: MenuEntry[] = LANGUAGES.map(({ code, label }) => ({
     kind: "item",
@@ -149,10 +184,16 @@ const TopBar = (props: TopBarProps) => {
       hideSnippets: props.hideSnippets,
       onShowFullSource: props.onShowFullSource,
     }),
+    ...(isCompact && props.accountMenuEntries?.length
+      ? [
+          { kind: "separator" as const, key: "account-sep" },
+          ...props.accountMenuEntries,
+        ]
+      : []),
   ];
 
   return (
-    <div className="grid grid-cols-[auto_1fr_auto] min-h-20 bg-white border-b border-gray-300 [grid-template-areas:'logo_title_account'_'logo_menu_account'] max-[500px]:[grid-template-areas:'logo_title_account'_'menu_menu_menu']">
+    <div className="grid grid-cols-[auto_1fr_auto] min-h-20 bg-white border-b border-gray-300 [grid-template-areas:'logo_title_account'_'logo_menu_account'] max-[500px]:[grid-template-areas:'logo_title_title'_'menu_menu_menu']">
       <div className="flex items-center pl-4 pr-4 [grid-area:logo]">
         {props.logo ?? <span aria-hidden>✏️</span>}
       </div>
@@ -206,7 +247,7 @@ const TopBar = (props: TopBarProps) => {
           />
         </div>
       </div>
-      {props.accountArea && (
+      {props.accountArea && !isCompact && (
         <div className="flex items-center border-l border-gray-200 px-2 [grid-area:account]">
           {props.accountArea}
         </div>

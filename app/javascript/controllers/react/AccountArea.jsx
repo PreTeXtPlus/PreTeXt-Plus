@@ -1,5 +1,6 @@
 import React, { useState } from "react";
 import { MenuDropdown } from "@pretextbook/web-editor";
+import { buildAccountEntries } from "./accountEntries";
 
 /**
  * The Account menu for the unified editor top bar, matching the equivalent
@@ -33,61 +34,16 @@ function AccountArea({
 }) {
   const [openMenu, setOpenMenu] = useState(/** @type {string|null} */ (null));
 
-  const accountEntries = signedIn
-    ? [
-        ...(hasProfilePage
-          ? [
-              {
-                kind: "item",
-                key: "profile",
-                label: "Public Profile",
-                onSelect: () => {
-                  window.location.href = profilePath;
-                },
-              },
-            ]
-          : []),
-        {
-          kind: "item",
-          key: "settings",
-          label: "Settings",
-          onSelect: () => {
-            window.location.href = settingsPath;
-          },
-        },
-        {
-          kind: "item",
-          key: "subscriptions",
-          label: "Manage Subscriptions",
-          onSelect: () => {
-            window.location.href = subscriptionsPath;
-          },
-        },
-        {
-          kind: "item",
-          key: "sign-out",
-          label: "Sign out",
-          onSelect: () => onSignOut?.(),
-        },
-      ]
-    : [
-        {
-          kind: "item",
-          key: "create-account",
-          label: "Create account",
-          onSelect: () => {
-            window.location.href = newUserPath;
-          },
-        },
-        {
-          kind: "item",
-          key: "sign-in",
-          label: "Sign in",
-          onSelect: () => {
-            window.location.href = newSessionPath;
-          },
-        },
-      ];
+  const accountEntries = buildAccountEntries({
+    signedIn,
+    hasProfilePage,
+    profilePath,
+    settingsPath,
+    subscriptionsPath,
+    onSignOut,
+    newUserPath,
+    newSessionPath,
+  });
 
   const menus = [
     {

@@ -1,7 +1,7 @@
 /**
  * @vitest-environment jsdom
  */
-import { describe, it, expect, vi } from "vitest";
+import { describe, it, expect, vi, afterEach } from "vitest";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type { ReactNode } from "react";
@@ -219,4 +219,60 @@ describe("TopBar", () => {
     await user.click(screen.getByRole("menuitem", { name: /^Select All/ }));
   });
 
+  describe("compact viewport", () => {
+    /** Stubs `window.matchMedia` to report a fixed `matches` for every query. */
+    function stubMatchMedia(matches: boolean) {
+      const mql = {
+        matches,
+        media: "",
+        addEventListener: vi.fn(),
+        removeEventListener: vi.fn(),
+      } as unknown as MediaQueryList;
+      vi.stubGlobal("matchMedia", vi.fn().mockReturnValue(mql));
+    }
+
+    afterEach(() => {
+      vi.unstubAllGlobals();
+    });
+
+    const accountMenuEntries = [
+      {
+        kind: "item" as const,
+        key: "sign-out",
+        label: "Sign out",
+        onSelect: vi.fn(),
+      },
+    ];
+
+    it("folds account entries into File and hides accountArea when compact", async () => {
+      stubMatchMedia(true);
+      const user = userEvent.setup();
+      renderWithStore({
+        accountArea: <span>Account stuff</span>,
+        accountMenuEntries,
+      });
+
+      expect(screen.queryByText("Account stuff")).not.toBeInTheDocument();
+
+      await user.click(screen.getByRole("button", { name: "File" }));
+      expect(
+        screen.getByRole("menuitem", { name: "Sign out" }),
+      ).toBeInTheDocument();
+    });
+
+    it("keeps accountArea and leaves File unchanged without a matchMedia stub", async () => {
+      const user = userEvent.setup();
+      renderWithStore({
+        accountArea: <span>Account stuff</span>,
+        accountMenuEntries,
+      });
+
+      expect(screen.getByText("Account stuff")).toBeInTheDocument();
+
+      await user.click(screen.getByRole("button", { name: "File" }));
+      expect(
+        screen.queryByRole("menuitem", { name: "Sign out" }),
+      ).not.toBeInTheDocument();
+    });
+  });
 });
