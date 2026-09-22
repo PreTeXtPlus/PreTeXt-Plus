@@ -34,8 +34,8 @@ const EditorTitleField = ({
 
   const titleTextClasses =
     size === "large"
-      ? "font-semibold text-[1.2rem] mr-3 overflow-hidden text-ellipsis whitespace-nowrap hover:underline cursor-pointer"
-      : "font-semibold text-[1.05rem] mr-3 overflow-hidden text-ellipsis whitespace-nowrap";
+      ? "font-semibold text-[1.2rem] mx-2 overflow-hidden text-ellipsis whitespace-nowrap hover:underline cursor-pointer"
+      : "font-semibold text-[1.05rem] mx-2 overflow-hidden text-ellipsis whitespace-nowrap";
 
   return (
     <div className="flex items-center mt-4 max-[500px]:basis-full">
@@ -57,7 +57,7 @@ const EditorTitleField = ({
           }}
         />
       ) : (
-        <span className="flex items-baseline gap-2 min-w-0 px-2 max-[500px]:w-full">
+        <span className="flex items-baseline gap-2 min-w-0 max-[500px]:w-full">
           <button
             type="button"
             className={titleTextClasses}
