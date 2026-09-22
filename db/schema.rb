@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_09_22_185107) do
+ActiveRecord::Schema[8.1].define(version: 2026_09_22_190000) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
   enable_extension "pgcrypto"
@@ -213,21 +213,6 @@ ActiveRecord::Schema[8.1].define(version: 2026_09_22_185107) do
     t.datetime "updated_at", null: false
   end
 
-  create_table "project_doc_updates", force: :cascade do |t|
-    t.datetime "created_at", null: false
-    t.binary "payload", null: false
-    t.uuid "project_id", null: false
-    t.index ["project_id"], name: "index_project_doc_updates_on_project_id"
-  end
-
-  create_table "project_docs", id: :uuid, default: -> { "gen_random_uuid()" }, force: :cascade do |t|
-    t.datetime "created_at", null: false
-    t.uuid "project_id", null: false
-    t.binary "snapshot"
-    t.datetime "updated_at", null: false
-    t.index ["project_id"], name: "index_project_docs_on_project_id", unique: true
-  end
-
   create_table "projects", id: :uuid, default: -> { "gen_random_uuid()" }, force: :cascade do |t|
     t.datetime "created_at", null: false
     t.text "description"
@@ -373,8 +358,6 @@ ActiveRecord::Schema[8.1].define(version: 2026_09_22_185107) do
   add_foreign_key "pay_charges", "pay_subscriptions", column: "subscription_id"
   add_foreign_key "pay_payment_methods", "pay_customers", column: "customer_id"
   add_foreign_key "pay_subscriptions", "pay_customers", column: "customer_id"
-  add_foreign_key "project_doc_updates", "projects"
-  add_foreign_key "project_docs", "projects"
   add_foreign_key "projects", "users"
   add_foreign_key "snippets", "projects"
   add_foreign_key "subscription_seats", "pay_subscriptions"

@@ -11,12 +11,10 @@ class Project < ApplicationRecord
   has_many :collaborators, -> { merge(Collaboration.accepted) },
     through: :collaborations, source: :user
 
-  # The shared Yjs document backing real-time collaborative editing, plus its
-  # append-only update log. Exists only while the project actually has
-  # collaborations (see #collaborative? and #reset_collaborative_doc!) and is
-  # created lazily by the first collaborative editor session.
-  has_one :project_doc, dependent: :destroy
-  has_many :project_doc_updates, dependent: :delete_all
+  # The shared Yjs document backing real-time collaborative editing lives in
+  # yrby's store rather than in an association here, because it is addressed by
+  # an opaque key and the server -- not this record -- is what integrates its
+  # updates. See ProjectDoc, #collaborative? and #reset_collaborative_doc!.
 
   # dependent: :destroy so deleting a project drops its assets (and their
   # attached files) too -- an asset has no life outside its
@@ -105,6 +103,9 @@ class Project < ApplicationRecord
   # Built (not created) so it saves in the same transaction as the project. Skipped when
   # targets are already present, which is how full_dup carries a project's own set over.
   before_create :build_default_target
+  # The collaborative document is addressed by key rather than held through an
+  # association, so nothing cascades to it on its own.
+  after_destroy { ProjectDoc.reset!(self) }
 
   # "Private" is supposed to mean nothing here is publicly reachable, so it has to take
   # every published target down with it, not just stop listing the project. update_all
@@ -259,8 +260,7 @@ class Project < ApplicationRecord
   # writes divisions directly, leaving a persisted doc stale), so the doc is
   # reseeded from the divisions if collaboration ever starts again.
   def reset_collaborative_doc!
-    project_doc&.destroy!
-    project_doc_updates.delete_all
+    ProjectDoc.reset!(self)
   end
 
   def effective_docinfo

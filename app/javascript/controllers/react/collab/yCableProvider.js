@@ -1,42 +1,39 @@
 import { createConsumer } from "@rails/actioncable";
 import * as Y from "yjs";
-import {
-  Awareness,
-  applyAwarenessUpdate,
-  encodeAwarenessUpdate,
-  removeAwarenessStates,
-} from "y-protocols/awareness";
+import { ActionCableProvider } from "yrby-client";
 import { seedDocFromState } from "@pretextbook/web-editor";
 import { reportCollabIncident } from "./reportIncident";
 
 /**
- * Yjs provider over ActionCable + the project-doc HTTP endpoints.
+ * Yjs provider for a project's collaborative editing session.
  *
- * Transport model: every document update a client makes is POSTed over the
- * cable (`doc_update`), which the server appends to `project_doc_updates` and
- * relays to all subscribers. A joining (or reconnecting) client fetches
- * `GET /projects/:id/doc` — the last compacted snapshot plus all appended
- * updates — and applies everything; CRDT merges are idempotent and
- * commutative, so overlap with live traffic is harmless. Awareness (cursors,
- * names) relays over the same channel but is never persisted.
+ * The transport is yrby's `ActionCableProvider`, which speaks the y-websocket
+ * sync protocol against a server that holds the document (see
+ * ProjectDocChannel). That is the whole reason this file is short. A join, a
+ * reconnect or a resync sends this client's *state vector* and is answered with
+ * exactly the updates it lacks, computed by the side that has them; every local
+ * update is held until the server acknowledges having recorded it. Nothing here
+ * has to work out what it might be missing, which is what the previous version
+ * of this file spent four hundred lines failing to do soundly.
  *
- * First-time seeding is a compare-and-set: the client builds the doc from the
- * project JSON it already loaded and POSTs it to `doc/seed`; the server
- * accepts exactly one seed per project (409 for the losers, who then fetch
- * the winner's state). This is what prevents the classic two-clients-seed-
- * independently duplication.
+ * What is left is the three things the protocol does not cover, because they
+ * are about this application rather than about the document:
  *
- * Compaction: the leader (lowest awareness clientID) periodically PUTs the
- * full doc state with the highest update id it has incorporated; the server
- * swaps the snapshot and deletes only rows up to that id.
- *
- * Relay watchdog: the channel broadcasts to every subscriber *including the
- * sender*, so this client's own awareness heartbeat comes back to it every
- * AWARENESS_HEARTBEAT_MS. That makes inbound traffic a liveness signal for the
- * whole relay even in a session of one, and its absence the one symptom that
- * distinguishes "nobody is typing" from "broadcasts are going nowhere" -- the
- * August 2026 outage, where solid_cable's listener thread had died in a Puma
- * worker and every HTTP request kept succeeding. See `startWatchdog`.
+ *   * **Seeding.** A brand-new session has to decide the document's first
+ *     content, and only one client may. The seed is POSTed to `doc/seed` and
+ *     deliberately *not* applied locally -- the handshake hands it back, so
+ *     every client including the seeder reaches the document one way.
+ *   * **The relay watchdog.** ActionCable can stop delivering while every HTTP
+ *     request keeps succeeding: in the August 2026 outage solid_cable's listener
+ *     thread had died inside a Puma worker. Nothing on the server can see that;
+ *     this client can, because the channel echoes its own awareness back to it.
+ *     See `startWatchdog`.
+ *   * **Periodic resync.** The one gap a live socket can still hide. solid_cable
+ *     polls `solid_cable_messages` by id and a sequence hands out ids before the
+ *     commits behind them land, so a row can be passed over and delivered to
+ *     nobody -- with the socket perfectly healthy, so no reconnect ever fires.
+ *     Re-running the handshake costs a state vector (tens of bytes) and, when
+ *     nothing is missing, an empty answer.
  *
  * @typedef {Object} ProviderConfig
  * @property {string} projectId
@@ -45,15 +42,21 @@ import { reportCollabIncident } from "./reportIncident";
  * @property {(status: "ready"|"stalled") => void} [onRelayStatusChange]
  */
 
-const AWARENESS_HEARTBEAT_MS = 15000; // y-protocols expires peers after 30s
-const COMPACTION_INTERVAL_MS = 60000;
-const COMPACTION_MIN_UPDATES = 20;
+// y-protocols expires a peer after 30s and refreshes our own awareness entry
+// once it is 15s old, so a live session cannot be quiet for longer than that.
+const AWARENESS_HEARTBEAT_MS = 15000;
 // How often the watchdog looks, and how much silence it takes to call the relay
 // stalled. Two and a half missed heartbeats: long enough that one dropped
 // message or a slow poll is not an incident, short enough that a user is still
 // looking at the screen when the banner appears.
 const RELAY_WATCHDOG_MS = 10000;
 const RELAY_SILENCE_MS = AWARENESS_HEARTBEAT_MS * 2.5;
+// How often to re-run the sync handshake on a socket that has not dropped.
+// Measured server-side at ~17ms for a book-sized document, nearly all of it
+// reading the snapshot out of Postgres, so this is affordable per client but
+// not free -- it buys the repair for a broadcast lost under a healthy socket,
+// which nothing else here would ever notice.
+const RESYNC_INTERVAL_MS = 30000;
 
 export class YCableProvider {
   /** @param {ProviderConfig} config */
@@ -63,23 +66,11 @@ export class YCableProvider {
     this.user = user;
     this.onRelayStatusChange = onRelayStatusChange ?? (() => {});
     this.doc = new Y.Doc();
-    this.awareness = new Awareness(this.doc);
-    // Per-tab identity for filtering our own cable echoes (we still read the
-    // row `id` off them for compaction bookkeeping). Not crypto.randomUUID:
-    // that's secure-context-only, and dev/test servers run plain HTTP.
-    this.sender = `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`;
-    this.maxUpdateId = 0;
-    this.updatesSinceCompaction = 0;
-    this.ready = false;
-    this.destroyed = false;
-    this.hasConnectedOnce = false;
-    // Coalescing state for scheduleResync.
-    this.resyncInFlight = false;
-    this.resyncQueued = false;
-    /** @type {Array<{type: string, payload: string, id?: number, sender?: string}>} */
-    this.buffered = [];
+    this.provider = null;
     this.consumer = null;
-    this.subscription = null;
+    /** @type {import("y-protocols/awareness").Awareness | null} */
+    this.awareness = null;
+    this.destroyed = false;
     this.intervals = [];
     // Watchdog state. `relayStatus` is "ready" until proven otherwise, so a
     // session that never stalls never mentions the relay to anyone.
@@ -96,91 +87,121 @@ export class YCableProvider {
    * @returns {Promise<void>}
    */
   async connect(seedStateFactory) {
-    // Outbound: every local transaction (Monaco binding, bridge, docinfo...)
-    // goes to the server. Applies *by this provider* (snapshot, seed echo,
-    // remote updates) carry `this` as origin and stay local.
-    this.doc.on("update", (update, origin) => {
-      if (origin === this || this.destroyed) return;
-      this.perform("doc_update", { payload: toBase64(update) });
-    });
+    await this.seed(seedStateFactory);
 
-    this.awareness.on("update", ({ added, updated, removed }, origin) => {
-      if (origin === this || this.destroyed) return;
-      const changed = [...added, ...updated, ...removed];
-      if (!changed.includes(this.awareness.clientID)) return;
-      this.perform("awareness", {
-        payload: toBase64(
-          encodeAwarenessUpdate(this.awareness, [this.awareness.clientID]),
-        ),
-      });
-    });
-
-    // Subscribe first and buffer, so nothing broadcast between our state
-    // fetch and the subscription confirmation is lost.
-    await this.subscribe();
-    await this.loadOrSeed(seedStateFactory);
-    this.ready = true;
-    for (const message of this.buffered.splice(0)) this.receive(message);
-
-    // Presence heartbeat: rebroadcast our state so peers' 30s expiry never
-    // fires while we're alive (awareness is unpersisted, so newcomers learn
-    // about us from this too).
-    this.intervals.push(
-      setInterval(() => {
-        this.perform("awareness", {
-          payload: toBase64(
-            encodeAwarenessUpdate(this.awareness, [this.awareness.clientID]),
-          ),
-        });
-      }, AWARENESS_HEARTBEAT_MS),
+    this.consumer = createConsumer();
+    this.provider = new ActionCableProvider(
+      this.doc,
+      this.watchedConsumer(this.consumer),
+      "ProjectDocChannel",
+      { project_id: this.projectId },
     );
+    this.awareness = this.provider.awareness;
+    // Presence identity. Set before connecting so our first awareness frame
+    // already carries it, and so PresenceAvatars never sees a nameless peer.
+    this.awareness.setLocalStateField("user", this.user);
 
-    this.intervals.push(
-      setInterval(() => this.maybeCompact(), COMPACTION_INTERVAL_MS),
-    );
+    this.provider.connect();
+    await this.provider.whenSynced;
+    if (this.destroyed) return;
 
     this.startWatchdog();
+    this.intervals.push(
+      setInterval(() => this.resync(), RESYNC_INTERVAL_MS),
+    );
+  }
 
-    // Best-effort presence cleanup; if it doesn't get out, peers expire us
-    // after the awareness timeout anyway.
-    this.onPageHide = () => {
-      removeAwarenessStates(this.awareness, [this.awareness.clientID], "pagehide");
+  /**
+   * Offer this client's view of the project as the document's first content.
+   *
+   * Exactly one offer is accepted; a 409 means somebody seeded first and this
+   * client simply joins. The seed is built in a scratch doc and never applied
+   * to `this.doc`: applying it here would make it a local edit, which the
+   * handshake would then push back to a server that already has it, and would
+   * leave the seeder reaching the document by a path no other client uses.
+   *
+   * A failure is not fatal. The document may already exist, and if it does not,
+   * the session joins an empty one rather than refusing to open -- which is
+   * recoverable, where a duplicated seed is not.
+   * @param {() => import("@pretextbook/web-editor").CollabDocState} seedStateFactory
+   * @returns {Promise<void>}
+   */
+  async seed(seedStateFactory) {
+    const seedDoc = new Y.Doc();
+    seedDocFromState(seedDoc, seedStateFactory());
+    const state = toBase64(Y.encodeStateAsUpdate(seedDoc));
+    seedDoc.destroy();
+
+    try {
+      await fetch(`/projects/${this.projectId}/doc/seed`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Accept: "application/json",
+          "X-CSRF-Token": this.csrfToken,
+        },
+        body: JSON.stringify({ state }),
+      });
+    } catch (error) {
+      console.error("Failed to offer a seed for the collaborative doc:", error);
+    }
+  }
+
+  /**
+   * Wrap the cable consumer so every inbound message also feeds the watchdog.
+   *
+   * The provider owns its subscription, and the watchdog needs to see the
+   * traffic on it. Wrapping the mixin's `received` is the one seam that does
+   * not require reaching into the provider's internals.
+   * @param {ReturnType<typeof createConsumer>} consumer
+   * @returns {{subscriptions: {create: Function}}}
+   */
+  watchedConsumer(consumer) {
+    return {
+      subscriptions: {
+        create: (channel, mixin) =>
+          consumer.subscriptions.create(channel, {
+            ...mixin,
+            received: (message) => {
+              this.noteInbound();
+              mixin?.received?.(message);
+            },
+          }),
+      },
     };
-    window.addEventListener("pagehide", this.onPageHide);
   }
 
   // ── Relay watchdog ─────────────────────────────────────────────────────────
 
   /**
-   * Watches for the relay going quiet, and keeps the session usable when it
-   * does.
+   * Watch for the relay going quiet, and keep the session usable when it does.
    *
-   * The signal is plain silence. Our own awareness heartbeat is echoed back to
-   * us by the channel every AWARENESS_HEARTBEAT_MS, so a healthy relay cannot be
-   * quiet for RELAY_SILENCE_MS no matter how idle the humans are; a quiet relay
-   * is a broken one. That is what makes this catch the failure that HTTP checks
-   * cannot see, in a session of one as readily as in a session of five.
+   * The signal is plain silence. Our own awareness frame is echoed back to us by
+   * the channel, and y-protocols refreshes our awareness entry once it is 15s
+   * old, so a healthy relay cannot be quiet for RELAY_SILENCE_MS however idle
+   * the humans are; a quiet relay is a broken one. That is what makes this catch
+   * the failure HTTP checks cannot see, in a session of one as readily as in a
+   * session of five.
    *
-   * While stalled it re-fetches over HTTP on every tick. This is not just
-   * bookkeeping: when the relay dies the way it died in August, the *broadcast*
-   * leg is what's gone -- `doc_update` still reaches the server and is still
-   * appended to `project_doc_updates` -- so peers' edits are all still there to
-   * be read. Polling turns a silently diverging session into a slow one.
+   * While stalled it re-runs the handshake every tick. That is not just
+   * bookkeeping: when the relay died in August the *broadcast* leg was what had
+   * gone -- updates still reached the server and were still recorded -- so peers'
+   * edits were all there to be read. Re-syncing turns a silently diverging
+   * session into a slow one.
    * @returns {void}
    */
   startWatchdog() {
     this.lastInboundAt = Date.now();
 
-    // A hidden tab has its timers throttled, our heartbeat included, so silence
-    // measured across a spell in the background says nothing about the relay.
+    // A hidden tab has its timers throttled, the awareness refresh included, so
+    // silence measured across a spell in the background says nothing about the
+    // relay.
     this.onVisibilityChange = () => {
       if (document.visibilityState === "visible") this.lastInboundAt = Date.now();
     };
     document.addEventListener("visibilitychange", this.onVisibilityChange);
 
-    this.intervals.push(
-      setInterval(() => this.checkRelay(), RELAY_WATCHDOG_MS),
-    );
+    this.intervals.push(setInterval(() => this.checkRelay(), RELAY_WATCHDOG_MS));
   }
 
   /** @returns {void} */
@@ -204,14 +225,13 @@ export class YCableProvider {
       });
     }
 
-    // Every tick while stalled, not just on the transition: this is the session's
-    // only remaining path to peers' edits.
-    this.scheduleResync();
+    // Every tick while stalled, not just on the transition: this is the
+    // session's only remaining path to peers' edits.
+    this.resync();
   }
 
   /**
-   * Any inbound cable message is proof the relay is delivering. Called for every
-   * message, including ones buffered before the session is ready.
+   * Any inbound cable message is proof the relay is delivering.
    * @returns {void}
    */
   noteInbound() {
@@ -230,201 +250,47 @@ export class YCableProvider {
     });
   }
 
-  /** True when this client should run session-wide chores (autosave, compaction). */
+  /**
+   * Re-run the sync handshake on a socket that has not dropped.
+   *
+   * `onConnect` is what the provider calls when the transport comes up: it
+   * sends SyncStep1, re-announces our presence, and replays anything the server
+   * has not acknowledged. All three are idempotent, which is what makes it safe
+   * to call on a live connection.
+   * @returns {void}
+   */
+  resync() {
+    if (this.destroyed) return;
+    this.provider?.session?.onConnect();
+  }
+
+  /**
+   * True when this client should run session-wide chores (the autosave that
+   * writes the doc out as project source).
+   *
+   * The lowest awareness clientID, which is arbitrary but agreed on by every
+   * tab. Leaving this here is temporary: the whole idea of electing a browser
+   * to persist on the session's behalf goes away once the server projects the
+   * document into the project's divisions itself, which is the next change.
+   * @returns {boolean}
+   */
   isLeader() {
-    let min = this.awareness.clientID;
-    this.awareness.getStates().forEach((_state, clientId) => {
-      if (clientId < min) min = clientId;
-    });
-    return min === this.awareness.clientID;
+    if (!this.awareness) return false;
+    const ids = [...this.awareness.getStates().keys()];
+    if (ids.length === 0) return true;
+    return Math.min(...ids) === this.awareness.clientID;
   }
 
   destroy() {
     this.destroyed = true;
-    window.removeEventListener("pagehide", this.onPageHide ?? (() => {}));
     document.removeEventListener("visibilitychange", this.onVisibilityChange ?? (() => {}));
     this.intervals.forEach(clearInterval);
     this.intervals = [];
-    removeAwarenessStates(this.awareness, [this.awareness.clientID], "destroy");
-    this.subscription?.unsubscribe();
+    // Tears down the subscription and the Awareness it created, after flushing
+    // a presence removal so peers drop our cursor immediately.
+    this.provider?.destroy();
     this.consumer?.disconnect();
-    this.awareness.destroy();
     this.doc.destroy();
-  }
-
-  // ── Cable plumbing ─────────────────────────────────────────────────────────
-
-  subscribe() {
-    return new Promise((resolve, reject) => {
-      this.consumer = createConsumer();
-      let settled = false;
-      this.subscription = this.consumer.subscriptions.create(
-        { channel: "ProjectDocChannel", project_id: this.projectId },
-        {
-          connected: () => {
-            if (!settled) {
-              settled = true;
-              this.hasConnectedOnce = true;
-              resolve();
-              return;
-            }
-            // Reconnected after a drop: re-fetch the persisted state to close
-            // the gap (idempotent to apply over live traffic).
-            this.fetchAndApply().catch((error) =>
-              console.error("Failed to resync collaborative doc:", error),
-            );
-          },
-          rejected: () => {
-            if (!settled) {
-              settled = true;
-              reject(new Error("Collaboration subscription rejected"));
-            }
-          },
-          received: (message) => {
-            this.noteInbound();
-            if (!this.ready) {
-              this.buffered.push(message);
-              return;
-            }
-            this.receive(message);
-          },
-        },
-      );
-    });
-  }
-
-  perform(action, data) {
-    this.subscription?.perform(action, { ...data, sender: this.sender });
-  }
-
-  receive(message) {
-    if (message.type === "update") {
-      if (typeof message.id === "number" && message.id > this.maxUpdateId) {
-        this.maxUpdateId = message.id;
-        this.updatesSinceCompaction += 1;
-      }
-      if (message.sender !== this.sender) {
-        Y.applyUpdate(this.doc, fromBase64(message.payload), this);
-      }
-    } else if (message.type === "resync") {
-      // An update too large for the cable transport to carry (see
-      // ProjectDocChannel::MAX_BROADCAST_BYTES). It is already persisted, so pull it
-      // over HTTP. The sender already has it locally and can skip.
-      if (typeof message.id === "number" && message.id > this.maxUpdateId) {
-        this.maxUpdateId = message.id;
-        this.updatesSinceCompaction += 1;
-      }
-      if (message.sender !== this.sender) this.scheduleResync();
-    } else if (message.type === "awareness") {
-      if (message.sender !== this.sender) {
-        applyAwarenessUpdate(this.awareness, fromBase64(message.payload), this);
-      }
-    }
-  }
-
-  // ── HTTP persistence ───────────────────────────────────────────────────────
-
-  get docUrl() {
-    return `/projects/${this.projectId}/doc`;
-  }
-
-  async loadOrSeed(seedStateFactory) {
-    const info = await this.fetchDocInfo();
-    if (info.seeded) {
-      this.applyDocInfo(info);
-      return;
-    }
-
-    // Build the seed in a scratch doc so a lost race leaves this.doc pristine.
-    const seedDoc = new Y.Doc();
-    seedDocFromState(seedDoc, seedStateFactory());
-    const seedUpdate = Y.encodeStateAsUpdate(seedDoc);
-    seedDoc.destroy();
-
-    const res = await fetch(`${this.docUrl}/seed`, {
-      method: "POST",
-      headers: this.jsonHeaders(),
-      body: JSON.stringify({ snapshot: toBase64(seedUpdate) }),
-    });
-    if (res.status === 201) {
-      Y.applyUpdate(this.doc, seedUpdate, this);
-    } else if (res.status === 409) {
-      // Another client seeded first; adopt its state.
-      this.applyDocInfo(await this.fetchDocInfo());
-    } else {
-      throw new Error(`Seeding collaborative doc failed: ${res.status}`);
-    }
-  }
-
-  async fetchDocInfo() {
-    const res = await fetch(this.docUrl, {
-      headers: { Accept: "application/json" },
-    });
-    if (!res.ok) throw new Error(`Failed to load collaborative doc: ${res.status}`);
-    return res.json();
-  }
-
-  applyDocInfo(info) {
-    if (info.snapshot) {
-      Y.applyUpdate(this.doc, fromBase64(info.snapshot), this);
-    }
-    for (const update of info.updates ?? []) {
-      Y.applyUpdate(this.doc, fromBase64(update.payload), this);
-      if (update.id > this.maxUpdateId) {
-        this.maxUpdateId = update.id;
-        this.updatesSinceCompaction += 1;
-      }
-    }
-  }
-
-  async fetchAndApply() {
-    this.applyDocInfo(await this.fetchDocInfo());
-  }
-
-  /**
-   * Catch up over HTTP, coalescing concurrent requests: a burst of oversized updates
-   * (a paste storm, or several peers converting divisions at once) would otherwise
-   * fire one full document fetch each. A fetch already in flight may have started
-   * before the newest update landed, so a resync arriving mid-flight queues exactly
-   * one more pass rather than being dropped.
-   * @returns {void}
-   */
-  scheduleResync() {
-    if (this.resyncInFlight) {
-      this.resyncQueued = true;
-      return;
-    }
-    this.resyncInFlight = true;
-    this.fetchAndApply()
-      .catch((error) => console.error("Failed to resync collaborative doc:", error))
-      .finally(() => {
-        this.resyncInFlight = false;
-        if (this.resyncQueued) {
-          this.resyncQueued = false;
-          this.scheduleResync();
-        }
-      });
-  }
-
-  async maybeCompact() {
-    if (this.destroyed || !this.isLeader()) return;
-    if (this.updatesSinceCompaction < COMPACTION_MIN_UPDATES) return;
-    const throughId = this.maxUpdateId;
-    const snapshot = toBase64(Y.encodeStateAsUpdate(this.doc));
-    const res = await fetch(this.docUrl, {
-      method: "PUT",
-      headers: this.jsonHeaders(),
-      body: JSON.stringify({ snapshot, through_update_id: throughId }),
-    }).catch(() => null);
-    if (res?.ok) this.updatesSinceCompaction = 0;
-  }
-
-  jsonHeaders() {
-    return {
-      "Content-Type": "application/json",
-      Accept: "application/json",
-      "X-CSRF-Token": this.csrfToken,
-    };
   }
 }
 
@@ -435,6 +301,3 @@ const toBase64 = (bytes) => {
   }
   return btoa(binary);
 };
-
-const fromBase64 = (encoded) =>
-  Uint8Array.from(atob(encoded), (c) => c.charCodeAt(0));

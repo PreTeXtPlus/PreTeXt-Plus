@@ -1,52 +1,34 @@
-# HTTP persistence for a project's collaborative Yjs document. All payloads
-# are opaque binary carried as base64 in JSON; the CRDT semantics live
-# entirely in the clients. Live update relay is ProjectDocChannel; these
-# endpoints only cover joining (show), first-time seeding (seed), and
-# compaction (update).
+# frozen_string_literal: true
+
+# Seeding for a project's collaborative document. One endpoint, because the
+# server now speaks the sync protocol itself: joining, catching up and
+# compaction all happen over ProjectDocChannel, against a document the server
+# holds rather than a log browsers had to interpret.
+#
+# What remains is the one thing the protocol cannot do, because it is a
+# question about the project rather than about the document: a brand-new
+# session has to decide what the document's *first* content is, and only one
+# client may decide it.
 class ProjectDocsController < ApplicationController
   before_action :set_project
 
-  # GET /projects/:id/doc
-  # Everything a joining client needs: the last compacted snapshot plus every
-  # update appended since. Applying them in any order converges.
-  def show
-    doc = @project.project_doc
-    updates = @project.project_doc_updates.order(:id)
-    render json: {
-      seeded: doc.present?,
-      snapshot: doc&.snapshot ? Base64.strict_encode64(doc.snapshot) : nil,
-      updates: updates.map { |u| { id: u.id, payload: Base64.strict_encode64(u.payload) } }
-    }
-  end
-
   # POST /projects/:id/doc/seed
-  # Compare-and-set creation of the doc. Exactly one client may seed: two
-  # clients each seeding an empty doc and then syncing would duplicate every
-  # division's text (the CRDT rightly treats the seeds as concurrent inserts).
-  # The unique index on project_id arbitrates the race; losers get 409 and
-  # re-fetch the winner's snapshot.
+  #
+  # Compare-and-set creation. Two clients each seeding a fresh document and
+  # then syncing would duplicate every division's text -- the CRDT is right to
+  # treat two independent seeds as concurrent inserts -- so exactly one seed
+  # wins and the rest are told to join instead.
+  #
+  # The winner does not apply its own seed locally; it connects, and the
+  # handshake hands the document back. That keeps one path into the document
+  # for every client, seeder included, instead of a second one that has to stay
+  # byte-identical to the first.
   def seed
-    @project.create_project_doc!(snapshot: decoded_snapshot)
-    head :created
-  rescue ActiveRecord::RecordNotUnique, ActiveRecord::RecordInvalid
-    head :conflict
-  end
-
-  # PUT /projects/:id/doc
-  # Compaction: replace the snapshot with a full state that has incorporated
-  # every update through `through_update_id`, and drop those rows. Updates
-  # that raced in with higher ids survive -- merges are commutative, so
-  # snapshot + surviving rows still yields the current document.
-  def update
-    doc = @project.project_doc
-    return head :conflict if doc.nil?
-
-    through_id = params.require(:through_update_id).to_i
-    ActiveRecord::Base.transaction do
-      doc.update!(snapshot: decoded_snapshot)
-      @project.project_doc_updates.where(id: ..through_id).delete_all
+    if ProjectDoc.seed(@project, decoded_state)
+      head :created
+    else
+      head :conflict
     end
-    head :no_content
   end
 
   private
@@ -57,7 +39,7 @@ class ProjectDocsController < ApplicationController
     authorize! :update, @project
   end
 
-  def decoded_snapshot
-    Base64.strict_decode64(params.require(:snapshot))
+  def decoded_state
+    Base64.strict_decode64(params.require(:state))
   end
 end

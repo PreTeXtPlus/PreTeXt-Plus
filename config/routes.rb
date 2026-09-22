@@ -169,10 +169,9 @@ Rails.application.routes.draw do
       get ":id/*_.html", to: redirect("/projects/%{id}/share")
     end
     member do
-      # Collaborative-editing doc persistence (live relay is ProjectDocChannel).
-      get "doc" => "project_docs#show", as: "doc"
+      # First-time seeding of the collaborative doc. Everything else about it --
+      # joining, catching up, compaction -- is ProjectDocChannel's sync protocol.
       post "doc/seed" => "project_docs#seed", as: "seed_doc"
-      put "doc" => "project_docs#update"
       get "share" => "projects#share", as: "share"
       get "source" => "projects#source", as: "share_source"
       get "share/source" => "projects#source", to: redirect("/projects/%{id}/source")

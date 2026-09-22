@@ -1,23 +1,43 @@
-# Live relay for a project's collaborative editing session. Two message
-# kinds, both opaque base64 payloads:
+# frozen_string_literal: true
+
+# A project's collaborative editing session, over the y-websocket sync protocol.
 #
-# * `doc_update`  -- a Yjs document update. Persisted to the append-only log
-#   (so clients joining or reconnecting can catch up via
-#   ProjectDocsController#show) and then broadcast.
-# * `awareness`   -- ephemeral presence (cursors, names). Broadcast only.
+# The server holds the document. A joining client sends its state vector and is
+# answered with exactly the updates it does not have; every update it makes is
+# recorded here before it is acknowledged or relayed. That is the whole of the
+# reliability story, and it is worth saying why it replaced a hand-written one.
 #
-# Every client subscribes with a random per-tab `sender` id and ignores its
-# own broadcasts; Yjs updates are idempotent anyway, so a missed filter is
-# harmless.
+# This channel used to be a relay: it stored opaque base64 and broadcast it, and
+# no party could answer "what do you have that I don't?" -- so each client had to
+# infer it, from sequence numbers, from row ids, from whether Yjs reported
+# anything pending. Every one of those inferences is unsound in some case, and a
+# Yjs update that goes missing does not degrade gracefully: it strands every
+# later insert from that peer, unapplied, while their deletes keep applying, so
+# a document silently reads as though someone deleted their work and never
+# retyped it. Here the diff is computed by the side that holds the data, so
+# there is nothing to infer.
+#
+# Awareness (cursors, names) rides the same channel and is relayed without being
+# stored, as presence should be.
 class ProjectDocChannel < ApplicationCable::Channel
-  # The development cable adapter is postgresql, whose LISTEN/NOTIFY transport caps one
-  # message at 8000 bytes and raises inside the broadcast where no one watching the
-  # browser will see it (see config/cable.yml). A Yjs update is normally tens of bytes,
-  # but a paste or a whole-division rewrite is not, so past this size the update is
-  # *announced* rather than sent: it is already in the append-only log, and clients pull
-  # it over HTTP using the same catch-up path they use after a reconnect. Well under
-  # 8000 to leave room for the JSON and ActionCable envelopes around it.
-  MAX_BROADCAST_BYTES = 6_000
+  include Y::ActionCable
+
+  # Rebuild the document from durable storage. nil means nobody has seeded it
+  # yet, which is a legitimate brand-new document rather than an error.
+  on_load { |key| ProjectDoc.load_state(key) }
+
+  # Record every delta before it is acked or relayed. Raising here rejects the
+  # change: the client holds it and retries, which is the right way round --
+  # ActionCable's `perform` reports that a socket took the bytes, never that
+  # anyone stored them.
+  on_change { |key, update| ProjectDoc.record(key, update) }
+
+  # A causal gap in the stored document: an update arrived whose predecessor
+  # never did. yrby parks it and heals it when the missing update turns up (a
+  # peer's retransmit, or the next join handshake), so this is a measurement
+  # rather than an alarm -- but the rate is the only way to see whether the
+  # relay is still losing messages, and nothing else can see it at all.
+  on_gap { |key| report_gap(key) }
 
   def subscribed
     project = Project.find_by(id: params[:project_id])
@@ -27,46 +47,28 @@ class ProjectDocChannel < ApplicationCable::Channel
       return
     end
     @project = project
-    stream_for project
+    sync_subscribed(ProjectDoc.key_for(project))
   end
 
-  def doc_update(data)
-    payload = data["payload"].to_s
-    return if payload.blank?
+  def receive(data)
+    sync_receive(data)
+  end
 
-    update = ProjectDocUpdate.create!(
-      project: @project,
-      payload: Base64.strict_decode64(payload)
+  private
+
+  # Identify the connection in yrby's dropped-frame logs, which otherwise say
+  # only that a frame was too big or unparseable.
+  def sync_log_context
+    "project=#{@project&.id} user=#{current_user&.id}"
+  end
+
+  def report_gap(key)
+    context = { key: key, project_id: @project&.id, user_id: current_user&.id }
+    Honeybadger.notify(
+      "Collaborative editing: document holds a causal gap",
+      error_class: "Collab::DocumentGap",
+      context: context
     )
-
-    if payload.bytesize > MAX_BROADCAST_BYTES
-      self.class.broadcast_to(@project, {
-        type: "resync",
-        id: update.id,
-        sender: data["sender"]
-      })
-    else
-      self.class.broadcast_to(@project, {
-        type: "update",
-        id: update.id,
-        payload: payload,
-        sender: data["sender"]
-      })
-    end
-  end
-
-  def awareness(data)
-    payload = data["payload"].to_s
-    return if payload.blank?
-    # Presence is ephemeral and unpersisted, so there is nothing to fetch and no point
-    # raising: an oversized update is dropped and the sender's next heartbeat carries
-    # the same state again.
-    return if payload.bytesize > MAX_BROADCAST_BYTES
-
-    self.class.broadcast_to(@project, {
-      type: "awareness",
-      payload: payload,
-      sender: data["sender"]
-    })
+    Rails.logger.warn("[collab-incident] #{context.merge(kind: "document_gap").to_json}")
   end
 end
