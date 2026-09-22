@@ -1,4 +1,5 @@
 <% content_for :title, "Source for #{@project.title}" %>
+<% content_for :hide_top_nav, true %>
 <% content_for :full_screen_content do %>
 <div class="flex size-full flex-1 flex-col min-h-0">
   <div class="shrink-0 p-3 w-full text-center text-sm text-gray-500">
@@ -28,6 +29,7 @@
       data-controller="shared-source"
       data-shared-source-project-id-value="<%= @project.id %>"
       data-shared-source-source-url-value="<%= share_source_project_path(@project, format: :json) %>"
+      data-shared-source-root-path-value="<%= root_path %>"
       data-turbo="false">
     <div data-shared-source-target="root" class="w-full flex-1 min-h-0">
       <div class="flex h-full items-center justify-center">

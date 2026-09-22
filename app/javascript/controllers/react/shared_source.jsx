@@ -7,6 +7,7 @@ import {
   railsAssetToEditor,
   railsSnippetToEditor,
 } from "./railsProjectMapping";
+import { HELP_ENTRIES } from "./helpEntries";
 
 /** @typedef {import("./railsProjectMapping").RailsDivision} RailsDivision */
 /** @typedef {import("./railsProjectMapping").RailsAsset} RailsAsset */
@@ -56,6 +57,7 @@ function railsToReadOnlyState(json) {
  * @typedef {Object} SharedSourceConfig
  * @property {string} projectId
  * @property {string} sourceUrl - The `source.json` endpoint URL.
+ * @property {string} rootPath
  */
 
 /**
@@ -63,7 +65,7 @@ function railsToReadOnlyState(json) {
  * @returns {JSX.Element}
  */
 function SharedSourceApp({ config }) {
-  const { projectId, sourceUrl } = config;
+  const { projectId, sourceUrl, rootPath } = config;
 
   const query = useQuery({
     queryKey: ["shared-source", projectId],
@@ -89,6 +91,12 @@ function SharedSourceApp({ config }) {
     );
   }
 
+  const logo = (
+    <a href={rootPath} className="flex items-center">
+      <img src="/icon.svg" className="h-14 mr-2" alt="PreTeXtPlus Logo" />
+    </a>
+  );
+
   const state = query.data;
   return (
     <Editors
@@ -106,6 +114,10 @@ function SharedSourceApp({ config }) {
       projectSnippets={state.projectSnippets}
       hideSnippets
       onContentChange={() => {}}
+      topBar={{
+        logo,
+        helpMenu: () => ({ label: "Help", entries: HELP_ENTRIES }),
+      }}
     />
   );
 }
