@@ -11,11 +11,15 @@ describe("FeedbackLink", () => {
     const user = userEvent.setup();
     render(<FeedbackLink context="test" onSubmit={vi.fn()} />);
 
-    expect(screen.getByRole("button", { name: "Support / Feedback" })).toBeInTheDocument();
-    expect(screen.queryByText("Provide Feedback")).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Give feedback" })).toBeInTheDocument();
+    expect(
+      screen.queryByText("Provide Feedback or Request Support"),
+    ).not.toBeInTheDocument();
 
-    await user.click(screen.getByRole("button", { name: "Support / Feedback" }));
-    expect(screen.getByText("Provide Feedback")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Give feedback" }));
+    expect(
+      screen.getByText("Provide Feedback or Request Support"),
+    ).toBeInTheDocument();
   });
 
   it("omits the built-in trigger and follows the open prop when controlled", () => {
@@ -28,9 +32,11 @@ describe("FeedbackLink", () => {
       />,
     );
     expect(
-      screen.queryByRole("button", { name: "Support / Feedback" }),
+      screen.queryByRole("button", { name: "Give feedback" }),
     ).not.toBeInTheDocument();
-    expect(screen.queryByText("Provide Feedback")).not.toBeInTheDocument();
+    expect(
+      screen.queryByText("Provide Feedback or Request Support"),
+    ).not.toBeInTheDocument();
 
     rerender(
       <FeedbackLink
@@ -40,7 +46,9 @@ describe("FeedbackLink", () => {
         onOpenChange={vi.fn()}
       />,
     );
-    expect(screen.getByText("Provide Feedback")).toBeInTheDocument();
+    expect(
+      screen.getByText("Provide Feedback or Request Support"),
+    ).toBeInTheDocument();
   });
 
   it("calls onOpenChange(false) when Cancel is clicked in controlled mode", async () => {
@@ -56,5 +64,31 @@ describe("FeedbackLink", () => {
     );
     await user.click(screen.getByRole("button", { name: "Cancel" }));
     expect(onOpenChange).toHaveBeenCalledWith(false);
+  });
+
+  it("hides the email field and silently attaches userEmail when provided", async () => {
+    const user = userEvent.setup();
+    const onSubmit = vi.fn();
+    render(
+      <FeedbackLink
+        context="test"
+        onSubmit={onSubmit}
+        userEmail="steven@example.com"
+        open
+        onOpenChange={vi.fn()}
+      />,
+    );
+
+    expect(screen.queryByLabelText("Email (optional)")).not.toBeInTheDocument();
+    expect(
+      screen.queryByPlaceholderText("name@example.com"),
+    ).not.toBeInTheDocument();
+
+    await user.type(screen.getByLabelText("Message"), "It broke.");
+    await user.click(screen.getByRole("button", { name: "Submit" }));
+
+    expect(onSubmit).toHaveBeenCalledWith(
+      expect.objectContaining({ email: "steven@example.com" }),
+    );
   });
 });

@@ -5,7 +5,6 @@ import {
   Dialog,
   DialogHeader,
   DialogTitle,
-  DialogCopy,
   DialogClose,
   DialogActions,
   DialogButton,
@@ -29,6 +28,11 @@ interface FeedbackLinkProps {
   sourceFormat?: SourceFormat;
   /** Optional document title metadata for the feedback payload. */
   title?: string;
+  /**
+   * The signed-in user's email, if any. When set, the email field is hidden
+   * entirely and this value is attached to the submission silently instead.
+   */
+  userEmail?: string;
   /** Optional class for the trigger button. */
   className?: string;
   /**
@@ -57,6 +61,7 @@ const FeedbackLink = ({
   currentSource,
   sourceFormat,
   title,
+  userEmail,
   className,
   open,
   onOpenChange,
@@ -92,7 +97,7 @@ const FeedbackLink = ({
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     const trimmedMessage = message.trim();
-    const trimmedEmail = email.trim();
+    const trimmedEmail = (userEmail ?? email).trim();
     if (!trimmedMessage) {
       setError("Please enter a message.");
       return;
@@ -149,14 +154,6 @@ const FeedbackLink = ({
             <DialogHeader>
               <div>
                 <DialogTitle id={titleId}>Provide Feedback or Request Support</DialogTitle>
-                <DialogCopy>
-                  Help us improve PreTeXt.plus! We'd love to hear from you.
-                </DialogCopy>
-                <DialogCopy>
-                  (If you would like a response, please include your email
-                  address in the form below and we will get back to you as soon
-                  as we can.)
-                </DialogCopy>
               </div>
               <DialogClose
                 onClick={closeDialog}
@@ -171,21 +168,25 @@ const FeedbackLink = ({
               className="flex flex-col gap-[0.6rem] flex-1 min-h-0 overflow-y-auto"
               onSubmit={handleSubmit}
             >
-              <label
-                className="text-slate-700 text-[0.85rem] font-semibold"
-                htmlFor={emailId}
-              >
-                Email (optional)
-              </label>
-              <input
-                id={emailId}
-                type="email"
-                className="w-full border border-slate-300 rounded-[2px] py-2 px-[0.6rem] text-slate-900 bg-white focus:outline focus:outline-2 focus:outline-blue-300 focus:outline-offset-1"
-                value={email}
-                onChange={(event) => setEmail(event.target.value)}
-                placeholder="name@example.com"
-                autoComplete="email"
-              />
+              {!userEmail && (
+                <>
+                  <label
+                    className="text-slate-700 text-[0.85rem] font-semibold"
+                    htmlFor={emailId}
+                  >
+                    Email (optional)
+                  </label>
+                  <input
+                    id={emailId}
+                    type="email"
+                    className="w-full border border-slate-300 rounded-[2px] py-2 px-[0.6rem] text-slate-900 bg-white focus:outline focus:outline-2 focus:outline-blue-300 focus:outline-offset-1"
+                    value={email}
+                    onChange={(event) => setEmail(event.target.value)}
+                    placeholder="name@example.com"
+                    autoComplete="email"
+                  />
+                </>
+              )}
 
               <label
                 className="text-slate-700 text-[0.85rem] font-semibold"

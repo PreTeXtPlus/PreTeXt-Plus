@@ -94,10 +94,14 @@ describe("TopBar", () => {
       "Help & Feedback",
     ]);
 
-    expect(screen.queryByText("Provide Feedback")).not.toBeInTheDocument();
+    expect(
+      screen.queryByText("Provide Feedback or Request Support"),
+    ).not.toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "Help & Feedback" }));
     await user.click(screen.getByRole("menuitem", { name: "Support / Feedback" }));
-    expect(screen.getByText("Provide Feedback")).toBeInTheDocument();
+    expect(
+      screen.getByText("Provide Feedback or Request Support"),
+    ).toBeInTheDocument();
   });
 
   it("omits the Help menu when helpMenu is not provided", () => {

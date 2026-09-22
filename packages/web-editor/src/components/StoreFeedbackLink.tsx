@@ -24,6 +24,7 @@ const StoreFeedbackLink = ({
   const sourceFormat = useEditorStore((s) => s.sourceFormat);
   const title = useEditorStore((s) => s.title);
   const feedbackSubmit = useEditorStore((s) => s.feedbackSubmit);
+  const userEmail = useEditorStore((s) => s.userEmail);
 
   if (!hasFeedback) return null;
 
@@ -37,6 +38,7 @@ const StoreFeedbackLink = ({
       sourceFormat={sourceFormat}
       title={title}
       onSubmit={feedbackSubmit}
+      userEmail={userEmail}
       open={open}
       onOpenChange={onOpenChange}
     />

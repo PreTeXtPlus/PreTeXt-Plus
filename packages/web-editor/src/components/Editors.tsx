@@ -163,6 +163,8 @@ export interface editorProps {
   onFeedbackSubmit?: (feedback: FeedbackSubmission) => void | Promise<void>;
   /** Optional URL for the current project, included in feedback submissions. */
   projectUrl?: string;
+  /** The signed-in user's email, if any — used to silently attach it to feedback submissions instead of asking for one. */
+  userEmail?: string;
   /**
    * If provided, `onSave` is called on Ctrl+S in addition to `onSaveAndClose`.
    * Useful when the host wants a keyboard shortcut to trigger saving without
@@ -1577,6 +1579,7 @@ const EditorsInner = (props: EditorsInnerProps) => {
       source: divisionActiveSource,
       sourceFormat: activeDivisionFormat,
       projectUrl: props.projectUrl,
+      userEmail: props.userEmail,
       rootDivisionId: rootDivision?.xmlId,
       canConvertToPretext: divisionConvertedPretext !== undefined,
       activeEditorSource: divisionActiveSource,

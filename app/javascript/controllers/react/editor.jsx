@@ -1366,6 +1366,7 @@ function EditorApp({ config }) {
         projectAssets={projectAssets}
         projectSnippets={projectSnippets}
         projectUrl={feedbackProjectUrl}
+        userEmail={userEmail}
         topBar={{
           logo,
           accountArea: (
