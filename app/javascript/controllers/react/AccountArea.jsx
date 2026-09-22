@@ -116,6 +116,7 @@ function AccountArea({
           onOpenChange={(open) => setOpenMenu(open ? menu.key : null)}
           menubarActive={openMenu !== null}
           onNavigate={(direction) => navigate(index, direction)}
+          align="right"
         />
       ))}
     </div>

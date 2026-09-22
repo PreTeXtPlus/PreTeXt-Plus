@@ -42,6 +42,14 @@ export interface MenuDropdownProps {
   onNavigate?: (direction: -1 | 1) => void;
   /** When true, the trigger button is disabled and the panel never opens. */
   disabled?: boolean;
+  /**
+   * Which edge of the trigger button the panel's own edge lines up with, and
+   * which direction it grows from there. Defaults to `"left"`. Use `"right"`
+   * for a menu pinned to the right edge of its container (e.g. Account),
+   * where a left-aligned, rightward-growing panel would overflow the
+   * viewport.
+   */
+  align?: "left" | "right";
 }
 
 const BUTTON_CLASSES =
@@ -54,10 +62,13 @@ const ITEM_CLASSES =
  * A menubar menu: a button that opens a panel of actions.
  *
  * Deliberately plain — no portal, no floating-UI — because the panel hangs off
- * a toolbar pinned to the top of the editor pane, so a left-aligned absolute
- * panel is always in view. Focus moves into the panel on open so the whole
- * menu is reachable from the keyboard: Up/Down walk the items, Left/Right
- * cross to the neighbouring menu, Escape closes and hands focus back.
+ * a toolbar pinned to the top of the editor pane, so a simple absolute panel
+ * is always in view *given the right `align`*: left-aligned (the default) for
+ * a menu near the left/middle of its bar, right-aligned for one pinned to the
+ * bar's right edge (see `align`) — otherwise the panel grows off-screen.
+ * Focus moves into the panel on open so the whole menu is reachable from the
+ * keyboard: Up/Down walk the items, Left/Right cross to the neighbouring
+ * menu, Escape closes and hands focus back.
  */
 const MenuDropdown = ({
   label,
@@ -67,6 +78,7 @@ const MenuDropdown = ({
   menubarActive,
   onNavigate,
   disabled,
+  align = "left",
 }: MenuDropdownProps) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const buttonRef = useRef<HTMLButtonElement>(null);
@@ -184,7 +196,10 @@ const MenuDropdown = ({
           ref={panelRef}
           role="menu"
           aria-label={label}
-          className="absolute top-[calc(100%+4px)] left-0 z-20 flex flex-col min-w-[220px] max-h-[70vh] overflow-y-auto p-1 bg-white border border-[#d0d0d0] rounded-md shadow-[0_6px_16px_rgba(0,0,0,0.14)]"
+          className={clsx(
+            "absolute top-[calc(100%+4px)] z-20 flex flex-col min-w-[220px] max-h-[70vh] overflow-y-auto p-1 bg-white border border-[#d0d0d0] rounded-md shadow-[0_6px_16px_rgba(0,0,0,0.14)]",
+            align === "right" ? "right-0" : "left-0",
+          )}
           onKeyDown={handlePanelKeyDown}
         >
           {entries.map((entry) => {
