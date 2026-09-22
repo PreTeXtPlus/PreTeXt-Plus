@@ -38,7 +38,7 @@ const EditorTitleField = ({
       : "font-semibold text-[1.05rem] mx-2 overflow-hidden text-ellipsis whitespace-nowrap";
 
   return (
-    <div className="flex items-center mt-4 max-[500px]:basis-full">
+    <div className="flex items-center max-[500px]:basis-full">
       {titleOverride !== undefined ? (
         <span className={titleTextClasses}>{titleOverride}</span>
       ) : editingTitle ? (

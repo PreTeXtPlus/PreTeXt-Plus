@@ -1199,7 +1199,7 @@ function EditorApp({ config }) {
 
   const logo = (
     <a href={rootPath} className="flex items-center">
-      <img src="/icon.svg" className="h-14 mr-2" alt="PreTeXtPlus Logo" />
+      <img src="/icon.svg" className="h-14" alt="PreTeXtPlus Logo" />
     </a>
   );
 
@@ -1310,7 +1310,7 @@ function EditorApp({ config }) {
   }
   if (projectQuery.isError) {
     return <div className="flex h-full items-center justify-center">
-      <div class="mx-5 text-center">Error loading editor state. Please reload the page.</div>
+      <div className="mx-5 text-center">Error loading editor state. Please reload the page.</div>
     </div>;
   }
   // A collaborative project's editor waits for the shared doc: mounting before
