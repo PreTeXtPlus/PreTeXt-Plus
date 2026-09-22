@@ -13,7 +13,7 @@
 import * as Y from "yjs";
 import * as encoding from "lib0/encoding";
 import { Awareness, encodeAwarenessUpdate } from "y-protocols/awareness";
-import { seedDocFromState } from "../packages/web-editor/src/collab/schema.ts";
+import { seedDocFromState, markDeleted } from "../packages/web-editor/src/collab/schema.ts";
 import { writeFileSync, mkdirSync } from "node:fs";
 
 const OUT = new URL("../test/fixtures/files/collab/", import.meta.url).pathname;
@@ -30,7 +30,7 @@ seedDocFromState(doc, {
     {
       id: ROOT_ID,
       xmlId: "root",
-      sourceFormat: "ptx",
+      sourceFormat: "pretext",
       type: "book",
       title: "Fixture Book",
       source: '<book xml:id="root"><title>Fixture Book</title></book>',
@@ -54,7 +54,7 @@ seedDocFromState(rival, {
     {
       id: "22222222-2222-4222-8222-222222222222",
       xmlId: "rival",
-      sourceFormat: "ptx",
+      sourceFormat: "pretext",
       type: "book",
       title: "Rival Book",
       source: "<book/>",
@@ -74,5 +74,37 @@ encoding.writeVarUint(encoder, 1); // MessageType.Awareness
 encoding.writeVarUint8Array(encoder, encodeAwarenessUpdate(awareness, [doc.clientID]));
 writeFileSync(OUT + "awareness_frame.bin", encoding.toUint8Array(encoder));
 awareness.destroy();
+
+// A document with everything ProjectDocProjection reads: every meta field, two
+// divisions in different source formats, and tombstones for a division and an
+// asset removed during the session.
+const projected = new Y.Doc();
+seedDocFromState(projected, {
+  title: "Projected Title",
+  docinfo: "<docinfo><macros>\\newcommand{\\R}{\\mathbb{R}}</macros></docinfo>",
+  useCommonDocinfo: false,
+  language: "fr-FR",
+  divisions: [
+    {
+      id: "33333333-3333-4333-8333-333333333333",
+      xmlId: "projected-root",
+      sourceFormat: "pretext",
+      type: "book",
+      title: "Projected Book",
+      source: '<book xml:id="projected-root"><title>Projected Book</title></book>',
+    },
+    {
+      id: "44444444-4444-4444-8444-444444444444",
+      xmlId: "projected-ch1",
+      sourceFormat: "latex",
+      type: "chapter",
+      title: "Chapter One",
+      source: "\\chapter{One}\\label{projected-ch1}",
+    },
+  ],
+});
+markDeleted(projected, "division", "55555555-5555-4555-8555-555555555555");
+markDeleted(projected, "asset", "66666666-6666-4666-8666-666666666666");
+writeFileSync(OUT + "projection_state.bin", Y.encodeStateAsUpdate(projected));
 
 console.log(`wrote collab fixtures to ${OUT}`);
