@@ -1,6 +1,46 @@
 require "test_helper"
 
 class Pay::SubscriptionTest < ActiveSupport::TestCase
+  FakeType = Struct.new(:recurrence)
+
+  test "reminders_enabled? defaults on for an annual plan with no explicit choice" do
+    subscription = pay_subscriptions(:one)
+
+    SubscriptionType.stub(:find_by, FakeType.new("year")) do
+      assert subscription.reminders_enabled?
+    end
+  end
+
+  test "reminders_enabled? defaults off for a monthly plan with no explicit choice" do
+    subscription = pay_subscriptions(:one)
+
+    SubscriptionType.stub(:find_by, FakeType.new("month")) do
+      assert_not subscription.reminders_enabled?
+    end
+  end
+
+  test "reminders_enabled? is off when the plan type cannot be resolved" do
+    subscription = pay_subscriptions(:one)
+
+    SubscriptionType.stub(:find_by, nil) do
+      assert_not subscription.reminders_enabled?
+    end
+  end
+
+  test "reminders_enabled? honors an explicit override over the interval default" do
+    subscription = pay_subscriptions(:one)
+
+    subscription.user.update!(subscription_reminders: false)
+    SubscriptionType.stub(:find_by, FakeType.new("year")) do
+      assert_not subscription.reminders_enabled?
+    end
+
+    subscription.user.update!(subscription_reminders: true)
+    SubscriptionType.stub(:find_by, FakeType.new("month")) do
+      assert subscription.reminders_enabled?
+    end
+  end
+
   test "active subscription grants privileges" do
     subscription = pay_subscriptions(:one)
     assert subscription.grants_privileges?

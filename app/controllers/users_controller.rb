@@ -54,7 +54,7 @@ class UsersController < ApplicationController
   end
 
   def update_params
-    ps = params.expect(user: [ :name, :password, :common_docinfo, :username ])
+    ps = params.expect(user: [ :name, :password, :common_docinfo, :username, :subscription_reminders ])
     ps[:password].blank? ? ps.except(:password) : ps
   end
 end

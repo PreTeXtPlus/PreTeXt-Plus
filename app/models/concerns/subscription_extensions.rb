@@ -30,6 +30,16 @@ module SubscriptionExtensions
     object&.dig("latest_invoice", "status") == "paid"
   end
 
+  # Whether the renewal-reminder email (see config/initializers/pay.rb) should go out
+  # for this subscription: an explicit per-user choice, if the user has made one,
+  # otherwise the plan's interval-based default (annual on, monthly off). This is the
+  # one place that decision is made, so the email gate and the account UI can't disagree.
+  def reminders_enabled?
+    explicit = user&.subscription_reminders
+    return explicit unless explicit.nil?
+    type&.recurrence == "year"
+  end
+
   def price
     type.stripe_price.unit_amount / 100.0 * quantity
   end

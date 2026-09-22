@@ -12,6 +12,10 @@
       class: "#{button_classes(color: "gray", outlined: true)} inline-flex select-none items-center gap-2 ml-1 px-4 py-2 my-1 text-sm" %>
 <% end %>
 
+<% if current_user.owns_remindable_subscription? %>
+  <%= render "subscriptions/reminders_status", subscription: @subscription %>
+<% end %>
+
 <%= render "subscription", subscription: @subscription %>
 
 <h3 class="text-xl my-3 inline-flex items-center gap-2">

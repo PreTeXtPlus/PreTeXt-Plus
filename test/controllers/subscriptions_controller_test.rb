@@ -57,6 +57,51 @@ class SubscriptionsControllerTest < ActionDispatch::IntegrationTest
     assert_not_includes response.body, "Free trial ends:"
   end
 
+  test "the reminders banner shows off by default on the index page" do
+    pay_subscriptions(:one).update_columns(current_period_end: 20.days.from_now)
+    sign_in users(:subscribed)
+
+    get_index
+
+    assert_response :success
+    assert_includes response.body, "Subscription reminders are off"
+    assert_includes response.body, "Turn on"
+  end
+
+  test "the reminders banner shows on once the user opts in, on the index page" do
+    pay_subscriptions(:one).update_columns(current_period_end: 20.days.from_now)
+    users(:subscribed).update!(subscription_reminders: true)
+    sign_in users(:subscribed)
+
+    get_index
+
+    assert_response :success
+    assert_includes response.body, "Subscription reminders are on"
+    assert_includes response.body, "Turn off"
+  end
+
+  test "the reminders banner is absent for a user with no subscription" do
+    sign_in users(:one)
+
+    get_index
+
+    assert_response :success
+    assert_not_includes response.body, "Subscription reminders are"
+  end
+
+  test "the reminders banner shows off by default on the plan page" do
+    pay_subscriptions(:one).update_columns(current_period_end: 20.days.from_now)
+    sign_in users(:subscribed)
+    portal = Struct.new(:url).new("https://billing.stripe.test/portal")
+
+    Stripe::BillingPortal::Session.stub(:create, portal) do
+      get subscription_path(pay_subscriptions(:one))
+    end
+
+    assert_response :success
+    assert_includes response.body, "Subscription reminders are off for this plan"
+  end
+
   private
     # The index re-syncs from Stripe and links to the billing portal for subscribers;
     # stub both rather than hitting the API.

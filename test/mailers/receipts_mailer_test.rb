@@ -31,6 +31,16 @@ class ReceiptsMailerTest < ActionMailer::TestCase
     end
   end
 
+  test "subscription_renewing links to account settings to change reminders" do
+    mail = renewing_mail
+
+    [ mail.html_part, mail.text_part ].each do |part|
+      body = part.body.to_s
+      assert_includes body, "turn subscription reminders on or off"
+      assert_includes body, Rails.application.routes.url_helpers.edit_user_url(pay_subscriptions(:one).user, host: "example.com")
+    end
+  end
+
   test "subscription_renewing omits the amount when the price is unavailable" do
     mail = renewing_mail
 

@@ -38,6 +38,48 @@ class UserTest < ActiveSupport::TestCase
     assert_not users(:subscribed).trial_eligible?
   end
 
+  test "owns_remindable_subscription? is true for a subscriber" do
+    assert users(:subscribed).owns_remindable_subscription?
+  end
+
+  test "owns_remindable_subscription? is false with no subscription" do
+    assert_not users(:one).owns_remindable_subscription?
+  end
+
+  test "owns_remindable_subscription? is false for an invoiced subscription" do
+    pay_subscriptions(:one).update_columns(object: { "collection_method" => "send_invoice", "latest_invoice" => { "status" => "paid" } })
+    assert_not users(:subscribed).owns_remindable_subscription?
+  end
+
+  test "owns_remindable_subscription? is false for a cancelled subscription" do
+    pay_subscriptions(:one).update_columns(ends_at: 1.day.ago)
+    assert_not users(:subscribed).owns_remindable_subscription?
+  end
+
+  test "subscription_reminders_effective? is off by default for a monthly fixture subscription" do
+    assert_not users(:subscribed).subscription_reminders_effective?
+  end
+
+  test "subscription_reminders_effective? is on once the user opts in explicitly" do
+    users(:subscribed).update!(subscription_reminders: true)
+    assert users(:subscribed).subscription_reminders_effective?
+  end
+
+  test "subscription_reminders_effective? is on by default for an annual plan" do
+    fake_type = Struct.new(:recurrence).new("year")
+    SubscriptionType.stub(:find_by, fake_type) do
+      assert users(:subscribed).subscription_reminders_effective?
+    end
+  end
+
+  test "subscription_reminders_effective? honors an explicit opt-out on an annual plan" do
+    users(:subscribed).update!(subscription_reminders: false)
+    fake_type = Struct.new(:recurrence).new("year")
+    SubscriptionType.stub(:find_by, fake_type) do
+      assert_not users(:subscribed).subscription_reminders_effective?
+    end
+  end
+
   test "has_subscriber_benefits? is true for admin" do
     user = users(:one)
     user.admin = true

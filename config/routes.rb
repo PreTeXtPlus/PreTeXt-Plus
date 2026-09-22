@@ -104,6 +104,10 @@ Rails.application.routes.draw do
       post "seat" => "subscriptions#seat", as: "seat"
     end
   end
+  # Toggles the current user's subscription_reminders override; see
+  # SubscriptionExtensions#reminders_enabled?. Singular/no id: it always acts on
+  # current_user, like users#edit.
+  resource :subscription_reminders, only: :update
   resources :subscription_types do
     member do
       get "checkout" => "subscription_types#checkout", as: "checkout"
