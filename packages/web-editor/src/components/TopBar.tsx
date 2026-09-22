@@ -204,11 +204,6 @@ const TopBar = (props: TopBarProps) => {
             open={isFeedbackOpen}
             onOpenChange={setIsFeedbackOpen}
           />
-          {props.readOnly && (
-            <span className="inline-block py-1 px-2.5 rounded-[3px] bg-[#a32899] text-white font-medium text-[13px]">
-              Read-only Mode
-            </span>
-          )}
         </div>
       </div>
       {props.accountArea && (

@@ -206,10 +206,9 @@ describe("TopBar", () => {
     ).toBeInTheDocument();
   });
 
-  it("hides Insert and shows the read-only badge when readOnly", () => {
+  it("hides Insert when readOnly", () => {
     renderWithStore({ readOnly: true });
     expect(screen.queryByRole("button", { name: "Insert" })).not.toBeInTheDocument();
-    expect(screen.getByText("Read-only Mode")).toBeInTheDocument();
   });
 
   it("renders Edit/Insert/Tools inertly before CodeEditor's first menuState report", async () => {
