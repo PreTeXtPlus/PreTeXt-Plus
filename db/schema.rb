@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_08_27_222821) do
+ActiveRecord::Schema[8.1].define(version: 2026_09_22_185107) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
   enable_extension "pgcrypto"
@@ -340,6 +340,26 @@ ActiveRecord::Schema[8.1].define(version: 2026_08_27_222821) do
     t.index ["tos_id"], name: "index_users_on_tos_id"
   end
 
+  create_table "y_document_updates", force: :cascade do |t|
+    t.datetime "created_at", null: false
+    t.bigint "document_id", null: false
+    t.binary "payload", null: false
+    t.boolean "pending", default: false, null: false
+    t.index ["document_id", "pending"], name: "index_y_document_updates_on_document_id_and_pending"
+  end
+
+  create_table "y_documents", force: :cascade do |t|
+    t.datetime "created_at", null: false
+    t.string "key", null: false
+    t.string "name"
+    t.uuid "record_id"
+    t.string "record_type"
+    t.binary "state"
+    t.datetime "updated_at", null: false
+    t.index ["key"], name: "index_y_documents_on_key", unique: true
+    t.index ["record_type", "record_id", "name"], name: "index_y_documents_on_record_and_name", unique: true, where: "(record_type IS NOT NULL)"
+  end
+
   add_foreign_key "active_storage_attachments", "active_storage_blobs", column: "blob_id"
   add_foreign_key "active_storage_variant_records", "active_storage_blobs", column: "blob_id"
   add_foreign_key "assets", "projects"
@@ -360,4 +380,5 @@ ActiveRecord::Schema[8.1].define(version: 2026_08_27_222821) do
   add_foreign_key "subscription_seats", "pay_subscriptions"
   add_foreign_key "subscription_seats", "users"
   add_foreign_key "targets", "projects"
+  add_foreign_key "y_document_updates", "y_documents", column: "document_id"
 end

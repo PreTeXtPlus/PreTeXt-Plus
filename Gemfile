@@ -27,6 +27,11 @@ gem "solid_cache"
 gem "solid_queue"
 gem "solid_cable"
 
+# SPIKE (Phase 0, not for merge): server-side Yjs CRDT for collaborative editing.
+# `yrby` is the Rust y-crdt binding; `yrby-rails` is the ActionCable sync concern.
+gem "yrby"
+gem "yrby-rails"
+
 # Reduces boot times through caching; required in config/boot.rb
 gem "bootsnap", require: false
 
