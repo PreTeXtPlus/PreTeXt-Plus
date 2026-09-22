@@ -75,7 +75,7 @@ describe("TopBar", () => {
           {
             kind: "item",
             key: "feedback",
-            label: "Give feedback",
+            label: "Support / Feedback",
             onSelect: helpers.onGiveFeedback,
           },
         ],
@@ -96,7 +96,7 @@ describe("TopBar", () => {
 
     expect(screen.queryByText("Provide Feedback")).not.toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "Help & Feedback" }));
-    await user.click(screen.getByRole("menuitem", { name: "Give feedback" }));
+    await user.click(screen.getByRole("menuitem", { name: "Support / Feedback" }));
     expect(screen.getByText("Provide Feedback")).toBeInTheDocument();
   });
 

@@ -11,10 +11,10 @@ describe("FeedbackLink", () => {
     const user = userEvent.setup();
     render(<FeedbackLink context="test" onSubmit={vi.fn()} />);
 
-    expect(screen.getByRole("button", { name: "Give feedback" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Support / Feedback" })).toBeInTheDocument();
     expect(screen.queryByText("Provide Feedback")).not.toBeInTheDocument();
 
-    await user.click(screen.getByRole("button", { name: "Give feedback" }));
+    await user.click(screen.getByRole("button", { name: "Support / Feedback" }));
     expect(screen.getByText("Provide Feedback")).toBeInTheDocument();
   });
 
@@ -28,7 +28,7 @@ describe("FeedbackLink", () => {
       />,
     );
     expect(
-      screen.queryByRole("button", { name: "Give feedback" }),
+      screen.queryByRole("button", { name: "Support / Feedback" }),
     ).not.toBeInTheDocument();
     expect(screen.queryByText("Provide Feedback")).not.toBeInTheDocument();
 
