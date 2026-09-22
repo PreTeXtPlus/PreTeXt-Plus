@@ -152,67 +152,67 @@ const TopBar = (props: TopBarProps) => {
   ];
 
   return (
-    <div className="flex h-20 items-center bg-white border-b border-gray-300 max-[500px]:flex-wrap max-[500px]:h-auto">
-      <div className="flex items-center shrink-0 pl-4 pr-4 max-[500px]:basis-full max-[500px]:py-2">
+    <div className="grid grid-cols-[auto_1fr_auto] min-h-20 bg-white border-b border-gray-300 [grid-template-areas:'logo_title_account'_'logo_menu_account'] max-[500px]:[grid-template-areas:'logo_title_account'_'menu_menu_menu']">
+      <div className="flex items-center pl-4 pr-4 [grid-area:logo]">
         {props.logo ?? <span aria-hidden>✏️</span>}
       </div>
-      <div className="flex flex-1 min-w-0 flex-col justify-center py-1.5">
+      <div className="flex items-center min-w-0 py-1.5 [grid-area:title]">
         <EditorTitleField
           readOnly={props.readOnly}
           titleOverride={props.titleOverride}
           size="large"
         />
-        <div className="flex items-center w-full">
-          <CodeEditorMenu
-            className="flex-1 border-b-0"
-            content={props.content}
-            sourceFormat={props.sourceFormat}
-            rootType={props.rootType}
-            onContentChange={props.onContentChange}
-            onOpenImport={props.onOpenImport}
-            pasteAutoConvert={props.pasteAutoConvert}
-            onTogglePasteAutoConvert={props.onTogglePasteAutoConvert}
-            onOpenClean={props.onOpenClean}
-            onOpenDocinfoEditor={props.onOpenDocinfoEditor}
-            onUndo={state.onUndo}
-            onRedo={state.onRedo}
-            canUndo={state.canUndo}
-            canRedo={state.canRedo}
-            hasSelection={state.hasSelection}
-            actions={state.actions}
-            onConvertToPretext={props.onOpenConvertToPretext}
-            canConvertToPretext={props.canConvertToPretext}
-            onOpenAssets={props.onOpenAssets}
-            onOpenSnippets={props.onOpenSnippets}
-            onOpenFindInProject={props.onOpenFindInProject}
-            isFindingInFile={state.isFindingInFile}
-            onSwitchToFindInProject={
-              props.onOpenFindInProject ? state.switchToFindInProject : undefined
-            }
-            onShowFullSource={props.onShowFullSource}
-            hideAssets={props.hideAssets}
-            hideSnippets={props.hideSnippets}
-            readOnly={props.readOnly}
-            leadingMenus={[{ key: "file", label: "File", entries: fileEntries }]}
-            trailingMenus={trailingMenus}
-            showDocumentActionsInTools={false}
+      </div>
+      <div className="flex items-center w-full min-w-0 [grid-area:menu]">
+        <CodeEditorMenu
+          className="flex-1 border-b-0"
+          content={props.content}
+          sourceFormat={props.sourceFormat}
+          rootType={props.rootType}
+          onContentChange={props.onContentChange}
+          onOpenImport={props.onOpenImport}
+          pasteAutoConvert={props.pasteAutoConvert}
+          onTogglePasteAutoConvert={props.onTogglePasteAutoConvert}
+          onOpenClean={props.onOpenClean}
+          onOpenDocinfoEditor={props.onOpenDocinfoEditor}
+          onUndo={state.onUndo}
+          onRedo={state.onRedo}
+          canUndo={state.canUndo}
+          canRedo={state.canRedo}
+          hasSelection={state.hasSelection}
+          actions={state.actions}
+          onConvertToPretext={props.onOpenConvertToPretext}
+          canConvertToPretext={props.canConvertToPretext}
+          onOpenAssets={props.onOpenAssets}
+          onOpenSnippets={props.onOpenSnippets}
+          onOpenFindInProject={props.onOpenFindInProject}
+          isFindingInFile={state.isFindingInFile}
+          onSwitchToFindInProject={
+            props.onOpenFindInProject ? state.switchToFindInProject : undefined
+          }
+          onShowFullSource={props.onShowFullSource}
+          hideAssets={props.hideAssets}
+          hideSnippets={props.hideSnippets}
+          readOnly={props.readOnly}
+          leadingMenus={[{ key: "file", label: "File", entries: fileEntries }]}
+          trailingMenus={trailingMenus}
+          showDocumentActionsInTools={false}
+        />
+        <div className="flex items-center gap-3 pl-2 pr-2 shrink-0">
+          <StoreFeedbackLink
+            context="main-editor"
+            open={isFeedbackOpen}
+            onOpenChange={setIsFeedbackOpen}
           />
-          <div className="flex items-center gap-3 pl-2 pr-2 shrink-0">
-            <StoreFeedbackLink
-              context="main-editor"
-              open={isFeedbackOpen}
-              onOpenChange={setIsFeedbackOpen}
-            />
-            {props.readOnly && (
-              <span className="inline-block py-1 px-2.5 rounded-[3px] bg-[#a32899] text-white font-medium text-[13px]">
-                Read-only Mode
-              </span>
-            )}
-          </div>
+          {props.readOnly && (
+            <span className="inline-block py-1 px-2.5 rounded-[3px] bg-[#a32899] text-white font-medium text-[13px]">
+              Read-only Mode
+            </span>
+          )}
         </div>
       </div>
       {props.accountArea && (
-        <div className="h-16 flex items-center border-l border-gray-200 px-2 shrink-0 max-[500px]:h-auto">
+        <div className="flex items-center border-l border-gray-200 px-2 [grid-area:account]">
           {props.accountArea}
         </div>
       )}
