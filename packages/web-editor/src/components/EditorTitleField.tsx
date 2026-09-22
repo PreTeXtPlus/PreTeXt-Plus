@@ -34,7 +34,7 @@ const EditorTitleField = ({
 
   const titleTextClasses =
     size === "large"
-      ? "font-semibold text-[1.2rem] mx-2 overflow-hidden text-ellipsis whitespace-nowrap hover:underline cursor-pointer"
+      ? `font-semibold text-[1.2rem] mx-2 overflow-hidden text-ellipsis whitespace-nowrap${readOnly ? "" : " hover:underline cursor-pointer"}`
       : "font-semibold text-[1.05rem] mx-2 overflow-hidden text-ellipsis whitespace-nowrap";
 
   return (

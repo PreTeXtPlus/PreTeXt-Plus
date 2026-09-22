@@ -427,6 +427,7 @@ export interface editorProps {
      * with nothing to persist a title edit to (a demo/tryit project).
      */
     titleOverride?: ReactNode;
+    readOnly?: boolean;
   };
 
   /**
@@ -2324,7 +2325,7 @@ const EditorsInner = (props: EditorsInnerProps) => {
         accountArea={props.topBar.accountArea}
         helpMenu={props.topBar.helpMenu}
         titleOverride={props.topBar.titleOverride}
-        readOnly={props.readOnly}
+        readOnly={props.topBar.readOnly}
         onSaveAndClose={props.onSaveAndClose}
         saveAndCloseLabel={props.saveAndCloseLabel}
         content={divisionActiveSource}
