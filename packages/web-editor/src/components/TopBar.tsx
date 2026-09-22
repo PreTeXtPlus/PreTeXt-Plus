@@ -158,7 +158,7 @@ const TopBar = (props: TopBarProps) => {
       </div>
       <div className="flex items-center min-w-0 py-1.5 [grid-area:title]">
         <EditorTitleField
-          readOnly={props.readOnly}
+          readOnly={props.titleOverride != null}
           titleOverride={props.titleOverride}
           size="large"
         />

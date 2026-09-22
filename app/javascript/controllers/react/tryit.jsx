@@ -138,7 +138,6 @@ function TryItApp({ config }) {
         ),
         helpMenu: () => ({ label: "Help", entries: HELP_ENTRIES }),
         titleOverride: "Try PreTeXt in Your Browser!",
-        readOnly: true,
       }}
     />
   );
