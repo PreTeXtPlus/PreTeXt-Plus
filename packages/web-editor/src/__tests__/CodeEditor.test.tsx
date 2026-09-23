@@ -73,6 +73,17 @@ describe("CodeEditor", () => {
     },
   );
 
+  it("shows a read-only badge next to the format badge when read-only", () => {
+    render(<CodeEditor {...baseProps} readOnly />);
+    expect(screen.getByText("Read-only")).toBeInTheDocument();
+    expect(screen.getByText("PreTeXt")).toBeInTheDocument();
+  });
+
+  it("omits the read-only badge when editable", () => {
+    render(<CodeEditor {...baseProps} />);
+    expect(screen.queryByText("Read-only")).not.toBeInTheDocument();
+  });
+
   it("renders presence content next to the floating format badge", () => {
     render(<CodeEditor {...baseProps} presence={<span>Presence chips</span>} />);
     expect(screen.getByText("Presence chips")).toBeInTheDocument();

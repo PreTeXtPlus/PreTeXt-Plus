@@ -1231,6 +1231,11 @@ const CodeEditor = forwardRef<CodeEditorHandle, CodeEditorProps>(({
               Convert to PreTeXt
             </button>
           )}
+          {readOnly && (
+            <span className="inline-flex items-center py-0.5 px-2 rounded-full bg-[#a32899] text-white text-xs font-semibold pointer-events-none shadow-sm">
+              Read-only
+            </span>
+          )}
           <span className="inline-flex items-center py-0.5 px-2 rounded-full bg-gray-200/90 text-gray-800 text-xs font-semibold pointer-events-none shadow-sm">
             {FORMAT_LABELS[sourceFormat]}
           </span>

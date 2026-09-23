@@ -2,29 +2,6 @@
 <% content_for :hide_top_nav, true %>
 <% content_for :full_screen_content do %>
 <div class="flex size-full flex-1 flex-col min-h-0">
-  <div class="shrink-0 p-3 w-full text-center text-sm text-gray-500">
-    <% if @project.user == current_user %>
-      You are the owner of this project
-      (<%= link_to "Manage", @project, class: "text-blue-500 hover:font-semibold" %>).
-      <% unless @project.private_visibility? %>
-        Copy this link to share your project's source code with others:
-        <input type="text" class="my-2 block mx-auto max-w-full field-sizing-content p-1 text-sm text-gray-700 border border-gray-400 rounded" value="<%= share_source_project_url(@project) %>" readonly onclick="this.select()" onfocus="this.select()">
-        Or you can <%= button_to "make a new copy", copy_project_path(@project), class: "text-purple-700 hover:font-semibold cursor-pointer", form_class: "inline" %>.
-      <% else %>
-        This project is private. You can share the source code with others by
-        <%= link_to "making it public", @project, class: "text-blue-500 hover:font-semibold" %>,
-        or you can <%= button_to "make a new copy", copy_project_path(@project), class: "text-purple-700 hover:font-semibold cursor-pointer", form_class: "inline" %>.
-      <% end %>
-    <% elsif current_user.blank? %>
-      This is a read-only view of the source code for this project.
-      You can <%= link_to "sign in", new_user_session_path, class: "text-blue-500 hover:font-semibold" %>
-      to copy this project to your own account and edit it.
-    <% else %>
-      This is a read-only view of the source code for this project.
-      You can <%= button_to "copy this project", copy_project_path(@project), class: "text-purple-700 hover:font-semibold cursor-pointer", form_class: "inline" %>
-      to your own account to edit it.
-    <% end %>
-  </div>
   <div class="flex size-full flex-1 min-h-0"
       data-controller="shared-source"
       data-shared-source-project-id-value="<%= @project.id %>"
@@ -40,6 +17,29 @@
         </div>
       </div>
     </div>
+  </div>
+  <div class="bg-gray-50 border-t border-gray-300 shrink-0 p-3 w-full text-center text-sm text-gray-500">
+    <% if @project.user == current_user %>
+      You are the owner of this project
+      (<%= link_to "Manage", @project, class: "text-blue-500 hover:font-semibold" %>).
+      <% unless @project.private_visibility? %>
+        Copy this link to share your project's source code with others:
+        <input type="text" class="bg-white my-2 block mx-auto max-w-full field-sizing-content p-1 text-sm text-gray-700 border border-gray-400 rounded" value="<%= share_source_project_url(@project) %>" readonly onclick="this.select()" onfocus="this.select()">
+        Or you can <%= button_to "make a new copy", copy_project_path(@project), class: "text-purple-700 hover:font-semibold cursor-pointer", form_class: "inline" %>.
+      <% else %>
+        This project is private. You can share the source code with others by
+        <%= link_to "making it public", @project, class: "text-blue-500 hover:font-semibold" %>,
+        or you can <%= button_to "make a new copy", copy_project_path(@project), class: "text-purple-700 hover:font-semibold cursor-pointer", form_class: "inline" %>.
+      <% end %>
+    <% elsif current_user.blank? %>
+      This is a read-only view of the source code for this project.
+      You can <%= link_to "sign in", new_user_session_path, class: "text-blue-500 hover:font-semibold" %>
+      to copy this project to your own account and edit it.
+    <% else %>
+      This is a read-only view of the source code for this project.
+      You can <%= button_to "copy this project", copy_project_path(@project), class: "text-purple-700 hover:font-semibold cursor-pointer", form_class: "inline" %>
+      to your own account to edit it.
+    <% end %>
   </div>
 </div>
 <% end %>
