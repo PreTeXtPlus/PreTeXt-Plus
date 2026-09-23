@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
+import clsx from "clsx";
 import { useEditorStore } from "../store/hooks";
 
 export interface EditorTitleFieldProps {
@@ -10,15 +11,12 @@ export interface EditorTitleFieldProps {
    * a fixed label here instead.
    */
   titleOverride?: ReactNode;
-  /** Slightly larger text for a host's primary title row. */
-  size?: "normal" | "large";
 }
 
 /** The document title (click-to-edit), rendered by `TopBar`. */
 const EditorTitleField = ({
   readOnly,
   titleOverride,
-  size = "normal",
 }: EditorTitleFieldProps) => {
   const title = useEditorStore((s) => s.title);
   const updateTitle = useEditorStore((s) => s.updateTitle);
@@ -32,10 +30,10 @@ const EditorTitleField = ({
     }
   }, [editingTitle]);
 
-  const titleTextClasses =
-    size === "large"
-      ? `font-semibold text-[1.2rem] mx-2 overflow-hidden text-ellipsis whitespace-nowrap${readOnly ? "" : " hover:underline cursor-pointer"}`
-      : "font-semibold text-[1.05rem] mx-2 overflow-hidden text-ellipsis whitespace-nowrap";
+  const titleTextClasses = clsx(
+    "font-semibold text-[1.2rem] mx-2 overflow-hidden text-ellipsis whitespace-nowrap",
+    !readOnly && "hover:underline cursor-pointer",
+  );
 
   return (
     <div className="flex items-center max-[500px]:basis-full">
