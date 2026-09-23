@@ -91,7 +91,7 @@ function TryItApp({ config }) {
 
   const logo = (
     <a href={rootPath} className="flex items-center">
-      <img src="/icon.svg" className="h-14 mr-2" alt="PreTeXtPlus Logo" />
+      <img src="/icon.svg" className="h-14" alt="PreTeXtPlus Logo" />
     </a>
   );
 

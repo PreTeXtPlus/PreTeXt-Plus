@@ -193,11 +193,11 @@ const TopBar = (props: TopBarProps) => {
   ];
 
   return (
-    <div className="mt-1 grid grid-cols-[auto_1fr_auto] min-h-20 bg-white border-b border-gray-300 [grid-template-areas:'logo_title_account'_'logo_menu_account'] max-[500px]:[grid-template-areas:'logo_title_title'_'menu_menu_menu']">
-      <div className="flex items-center px-4 max-[500px]:px-1 [grid-area:logo]">
+    <div className="grid grid-cols-[auto_1fr_auto] min-h-16 bg-white border-b border-gray-300 [grid-template-areas:'logo_title_account'_'logo_menu_account'] max-[500px]:[grid-template-areas:'logo_title_title'_'menu_menu_menu']">
+      <div className="flex items-center pr-1 pl-4 max-[500px]:pl-1 [grid-area:logo]">
         {props.logo ?? <span aria-hidden>✏️</span>}
       </div>
-      <div className="flex items-center min-w-0 py-1.5 [grid-area:title]">
+      <div className="flex items-center sm:pt-2 min-w-0 [grid-area:title]">
         <EditorTitleField
           readOnly={props.titleOverride != null}
           titleOverride={props.titleOverride}

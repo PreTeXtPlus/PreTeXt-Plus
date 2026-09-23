@@ -426,7 +426,7 @@ const CodeEditorMenu: React.FC<CodeEditorMenuProps> = ({
     // its own trigger button sits.
     <div
       className={clsx(
-        "flex items-center gap-1 py-1.5 w-full border-b border-[#d6d6d6] max-[500px]:relative",
+        "flex items-center gap-1 w-full border-b border-[#d6d6d6] max-[500px]:relative",
         className,
       )}
       role="menubar"
