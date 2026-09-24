@@ -156,10 +156,10 @@ const MenuDropdown = ({
   };
 
   return (
-    // Below 500px, drop `relative` so an open panel's `absolute` positioning
+    // Below 600px, drop `relative` so an open panel's `absolute` positioning
     // falls through to the menubar row itself (see CodeEditorMenu.tsx),
     // anchoring it to the row's left edge rather than this specific button's.
-    <div className="relative inline-flex max-[500px]:static" ref={containerRef}>
+    <div className="relative inline-flex max-[600px]:static" ref={containerRef}>
       <button
         ref={buttonRef}
         type="button"
