@@ -505,8 +505,8 @@ DEPENDENCIES
   turbo-rails
   tzinfo-data
   web-console
-  yrby
-  yrby-rails
+  yrby (~> 0.7.1)
+  yrby-rails (~> 0.6.1)
 
 BUNDLED WITH
    2.6.9
