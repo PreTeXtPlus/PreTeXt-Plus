@@ -3,7 +3,7 @@
     data-editor-project-id-value="<%= project.id %>"
     data-editor-editor-state-url-value="<%= project_path(project, format: :json) %>"
     data-editor-pandoc-url-value="<%= pandoc_projects_path %>"
-    data-editor-root-path-value="<%= root_path %>"
+    data-editor-root-path-value="<%= projects_path %>"
     data-editor-user-email-value="<%= current_user.email %>"
     data-editor-has-profile-page-value="<%= current_user.has_profile_page? %>"
     data-editor-profile-path-value="<%= current_user.has_profile_page? ? user_profile_path(current_user.username) : "" %>"
