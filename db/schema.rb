@@ -222,6 +222,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_09_24_120000) do
     t.text "html_source"
     t.boolean "is_template", default: false, null: false
     t.integer "language", default: 0, null: false
+    t.text "pretext_source"
     t.jsonb "publication_settings", default: {}, null: false
     t.string "root_element"
     t.datetime "source_updated_at", default: -> { "CURRENT_TIMESTAMP" }, null: false

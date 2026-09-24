@@ -9,8 +9,8 @@
 // `<plus:* ref="..."/>` placeholders and converting latex/markdown divisions to
 // PreTeXt is ~3,400 lines built on xast-util and the content converters, with
 // no Ruby equivalent to reach for. The browser used to run it on every autosave
-// and PATCH the result into `projects.pretext_source`; that column is gone, and
-// this is what replaced it.
+// and PATCH the result into `projects.pretext_source`; nothing reads or writes
+// that column now, and this is what replaced it.
 //
 // The input is the same project JSON the editor loads
 // (`projects/_project.json.jbuilder`), and `assembleProjectJson` is the same

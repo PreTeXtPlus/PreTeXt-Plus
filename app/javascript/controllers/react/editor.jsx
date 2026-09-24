@@ -137,7 +137,7 @@ function slugifyRef(value) {
 //
 // Neither is the assembled document. The browser used to send it as
 // `pretext_source`, which is how an idle collaborator's tab came to overwrite
-// source a build had just consumed. There is no such column now: the server
+// source a build had just consumed. Nothing reads that column now: the server
 // assembles the document from these rows when a build asks for it
 // (SourceAssembler), so what a build gets can no longer be older than what the
 // author last typed.

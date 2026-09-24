@@ -3,9 +3,15 @@
 # `pretext_source` held the assembled standalone document, written by the
 # browser on a ten-second autosave and read by ProjectArchiveBuilder. Two
 # writers for one row is what let an idle collaborator's tab overwrite source a
-# build had just consumed; the fix is not another lock but removing the stored
-# copy, since the document is derivable from the rows beside it. SourceAssembler
-# now assembles it when a build asks, and nothing stores it.
+# build had just consumed; the fix is not another lock but no longer depending on
+# a stored copy, since the document is derivable from the rows beside it.
+# SourceAssembler now assembles it when a build asks.
+#
+# The column itself stays for now, unread and unwritten. It is the rollback path:
+# code from before this change reads it, and a column left in place still holds
+# each project's last assembled source, where one dropped and re-added would be
+# empty and every build from it would ship nothing. Drop it in a later migration
+# once this has been live long enough not to need that.
 #
 # One thing was only ever read off that column rather than assembled from it:
 # the document's root element, which Project#structural_document_type uses to
@@ -27,7 +33,6 @@ class ReplacePretextSourceWithRootElement < ActiveRecord::Migration[8.1]
     say_with_time "backfilling projects.root_element from pretext_source" do
       suppress_messages { backfill }
     end
-
   end
 
   def down

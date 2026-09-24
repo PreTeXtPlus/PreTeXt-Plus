@@ -10,9 +10,10 @@ require "open3"
 # This used to be `projects.pretext_source`, a column the browser wrote on a
 # ten-second autosave. That arrangement had one writer too many: an idle
 # collaborator's tab could overwrite source a build had just consumed, and the
-# build read whatever happened to be in the row at the time. The column is gone.
-# A build asks for the document instead, and gets one assembled from the rows as
-# they are at that moment.
+# build read whatever happened to be in the row at the time. Nothing reads or
+# writes that column now (it stays only as a rollback path; see the migration
+# that introduced `root_element`). A build asks for the document instead, and
+# gets one assembled from the rows as they are at that moment.
 #
 # Why Node: the assembler is `assembleFullProjectSource`, ~3,400 lines of
 # TypeScript over xast-util and the latex/markdown converters, with no Ruby
@@ -30,7 +31,7 @@ class SourceAssembler
   # Raised for anything that leaves us without a document: no bundle, a
   # non-zero exit, a timeout. Never rescued here -- a build that cannot
   # assemble its source must fail loudly rather than ship whatever was lying
-  # around, which is the whole point of dropping the column.
+  # around, which is the whole point of no longer storing it.
   class AssemblyError < StandardError; end
 
   # Built by `npm run build:assembler`, which assets:precompile runs on deploy
