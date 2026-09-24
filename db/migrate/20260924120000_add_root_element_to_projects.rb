@@ -7,18 +7,18 @@
 # a stored copy, since the document is derivable from the rows beside it.
 # SourceAssembler now assembles it when a build asks.
 #
-# The column itself stays for now, unread and unwritten. It is the rollback path:
-# code from before this change reads it, and a column left in place still holds
-# each project's last assembled source, where one dropped and re-added would be
-# empty and every build from it would ship nothing. Drop it in a later migration
-# once this has been live long enough not to need that.
+# The column itself stays for now, unread and unwritten (Project ignores it). It
+# is the rollback path: code from before this change reads it, and a column left
+# in place still holds each project's last assembled source, where one dropped
+# and re-added would be empty and every build from it would ship nothing. Drop
+# it in a later migration once this has been live long enough not to need that.
 #
 # One thing was only ever read off that column rather than assembled from it:
 # the document's root element, which Project#structural_document_type uses to
 # tell an article from a book. That cannot be recomputed cheaply -- it needs the
-# latex/markdown converters -- so it moves into a column of its own, and is
-# backfilled here while the source to read it from still exists.
-class ReplacePretextSourceWithRootElement < ActiveRecord::Migration[8.1]
+# latex/markdown converters -- so it gets a column of its own, backfilled here
+# from the last source each project stored.
+class AddRootElementToProjects < ActiveRecord::Migration[8.1]
   # The root-only elements a PreTeXt document can open with. Anything above or
   # before one of these in the document (<pretext>, <docinfo>) simply does not
   # match, which is why scanning for the first hit is enough.

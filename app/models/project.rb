@@ -1,4 +1,11 @@
 class Project < ApplicationRecord
+  # The assembled source a build used to read, kept in the table as a rollback path
+  # (see AddRootElementToProjects) but read and written by nothing. Ignored so every
+  # project query stops loading a whole book it will not look at -- the dashboard
+  # lists projects by the dozen -- and so the eventual migration dropping it cannot
+  # break a process still running with the column in its cached schema.
+  self.ignored_columns += [ "pretext_source" ]
+
   # Publisher options for every output of this project, overriding the owner's account
   # defaults and overridden in turn by any one output. See Publication::Settings.
   include HasPublicationSettings
