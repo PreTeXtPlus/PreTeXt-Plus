@@ -117,6 +117,7 @@ function SharedSourceApp({ config }) {
       topBar={{
         logo,
         helpMenu: () => ({ label: "Help", entries: HELP_ENTRIES }),
+        titleOverride: `${state.title} (Shared source)`,
       }}
     />
   );
