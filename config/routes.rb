@@ -169,9 +169,13 @@ Rails.application.routes.draw do
       get ":id/*_.html", to: redirect("/projects/%{id}/share")
     end
     member do
-      # First-time seeding of the collaborative doc. Everything else about it --
-      # joining, catching up, compaction -- is ProjectDocChannel's sync protocol.
+      # First-time seeding of the collaborative doc, and the one point at which a
+      # client asks for it to be written out to the project's rows *now* rather
+      # than on ProjectDocProjectionJob's own schedule. Everything else about
+      # the doc -- joining, catching up, compaction -- is ProjectDocChannel's
+      # sync protocol.
       post "doc/seed" => "project_docs#seed", as: "seed_doc"
+      post "doc/flush" => "project_docs#flush", as: "flush_doc"
       get "share" => "projects#share", as: "share"
       get "source" => "projects#source", as: "share_source"
       get "share/source" => "projects#source", to: redirect("/projects/%{id}/source")

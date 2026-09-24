@@ -1,14 +1,13 @@
 # frozen_string_literal: true
 
-# Seeding for a project's collaborative document. One endpoint, because the
-# server now speaks the sync protocol itself: joining, catching up and
-# compaction all happen over ProjectDocChannel, against a document the server
+# The two things a client still asks of a project's collaborative document over
+# HTTP. Everything about the document itself -- joining, catching up,
+# compaction -- happens over ProjectDocChannel, against a document the server
 # holds rather than a log browsers had to interpret.
 #
-# What remains is the one thing the protocol cannot do, because it is a
-# question about the project rather than about the document: a brand-new
-# session has to decide what the document's *first* content is, and only one
-# client may decide it.
+# What is left here are the two questions that are about the *project* rather
+# than about the document: what the document's first content should be, and
+# when the project's rows should be made to agree with it.
 class ProjectDocsController < ApplicationController
   before_action :set_project
 
@@ -29,6 +28,26 @@ class ProjectDocsController < ApplicationController
     else
       head :conflict
     end
+  end
+
+  # POST /projects/:id/doc/flush
+  #
+  # Write the document out into the project's rows, now, and do not return until
+  # it is done. ProjectDocProjectionJob does this on a timer for readers who did
+  # not ask; this is for the author who did -- saving and closing, or copying the
+  # project -- and is about to look at, or duplicate, those rows.
+  #
+  # The browser no longer writes them itself, so without this the editor would
+  # have no way to make "Save" mean anything: a copy taken straight afterwards
+  # would be built from whatever the last scheduled run left behind.
+  #
+  # Idempotent, and cheap enough to be worth no cleverness: ~15ms to read the
+  # document and write the rows it implies. An exception is deliberately not
+  # rescued -- the client needs to hear that the save did not happen, rather
+  # than navigate away believing it did.
+  def flush
+    ProjectDocProjection.new(@project).apply!
+    head :no_content
   end
 
   private
