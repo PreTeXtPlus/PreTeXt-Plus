@@ -67,6 +67,7 @@ You must not:
 - Scrape or automate access in a manner that exceeds reasonable usage limits
 - Infringe intellectual property, privacy, or other rights
 - Use the Service for fraudulent, deceptive, abusive, harassing, or unlawful purposes
+- Create multiple accounts, or otherwise circumvent eligibility limits, to obtain additional free trials or promotional offers
 
 We may investigate violations and take action, including content removal, access restrictions, suspension, or termination.
 
@@ -76,14 +77,28 @@ We may investigate violations and take action, including content removal, access
 - Payments are processed by third-party providers (including Stripe) under their terms.
 - Subscription fees are billed as disclosed at checkout or in your account.
 - Unless otherwise stated, subscriptions renew automatically until canceled.
-- You may cancel through your billing settings or payment portal; cancellation takes effect at the end of the current billing period unless otherwise stated.
+- You may cancel through your billing settings or payment portal; cancellation takes effect at the end of the current billing period unless otherwise stated. Cancellation during a free trial is described in Section 8.
 - Fees already paid are non-refundable except as required by law.
 
 We may change pricing, plans, quotas, or feature access in the future. Where required by law, we provide advance notice.
 
 ## 8. Free Trials and Beta Features
 
-We may offer free trials and beta, preview, or early-access features.
+### 8.1 Free trials
+
+We may offer a free trial of a paid plan. The length of the trial, the plan, and the price that applies after the trial are shown at checkout.
+
+- **Eligibility.** Free trials are limited to one per person and are available only to users with a confirmed email address who have not previously had a subscription with us. We decide eligibility in our discretion, and may decline or end a trial, or charge for the plan, if we reasonably believe you are creating multiple accounts or otherwise abusing the offer.
+- **Payment method required.** You must provide a valid payment method to start a free trial. You will not be charged during the trial.
+- **Automatic conversion.** Unless you cancel before the trial ends, your trial converts to a paid subscription and, when the trial ends, we (through Stripe) will automatically charge your payment method the fee shown at checkout for the plan and number of seats you selected. The subscription then renews as described in Section 7.
+- **Canceling.** You may cancel at any time before the trial ends through your billing settings or payment portal. If you cancel before the trial ends, you will not be charged and you keep access to the plan until the trial ends. We may send a reminder before your trial ends, but you are responsible for keeping track of the end date shown at checkout and in your account.
+- **Failed payment.** If we cannot collect the first payment when the trial ends, your paid access ends, and we may retry the payment.
+- **Card-paid plans only.** Free trials apply only to plans paid by card, not to subscriptions paid by invoice.
+- **After the trial.** If you do not convert to a paid subscription, your account returns to the limits of the free plan (see Section 9).
+
+### 8.2 Beta features
+
+We may offer beta, preview, or early-access features.
 
 - Beta features are provided as-is, may be incomplete, and may be changed or discontinued at any time.
 - Service levels and support commitments may not apply to beta features.

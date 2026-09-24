@@ -57,6 +57,25 @@ class UsersControllerTest < ActionDispatch::IntegrationTest
     assert_equal "brand-new-name", users(:one).reload.username
   end
 
+  test "update sets an explicit subscription_reminders choice" do
+    sign_in users(:one)
+    patch user_path(users(:one)), params: { user: { subscription_reminders: "true" } }
+    assert_redirected_to edit_user_path(users(:one))
+    assert_equal true, users(:one).reload.subscription_reminders
+
+    patch user_path(users(:one)), params: { user: { subscription_reminders: "false" } }
+    assert_equal false, users(:one).reload.subscription_reminders
+  end
+
+  test "update clears subscription_reminders back to the plan default" do
+    users(:one).update!(subscription_reminders: true)
+    sign_in users(:one)
+
+    patch user_path(users(:one)), params: { user: { subscription_reminders: "" } }
+
+    assert_nil users(:one).reload.subscription_reminders
+  end
+
   test "update rejects a username already taken by another user" do
     sign_in users(:one)
     patch user_path(users(:one)), params: { user: { username: users(:two).username } }

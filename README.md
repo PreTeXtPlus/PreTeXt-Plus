@@ -9,7 +9,7 @@ Open in a codespace, run `bin/dev`. Set port `3000` to `public` then preview the
 ### Stripe CLI
 
 ```
-stripe listen --forward-to 0.0.0.0:3000/pay/stripe/webhooks
+stripe listen --forward-to 0.0.0.0:3000/pay/webhooks/stripe
 ```
 
 ### Database & migrations

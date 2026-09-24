@@ -1,0 +1,23 @@
+<%
+  subscription = local_assigns[:subscription]
+  enabled = subscription ? subscription.reminders_enabled? : current_user.subscription_reminders_effective?
+%>
+<div id="subscription-reminders-banner" class="mx-auto w-full lg:w-2/3 mt-2 py-2">
+  <div class="flex items-center justify-between gap-3 rounded-lg border border-blue-200 bg-blue-50 px-4 py-2 text-sm text-blue-800">
+    <span>
+      <% if enabled %>
+        Subscription reminders are on<%= " for this plan" if subscription %>. We'll email you a few days before you're charged.
+      <% else %>
+        Subscription reminders are off<%= " for this plan" if subscription %>.
+      <% end %>
+    </span>
+    <span class="flex items-center gap-3 shrink-0">
+      <%= button_to (enabled ? "Turn off" : "Turn on"), subscription_reminders_path, method: :patch,
+            class: "font-semibold text-blue-700 hover:underline bg-transparent border-0 p-0 cursor-pointer",
+            form_class: "inline-block" %>
+      <button type="button" onclick="this.closest('#subscription-reminders-banner').remove()" class="text-blue-800" aria-label="Dismiss">
+        <svg width="16px" height="16px" stroke-width="1" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M6.75827 17.2426L12.0009 12M17.2435 6.75736L12.0009 12M12.0009 12L6.75827 6.75736M12.0009 12L17.2435 17.2426" stroke="currentColor" stroke-width="1" stroke-linecap="round" stroke-linejoin="round"></path></svg>
+      </button>
+    </span>
+  </div>
+</div>

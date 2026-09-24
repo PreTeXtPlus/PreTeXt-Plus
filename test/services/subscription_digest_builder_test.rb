@@ -31,6 +31,24 @@ class SubscriptionDigestBuilderTest < ActiveSupport::TestCase
   end
 
   test "excludes a renewal charge in the window" do
+    create_charge(billing_reason: "subscription_create", created_at: 40.days.ago)
+    create_charge(billing_reason: "subscription_cycle", created_at: 1.hour.ago)
+
+    result = SubscriptionDigestBuilder.new(since: 24.hours.ago).build
+
+    assert result.empty?
+  end
+
+  test "includes a trial converting, whose first charge is a subscription_cycle" do
+    create_charge(billing_reason: "subscription_cycle", created_at: 1.hour.ago)
+
+    result = SubscriptionDigestBuilder.new(since: 24.hours.ago).build
+
+    assert_equal [ subscription ], result.new_subscriptions.map(&:subscription)
+  end
+
+  test "excludes the renewal after a converted trial" do
+    create_charge(billing_reason: "subscription_cycle", created_at: 30.days.ago)
     create_charge(billing_reason: "subscription_cycle", created_at: 1.hour.ago)
 
     result = SubscriptionDigestBuilder.new(since: 24.hours.ago).build
