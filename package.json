@@ -12,7 +12,8 @@
   },
   "scripts": {
     "test": "vitest run",
-    "build": "node script/copy-static-assets.js && esbuild app/javascript/*.* --bundle --sourcemap --format=esm --outdir=app/assets/builds --public-path=/assets --external:module --external:worker_threads --alias:path=./packages/web-editor/src/nodeShims/path.ts --alias:url=./packages/web-editor/src/nodeShims/url.ts --alias:fs=./packages/web-editor/src/nodeShims/fs.ts --alias:tailwindcss=./packages/web-editor/src/nodeShims/tailwind-stub.css --loader:.png=dataurl --jsx=automatic"
+    "build": "node script/copy-static-assets.js && esbuild app/javascript/*.* --bundle --sourcemap --format=esm --outdir=app/assets/builds --public-path=/assets --external:module --external:worker_threads --alias:path=./packages/web-editor/src/nodeShims/path.ts --alias:url=./packages/web-editor/src/nodeShims/url.ts --alias:fs=./packages/web-editor/src/nodeShims/fs.ts --alias:tailwindcss=./packages/web-editor/src/nodeShims/tailwind-stub.css --loader:.png=dataurl --jsx=automatic",
+    "build:assembler": "esbuild script/assemble-source.mjs --bundle --format=esm --platform=node --loader:.css=empty --loader:.png=dataurl --banner:js=\"import{createRequire as __cr}from'node:module';const require=__cr(import.meta.url);\" --outfile=lib/assembler/assemble.mjs"
   },
   "dependencies": {
     "@hotwired/stimulus": "^3.2.2",

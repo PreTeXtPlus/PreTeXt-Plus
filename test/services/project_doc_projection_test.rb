@@ -18,6 +18,16 @@ class ProjectDocProjectionTest < ActiveSupport::TestCase
     ProjectDocProjection.new(@project).apply!
   end
 
+  # Make the division the document knows by `id` this project's root, so the
+  # projection can find it. The existing root steps down first: only one row per
+  # project may claim it (Division#is_root uniqueness).
+  def make_root(id)
+    @project.divisions.find_by(is_root: true)&.update!(is_root: false)
+    @project.divisions.create!(id: id, ref: "placeholder", source: "<book/>",
+                               source_format: "pretext", is_root: true)
+    @project.divisions.reload
+  end
+
   test "a project with no document is left alone" do
     before = @project.title
 
@@ -111,6 +121,49 @@ class ProjectDocProjectionTest < ActiveSupport::TestCase
 
     assert_equal original_root.id, @project.reload.divisions.find_by(is_root: true).id
     assert_not Division.find(ROOT_ID).is_root, "a projected division must not claim the root"
+  end
+
+  # ---- root_element ----
+  #
+  # What Project#structural_document_type reads, and the one thing that used to
+  # be recovered from the assembled source rather than stored. The editor keeps
+  # it as the root division's `type`; this is where it reaches the row.
+
+  test "the root division's type in the document becomes the project's root_element" do
+    make_root ROOT_ID
+    @project.update_column(:root_element, "article")
+    ProjectDoc.seed(@project, fixture("projection_state"))
+
+    project!
+
+    assert_equal "book", @project.reload.root_element,
+      "the document says its root is a <book>, so that is what the project is"
+  end
+
+  # The document does not carry `is_root` -- only the project knows which of its
+  # divisions is the root -- so a document whose divisions do not include this
+  # project's root has nothing to say about the root element, and must not be
+  # read as saying "none".
+  test "a root the document says nothing about leaves root_element alone" do
+    @project.update_column(:root_element, "slideshow")
+    ProjectDoc.seed(@project, fixture("projection_state"))
+
+    project!
+
+    assert_equal "slideshow", @project.reload.root_element
+  end
+
+  test "a division type that is not a root element is ignored rather than stored" do
+    # The projected *child* is a latex chapter. Pointing the project's root at it
+    # is the shape of a document whose root carries a non-root type -- which is
+    # not an answer to "article or book", and must not be written as one.
+    make_root CHILD_ID
+    @project.update_column(:root_element, "article")
+    ProjectDoc.seed(@project, fixture("projection_state"))
+
+    project!
+
+    assert_equal "article", @project.reload.root_element
   end
 
   test "a document missing the newer meta fields leaves the project's own values" do

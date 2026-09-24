@@ -82,7 +82,7 @@ class Project < ApplicationRecord
   # Attributes a build actually consumes. Changing any of them makes every built target
   # stale; changing `title` does not. Divisions and assets bump the same timestamp from
   # their own `belongs_to ... touch:`.
-  SOURCE_ATTRIBUTES = %w[ pretext_source docinfo use_common_docinfo document_type ].freeze
+  SOURCE_ATTRIBUTES = %w[ docinfo use_common_docinfo document_type ].freeze
 
   # Slug omitted deliberately: Target derives "website" from this name like it does for
   # every other output, so there is one rule rather than one rule and an exception.
@@ -123,27 +123,29 @@ class Project < ApplicationRecord
 
   # document_type as it should read for anything keyed to the document's actual
   # structure -- Publication::Catalog's article/book-specific numbering options,
-  # chiefly. The column alone cannot answer that: the TOC lets an author switch
-  # a document between article and book freely, by design, and that choice never
-  # reaches this row (ProjectsController#project_params excludes document_type
-  # from :update on purpose -- it also carries the deck axis, which *is* fixed
-  # at creation).
+  # chiefly. The `document_type` column alone cannot answer that: the TOC lets an
+  # author switch a document between article and book freely, by design, and that
+  # choice never reaches this row (ProjectsController#project_params excludes
+  # document_type from :update on purpose -- it also carries the deck axis, which
+  # *is* fixed at creation).
   #
   # What the author switched is the root division's own source, in whichever
-  # markup style they write. Rather than learn all three spellings, read the one
-  # artifact that has already resolved them: pretext_source, which the editor
-  # assembles with every save (assembleFullProjectSource -- placeholders
-  # expanded, latex/markdown converted, no projectType involved) and which
-  # ProjectArchiveBuilder writes out as source/main.ptx. Its root element is
-  # what PreTeXt itself numbers, so it is the document type by definition, and
-  # a change to how LaTeX or Markdown spells a book is the converter's business
-  # rather than ours.
+  # markup style they write, which is why this is a stored answer rather than a
+  # computed one. Reading it out of the source means knowing all three spellings
+  # of "book", and the one artifact that has resolved them -- the assembled
+  # document -- costs a Node process to produce (SourceAssembler). This is read
+  # on settings and admin pages, so it has to be a column read.
   #
-  # Falls back to the column when pretext_source is blank or names no root
-  # element -- a project between creation/import and its first autosave, where
-  # the column is exactly as its author left it and so still right.
+  # ProjectDocProjection writes it, from the type the editor keeps on the root
+  # division in the collaborative document. That is the same value the editor
+  # itself renders from, so what this reports and what the author is looking at
+  # cannot disagree.
+  #
+  # Falls back to `document_type` when it is unset -- a project between
+  # creation/import and its first projection, where that column is exactly as its
+  # author left it and so still right.
   def structural_document_type
-    root_element_type || document_type
+    root_element.presence || document_type
   end
 
   # The project's own uploaded icon/logo (the special "icon" ref, referenced by
@@ -417,29 +419,6 @@ class Project < ApplicationRecord
 
     def stamp_source_updated_at
       self.source_updated_at = Time.current
-    end
-
-    # The document element of the assembled source: the first article/book/
-    # slideshow it names, which is the one <pretext> wraps -- those three are
-    # root-only elements, so nothing above or before it can be called that, and
-    # <docinfo> is skipped by simply not matching.
-    #
-    # Streamed rather than parsed whole, and returning as soon as it matches:
-    # pretext_source is the entire book, and reading only its head keeps this
-    # flat in the size of the document (~2ms against ~26ms for a full parse of
-    # a 5MB one). A malformed document raises partway through and is answered
-    # with nil, like one that names nothing -- the caller falls back to the
-    # column rather than overriding it with a guess.
-    def root_element_type
-      return nil if pretext_source.blank?
-
-      Nokogiri::XML::Reader(pretext_source).each do |node|
-        next unless node.node_type == Nokogiri::XML::Reader::TYPE_ELEMENT
-        return node.name if ROOT_ELEMENT_TYPES.include?(node.name)
-      end
-      nil
-    rescue Nokogiri::XML::SyntaxError
-      nil
     end
 
     # Note this runs after validation, so what it builds is never checked against

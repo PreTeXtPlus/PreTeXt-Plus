@@ -14,12 +14,10 @@
 # the same rows given the same document, so it is safe to run on a timer, before
 # a build, or twice at once.
 #
-# NOTE: this deliberately does not write `Project#pretext_source`, the assembled
-# standalone document the build server consumes. Assembling it resolves
-# <plus:* ref="..."/> placeholders and converts latex/markdown divisions, and
-# that logic lives in JavaScript (assembleFullProjectSource). Until it can be
-# reached from here, the editor still writes that column and this covers
-# everything else.
+# It does not write the assembled standalone document a build consumes. Nothing
+# does: there is no column for it any more. SourceAssembler builds it from these
+# rows when a build asks, which is why FullBuildJob runs this first -- see the
+# comment there for what that ordering buys.
 class ProjectDocProjection
   # Tombstones are never cleared from the document, because yrby's Ruby bindings
   # can read a document but not write one. That is cheap and safe: a delete is
@@ -47,17 +45,20 @@ class ProjectDocProjection
   def attributes_from(doc)
     meta = read_map(doc, "meta")
     deleted = read_map(doc, "deleted")
+    divisions = read_map(doc, "divisions")
 
     attributes = {
       title: meta["title"].to_s,
       docinfo: meta["docinfo"].to_s,
-      divisions_attributes: division_attributes(doc, deleted)
+      divisions_attributes: division_attributes(divisions, deleted)
     }
     # Absent from the document is not the same as false or blank: a document
     # seeded before either field existed simply has nothing to say about them,
     # and must not reset the project's own value.
     attributes[:use_common_docinfo] = meta["useCommonDocinfo"] unless meta["useCommonDocinfo"].nil?
     attributes[:language] = meta["language"] unless meta["language"].nil?
+    root = root_element(divisions)
+    attributes[:root_element] = root unless root.nil?
 
     destroys = destroy_attributes(deleted, "asset")
     attributes[:assets_attributes] = destroys if destroys.any?
@@ -69,8 +70,8 @@ class ProjectDocProjection
 
   # `is_root` is deliberately absent, as it is from the editor's own payload: a
   # projection must never move which division is the root.
-  def division_attributes(doc, deleted)
-    present = read_map(doc, "divisions").filter_map do |id, entry|
+  def division_attributes(divisions, deleted)
+    present = divisions.filter_map do |id, entry|
       next if deleted[id] == "division" # removed in the same session that wrote it
 
       {
@@ -87,6 +88,28 @@ class ProjectDocProjection
   # lets a tombstone stay in the document forever without costing anything.
   def destroy_attributes(deleted, kind)
     deleted.filter_map { |id, k| { id: id, _destroy: true } if k == kind }
+  end
+
+  # The document's root element -- what tells an article from a book, and what
+  # Project#structural_document_type reads. The editor keeps it as the root
+  # division's `type`, having derived it from that division's own source (its
+  # PreTeXt tag, or the project type for a latex/markdown root that has no tag to
+  # read). Taking it from there rather than re-deriving it is what keeps this
+  # agreeing with what the author is looking at.
+  #
+  # The root is found by id rather than by looking for a root-shaped type,
+  # because only this project knows which division is its root -- the document
+  # does not carry `is_root` (see division_attributes).
+  #
+  # nil for anything unrecognised, and the caller leaves the column alone: a
+  # pretext root still holding a bare <section> (pre-migration data) carries no
+  # type at all, and that is not a reason to forget the answer already stored.
+  def root_element(divisions)
+    root_id = @project.root_division&.id
+    return nil if root_id.nil?
+
+    type = divisions.dig(root_id, "type")
+    type if Project::ROOT_ELEMENT_TYPES.include?(type)
   end
 
   # A root map that has never been written does not exist in the document, and
