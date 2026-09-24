@@ -9,6 +9,9 @@ import { Controller } from "@hotwired/stimulus"
 export default class extends Controller {
   static values = {
     project: Object,
+    rootPath: String,
+    newUserPath: String,
+    newSessionPath: String,
   }
 
   /** Load the React bundle as soon as the controller initializes.
@@ -41,6 +44,9 @@ export default class extends Controller {
     this.component.render(root, {
       project: this.projectValue,
       csrfToken: document.querySelector('meta[name="csrf-token"]')?.content,
+      rootPath: this.rootPathValue,
+      newUserPath: this.newUserPathValue,
+      newSessionPath: this.newSessionPathValue,
     })
 
     this.notifyLayoutChange()

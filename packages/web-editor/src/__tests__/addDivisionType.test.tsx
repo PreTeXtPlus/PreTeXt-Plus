@@ -58,6 +58,7 @@ function renderEditors(divisions: Division[]) {
       rootDivisionId={divisions[0].xmlId}
       projectType={divisions[0].type === "book" ? "book" : "article"}
       title="Doc"
+      topBar={{}}
       onContentChange={(c) => changes.push(c)}
       onDivisionAdd={(d) => {
         added.push(d);

@@ -1,23 +1,6 @@
 <% content_for :title, "Try it!" %>
+<% content_for :hide_top_nav, true %>
 
 <% content_for :full_screen_content do %>
-<div class="flex size-full flex-1 flex-col min-h-0">
-
-<div class="shrink-0 bg-sky-50/70 ">
-  <div class="mx-auto max-w-6xl py-2 px-3">
-    <div class="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
-      <div>
-        <h1 class="text-xl font-semibold text-sky-900">Try PreTeXt in your web browser!</h1>
-      </div>
-      <div class="flex flex-wrap gap-2">
-        <%= link_to "Create account", new_user_path, class: "#{button_classes(color: "sky")} px-2 py-1 text-sm" %>
-        <%= link_to "Sign in", new_user_session_path, class: "#{button_classes(color: "sky", outlined: true)} px-2 py-1 text-sm" %>
-      </div>
-    </div>
-  </div>
-</div>
-
-<%= render "tryit_form", project: @project %>
-
-</div>
+  <%= render "tryit_form", project: @project %>
 <% end %>

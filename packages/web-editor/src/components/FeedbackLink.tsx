@@ -5,7 +5,6 @@ import {
   Dialog,
   DialogHeader,
   DialogTitle,
-  DialogCopy,
   DialogClose,
   DialogActions,
   DialogButton,
@@ -29,8 +28,21 @@ interface FeedbackLinkProps {
   sourceFormat?: SourceFormat;
   /** Optional document title metadata for the feedback payload. */
   title?: string;
+  /**
+   * The signed-in user's email, if any. When set, the email field is hidden
+   * entirely and this value is attached to the submission silently instead.
+   */
+  userEmail?: string;
   /** Optional class for the trigger button. */
   className?: string;
+  /**
+   * Controlled mode: when provided, this drives the dialog's open state and
+   * the built-in trigger button is not rendered — the caller supplies its
+   * own trigger (e.g. a "Give feedback" menu item) and calls `onOpenChange`.
+   */
+  open?: boolean;
+  /** Required alongside `open`. Called with the next open state. */
+  onOpenChange?: (open: boolean) => void;
 }
 
 const getFallbackUrl = () => {
@@ -49,14 +61,23 @@ const FeedbackLink = ({
   currentSource,
   sourceFormat,
   title,
+  userEmail,
   className,
+  open,
+  onOpenChange,
 }: FeedbackLinkProps) => {
   const idBase = useId();
   const titleId = `${idBase}-title`;
   const emailId = `${idBase}-email`;
   const messageId = `${idBase}-message`;
   const sourceId = `${idBase}-source`;
-  const [isOpen, setIsOpen] = useState(false);
+  const controlled = open !== undefined;
+  const [internalOpen, setInternalOpen] = useState(false);
+  const isOpen = controlled ? open : internalOpen;
+  const setOpen = (value: boolean) => {
+    if (controlled) onOpenChange?.(value);
+    else setInternalOpen(value);
+  };
   const [email, setEmail] = useState("");
   const [message, setMessage] = useState("");
   const [includeCurrentSource, setIncludeCurrentSource] = useState(false);
@@ -69,14 +90,14 @@ const FeedbackLink = ({
   }, [projectUrl]);
 
   const closeDialog = () => {
-    setIsOpen(false);
+    setOpen(false);
     setError(null);
   };
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     const trimmedMessage = message.trim();
-    const trimmedEmail = email.trim();
+    const trimmedEmail = (userEmail ?? email).trim();
     if (!trimmedMessage) {
       setError("Please enter a message.");
       return;
@@ -98,7 +119,7 @@ const FeedbackLink = ({
       await onSubmit(payload);
       setMessage("");
       setIncludeCurrentSource(false);
-      setIsOpen(false);
+      setOpen(false);
     } catch (submitError) {
       const text =
         submitError instanceof Error
@@ -112,13 +133,15 @@ const FeedbackLink = ({
 
   return (
     <>
-      <button
-        type="button"
-        className={className || FEEDBACK_TRIGGER_CLASSES}
-        onClick={() => setIsOpen(true)}
-      >
-        {label}
-      </button>
+      {!controlled && (
+        <button
+          type="button"
+          className={className || FEEDBACK_TRIGGER_CLASSES}
+          onClick={() => setOpen(true)}
+        >
+          {label}
+        </button>
+      )}
       {isOpen ? (
         <DialogOverlay onClick={closeDialog}>
           <Dialog
@@ -130,15 +153,7 @@ const FeedbackLink = ({
           >
             <DialogHeader>
               <div>
-                <DialogTitle id={titleId}>Provide Feedback</DialogTitle>
-                <DialogCopy>
-                  Help us improve PreTeXt.plus! We'd love to hear from you.
-                </DialogCopy>
-                <DialogCopy>
-                  (If you would like a response, please include your email
-                  address in the form below and we will get back to you as soon
-                  as we can.)
-                </DialogCopy>
+                <DialogTitle id={titleId}>Provide Feedback or Request Support</DialogTitle>
               </div>
               <DialogClose
                 onClick={closeDialog}
@@ -153,21 +168,25 @@ const FeedbackLink = ({
               className="flex flex-col gap-[0.6rem] flex-1 min-h-0 overflow-y-auto"
               onSubmit={handleSubmit}
             >
-              <label
-                className="text-slate-700 text-[0.85rem] font-semibold"
-                htmlFor={emailId}
-              >
-                Email (optional)
-              </label>
-              <input
-                id={emailId}
-                type="email"
-                className="w-full border border-slate-300 rounded-[2px] py-2 px-[0.6rem] text-slate-900 bg-white focus:outline focus:outline-2 focus:outline-blue-300 focus:outline-offset-1"
-                value={email}
-                onChange={(event) => setEmail(event.target.value)}
-                placeholder="name@example.com"
-                autoComplete="email"
-              />
+              {!userEmail && (
+                <>
+                  <label
+                    className="text-slate-700 text-[0.85rem] font-semibold"
+                    htmlFor={emailId}
+                  >
+                    Email (optional)
+                  </label>
+                  <input
+                    id={emailId}
+                    type="email"
+                    className="w-full border border-slate-300 rounded-[2px] py-2 px-[0.6rem] text-slate-900 bg-white focus:outline focus:outline-2 focus:outline-blue-300 focus:outline-offset-1"
+                    value={email}
+                    onChange={(event) => setEmail(event.target.value)}
+                    placeholder="name@example.com"
+                    autoComplete="email"
+                  />
+                </>
+              )}
 
               <label
                 className="text-slate-700 text-[0.85rem] font-semibold"

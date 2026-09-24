@@ -25,6 +25,9 @@ import {
   railsSnippetToEditor,
   toEditorSnippet,
 } from "./railsProjectMapping";
+import AccountArea from "./AccountArea";
+import { HELP_ENTRIES } from "./helpEntries";
+import { buildAccountEntries } from "./accountEntries";
 
 /** @typedef {import("@pretextbook/web-editor").Asset} Asset */
 /** @typedef {import("@pretextbook/web-editor").Division} Division */
@@ -421,7 +424,19 @@ function collabEditorState(doc, base) {
  * @returns {JSX.Element}
  */
 function EditorApp({ config }) {
-  const { projectId, apiBase, pandocUrl, csrfToken } = config;
+  const {
+    projectId,
+    apiBase,
+    pandocUrl,
+    csrfToken,
+    rootPath,
+    userEmail,
+    hasProfilePage,
+    profilePath,
+    settingsPath,
+    subscriptionsPath,
+    signOutPath,
+  } = config;
 
   // Rails routes the React side needs.  Kept here (rather than in many data
   // attributes) since they're derivable from the project id.
@@ -1167,13 +1182,26 @@ function EditorApp({ config }) {
     if (working.current) working.current.commonDocinfo = value ?? "";
   }, []);
 
-  const onSaveButton = useCallback(async () => {
+  const onSaveAndClose = useCallback(async () => {
     if (await save(true)) window.location.href = projectUrl;
   }, [save, projectUrl]);
 
-  const onCancelButton = useCallback(() => {
-    if (confirm("Cancel without saving?")) window.location.href = projectUrl;
-  }, [projectUrl]);
+  // Submitted from the Account menu's "Sign out" entry (see signOutFormRef
+  // below). A real form POST with `_method=delete` mirrors what Rails'
+  // `button_to method: :delete` generates, rather than relying on Turbo's
+  // click interception — which the editor's mount root opts out of via
+  // `data-turbo="false"` on `_form.html.erb`, so a plain link would send a
+  // GET instead of the DELETE `destroy_user_session_path` requires.
+  const signOutFormRef = useRef(null);
+  const onSignOut = useCallback(() => {
+    signOutFormRef.current?.requestSubmit();
+  }, []);
+
+  const logo = (
+    <a href={rootPath} className="flex items-center">
+      <img src="/icon.svg" className="h-14" alt="PreTeXtPlus Logo" />
+    </a>
+  );
 
   // The web-editor hands us a standalone PreTeXt fragment scoped to whichever
   // division is currently open (the whole document only when that's the root)
@@ -1282,7 +1310,7 @@ function EditorApp({ config }) {
   }
   if (projectQuery.isError) {
     return <div className="flex h-full items-center justify-center">
-      <div class="mx-5 text-center">Error loading editor state. Please reload the page.</div>
+      <div className="mx-5 text-center">Error loading editor state. Please reload the page.</div>
     </div>;
   }
   // A collaborative project's editor waits for the shared doc: mounting before
@@ -1339,8 +1367,44 @@ function EditorApp({ config }) {
         projectAssets={projectAssets}
         projectSnippets={projectSnippets}
         projectUrl={feedbackProjectUrl}
-        saveButtonLabel="Save and manage"
-        cancelButtonLabel="Cancel"
+        userEmail={userEmail}
+        topBar={{
+          logo,
+          accountArea: (
+            <AccountArea
+              signedIn
+              userEmail={userEmail}
+              projectsPath={rootPath}
+              hasProfilePage={hasProfilePage}
+              profilePath={profilePath}
+              settingsPath={settingsPath}
+              subscriptionsPath={subscriptionsPath}
+              onSignOut={onSignOut}
+            />
+          ),
+          accountMenuEntries: buildAccountEntries({
+            signedIn: true,
+            projectsPath: rootPath,
+            hasProfilePage,
+            profilePath,
+            settingsPath,
+            subscriptionsPath,
+            onSignOut,
+          }),
+          helpMenu: (helpers) => ({
+            label: "Help & Feedback",
+            entries: [
+              ...HELP_ENTRIES,
+              { kind: "separator", key: "feedback-sep" },
+              {
+                kind: "item",
+                key: "feedback",
+                label: "Support / Feedback",
+                onSelect: helpers.onGiveFeedback,
+              },
+            ],
+          }),
+        }}
         onContentChange={onContentChange}
         importEngines={importEngines}
         onDivisionAdd={onDivisionAdd}
@@ -1361,12 +1425,21 @@ function EditorApp({ config }) {
         onUseCommonDocinfoChange={onUseCommonDocinfoChange}
         onCommonDocinfoChange={onCommonDocinfoChange}
         onSave={() => save()}
-        onSaveButton={onSaveButton}
-        onCancelButton={onCancelButton}
+        onSaveAndClose={onSaveAndClose}
+        saveAndCloseLabel="Save and manage project"
         onPreviewRebuild={onPreviewRebuild}
         onCreatePretextProjectCopy={onCreatePretextProjectCopy}
         onFeedbackSubmit={onFeedbackSubmit}
       />
+      <form
+        ref={signOutFormRef}
+        method="post"
+        action={signOutPath}
+        className="hidden"
+      >
+        <input type="hidden" name="_method" value="delete" />
+        <input type="hidden" name="authenticity_token" value={csrfToken} />
+      </form>
     </>
 
   );

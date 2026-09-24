@@ -259,6 +259,8 @@ export interface EditorStoreState {
   /** The document's content language (BCP-47 code, e.g. `"en-US"`), written as `@xml:lang` on the generated root element. */
   language: string;
   projectUrl: string | undefined;
+  /** The signed-in user's email, if any — used to silently attach it to feedback submissions instead of asking for one. */
+  userEmail: string | undefined;
 
   // Divisions (host-controlled pool)
   divisions: Division[] | undefined;
@@ -496,6 +498,7 @@ export type EditorSyncableState = Pick<
   | "useCommonDocinfo"
   | "language"
   | "projectUrl"
+  | "userEmail"
   | "divisions"
   | "rootDivisionId"
   | "activeDivisionId"
@@ -569,6 +572,7 @@ export function createEditorStore(init: EditorStoreInit): EditorStoreHandle {
     useCommonDocinfo: init.useCommonDocinfo,
     language: init.language,
     projectUrl: undefined,
+    userEmail: undefined,
     divisions: init.divisions,
     rootDivisionId: undefined,
     activeDivisionId: init.activeDivisionId,
