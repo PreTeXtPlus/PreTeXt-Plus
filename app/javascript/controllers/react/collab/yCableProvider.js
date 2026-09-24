@@ -72,6 +72,10 @@ export class YCableProvider {
     this.awareness = null;
     this.destroyed = false;
     this.intervals = [];
+    // Clients we have already answered with an announcement of our own, so a
+    // session settles rather than echoing (see answerNewPeers).
+    /** @type {Set<number>} */
+    this.seenPeers = new Set();
     // Watchdog state. `relayStatus` is "ready" until proven otherwise, so a
     // session that never stalls never mentions the relay to anyone.
     this.relayStatus = "ready";
@@ -100,6 +104,7 @@ export class YCableProvider {
     // Presence identity. Set before connecting so our first awareness frame
     // already carries it, and so PresenceAvatars never sees a nameless peer.
     this.awareness.setLocalStateField("user", this.user);
+    this.answerNewPeers();
 
     this.provider.connect();
     await this.provider.whenSynced;
@@ -145,6 +150,57 @@ export class YCableProvider {
     } catch (error) {
       console.error("Failed to offer a seed for the collaborative doc:", error);
     }
+  }
+
+  /**
+   * Announce ourselves again whenever a client we have not seen before appears.
+   *
+   * yrby-client speaks two y-protocols frame types, Sync and Awareness; its
+   * MessageType says in as many words that query-awareness is not among them.
+   * So a client joining an existing session can say who it is, but cannot ask
+   * who else is here -- and the clients already here are not asked. Presence
+   * then waits on y-protocols refreshing each peer's own state, which it does
+   * when that state is older than half the 30s expiry and checks only every 3s:
+   * up to ~18s during which a newcomer sees an empty session and everyone in it
+   * sees them.
+   *
+   * Answering back closes that to one round trip. Nobody answers the same
+   * client twice, so a session of N settles after N-1 frames rather than
+   * echoing; a peer that drops is forgotten, so a reconnect is answered like
+   * any other arrival.
+   * @returns {void}
+   */
+  answerNewPeers() {
+    // `updated` as well as `added`, because a peer that dropped and came back
+    // arrives as neither a stranger nor a heartbeat: y-protocols keeps its
+    // `meta` entry after removing its state, so the frame that brings it back
+    // is reported as an update to a client we already knew about. `seenPeers`
+    // is what tells those apart -- a returning peer was forgotten when its
+    // removal came through, an established one was not -- so an ordinary
+    // heartbeat from someone we have already answered costs nothing here.
+    this.onAwarenessChange = ({ added, updated, removed }) => {
+      removed.forEach((id) => this.seenPeers.delete(id));
+
+      const strangers = [ ...added, ...updated ].filter(
+        (id) => id !== this.awareness.clientID && !this.seenPeers.has(id),
+      );
+      if (strangers.length === 0) return;
+      strangers.forEach((id) => this.seenPeers.add(id));
+
+      // Re-setting the state is the announcement: it bumps our clock and emits
+      // an awareness update, which the session sends. There is no separate
+      // "announce" to call.
+      //
+      // The whole state rather than `setLocalStateField`, for two reasons: that
+      // helper is a no-op when the local state is null, which is exactly what
+      // announcing a departure leaves behind, and re-setting one field would
+      // drop nothing today but would quietly stop carrying whatever else ends
+      // up on the state later (a cursor, a selection).
+      const state = this.awareness.getLocalState();
+      if (state === null) return; // we have said we are leaving; do not come back
+      this.awareness.setLocalState({ ...state });
+    };
+    this.awareness.on("change", this.onAwarenessChange);
   }
 
   /**
@@ -286,6 +342,7 @@ export class YCableProvider {
     document.removeEventListener("visibilitychange", this.onVisibilityChange ?? (() => {}));
     this.intervals.forEach(clearInterval);
     this.intervals = [];
+    if (this.onAwarenessChange) this.awareness?.off("change", this.onAwarenessChange);
     // Tears down the subscription and the Awareness it created, after flushing
     // a presence removal so peers drop our cursor immediately.
     this.provider?.destroy();
