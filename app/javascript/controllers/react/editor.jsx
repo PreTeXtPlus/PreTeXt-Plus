@@ -1374,6 +1374,7 @@ function EditorApp({ config }) {
             <AccountArea
               signedIn
               userEmail={userEmail}
+              projectsPath={rootPath}
               hasProfilePage={hasProfilePage}
               profilePath={profilePath}
               settingsPath={settingsPath}
@@ -1383,6 +1384,7 @@ function EditorApp({ config }) {
           ),
           accountMenuEntries: buildAccountEntries({
             signedIn: true,
+            projectsPath: rootPath,
             hasProfilePage,
             profilePath,
             settingsPath,

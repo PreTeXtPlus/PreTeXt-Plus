@@ -6,6 +6,7 @@
  *
  * @param {Object} props
  * @param {boolean} [props.signedIn]
+ * @param {string} [props.projectsPath] - Signed-in only.
  * @param {boolean} [props.hasProfilePage]
  * @param {string} [props.profilePath]
  * @param {string} [props.settingsPath]
@@ -17,6 +18,7 @@
  */
 export function buildAccountEntries({
   signedIn,
+  projectsPath,
   hasProfilePage,
   profilePath,
   settingsPath,
@@ -27,6 +29,15 @@ export function buildAccountEntries({
 }) {
   return signedIn
     ? [
+        {
+          kind: "item",
+          key: "projects",
+          label: "Projects",
+          onSelect: () => {
+            window.location.href = projectsPath;
+          },
+        },
+        { kind: "separator", key: "projects-sep" },
         ...(hasProfilePage
           ? [
               {

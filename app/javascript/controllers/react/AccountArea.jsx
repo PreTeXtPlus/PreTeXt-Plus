@@ -12,6 +12,7 @@ import { buildAccountEntries } from "./accountEntries";
  * @param {Object} props
  * @param {boolean} [props.signedIn] - Whether Account shows the signed-in entries.
  * @param {string} [props.userEmail]
+ * @param {string} [props.projectsPath] - Signed-in only.
  * @param {boolean} [props.hasProfilePage]
  * @param {string} [props.profilePath]
  * @param {string} [props.settingsPath]
@@ -24,6 +25,7 @@ import { buildAccountEntries } from "./accountEntries";
 function AccountArea({
   signedIn,
   userEmail,
+  projectsPath,
   hasProfilePage,
   profilePath,
   settingsPath,
@@ -36,6 +38,7 @@ function AccountArea({
 
   const accountEntries = buildAccountEntries({
     signedIn,
+    projectsPath,
     hasProfilePage,
     profilePath,
     settingsPath,
