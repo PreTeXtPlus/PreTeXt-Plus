@@ -201,7 +201,11 @@ const MenuDropdown = ({
           aria-label={label}
           className={clsx(
             "absolute top-[calc(100%+4px)] z-20 flex flex-col min-w-[220px] max-h-[70vh] w-full sm:w-auto overflow-y-auto p-1 bg-white border border-[#d0d0d0] rounded-md shadow-[0_6px_16px_rgba(0,0,0,0.14)]",
-            align === "right" ? "right-0" : "left-0",
+            // Compact: nudge 2px off the row's left edge, shrinking to match
+            // so the full-width panel doesn't overflow the viewport.
+            align === "right"
+              ? "right-0"
+              : "left-0 max-[600px]:left-0.5 max-[600px]:w-[calc(100%-2px)]",
           )}
           onKeyDown={handlePanelKeyDown}
         >
