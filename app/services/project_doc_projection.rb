@@ -15,9 +15,9 @@
 # a build, or twice at once.
 #
 # It does not write the assembled standalone document a build consumes. Nothing
-# does: there is no column for it any more. SourceAssembler builds it from these
-# rows when a build asks, which is why FullBuildJob runs this first -- see the
-# comment there for what that ordering buys.
+# does: the old column is no longer read or written. SourceAssembler builds the
+# document from these rows when a build asks, which is why FullBuildJob runs
+# this first -- see the comment there for what that ordering buys.
 class ProjectDocProjection
   # Tombstones are never cleared from the document, because yrby's Ruby bindings
   # can read a document but not write one. That is cheap and safe: a delete is
