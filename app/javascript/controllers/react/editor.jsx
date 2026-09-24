@@ -9,7 +9,6 @@ import {
 } from "@tanstack/react-query";
 import {
   Editors,
-  assembleFullProjectSource,
   clearDeletions,
   configureSpellCheck,
   docToState,
@@ -24,6 +23,7 @@ import {
   toEditorAsset,
   railsSnippetToEditor,
   toEditorSnippet,
+  railsToEditorState,
 } from "./railsProjectMapping";
 import AccountArea from "./AccountArea";
 import { HELP_ENTRIES } from "./helpEntries";
@@ -37,35 +37,8 @@ import { buildAccountEntries } from "./accountEntries";
 /** @typedef {import("./railsProjectMapping").RailsSnippet} RailsSnippet */
 /** @typedef {import("./railsProjectMapping").EditorDivision} EditorDivision */
 
-/**
- * The full project JSON returned by the editor-state endpoint.
- * @typedef {Object} RailsProjectJson
- * @property {string} [title]
- * @property {string} [docinfo]
- * @property {string} [common_docinfo]
- * @property {boolean} [use_common_docinfo]
- * @property {string} [document_type]
- * @property {string} [language]
- * @property {RailsDivision[]} [divisions]
- * @property {RailsAsset[]} [assets]
- * @property {RailsSnippet[]} [snippets]
- */
-
-/**
- * The client-side working/server-snapshot state mirrored from Rails and fed
- * to (or read back from) the `<Editors>` component.
- * @typedef {Object} EditorState
- * @property {string} title
- * @property {string} docinfo
- * @property {string} commonDocinfo
- * @property {boolean} useCommonDocinfo
- * @property {string} language
- * @property {"article"|"book"|"slideshow"} projectType
- * @property {EditorDivision[]} divisions
- * @property {Asset[]} [projectAssets]
- * @property {Snippet[]} [projectSnippets]
- * @property {string} [rootDivisionId]
- */
+/** @typedef {import("./railsProjectMapping").RailsProjectJson} RailsProjectJson */
+/** @typedef {import("./railsProjectMapping").EditorState} EditorState */
 
 // ---------------------------------------------------------------------------
 // Architecture
@@ -115,14 +88,10 @@ import { buildAccountEntries } from "./accountEntries";
 
 const AUTOSAVE_MS = 10000;
 
-// Root element tag names the editor understands, which is also exactly the set
-// of `Project#document_type` values -- see railsToEditorState for why the two
-// vocabularies are deliberately the same.
-const ROOT_ELEMENT_TYPES = [ "article", "book", "slideshow" ];
-
 // --- Rails JSON  <->  web-editor shapes ------------------------------------
-// railsDivisionToEditor / railsAssetToEditor / toEditorAsset now live in
-// ./railsProjectMapping, shared with ./shared_source.jsx.
+// The per-record mappers, `railsToEditorState` and the assembly it feeds all
+// live in ./railsProjectMapping, shared with ./shared_source.jsx and with the
+// Node assembler the server shells out to at build time.
 
 // Slugify arbitrary text into a valid PreTeXt ref (REF_REGEX: a leading letter
 // or underscore, then letters/digits/hyphens/underscores).
@@ -137,90 +106,6 @@ function slugifyRef(value) {
     .replace(/[^a-z0-9]+/g, "-")
     .replace(/^-+|-+$/g, "");
   return /^[a-z_]/.test(slug) ? slug : `asset-${slug}`.replace(/-+$/, "");
-}
-
-// Transform the full project JSON into the state the editor renders from.
-/**
- * @param {RailsProjectJson} json
- * @returns {EditorState}
- */
-function railsToEditorState(json) {
-  const root = (json.divisions ?? []).find((d) => d.is_root);
-  const title = json.title ?? "";
-  // `document_type` and the editor's `projectType` are the same vocabulary --
-  // root element tag names -- so this is an identity map with a fallback, not a
-  // translation. That is deliberate: the editor synthesizes a wrapper element
-  // from this value, so it has to be a real tag name. Anything unrecognised
-  // becomes an article, since a wrong tag is worse than a default one.
-  const projectType = ROOT_ELEMENT_TYPES.includes(json.document_type)
-    ? json.document_type
-    : "article";
-  const rootMeta = { type: projectType, title };
-  return {
-    title,
-    docinfo: json.docinfo ?? "",
-    commonDocinfo: json.common_docinfo ?? "",
-    useCommonDocinfo: json.use_common_docinfo ?? false,
-    language: json.language ?? DEFAULT_LANGUAGE,
-    projectType,
-    divisions: (json.divisions ?? []).map((d) => railsDivisionToEditor(d, rootMeta)),
-    projectAssets: (json.assets ?? []).map(railsAssetToEditor),
-    projectSnippets: (json.snippets ?? []).map(railsSnippetToEditor),
-    // rootDivisionId is the root division's *xmlId* (its ref), which is how the
-    // web-editor identifies divisions, not the database id.
-    rootDivisionId: root ? (root.ref ?? "") : undefined,
-    // The root's *database* id: stable across xml:id renames, which is how the
-    // collab save path re-finds the root in doc-derived state.
-    rootDivisionUuid: root ? String(root.id) : undefined,
-    // Real-time collaboration flag + the identity shown on remote cursors.
-    collaborative: json.collaborative === true,
-    editorUser: json.editor_user ?? null,
-    // Words the spell checker has been taught on this project. Read-only here,
-    // like the two fields above: additions go straight to their own endpoint.
-    dictionaryWords: json.dictionary_words ?? [],
-  };
-}
-
-// The docinfo actually in effect: the user's common docinfo when the project
-// is opted in to it (and one is set), otherwise the project's own docinfo.
-/**
- * @param {EditorState} state
- * @returns {string}
- */
-function effectiveDocinfo(state) {
-  return state.useCommonDocinfo && state.commonDocinfo ? state.commonDocinfo : state.docinfo;
-}
-
-// Assemble the full, standalone PreTeXt document that gets sent to the build
-// server.  The web-editor owns this entirely: `assembleFullProjectSource`
-// resolves every <plus:* ref="..."/> placeholder, converts any latex/markdown
-// divisions to PreTeXt, wraps the result in the outer <pretext> with the
-// docinfo we pass inserted as a sibling, and guarantees the root element
-// carries a label/xml:id so the build server knows which file to return.
-//
-// The only thing Rails contributes is *which* docinfo is in effect (the user's
-// common preamble vs. the project's own) -- the rest of the document shape is
-// no longer reshaped here.
-// `projectAssets` are passed in (server truth, from the live query) rather than
-// read off `state`: the editor owns the live asset pool, so we no longer keep an
-// asset working copy here -- the document only needs the assets to resolve each
-// <plus:* ref="..."/> placeholder it emits.
-/**
- * @param {EditorState} state
- * @param {Asset[]} projectAssets
- * @param {Snippet[]} projectSnippets
- * @returns {string}
- */
-function assembleFullPretextSource(state, projectAssets, projectSnippets) {
-  if (!state.rootDivisionId) return "";
-  return assembleFullProjectSource(
-    state.divisions,
-    state.rootDivisionId,
-    effectiveDocinfo(state),
-    projectAssets.map(toEditorAsset),
-    state.language,
-    projectSnippets.map(toEditorSnippet),
-  );
 }
 
 // Build the PATCH body Rails expects.  Only the fields permitted by
@@ -243,22 +128,25 @@ function assembleFullPretextSource(state, projectAssets, projectSnippets) {
 // ride in the shared doc, and a snippet is persisted immediately per edit
 // the same way (see the asset/snippet callbacks) so its content stays out of
 // the deferred bulk save too. Only asset/snippet *destroys* are re-sent from
-// here. We still pass `projectAssets`/`projectSnippets` so the assembled
-// `pretext_source` can resolve image/snippet refs.
+// here.
+//
+// Neither is the assembled document. The browser used to send it as
+// `pretext_source`, which is how an idle collaborator's tab came to overwrite
+// source a build had just consumed. There is no such column now: the server
+// assembles the document from these rows when a build asks for it
+// (SourceAssembler), so what a build gets can no longer be older than what the
+// author last typed.
 /**
  * @param {EditorState} state
- * @param {Asset[]} projectAssets
- * @param {Snippet[]} projectSnippets
  * @param {{id: string, kind: "division"|"asset"|"snippet"}[]} [deletes] - Records to destroy.
  * @returns {{project: Object}}
  */
-function editorStateToRailsPayload(state, projectAssets, projectSnippets, deletes = []) {
+function editorStateToRailsPayload(state, deletes = []) {
   const project = {
     title: state.title,
     docinfo: state.docinfo,
     use_common_docinfo: state.useCommonDocinfo,
     language: state.language,
-    pretext_source: assembleFullPretextSource(state, projectAssets, projectSnippets),
     divisions_attributes: [
       ...state.divisions.map((d) => ({
         id: d.id,
@@ -590,8 +478,8 @@ function EditorApp({ config }) {
 
   // ----- WRITE: save via TanStack mutation ---------------------------------
   const saveMutation = useMutation({
-    mutationFn: async ({ state, assets, snippets, deletes }) => {
-      const payload = editorStateToRailsPayload(state, assets, snippets, deletes);
+    mutationFn: async ({ state, deletes }) => {
+      const payload = editorStateToRailsPayload(state, deletes);
       const res = await fetch(apiBase, {
         method: "PATCH",
         headers: {
@@ -642,11 +530,6 @@ function EditorApp({ config }) {
         try {
           await saveMutation.mutateAsync({
             state: snapshot,
-            // The doc's assets, not this client's last fetch: a peer may have
-            // added an asset whose placeholder is already in the source, and
-            // the assembled document has to be able to resolve it.
-            assets: snapshot.projectAssets,
-            snippets: snapshot.projectSnippets,
             deletes: snapshot.deletes,
           });
           // Rails has now dropped those rows, so the tombstones have done their
@@ -665,10 +548,8 @@ function EditorApp({ config }) {
       if (!working.current) return false;
       if (!hard && !isDirty()) return true;
       const snapshot = structuredClone(working.current);
-      const assets = serverAssets.current;
-      const snippets = serverSnippets.current;
       try {
-        await saveMutation.mutateAsync({ state: snapshot, assets, snippets, deletes: [] });
+        await saveMutation.mutateAsync({ state: snapshot, deletes: [] });
         serverSnapshot.current = snapshot;
         return true;
       } catch (error) {

@@ -13,9 +13,11 @@ require "stringio"
 #                                   added by hand to a downloaded copy would pick up
 #   publication/<slug>.ptx       -- one per target, holding that output's options
 #                                   resolved through account -> project -> output
-#   source/main.ptx              -- project.pretext_source, already a complete,
+#   source/main.ptx              -- the project's assembled source: a complete,
 #                                   standalone <pretext> document (docinfo + body,
-#                                   with every <plus:* ref/> placeholder resolved)
+#                                   with every <plus:* ref/> placeholder resolved),
+#                                   built here and now by SourceAssembler rather
+#                                   than read from a column something else wrote
 #   source/external/<ref>.<ext>  -- each project asset, matching the bare
 #                                   `<image source="<ref>.<ext>">` the editor emits
 #
@@ -50,6 +52,13 @@ class ProjectArchiveBuilder
 
   # Returns a rewound StringIO holding the zip bytes.
   def build
+    # Assembled before the zip is opened, not partway through writing it: this
+    # shells out to Node and can fail, and a half-written archive is worse than
+    # none. A failure here fails the build, which is the right answer -- there is
+    # no stored source to fall back on, and an archive built from source we could
+    # not assemble would be an archive of the wrong document.
+    source = assembled_source
+
     buffer = Zip::OutputStream.write_buffer do |zip|
       zip.put_next_entry("project.ptx")
       zip.write(project_ptx)
@@ -67,7 +76,7 @@ class ProjectArchiveBuilder
       end
 
       zip.put_next_entry("source/main.ptx")
-      zip.write(@project.pretext_source.to_s)
+      zip.write(source)
 
       @project.assets.each do |asset|
         next unless asset.file.attached?
@@ -100,6 +109,12 @@ class ProjectArchiveBuilder
   end
 
   private
+
+    # Memoized so a caller that builds more than one archive from the same
+    # instance pays for one Node process rather than one per archive.
+    def assembled_source
+      @assembled_source ||= SourceAssembler.new(@project).call
+    end
 
     # The target's publication file, named for the same slug everything else about it is.
     #

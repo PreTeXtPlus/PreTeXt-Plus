@@ -16,7 +16,21 @@ class FullBuildJob < ApplicationJob
   def perform(build)
     build.mark!(:in_progress)
 
-    archive = ProjectArchiveBuilder.new(build.project).build
+    # Fold whatever the live editing session holds into the project's rows
+    # before reading them. The server has been authoritative over the
+    # collaborative document since it started speaking the Yjs sync protocol
+    # (ProjectDocChannel), so this is a read of state we already know to be
+    # current -- not a request to a browser that may have closed.
+    #
+    # Doing it here, synchronously, is what turns "the build consumed stale
+    # source" from a timing race into something that cannot happen: the rows
+    # ProjectArchiveBuilder assembles from are written in this method, a few
+    # lines above where they are read. A project with no document to project
+    # (never opened collaboratively, or already compacted away) returns false
+    # and leaves its rows alone, which are then the only truth there is.
+    ProjectDocProjection.new(build.project).apply!
+
+    archive = ProjectArchiveBuilder.new(build.project.reload).build
 
     uri = URI.parse("https://#{Rails.application.credentials.dig(:full_build, :host)}/builds")
     request = Net::HTTP::Post.new(uri)

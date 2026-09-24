@@ -590,7 +590,7 @@ class Publication::SettingsTest < ActiveSupport::TestCase
     project = projects(:one)
     assert_equal "article", project.document_type
 
-    project.update_column(:pretext_source, "<pretext>\n<book xml:id=\"document\"><title>Hello</title></book>\n</pretext>")
+    project.update_column(:root_element, "book")
 
     settings = Publication::Settings.new(project.reload)
     assert_equal "book", settings.document_type
