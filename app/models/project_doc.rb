@@ -10,11 +10,25 @@
 # the updates that client is missing.
 module ProjectDoc
   # yrby addresses documents by one opaque string. Deliberately not the
-  # polymorphic record binding the gem also offers: nothing here needs to walk
-  # from a document back to a project, and the binding's `record_id` is a
-  # bigint by default where projects have uuid primary keys.
+  # polymorphic record binding the gem also offers: its `record_id` is a bigint
+  # by default where projects have uuid primary keys, and the one caller that
+  # does need to walk from a document back to a project reads the key instead
+  # (see `project_id_from`).
   def self.key_for(project)
     "project/#{project.id}/doc"
+  end
+
+  # The inverse, for the one caller that starts from documents rather than from
+  # a project: ProjectDocProjectionJob, which asks the store which documents
+  # have been written to lately and has to get back to the projects they belong
+  # to. Kept beside `key_for` so the shape of a key is stated once.
+  #
+  # nil for anything that is not one of ours -- yrby's store is not exclusively
+  # this app's, and a key it does not recognise is not an error here.
+  KEY_PATTERN = %r{\Aproject/(?<project_id>[0-9a-fA-F-]{36})/doc\z}
+
+  def self.project_id_from(key)
+    KEY_PATTERN.match(key.to_s)&.[](:project_id)
   end
 
   # Everything a joining client's handshake needs: the snapshot with the

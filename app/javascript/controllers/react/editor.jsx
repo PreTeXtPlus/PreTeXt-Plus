@@ -9,9 +9,7 @@ import {
 } from "@tanstack/react-query";
 import {
   Editors,
-  clearDeletions,
   configureSpellCheck,
-  docToState,
   DEFAULT_LANGUAGE,
 } from "@pretextbook/web-editor";
 import { buildImportEngines } from "./importEngines";
@@ -84,6 +82,16 @@ import { buildAccountEntries } from "./accountEntries";
 // A fresh `projectAssets` array identity is an authoritative reset of the
 // editor's pool, so we only ever hand it the query's current data, never a
 // stale-but-new-identity array.
+//
+// ALL OF THE ABOVE IS THE SOLO CASE. When the project has collaborators, the
+// buffer moves into a shared Yjs doc the server holds and records every
+// keystroke of, and the server writes that doc out into the same rows itself
+// (ProjectDocProjection). There is then no bulk save, no dirty check and no
+// autosave here: the immediate per-action PATCHes remain as the fast path for
+// creates and destroys, but nothing in this module is the thing that makes an
+// edit durable. The one request left is `save(true)` asking the server to make
+// the rows agree with the doc *now*, because the caller is about to read or
+// copy them.
 // ---------------------------------------------------------------------------
 
 const AUTOSAVE_MS = 10000;
@@ -249,54 +257,6 @@ function editorStateToCollabSeed(state) {
   };
 }
 
-// In collab mode the shared doc — not this client's working copy — is the
-// authoritative document, so save payloads are derived from it: it already
-// contains every peer's edits, which is exactly what lets a single "leader"
-// client autosave on behalf of the whole session. Shaped like EditorState so
-// editorStateToRailsPayload/persistableShape work unchanged; divisions sorted
-// by id so dirty-check comparisons don't depend on Y.Map iteration order.
-/**
- * @param {import("yjs").Doc} doc
- * @param {EditorState} base - The initially loaded state (supplies the fields
- *   that don't live in the doc: commonDocinfo, projectType, root identity).
- * @returns {EditorState}
- */
-function collabEditorState(doc, base) {
-  const shared = docToState(doc);
-  const divisions = shared.divisions
-    .slice()
-    .sort((a, b) => (a.id < b.id ? -1 : 1))
-    .map((d) => ({
-      id: d.id,
-      xmlId: d.xmlId,
-      source: d.source,
-      sourceFormat: d.sourceFormat,
-      title: d.title,
-      type: d.type,
-    }));
-  // Re-find the root by database id — stable across xml:id renames.
-  const root = divisions.find((d) => d.id === base.rootDivisionUuid);
-  return {
-    title: shared.title,
-    docinfo: shared.docinfo,
-    commonDocinfo: base.commonDocinfo,
-    useCommonDocinfo: shared.useCommonDocinfo ?? base.useCommonDocinfo,
-    language: shared.language ?? base.language,
-    projectType: base.projectType,
-    divisions,
-    // The doc's assets are the session's truth about which assets exist; the
-    // save only needs them to resolve <plus:* ref="..."/> placeholders in the
-    // assembled source, since asset rows are written by whoever uploaded them.
-    projectAssets: shared.assets.slice().sort((a, b) => (a.id < b.id ? -1 : 1)),
-    // Same reasoning as `projectAssets`, for snippets.
-    projectSnippets: shared.snippets.slice().sort((a, b) => (a.id < b.id ? -1 : 1)),
-    // Tombstones, sorted for a stable dirty-check comparison.
-    deletes: shared.deleted.slice().sort((a, b) => (a.id < b.id ? -1 : 1)),
-    rootDivisionId: root?.xmlId ?? base.rootDivisionId,
-    rootDivisionUuid: base.rootDivisionUuid,
-  };
-}
-
 // --- The editor app --------------------------------------------------------
 
 /**
@@ -334,6 +294,10 @@ function EditorApp({ config }) {
   const feedbackProjectUrl = `${window.location.origin}${projectUrl}`;
   const previewUrl = `/projects/${projectId}/preview`;
   const copyUrl = `/projects/${projectId}/copy_conversion`;
+  // Asks the server to write the collaborative doc out into the project's rows
+  // and wait for it. Only collab mode uses it, and only on an explicit save --
+  // see `save`.
+  const flushDocUrl = `/projects/${projectId}/doc/flush`;
   // Feedback is a collection route, not a member one: the action doesn't load a
   // project, it just mails what the form sends (the project is identified by the
   // `project_url` in the body).
@@ -420,16 +384,21 @@ function EditorApp({ config }) {
   }
 
   // ----- Real-time collaboration ------------------------------------------
-  // When the project has collaborators, the buffer sync moves to a shared
-  // Yjs doc carried over ActionCable (YCableProvider); this PATCH-based module
-  // remains the *persistence* layer, with the save payload derived from the
-  // doc (see collabEditorState) and autosave gated to the session leader.
-  // Solo projects skip all of this — providerRef stays null and behavior is
-  // exactly as before.
+  // When the project has collaborators, the buffer sync moves to a shared Yjs
+  // doc carried over ActionCable (YCableProvider) — and so does persistence.
+  // The server holds that doc and writes it out to the project's rows itself
+  // (ProjectDocProjection), so this module stops being the persistence layer
+  // for a collaborative session: there is nothing here to save that the server
+  // does not already have, durably, from the moment each keystroke reached it.
+  //
+  // What that removed: the doc-derived save payload, the dirty-check baseline
+  // it was compared against, and the leader election that decided which of N
+  // tabs got to write. The last of those is what made an idle collaborator's
+  // window able to overwrite source a build had just consumed.
+  //
+  // Solo projects are untouched — providerRef stays null, and every path below
+  // takes the same branch it always did.
   const providerRef = useRef(null);
-  // The doc-derived state as of the last successful save (or session join) —
-  // the collab-mode dirty-check baseline, mirroring serverSnapshot.
-  const collabServerSnapshot = useRef(null);
   const [collabStatus, setCollabStatus] = useState("off"); // off|connecting|ready|error
   // Whether live relay is currently flowing. Separate from collabStatus: the
   // session is joined and fully usable, it just isn't hearing peers in real time
@@ -452,13 +421,7 @@ function EditorApp({ config }) {
     setCollabStatus("connecting");
     provider
       .connect(() => editorStateToCollabSeed(data))
-      .then(() => {
-        // Baseline for the dirty check comes from the doc itself: it may
-        // already be ahead of what we loaded (peers kept editing), and those
-        // differences belong to the next autosave, not to a false "clean".
-        collabServerSnapshot.current = collabEditorState(provider.doc, data);
-        setCollabStatus("ready");
-      })
+      .then(() => setCollabStatus("ready"))
       .catch((error) => {
         console.error("Failed to join collaborative session:", error);
         setCollabStatus("error");
@@ -494,15 +457,12 @@ function EditorApp({ config }) {
     },
   });
 
+  // Whether this client is holding edits the server does not have. In a
+  // collaborative session it never is: every keystroke went into the shared doc
+  // and the server recorded it before acking. "Unsaved" is a property of a
+  // working copy, and in that mode there isn't one to be behind.
   const isDirty = useCallback(() => {
-    // Collab mode: dirtiness is a property of the shared doc vs. what was last
-    // persisted from it, not of this client's own working copy.
-    const provider = providerRef.current;
-    if (provider) {
-      if (!collabServerSnapshot.current || !initial.current) return false;
-      const docState = collabEditorState(provider.doc, initial.current);
-      return persistableShape(docState) !== persistableShape(collabServerSnapshot.current);
-    }
+    if (providerRef.current) return false;
     if (!working.current || !serverSnapshot.current) return false;
     return persistableShape(working.current) !== persistableShape(serverSnapshot.current);
   }, []);
@@ -512,35 +472,27 @@ function EditorApp({ config }) {
   // front so edits made *during* the in-flight save aren't mistakenly marked
   // saved.
   //
-  // In collab mode the payload is derived from the shared doc (which holds
-  // every peer's edits), and soft (auto)saves run only on the session leader —
-  // one writer for the whole session instead of N clients issuing near-
-  // identical PATCHes. Autosave failures are logged but not alerted: with the
-  // doc as the source of truth a transient failure is retried on the next
-  // tick, and racing a just-deleted division is an expected (self-healing)
-  // case. Explicit saves still alert.
+  // In collab mode there is nothing here to persist: the shared doc is already
+  // on the server, durably, and the server writes it out to the project's rows
+  // itself. What an explicit save means there is "make those rows agree with
+  // the doc before I look at them" -- which is the flush endpoint, and which
+  // matters because the two callers of `save(true)` are about to read the rows
+  // (navigate to the project page) or copy them (copy_conversion). A soft save
+  // asks for nothing: ProjectDocProjectionJob is already doing it on a timer.
   const save = useCallback(
     async (hard = false) => {
-      const provider = providerRef.current;
-      if (provider) {
-        if (!initial.current || !collabServerSnapshot.current) return false;
-        if (!hard && !provider.isLeader()) return true;
-        if (!hard && !isDirty()) return true;
-        const snapshot = collabEditorState(provider.doc, initial.current);
+      if (providerRef.current) {
+        if (!hard) return true;
         try {
-          await saveMutation.mutateAsync({
-            state: snapshot,
-            deletes: snapshot.deletes,
+          const res = await fetch(flushDocUrl, {
+            method: "POST",
+            headers: { Accept: "application/json", "X-CSRF-Token": csrfToken },
           });
-          // Rails has now dropped those rows, so the tombstones have done their
-          // job; clearing them keeps the doc from accumulating one per removal
-          // for the life of the session.
-          clearDeletions(provider.doc, snapshot.deletes);
-          collabServerSnapshot.current = { ...snapshot, deletes: [] };
+          if (!res.ok) throw new Error(`Flush failed: ${res.status}`);
           return true;
         } catch (error) {
           console.error("Error saving:", error);
-          if (hard) alert("An error occurred while saving.");
+          alert("An error occurred while saving.");
           return false;
         }
       }
@@ -558,10 +510,16 @@ function EditorApp({ config }) {
         return false;
       }
     },
-    [isDirty, saveMutation],
+    [isDirty, saveMutation, flushDocUrl, csrfToken],
   );
 
   // ----- Autosave: fire `save` every AUTOSAVE_MS, only when dirty ----------
+  // Effectively solo-only: a soft save returns immediately in a collaborative
+  // session, because the server already has every keystroke and is writing the
+  // rows itself. The timer is left running rather than gated on the mode so
+  // there is one path through `save` and one place that decides what a soft
+  // save means.
+  //
   // We hold `save` in a ref so the interval (set up once) always calls the
   // latest closure without resetting the timer.
   const saveRef = useRef(save);
@@ -720,12 +678,13 @@ function EditorApp({ config }) {
     [patchProjectJson],
   );
 
-  // Division removal persists immediately (like every asset mutation), not on
-  // the next bulk save: in collab mode the bulk autosave may run on a *different*
-  // client (the leader), whose doc-derived payload simply omits the removed
-  // division. What carries the removal *across* clients is the shared doc's
-  // tombstone, which the leader replays as a _destroy until it sticks — so this
-  // immediate request is the fast path, not the only one.
+  // Division removal persists immediately (like every asset mutation), rather
+  // than being left to whatever writes the rows next: in collab mode that is
+  // the server's own projection, and a projection derives the rows from the
+  // document rather than from this client. What carries the removal there is
+  // the shared doc's tombstone, which every projection replays as a _destroy
+  // until it sticks — so this immediate request is the fast path, not the only
+  // one.
   //
   // The destroy is sent unconditionally now. Rails drops a _destroy naming a row
   // it doesn't have (Project#tolerate_client_minted_ids), so a division the
@@ -746,9 +705,10 @@ function EditorApp({ config }) {
       patchProjectJson({ divisions_attributes: [ { id: removed.id, _destroy: true } ] })
         .catch((error) => {
           console.error("Error removing division:", error);
-          // In a collaborative session the doc's tombstone means the leader will
-          // retry this, so only a solo editor is left with nothing to fall back
-          // on and needs telling.
+          // In a collaborative session the doc's tombstone outlives this
+          // request, and the next projection -- scheduled, or on the next save
+          // or build -- re-sends the destroy. Only a solo editor is left with
+          // nothing to fall back on and needs telling.
           if (!providerRef.current) {
             alert("An error occurred while removing the section.");
           }
@@ -935,9 +895,9 @@ function EditorApp({ config }) {
   // fire-and-forget persistence, then a reconcile via invalidate.
   //
   // In a collaborative session the editor has also written a tombstone into the
-  // shared doc, so this request failing is recoverable: the session leader
-  // re-sends the _destroy on its next save, and peers have already dropped the
-  // asset from their pools regardless.
+  // shared doc, so this request failing is recoverable: the next projection
+  // re-sends the _destroy, and peers have already dropped the asset from their
+  // pools regardless.
   //
   // The promise is returned so Replace can await it: the replacement takes over
   // this asset's ref, and Asset validates ref uniqueness within a project, so

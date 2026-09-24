@@ -320,23 +320,6 @@ export class YCableProvider {
     this.provider?.session?.onConnect();
   }
 
-  /**
-   * True when this client should run session-wide chores (the autosave that
-   * writes the doc out as project source).
-   *
-   * The lowest awareness clientID, which is arbitrary but agreed on by every
-   * tab. Leaving this here is temporary: the whole idea of electing a browser
-   * to persist on the session's behalf goes away once the server projects the
-   * document into the project's divisions itself, which is the next change.
-   * @returns {boolean}
-   */
-  isLeader() {
-    if (!this.awareness) return false;
-    const ids = [...this.awareness.getStates().keys()];
-    if (ids.length === 0) return true;
-    return Math.min(...ids) === this.awareness.clientID;
-  }
-
   destroy() {
     this.destroyed = true;
     document.removeEventListener("visibilitychange", this.onVisibilityChange ?? (() => {}));
