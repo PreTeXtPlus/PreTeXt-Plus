@@ -156,10 +156,11 @@ const MenuDropdown = ({
   };
 
   return (
-    // Below 600px, drop `relative` so an open panel's `absolute` positioning
-    // falls through to the menubar row itself (see CodeEditorMenu.tsx),
-    // anchoring it to the row's left edge rather than this specific button's.
-    <div className="relative inline-flex max-[600px]:static" ref={containerRef}>
+    // Below the `sm` breakpoint (40rem), drop `relative` so an open panel's
+    // `absolute` positioning falls through to the menubar row itself (see
+    // CodeEditorMenu.tsx), anchoring it to the row's left edge rather than
+    // this specific button's.
+    <div className="relative inline-flex max-sm:static" ref={containerRef}>
       <button
         ref={buttonRef}
         type="button"
@@ -205,7 +206,7 @@ const MenuDropdown = ({
             // so the full-width panel doesn't overflow the viewport.
             align === "right"
               ? "right-0"
-              : "left-0 max-[600px]:left-0.5 max-[600px]:w-[calc(100%-2px)]",
+              : "left-0 max-sm:left-0.5 max-sm:w-[calc(100%-2px)]",
           )}
           onKeyDown={handlePanelKeyDown}
         >

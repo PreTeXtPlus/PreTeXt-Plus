@@ -101,18 +101,19 @@ export interface TopBarProps {
 /**
  * Below this width, `TopBar` folds the Account menu into File (see
  * `accountMenuEntries`) and reflows into two rows — see the grid classes in
- * the JSX below, which use the same value via Tailwind's `max-[600px]:`.
+ * the JSX below, which use the same breakpoint via Tailwind's `max-sm:`
+ * (`@media (width < 40rem)`).
  */
-const COMPACT_TOPBAR_MAX_WIDTH = 600;
+const COMPACT_TOPBAR_QUERY = "(width < 40rem)";
 
 /**
- * The `(max-width: …)` query backing `isCompact`, or `undefined` where
+ * The media query backing `isCompact`, or `undefined` where
  * `matchMedia` doesn't exist (e.g. this package's jsdom-based tests, unless a
  * test stubs it) — callers treat that as "not compact".
  */
 const compactMediaQuery = (): MediaQueryList | undefined =>
   typeof window !== "undefined" && typeof window.matchMedia === "function"
-    ? window.matchMedia(`(max-width: ${COMPACT_TOPBAR_MAX_WIDTH}px)`)
+    ? window.matchMedia(COMPACT_TOPBAR_QUERY)
     : undefined;
 
 /**
@@ -193,8 +194,8 @@ const TopBar = (props: TopBarProps) => {
   ];
 
   return (
-    <div className="grid grid-cols-[auto_1fr_auto] min-h-16 bg-white border-b border-gray-300 [grid-template-areas:'logo_title_account'_'logo_menu_account'] max-[600px]:[grid-template-areas:'logo_title_title'_'menu_menu_menu']">
-      <div className="flex items-center pr-1 pl-4 max-[600px]:pl-1 [grid-area:logo]">
+    <div className="grid grid-cols-[auto_1fr_auto] min-h-16 bg-white border-b border-gray-300 [grid-template-areas:'logo_title_account'_'logo_menu_account'] max-sm:[grid-template-areas:'logo_title_title'_'menu_menu_menu']">
+      <div className="flex items-center pr-1 pl-4 max-sm:pl-1 [grid-area:logo]">
         {props.logo ?? <span aria-hidden>✏️</span>}
       </div>
       <div className="flex items-center sm:pt-2 min-w-0 [grid-area:title]">
