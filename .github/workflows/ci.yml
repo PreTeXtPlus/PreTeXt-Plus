@@ -68,6 +68,9 @@ jobs:
       - name: Test
         run: npm run test --workspace=packages/web-editor
 
+      - name: Test app/javascript
+        run: npm test
+
   lint:
     runs-on: ubuntu-latest
     env:
