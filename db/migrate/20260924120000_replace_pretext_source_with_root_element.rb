@@ -28,11 +28,9 @@ class ReplacePretextSourceWithRootElement < ActiveRecord::Migration[8.1]
       suppress_messages { backfill }
     end
 
-    remove_column :projects, :pretext_source
   end
 
   def down
-    add_column :projects, :pretext_source, :text
     remove_column :projects, :root_element
   end
 
