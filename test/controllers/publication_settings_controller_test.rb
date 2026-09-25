@@ -274,6 +274,21 @@ class PublicationSettingsControllerTest < ActionDispatch::IntegrationTest
     assert_select "#publication-panel-epub", /upload an image/i
   end
 
+  test "the logo picker offers a subscriber the project's own images" do
+    @user.update!(admin: true)
+    get edit_project_publication_settings_url(@project), headers: modal_headers
+
+    assert_select "select[name='publication_settings[brandlogo]'] " \
+                  "option[value=?]", "#{assets(:image_one).ref}.png"
+  end
+
+  test "the logo picker is replaced by a subscriber note for everyone else" do
+    get edit_project_publication_settings_url(@project), headers: modal_headers
+
+    assert_select "select[name='publication_settings[brandlogo]']", false
+    assert_select "#publication-panel-html", /available to subscribers/i
+  end
+
   # Panels are hidden, not unmounted, so a change on one tab and a change on another save
   # together. Anything else silently drops half of what an author just did.
   test "fields on every tab submit together" do

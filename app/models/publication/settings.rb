@@ -39,8 +39,12 @@ module Publication
       end.compact
     end
 
+    # A subscriber-only option is dropped here, not refused on save, so that a lapsed
+    # subscription stops reaching the build without discarding what the author chose --
+    # subscribing again brings it back.
     def effective
       @effective ||= chain.reduce({}) { |merged, level| merged.merge(level.publication_settings) }
+                          .reject { |key, _| !subscriber? && Catalog.find(key)&.subscriber_only? }
     end
 
     # What this level itself sets, if anything -- what the form's select should show as
@@ -131,13 +135,14 @@ module Publication
       choices_for(option).any?
     end
 
-    # Why an option is showing with no control under it, or nil when it has one. Only the
-    # EPUB cover reaches this: the tab earns its place by telling an author the setting
-    # exists, and there is nothing to pick until the project has an image to pick.
+    # Why an option is showing with no control under it, or nil when it has one. The tab
+    # earns its place by telling an author the setting exists: a subscriber-only option
+    # says who can use it, and there is nothing to pick until the project has an image.
     def unavailable_note(option)
+      return "Subscribe to customize the document's logo." if option.subscriber_only? && !subscriber?
       return nil unless option.project_scoped? && choices_for(option).empty?
 
-      "Upload an image to this project, and you can choose it here as the cover."
+      "Add an asset to this project, and you can choose it here."
     end
 
     # The label an author reads for an inherited value: the option's own wording for it
@@ -287,6 +292,15 @@ module Publication
         when Target then owner.project
         when Project then owner
         end
+      end
+
+      # Keyed to the project's owner, like Project#collaborator_limit: the build is theirs,
+      # whoever opened the modal. False at the account level, which offers no
+      # subscriber-only option anyway.
+      def subscriber?
+        return @subscriber if defined?(@subscriber)
+
+        @subscriber = project&.user&.has_subscriber_benefits? || false
       end
 
     def level_name

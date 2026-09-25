@@ -244,9 +244,9 @@ module Publication
                                    guidance: "one line of text, without < or >, of at " \
                                              "most 100 characters")
 
-    # An option whose list is the project's own uploaded images -- the EPUB cover, which
-    # PreTeXt resolves against the external directory, exactly where ProjectArchiveBuilder
-    # writes a project's assets. Publication::Settings builds the list, since the catalog
+    # An option whose list is the project's own uploaded images -- the EPUB cover and the
+    # site's brand logo, both of which PreTeXt resolves against the external directory,
+    # exactly where ProjectArchiveBuilder writes a project's assets. Publication::Settings builds the list, since the catalog
     # has no project to ask.
     PROJECT_IMAGES = :project_images
 
@@ -278,17 +278,25 @@ module Publication
     #                where that is a third thing rather than the absence of a setting. Its
     #                presence is what puts a checkbox beside the field; see EMPTY_MARKER,
     #                and empty_key for the box's own name in the form.
+    # `subscriber_only` -- honored only when the project's owner has subscriber benefits.
+    #                Publication::Settings drops it from what a build is handed otherwise,
+    #                so a lapsed subscription falls back to PreTeXt.Plus's own choice
+    #                without losing what was set.
     Option = Data.define(:key, :label, :help, :element, :attribute, :family, :choices,
                          :default_label, :group, :applied_default, :hint, :empty_label,
-                         :choice_groups) do
+                         :choice_groups, :subscriber_only) do
       def self.build(key, label:, element:, attribute:, family:, choices:, help: nil,
                      default_label: nil, group: nil, applied_default: nil, hint: nil,
-                     empty_label: nil, choice_groups: nil)
+                     empty_label: nil, choice_groups: nil, subscriber_only: false)
         new(key: key.to_s, label: label, help: help, element: element.map(&:to_s).freeze,
             attribute: attribute.to_s, family: family.to_s, choices: choices.freeze,
             default_label: default_label, group: group&.to_s,
             applied_default: applied_default, hint: hint, empty_label: empty_label,
-            choice_groups: choice_groups&.freeze)
+            choice_groups: choice_groups&.freeze, subscriber_only: subscriber_only)
+      end
+
+      def subscriber_only?
+        subscriber_only
       end
 
       # Whether this option can be set to "write the attribute empty" at all -- which is
@@ -947,6 +955,17 @@ module Publication
         help: "Whether readers can switch the site to a dark color scheme.",
         element: %w[ html css ], attribute: "provide-dark-mode", family: :html,
         choices: DARK_MODE),
+
+      # html/brandlogo/@source, resolved against the external directory like the EPUB
+      # cover. PublicationFileBuilder::BASE already writes icon.svg here, and a chosen
+      # image merges over it -- so leaving this unset, or not being a subscriber, keeps
+      # the PreTeXt.Plus logo.
+      Option.build(:brandlogo,
+        label: "Logo",
+        help: "The image at the top of every page of your site. Leave it unset to use " \
+              "the PreTeXt.Plus logo.",
+        element: %w[ html brandlogo ], attribute: "source", family: :html,
+        choices: PROJECT_IMAGES, subscriber_only: true),
 
       Option.build(:chunk_level,
         label: "Webpage split level",

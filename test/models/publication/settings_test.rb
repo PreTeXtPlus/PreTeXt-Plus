@@ -181,7 +181,7 @@ class Publication::SettingsTest < ActiveSupport::TestCase
 
     html = settings.sections(families["html"])
 
-    assert_equal %w[ theme dark_mode chunk_level embed_button knowls ],
+    assert_equal %w[ theme dark_mode brandlogo chunk_level embed_button knowls ],
                  html.map { |section| section.group? ? section.group.key : section.option.key }
     assert_equal 18, html.last.options.size
 
@@ -517,6 +517,39 @@ class Publication::SettingsTest < ActiveSupport::TestCase
     assert_equal "gone.png", @project.reload.publication_settings["epub_cover"]
     assert_equal "gone.png",
                  Publication::Settings.new(@project).label_for(Publication::Catalog.find("epub_cover"), "gone.png")
+  end
+
+  # ---- the brand logo, a subscriber-only pick among the project's images ----
+
+  test "a subscriber's chosen logo reaches the publication file" do
+    @user.update!(admin: true)
+    @project.update!(publication_settings: { "brandlogo" => "logo.png" })
+
+    assert_equal "logo.png", Publication::Settings.effective_for(@target)["brandlogo"]
+    assert_match(/<brandlogo source="logo.png"\/>/, ProjectArchiveBuilder.new(@project).publication_ptx(@target))
+  end
+
+  # Dropped rather than refused, so a lapsed subscription keeps what was chosen and the
+  # build falls back to the built-in icon.svg in the meantime.
+  test "a logo set on a project whose owner is not a subscriber is kept but not built" do
+    @project.update!(publication_settings: { "brandlogo" => "logo.png" })
+
+    assert_equal "logo.png", @project.reload.publication_settings["brandlogo"]
+    assert_not_includes Publication::Settings.effective_for(@target).keys, "brandlogo"
+    assert_match(/<brandlogo source="icon.svg"\/>/, ProjectArchiveBuilder.new(@project).publication_ptx(@target))
+  end
+
+  test "the logo picker tells a non-subscriber it is for subscribers" do
+    option = Publication::Catalog.find("brandlogo")
+
+    assert_match(/subscribers/i, Publication::Settings.new(@project).unavailable_note(option))
+
+    @project.user.update!(admin: true)
+    assert_nil Publication::Settings.new(@project).unavailable_note(option)
+  end
+
+  test "the account level does not offer a logo" do
+    assert_not_includes Publication::Settings.new(@user).options.map(&:key), "brandlogo"
   end
 
   # An option's tab and the outputs it affects are the same declaration, so they cannot
