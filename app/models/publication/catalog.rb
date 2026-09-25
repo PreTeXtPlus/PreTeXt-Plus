@@ -244,6 +244,18 @@ module Publication
                                    guidance: "one line of text, without < or >, of at " \
                                              "most 100 characters")
 
+    # A web address a reader is sent to. It lands in an href on every page of a published
+    # site, so the pattern admits http(s) and nothing else -- no javascript: or data: --
+    # and nothing that could close the attribute it is written into. An address typed
+    # without a scheme ("example.edu") is plainly meant as https; one with any other
+    # scheme is left as typed, to be refused.
+    LINK_URL = FreeText.build(
+      pattern: %r{\Ahttps?://[^\s<>"'\\]+\z},
+      max_length: 300,
+      guidance: "a web address starting with https://",
+      normalizer: ->(value) { value.match?(/\A[a-z][a-z0-9+.-]*:/i) ? value : "https://#{value}" }
+    )
+
     # An option whose list is the project's own uploaded images -- the EPUB cover and the
     # site's brand logo, both of which PreTeXt resolves against the external directory,
     # exactly where ProjectArchiveBuilder writes a project's assets. Publication::Settings builds the list, since the catalog
@@ -966,6 +978,14 @@ module Publication
               "the PreTeXt.Plus logo.",
         element: %w[ html brandlogo ], attribute: "source", family: :html,
         choices: PROJECT_IMAGES, subscriber_only: true),
+
+      # html/brandlogo/@url, which PreTeXt turns the logo into a link to. BASE links it to
+      # PreTeXt.Plus; this merges over that.
+      Option.build(:brandlogo_url,
+        label: "Logo link",
+        help: "Customize where clicking the logo takes a reader.",
+        element: %w[ html brandlogo ], attribute: "url", family: :html,
+        choices: LINK_URL, hint: "https://example.edu", subscriber_only: true),
 
       Option.build(:chunk_level,
         label: "Webpage split level",

@@ -181,7 +181,7 @@ class Publication::SettingsTest < ActiveSupport::TestCase
 
     html = settings.sections(families["html"])
 
-    assert_equal %w[ theme dark_mode brandlogo chunk_level embed_button knowls ],
+    assert_equal %w[ theme dark_mode brandlogo brandlogo_url chunk_level embed_button knowls ],
                  html.map { |section| section.group? ? section.group.key : section.option.key }
     assert_equal 18, html.last.options.size
 
@@ -526,7 +526,7 @@ class Publication::SettingsTest < ActiveSupport::TestCase
     @project.update!(publication_settings: { "brandlogo" => "logo.png" })
 
     assert_equal "logo.png", Publication::Settings.effective_for(@target)["brandlogo"]
-    assert_match(/<brandlogo source="logo.png"\/>/, ProjectArchiveBuilder.new(@project).publication_ptx(@target))
+    assert_match(/<brandlogo source="logo.png" url="https:\/\/pretext.plus"\/>/, ProjectArchiveBuilder.new(@project).publication_ptx(@target))
   end
 
   # Dropped rather than refused, so a lapsed subscription keeps what was chosen and the
@@ -536,7 +536,7 @@ class Publication::SettingsTest < ActiveSupport::TestCase
 
     assert_equal "logo.png", @project.reload.publication_settings["brandlogo"]
     assert_not_includes Publication::Settings.effective_for(@target).keys, "brandlogo"
-    assert_match(/<brandlogo source="pretext-plus\/icon.svg"\/>/, ProjectArchiveBuilder.new(@project).publication_ptx(@target))
+    assert_match(%r{<brandlogo source="pretext-plus/icon.svg" url="https://pretext.plus"/>}, ProjectArchiveBuilder.new(@project).publication_ptx(@target))
   end
 
   test "the logo picker tells a non-subscriber it is for subscribers" do
@@ -550,6 +550,43 @@ class Publication::SettingsTest < ActiveSupport::TestCase
 
   test "the account level does not offer a logo" do
     assert_not_includes Publication::Settings.new(@user).options.map(&:key), "brandlogo"
+  end
+
+  test "a subscriber's logo link reaches the publication file" do
+    @user.update!(admin: true)
+    @project.update!(publication_settings: { "brandlogo_url" => "https://example.edu" })
+
+    assert_match(%r{<brandlogo source="pretext-plus/icon.svg" url="https://example.edu"/>},
+                 ProjectArchiveBuilder.new(@project).publication_ptx(@target))
+  end
+
+  test "a logo link set on a project whose owner is not a subscriber is kept but not built" do
+    @project.update!(publication_settings: { "brandlogo_url" => "https://example.edu" })
+
+    assert_equal "https://example.edu", @project.reload.publication_settings["brandlogo_url"]
+    assert_match(%r{url="https://pretext.plus"}, ProjectArchiveBuilder.new(@project).publication_ptx(@target))
+  end
+
+  test "a logo link is stored as a web address and refused as anything else" do
+    option = Publication::Catalog.find("brandlogo_url")
+
+    assert_equal "https://example.edu", option.normalize("example.edu")
+    assert option.permits?(option.normalize("http://example.edu/book?x=1"))
+    assert_not option.permits?(option.normalize("javascript:alert(1)"))
+    assert_not option.permits?(option.normalize("ftp://example.edu"))
+    assert_not option.permits?(option.normalize('https://example.edu/"onmouseover'))
+  end
+
+  # A link, unlike an image, means the same thing in every project, so a subscriber can
+  # set one as their account default.
+  test "the account level offers a subscriber the logo link and tells anyone else to subscribe" do
+    option = Publication::Catalog.find("brandlogo_url")
+
+    assert_includes Publication::Settings.new(@user).options.map(&:key), "brandlogo_url"
+    assert_match(/subscribe/i, Publication::Settings.new(@user).unavailable_note(option))
+
+    @user.update!(admin: true)
+    assert_nil Publication::Settings.new(@user).unavailable_note(option)
   end
 
   # An option's tab and the outputs it affects are the same declaration, so they cannot

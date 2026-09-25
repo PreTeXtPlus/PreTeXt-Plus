@@ -139,7 +139,7 @@ module Publication
     # earns its place by telling an author the setting exists: a subscriber-only option
     # says who can use it, and there is nothing to pick until the project has an image.
     def unavailable_note(option)
-      return "Subscribe to customize the document's logo." if option.subscriber_only? && !subscriber?
+      return "Subscribe to customize this setting." if option.subscriber_only? && !subscriber?
       return nil unless option.project_scoped? && choices_for(option).empty?
 
       "Add an asset to this project, and you can choose it here."
@@ -294,13 +294,13 @@ module Publication
         end
       end
 
-      # Keyed to the project's owner, like Project#collaborator_limit: the build is theirs,
-      # whoever opened the modal. False at the account level, which offers no
-      # subscriber-only option anyway.
+      # Keyed to the account at the top of the chain -- the project's owner, like
+      # Project#collaborator_limit, whoever opened the modal; or the account itself, whose
+      # defaults a subscriber-only option like the logo link can be set among.
       def subscriber?
         return @subscriber if defined?(@subscriber)
 
-        @subscriber = project&.user&.has_subscriber_benefits? || false
+        @subscriber = chain.first&.has_subscriber_benefits? || false
       end
 
     def level_name

@@ -282,10 +282,18 @@ class PublicationSettingsControllerTest < ActionDispatch::IntegrationTest
                   "option[value=?]", "#{assets(:image_one).ref}.png"
   end
 
+  test "a subscriber can type a link for the logo" do
+    @user.update!(admin: true)
+    get edit_project_publication_settings_url(@project), headers: modal_headers
+
+    assert_select "input[type=text][name='publication_settings[brandlogo_url]']"
+  end
+
   test "the logo picker is replaced by a subscriber note for everyone else" do
     get edit_project_publication_settings_url(@project), headers: modal_headers
 
     assert_select "select[name='publication_settings[brandlogo]']", false
+    assert_select "input[name='publication_settings[brandlogo_url]']", false
     assert_select "#publication-panel-html", /subscribe to customize/i
   end
 

@@ -13,7 +13,7 @@ class PublicationFileBuilderTest < ActiveSupport::TestCase
     [ {}, { "theme" => "salem" } ].each do |settings|
       assert_match(/<directories external="external" generated="generated"\/>/, xml(settings))
       assert_match(/<resources host="cdn"\/>/, xml(settings))
-      assert_match(%r{<brandlogo source="pretext-plus/icon.svg"/>}, xml(settings))
+      assert_match(%r{<brandlogo source="pretext-plus/icon.svg" url="https://pretext.plus"/>}, xml(settings))
     end
   end
 
@@ -74,7 +74,7 @@ class PublicationFileBuilderTest < ActiveSupport::TestCase
 
     assert_equal 1, result.scan("<html ").length
     assert_match(
-      %r{<html [^>]*>\s*<resources host="cdn"/>\s*<brandlogo source="pretext-plus/icon.svg"/>\s*<css theme="salem"/>\s*</html>},
+      %r{<html [^>]*>\s*<resources host="cdn"/>\s*<brandlogo source="pretext-plus/icon.svg" url="https://pretext.plus"/>\s*<css theme="salem"/>\s*</html>},
       result
     )
   end
@@ -96,7 +96,7 @@ class PublicationFileBuilderTest < ActiveSupport::TestCase
         </source>
         <html embed-button="yes">
           <resources host="cdn"/>
-          <brandlogo source="pretext-plus/icon.svg"/>
+          <brandlogo source="pretext-plus/icon.svg" url="https://pretext.plus"/>
         </html>
       </publication>
     XML

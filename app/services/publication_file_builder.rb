@@ -17,8 +17,9 @@ class PublicationFileBuilder
   # html/brandlogo: every build gets the PreTeXt.Plus logo, which ProjectArchiveBuilder
   # writes to DEFAULT_BRANDLOGO. It sits in a directory of its own because assets are
   # written as bare "<ref>.<ext>" beside it, and a ref cannot hold a "/" -- so no upload,
-  # not even one called "icon", can stand in for it. A subscriber's chosen logo (the
-  # brandlogo option) merges over this.
+  # not even one called "icon", can stand in for it. The logo links to
+  # DEFAULT_BRANDLOGO_URL. A subscriber's chosen logo and link (the brandlogo and
+  # brandlogo_url options) merge over both.
   #
   # Author options merge *onto* this, so an option may extend one of these elements (a
   # theme lands on html/css, alongside html/resources) but the attributes here are not
@@ -28,11 +29,12 @@ class PublicationFileBuilder
   # every file: those *are* the catalog's to offer, and an author who turns the embed
   # button off overrides one. Anything an author may change belongs there, not here.
   DEFAULT_BRANDLOGO = "pretext-plus/icon.svg".freeze
+  DEFAULT_BRANDLOGO_URL = "https://pretext.plus".freeze
 
   BASE = {
     %w[ source directories ] => { "external" => "external", "generated" => "generated" },
     %w[ html resources ] => { "host" => "cdn" },
-    %w[ html brandlogo ] => { "source" => DEFAULT_BRANDLOGO }
+    %w[ html brandlogo ] => { "source" => DEFAULT_BRANDLOGO, "url" => DEFAULT_BRANDLOGO_URL }
   }.freeze
 
   # `settings` is the merged hash from Publication::Settings -- our own keys, not PreTeXt's.
