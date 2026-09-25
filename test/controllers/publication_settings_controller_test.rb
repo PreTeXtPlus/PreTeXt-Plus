@@ -271,7 +271,7 @@ class PublicationSettingsControllerTest < ActionDispatch::IntegrationTest
 
     assert_select "#publication-tab-epub"
     assert_select "select[name='publication_settings[epub_cover]']", false
-    assert_select "#publication-panel-epub", /upload an image/i
+    assert_select "#publication-panel-epub", /add an asset/i
   end
 
   test "the logo picker offers a subscriber the project's own images" do
@@ -286,7 +286,7 @@ class PublicationSettingsControllerTest < ActionDispatch::IntegrationTest
     get edit_project_publication_settings_url(@project), headers: modal_headers
 
     assert_select "select[name='publication_settings[brandlogo]']", false
-    assert_select "#publication-panel-html", /available to subscribers/i
+    assert_select "#publication-panel-html", /subscribe to customize/i
   end
 
   # Panels are hidden, not unmounted, so a change on one tab and a change on another save

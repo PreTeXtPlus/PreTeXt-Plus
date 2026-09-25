@@ -489,7 +489,7 @@ class Publication::SettingsTest < ActiveSupport::TestCase
 
     assert settings.offers?(option)
     assert_empty settings.choices_for(option)
-    assert_match(/upload an image/i, settings.unavailable_note(option))
+    assert_match(/add an asset/i, settings.unavailable_note(option))
   end
 
   # A cover is a particular image in a particular project, so there is nothing for an
@@ -542,7 +542,7 @@ class Publication::SettingsTest < ActiveSupport::TestCase
   test "the logo picker tells a non-subscriber it is for subscribers" do
     option = Publication::Catalog.find("brandlogo")
 
-    assert_match(/subscribers/i, Publication::Settings.new(@project).unavailable_note(option))
+    assert_match(/subscribe/i, Publication::Settings.new(@project).unavailable_note(option))
 
     @project.user.update!(admin: true)
     assert_nil Publication::Settings.new(@project).unavailable_note(option)
