@@ -295,6 +295,8 @@ class PublicationSettingsControllerTest < ActionDispatch::IntegrationTest
     assert_select "select[name='publication_settings[brandlogo]']", false
     assert_select "input[name='publication_settings[brandlogo_url]']", false
     assert_select "#publication-panel-html", /subscribe to customize/i
+    assert_select "#publication-panel-html a[href=?][data-turbo-frame=_top]", subscriptions_path,
+                  text: "Subscribe"
   end
 
   # Panels are hidden, not unmounted, so a change on one tab and a change on another save

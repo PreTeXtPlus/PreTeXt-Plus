@@ -539,13 +539,13 @@ class Publication::SettingsTest < ActiveSupport::TestCase
     assert_match(%r{<brandlogo source="pretext-plus/icon.svg" url="https://pretext.plus"/>}, ProjectArchiveBuilder.new(@project).publication_ptx(@target))
   end
 
-  test "the logo picker tells a non-subscriber it is for subscribers" do
+  test "the logo picker is locked for a non-subscriber" do
     option = Publication::Catalog.find("brandlogo")
 
-    assert_match(/subscribe/i, Publication::Settings.new(@project).unavailable_note(option))
+    assert Publication::Settings.new(@project).subscriber_locked?(option)
 
     @project.user.update!(admin: true)
-    assert_nil Publication::Settings.new(@project).unavailable_note(option)
+    assert_not Publication::Settings.new(@project).subscriber_locked?(option)
   end
 
   test "the account level does not offer a logo" do
@@ -583,10 +583,10 @@ class Publication::SettingsTest < ActiveSupport::TestCase
     option = Publication::Catalog.find("brandlogo_url")
 
     assert_includes Publication::Settings.new(@user).options.map(&:key), "brandlogo_url"
-    assert_match(/subscribe/i, Publication::Settings.new(@user).unavailable_note(option))
+    assert Publication::Settings.new(@user).subscriber_locked?(option)
 
     @user.update!(admin: true)
-    assert_nil Publication::Settings.new(@user).unavailable_note(option)
+    assert_not Publication::Settings.new(@user).subscriber_locked?(option)
   end
 
   # An option's tab and the outputs it affects are the same declaration, so they cannot

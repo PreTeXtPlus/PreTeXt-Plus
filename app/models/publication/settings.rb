@@ -135,11 +135,17 @@ module Publication
       choices_for(option).any?
     end
 
+    # Whether this option is shown without a control because the account is not a
+    # subscriber. Still shown, so an author learns the setting exists; the modal says
+    # what it takes to use it.
+    def subscriber_locked?(option)
+      option.subscriber_only? && !subscriber?
+    end
+
     # Why an option is showing with no control under it, or nil when it has one. The tab
-    # earns its place by telling an author the setting exists: a subscriber-only option
-    # says who can use it, and there is nothing to pick until the project has an image.
+    # earns its place by telling an author the setting exists, and there is nothing to
+    # pick until the project has an image.
     def unavailable_note(option)
-      return "Subscribe to customize this setting." if option.subscriber_only? && !subscriber?
       return nil unless option.project_scoped? && choices_for(option).empty?
 
       "Add an asset to this project, and you can choose it here."
