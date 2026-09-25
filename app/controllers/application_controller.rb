@@ -55,8 +55,7 @@ class ApplicationController < ActionController::Base
   # validates them there, as long as the URL is virtual-hosted-style (which
   # storage.yml already produces, since force_path_style is never set). A
   # no-op when spaces_cdn_host isn't configured, or the URL isn't a Spaces
-  # origin URL (e.g. the local "/icon.svg" and "/image-not-found.svg"
-  # fallback paths).
+  # origin URL (e.g. the local "/image-not-found.svg" fallback path).
   def cdn_asset_url(url)
     cdn_host = Rails.application.config.x.spaces_cdn_host.presence
     return url unless cdn_host

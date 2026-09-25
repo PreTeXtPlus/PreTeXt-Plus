@@ -76,17 +76,11 @@ class ProjectArchiveBuilder
         zip.write(asset.file.download)
       end
 
-      # Both extensions: new projects' docinfo points at icon.svg, but a
-      # project created before that default changed still has icon.png
-      # baked into its own persisted docinfo (docinfo is only ever set from
-      # the current template at creation time, never regenerated), so
-      # either reference has to resolve without a data migration.
-      unless @project.icon_asset
-        %w[ svg png ].each do |ext|
-          zip.put_next_entry("source/external/icon.#{ext}")
-          zip.write(File.read Rails.root.join("public", "icon.#{ext}"))
-        end
-      end
+      # The PreTeXt.Plus logo every publication file points at unless a subscriber has
+      # chosen their own -- see PublicationFileBuilder::DEFAULT_BRANDLOGO for why it has a
+      # directory to itself.
+      zip.put_next_entry("source/external/#{PublicationFileBuilder::DEFAULT_BRANDLOGO}")
+      zip.write(File.binread(Rails.root.join("public", "icon.svg")))
     end
     buffer.rewind
     buffer

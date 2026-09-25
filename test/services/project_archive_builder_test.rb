@@ -194,20 +194,16 @@ class ProjectArchiveBuilderTest < ActiveSupport::TestCase
     assert_equal asset.file.download, contents[path]
   end
 
-  # Packed under both extensions: new projects' docinfo points at icon.svg,
-  # but a project created before that default changed still has icon.png
-  # baked into its own persisted docinfo (see Project#set_default_docinfo),
-  # so either reference has to resolve.
-  test "packs PreTeXt's built-in logo at both icon.svg and icon.png when the project has no icon of its own" do
-    project = projects(:one)
+  # In a directory of its own so that no asset -- which lands at "<ref>.<ext>" beside it --
+  # can take its place.
+  test "packs the PreTeXt.Plus logo where every publication file points" do
+    contents = entries(ProjectArchiveBuilder.new(projects(:one)).build)
 
-    contents = entries(ProjectArchiveBuilder.new(project).build)
-
-    assert_equal File.binread(Rails.root.join("public", "icon.svg")), contents["source/external/icon.svg"]
-    assert_equal File.binread(Rails.root.join("public", "icon.png")), contents["source/external/icon.png"]
+    assert_equal File.binread(Rails.root.join("public", "icon.svg")),
+                 contents["source/external/#{PublicationFileBuilder::DEFAULT_BRANDLOGO}"]
   end
 
-  test "packs the project's own icon asset instead of the built-in logo when one exists" do
+  test "an asset called icon is packed like any other and leaves the default logo alone" do
     project = projects(:one)
     icon = project.assets.create!(ref: "icon", kind: :file, title: "My Icon")
     icon.file.attach(
@@ -218,6 +214,7 @@ class ProjectArchiveBuilderTest < ActiveSupport::TestCase
     contents = entries(ProjectArchiveBuilder.new(project).build)
 
     assert_equal icon.file.download, contents["source/external/icon.png"]
-    assert_not_includes contents.keys, "source/external/icon.svg"
+    assert_equal File.binread(Rails.root.join("public", "icon.svg")),
+                 contents["source/external/pretext-plus/icon.svg"]
   end
 end

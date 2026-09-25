@@ -181,7 +181,7 @@ class Publication::SettingsTest < ActiveSupport::TestCase
 
     html = settings.sections(families["html"])
 
-    assert_equal %w[ theme dark_mode chunk_level embed_button knowls ],
+    assert_equal %w[ theme dark_mode brandlogo brandlogo_url chunk_level embed_button knowls ],
                  html.map { |section| section.group? ? section.group.key : section.option.key }
     assert_equal 18, html.last.options.size
 
@@ -489,7 +489,7 @@ class Publication::SettingsTest < ActiveSupport::TestCase
 
     assert settings.offers?(option)
     assert_empty settings.choices_for(option)
-    assert_match(/upload an image/i, settings.unavailable_note(option))
+    assert_match(/add an asset/i, settings.unavailable_note(option))
   end
 
   # A cover is a particular image in a particular project, so there is nothing for an
@@ -517,6 +517,76 @@ class Publication::SettingsTest < ActiveSupport::TestCase
     assert_equal "gone.png", @project.reload.publication_settings["epub_cover"]
     assert_equal "gone.png",
                  Publication::Settings.new(@project).label_for(Publication::Catalog.find("epub_cover"), "gone.png")
+  end
+
+  # ---- the brand logo, a subscriber-only pick among the project's images ----
+
+  test "a subscriber's chosen logo reaches the publication file" do
+    @user.update!(admin: true)
+    @project.update!(publication_settings: { "brandlogo" => "logo.png" })
+
+    assert_equal "logo.png", Publication::Settings.effective_for(@target)["brandlogo"]
+    assert_match(/<brandlogo source="logo.png" url="https:\/\/pretext.plus"\/>/, ProjectArchiveBuilder.new(@project).publication_ptx(@target))
+  end
+
+  # Dropped rather than refused, so a lapsed subscription keeps what was chosen and the
+  # build falls back to the built-in icon.svg in the meantime.
+  test "a logo set on a project whose owner is not a subscriber is kept but not built" do
+    @project.update!(publication_settings: { "brandlogo" => "logo.png" })
+
+    assert_equal "logo.png", @project.reload.publication_settings["brandlogo"]
+    assert_not_includes Publication::Settings.effective_for(@target).keys, "brandlogo"
+    assert_match(%r{<brandlogo source="pretext-plus/icon.svg" url="https://pretext.plus"/>}, ProjectArchiveBuilder.new(@project).publication_ptx(@target))
+  end
+
+  test "the logo picker is locked for a non-subscriber" do
+    option = Publication::Catalog.find("brandlogo")
+
+    assert Publication::Settings.new(@project).subscriber_locked?(option)
+
+    @project.user.update!(admin: true)
+    assert_not Publication::Settings.new(@project).subscriber_locked?(option)
+  end
+
+  test "the account level does not offer a logo" do
+    assert_not_includes Publication::Settings.new(@user).options.map(&:key), "brandlogo"
+  end
+
+  test "a subscriber's logo link reaches the publication file" do
+    @user.update!(admin: true)
+    @project.update!(publication_settings: { "brandlogo_url" => "https://example.edu" })
+
+    assert_match(%r{<brandlogo source="pretext-plus/icon.svg" url="https://example.edu"/>},
+                 ProjectArchiveBuilder.new(@project).publication_ptx(@target))
+  end
+
+  test "a logo link set on a project whose owner is not a subscriber is kept but not built" do
+    @project.update!(publication_settings: { "brandlogo_url" => "https://example.edu" })
+
+    assert_equal "https://example.edu", @project.reload.publication_settings["brandlogo_url"]
+    assert_match(%r{url="https://pretext.plus"}, ProjectArchiveBuilder.new(@project).publication_ptx(@target))
+  end
+
+  test "a logo link is stored as a web address and refused as anything else" do
+    option = Publication::Catalog.find("brandlogo_url")
+
+    assert_equal "https://example.edu", option.normalize("example.edu")
+    assert option.permits?(option.normalize("http://example.edu/book?x=1"))
+    assert_not option.permits?(option.normalize("javascript:alert(1)"))
+    assert_not option.permits?(option.normalize("ftp://example.edu"))
+    assert_not option.permits?(option.normalize('https://example.edu/"onmouseover'))
+  end
+
+  # A link, unlike an image, means the same thing in every project, so a subscriber can
+  # set one as their account default.
+  test "the account level offers a subscriber the logo link and tells anyone else to subscribe" do
+    option = Publication::Catalog.find("brandlogo_url")
+
+    assert_includes Publication::Settings.new(@user).options.map(&:key), "brandlogo_url"
+    assert Publication::Settings.new(@user).subscriber_locked?(option)
+
+    @user.update!(admin: true)
+    assert_not Publication::Settings.new(@user).subscriber_locked?(option)
   end
 
   # An option's tab and the outputs it affects are the same declaration, so they cannot

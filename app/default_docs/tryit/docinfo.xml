@@ -2,5 +2,4 @@
     <macros>
         \newcommand{\N}{\mathbb N}
     </macros>
-    <brandlogo source="icon.svg" />
 </docinfo>
