@@ -19,7 +19,10 @@ class MoveProjectDocsToYDocuments < ActiveRecord::Migration[8.1]
         state = merged_state(snapshot, payloads)
         next if state.nil?
 
-        connection.exec_insert(<<~SQL, "y_documents insert", [ key_for(project_id), state ])
+        # An untyped bind goes to PG as text, which cannot hold the NUL bytes
+        # every Yjs update contains; typing it as binary sends it as bytea.
+        state_bind = ActiveRecord::Relation::QueryAttribute.new("state", state, ActiveRecord::Type::Binary.new)
+        connection.exec_insert(<<~SQL, "y_documents insert", [ key_for(project_id), state_bind ])
           INSERT INTO y_documents (key, state, created_at, updated_at)
           VALUES ($1, $2, NOW(), NOW())
           ON CONFLICT (key) DO NOTHING
