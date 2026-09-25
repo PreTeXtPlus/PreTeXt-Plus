@@ -9,14 +9,6 @@ class AssetsController < ApplicationController
   # covers every live use.
   def share
     @project = Project.find(params[:id])
-    # The "icon" ref is a special case: PreTeXtPlus's own built-in logo,
-    # referenced by default docinfo as `icon.*`, used whenever the project
-    # has no icon asset of its own -- see Project#icon_asset.
-    if params[:ref] == "icon"
-      icon = @project.icon_asset
-      return redirect_to "/icon.svg" unless icon
-      return redirect_to_cdn_url icon.url
-    end
     @asset = @project.assets.find_by!(ref: params[:ref])
     redirect_to_cdn_url @asset.url
   end

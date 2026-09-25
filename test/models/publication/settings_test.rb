@@ -536,7 +536,7 @@ class Publication::SettingsTest < ActiveSupport::TestCase
 
     assert_equal "logo.png", @project.reload.publication_settings["brandlogo"]
     assert_not_includes Publication::Settings.effective_for(@target).keys, "brandlogo"
-    assert_match(/<brandlogo source="icon.svg"\/>/, ProjectArchiveBuilder.new(@project).publication_ptx(@target))
+    assert_match(/<brandlogo source="pretext-plus\/icon.svg"\/>/, ProjectArchiveBuilder.new(@project).publication_ptx(@target))
   end
 
   test "the logo picker tells a non-subscriber it is for subscribers" do

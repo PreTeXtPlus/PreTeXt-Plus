@@ -196,7 +196,6 @@ Rails.application.routes.draw do
   resources :asset_fetches, only: :create
   get "tryit" => "projects#tryit"
   post "tryit/preview" => "projects#preview", as: "tryit_preview"
-  get "(tryit)/external/icon" => redirect("/icon.svg")
 
   # Where the editor reports collaboration failures only the browser can see.
   resources :collab_incidents, only: :create

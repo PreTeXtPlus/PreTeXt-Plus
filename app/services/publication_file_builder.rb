@@ -14,9 +14,11 @@ class PublicationFileBuilder
   # source/directories: the archive puts assets in source/external, which is where PreTeXt
   # resolves `external` relative to the main source file. html/resources: the built site
   # loads its JavaScript and CSS from the PreTeXt CDN rather than carrying its own copy.
-  # html/brandlogo: every build gets a brandlogo pointed at the archive's icon.svg --
-  # ProjectArchiveBuilder writes that path whenever a project has no uploaded icon of its
-  # own (see its icon_asset fallback), matching what default_docs/docinfo.xml used to set.
+  # html/brandlogo: every build gets the PreTeXt.Plus logo, which ProjectArchiveBuilder
+  # writes to DEFAULT_BRANDLOGO. It sits in a directory of its own because assets are
+  # written as bare "<ref>.<ext>" beside it, and a ref cannot hold a "/" -- so no upload,
+  # not even one called "icon", can stand in for it. A subscriber's chosen logo (the
+  # brandlogo option) merges over this.
   #
   # Author options merge *onto* this, so an option may extend one of these elements (a
   # theme lands on html/css, alongside html/resources) but the attributes here are not
@@ -25,10 +27,12 @@ class PublicationFileBuilder
   # Not the same thing as Publication::Catalog.applied_defaults, which is also written into
   # every file: those *are* the catalog's to offer, and an author who turns the embed
   # button off overrides one. Anything an author may change belongs there, not here.
+  DEFAULT_BRANDLOGO = "pretext-plus/icon.svg".freeze
+
   BASE = {
     %w[ source directories ] => { "external" => "external", "generated" => "generated" },
     %w[ html resources ] => { "host" => "cdn" },
-    %w[ html brandlogo ] => { "source" => "icon.svg" }
+    %w[ html brandlogo ] => { "source" => DEFAULT_BRANDLOGO }
   }.freeze
 
   # `settings` is the merged hash from Publication::Settings -- our own keys, not PreTeXt's.

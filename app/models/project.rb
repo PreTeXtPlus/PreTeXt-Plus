@@ -145,15 +145,6 @@ class Project < ApplicationRecord
     root_element_type || document_type
   end
 
-  # The project's own uploaded icon/logo (the special "icon" ref, referenced by
-  # default docinfo's <brandlogo source="icon.*">), or nil when absent -- a row
-  # with no file attached counts as absent too, since there's nothing to serve.
-  # Callers fall back to the built-in public/icon.svg in that case.
-  def icon_asset
-    asset = assets.find_by(ref: "icon")
-    asset if asset&.file&.attached?
-  end
-
   # How many collaborators (accepted + pending invites) this project may have.
   # Keyed to the OWNER's standing, not the inviter's or invitee's. Enforced
   # only when adding (see Collaboration#within_collaborator_limit), so a lapsed

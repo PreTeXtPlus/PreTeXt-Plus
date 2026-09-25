@@ -957,7 +957,7 @@ module Publication
         choices: DARK_MODE),
 
       # html/brandlogo/@source, resolved against the external directory like the EPUB
-      # cover. PublicationFileBuilder::BASE already writes icon.svg here, and a chosen
+      # cover. PublicationFileBuilder::BASE already writes the PreTeXt.Plus logo here, and a chosen
       # image merges over it -- so leaving this unset, or not being a subscriber, keeps
       # the PreTeXt.Plus logo.
       Option.build(:brandlogo,
