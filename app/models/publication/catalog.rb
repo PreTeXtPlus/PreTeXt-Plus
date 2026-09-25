@@ -160,9 +160,10 @@ module Publication
 
       # What the author typed, read the way they plainly meant it. A kind with no
       # normalizer stores what it was given, and so does a value the normalizer cannot make
-      # sense of -- which then fails the pattern and is reported back as it was typed.
+      # sense of -- which then fails the pattern and is reported back as it was typed. A
+      # blank stays blank, so no normalizer can turn a field left empty into a setting.
       def normalize(value)
-        return value if normalizer.nil?
+        return value if normalizer.nil? || value.blank?
 
         normalizer.call(value).presence || value
       end

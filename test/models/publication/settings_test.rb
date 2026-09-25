@@ -571,10 +571,17 @@ class Publication::SettingsTest < ActiveSupport::TestCase
     option = Publication::Catalog.find("brandlogo_url")
 
     assert_equal "https://example.edu", option.normalize("example.edu")
+    assert_equal "", option.normalize("")
     assert option.permits?(option.normalize("http://example.edu/book?x=1"))
     assert_not option.permits?(option.normalize("javascript:alert(1)"))
     assert_not option.permits?(option.normalize("ftp://example.edu"))
     assert_not option.permits?(option.normalize('https://example.edu/"onmouseover'))
+  end
+
+  test "a logo link left blank inherits rather than being refused" do
+    @project.update!(publication_settings: { "brandlogo_url" => "" })
+
+    assert_not @project.reload.publication_settings.key?("brandlogo_url")
   end
 
   # A link, unlike an image, means the same thing in every project, so a subscriber can
