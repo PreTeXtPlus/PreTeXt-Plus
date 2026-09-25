@@ -441,6 +441,19 @@ GEM
     websocket-extensions (0.1.5)
     xpath (3.2.0)
       nokogiri (~> 1.8)
+    yrby (0.7.1)
+      rb_sys (~> 0.9)
+    yrby (0.7.1-aarch64-linux)
+    yrby (0.7.1-aarch64-linux-musl)
+    yrby (0.7.1-x86_64-linux)
+    yrby (0.7.1-x86_64-linux-musl)
+    yrby-rails (0.6.1)
+      actioncable (>= 7.1)
+      activerecord (>= 7.1)
+      activesupport (>= 7.1)
+      base64 (~> 0.2)
+      railties (>= 7.1)
+      yrby (>= 0.7.0)
     zeitwerk (2.8.3)
 
 PLATFORMS
@@ -493,6 +506,8 @@ DEPENDENCIES
   turbo-rails
   tzinfo-data
   web-console
+  yrby (~> 0.7.1)
+  yrby-rails (~> 0.6.1)
 
 BUNDLED WITH
    2.6.9

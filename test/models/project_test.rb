@@ -80,66 +80,50 @@ class ProjectTest < ActiveSupport::TestCase
   # source, without ever resaving document_type (see ProjectsController#project_params).
   # This is what Publication::Settings reads instead, so numbering options stay in step
   # with the document the author is actually looking at.
+  #
+  # `root_element` is where that switch lands: ProjectDocProjection writes it from the
+  # root division's type in the collaborative document. See ProjectDocProjectionTest for
+  # the tests that it gets there.
 
-  test "structural_document_type follows the assembled source even though document_type does not" do
+  test "structural_document_type follows root_element even though document_type does not" do
     project = projects(:one)
     assert_equal "article", project.document_type
 
-    stub_build_server do
-      project.update!(pretext_source: "<pretext>\n<book xml:id=\"document\"><title>Hello</title></book>\n</pretext>")
-    end
+    project.update!(root_element: "book")
 
     assert_equal "article", project.reload.document_type,
                  "document_type itself is untouched -- it is not on this axis"
     assert_equal "book", project.structural_document_type
   end
 
-  # Reading the assembled source rather than the root division's own is what makes this
-  # markup-agnostic: a latex/markdown project is converted to PreTeXt before it lands in
-  # pretext_source, so there is no second (or third) spelling of "book" to know about.
+  # Storing the resolved root element rather than re-reading one out of source is what
+  # makes this markup-agnostic: the editor derived it before it ever reached this column,
+  # so there is no second (or third) spelling of "book" to know about here.
   test "structural_document_type reads a latex-authored project the same way" do
     project = projects(:two)
     assert project.root_division.latex_source_format?
     assert_equal "article", project.document_type
 
-    stub_build_server do
-      project.update!(pretext_source: "<pretext>\n<book xml:id=\"document\"><title>Welcome</title></book>\n</pretext>")
-    end
+    project.update!(root_element: "book")
 
     assert_equal "book", project.reload.structural_document_type
   end
 
-  test "structural_document_type skips the docinfo the assembler puts first" do
-    project = projects(:one)
-
-    stub_build_server do
-      project.update!(pretext_source: "<pretext xml:lang=\"en-US\">\n<docinfo><macros>\\def\\z{1}</macros></docinfo>\n" \
-                                      "<book xml:id=\"document\"><title>Hello</title></book>\n</pretext>")
-    end
-
-    assert_equal "book", project.reload.structural_document_type
-  end
-
-  # Between creation/import and the first autosave there is no assembled source yet -- and
+  # Between creation/import and the first projection there is no root_element yet -- and
   # the column is exactly as its author left it, so it is still the right answer.
-  test "structural_document_type falls back to document_type when there's no assembled source yet" do
+  test "structural_document_type falls back to document_type when root_element is unset" do
     project = Project.new(user: users(:one), document_type: :book)
 
-    assert_nil project.pretext_source
+    assert_nil project.root_element
     assert_equal "book", project.structural_document_type
   end
 
-  # nil rather than a guess: a half-saved or hand-broken document must not override the
-  # column with junk.
-  test "structural_document_type falls back when the assembled source names no root element" do
+  # A blank is treated as absent rather than as an answer, so a row written by something
+  # that had nothing to say still falls back instead of reporting "".
+  test "structural_document_type falls back when root_element is blank" do
     project = projects(:one)
+    project.update_column(:root_element, "")
 
-    stub_build_server do
-      project.update!(pretext_source: "<pretext><docinfo/><section><title>Orphan</title></section></pretext>")
-    end
-    assert_equal "article", project.reload.structural_document_type
-
-    stub_build_server { project.update!(pretext_source: "<pretext><docinfo>& <unclosed") }
     assert_equal "article", project.reload.structural_document_type
   end
 

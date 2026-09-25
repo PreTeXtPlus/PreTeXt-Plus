@@ -9,6 +9,16 @@ module BuildServerHelper
     Net::HTTP.stub(:post_form, fake_response, &block)
   end
 
+  # Stubs the Node assembler ProjectArchiveBuilder shells out to, so a test that
+  # builds an archive neither spawns a process nor needs `npm run build:assembler`
+  # to have run. Yields `source` as the assembled document.
+  #
+  # Tests that care what the assembler actually produces should not use this --
+  # see SourceAssemblerTest, which runs the real bundle.
+  def stub_source_assembler(source = "<pretext><article/></pretext>", &block)
+    SourceAssembler.stub(:new, ->(_project) { Struct.new(:call).new(source) }, &block)
+  end
+
   # Stubs the Net::HTTP.start-based preview build call used by ProjectsController#preview.
   # Yields a fake successful HTTP response with the given body by default.
   # Pass `raise_error:` to simulate a network failure instead.

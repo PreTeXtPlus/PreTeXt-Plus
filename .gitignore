@@ -37,6 +37,13 @@
 /app/assets/builds/*
 !/app/assets/builds/.keep
 
+# The Node assembler Rails shells out to at build time, bundled from
+# script/assemble-source.mjs by `npm run build:assembler`. Generated exactly
+# like app/assets/builds above, and for the same reason kept out of the repo:
+# it is a build product of packages/web-editor, not a source file.
+/lib/assembler/*
+!/lib/assembler/.keep
+
 /node_modules
 
 # Ignore key files for decrypting credentials and more.

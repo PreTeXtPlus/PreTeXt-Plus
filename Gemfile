@@ -27,6 +27,14 @@ gem "solid_cache"
 gem "solid_queue"
 gem "solid_cable"
 
+# Server-side Yjs for collaborative editing: `yrby` is the Rust y-crdt engine
+# bound into Ruby, `yrby-rails` the ActionCable sync concern and document store
+# behind ProjectDocChannel. Pinned tightly because both are pre-1.0, and what
+# they carry -- the CRDT every collaborative session's text lives in -- is not
+# something to let a minor bump change under us.
+gem "yrby", "~> 0.7.1"
+gem "yrby-rails", "~> 0.6.1"
+
 # Reduces boot times through caching; required in config/boot.rb
 gem "bootsnap", require: false
 

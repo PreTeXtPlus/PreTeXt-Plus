@@ -10,15 +10,31 @@ class ProjectArchiveBuilderTest < ActiveSupport::TestCase
     end
   end
 
-  test "includes project.ptx and publication and puts pretext_source at source/main.ptx" do
-    project = projects(:one)
-    project.update_column(:pretext_source, "<pretext><article/></pretext>")
-
-    contents = entries(ProjectArchiveBuilder.new(project).build)
+  # source/main.ptx is assembled on demand now rather than read from a column, so
+  # what lands there is whatever SourceAssembler returned -- which is the point:
+  # there is no stored copy left to be older than the rows beside it.
+  test "includes project.ptx and publication and puts the assembled source at source/main.ptx" do
+    contents = stub_source_assembler("<pretext><article/></pretext>") do
+      entries(ProjectArchiveBuilder.new(projects(:one)).build)
+    end
 
     assert_includes contents.keys, "project.ptx"
     assert_includes contents.keys, "publication/publication.ptx"
     assert_equal "<pretext><article/></pretext>", contents["source/main.ptx"]
+  end
+
+  # A build must not ship a document nobody could assemble: with no column to fall
+  # back on, the only safe answer is to fail, and FullBuildJob marks the build
+  # failed on the way past.
+  test "a failed assembly raises rather than writing an archive without real source" do
+    raiser = Struct.new(:noop) do
+      def call = raise(SourceAssembler::AssemblyError, "boom")
+    end
+
+    error = SourceAssembler.stub(:new, ->(_p) { raiser.new }) do
+      assert_raises(SourceAssembler::AssemblyError) { ProjectArchiveBuilder.new(projects(:one)).build }
+    end
+    assert_equal "boom", error.message
   end
 
   # The manifest lists every target, so one archive serves any build request and a

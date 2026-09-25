@@ -29,11 +29,19 @@ class CollaborativeEditingTest < ApplicationSystemTestCase
       visit edit_project_path(project)
       assert_selector ".monaco-editor", wait: 30
       # The first window's client should be visible as a presence avatar.
-      assert_selector "[data-testid='presence-avatar']", wait: 15
+      #
+      # Deliberately a short wait. yrby-client does not speak y-protocols'
+      # query-awareness, so a joining client cannot ask who is already here;
+      # what makes this prompt is that established clients answer a newcomer
+      # (YCableProvider#answerNewPeers). Without that, presence waits on
+      # y-protocols refreshing each peer's own state -- up to ~18s -- and a
+      # generous wait here would pass on that timer and assert nothing about
+      # joining a session.
+      assert_selector "[data-testid='presence-avatar']", wait: 5
     end
 
     # ...and vice versa.
-    assert_selector "[data-testid='presence-avatar']", wait: 15
+    assert_selector "[data-testid='presence-avatar']", wait: 5
 
     # Type a distinctive token into the first window's editor. Click on the
     # body text itself (not the generic `.view-lines` container): Monaco's

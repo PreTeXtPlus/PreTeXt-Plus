@@ -1,12 +1,17 @@
-json.extract! project, :id, :title, :pretext_source, :docinfo, :language, :use_common_docinfo, :common_docinfo
-# The *structural* document type, not the column: an author who switched this
-# document between article and book did it by rewriting the root division's own
-# source, which never reaches `document_type` (see
+json.extract! project, :id, :title, :docinfo, :language, :use_common_docinfo, :common_docinfo
+# The *structural* document type, not the `document_type` column: an author who
+# switched this document between article and book did it by rewriting the root
+# division's own source, which never reaches that column (see
 # ProjectsController#project_params). railsToEditorState turns this into the
 # editor's `projectType`, and for a latex/markdown root that value is what
 # railsDivisionToEditor hands back as the root's type -- so the stale column
 # here showed such a document as the kind it was created as, whatever its
 # source now says.
+#
+# This JSON is also what SourceAssembler feeds the Node assembler at build time,
+# narrowed to the fields assembly reads. The assembled document is no longer one
+# of them: the browser used to send it back as `pretext_source` and the server
+# stored it, which is the arrangement this replaced.
 json.document_type project.structural_document_type
 json.url project_url(project, format: :json)
 # Real-time collaboration is on whenever the project has collaborators (or

@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_09_22_120000) do
+ActiveRecord::Schema[8.1].define(version: 2026_09_24_120000) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
   enable_extension "pgcrypto"
@@ -213,21 +213,6 @@ ActiveRecord::Schema[8.1].define(version: 2026_09_22_120000) do
     t.datetime "updated_at", null: false
   end
 
-  create_table "project_doc_updates", force: :cascade do |t|
-    t.datetime "created_at", null: false
-    t.binary "payload", null: false
-    t.uuid "project_id", null: false
-    t.index ["project_id"], name: "index_project_doc_updates_on_project_id"
-  end
-
-  create_table "project_docs", id: :uuid, default: -> { "gen_random_uuid()" }, force: :cascade do |t|
-    t.datetime "created_at", null: false
-    t.uuid "project_id", null: false
-    t.binary "snapshot"
-    t.datetime "updated_at", null: false
-    t.index ["project_id"], name: "index_project_docs_on_project_id", unique: true
-  end
-
   create_table "projects", id: :uuid, default: -> { "gen_random_uuid()" }, force: :cascade do |t|
     t.datetime "created_at", null: false
     t.text "description"
@@ -239,6 +224,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_09_22_120000) do
     t.integer "language", default: 0, null: false
     t.text "pretext_source"
     t.jsonb "publication_settings", default: {}, null: false
+    t.string "root_element"
     t.datetime "source_updated_at", default: -> { "CURRENT_TIMESTAMP" }, null: false
     t.text "template_description"
     t.string "title"
@@ -341,6 +327,26 @@ ActiveRecord::Schema[8.1].define(version: 2026_09_22_120000) do
     t.index ["tos_id"], name: "index_users_on_tos_id"
   end
 
+  create_table "y_document_updates", force: :cascade do |t|
+    t.datetime "created_at", null: false
+    t.bigint "document_id", null: false
+    t.binary "payload", null: false
+    t.boolean "pending", default: false, null: false
+    t.index ["document_id", "pending"], name: "index_y_document_updates_on_document_id_and_pending"
+  end
+
+  create_table "y_documents", force: :cascade do |t|
+    t.datetime "created_at", null: false
+    t.string "key", null: false
+    t.string "name"
+    t.uuid "record_id"
+    t.string "record_type"
+    t.binary "state"
+    t.datetime "updated_at", null: false
+    t.index ["key"], name: "index_y_documents_on_key", unique: true
+    t.index ["record_type", "record_id", "name"], name: "index_y_documents_on_record_and_name", unique: true, where: "(record_type IS NOT NULL)"
+  end
+
   add_foreign_key "active_storage_attachments", "active_storage_blobs", column: "blob_id"
   add_foreign_key "active_storage_variant_records", "active_storage_blobs", column: "blob_id"
   add_foreign_key "assets", "projects"
@@ -354,11 +360,10 @@ ActiveRecord::Schema[8.1].define(version: 2026_09_22_120000) do
   add_foreign_key "pay_charges", "pay_subscriptions", column: "subscription_id"
   add_foreign_key "pay_payment_methods", "pay_customers", column: "customer_id"
   add_foreign_key "pay_subscriptions", "pay_customers", column: "customer_id"
-  add_foreign_key "project_doc_updates", "projects"
-  add_foreign_key "project_docs", "projects"
   add_foreign_key "projects", "users"
   add_foreign_key "snippets", "projects"
   add_foreign_key "subscription_seats", "pay_subscriptions"
   add_foreign_key "subscription_seats", "users"
   add_foreign_key "targets", "projects"
+  add_foreign_key "y_document_updates", "y_documents", column: "document_id"
 end

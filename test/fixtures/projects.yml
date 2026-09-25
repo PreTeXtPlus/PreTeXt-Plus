@@ -1,48 +1,37 @@
 # Read about fixtures at https://api.rubyonrails.org/classes/ActiveRecord/FixtureSet.html
+#
+# `root_element` is the document's actual root tag, which ProjectDocProjection
+# derives from the root division's type in the collaborative document. It is set
+# here alongside `document_type` because these fixtures stand for projects that
+# have been edited at least once; a project that never has holds null there, and
+# Project#structural_document_type falls back to `document_type`.
 
 one:
   user: one
   title: My First Project
-  pretext_source: |
-    <pretext>
-    <article xml:id="document" label="document">
-      <title>Hello</title>
-      <p>
-        World
-      </p>
-    </article>
-    </pretext>
   document_type: article
+  root_element: article
 
 two:
   user: two
   title: My Second Project
-  pretext_source: |
-    <pretext>
-    <article xml:id="document" label="document">
-      <title>Welcome to PreTeXt.Plus!</title>
-
-      <p>
-        Hello world
-      </p>
-    </article>
-    </pretext>
   document_type: article
+  root_element: article
 
 # The only slideshow, and so the only project that may hold a revealjs or beamer target.
 slides:
   user: one
   title: My Slide Deck
-  pretext_source: <pretext><slideshow><slide><title>First</title><p>Content</p></slide></slideshow></pretext>
   document_type: slideshow
+  root_element: slideshow
 
 # A subscriber-owned project (collaborator cap 5), used by collaboration
 # tests that need room to invite. Holds the :pending invitation fixture.
 team:
   user: subscribed
   title: Team Book
-  pretext_source: <pretext><book><chapter><title>Team</title><p>Content</p></chapter></book></pretext>
   document_type: book
+  root_element: book
 
 # A team-curated starter, flagged is_template so it shows up in the
 # "Start project from template" chooser. Owned by user two like any other
@@ -50,20 +39,8 @@ team:
 template:
   user: two
   title: Calc Template
-  pretext_source: |
-    <pretext>
-    <article xml:id="document" label="document">
-      <title>Template</title>
-      <section xml:id="subdivision">
-      <title>Section</title>
-      <p>
-        Starter content
-      </p>
-    </section>
-    </article>
-
-    </pretext>
   document_type: article
+  root_element: article
   is_template: true
   template_description: A great starter
 
@@ -72,13 +49,8 @@ template:
 public_project:
   user: subscribed
   title: A Public Project
-  pretext_source: |
-    <pretext>
-    <article xml:id="document" label="document">
-      <title>Public</title>
-    </article>
-    </pretext>
   document_type: article
+  root_element: article
   visibility: public
 
 # Public but nothing built and published yet -- exercises the profile's empty state
@@ -86,11 +58,6 @@ public_project:
 public_project_unbuilt:
   user: subscribed
   title: A Public But Unbuilt Project
-  pretext_source: |
-    <pretext>
-    <article xml:id="document" label="document">
-      <title>Unbuilt</title>
-    </article>
-    </pretext>
   document_type: article
+  root_element: article
   visibility: public

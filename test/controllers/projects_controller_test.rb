@@ -859,10 +859,13 @@ class ProjectsControllerTest < ActionDispatch::IntegrationTest
     assert_response :success
     json = response.parsed_body
     assert_includes json.keys, "title"
-    assert_includes json.keys, "pretext_source"
     assert_includes json.keys, "docinfo"
     assert_includes json.keys, "use_common_docinfo"
     assert_includes json.keys, "common_docinfo"
+    # The assembled document is deliberately absent: it is derived from the
+    # divisions below it, and the server builds it at build time rather than
+    # storing a copy the browser keeps overwriting (see SourceAssembler).
+    assert_not_includes json.keys, "pretext_source"
   end
 
   test "json includes docinfo value" do
@@ -879,7 +882,6 @@ class ProjectsControllerTest < ActionDispatch::IntegrationTest
         params: {
           project: {
             title: "API Title",
-            pretext_source: "<pretext><article><section><title>API Title</title></section></article></pretext>",
             docinfo: "<docinfo/>",
             use_common_docinfo: true
           }

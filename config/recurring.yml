@@ -20,6 +20,19 @@ production:
     queue: default
     schedule: at 6am every day
 
+  compact_project_docs:
+    class: CompactProjectDocsJob
+    queue: default
+    schedule: every minute
+
+  # The backstop that keeps a project's rows in step with its live collaborative
+  # document. The paths where staleness would be felt -- a build, save-and-close,
+  # a copy -- project synchronously and do not wait for this.
+  project_doc_projection:
+    class: ProjectDocProjectionJob
+    queue: default
+    schedule: every minute
+
   clear_solid_queue_finished_jobs:
     command: "SolidQueue::Job.clear_finished_in_batches(sleep_between_batches: 0.3)"
     schedule: every hour at minute 12
