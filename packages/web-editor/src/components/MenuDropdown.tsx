@@ -40,10 +40,20 @@ export interface MenuDropdownProps {
   menubarActive?: boolean;
   /** Move to the previous/next menu in the bar (Arrow Left/Right). */
   onNavigate?: (direction: -1 | 1) => void;
+  /** When true, the trigger button is disabled and the panel never opens. */
+  disabled?: boolean;
+  /**
+   * Which edge of the trigger button the panel's own edge lines up with, and
+   * which direction it grows from there. Defaults to `"left"`. Use `"right"`
+   * for a menu pinned to the right edge of its container (e.g. Account),
+   * where a left-aligned, rightward-growing panel would overflow the
+   * viewport.
+   */
+  align?: "left" | "right";
 }
 
 const BUTTON_CLASSES =
-  "shrink-0 py-[5px] px-2.5 border border-transparent rounded-[3px] cursor-pointer text-[13px] font-medium leading-[1.3] bg-transparent text-[#1f1f1f] transition-colors duration-150 ease-in-out hover:bg-[#e8e8e8]";
+  "shrink-0 py-[5px] px-2.5 border border-transparent rounded-[3px] cursor-pointer text-[13px] font-medium leading-[1.3] bg-transparent text-[#1f1f1f] transition-colors duration-150 ease-in-out enabled:hover:bg-[#e8e8e8] disabled:text-gray-400 disabled:cursor-not-allowed";
 
 const ITEM_CLASSES =
   "flex w-full items-center gap-6 py-1.5 px-2.5 text-left bg-transparent border-none rounded cursor-pointer text-[13px] font-medium leading-[1.3] whitespace-nowrap text-[#1f1f1f] enabled:hover:bg-[#e8e8e8] enabled:focus-visible:bg-[#e8e8e8] focus:outline-none disabled:text-gray-400 disabled:cursor-not-allowed";
@@ -52,10 +62,13 @@ const ITEM_CLASSES =
  * A menubar menu: a button that opens a panel of actions.
  *
  * Deliberately plain — no portal, no floating-UI — because the panel hangs off
- * a toolbar pinned to the top of the editor pane, so a left-aligned absolute
- * panel is always in view. Focus moves into the panel on open so the whole
- * menu is reachable from the keyboard: Up/Down walk the items, Left/Right
- * cross to the neighbouring menu, Escape closes and hands focus back.
+ * a toolbar pinned to the top of the editor pane, so a simple absolute panel
+ * is always in view *given the right `align`*: left-aligned (the default) for
+ * a menu near the left/middle of its bar, right-aligned for one pinned to the
+ * bar's right edge (see `align`) — otherwise the panel grows off-screen.
+ * Focus moves into the panel on open so the whole menu is reachable from the
+ * keyboard: Up/Down walk the items, Left/Right cross to the neighbouring
+ * menu, Escape closes and hands focus back.
  */
 const MenuDropdown = ({
   label,
@@ -64,6 +77,8 @@ const MenuDropdown = ({
   onOpenChange,
   menubarActive,
   onNavigate,
+  disabled,
+  align = "left",
 }: MenuDropdownProps) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const buttonRef = useRef<HTMLButtonElement>(null);
@@ -71,23 +86,26 @@ const MenuDropdown = ({
   // Set when hovering across the bar opened this menu, so the click that
   // usually follows doesn't immediately toggle it back shut.
   const hoverOpenedRef = useRef(false);
+  // A disabled menu never actually opens, even if a sibling's keyboard
+  // navigation (Arrow Left/Right) lands on it and asks it to.
+  const open = isOpen && !disabled;
 
   // Close on a click outside this menu. Pointer-down (not click) so the menu
   // is gone before the click lands on whatever is underneath.
   useEffect(() => {
-    if (!isOpen) return;
+    if (!open) return;
     const handlePointer = (e: MouseEvent) => {
       if (!containerRef.current?.contains(e.target as Node)) onOpenChange(false);
     };
     document.addEventListener("mousedown", handlePointer);
     return () => document.removeEventListener("mousedown", handlePointer);
-  }, [isOpen, onOpenChange]);
+  }, [open, onOpenChange]);
 
   // Focus the first item when the menu opens, so Up/Down work immediately.
   useEffect(() => {
-    if (!isOpen) return;
+    if (!open) return;
     panelRef.current?.querySelector<HTMLElement>("[data-menu-item]:not(:disabled)")?.focus();
-  }, [isOpen]);
+  }, [open]);
 
   const focusItem = (offset: number) => {
     const panel = panelRef.current;
@@ -138,23 +156,28 @@ const MenuDropdown = ({
   };
 
   return (
-    <div className="relative inline-flex" ref={containerRef}>
+    // Below the `sm` breakpoint (40rem), drop `relative` so an open panel's
+    // `absolute` positioning falls through to the menubar row itself (see
+    // CodeEditorMenu.tsx), anchoring it to the row's left edge rather than
+    // this specific button's.
+    <div className="relative inline-flex max-sm:static" ref={containerRef}>
       <button
         ref={buttonRef}
         type="button"
-        className={clsx(BUTTON_CLASSES, isOpen && "bg-[#e0e0e0] border-[#d0d0d0]")}
+        disabled={disabled}
+        className={clsx(BUTTON_CLASSES, open && "bg-[#e0e0e0] border-[#d0d0d0]")}
         aria-haspopup="menu"
-        aria-expanded={isOpen}
+        aria-expanded={open}
         onClick={() => {
           if (hoverOpenedRef.current) {
             hoverOpenedRef.current = false;
             return;
           }
-          onOpenChange(!isOpen);
+          onOpenChange(!open);
         }}
         // Once one menu is open, sliding across the bar switches between them.
         onMouseEnter={() => {
-          if (menubarActive && !isOpen) {
+          if (menubarActive && !open) {
             hoverOpenedRef.current = true;
             onOpenChange(true);
           }
@@ -163,7 +186,7 @@ const MenuDropdown = ({
           hoverOpenedRef.current = false;
         }}
         onKeyDown={(e) => {
-          if (e.key === "ArrowDown" && !isOpen) {
+          if (e.key === "ArrowDown" && !open) {
             e.preventDefault();
             onOpenChange(true);
           }
@@ -172,12 +195,19 @@ const MenuDropdown = ({
         {label}
       </button>
 
-      {isOpen && (
+      {open && (
         <div
           ref={panelRef}
           role="menu"
           aria-label={label}
-          className="absolute top-[calc(100%+4px)] left-0 z-20 flex flex-col min-w-[220px] max-h-[70vh] overflow-y-auto p-1 bg-white border border-[#d0d0d0] rounded-md shadow-[0_6px_16px_rgba(0,0,0,0.14)]"
+          className={clsx(
+            "absolute top-[calc(100%+4px)] z-20 flex flex-col min-w-[220px] max-h-[70vh] w-full sm:w-auto overflow-y-auto p-1 bg-white border border-[#d0d0d0] rounded-md shadow-[0_6px_16px_rgba(0,0,0,0.14)]",
+            // Compact: nudge 2px off the row's left edge, shrinking to match
+            // so the full-width panel doesn't overflow the viewport.
+            align === "right"
+              ? "right-0"
+              : "left-0 max-sm:left-0.5 max-sm:w-[calc(100%-2px)]",
+          )}
           onKeyDown={handlePanelKeyDown}
         >
           {entries.map((entry) => {

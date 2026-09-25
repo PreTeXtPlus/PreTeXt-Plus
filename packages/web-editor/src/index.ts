@@ -135,6 +135,11 @@ export type {
 
 // Export components
 export { default as CodeEditor } from "./components/CodeEditor";
+// A generic, host-agnostic "button that opens a panel of entries" primitive —
+// exported so a host can build menus (e.g. Help/Account) that are pixel- and
+// keyboard-identical to the editor's own File/Edit/Insert/Tools menus.
+export { default as MenuDropdown } from "./components/MenuDropdown";
+export type { MenuDropdownProps, MenuEntry } from "./components/MenuDropdown";
 //export { VisualEditor } from "@pretextbook/visual-editor";
 export { default as LivePreview } from "./components/LivePreview";
 export { default as FeedbackLink } from "./components/FeedbackLink";

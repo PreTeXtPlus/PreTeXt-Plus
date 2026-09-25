@@ -263,7 +263,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_09_22_190000) do
     t.string "name"
     t.integer "order"
     t.string "stripe_price_id"
-    t.string "trial_date"
+    t.integer "trial_days", default: 0, null: false
     t.datetime "updated_at", null: false
   end
 
@@ -313,6 +313,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_09_22_190000) do
     t.datetime "reset_password_sent_at"
     t.string "reset_password_token"
     t.integer "sign_in_count", default: 0, null: false
+    t.boolean "subscription_reminders"
     t.uuid "tos_id"
     t.string "unconfirmed_email"
     t.datetime "updated_at", null: false

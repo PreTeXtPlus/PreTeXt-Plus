@@ -9,7 +9,18 @@ import { Controller } from "@hotwired/stimulus"
  * @extends {Controller}
  */
 export default class extends Controller {
-  static values = { projectId: String, editorStateUrl: String, pandocUrl: String }
+  static values = {
+    projectId: String,
+    editorStateUrl: String,
+    pandocUrl: String,
+    rootPath: String,
+    userEmail: String,
+    hasProfilePage: Boolean,
+    profilePath: String,
+    settingsPath: String,
+    subscriptionsPath: String,
+    signOutPath: String,
+  }
 
   /** Load the React bundle as soon as the controller initializes.
    * @returns {void}
@@ -43,6 +54,13 @@ export default class extends Controller {
       apiBase: this.editorStateUrlValue,
       pandocUrl: this.pandocUrlValue,
       csrfToken: document.querySelector('meta[name="csrf-token"]')?.content,
+      rootPath: this.rootPathValue,
+      userEmail: this.userEmailValue,
+      hasProfilePage: this.hasProfilePageValue,
+      profilePath: this.profilePathValue,
+      settingsPath: this.settingsPathValue,
+      subscriptionsPath: this.subscriptionsPathValue,
+      signOutPath: this.signOutPathValue,
     })
 
     this.notifyLayoutChange()

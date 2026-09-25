@@ -1,6 +1,10 @@
 <% content_for :title, "Manage Subscription Plans" %>
 <% content_for :subscription_notice do %><!-- no subscribe nudge on subscriptions pages --><% end %>
 <% content_for :heading, "Manage Subscription Plans" %>
+
+<% if current_user.owns_remindable_subscription? %>
+  <%= render "subscriptions/reminders_status" %>
+<% end %>
 <% content_for :actions do %>
   <%= link_to "mailto:requestdemo@pretext.plus?subject=PreTeXt.Plus%20Demonstration%20Request",
         class: "#{button_classes(color: "gray", outlined: true)} inline-flex select-none items-center gap-2 ml-1 px-4 py-2 my-1 text-sm" do %>
@@ -11,6 +15,7 @@
       Manage payment info
     <% end %>
   <% end %>
+  <% if current_user.confirmed? %>
   <span class="relative">
     <label for="subscribe-toggle" class="<%= button_classes(color: "gray", outlined: true) %> inline-flex select-none items-center gap-2 ml-1 px-4 py-2 my-1 text-sm">
       New Subscription Plan&nbsp;&#9662;
@@ -27,7 +32,7 @@
               </span>
               <span>
                   <%= type.name %>:
-                  <%= type.price %>/seat/<%= type.recurrence %> (pay by card)
+                  <%= type.price %>/seat/<%= type.recurrence %> (pay by card<% if type.trial_days_for(current_user) > 0 %>, <%= type.trial_days_for(current_user) %>-day free trial<% end %>)
               </span>
         <% end %>
         <% if type.invoiceable? %>
@@ -46,6 +51,9 @@
       <% end %>
     </span>
   </span>
+  <% else %>
+    <span class="ml-1 px-4 py-2 my-1 text-sm text-gray-600">Confirm your email address to subscribe.</span>
+  <% end %>
 <% end %>
 
 <h2 class="text-xl mb-2">Subscription Status</h2>

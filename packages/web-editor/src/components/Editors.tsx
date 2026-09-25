@@ -10,7 +10,7 @@ import {
 } from "react";
 import clsx from "clsx";
 
-import CodeEditor, { type CodeEditorHandle } from "./CodeEditor";
+import CodeEditor, { type CodeEditorHandle, type CodeEditorMenuState } from "./CodeEditor";
 //import { VisualEditor } from "@pretextbook/visual-editor";
 import LivePreview, { type LivePreviewHandle } from "./LivePreview";
 import { isLocalPreviewAvailable, type PreviewTheme } from "./wasmPreview";
@@ -29,7 +29,8 @@ import AssetManagerModal, { type AssetManagerMainTab } from "./AssetManagerModal
 import AssetEditModal from "./AssetEditModal";
 import SnippetManagerModal, { type SnippetManagerMainTab } from "./SnippetManagerModal";
 import SnippetEditModal from "./SnippetEditModal";
-import MenuBar from "./MenuBar";
+import TopBar, { type TopBarAccountAreaHelpers } from "./TopBar";
+import type { MenuEntry } from "./MenuDropdown";
 import TableOfContents from "./TableOfContents";
 import FindReplaceDrawer from "./toc/FindReplaceDrawer";
 import ErrorBoundary from "./ErrorBoundary";
@@ -154,20 +155,18 @@ export interface editorProps {
   title?: string;
   /** Called when the user edits the title field. */
   onTitleChange?: (value: string) => void;
-  /** If provided, a Save button is rendered in the menu bar. */
-  onSaveButton?: () => void;
-  /** Label for the Save button.  Defaults to `"Save"`. */
-  saveButtonLabel?: string;
-  /** If provided, a Cancel button is rendered in the menu bar. */
-  onCancelButton?: () => void;
-  /** Label for the Cancel button.  Defaults to `"Cancel"`. */
-  cancelButtonLabel?: string;
+  /** If provided, a "Save & Close" row is rendered in the File menu. */
+  onSaveAndClose?: () => void;
+  /** Label for the Save & Close row.  Defaults to `"Save & Close"`. */
+  saveAndCloseLabel?: string;
   /** Called when a user submits feedback from any built-in feedback link. */
   onFeedbackSubmit?: (feedback: FeedbackSubmission) => void | Promise<void>;
   /** Optional URL for the current project, included in feedback submissions. */
   projectUrl?: string;
+  /** The signed-in user's email, if any — used to silently attach it to feedback submissions instead of asking for one. */
+  userEmail?: string;
   /**
-   * If provided, `onSave` is called on Ctrl+S in addition to `onSaveButton`.
+   * If provided, `onSave` is called on Ctrl+S in addition to `onSaveAndClose`.
    * Useful when the host wants a keyboard shortcut to trigger saving without
    * necessarily showing an explicit Save button.
    */
@@ -401,11 +400,40 @@ export interface editorProps {
   hideSnippets?: boolean;
 
   /**
-   * If true, the built-in menu bar (title field, Save/Cancel buttons,
-   * feedback link, presence avatars) is not rendered at all. Useful when
-   * the host renders its own header above the editor.
+   * The unified top bar: logo, then a title/language row above a
+   * File/Edit/Insert/Tools/Help menu row, with the host's Account content
+   * flush right. The host supplies the host-specific slots this
+   * host-agnostic package cannot build itself.
    */
-  hideMenuBar?: boolean;
+  topBar: {
+    /** Rendered at the far left of the bar. Falls back to a plain "✏️" when omitted. */
+    logo?: ReactNode;
+    /**
+     * Rendered flush right, spanning the bar's full height — e.g. the host's
+     * Account dropdown menu. Omit to render no flush-right content. Hidden
+     * below the compact-viewport breakpoint — see `accountMenuEntries`.
+     */
+    accountArea?: ReactNode;
+    /**
+     * The Account menu's entries. Folded into the File menu, with the
+     * separate `accountArea` hidden, below the compact-viewport breakpoint.
+     */
+    accountMenuEntries?: MenuEntry[];
+    /**
+     * Builds a "Help"/"Help & Feedback" menu rendered inline with
+     * File/Edit/Insert/Tools/Language. Called with helpers (e.g.
+     * `onGiveFeedback`) so the host's Help entries can trigger the feedback
+     * dialog this package owns. Omit for no Help menu.
+     */
+    helpMenu?: (
+      helpers: TopBarAccountAreaHelpers,
+    ) => { label: string; entries: MenuEntry[] };
+    /**
+     * Renders in place of the editable title control when set — e.g. a host
+     * with nothing to persist a title edit to (a demo/tryit project).
+     */
+    titleOverride?: ReactNode;
+  };
 
   /**
    * Real-time collaboration session. When provided, the editor binds its
@@ -666,6 +694,11 @@ const EditorsInner = (props: EditorsInnerProps) => {
 
   const livePreviewRef = useRef<LivePreviewHandle>(null);
   const codeEditorRef = useRef<CodeEditorHandle>(null);
+  // Monaco-derived state (undo/redo/selection/find-in-file + actions), lifted
+  // from CodeEditor so TopBar can render the Edit/Insert/Tools toolbar
+  // outside the code-editor panel. Null until CodeEditor's first report.
+  const [codeEditorMenuState, setCodeEditorMenuState] =
+    useState<CodeEditorMenuState | null>(null);
 
   /**
    * Settle the code editor's debounced buffer into the pool, then read the pool
@@ -1552,6 +1585,7 @@ const EditorsInner = (props: EditorsInnerProps) => {
       source: divisionActiveSource,
       sourceFormat: activeDivisionFormat,
       projectUrl: props.projectUrl,
+      userEmail: props.userEmail,
       rootDivisionId: rootDivision?.xmlId,
       canConvertToPretext: divisionConvertedPretext !== undefined,
       activeEditorSource: divisionActiveSource,
@@ -2046,13 +2080,31 @@ const EditorsInner = (props: EditorsInnerProps) => {
   const activeCollabText =
     bridge && activeDivision ? bridge.getYText(activeDivision.xmlId) : undefined;
 
+  // ── Code editor menu wiring (shared between the code editor's keyboard
+  // shortcuts and TopBar's File/Edit/Insert/Tools toolbar) ────────────────
+  const onOpenImport = () => openModal("isImportDialogOpen");
+  const onOpenDocinfoEditor = () => openModal("isDocinfoEditorOpen");
+  const onOpenConvertToPretext =
+    isNonPretextDoc && divisionConvertedPretext !== undefined
+      ? () => openModal("isConvertDialogOpen")
+      : undefined;
+  const canConvertToPretext = divisionConvertedPretext !== undefined;
+  const onOpenAssets =
+    props.projectAssets !== undefined && activeDivisionFormat === "pretext"
+      ? () => openModal("isAssetPickerOpen")
+      : undefined;
+  const onOpenSnippets =
+    props.projectSnippets !== undefined && activeDivisionFormat === "pretext"
+      ? () => openModal("isSnippetPickerOpen")
+      : undefined;
+  const onShowFullSource = () => openModal("isFullSourceOpen");
+
   // ── Code editor ──────────────────────────────────────────────────────────
   const codeEditor = (
     <CodeEditor
       ref={codeEditorRef}
       content={divisionActiveSource}
       sourceFormat={activeDivisionFormat}
-      rootType={previewRootType}
       pretextValidation={pretextValidation}
       collab={
         props.collaboration && bridge && activeCollabText && activeDivision
@@ -2072,28 +2124,6 @@ const EditorsInner = (props: EditorsInnerProps) => {
       onRebuild={canPreview ? triggerRebuild : undefined}
       onSave={triggerSaveAndRebuild}
       onCursorLineChange={handleCursorLineChange}
-      onOpenImport={() => openModal("isImportDialogOpen")}
-      // The code editor hides this unless the active format has a cleanup
-      // engine behind it (LaTeX) and the buffer is editable.
-      onOpenClean={handleOpenCleanDialog}
-      onOpenDocinfoEditor={() => openModal("isDocinfoEditorOpen")}
-      onOpenConvertToPretext={
-        isNonPretextDoc && divisionConvertedPretext !== undefined
-          ? () => openModal("isConvertDialogOpen")
-          : undefined
-      }
-      canConvertToPretext={divisionConvertedPretext !== undefined}
-      onOpenAssets={
-        props.projectAssets !== undefined && activeDivisionFormat === "pretext"
-          ? () => openModal("isAssetPickerOpen")
-          : undefined
-      }
-      onOpenSnippets={
-        props.projectSnippets !== undefined && activeDivisionFormat === "pretext"
-          ? () => openModal("isSnippetPickerOpen")
-          : undefined
-      }
-      onShowFullSource={() => openModal("isFullSourceOpen")}
       onOpenFindInProject={handleOpenFindPanel}
       // Every format now locks its structural lines (the PreTeXt wrapper tag +
       // title, the Markdown frontmatter, the LaTeX `\section` header) and a
@@ -2103,11 +2133,16 @@ const EditorsInner = (props: EditorsInnerProps) => {
       // read-only: that form isn't otherwise reachable, and this is a second
       // entry point into it beyond the (already-hidden) TOC menus.
       onRequestWrapperEdit={props.readOnly ? undefined : handleRequestWrapperEdit}
-      hideAssets={props.hideAssets}
-      hideSnippets={props.hideSnippets}
       readOnly={props.readOnly}
       pasteAutoConvert={pasteAutoConvert}
-      onTogglePasteAutoConvert={togglePasteAutoConvert}
+      onMenuStateChange={setCodeEditorMenuState}
+      presence={
+        props.collaboration ? (
+          <PresenceAvatars awareness={props.collaboration.awareness} />
+        ) : undefined
+      }
+      onConvertToPretext={onOpenConvertToPretext}
+      canConvertToPretext={canConvertToPretext}
     />
   );
 
@@ -2287,24 +2322,37 @@ const EditorsInner = (props: EditorsInnerProps) => {
 
   return (
     <div
-      className="flex flex-col w-full h-full flex-1 min-h-0 relative"
+      className="flex flex-col w-full h-full flex-1 min-h-0 relative overflow-x-hidden"
       onKeyDown={handleKeyDown}
     >
-      {!props.hideMenuBar && (
-        <MenuBar
-          onSaveButton={props.onSaveButton}
-          saveButtonLabel={props.saveButtonLabel}
-          onCancelButton={props.onCancelButton}
-          cancelButtonLabel={props.cancelButtonLabel}
-          readOnly={props.readOnly}
-          showPreviewModeToggle={false}
-          presence={
-            props.collaboration ? (
-              <PresenceAvatars awareness={props.collaboration.awareness} />
-            ) : undefined
-          }
-        />
-      )}
+      <TopBar
+        logo={props.topBar.logo}
+        accountArea={props.topBar.accountArea}
+        accountMenuEntries={props.topBar.accountMenuEntries}
+        helpMenu={props.topBar.helpMenu}
+        titleOverride={props.topBar.titleOverride}
+        readOnly={props.readOnly}
+        onSaveAndClose={props.onSaveAndClose}
+        saveAndCloseLabel={props.saveAndCloseLabel}
+        content={divisionActiveSource}
+        sourceFormat={activeDivisionFormat}
+        rootType={previewRootType}
+        onContentChange={handleDivisionContentChange}
+        onOpenImport={onOpenImport}
+        onOpenClean={handleOpenCleanDialog}
+        onOpenDocinfoEditor={onOpenDocinfoEditor}
+        onOpenConvertToPretext={onOpenConvertToPretext}
+        canConvertToPretext={canConvertToPretext}
+        onOpenAssets={onOpenAssets}
+        onOpenSnippets={onOpenSnippets}
+        onShowFullSource={onShowFullSource}
+        onOpenFindInProject={handleOpenFindPanel}
+        hideAssets={props.hideAssets}
+        hideSnippets={props.hideSnippets}
+        pasteAutoConvert={pasteAutoConvert}
+        onTogglePasteAutoConvert={togglePasteAutoConvert}
+        menuState={codeEditorMenuState}
+      />
       <div className="flex flex-1 min-h-0 flex-col relative">
         <ErrorBoundary resetKeys={[divisionActiveSource, activeDivisionId]}>
           {editorDisplays}

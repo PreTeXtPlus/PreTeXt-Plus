@@ -62,6 +62,7 @@ function renderEditors() {
       rootDivisionId="doc"
       projectType="article"
       title="Doc"
+      topBar={{}}
       onContentChange={(c) => changes.push(c)}
       onDivisionAdd={(d) => {
         added.push(d);

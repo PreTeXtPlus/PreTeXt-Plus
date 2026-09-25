@@ -9,7 +9,7 @@ import { Controller } from "@hotwired/stimulus"
  * @extends {Controller}
  */
 export default class extends Controller {
-  static values = { projectId: String, sourceUrl: String }
+  static values = { projectId: String, sourceUrl: String, rootPath: String }
 
   /** Load the React bundle as soon as the controller initializes.
    * @returns {void}
@@ -41,6 +41,7 @@ export default class extends Controller {
     this.component.render(root, {
       projectId: this.projectIdValue,
       sourceUrl: this.sourceUrlValue,
+      rootPath: this.rootPathValue,
     })
 
     this.notifyLayoutChange()
