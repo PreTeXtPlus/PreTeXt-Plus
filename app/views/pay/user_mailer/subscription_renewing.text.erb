@@ -1,0 +1,16 @@
+<% subscription = params[:pay_subscription] -%>
+<% type = subscription.type -%>
+<% show_price = type&.stripe_price.present? -%>
+Thank you for your support of <%= Pay.application_name %>!
+
+Your <%= type ? type.name : Pay.application_name %> subscription<% if subscription.quantity.to_i > 1 %> (<%= pluralize(subscription.quantity, "seat") %>)<% end %> will renew automatically on <%= params[:date].strftime("%B %-d, %Y") %><% if show_price %> at <%= number_to_currency(subscription.price) %>/<%= type.recurrence %><% end %>, and your payment method on file will be charged.
+
+To cancel or update your payment method before then, open your subscription page and choose "Manage payment info":
+
+<%= subscriptions_url %>
+
+Questions? Please reply to this email.
+
+You can turn subscription reminders on or off anytime in your account settings:
+
+<%= edit_user_url(subscription.user) %>

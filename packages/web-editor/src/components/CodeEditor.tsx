@@ -1,6 +1,6 @@
 import { Editor } from "@monaco-editor/react";
 import { constrainedEditor } from "constrained-editor-plugin";
-import { useState, useRef, useEffect, useMemo, forwardRef, useImperativeHandle } from "react";
+import { useState, useRef, useEffect, useMemo, useCallback, forwardRef, useImperativeHandle, type ReactNode } from "react";
 import {
   copySelection,
   cutSelection,
@@ -10,7 +10,6 @@ import {
   selectEditableRegion,
 } from "./editorCommands";
 import type { EditorMenuActions } from "./CodeEditorMenu";
-import type { RootDivisionType } from "../types/sections";
 import type * as Y from "yjs";
 import type { Awareness } from "y-protocols/awareness";
 import { editorConfigs } from "./editorConfigs";
@@ -18,7 +17,6 @@ import { applyCleanFixes, fixesForModel } from "./editorConfigs/latexClean";
 import { summarizeCleanFixes, type CleanFinding } from "../cleanFindings";
 import { usePretextDiagnostics } from "./editorConfigs/usePretextDiagnostics";
 import type { PretextValidationInput } from "./editorConfigs/pretextDiagnostics";
-import CodeEditorMenu from "./CodeEditorMenu";
 import { MonacoCollabBinding } from "../collab/monacoBinding";
 import { installEditGuard } from "../collab/editGuard";
 import { computeLockedRegion, findPretextHeaderEnd, isRangeWithin } from "./lockedRegion";
@@ -49,11 +47,6 @@ interface CodeEditorProps {
    * to `"xml"`, `"pretext-latex"`, or `"pretext-markdown"`.
    */
   sourceFormat: SourceFormat;
-  /**
-   * The project's root element, passed through to the Insert menu so it can
-   * offer the constructs that only exist under one (a `<slide>`).
-   */
-  rootType?: RootDivisionType;
   /** Called (debounced 500 ms) whenever the user edits the content. */
   onChange: (value: string | undefined) => void;
   /** If provided, Ctrl+Enter in the editor triggers this callback. */
@@ -66,34 +59,12 @@ interface CodeEditorProps {
    * not on horizontal movement or on programmatic reveals.
    */
   onCursorLineChange?: (line: number) => void;
-  /** Called when the user chooses Tools → Import…. */
-  onOpenImport: () => void;
   /**
-   * Called when the user clicks "Clean up LaTeX…" in the toolbar. The button is
-   * shown only when the active format has a cleanup engine (LaTeX) and the
-   * buffer is editable, so a host that omits this simply never offers it.
+   * If provided, Ctrl+Shift+F opens the project-wide Find/Replace drawer, and
+   * the toolbar's "Find/Replace in Project…" menu item (rendered externally —
+   * see `onMenuStateChange`) calls it too.
    */
-  onOpenClean?: () => void;
-  /** Called when the user clicks "Edit Macros" in the toolbar. */
-  onOpenDocinfoEditor: () => void;
-  /**
-   * If provided, a "Convert to PreTeXt" button is shown in the toolbar.
-   * Called when the user clicks to open the conversion confirmation dialog.
-   */
-  onOpenConvertToPretext?: () => void;
-  /**
-   * Controls whether the "Convert to PreTeXt" button is enabled.
-   * Should be `false` when conversion has failed.
-   */
-  canConvertToPretext?: boolean;
-  /** If provided, an "Assets" button is shown in the toolbar (PreTeXt mode only). */
-  onOpenAssets?: () => void;
-  /** If provided, a "Snippets" button is shown in the toolbar (PreTeXt mode only). */
-  onOpenSnippets?: () => void;
-  /** If provided, a "Find in Project…" item is shown in the Tools menu. */
   onOpenFindInProject?: () => void;
-  /** Called when the user clicks "Display Full Source" to open the assembled-source modal. */
-  onShowFullSource: () => void;
   /**
    * Called when the user clicks any locked leading line of the wrapper (the
    * opening tag, and the title line right after it when present). Hosts use
@@ -101,17 +72,23 @@ interface CodeEditorProps {
    * since the tag/title/xml:id aren't editable in-place.
    */
   onRequestWrapperEdit?: () => void;
-  hideAssets?: boolean;
-  hideSnippets?: boolean;
-  /** When true, Monaco is non-editable and the toolbar shows only "Display Full Source". */
+  /** When true, Monaco is non-editable. */
   readOnly?: boolean;
   /**
    * Convert LaTeX or Markdown pasted into a PreTeXt division on the way in.
    * Defaults to on; the author's remembered choice lives in the store.
    */
   pasteAutoConvert?: boolean;
-  /** Flip {@link pasteAutoConvert}. Omit to hide the Edit-menu toggle. */
-  onTogglePasteAutoConvert?: () => void;
+  /**
+   * Reports the Monaco-derived state (undo/redo/selection availability, the
+   * clipboard/select-all/insert actions, and find-in-file status) that only
+   * this component — the one holding the live Monaco instance — can produce.
+   * The host (`Editors`/`TopBar`) uses this to render the Edit/Insert/Tools
+   * toolbar externally, since this component no longer renders its own.
+   * Fires once after mount and again whenever the reported state actually
+   * changes.
+   */
+  onMenuStateChange?: (state: CodeEditorMenuState) => void;
   /**
    * When set, the editor model is bound to this shared `Y.Text` instead of
    * being driven by the `content` prop: keystrokes emit CRDT deltas, remote
@@ -133,6 +110,41 @@ interface CodeEditorProps {
    * would restart the debounce forever and never lint.
    */
   pretextValidation?: PretextValidationInput;
+  /**
+   * Collaborator presence indicator (avatar chips), when collaboration is on.
+   * Rendered floating over the editor's lower-right corner, next to the
+   * source-format badge.
+   */
+  presence?: ReactNode;
+  /**
+   * If provided, a "Convert to PreTeXt" button is shown floating over the
+   * editor's lower-right corner, next to the source-format badge.
+   * Called when the user clicks to promote the derived PreTeXt to the canonical source.
+   */
+  onConvertToPretext?: () => void;
+  /**
+   * Controls whether the "Convert to PreTeXt" button is enabled.
+   * Should be `false` when conversion has failed.
+   */
+  canConvertToPretext?: boolean;
+}
+
+/**
+ * Monaco-derived reactive state, reported via `onMenuStateChange` so a host
+ * can render the Edit/Insert/Tools toolbar outside this component (e.g. in a
+ * full-width `TopBar`) while still driving it from the live Monaco instance
+ * only this component holds.
+ */
+export interface CodeEditorMenuState {
+  canUndo: boolean;
+  canRedo: boolean;
+  hasSelection: boolean;
+  onUndo: () => void;
+  onRedo: () => void;
+  actions: EditorMenuActions;
+  isFindingInFile: boolean;
+  /** Closes Monaco's own find widget, then calls `onOpenFindInProject`. No-op if none was provided. */
+  switchToFindInProject: () => void;
 }
 
 /** Imperative handle exposed via `forwardRef` for programmatic control. */
@@ -198,6 +210,16 @@ export interface CodeEditorHandle {
   flushPendingChange: () => void;
 }
 
+/** Labels for the floating source-format badge in the editor's lower-right corner. */
+const FORMAT_LABELS: Record<SourceFormat, string> = {
+  pretext: "PreTeXt",
+  latex: "LaTeX",
+  markdown: "Markdown",
+};
+
+const CONVERT_BUTTON_CLASSES =
+  "shrink-0 py-0.5 px-1.5 rounded-[3px] border border-transparent cursor-pointer text-[13px] font-medium leading-[1.3] transition-colors duration-150 ease-in-out bg-blue-600 text-white enabled:hover:bg-blue-700 disabled:bg-blue-300 disabled:cursor-not-allowed";
+
 /** Base Monaco editor options shared across all instances of this component. */
 const baseOptions = {
   automaticLayout: true,
@@ -226,28 +248,20 @@ const baseOptions = {
 const CodeEditor = forwardRef<CodeEditorHandle, CodeEditorProps>(({
   content,
   sourceFormat,
-  rootType,
   onChange,
   onRebuild,
   onSave,
   onCursorLineChange,
-  onOpenImport,
-  onOpenClean,
-  onOpenDocinfoEditor,
-  onOpenConvertToPretext,
-  canConvertToPretext,
-  onOpenAssets,
-  onOpenSnippets,
   onOpenFindInProject,
-  onShowFullSource,
   onRequestWrapperEdit,
-  hideAssets,
-  hideSnippets,
   readOnly,
   pasteAutoConvert = true,
-  onTogglePasteAutoConvert,
+  onMenuStateChange,
   pretextValidation,
   collab,
+  presence,
+  onConvertToPretext,
+  canConvertToPretext,
 }, ref) => {
   const editorRef = useRef<any>(null);
   const monacoRef = useRef<any>(null);
@@ -1047,15 +1061,18 @@ const CodeEditor = forwardRef<CodeEditorHandle, CodeEditorProps>(({
     onChange(newContent);
   };
 
-  const handleUndo = () => {
+  // Stable identities (read only through refs and stable setState setters) so
+  // the `onMenuStateChange` effect below doesn't fire on every render — see
+  // that effect for why the bundle's function identities matter.
+  const handleUndo = useCallback(() => {
     editorRef.current?.trigger("", "undo");
     updateUndoRedoState();
-  };
+  }, []);
 
-  const handleRedo = () => {
+  const handleRedo = useCallback(() => {
     editorRef.current?.trigger("", "redo");
     updateUndoRedoState();
-  };
+  }, []);
 
   /**
    * Park the cursor inside the editable body before writing to it.
@@ -1128,69 +1145,59 @@ const CodeEditor = forwardRef<CodeEditorHandle, CodeEditorProps>(({
     insertSnippet(editor, plan.body);
   };
 
-  // Rebuilt each render rather than memoized: every method reads the editor
-  // through `editorRef`, so there is no state to go stale and nothing below
-  // this is memoized on the object's identity.
-  const menuActions: EditorMenuActions = {
-    runCommand: (id) => {
-      runEditorCommand(editorRef.current, id);
-      // Undo/redo run through here too, and the model's stacks have moved.
-      updateUndoRedoState();
-    },
-    cut: () => cutSelection(editorRef.current),
-    copy: () => copySelection(editorRef.current),
-    selectAll: selectEditableContent,
-    paste: async () => {
-      ensureCursorInEditableRegion();
-      return pasteFromClipboard(editorRef.current);
-    },
-    insertSnippet: insertSnippetInContext,
-  };
+  // Stable identity for the same reason as `handleUndo`/`handleRedo` above:
+  // every method here reads the editor through `editorRef`, so there is no
+  // state to go stale by memoizing it.
+  const menuActions: EditorMenuActions = useMemo(
+    () => ({
+      runCommand: (id) => {
+        runEditorCommand(editorRef.current, id);
+        // Undo/redo run through here too, and the model's stacks have moved.
+        updateUndoRedoState();
+      },
+      cut: () => cutSelection(editorRef.current),
+      copy: () => copySelection(editorRef.current),
+      selectAll: selectEditableContent,
+      paste: async () => {
+        ensureCursorInEditableRegion();
+        return pasteFromClipboard(editorRef.current);
+      },
+      insertSnippet: insertSnippetInContext,
+    }),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [],
+  );
 
   // Closes Monaco's own find widget before handing off to Find in Project,
   // so switching between the two never leaves both open at once.
-  const handleSwitchToFindInProject = () => {
+  const handleSwitchToFindInProject = useCallback(() => {
     findControllerRef.current?.closeFindWidget?.();
     onOpenFindInProjectRef.current?.();
-  };
+  }, []);
+
+  // Reports the state a host renders the Edit/Insert/Tools toolbar from, once
+  // after mount and again whenever one of the primitive booleans actually
+  // changes. The callbacks bundled alongside them are the stable identities
+  // above, so this doesn't fire (and the host doesn't re-render) on every
+  // keystroke — only when undo/redo/selection/find-in-file availability
+  // genuinely changes.
+  useEffect(() => {
+    onMenuStateChange?.({
+      canUndo,
+      canRedo,
+      hasSelection,
+      onUndo: handleUndo,
+      onRedo: handleRedo,
+      actions: menuActions,
+      isFindingInFile,
+      switchToFindInProject: handleSwitchToFindInProject,
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [canUndo, canRedo, hasSelection, isFindingInFile, onMenuStateChange]);
 
   return (
     <div style={{ display: "flex", flexDirection: "column", height: "100%" }}>
-      <CodeEditorMenu
-        content={content}
-        sourceFormat={sourceFormat}
-        rootType={rootType}
-        onContentChange={handleContentChange}
-        onOpenImport={onOpenImport}
-        pasteAutoConvert={pasteAutoConvert}
-        onTogglePasteAutoConvert={onTogglePasteAutoConvert}
-        onOpenClean={
-          onOpenClean && !readOnly && editorConfigs[sourceFormat].clean
-            ? onOpenClean
-            : undefined
-        }
-        onOpenDocinfoEditor={onOpenDocinfoEditor}
-        onUndo={handleUndo}
-        onRedo={handleRedo}
-        canUndo={canUndo}
-        canRedo={canRedo}
-        hasSelection={hasSelection}
-        actions={menuActions}
-        onConvertToPretext={onOpenConvertToPretext}
-        canConvertToPretext={canConvertToPretext}
-        onOpenAssets={onOpenAssets}
-        onOpenSnippets={onOpenSnippets}
-        onOpenFindInProject={onOpenFindInProject}
-        isFindingInFile={isFindingInFile}
-        onSwitchToFindInProject={
-          onOpenFindInProject ? handleSwitchToFindInProject : undefined
-        }
-        onShowFullSource={onShowFullSource}
-        hideAssets={hideAssets}
-        hideSnippets={hideSnippets}
-        readOnly={readOnly}
-      />
-      <div style={{ flex: 1 }}>
+      <div style={{ flex: 1, position: "relative" }}>
         <Editor
           options={options}
           height="100%"
@@ -1211,6 +1218,28 @@ const CodeEditor = forwardRef<CodeEditorHandle, CodeEditorProps>(({
             debounceRef.current = setTimeout(deliver, 500);
           }}
         />
+        <div className="absolute bottom-2 right-4 z-10 flex items-center gap-2">
+          {presence}
+          {onConvertToPretext && !readOnly && (
+            <button
+              type="button"
+              className={CONVERT_BUTTON_CLASSES}
+              onClick={onConvertToPretext}
+              disabled={canConvertToPretext === false}
+              title="Convert this division to use PreTeXt XML"
+            >
+              Convert to PreTeXt
+            </button>
+          )}
+          {readOnly && (
+            <span className="inline-flex items-center py-0.5 px-2 rounded-full bg-[#a32899] text-white text-xs font-semibold pointer-events-none shadow-sm">
+              Read-only
+            </span>
+          )}
+          <span className="inline-flex items-center py-0.5 px-2 rounded-full bg-gray-200/90 text-gray-800 text-xs font-semibold pointer-events-none shadow-sm">
+            {FORMAT_LABELS[sourceFormat]}
+          </span>
+        </div>
       </div>
     </div>
   );

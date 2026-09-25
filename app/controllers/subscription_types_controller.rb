@@ -1,5 +1,6 @@
 class SubscriptionTypesController < ApplicationController
   before_action :require_admin, except: %i[ checkout new_invoice invoice ]
+  before_action :require_confirmed_email, only: %i[ checkout new_invoice invoice ]
   before_action :set_subscription_type, only: %i[ show edit update destroy checkout new_invoice invoice ]
 
   # GET /subscription_types or /subscription_types.json
@@ -90,26 +91,36 @@ class SubscriptionTypesController < ApplicationController
 
     # Only allow a list of trusted parameters through.
     def subscription_type_params
-      params.expect(subscription_type: [ :name, :description, :bulletpoints, :stripe_price_id, :order, :trial_date, :invoiceable ])
+      params.expect(subscription_type: [ :name, :description, :bulletpoints, :stripe_price_id, :order, :trial_days, :invoiceable ])
     end
 
     def checkout_url
       return subscriptions_url if Rails.env.development?
       return_url = "https://#{request.host}/subscriptions"
-      current_user.payment_processor.checkout(
+      options = {
         mode: "subscription",
         line_items: [ {
           price: @subscription_type.stripe_price_id,
           quantity: 1,
           adjustable_quantity: { enabled: true }
         } ],
-        subscription_data: {
-          trial_period_days: @subscription_type.trial_days > 0 ? @subscription_type.trial_days : nil
-        },
+        payment_method_collection: "always",
         success_url: "#{return_url}?sync=true",
         cancel_url: return_url,
         billing_address_collection: "auto",
         allow_promotion_codes: false
-      ).url
+      }
+      trial_days = @subscription_type.trial_days_for(current_user)
+      if trial_days > 0
+        options[:subscription_data] = {
+          trial_period_days: trial_days,
+          # Cancel at trial end, rather than invoicing, if the card is removed mid-trial.
+          trial_settings: { end_behavior: { missing_payment_method: "cancel" } }
+        }
+        options[:custom_text] = {
+          submit: { message: "Your card will be charged automatically after your #{trial_days}-day free trial unless you cancel first." }
+        }
+      end
+      current_user.payment_processor.checkout(**options).url
     end
 end

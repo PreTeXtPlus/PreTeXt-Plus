@@ -17,6 +17,7 @@ two:
   stripe_price_id: price_1TMTEvIprmvrFLasXOkunUVR
   order: 1
   stripe_price_id: sustaining
+  trial_days: 7
 
 three:
   name: Institutional
@@ -27,4 +28,5 @@ three:
   stripe_price_id: price_1TMTGEIprmvrFLashZcu8wkN
   order: 2
   stripe_price_id: institutional
+  trial_days: 7
   invoiceable: true

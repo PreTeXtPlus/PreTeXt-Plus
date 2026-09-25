@@ -37,4 +37,16 @@
             <% end %>
         <% end %>
     </div>
+
+    <div class="my-5">
+        <%= form.label :subscription_reminders do %>
+            Email me before my subscription renews
+        <% end %>
+        <%= form.select :subscription_reminders,
+              [ [ "Send default reminders (on for annual plans, off for monthly)", "" ],
+                [ "Always email me", true ],
+                [ "Never email me", false ] ],
+              {},
+              class: "block shadow-sm rounded-md border border-gray-400 focus:outline-blue-600 px-3 py-2 mt-2 w-full" %>
+    </div>
 <% end %>

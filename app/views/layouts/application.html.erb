@@ -30,6 +30,7 @@
   </head>
 
   <body class="min-h-dvh flex flex-col">
+    <% unless content_for?(:hide_top_nav) %>
     <nav class="fixed z-10 top-0 left-0 bg-white px-6 py-4 w-full shadow border-b border-gray-200 h-16">
         <div class="flex flex-col container mx-auto lg:flex-row lg:items-center lg:justify-between">
             <div class="flex justify-between items-center">
@@ -132,6 +133,7 @@
             </div>
         </div>
     </nav>
+    <% end %>
       <% if notice.present? or params[:notice].present? or alert.present? %>
         <div class="relative flex justify-center w-full cursor-pointer -mb-20 bg-gray-50" onclick="this.remove()">
           <% if notice.present? or params[:notice].present? %>
@@ -158,11 +160,11 @@
         </div>
       <% end %>
         <% if content_for?(:full_screen_content) %>
-          <main class="h-dvh pt-16">
+          <main class="h-dvh <%= "pt-16" unless content_for?(:hide_top_nav) %>">
             <%= yield(:full_screen_content) %>
           </main>
         <% else %>
-          <div class="pt-16 flex-1 flex flex-col bg-white">
+          <div class="<%= "pt-16" unless content_for?(:hide_top_nav) %> flex-1 flex flex-col bg-white">
             <% if content_for?(:heading) %>
               <header class="border-b border-gray-200 bg-gray-50">
                 <% if current_user.present? %>

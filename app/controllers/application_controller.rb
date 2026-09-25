@@ -84,6 +84,11 @@ class ApplicationController < ActionController::Base
     authorize! :manage, :admin
   end
 
+  def require_confirmed_email
+    return if current_user.confirmed?
+    redirect_to projects_path, alert: "Please confirm your email address before subscribing."
+  end
+
   # Reads the "tz" cookie set client-side (see app/javascript/application.js) so
   # local_time_tag can server-render already-localized times. Time.zone is a
   # thread-global, not request-scoped, so Time.use_zone sets it for this request

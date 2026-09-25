@@ -93,6 +93,32 @@ class User < ApplicationRecord
     subscribed? || admin
   end
 
+  # Stripe has no one-trial-per-customer rule, so a trial is only offered to users who
+  # have never had a subscription of their own (any status, any customer record) --
+  # otherwise cancelling and re-subscribing would restart it. Being seated on someone
+  # else's subscription doesn't count.
+  def trial_eligible?
+    pay_subscriptions.none?
+  end
+
+  # Subscriptions that would otherwise auto-charge: not invoiced (Stripe emails those
+  # itself and Pay skips them) and not already cancelled. Trialing counts, so the
+  # reminders banner appears before the first real charge too.
+  def remindable_subscriptions
+    pay_subscriptions.select { |s| s.grants_privileges? && !s.invoiced? && !s.canceled? }
+  end
+
+  def owns_remindable_subscription?
+    remindable_subscriptions.any?
+  end
+
+  # Aggregate for the subscriptions-index banner, where a user's several plans could
+  # otherwise disagree; the toggle itself is a single user-level override, so "on" here
+  # means every one of them would get a reminder.
+  def subscription_reminders_effective?
+    remindable_subscriptions.all?(&:reminders_enabled?)
+  end
+
   def has_profile_page?
     username.present?
   end
