@@ -1,14 +1,14 @@
 import type { ReactNode } from "react";
 
-/** Shared frame for the explorer rail's 24×24 stroke icons. */
+/** Shared frame for the explorer rail's 36×36 stroke icons. */
 const Icon = ({ children }: { children: ReactNode }) => (
   <svg
-    width="24"
-    height="24"
+    width="36"
+    height="36"
     viewBox="0 0 24 24"
     fill="none"
     stroke="currentColor"
-    strokeWidth="1"
+    strokeWidth="0.8"
     strokeLinecap="round"
     strokeLinejoin="round"
     xmlns="http://www.w3.org/2000/svg"
@@ -22,11 +22,15 @@ export const TocIcon = () => (
   <Icon>
     <path d="M9 5L21 5" />
     <path d="M5 7L5 3L3.5 4.5" />
-    <path d="M5.5 14L3.5 14L5.40471 11.0371C5.46692 10.9403 5.50215 10.8268 5.47709 10.7145C5.41935 10.4557 5.216 10 4.5 10C3.50001 10 3.5 10.8889 3.5 10.8889C3.5 10.8889 3.5 10.8889 3.5 10.8889L3.5 11.1111" />
-    <path d="M4 19L4.5 19C5.05228 19 5.5 19.4477 5.5 20V20C5.5 20.5523 5.05228 21 4.5 21L3.5 21" />
-    <path d="M3.5 17L5.5 17L4 19" />
-    <path d="M9 12L21 12" />
-    <path d="M9 19L21 19" />
+    <path d="m 14.750039,20.75 h -2 l 1.90471,-2.9629 c 0.06221,-0.0968 0.09744,-0.2103 0.07238,-0.3226 -0.05774,-0.2588 -0.26109,-0.7145 -0.97709,-0.7145 -0.99999,0 -1,0.8889 -1,0.8889 0,0 0,0 0,0 v 0.2222" />
+    <path d="m 17,12 h 4" />
+    <path d="m 17,19 h 4" />
+    <path d="M 17,5 V 18.932107" />
+    <path d="m 14.25,13.999894 v -4 l -1.5,1.5" />
+    <path d="m 8.75,13.999894 v -4 l -1.5,1.5" />
+    <path d="m 8.75,20.749894 v -4 l -1.5,1.5" />
+    <path d="M11.218067 14.218067h0" />
+    <path d="M11.218067 20.718067h0" />
   </Icon>
 );
 

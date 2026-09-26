@@ -92,7 +92,7 @@ const ProjectExplorer = ({
   return (
     <div className="flex flex-row h-full shrink-0">
       <div
-        className="flex flex-col items-center gap-1 w-9 min-w-9 h-full pt-2 bg-[#f5f6f8] border-r border-[#dde0e6] select-none"
+        className="flex flex-col items-center gap-2 w-12 min-w-12 h-full pt-2 bg-[#f5f6f8] border-r border-[#dde0e6] select-none"
         role="toolbar"
         aria-orientation="vertical"
         aria-label="Project explorer"
@@ -105,7 +105,7 @@ const ProjectExplorer = ({
               type="button"
               data-testid={`explorer-tab-${view}`}
               className={clsx(
-                "flex items-center justify-center w-8 h-8 p-0 border-none rounded-[3px] cursor-pointer",
+                "flex items-center justify-center w-10 h-10 p-0 border-none rounded-[3px] cursor-pointer",
                 isOpen
                   ? "text-slate-800 bg-slate-300"
                   : "text-slate-600 hover:text-slate-700 hover:bg-slate-200 hover:text-slate-500",
