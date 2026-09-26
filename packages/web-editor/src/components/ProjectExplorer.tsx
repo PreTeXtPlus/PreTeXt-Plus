@@ -105,10 +105,10 @@ const ProjectExplorer = ({
               type="button"
               data-testid={`explorer-tab-${view}`}
               className={clsx(
-                "flex items-center justify-center w-7 h-7 p-0 bg-transparent border-none rounded-[3px] cursor-pointer",
+                "flex items-center justify-center w-8 h-8 p-0 border-none rounded-[3px] cursor-pointer",
                 isOpen
-                  ? "bg-[#e0e8ff] text-blue-700"
-                  : "text-[#666] hover:bg-[#e3e6ec] hover:text-[#333]",
+                  ? "text-slate-800 bg-slate-300"
+                  : "text-slate-600 hover:text-slate-700 hover:bg-slate-200 hover:text-slate-500",
               )}
               onClick={() => selectExplorerView(view)}
               aria-pressed={isOpen}
