@@ -31,8 +31,7 @@ import SnippetManagerModal, { type SnippetManagerMainTab } from "./SnippetManage
 import SnippetEditModal from "./SnippetEditModal";
 import TopBar, { type TopBarAccountAreaHelpers } from "./TopBar";
 import type { MenuEntry } from "./MenuDropdown";
-import TableOfContents from "./TableOfContents";
-import FindReplaceDrawer from "./toc/FindReplaceDrawer";
+import ProjectExplorer from "./ProjectExplorer";
 import ErrorBoundary from "./ErrorBoundary";
 import { applyReplacements } from "./projectFind";
 import type { ProjectMatch } from "../types/projectScan";
@@ -604,14 +603,12 @@ const EditorsInner = (props: EditorsInnerProps) => {
   const setIsNarrowScreen = useEditorStore((s) => s.setIsNarrowScreen);
   const activeTab = useEditorStore((s) => s.activeTab);
   const setActiveTab = useEditorStore((s) => s.setActiveTab);
-  const isTocCollapsed = useEditorStore((s) => s.isTocCollapsed);
   const pasteAutoConvert = useEditorStore((s) => s.pasteAutoConvert);
   const togglePasteAutoConvert = useEditorStore(
     (s) => s.togglePasteAutoConvert,
   );
   const setIsTocCollapsed = useEditorStore((s) => s.setIsTocCollapsed);
-  const toggleTocCollapsed = useEditorStore((s) => s.toggleTocCollapsed);
-  const isFindPanelOpen = useEditorStore((s) => s.isFindPanelOpen);
+  const showExplorerView = useEditorStore((s) => s.showExplorerView);
   const isImportDialogOpen = useEditorStore((s) => s.isImportDialogOpen);
   const isCleanDialogOpen = useEditorStore((s) => s.isCleanDialogOpen);
   const isConvertDialogOpen = useEditorStore((s) => s.isConvertDialogOpen);
@@ -1052,7 +1049,7 @@ const EditorsInner = (props: EditorsInnerProps) => {
     }
   };
 
-  const handleOpenFindPanel = () => openModal("isFindPanelOpen");
+  const handleOpenFindPanel = () => showExplorerView("find");
 
   // The active division's source converted to a complete, correctly-typed
   // PreTeXt element. Markdown's frontmatter already yields a full element; LaTeX
@@ -1209,11 +1206,12 @@ const EditorsInner = (props: EditorsInnerProps) => {
   };
 
   // Clicking the locked wrapper line in the code editor opens the active
-  // division's properties form in the TOC. Expand the TOC first so the form is
-  // visible (it's collapsible, and collapsed in the narrow-screen drawer).
+  // division's properties form in the explorer's Contents view. Open that view
+  // first so the form is visible (the explorer may be collapsed or on another
+  // view, and is collapsed in the narrow-screen drawer).
   const handleRequestWrapperEdit = () => {
     if (!activeDivision) return;
-    setIsTocCollapsed(false);
+    showExplorerView("toc");
     startSectionEdit(activeDivision);
   };
 
@@ -2188,12 +2186,11 @@ const EditorsInner = (props: EditorsInnerProps) => {
     //  );
   }
 
-  // ── TOC sidebar ──────────────────────────────────────────────────────────
-  // Deep data + callbacks come from the store.
-  const tocSidebar = (
-    <TableOfContents
-      isCollapsed={isTocCollapsed}
-      onToggleCollapse={toggleTocCollapsed}
+  // ── Project explorer sidebar ─────────────────────────────────────────────
+  // Deep data + callbacks come from the store. Always rendered: collapsed, it
+  // is still the thin icon rail.
+  const explorerSidebar = (
+    <ProjectExplorer
       hideAssets={props.hideAssets}
       readOnly={props.readOnly}
       onOpenAssetPicker={
@@ -2213,29 +2210,10 @@ const EditorsInner = (props: EditorsInnerProps) => {
             }
           : undefined
       }
-    />
-  );
-
-  // Docked next to the TOC (see FindReplaceDrawer), not sharing its tab bar —
-  // closed with its own ✕/Escape. A normal flex sibling, not an absolute
-  // overlay, so it never covers the code editor.
-  //
-  // Its relationship to the TOC depends on whether the TOC has its own space
-  // to give up: when the TOC is expanded, the drawer takes that same slot
-  // (replacing it, rather than adding another 300px next to it and squeezing
-  // the editor/preview panes); when the TOC is collapsed to its thin rail,
-  // there's nothing to replace, so the drawer sits beside the rail as an
-  // extra sibling and the editor slides over for it, same as any other panel
-  // opening.
-  const findDrawer = isFindPanelOpen ? (
-    <FindReplaceDrawer
-      onClose={() => closeModal("isFindPanelOpen")}
       onJumpToMatch={handleJumpToMatch}
       onReplaceMatches={handleReplaceMatches}
-      readOnly={props.readOnly}
     />
-  ) : null;
-  const showTocSidebar = !(isFindPanelOpen && !isTocCollapsed);
+  );
 
   // ── Layout ────────────────────────────────────────────────────────────────
   const editorTabId = "pretext-plus-tab-editor";
@@ -2246,8 +2224,7 @@ const EditorsInner = (props: EditorsInnerProps) => {
   if (isNarrowScreen) {
     editorDisplays = (
       <div className="h-full w-full flex flex-row overflow-hidden">
-        {showTocSidebar && tocSidebar}
-        {findDrawer}
+        {explorerSidebar}
         <div className="flex flex-col flex-1 min-w-0 h-full">
           <div className="flex border-b border-[#ddd] bg-[#f8f8f8]" role="tablist">
             <button
@@ -2299,8 +2276,7 @@ const EditorsInner = (props: EditorsInnerProps) => {
   } else {
     editorDisplays = (
       <div className="flex flex-row w-full h-full overflow-hidden">
-        {showTocSidebar && tocSidebar}
-        {findDrawer}
+        {explorerSidebar}
         <Group orientation="horizontal" className="h-full w-full">
           <Panel
             className="flex flex-col min-h-0 relative overflow-visible z-[1]"

@@ -159,7 +159,7 @@ export interface ExternalUpdate {
   language?: string;
 }
 
-/** The find/replace drawer's inputs — see `EditorStoreState.findPanelState`. */
+/** The find/replace panel's inputs — see `EditorStoreState.findPanelState`. */
 export interface FindPanelState {
   query: string;
   replacement: string;
@@ -183,8 +183,14 @@ type ModalKey =
   | "isDocinfoEditorOpen"
   | "isAssetPickerOpen"
   | "isSnippetPickerOpen"
-  | "isFullSourceOpen"
-  | "isFindPanelOpen";
+  | "isFullSourceOpen";
+
+/**
+ * The views the project explorer's icon rail switches between. `"find"` is the
+ * project-wide find/replace panel, which shares the explorer's slot rather
+ * than docking beside it.
+ */
+export type ExplorerView = "toc" | "snippets" | "assets" | "find";
 
 /**
  * All callbacks wired by Editors.tsx that deep components need to call.
@@ -285,6 +291,8 @@ export interface EditorStoreState {
   // ── UI state owned by the store ────────────────────────────────────────────
 
   isTocCollapsed: boolean;
+  /** Which view the project explorer shows when it isn't collapsed. */
+  explorerView: ExplorerView;
   /** Convert LaTeX/Markdown pasted into a PreTeXt division — see {@link PASTE_AUTO_CONVERT_KEY}. */
   pasteAutoConvert: boolean;
   showLivePreview: boolean;
@@ -298,17 +306,11 @@ export interface EditorStoreState {
   isSnippetPickerOpen: boolean;
   isFullSourceOpen: boolean;
   /**
-   * The project-wide find/replace panel — a dismissible drawer docked next to
-   * the TOC (opened from the Tools menu), not a tab it shares equal billing
-   * with. Modeled as a `ModalKey` like the other dialogs since it's exactly
-   * that shape: open, closed, nothing else to track here.
-   */
-  isFindPanelOpen: boolean;
-  /**
-   * The find/replace drawer's query, replacement text and option toggles.
-   * Kept in the store (rather than the drawer's own `useState`) so closing
-   * and reopening it — the drawer unmounts, since it's only rendered while
-   * `isFindPanelOpen` — doesn't lose what the author typed.
+   * The find/replace panel's query, replacement text and option toggles.
+   * Kept in the store (rather than the panel's own `useState`) so switching
+   * the explorer to another view and back — the panel unmounts, since it's
+   * only rendered while `explorerView` is `"find"` — doesn't lose what the
+   * author typed.
    */
   findPanelState: FindPanelState;
 
@@ -387,6 +389,17 @@ export interface EditorStoreState {
    */
   toggleTocCollapsed: () => void;
   /**
+   * A click on an explorer rail icon: opens `view`, or — if it is already the
+   * open view — collapses the explorer to its rail. Collapse changes are
+   * remembered like {@link toggleTocCollapsed}'s.
+   */
+  selectExplorerView: (view: ExplorerView) => void;
+  /**
+   * Open the explorer on `view` for the author (Tools → Find in Project, the
+   * wrapper-line properties form). Never collapses, and not a saved preference.
+   */
+  showExplorerView: (view: ExplorerView) => void;
+  /**
    * Turn paste-and-convert on or off, remembering the choice for future
    * sessions — see {@link PASTE_AUTO_CONVERT_KEY}.
    */
@@ -408,7 +421,7 @@ export interface EditorStoreState {
   startNewDivision: (parentXmlId: string | null, draft: EditDraft) => void;
   setEditDraft: (draft: EditDraft) => void;
 
-  /** Merge `partial` into the find/replace drawer's inputs. */
+  /** Merge `partial` into the find/replace panel's inputs. */
   setFindPanelState: (partial: Partial<FindPanelState>) => void;
   commitSectionEdit: () => void;
   cancelSectionEdit: () => void;
@@ -584,6 +597,7 @@ export function createEditorStore(init: EditorStoreInit): EditorStoreHandle {
 
     // ── Initial UI state ───────────────────────────────────────────────────
     isTocCollapsed: defaultTocCollapsed(),
+    explorerView: "toc",
     pasteAutoConvert: defaultPasteAutoConvert(),
     showLivePreview: true,
     isNarrowScreen: isNarrowViewport(),
@@ -595,7 +609,6 @@ export function createEditorStore(init: EditorStoreInit): EditorStoreHandle {
     isAssetPickerOpen: false,
     isSnippetPickerOpen: false,
     isFullSourceOpen: false,
-    isFindPanelOpen: false,
     findPanelState: initialFindPanelState,
     editingId: null,
     editDraft: null,
@@ -671,6 +684,16 @@ export function createEditorStore(init: EditorStoreInit): EditorStoreHandle {
         if (!s.isNarrowScreen) writeStoredTocCollapsed(isTocCollapsed);
         return { isTocCollapsed };
       }),
+    selectExplorerView: (view) =>
+      set((s) => {
+        const isTocCollapsed = view === s.explorerView && !s.isTocCollapsed;
+        if (!s.isNarrowScreen && isTocCollapsed !== s.isTocCollapsed) {
+          writeStoredTocCollapsed(isTocCollapsed);
+        }
+        return { explorerView: view, isTocCollapsed };
+      }),
+    showExplorerView: (view) =>
+      set({ explorerView: view, isTocCollapsed: false }),
     togglePasteAutoConvert: () =>
       set((s) => {
         const pasteAutoConvert = !s.pasteAutoConvert;

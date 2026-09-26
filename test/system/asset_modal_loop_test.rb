@@ -21,6 +21,7 @@ class AssetModalLoopTest < ApplicationSystemTestCase
     assert_text "Signed in successfully.", wait: 10
 
     visit edit_project_path(project)
+    open_explorer_view(:assets)
 
     assert_selector "button[data-testid='toc-assets-btn']", text: "Manage", wait: 20
     find("button[data-testid='toc-assets-btn']", text: "Manage").click
