@@ -127,10 +127,8 @@ const ProjectExplorer = ({
       {!isCollapsed && (
         <div
           className={clsx(
-            "flex flex-col h-full overflow-hidden border-r border-[#dde0e6]",
-            activeView === "find"
-              ? "w-[300px] min-w-[300px] bg-white"
-              : "w-[260px] min-w-[260px] bg-[#f5f6f8] select-none",
+            "flex flex-col w-[260px] min-w-[260px] h-full overflow-hidden bg-[#f5f6f8] border-r border-[#dde0e6]",
+            activeView !== "find" && "select-none",
           )}
         >
           <div className="flex items-center gap-1.5 py-2 px-2.5 pb-1.5 border-b border-[#dde0e6] shrink-0">
