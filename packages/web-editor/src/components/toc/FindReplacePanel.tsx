@@ -21,8 +21,8 @@ const INPUT_CLASSES =
  * which only ever sees the division currently open.
  *
  * Query/replacement/options live in the store's `findPanelState` rather than
- * local `useState`: this panel only exists in the tree while the drawer is
- * open, so local state would be lost every time it's closed and reopened.
+ * local `useState`: this panel only exists in the tree while the explorer's
+ * find view is showing, so local state would be lost on every switch away.
  */
 const FindReplacePanel = ({
   readOnly,

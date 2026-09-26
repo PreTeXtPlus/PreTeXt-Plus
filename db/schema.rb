@@ -224,7 +224,6 @@ ActiveRecord::Schema[8.1].define(version: 2026_09_24_120000) do
     t.integer "language", default: 0, null: false
     t.text "pretext_source"
     t.jsonb "publication_settings", default: {}, null: false
-    t.string "root_element"
     t.datetime "source_updated_at", default: -> { "CURRENT_TIMESTAMP" }, null: false
     t.text "template_description"
     t.string "title"
@@ -232,6 +231,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_09_24_120000) do
     t.boolean "use_common_docinfo", default: false, null: false
     t.uuid "user_id", null: false
     t.integer "visibility", default: 0, null: false
+    t.string "root_element"
     t.index ["is_template"], name: "index_projects_on_is_template"
     t.index ["user_id", "visibility"], name: "index_projects_on_user_id_and_visibility"
     t.index ["user_id"], name: "index_projects_on_user_id"
@@ -328,20 +328,20 @@ ActiveRecord::Schema[8.1].define(version: 2026_09_24_120000) do
   end
 
   create_table "y_document_updates", force: :cascade do |t|
-    t.datetime "created_at", null: false
     t.bigint "document_id", null: false
     t.binary "payload", null: false
     t.boolean "pending", default: false, null: false
+    t.datetime "created_at", null: false
     t.index ["document_id", "pending"], name: "index_y_document_updates_on_document_id_and_pending"
   end
 
   create_table "y_documents", force: :cascade do |t|
-    t.datetime "created_at", null: false
     t.string "key", null: false
-    t.string "name"
-    t.uuid "record_id"
     t.string "record_type"
+    t.uuid "record_id"
+    t.string "name"
     t.binary "state"
+    t.datetime "created_at", null: false
     t.datetime "updated_at", null: false
     t.index ["key"], name: "index_y_documents_on_key", unique: true
     t.index ["record_type", "record_id", "name"], name: "index_y_documents_on_record_and_name", unique: true, where: "(record_type IS NOT NULL)"

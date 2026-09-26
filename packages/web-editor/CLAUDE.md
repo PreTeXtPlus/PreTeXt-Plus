@@ -96,12 +96,27 @@ Splits and merges PreTeXt documents at section boundaries. Supported section typ
 - A LaTeX holder has nowhere inline to write them, so `\plus` takes an optional argument: `\plus[component=teacher]{section}{x}`. Both converters already emit these as real attributes; the helpers here only have to tolerate and preserve the shape. The placeholder *writers* stay on the bare form — the optional argument is the author's to add.
 - `renameDivisionRef` rewrites a placeholder in place rather than rebuilding it from type and id, precisely so these attributes survive an `xml:id` rename. Rebuilding drops them silently, which shows up much later as a division that quietly starts appearing in every build.
 
-### Table of Contents (`src/components/TableOfContents.tsx` + `src/components/toc/`)
+### Project Explorer (`src/components/ProjectExplorer.tsx` + `src/components/toc/`)
 
-- Article mode: flat section list
-- Book mode: chapter list with expandable sections
-- Drag-and-drop reordering via `@dnd-kit`
-- Hooks: `useBookChapters`, `useSectionDnd`, `useSectionEdit`
+The left sidebar is an always-visible icon rail plus a panel for the selected
+view. The store's `explorerView` names the view and `isTocCollapsed` whether the
+panel is shown; `selectExplorerView` is the rail click (clicking the open view's
+icon collapses to the rail, and that choice is remembered), `showExplorerView` is
+for code that needs a view on screen (Tools → Find in Project, the wrapper-line
+properties form) and never collapses.
+
+- **Contents** (`toc/ArticleToc.tsx`): the document's tree, root down through
+  every placed `<plus:* ref/>`. Unplaced divisions are deliberately *not* here.
+- **Divisions** (`toc/DivisionList.tsx`): every division as a flat list — root,
+  placed in document order, then unplaced (marked "not placed"), which is the
+  only place unplaced divisions and their Place-in-document action appear.
+  Row actions shared with Contents live in `toc/useDivisionActions.ts`.
+- **Snippets** / **Assets** (`toc/SnippetList.tsx`, `toc/AssetList.tsx`); hidden
+  along with their rail icons by `hideSnippets` / `hideAssets`.
+- **Find** (`toc/FindReplacePanel.tsx`): project-wide find/replace. Escape
+  collapses it; its inputs persist in the store's `findPanelState`.
+- Rail icons are inline SVG components in `toc/explorerIcons.tsx` that stroke
+  with `currentColor`, so the button's text color styles them.
 - **"Add new division" creates nothing.** It opens a draft properties form
   (`pendingNewDivision` in the store, rendered by `toc/NewDivisionRow.tsx` at the
   position the division will take); the record, the parent's `<plus:* ref/>`
@@ -110,7 +125,7 @@ Splits and merges PreTeXt documents at section boundaries. Supported section typ
   untouched, and a new division is never renamed — it is created with the id the
   author chose, which is why only *existing* divisions reach
   `syncParentDivisionRef`.
-- Any TOC action that rewrites a division's source computes it from the pool,
+- Any explorer action that rewrites a division's source computes it from the pool,
   and the code editor reports typing on a 500 ms debounce — so it must call
   `settledDivisions()` (flush the pending keystroke, then re-read the store)
   rather than this render's `divisions`. Skipping that lets the late delivery

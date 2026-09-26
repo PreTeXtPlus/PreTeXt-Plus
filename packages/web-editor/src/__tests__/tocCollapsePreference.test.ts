@@ -75,3 +75,42 @@ describe("TOC collapse preference", () => {
     expect(defaultTocCollapsed()).toBe(false);
   });
 });
+
+describe("explorer view selection", () => {
+  beforeEach(() => {
+    localStorage.clear();
+    setViewportWidth(NARROW_SCREEN_MAX_WIDTH + 200);
+  });
+
+  it("switches views without collapsing", () => {
+    const store = makeStore();
+    store.getState().selectExplorerView("divisions");
+    expect(store.getState().explorerView).toBe("divisions");
+    expect(store.getState().isTocCollapsed).toBe(false);
+  });
+
+  it("collapses, and remembers it, when the open view is selected again", () => {
+    const store = makeStore();
+    store.getState().selectExplorerView("toc");
+    expect(store.getState().isTocCollapsed).toBe(true);
+    expect(defaultTocCollapsed()).toBe(true);
+  });
+
+  it("expands a collapsed explorer onto the selected view", () => {
+    const store = makeStore();
+    store.getState().selectExplorerView("toc"); // collapse
+    store.getState().selectExplorerView("toc");
+    expect(store.getState().isTocCollapsed).toBe(false);
+    expect(defaultTocCollapsed()).toBe(false);
+  });
+
+  it("never collapses when a view is shown programmatically", () => {
+    const store = makeStore();
+    store.getState().showExplorerView("toc");
+    expect(store.getState().isTocCollapsed).toBe(false);
+    store.getState().setIsTocCollapsed(true);
+    store.getState().showExplorerView("find");
+    expect(store.getState().explorerView).toBe("find");
+    expect(store.getState().isTocCollapsed).toBe(false);
+  });
+});
