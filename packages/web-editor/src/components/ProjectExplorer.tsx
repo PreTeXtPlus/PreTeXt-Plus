@@ -1,13 +1,11 @@
 import { useEffect, type ReactNode } from "react";
 import clsx from "clsx";
 import ArticleToc from "./toc/ArticleToc";
-import DivisionList from "./toc/DivisionList";
 import SnippetList from "./toc/SnippetList";
 import AssetList from "./toc/AssetList";
 import FindReplacePanel from "./toc/FindReplacePanel";
 import {
   AssetsIcon,
-  DivisionsIcon,
   FindIcon,
   SnippetsIcon,
   TocIcon,
@@ -24,8 +22,7 @@ const EXPLORER_VIEWS: {
   label: string;
   icon: () => ReactNode;
 }[] = [
-  { view: "toc", label: "Contents", icon: TocIcon },
-  { view: "divisions", label: "All Divisions", icon: DivisionsIcon },
+  { view: "toc", label: "Table of Contents", icon: TocIcon },
   { view: "snippets", label: "Snippets", icon: SnippetsIcon },
   { view: "assets", label: "Assets", icon: AssetsIcon },
   { view: "find", label: "Find in Project", icon: FindIcon },
@@ -48,7 +45,7 @@ export interface ProjectExplorerProps {
 
 /**
  * The left sidebar: an always-visible icon rail and, beside it, the panel for
- * the selected view (Contents, Divisions, Snippets, Assets, Find). Clicking
+ * the selected view (Table of Contents, Snippets, Assets, Find). Clicking
  * the open view's icon collapses the panel, leaving just the rail. Views read
  * their data from the editor store.
  */
@@ -142,7 +139,6 @@ const ProjectExplorer = ({
             )}
           </div>
           {activeView === "toc" && <ArticleToc readOnly={readOnly} />}
-          {activeView === "divisions" && <DivisionList readOnly={readOnly} />}
           {activeView === "snippets" && (
             <SnippetList onOpenSnippetPicker={onOpenSnippetPicker} />
           )}

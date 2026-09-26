@@ -84,8 +84,8 @@ describe("explorer view selection", () => {
 
   it("switches views without collapsing", () => {
     const store = makeStore();
-    store.getState().selectExplorerView("divisions");
-    expect(store.getState().explorerView).toBe("divisions");
+    store.getState().selectExplorerView("snippets");
+    expect(store.getState().explorerView).toBe("snippets");
     expect(store.getState().isTocCollapsed).toBe(false);
   });
 

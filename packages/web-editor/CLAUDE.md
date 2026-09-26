@@ -106,11 +106,10 @@ for code that needs a view on screen (Tools → Find in Project, the wrapper-lin
 properties form) and never collapses.
 
 - **Contents** (`toc/ArticleToc.tsx`): the document's tree, root down through
-  every placed `<plus:* ref/>`. Unplaced divisions are deliberately *not* here.
-- **Divisions** (`toc/DivisionList.tsx`): every division as a flat list — root,
-  placed in document order, then unplaced (marked "not placed"), which is the
-  only place unplaced divisions and their Place-in-document action appear.
-  Row actions shared with Contents live in `toc/useDivisionActions.ts`.
+  every placed `<plus:* ref/>`, then an "Unplaced divisions" block listing each
+  division the document doesn't reach as the head of its own subtree. Row
+  actions and the root lookup live in `toc/useDivisionActions.ts` (also used by
+  the Snippets/Assets views for the active division's embed format).
 - **Snippets** / **Assets** (`toc/SnippetList.tsx`, `toc/AssetList.tsx`); hidden
   along with their rail icons by `hideSnippets` / `hideAssets`.
 - **Find** (`toc/FindReplacePanel.tsx`): project-wide find/replace. Escape

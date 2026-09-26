@@ -20,8 +20,6 @@ interface SectionItemProps {
   isRoot?: boolean;
   /** Type of the division this one is (or would be) nested under; `null` if unplaced. */
   parentType?: DivisionType | null;
-  /** A status shown after the xml:id in amber, e.g. "not placed". */
-  note?: string;
 }
 
 const SectionItem = ({
@@ -39,7 +37,6 @@ const SectionItem = ({
   menuItems,
   isRoot = false,
   parentType = null,
-  note,
 }: SectionItemProps) => {
   const isEditing = editDraft !== null;
 
@@ -93,15 +90,9 @@ const SectionItem = ({
           >
             {division.title || untitledFallback || <em>Untitled</em>}
           </span>
-          {(division.xmlId || note) && (
-            <span
-              className={clsx(
-                "block overflow-hidden text-ellipsis whitespace-nowrap text-[0.68rem] font-normal font-mono",
-                note ? "text-amber-700" : "text-slate-400",
-              )}
-            >
+          {division.xmlId && (
+            <span className="block overflow-hidden text-ellipsis whitespace-nowrap text-[0.68rem] font-normal font-mono text-slate-400">
               {division.xmlId}
-              {note && ` — ${note}`}
             </span>
           )}
         </button>

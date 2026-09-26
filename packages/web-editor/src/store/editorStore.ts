@@ -190,7 +190,7 @@ type ModalKey =
  * project-wide find/replace panel, which shares the explorer's slot rather
  * than docking beside it.
  */
-export type ExplorerView = "toc" | "divisions" | "snippets" | "assets" | "find";
+export type ExplorerView = "toc" | "snippets" | "assets" | "find";
 
 /**
  * All callbacks wired by Editors.tsx that deep components need to call.

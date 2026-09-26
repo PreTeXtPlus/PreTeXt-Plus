@@ -39,19 +39,20 @@ const tab = (view: string) => screen.getByTestId(`explorer-tab-${view}`);
 describe("ProjectExplorer", () => {
   beforeEach(() => localStorage.clear());
 
-  it("opens on the Contents view, which omits unplaced divisions", () => {
+  it("opens on the Contents view, with unplaced divisions below the tree", () => {
     renderExplorer();
     expect(tab("toc")).toHaveAttribute("aria-pressed", "true");
     expect(screen.getByText("A section")).toBeInTheDocument();
-    expect(screen.queryByText("Unplaced thing")).toBeNull();
+    expect(screen.getByText("Unplaced divisions")).toBeInTheDocument();
+    expect(screen.getByText("Unplaced thing")).toBeInTheDocument();
   });
 
-  it("lists unplaced divisions in the Divisions view", () => {
+  it("switches views from the rail", () => {
     renderExplorer();
-    fireEvent.click(tab("divisions"));
-    expect(tab("divisions")).toHaveAttribute("aria-pressed", "true");
+    fireEvent.click(tab("assets"));
+    expect(tab("assets")).toHaveAttribute("aria-pressed", "true");
     expect(tab("toc")).toHaveAttribute("aria-pressed", "false");
-    expect(screen.getByText("Unplaced thing")).toBeInTheDocument();
+    expect(screen.queryByText("A section")).toBeNull();
   });
 
   it("collapses to the rail when the open view's icon is clicked", () => {

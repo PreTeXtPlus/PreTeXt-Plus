@@ -70,7 +70,6 @@ import {
   updateSectionMetadata,
   normalizeDivisionsOnLoad,
   isRootDivisionType,
-  getOrphanedDivisions,
 } from "../sectionUtils";
 import {
   defaultChildDivisionType,
@@ -1207,17 +1206,12 @@ const EditorsInner = (props: EditorsInnerProps) => {
   };
 
   // Clicking the locked wrapper line in the code editor opens the active
-  // division's properties form in the explorer. Open the view that lists the
-  // division first so the form is visible: the Contents tree for a placed
-  // division, the Divisions list for an unplaced one (the tree omits those).
+  // division's properties form in the explorer's Contents view. Open that view
+  // first so the form is visible (the explorer may be collapsed or on another
+  // view, and is collapsed in the narrow-screen drawer).
   const handleRequestWrapperEdit = () => {
     if (!activeDivision) return;
-    const isUnplaced =
-      !!rootDivision &&
-      getOrphanedDivisions(divisions, rootDivision.xmlId).some(
-        (d) => d.xmlId === activeDivision.xmlId,
-      );
-    showExplorerView(isUnplaced ? "divisions" : "toc");
+    showExplorerView("toc");
     startSectionEdit(activeDivision);
   };
 

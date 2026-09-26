@@ -160,6 +160,30 @@ describe("ArticleToc division type choices", () => {
     expect(options).not.toContain("subsubsection");
   });
 
+  it("restricts an unplaced division to what the root would accept", () => {
+    // An orphan is placed under the root by "Place in document", so the root's
+    // rules are the ones that apply — an article project must never offer
+    // Part or Chapter.
+    const withOrphan: Division[] = [
+      ...divisions,
+      {
+        id: "3",
+        xmlId: "orph",
+        title: "Unplaced thing",
+        type: "section",
+        sourceFormat: "pretext",
+        source:
+          '<section xml:id="orph"><title>Unplaced thing</title></section>',
+      },
+    ];
+    renderToc(false, withOrphan);
+    const { options, value } = typeChoices("Unplaced thing");
+    expect(value).toBe("section");
+    expect(options).toContain("section");
+    expect(options).not.toContain("chapter");
+    expect(options).not.toContain("part");
+  });
+
   it("lets an article root switch to a book", () => {
     // Article and book hold the same children, so swapping the root tag leaves
     // a valid document — this is the one root conversion that is offered.
