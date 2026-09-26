@@ -127,6 +127,19 @@ export const TYPE_FULL_LABELS: Record<string, string> = {
 };
 
 /**
+ * The name a division is shown under. Introduction/conclusion divisions never
+ * carry a `<title>` in source, so they show their type name ("Introduction")
+ * rather than reading as untitled. Empty when there is genuinely no title.
+ */
+export const divisionDisplayTitle = (
+  division: Pick<Division, "title" | "type">,
+): string =>
+  division.title ||
+  (division.type === "introduction" || division.type === "conclusion"
+    ? TYPE_FULL_LABELS[division.type]
+    : "");
+
+/**
  * Root document types the author can switch between from the TOC's root
  * "Edit properties" form. Slideshow exists as a division type but isn't
  * offered as a switch target yet.

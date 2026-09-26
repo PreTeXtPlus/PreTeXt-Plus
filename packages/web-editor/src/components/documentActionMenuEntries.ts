@@ -23,7 +23,7 @@ export interface DocumentActionEntriesArgs {
   readOnly?: boolean;
   /** Called with the formatted content after a successful format operation. */
   onContentChange: (newContent: string) => void;
-  onOpenImport: () => void;
+  onOpenImport?: () => void;
   onOpenClean?: () => void;
   onOpenDocinfoEditor: () => void;
   onOpenAssets?: () => void;
@@ -71,14 +71,18 @@ export function buildDocumentActionEntries({
           }
         },
       });
-      entries.push({
-        kind: "item",
-        key: "import",
-        label: "Import…",
-        title:
-          "Convert LaTeX, Markdown or another document to PreTeXt for this division",
-        onSelect: onOpenImport,
-      });
+      // Import fits its result to a division (retargeting its sections one rung
+      // below it), so it is only offered while one is open.
+      if (onOpenImport) {
+        entries.push({
+          kind: "item",
+          key: "import",
+          label: "Import…",
+          title:
+            "Convert LaTeX, Markdown or another document to PreTeXt for this division",
+          onSelect: onOpenImport,
+        });
+      }
     }
     if (onOpenClean) {
       entries.push({

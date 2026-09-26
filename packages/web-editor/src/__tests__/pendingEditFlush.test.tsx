@@ -25,6 +25,7 @@ import { render, screen, within, fireEvent, act } from "@testing-library/react";
 import Editors from "../components/Editors";
 import type { Division } from "../types/sections";
 import type { EditorContentChange } from "../types/editor";
+import { openSettings } from "./tocTestUtils";
 
 // Monaco loads itself from a CDN, so stand in a textarea — but one that keeps
 // the two parts of the real editor this test is about: the 500 ms debounce
@@ -135,16 +136,14 @@ function tocRow(label: string): HTMLElement {
   return row;
 }
 
-/** "Add new division" from `label`'s row menu. */
+/** "Add new division" from `label`'s settings drawer. */
 function addUnder(label: string) {
-  const row = tocRow(label);
-  fireEvent.click(within(row).getByTitle("More options"));
-  fireEvent.click(screen.getByText("Add new division"));
+  fireEvent.click(within(openSettings(label)).getByText("Add new division"));
 }
 
 /** Title the open draft and save it; returns the xml:id it created. */
 function saveForm(title: string): string {
-  const row = screen.getByTestId("toc-new-division");
+  const row = screen.getByTestId("settings-new-division");
   const input = within(row).getByText("Title").parentElement!
     .querySelector("input") as HTMLInputElement;
   fireEvent.change(input, { target: { value: title } });

@@ -138,7 +138,7 @@ const ProjectExplorer = ({
               </span>
             )}
           </div>
-          {activeView === "toc" && <ArticleToc readOnly={readOnly} />}
+          {activeView === "toc" && <ArticleToc />}
           {activeView === "snippets" && (
             <SnippetList onOpenSnippetPicker={onOpenSnippetPicker} />
           )}

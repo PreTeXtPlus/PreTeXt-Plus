@@ -2,36 +2,49 @@
  * @vitest-environment jsdom
  */
 import { describe, it, expect } from "vitest";
-import { screen } from "@testing-library/react";
-import ArticleToc from "../components/toc/ArticleToc";
+import { fireEvent, screen, within } from "@testing-library/react";
 import type { Division } from "../types/sections";
 import {
   divisions,
-  openMenu,
+  openSettings,
   renderWithStore,
+  tocRow,
   typeChoices,
   type TestStore,
 } from "./tocTestUtils";
+import TocWithSettings from "./TocWithSettings";
 
 function renderToc(
   readOnly?: boolean,
   docDivisions: Division[] = divisions,
   configure?: (store: TestStore) => void,
 ) {
-  return renderWithStore(<ArticleToc readOnly={readOnly} />, docDivisions, configure);
+  return renderWithStore(
+    <TocWithSettings readOnly={readOnly} />,
+    docDivisions,
+    configure,
+  );
 }
 
 describe("ArticleToc", () => {
-  it("hides every division menu trigger when readOnly", () => {
-    renderToc(true);
-    expect(screen.getByText("Document")).toBeInTheDocument();
-    expect(screen.getByText("A section")).toBeInTheDocument();
+  it("has no per-row menus: a row only opens its division", () => {
+    const { store } = renderToc(false);
     expect(screen.queryAllByTitle("More options")).toHaveLength(0);
+    fireEvent.click(within(tocRow("A section")).getByTestId("toc-title"));
+    expect(store.getState().openItem).toEqual({ kind: "division", ref: "sec" });
+    expect(screen.getByTestId("editor-target-title")).toHaveTextContent(
+      "A section",
+    );
+    expect(
+      within(tocRow("A section")).getByRole("button", { current: true }),
+    ).toBeInTheDocument();
   });
 
-  it("shows division menu triggers by default", () => {
-    renderToc(false);
-    expect(screen.queryAllByTitle("More options").length).toBeGreaterThan(0);
+  it("offers no division settings when readOnly", () => {
+    renderToc(true);
+    expect(tocRow("Document")).toBeInTheDocument();
+    expect(tocRow("A section")).toBeInTheDocument();
+    expect(screen.queryByTestId("settings-drawer-toggle")).toBeNull();
   });
 });
 
@@ -125,11 +138,11 @@ describe("ArticleToc division type choices", () => {
     renderToc(false, bookDivisions);
     // <exercises> holds exercises, not divisions — there is no valid child
     // type for one, so it offers no "Add new division" at all.
-    openMenu("Exercises");
-    expect(screen.getByText("Edit properties")).toBeInTheDocument();
-    expect(screen.queryByText("Add new division")).toBeNull();
-    openMenu("A section");
-    expect(screen.getByText("Add new division")).toBeInTheDocument();
+    let drawer = openSettings("Exercises");
+    expect(within(drawer).getByText("Type")).toBeInTheDocument();
+    expect(within(drawer).queryByText("Add new division")).toBeNull();
+    drawer = openSettings("A section");
+    expect(within(drawer).getByText("Add new division")).toBeInTheDocument();
   });
 
   it("offers a section's child subsections", () => {

@@ -102,6 +102,8 @@ export {
   getMetaMap,
   getDeletedMap,
   getDivisionText,
+  getSnippetText,
+  getAssetText,
 } from "./collab/schema";
 export type {
   CollabAssetSnapshot,

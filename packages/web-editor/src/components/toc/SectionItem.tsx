@@ -1,27 +1,23 @@
 import clsx from "clsx";
-import type { Division, DivisionType } from "../../types/sections";
-import SectionEditForm from "./SectionEditForm";
-import DivisionMenu, { type DivisionMenuItem } from "./DivisionMenu";
-import { type EditDraft, TYPE_FULL_LABELS } from "./types";
+import type { Division } from "../../types/sections";
+import { divisionDisplayTitle, TYPE_FULL_LABELS } from "./types";
 
 interface SectionItemProps {
   division: Division;
   depth: number;
+  /** True while this division is the one open in the code editor. */
   isActive: boolean;
   hasChildren: boolean;
   isExpanded: boolean;
   onToggleExpand: () => void;
-  editDraft: EditDraft | null;
   onSelect: () => void;
-  onDraftChange: (draft: EditDraft) => void;
-  onEditCommit: () => void;
-  onEditCancel: () => void;
-  menuItems: DivisionMenuItem[];
-  isRoot?: boolean;
-  /** Type of the division this one is (or would be) nested under; `null` if unplaced. */
-  parentType?: DivisionType | null;
 }
 
+/**
+ * One row of the Contents tree. Selecting it opens the division in the code
+ * editor, whose title bar carries its properties and actions — the row itself
+ * only expands, collapses and selects.
+ */
 const SectionItem = ({
   division,
   depth,
@@ -29,23 +25,9 @@ const SectionItem = ({
   hasChildren,
   isExpanded,
   onToggleExpand,
-  editDraft,
   onSelect,
-  onDraftChange,
-  onEditCommit,
-  onEditCancel,
-  menuItems,
-  isRoot = false,
-  parentType = null,
 }: SectionItemProps) => {
-  const isEditing = editDraft !== null;
-
-  // Introduction/conclusion divisions never carry a `<title>` in source, so
-  // show their type name (e.g. "Introduction") rather than "Untitled".
-  const untitledFallback =
-    division.type === "introduction" || division.type === "conclusion"
-      ? TYPE_FULL_LABELS[division.type]
-      : null;
+  const title = divisionDisplayTitle(division);
 
   return (
     <li
@@ -53,7 +35,6 @@ const SectionItem = ({
       className={clsx(
         "group relative flex flex-col border-l-[3px] border-transparent cursor-default",
         isActive && "border-l-blue-600",
-        isEditing && "bg-[#f0f4ff]",
       )}
     >
       <div
@@ -88,7 +69,7 @@ const SectionItem = ({
             data-testid="toc-title"
             className="block overflow-hidden text-ellipsis whitespace-nowrap text-[0.83rem]"
           >
-            {division.title || untitledFallback || <em>Untitled</em>}
+            {title || <em>Untitled</em>}
           </span>
           {division.xmlId && (
             <span className="block overflow-hidden text-ellipsis whitespace-nowrap text-[0.68rem] font-normal font-mono text-slate-400">
@@ -96,27 +77,7 @@ const SectionItem = ({
             </span>
           )}
         </button>
-
-        <div
-          className={clsx(
-            "flex items-center shrink-0 opacity-0 pointer-events-none transition-opacity duration-100 group-hover:opacity-100 group-hover:pointer-events-auto",
-            isActive && "opacity-100 pointer-events-auto",
-          )}
-        >
-          <DivisionMenu items={menuItems} />
-        </div>
       </div>
-
-      {isEditing && editDraft && (
-        <SectionEditForm
-          draft={editDraft}
-          isRoot={isRoot}
-          parentType={parentType}
-          onDraftChange={onDraftChange}
-          onCommit={onEditCommit}
-          onCancel={onEditCancel}
-        />
-      )}
     </li>
   );
 };

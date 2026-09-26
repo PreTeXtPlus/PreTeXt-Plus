@@ -14,6 +14,7 @@ import { render, screen, within, fireEvent } from "@testing-library/react";
 import Editors from "../components/Editors";
 import type { Division } from "../types/sections";
 import type { EditorContentChange } from "../types/editor";
+import { openSettings } from "./tocTestUtils";
 
 // Monaco loads itself from a CDN; the TOC is what's under test here.
 vi.mock("@monaco-editor/react", () => ({
@@ -68,23 +69,15 @@ function renderEditors(divisions: Division[]) {
   return { added, changes };
 }
 
-/** Click "Add new division" in the menu of the TOC row titled `label`. */
+/** Click "Add new division" in the settings drawer of the division titled `label`. */
 function addDivisionUnder(label: string) {
-  const row = [...document.querySelectorAll('[data-testid^="toc-item-"]')]
-    .find(
-      (li) =>
-        li.querySelector('[data-testid="toc-title"]')?.textContent ===
-        label,
-    ) as HTMLElement | undefined;
-  if (!row) throw new Error(`no TOC row for "${label}"`);
-  fireEvent.click(within(row).getByTitle("More options"));
-  fireEvent.click(screen.getByText("Add new division"));
+  fireEvent.click(within(openSettings(label)).getByText("Add new division"));
 }
 
 /** Save the open draft, creating the division. */
 function saveDraft() {
-  const row = screen.getByTestId("toc-new-division");
-  fireEvent.click(within(row).getByText("Save"));
+  const form = screen.getByTestId("settings-new-division");
+  fireEvent.click(within(form).getByText("Save"));
 }
 
 /** The Type dropdown of the open properties form. */

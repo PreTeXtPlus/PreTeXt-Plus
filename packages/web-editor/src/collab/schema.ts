@@ -9,18 +9,18 @@
  *   `Y.Text` under `"source"` — the CRDT that makes concurrent character edits
  *   merge.
  * - `doc.getMap("assets")`: key → `Y.Map` entry per project asset, keyed by the
- *   asset's record id. Metadata only (`ref`, `title`, `source`, `url`,
- *   `thumbnailUrl`, `extension`, `contentType`, `fileRef`, `isFile`), all
- *   last-writer-wins — an asset's *bytes* stay with
- *   the host, since the doc is replicated to every peer and persisted as an
- *   append-only update log. The uploader therefore writes its entry only once
- *   the host has stored the file and handed back a URL; every other peer learns
- *   of the asset from this map rather than from a re-fetch.
+ *   asset's record id. Its PreTeXt source is a nested `Y.Text` under
+ *   `"source"`, exactly like a division's, since it is edited in the same code
+ *   editor; the rest (`ref`, `title`, `shortDescription`, `url`,
+ *   `thumbnailUrl`, `extension`, `contentType`, `fileRef`, `isFile`) is
+ *   last-writer-wins metadata. An asset's *bytes* stay with the host, since the
+ *   doc is replicated to every peer and persisted as an append-only update log.
+ *   The uploader therefore writes its entry only once the host has stored the
+ *   file and handed back a URL; every other peer learns of the asset from this
+ *   map rather than from a re-fetch.
  * - `doc.getMap("snippets")`: key → `Y.Map` entry per project snippet, keyed by
- *   the snippet's record id. Metadata only (`ref`, `source`, `sourceFormat`),
- *   all last-writer-wins — mirrors the `assets` map's shape rather than
- *   `divisions`' (no nested `Y.Text`), since a snippet is edited through the
- *   same kind of open/close modal as an asset, not a continuously-open buffer.
+ *   the snippet's record id. `ref` and `sourceFormat` are last-writer-wins; the
+ *   source is a nested `Y.Text` under `"source"`, like a division's.
  * - `doc.getMap("meta")`: document-wide fields — `title`, `docinfo`,
  *   `useCommonDocinfo`, `language` — all last-writer-wins values.
  * - `doc.getMap("deleted")`: tombstones, record id → `"division"` | `"asset"` |
@@ -171,7 +171,6 @@ export const makeDivisionEntry = (
 const ASSET_FIELDS = [
   "ref",
   "title",
-  "source",
   "shortDescription",
   "url",
   "thumbnailUrl",
@@ -181,14 +180,34 @@ const ASSET_FIELDS = [
   "isFile",
 ] as const;
 
-/** Build an assets-map entry. Plain last-writer-wins scalars throughout. */
+/** A fresh `Y.Text` holding `source`. */
+const makeText = (source: string | undefined): Y.Text => {
+  const text = new Y.Text();
+  if (source) text.insert(0, source);
+  return text;
+};
+
+/** The nested `Y.Text` source of an entry in any of the three record maps. */
+export const getEntryText = (
+  entry: Y.Map<unknown> | undefined,
+): Y.Text | undefined => {
+  const text = entry?.get("source");
+  return text instanceof Y.Text ? text : undefined;
+};
+
+/** Build an assets-map entry: last-writer-wins metadata + `Y.Text` source. */
 export const makeAssetEntry = (asset: Asset): Y.Map<unknown> => {
   const entry = new Y.Map<unknown>();
   applyAssetFields(entry, asset);
+  entry.set("source", makeText(asset.source));
   return entry;
 };
 
-/** Write an asset's fields onto an entry. Callers own the transaction. */
+/**
+ * Write an asset's metadata fields onto an entry. The source is text, not a
+ * field — it changes by diff (see the bridge), never by replacement, so a
+ * metadata edit can't clobber concurrent typing. Callers own the transaction.
+ */
 export const applyAssetFields = (entry: Y.Map<unknown>, asset: Asset): void => {
   for (const field of ASSET_FIELDS) {
     const value = asset[field];
@@ -197,17 +216,18 @@ export const applyAssetFields = (entry: Y.Map<unknown>, asset: Asset): void => {
   }
 };
 
-/** The snippet fields the doc carries — every field of {@link Snippet}. */
-const SNIPPET_FIELDS = ["ref", "source", "sourceFormat"] as const;
+/** The snippet metadata fields the doc carries; `source` is a `Y.Text`. */
+const SNIPPET_FIELDS = ["ref", "sourceFormat"] as const;
 
-/** Build a snippets-map entry. Plain last-writer-wins scalars throughout. */
+/** Build a snippets-map entry: last-writer-wins metadata + `Y.Text` source. */
 export const makeSnippetEntry = (snippet: Snippet): Y.Map<unknown> => {
   const entry = new Y.Map<unknown>();
   applySnippetFields(entry, snippet);
+  entry.set("source", makeText(snippet.source));
   return entry;
 };
 
-/** Write a snippet's fields onto an entry. Callers own the transaction. */
+/** Write a snippet's metadata fields onto an entry. See {@link applyAssetFields}. */
 export const applySnippetFields = (
   entry: Y.Map<unknown>,
   snippet: Snippet,
@@ -223,11 +243,16 @@ export const applySnippetFields = (
 export const getDivisionText = (
   doc: Y.Doc,
   id: string,
-): Y.Text | undefined => {
-  const entry = getDivisionsMap(doc).get(id);
-  const text = entry?.get("source");
-  return text instanceof Y.Text ? text : undefined;
-};
+): Y.Text | undefined =>
+  getEntryText(getDivisionsMap(doc).get(id));
+
+/** The `Y.Text` holding a snippet's source, by record id. */
+export const getSnippetText = (doc: Y.Doc, id: string): Y.Text | undefined =>
+  getEntryText(getSnippetsMap(doc).get(id));
+
+/** The `Y.Text` holding an asset's source, by record id. */
+export const getAssetText = (doc: Y.Doc, id: string): Y.Text | undefined =>
+  getEntryText(getAssetsMap(doc).get(id));
 
 /** Read one divisions-map entry back into plain data. */
 export const entryToSnapshot = (
@@ -253,7 +278,7 @@ export const assetEntryToSnapshot = (
   id,
   ref: entry.get("ref") as string | undefined,
   title: String(entry.get("title") ?? ""),
-  source: entry.get("source") as string | undefined,
+  source: getEntryText(entry)?.toString(),
   shortDescription: entry.get("shortDescription") as string | undefined,
   url: entry.get("url") as string | undefined,
   thumbnailUrl: entry.get("thumbnailUrl") as string | undefined,
@@ -270,7 +295,7 @@ export const snippetEntryToSnapshot = (
 ): CollabSnippetSnapshot => ({
   id,
   ref: String(entry.get("ref") ?? ""),
-  source: String(entry.get("source") ?? ""),
+  source: getEntryText(entry)?.toString() ?? "",
   sourceFormat: (entry.get("sourceFormat") ?? "pretext") as SourceFormat,
 });
 

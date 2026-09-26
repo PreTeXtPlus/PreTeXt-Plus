@@ -80,7 +80,7 @@ export interface TopBarProps {
   sourceFormat: SourceFormat;
   rootType?: RootDivisionType;
   onContentChange: (newContent: string) => void;
-  onOpenImport: () => void;
+  onOpenImport?: () => void;
   onOpenClean?: () => void;
   onOpenDocinfoEditor: () => void;
   onOpenConvertToPretext?: () => void;

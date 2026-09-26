@@ -53,7 +53,7 @@ export class MonacoCollabBinding {
   private readonly editor: any;
   private readonly monaco: any;
   private readonly awareness: Awareness | null;
-  private readonly divisionKey: string;
+  private readonly bufferKey: string;
   private applyingRemote = false;
   private disposables: Disposable[] = [];
   private cursorDecorations: any = null;
@@ -65,15 +65,18 @@ export class MonacoCollabBinding {
     monaco: any;
     awareness: Awareness | null;
     user: CollabUser;
-    /** Identifies which division this text belongs to, for cursor scoping. */
-    divisionKey: string;
+    /**
+     * Identifies which buffer (a division, snippet or asset) this text belongs
+     * to, for cursor scoping.
+     */
+    bufferKey: string;
   }) {
     this.ytext = options.ytext;
     this.doc = options.ytext.doc as Y.Doc;
     this.editor = options.editor;
     this.monaco = options.monaco;
     this.awareness = options.awareness;
-    this.divisionKey = options.divisionKey;
+    this.bufferKey = options.bufferKey;
 
     this.ytext.observe(this.onRemoteChange);
     this.disposables.push(
@@ -189,7 +192,7 @@ export class MonacoCollabBinding {
     const anchorOffset = model.getOffsetAt(selection.getStartPosition());
     const headOffset = model.getOffsetAt(selection.getEndPosition());
     this.awareness.setLocalStateField("cursor", {
-      division: this.divisionKey,
+      buffer: this.bufferKey,
       // Relative positions survive concurrent edits: peers resolve them
       // against their own doc state at render time.
       anchor: Y.createRelativePositionFromTypeIndex(this.ytext, anchorOffset),
@@ -214,7 +217,7 @@ export class MonacoCollabBinding {
     this.awareness.getStates().forEach((state, clientId) => {
       if (clientId === this.awareness!.clientID) return;
       const cursor = state?.cursor;
-      if (!cursor || cursor.division !== this.divisionKey) return;
+      if (!cursor || cursor.buffer !== this.bufferKey) return;
       const anchor = Y.createAbsolutePositionFromRelativePosition(
         Y.createRelativePositionFromJSON(cursor.anchor),
         this.doc,

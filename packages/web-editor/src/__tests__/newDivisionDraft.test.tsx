@@ -16,6 +16,7 @@ import Editors from "../components/Editors";
 import type { Division } from "../types/sections";
 import type { EditorContentChange } from "../types/editor";
 import type { DivisionChanges } from "../store/editorStore";
+import { openSettings } from "./tocTestUtils";
 
 // Monaco loads itself from a CDN; the TOC is what's under test here.
 vi.mock("@monaco-editor/react", () => ({
@@ -77,24 +78,13 @@ function renderEditors() {
   return { added, changes, updates, sourceOf };
 }
 
-/** The TOC row whose title is `label`. */
-function tocRow(label: string): HTMLElement {
-  const row = [...document.querySelectorAll('[data-testid^="toc-item-"]')].find(
-    (li) =>
-      li.querySelector('[data-testid="toc-title"]')?.textContent === label,
-  ) as HTMLElement | undefined;
-  if (!row) throw new Error(`no TOC row for "${label}"`);
-  return row;
-}
-
+/** "Add new division" from `label`'s settings drawer. */
 function addUnder(label: string) {
-  const row = tocRow(label);
-  fireEvent.click(within(row).getByTitle("More options"));
-  fireEvent.click(screen.getByText("Add new division"));
+  fireEvent.click(within(openSettings(label)).getByText("Add new division"));
 }
 
-/** The draft row, and the fields/buttons inside it. */
-const draftRow = () => screen.getByTestId("toc-new-division");
+/** The draft's properties form (in the drawer), and the fields/buttons inside it. */
+const draftRow = () => screen.getByTestId("settings-new-division");
 const titleField = () =>
   within(draftRow()).getByText("Title").parentElement!
     .querySelector("input") as HTMLInputElement;
@@ -110,6 +100,7 @@ describe("a new division is a draft until it is saved", () => {
 
     // The draft is on screen, under the parent it will be placed in…
     expect(draftRow()).toBeInTheDocument();
+    expect(screen.getByTestId("toc-new-division")).toBeInTheDocument();
     // …but nothing has been created, placed or persisted.
     expect(added).toEqual([]);
     expect(changes).toEqual([]);
