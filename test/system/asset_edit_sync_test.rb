@@ -87,6 +87,7 @@ class AssetEditSyncTest < ApplicationSystemTestCase
     ref = "authored-diagram"
 
     visit edit_project_path(@project)
+    open_explorer_view(:assets)
     assert_selector "button[data-testid='toc-assets-btn']", text: "Add", wait: 20
     find("button[data-testid='toc-assets-btn']", text: "Add").click
 
@@ -136,6 +137,7 @@ class AssetEditSyncTest < ApplicationSystemTestCase
     # asset manager -- the only route a user has to it.
     def open_asset_editor_for(ref)
       visit edit_project_path(@project)
+      open_explorer_view(:assets)
       assert_selector "button[data-testid='toc-assets-btn']", text: "Manage", wait: 20
       find("button[data-testid='toc-assets-btn']", text: "Manage").click
 

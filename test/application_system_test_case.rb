@@ -38,4 +38,13 @@ class ApplicationSystemTestCase < ActionDispatch::SystemTestCase
   else
     driven_by :selenium, using: :headless_chrome, screen_size: [ 1400, 1400 ]
   end
+
+  # Show a project-explorer view (:toc, :snippets, :assets, :find) in the editor.
+  # Clicking the icon of the view that's already open collapses the explorer,
+  # so only click when it isn't the pressed one.
+  def open_explorer_view(view)
+    tab = find("button[data-testid='explorer-tab-#{view}']", wait: 20)
+    tab.click unless tab["aria-pressed"] == "true"
+    assert_selector "button[data-testid='explorer-tab-#{view}'][aria-pressed='true']"
+  end
 end
