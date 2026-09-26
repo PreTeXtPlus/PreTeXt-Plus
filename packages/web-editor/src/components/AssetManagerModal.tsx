@@ -2,6 +2,7 @@ import { useState, useEffect, useRef, type ReactNode } from "react";
 import clsx from "clsx";
 import type { Asset } from "../types/editor";
 import { useEditorStore } from "../store/hooks";
+import { useDivisionActions } from "./toc/useDivisionActions";
 import { assetEmbedCode } from "../sectionUtils";
 import { buildProjectAssetView, type AssetRow } from "../assetView";
 import {
@@ -138,17 +139,14 @@ const AssetManagerModal = ({
   onReplaceAsset,
 }: AssetManagerModalProps) => {
   const divisions = useEditorStore((s) => s.divisions);
-  const activeDivisionId = useEditorStore((s) => s.activeDivisionId);
-  // The embed code the user copies is matched to the division they're editing:
-  // a Markdown division needs `::image{ref="x"}`, since raw `<plus:.../>` XML
-  // pasted into Markdown doesn't survive conversion. Falls back to PreTeXt.
-  const activeFormat =
-    divisions?.find((d) => d.xmlId === activeDivisionId)?.sourceFormat ??
-    "pretext";
+  // The embed code the user copies matches the buffer open in the editor,
+  // where it will be pasted: Markdown needs `::image{ref="x"}`, since raw
+  // `<plus:.../>` XML pasted into Markdown doesn't survive conversion.
+  const { activeFormat } = useDivisionActions();
   const embedFor = (ref: string) => assetEmbedCode(ref, activeFormat);
   // Authoritative project-asset pool, owned by the store.
   const projectAssets = useEditorStore((s) => s.projectAssets) ?? [];
-  const openAssetEditor = useEditorStore((s) => s.openAssetEditor);
+  const openAsset = useEditorStore((s) => s.openAsset);
   const openAssetResolver = useEditorStore((s) => s.openAssetResolver);
   const removeAssetRefFromDocument = useEditorStore((s) => s.removeAssetRefFromDocument);
 
@@ -269,7 +267,7 @@ const AssetManagerModal = ({
     }
     if (asset.ref) {
       navigator.clipboard?.writeText(embedFor(asset.ref)).catch(() => {});
-      openAssetEditor(asset.ref);
+      openAsset(asset.ref);
     }
     onClose();
   };
@@ -369,7 +367,7 @@ const AssetManagerModal = ({
         } else {
           // Hand off to the standalone asset editor; close the manager so the
           // two dialogs don't stack.
-          openAssetEditor(row.ref);
+          openAsset(row.ref);
           onClose();
         }
       };

@@ -26,9 +26,13 @@ import ConvertToPretextDialog from "./ConvertToPretextDialog";
 import DocinfoEditor from "./DocinfoEditor";
 import FullSourceModal from "./FullSourceModal";
 import AssetManagerModal, { type AssetManagerMainTab } from "./AssetManagerModal";
-import AssetEditModal from "./AssetEditModal";
 import SnippetManagerModal, { type SnippetManagerMainTab } from "./SnippetManagerModal";
-import SnippetEditModal from "./SnippetEditModal";
+import EditorTargetBar from "./EditorTargetBar";
+import {
+  editorTargetKey,
+  resolveEditorTarget,
+  type EditorTarget,
+} from "./editorTarget";
 import TopBar, { type TopBarAccountAreaHelpers } from "./TopBar";
 import type { MenuEntry } from "./MenuDropdown";
 import ProjectExplorer from "./ProjectExplorer";
@@ -616,14 +620,12 @@ const EditorsInner = (props: EditorsInnerProps) => {
   const isAssetPickerOpen = useEditorStore((s) => s.isAssetPickerOpen);
   const isSnippetPickerOpen = useEditorStore((s) => s.isSnippetPickerOpen);
   const isFullSourceOpen = useEditorStore((s) => s.isFullSourceOpen);
-  const editingAssetRef = useEditorStore((s) => s.editingAssetRef);
-  const openAssetEditor = useEditorStore((s) => s.openAssetEditor);
-  const closeAssetEditor = useEditorStore((s) => s.closeAssetEditor);
+  const openItem = useEditorStore((s) => s.openItem);
+  const openDivision = useEditorStore((s) => s.openDivision);
+  const openAsset = useEditorStore((s) => s.openAsset);
+  const openSnippet = useEditorStore((s) => s.openSnippet);
   const assetResolveTarget = useEditorStore((s) => s.assetResolveTarget);
   const closeAssetResolver = useEditorStore((s) => s.closeAssetResolver);
-  const editingSnippetRef = useEditorStore((s) => s.editingSnippetRef);
-  const openSnippetEditor = useEditorStore((s) => s.openSnippetEditor);
-  const closeSnippetEditor = useEditorStore((s) => s.closeSnippetEditor);
   const snippetResolveTarget = useEditorStore((s) => s.snippetResolveTarget);
   const closeSnippetResolver = useEditorStore((s) => s.closeSnippetResolver);
   // Replace target is local UI state (only Editors + the asset manager need it).
@@ -652,14 +654,6 @@ const EditorsInner = (props: EditorsInnerProps) => {
   const renameSnippetInPool = useEditorStore((s) => s.renameSnippetInPool);
   const removeSnippetFromPool = useEditorStore((s) => s.removeSnippetFromPool);
 
-  const editingAsset = editingAssetRef
-    ? projectAssets?.find((a) => a.ref === editingAssetRef.ref)
-    : undefined;
-
-  const editingSnippet = editingSnippetRef
-    ? projectSnippets?.find((s) => s.ref === editingSnippetRef.ref)
-    : undefined;
-
   // ── Authoritative editing buffer (read from the store, not props) ─────────
   // The store owns the live edit after the initial seed.  Reading these here
   // means a local edit displays immediately without the host having to echo
@@ -667,7 +661,6 @@ const EditorsInner = (props: EditorsInnerProps) => {
   const divisionsRaw = useEditorStore((s) => s.divisions);
   const divisions = useMemo(() => divisionsRaw ?? [], [divisionsRaw]);
   const storeApi = useEditorStoreApi();
-  const activeDivisionId = useEditorStore((s) => s.activeDivisionId);
   const title = useEditorStore((s) => s.title);
   const docinfo = useEditorStore((s) => s.docinfo);
   const commonDocinfo = useEditorStore((s) => s.commonDocinfo);
@@ -682,7 +675,6 @@ const EditorsInner = (props: EditorsInnerProps) => {
   const removeDivisionFromPool = useEditorStore(
     (s) => s.removeDivisionFromPool,
   );
-  const setActiveDivisionId = useEditorStore((s) => s.setActiveDivisionId);
   const startSectionEdit = useEditorStore((s) => s.startSectionEdit);
   const setTitle = useEditorStore((s) => s.setTitle);
   const setLanguage = useEditorStore((s) => s.setLanguage);
@@ -736,11 +728,27 @@ const EditorsInner = (props: EditorsInnerProps) => {
     refreshCleanFindings();
   };
 
-  // ── Active division (derived from the store's authoritative pool) ─────────
+  // ── What the code editor has open (derived from the store's pools) ───────
   const rootDivision = findRootDivision(divisions, props.rootDivisionId);
 
+  // A division, a snippet or an asset — see `OpenItem`. Every division-only
+  // feature below (preview, conversion, structural sync) reads
+  // `activeDivision`, which is null while a snippet or asset is open.
+  const editorTarget: EditorTarget | null = useMemo(
+    () =>
+      resolveEditorTarget(
+        openItem,
+        divisions,
+        projectSnippets,
+        projectAssets,
+        rootDivision,
+      ),
+    [openItem, divisions, projectSnippets, projectAssets, rootDivision],
+  );
+  const editorKey = editorTargetKey(editorTarget);
+
   const activeDivision =
-    divisions.find((d) => d.xmlId === activeDivisionId) ?? divisions[0] ?? null;
+    editorTarget?.kind === "division" ? editorTarget.division : null;
 
   const activeDivisionFormat = activeDivision?.sourceFormat ?? "pretext";
 
@@ -748,6 +756,21 @@ const EditorsInner = (props: EditorsInnerProps) => {
   // wrapper tag included, rather than a stripped-down body — the wrapper
   // (with its xml:id/label attributes and title) is the source of truth.
   const divisionActiveSource = activeDivision?.source ?? "";
+
+  // The buffer itself, whichever kind it is. An asset's source is PreTeXt
+  // (it lands inside the generated `<image>`).
+  const editorContent =
+    editorTarget?.kind === "snippet"
+      ? editorTarget.snippet.source
+      : editorTarget?.kind === "asset"
+        ? (editorTarget.asset.source ?? "")
+        : divisionActiveSource;
+  const editorFormat: SourceFormat =
+    editorTarget?.kind === "snippet"
+      ? editorTarget.snippet.sourceFormat
+      : editorTarget?.kind === "asset"
+        ? "pretext"
+        : activeDivisionFormat;
 
   // ── Cross-division preview sync ──────────────────────────────────────────
   // Clicking inside a child division's content opens that division. Its line
@@ -988,7 +1011,7 @@ const EditorsInner = (props: EditorsInnerProps) => {
   };
 
   const applyDivisionSelect = (xmlId: string) => {
-    setActiveDivisionId(xmlId);
+    openDivision(xmlId);
     props.onDivisionSelect?.(xmlId);
   };
 
@@ -1205,13 +1228,10 @@ const EditorsInner = (props: EditorsInnerProps) => {
     applyDivisionSelect(xmlId);
   };
 
-  // Clicking the locked wrapper line in the code editor opens the active
-  // division's properties form in the explorer's Contents view. Open that view
-  // first so the form is visible (the explorer may be collapsed or on another
-  // view, and is collapsed in the narrow-screen drawer).
+  // Clicking the locked wrapper line in the code editor opens the division's
+  // properties form in the settings drawer under the editor's title bar.
   const handleRequestWrapperEdit = () => {
     if (!activeDivision) return;
-    showExplorerView("toc");
     startSectionEdit(activeDivision);
   };
 
@@ -1284,7 +1304,7 @@ const EditorsInner = (props: EditorsInnerProps) => {
         );
       }
     });
-    setActiveDivisionId(newDiv.xmlId);
+    openDivision(newDiv.xmlId);
     // Drop focus straight into the code editor so the author can start typing
     // the body without an extra click. Only on create: cancelling a draft
     // leaves them where they were.
@@ -1371,7 +1391,7 @@ const EditorsInner = (props: EditorsInnerProps) => {
     await props.onAssetUpdate?.(copy);
     addAssetToPool(copy);
     bridge?.localAssetAdd(copy);
-    openAssetEditor(newRef);
+    openAsset(newRef);
   };
 
   /**
@@ -1477,7 +1497,7 @@ const EditorsInner = (props: EditorsInnerProps) => {
     await props.onSnippetUpdate(copy);
     addSnippetToPool(copy);
     bridge?.localSnippetAdd(copy);
-    openSnippetEditor(newRef);
+    openSnippet(newRef);
   };
 
   /**
@@ -1502,6 +1522,145 @@ const EditorsInner = (props: EditorsInnerProps) => {
         emitContentChange(division.xmlId, next, division.sourceFormat);
       }
     }
+  };
+
+  // ── Snippet / asset buffers ──────────────────────────────────────────────
+  // A snippet's or asset's source is edited in the same code editor as a
+  // division, and travels the same way: the pool is updated optimistically and
+  // the shared doc by minimal diff (a no-op while the Monaco binding owns the
+  // text). Only solo mode tells the host — in collab mode the server reads
+  // content from the doc, exactly as it does for divisions.
+  //
+  // Host writes are coalesced per record: the code editor already debounces
+  // keystrokes, but a request per pause would still be one PATCH every half
+  // second of typing. The pending write reads the record from the store when
+  // it fires, so it always carries the latest text; switching items or
+  // unmounting flushes it rather than dropping it.
+  const [bufferSaveError, setBufferSaveError] = useState<string | null>(null);
+  const pendingHostSavesRef = useRef(
+    new Map<string, { timer: ReturnType<typeof setTimeout>; fire: () => void }>(),
+  );
+  // Records with a host write still scheduled or in flight, counted per record
+  // key. A host that answers each write by re-fetching (the Rails app does)
+  // hands back a fresh `projectSnippets`/`projectAssets` — which is a reset —
+  // that can predate text typed since the write left. While a record is listed
+  // here the reset keeps the local copy of it (see the external-update effect).
+  const unsavedRecordsRef = useRef(new Map<string, number>());
+  const scheduleHostSave = (key: string, save: () => Promise<void> | void) => {
+    const pending = pendingHostSavesRef.current;
+    const unsaved = unsavedRecordsRef.current;
+    const existing = pending.get(key);
+    if (existing) clearTimeout(existing.timer);
+    else unsaved.set(key, (unsaved.get(key) ?? 0) + 1);
+    const fire = () => {
+      pending.delete(key);
+      Promise.resolve()
+        .then(save)
+        .then(
+          () => setBufferSaveError(null),
+          (err: unknown) =>
+            setBufferSaveError(
+              err instanceof Error ? err.message : "the change could not be saved",
+            ),
+        )
+        .finally(() => {
+          const left = (unsaved.get(key) ?? 1) - 1;
+          if (left > 0) unsaved.set(key, left);
+          else unsaved.delete(key);
+        });
+    };
+    pending.set(key, { timer: setTimeout(fire, 1000), fire });
+  };
+  useEffect(() => {
+    const pending = pendingHostSavesRef.current;
+    return () => {
+      for (const { timer, fire } of [...pending.values()]) {
+        clearTimeout(timer);
+        fire();
+      }
+    };
+  }, [editorKey]);
+
+  const applySnippetSourceChange = (
+    ref: string,
+    content: string | undefined,
+  ) => {
+    const current = storeApi
+      .getState()
+      .projectSnippets?.find((sn) => sn.ref === ref);
+    const source = content ?? "";
+    if (!current || current.source === source) return;
+    updateSnippetInPool({ ...current, source });
+    bridge?.localSnippetSourceChange(ref, source);
+    const onSnippetUpdate = props.onSnippetUpdate;
+    if (props.collaboration || !onSnippetUpdate) return;
+    const id = current.id;
+    scheduleHostSave(`snippet:${id ?? ref}`, () => {
+      const latest = storeApi
+        .getState()
+        .projectSnippets?.find((sn) => (id ? sn.id === id : sn.ref === ref));
+      if (latest) return onSnippetUpdate(latest);
+    });
+  };
+
+  const applyAssetSourceChange = (ref: string, content: string | undefined) => {
+    const current = storeApi
+      .getState()
+      .projectAssets?.find((a) => a.ref === ref);
+    const source = content ?? "";
+    if (!current || (current.source ?? "") === source) return;
+    updateAssetInPool({ ...current, source });
+    bridge?.localAssetSourceChange(ref, source);
+    const onAssetUpdate = props.onAssetUpdate;
+    if (props.collaboration || !onAssetUpdate) return;
+    const id = current.id;
+    scheduleHostSave(`asset:${id ?? ref}`, () => {
+      const latest = storeApi
+        .getState()
+        .projectAssets?.find((a) => (id ? a.id === id : a.ref === ref));
+      if (latest) return onAssetUpdate(latest);
+    });
+  };
+
+  /**
+   * Persist a snippet metadata edit from the settings drawer (its ref or source
+   * format). The host goes first: a ref has to be unique across the whole
+   * project, which is more than the drawer can check against its own pool (a
+   * division can hold the name too), so the host is the only place a rename is
+   * truly settled. Letting it fail first means the error is reported with the
+   * document still intact, rather than every placeholder rewritten to a ref
+   * nothing owns.
+   */
+  const handleSnippetSave = async (snippet: Snippet, prevRef: string) => {
+    await props.onSnippetUpdate?.(snippet);
+    // A ref rename also rewrites every placeholder that names it, so the whole
+    // edit goes to peers as one transaction — otherwise they would briefly
+    // hold placeholders pointing at neither ref.
+    collabTransact(() => {
+      if (snippet.ref && snippet.ref !== prevRef) {
+        renameSnippetRefEverywhere(prevRef, snippet.ref);
+        renameSnippetInPool(prevRef, snippet);
+        bridge?.localSnippetUpdate(snippet, prevRef);
+      } else {
+        updateSnippetInPool(snippet);
+        bridge?.localSnippetUpdate(snippet);
+      }
+    });
+  };
+
+  /** {@link handleSnippetSave} for an asset's title, ref and short description. */
+  const handleAssetSave = async (asset: Asset, prevRef: string) => {
+    await props.onAssetUpdate?.(asset);
+    collabTransact(() => {
+      if (asset.ref && asset.ref !== prevRef) {
+        renameAssetRefEverywhere(prevRef, asset.ref);
+        renameAssetInPool(prevRef, asset);
+        bridge?.localAssetUpdate(asset, prevRef);
+      } else {
+        updateAssetInPool(asset);
+        bridge?.localAssetUpdate(asset);
+      }
+    });
   };
 
   // ── Resize listener ──────────────────────────────────────────────────────
@@ -1575,18 +1734,18 @@ const EditorsInner = (props: EditorsInnerProps) => {
   // ── Sync derived/config state into store ─────────────────────────────────
   // Only fields that are NEVER edited locally are mirrored from props/derived
   // values on every render — the editing buffer itself (divisions, title,
-  // docinfo, activeDivisionId) is owned by the store and handled separately
+  // docinfo, openItem) is owned by the store and handled separately
   // (optimistic edits above + external-update detection below).  `source` /
-  // `sourceFormat` track the active division (read by the feedback link).
+  // `sourceFormat` track the open buffer (read by the feedback link).
   useEffect(() => {
     syncState({
-      source: divisionActiveSource,
-      sourceFormat: activeDivisionFormat,
+      source: editorContent,
+      sourceFormat: editorFormat,
       projectUrl: props.projectUrl,
       userEmail: props.userEmail,
       rootDivisionId: rootDivision?.xmlId,
       canConvertToPretext: divisionConvertedPretext !== undefined,
-      activeEditorSource: divisionActiveSource,
+      activeEditorSource: editorContent,
       hasFeedback: props.onFeedbackSubmit !== undefined,
       hasAssetDuplicate: canDuplicateAsset,
       hasSnippetDuplicate: canDuplicateSnippet,
@@ -1624,12 +1783,34 @@ const EditorsInner = (props: EditorsInnerProps) => {
     // taken before the peers' latest additions reached it. Honoring it as a
     // reset would delete, from every client, whatever this one hadn't yet
     // fetched. The doc's own asset map keeps the pool current instead.
+    //
+    // Solo, a reset still must not undo typing the host hasn't stored yet: a
+    // record whose source write is scheduled or in flight keeps its local copy.
+    const unsaved = unsavedRecordsRef.current;
+    const keepUnsaved = <T extends { id?: string; ref?: string }>(
+      kind: "snippet" | "asset",
+      incoming: T[],
+      local: T[] | undefined,
+    ): T[] =>
+      unsaved.size === 0
+        ? incoming
+        : incoming.map((record) => {
+          const key = `${kind}:${record.id ?? record.ref}`;
+          if (!unsaved.has(key)) return record;
+          return (
+            local?.find((l) => `${kind}:${l.id ?? l.ref}` === key) ?? record
+          );
+        });
     if (
       !bridge &&
       props.projectAssets !== undefined &&
       props.projectAssets !== prev.projectAssets
     ) {
-      update.projectAssets = props.projectAssets;
+      update.projectAssets = keepUnsaved(
+        "asset",
+        props.projectAssets,
+        storeApi.getState().projectAssets,
+      );
       changed = true;
     }
 
@@ -1639,7 +1820,11 @@ const EditorsInner = (props: EditorsInnerProps) => {
       props.projectSnippets !== undefined &&
       props.projectSnippets !== prev.projectSnippets
     ) {
-      update.projectSnippets = props.projectSnippets;
+      update.projectSnippets = keepUnsaved(
+        "snippet",
+        props.projectSnippets,
+        storeApi.getState().projectSnippets,
+      );
       changed = true;
     }
 
@@ -1654,11 +1839,12 @@ const EditorsInner = (props: EditorsInnerProps) => {
       update.divisions = normalizedDivisions;
       const normalizedRoot =
         normalizedDivisions.find((d) => d.xmlId === newRoot?.xmlId) ?? newRoot;
-      // If the active division no longer exists in the incoming pool, fall back
-      // to the root so the editor never points at a missing division.
+      // If the open division no longer exists in the incoming pool, fall back
+      // to the root so the editor never points at a missing division. An open
+      // snippet or asset isn't affected by a new division pool.
       if (
-        activeDivisionId == null ||
-        !props.divisions.some((d) => d.xmlId === activeDivisionId)
+        openItem.kind === "division" &&
+        !props.divisions.some((d) => d.xmlId === openItem.ref)
       ) {
         update.activeDivisionId = normalizedRoot?.xmlId ?? null;
       }
@@ -1869,7 +2055,12 @@ const EditorsInner = (props: EditorsInnerProps) => {
   // this one only while the preview is. Both walk the whole divisions tree,
   // and neither should pay for the other being closed.
   const previewContextSource = useMemo(() => {
-    if (!showLivePreview || !rootDivision || previewingWholeDocument) {
+    if (
+      !showLivePreview ||
+      !activeDivision ||
+      !rootDivision ||
+      previewingWholeDocument
+    ) {
       return undefined;
     }
     try {
@@ -1888,6 +2079,7 @@ const EditorsInner = (props: EditorsInnerProps) => {
     }
   }, [
     showLivePreview,
+    activeDivision,
     rootDivision,
     previewingWholeDocument,
     divisions,
@@ -2063,24 +2255,48 @@ const EditorsInner = (props: EditorsInnerProps) => {
     applyDivisionUpdate(activeDivision.xmlId, { sourceFormat: "pretext" });
   };
 
-  // Which division each collaborator is looking at (drives presence detail).
+  // Which buffer each collaborator is looking at (drives presence detail): a
+  // division's xmlId, or `snippet:<id>` / `asset:<id>`.
   useEffect(() => {
     if (!props.collaboration) return;
     props.collaboration.awareness.setLocalStateField(
       "division",
-      activeDivisionId ?? null,
+      editorKey || null,
     );
-  }, [props.collaboration, activeDivisionId]);
+  }, [props.collaboration, editorKey]);
 
-  // The active division's shared text, when collaboration is on and the
-  // division has reached the doc (a just-created one lands after its host id
-  // resolves — the bridge version subscription re-renders us then).
-  const activeCollabText =
-    bridge && activeDivision ? bridge.getYText(activeDivision.xmlId) : undefined;
+  // The open buffer's shared text, when collaboration is on and the record has
+  // reached the doc (a just-created one lands after its host id resolves — the
+  // bridge version subscription re-renders us then).
+  const activeCollabText = !bridge || !editorTarget
+    ? undefined
+    : editorTarget.kind === "division"
+      ? bridge.getYText(editorTarget.division.xmlId)
+      : editorTarget.kind === "snippet"
+        ? bridge.getSnippetText(editorTarget.snippet.ref)
+        : bridge.getAssetText(editorTarget.asset.ref ?? "");
+
+  // Where the code editor's edits go, by what is open. Re-created per render
+  // and closing over *this* render's target, so a delivery the code editor is
+  // still holding when the author switches away lands on the record that was
+  // open when it was typed — not on whatever `openItem` says by then.
+  const openSnippetRef =
+    editorTarget?.kind === "snippet" ? editorTarget.snippet.ref : null;
+  const openAssetRef =
+    editorTarget?.kind === "asset" ? (editorTarget.asset.ref ?? "") : null;
+  const handleEditorChange = (content: string | undefined) => {
+    if (openSnippetRef !== null) applySnippetSourceChange(openSnippetRef, content);
+    else if (openAssetRef !== null) applyAssetSourceChange(openAssetRef, content);
+    else handleDivisionContentChange(content);
+  };
+  const isDivisionOpen = editorTarget?.kind === "division";
 
   // ── Code editor menu wiring (shared between the code editor's keyboard
   // shortcuts and TopBar's File/Edit/Insert/Tools toolbar) ────────────────
-  const onOpenImport = () => openModal("isImportDialogOpen");
+  // Import fits its result to the open division, so it needs one.
+  const onOpenImport = isDivisionOpen
+    ? () => openModal("isImportDialogOpen")
+    : undefined;
   const onOpenDocinfoEditor = () => openModal("isDocinfoEditorOpen");
   const onOpenConvertToPretext =
     isNonPretextDoc && divisionConvertedPretext !== undefined
@@ -2088,11 +2304,11 @@ const EditorsInner = (props: EditorsInnerProps) => {
       : undefined;
   const canConvertToPretext = divisionConvertedPretext !== undefined;
   const onOpenAssets =
-    props.projectAssets !== undefined && activeDivisionFormat === "pretext"
+    props.projectAssets !== undefined && editorFormat === "pretext"
       ? () => openModal("isAssetPickerOpen")
       : undefined;
   const onOpenSnippets =
-    props.projectSnippets !== undefined && activeDivisionFormat === "pretext"
+    props.projectSnippets !== undefined && editorFormat === "pretext"
       ? () => openModal("isSnippetPickerOpen")
       : undefined;
   const onShowFullSource = () => openModal("isFullSourceOpen");
@@ -2101,16 +2317,19 @@ const EditorsInner = (props: EditorsInnerProps) => {
   const codeEditor = (
     <CodeEditor
       ref={codeEditorRef}
-      content={divisionActiveSource}
-      sourceFormat={activeDivisionFormat}
-      pretextValidation={pretextValidation}
+      content={editorContent}
+      sourceFormat={editorFormat}
+      // Only a division's buffer can be schema-checked: the linter validates
+      // the assembled document, which a snippet or asset fragment isn't.
+      pretextValidation={isDivisionOpen ? pretextValidation : undefined}
+      lockStructure={isDivisionOpen}
       collab={
-        props.collaboration && bridge && activeCollabText && activeDivision
+        props.collaboration && bridge && activeCollabText && editorKey
           ? {
               ytext: activeCollabText,
               awareness: props.collaboration.awareness,
               user: props.collaboration.user,
-              divisionKey: activeDivision.xmlId,
+              bufferKey: editorKey,
               registerLocalOrigin: (origin) =>
                 bridge.registerLocalOrigin(origin),
               unregisterLocalOrigin: (origin) =>
@@ -2118,19 +2337,20 @@ const EditorsInner = (props: EditorsInnerProps) => {
             }
           : undefined
       }
-      onChange={handleDivisionContentChange}
-      onRebuild={canPreview ? triggerRebuild : undefined}
+      onChange={handleEditorChange}
+      onRebuild={canPreview && isDivisionOpen ? triggerRebuild : undefined}
       onSave={triggerSaveAndRebuild}
-      onCursorLineChange={handleCursorLineChange}
+      onCursorLineChange={isDivisionOpen ? handleCursorLineChange : undefined}
       onOpenFindInProject={handleOpenFindPanel}
-      // Every format now locks its structural lines (the PreTeXt wrapper tag +
-      // title, the Markdown frontmatter, the LaTeX `\section` header) and a
-      // single click on them opens the division's properties form in the TOC.
-      // The code editor only fires this when a locked leading line is actually
-      // present, so it's safe to wire up for all formats. Suppressed when
-      // read-only: that form isn't otherwise reachable, and this is a second
-      // entry point into it beyond the (already-hidden) TOC menus.
-      onRequestWrapperEdit={props.readOnly ? undefined : handleRequestWrapperEdit}
+      // Every format locks a division's structural lines (the PreTeXt wrapper
+      // tag + title, the Markdown frontmatter, the LaTeX `\section` header) and
+      // a single click on them opens the division's properties form in the
+      // settings drawer. The code editor only fires this when a locked leading
+      // line is actually present, so it's safe to wire up for all formats.
+      // Suppressed when read-only, where the drawer holds no form.
+      onRequestWrapperEdit={
+        props.readOnly || !isDivisionOpen ? undefined : handleRequestWrapperEdit
+      }
       readOnly={props.readOnly}
       pasteAutoConvert={pasteAutoConvert}
       onMenuStateChange={setCodeEditorMenuState}
@@ -2144,9 +2364,38 @@ const EditorsInner = (props: EditorsInnerProps) => {
     />
   );
 
+  // The code editor under its title bar, whose drawer holds the open item's
+  // settings and actions (dropping down over the editor).
+  const editorPane = (
+    <div className="flex flex-col flex-1 h-full min-h-0">
+      <EditorTargetBar
+        target={editorTarget}
+        readOnly={props.readOnly}
+        onSaveSnippet={handleSnippetSave}
+        onSaveAsset={handleAssetSave}
+        onReplaceAsset={
+          canReplaceAsset ? (asset) => setAssetReplaceTarget(asset) : undefined
+        }
+        saveError={isDivisionOpen ? null : bufferSaveError}
+      />
+      <div className="flex flex-col flex-1 min-h-0 relative">{codeEditor}</div>
+    </div>
+  );
+
   // ── Preview panel ─────────────────────────────────────────────────────────
   let preview: ReactNode;
-  if (showLivePreview && canPreview) {
+  if (showLivePreview && canPreview && !isDivisionOpen) {
+    // Snippets and assets only render inside a division today; previewing
+    // them on their own is planned.
+    preview = (
+      <div
+        data-testid="preview-coming-soon"
+        className="flex flex-1 h-full items-center justify-center p-6 bg-[#fafafa] text-center text-[0.9rem] text-slate-500"
+      >
+        Preview coming soon for snippets and assets.
+      </div>
+    );
+  } else if (showLivePreview && canPreview) {
     preview = (
       <LivePreview
         ref={livePreviewRef}
@@ -2267,7 +2516,7 @@ const EditorsInner = (props: EditorsInnerProps) => {
             }
           >
             <div style={{ height: "100%" }}>
-              {activeTab === "editor" ? codeEditor : preview}
+              {activeTab === "editor" ? editorPane : preview}
             </div>
           </div>
         </div>
@@ -2282,7 +2531,7 @@ const EditorsInner = (props: EditorsInnerProps) => {
             className="flex flex-col min-h-0 relative overflow-visible z-[1]"
             style={{ overflow: "hidden" }}
           >
-            {codeEditor}
+            {editorPane}
           </Panel>
           <Separator className="group bg-[#f0f0f0] cursor-col-resize w-2 flex items-center justify-center border-l border-r border-[#ddd] transition-colors duration-200 ease-in-out hover:bg-[#e0e0e0] active:bg-[#d0d0d0]">
             <div className="flex flex-col gap-1 items-center justify-center h-full px-[0.5px] bg-[#dde0e6]">
@@ -2310,10 +2559,10 @@ const EditorsInner = (props: EditorsInnerProps) => {
         readOnly={props.readOnly}
         onSaveAndClose={props.onSaveAndClose}
         saveAndCloseLabel={props.saveAndCloseLabel}
-        content={divisionActiveSource}
-        sourceFormat={activeDivisionFormat}
+        content={editorContent}
+        sourceFormat={editorFormat}
         rootType={previewRootType}
-        onContentChange={handleDivisionContentChange}
+        onContentChange={handleEditorChange}
         onOpenImport={onOpenImport}
         onOpenClean={handleOpenCleanDialog}
         onOpenDocinfoEditor={onOpenDocinfoEditor}
@@ -2330,7 +2579,7 @@ const EditorsInner = (props: EditorsInnerProps) => {
         menuState={codeEditorMenuState}
       />
       <div className="flex flex-1 min-h-0 flex-col relative">
-        <ErrorBoundary resetKeys={[divisionActiveSource, activeDivisionId]}>
+        <ErrorBoundary resetKeys={[editorContent, editorKey]}>
           {editorDisplays}
         </ErrorBoundary>
         {isImportDialogOpen ? (
@@ -2426,58 +2675,6 @@ const EditorsInner = (props: EditorsInnerProps) => {
             onClose={() => closeModal("isFullSourceOpen")}
           />
         ) : null}
-        {editingAsset ? (
-          <AssetEditModal
-            // Key by the edited asset so switching targets (e.g. opening the
-            // original right after Duplicate auto-opens the copy) remounts the
-            // modal and re-seeds its form fields from the new asset, instead of
-            // carrying the previous asset's edits over and writing them to the
-            // wrong record on Save.
-            key={editingAsset.ref}
-            asset={editingAsset}
-            projectAssets={projectAssets ?? []}
-            onClose={closeAssetEditor}
-            onReplace={
-              canReplaceAsset
-                ? (asset) => {
-                    closeAssetEditor();
-                    setAssetReplaceTarget(asset);
-                  }
-                : undefined
-            }
-            onDuplicate={
-              // Don't close first: keep the modal open (busy) through the
-              // re-fetch/upload round-trip, then handleAssetDuplicate re-opens
-              // it on the copy — the key above makes that a clean remount.
-              canDuplicateAsset
-                ? (asset) => handleAssetDuplicate(asset)
-                : undefined
-            }
-            onSave={async (asset, prevRef) => {
-              // Persist before touching the document. A `ref` has to be unique
-              // across the whole project, which is more than this modal can
-              // check against its own pool (a division can hold the name too),
-              // so the host is the only place
-              // the rename is truly settled. Letting it fail first means the
-              // modal reports the error with the document still intact, rather
-              // than leaving every placeholder rewritten to a ref nothing owns.
-              await props.onAssetUpdate?.(asset);
-              // A ref rename also rewrites every placeholder that names it, so
-              // the whole edit goes to peers as one transaction — otherwise
-              // they would briefly hold placeholders pointing at neither ref.
-              collabTransact(() => {
-                if (asset.ref && asset.ref !== prevRef) {
-                  renameAssetRefEverywhere(prevRef, asset.ref);
-                  renameAssetInPool(prevRef, asset);
-                  bridge?.localAssetUpdate(asset, prevRef);
-                } else {
-                  updateAssetInPool(asset);
-                  bridge?.localAssetUpdate(asset);
-                }
-              });
-            }}
-          />
-        ) : null}
         {(isSnippetPickerOpen || snippetResolveTarget) &&
         props.projectSnippets !== undefined ? (
           <SnippetManagerModal
@@ -2496,37 +2693,6 @@ const EditorsInner = (props: EditorsInnerProps) => {
             }
             onSnippetAdded={handleSnippetAdded}
             onResolveRef={renameSnippetRefEverywhere}
-          />
-        ) : null}
-        {editingSnippet ? (
-          <SnippetEditModal
-            // Key by the edited snippet so switching targets (e.g. opening the
-            // original right after Duplicate auto-opens the copy) remounts the
-            // modal and re-seeds its form fields from the new snippet.
-            key={editingSnippet.ref}
-            snippet={editingSnippet}
-            projectSnippets={projectSnippets ?? []}
-            onClose={closeSnippetEditor}
-            onDuplicate={
-              canDuplicateSnippet
-                ? (snippet) => handleSnippetDuplicate(snippet)
-                : undefined
-            }
-            onSave={async (snippet, prevRef) => {
-              // Persist before touching the document — see the identical
-              // reasoning on AssetEditModal's onSave above.
-              await props.onSnippetUpdate?.(snippet);
-              collabTransact(() => {
-                if (snippet.ref && snippet.ref !== prevRef) {
-                  renameSnippetRefEverywhere(prevRef, snippet.ref);
-                  renameSnippetInPool(prevRef, snippet);
-                  bridge?.localSnippetUpdate(snippet, prevRef);
-                } else {
-                  updateSnippetInPool(snippet);
-                  bridge?.localSnippetUpdate(snippet);
-                }
-              });
-            }}
           />
         ) : null}
       </div>

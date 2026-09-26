@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import clsx from "clsx";
 import type { Snippet } from "../types/editor";
 import { useEditorStore } from "../store/hooks";
+import { useDivisionActions } from "./toc/useDivisionActions";
 import { snippetEmbedCode, sanitizeXmlId } from "../sectionUtils";
 import { buildProjectSnippetView, type SnippetRow } from "../snippetView";
 import {
@@ -75,18 +76,15 @@ const SnippetManagerModal = ({
   onResolveRef,
 }: SnippetManagerModalProps) => {
   const divisions = useEditorStore((s) => s.divisions);
-  const activeDivisionId = useEditorStore((s) => s.activeDivisionId);
-  // The embed code the user copies is matched to the division they're editing:
-  // a Markdown division needs `::snippet{ref="x"}`, since raw `<plus:.../>`
-  // XML pasted into Markdown doesn't survive conversion. Falls back to PreTeXt.
-  const activeFormat =
-    divisions?.find((d) => d.xmlId === activeDivisionId)?.sourceFormat ??
-    "pretext";
+  // The embed code the user copies matches the buffer open in the editor,
+  // where it will be pasted: Markdown needs `::snippet{ref="x"}`, since raw
+  // `<plus:.../>` XML pasted into Markdown doesn't survive conversion.
+  const { activeFormat } = useDivisionActions();
   const embedFor = (ref: string) => snippetEmbedCode(ref, activeFormat);
   // Authoritative project-snippet pool, owned by the store.
   const projectSnippets = useEditorStore((s) => s.projectSnippets) ?? [];
   const projectAssets = useEditorStore((s) => s.projectAssets) ?? [];
-  const openSnippetEditor = useEditorStore((s) => s.openSnippetEditor);
+  const openSnippet = useEditorStore((s) => s.openSnippet);
   const openSnippetResolver = useEditorStore((s) => s.openSnippetResolver);
   const removeSnippetRefFromDocument = useEditorStore(
     (s) => s.removeSnippetRefFromDocument,
@@ -137,7 +135,7 @@ const SnippetManagerModal = ({
     }
     if (snippet.ref) {
       navigator.clipboard?.writeText(embedFor(snippet.ref)).catch(() => {});
-      openSnippetEditor(snippet.ref);
+      openSnippet(snippet.ref);
     }
     onClose();
   };
@@ -193,7 +191,7 @@ const SnippetManagerModal = ({
         if (row.status === "unlinked") {
           openSnippetResolver(row.ref);
         } else {
-          openSnippetEditor(row.ref);
+          openSnippet(row.ref);
           onClose();
         }
       };

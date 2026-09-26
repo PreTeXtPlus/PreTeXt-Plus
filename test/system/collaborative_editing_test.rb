@@ -58,4 +58,40 @@ class CollaborativeEditingTest < ApplicationSystemTestCase
       assert_selector ".monaco-editor", text: "ZZCOLLABZZ", wait: 15
     end
   end
+  # A snippet's source is shared text like a division's, so two people typing
+  # into the same snippet both keep what they typed.
+  test "two editor clients co-edit the same snippet" do
+    user = users(:one)
+    project = projects(:one)
+    snippet = project.snippets.create!(ref: "shared-note", source: "Base", source_format: :pretext)
+
+    visit new_user_session_path
+    fill_in "user_email", with: user.email
+    fill_in "user_password", with: "password123"
+    click_button "Sign in"
+    assert_text "Signed in successfully.", wait: 10
+
+    open_snippet = lambda do
+      visit edit_project_path(project)
+      assert_selector ".monaco-editor", wait: 30
+      open_explorer_view(:snippets)
+      find("[data-testid='snippet-row-#{snippet.ref}'] button", wait: 20).click
+      assert_selector ".monaco-editor .view-line", text: "Base", wait: 10
+    end
+
+    open_snippet.call
+    second_window = open_new_window
+    within_window(second_window) { open_snippet.call }
+
+    find(".monaco-editor .view-line", text: "Base").click
+    page.send_keys :end, "ZZFIRSTZZ"
+    within_window(second_window) do
+      assert_selector ".monaco-editor", text: "ZZFIRSTZZ", wait: 15
+      find(".monaco-editor .view-line", text: "ZZFIRSTZZ").click
+      page.send_keys :end, "ZZSECONDZZ"
+    end
+
+    assert_selector ".monaco-editor", text: "ZZSECONDZZ", wait: 15
+    assert_selector ".monaco-editor", text: "ZZFIRSTZZ"
+  end
 end

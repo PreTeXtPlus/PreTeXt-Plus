@@ -35,7 +35,7 @@ export function renderWithStore(
   docDivisions: Division[] = divisions,
   configure?: (store: TestStore) => void,
 ) {
-  const { store } = createEditorStore({
+  const { store, bindCallbacks } = createEditorStore({
     source: docDivisions[0].source,
     sourceFormat: "pretext",
     title: "Document",
@@ -47,6 +47,22 @@ export function renderWithStore(
     activeDivisionId: docDivisions[0].xmlId,
     projectAssets: undefined,
   });
+  // Without `Editors` nothing answers the store's callbacks; selecting a row
+  // just has to open the division, which is all these tests need of it.
+  const noop = () => {};
+  bindCallbacks({
+    selectDivision: (id) => store.getState().openDivision(id),
+    addDivision: noop,
+    createDivision: noop,
+    removeDivision: noop,
+    updateDivision: noop,
+    divisionContentChange: noop,
+    handleDivisionContentChange: noop,
+    assetInsert: noop,
+    snippetInsert: noop,
+    updateTitle: noop,
+    updateLanguage: noop,
+  });
   configure?.(store);
   return {
     store,
@@ -54,9 +70,9 @@ export function renderWithStore(
   };
 }
 
-/** Open the "⋮" menu of the TOC row whose title is `label`. */
-export function openMenu(label: string) {
-  // Matched on the row's own title element: once an edit form is open the
+/** The TOC row whose title is `label`. */
+export function tocRow(label: string): HTMLElement {
+  // Matched on the row's own title element: once a settings form is open the
   // label also appears as an <option>, which a plain text query would hit.
   const row = [...document.querySelectorAll('[data-testid^="toc-item-"]')]
     .find(
@@ -65,21 +81,33 @@ export function openMenu(label: string) {
         label,
     ) as HTMLElement | undefined;
   if (!row) throw new Error(`no TOC row for "${label}"`);
-  fireEvent.click(within(row).getByTitle("More options"));
   return row;
 }
 
-/** Open "Edit properties" for the row titled `label` and read its Type dropdown. */
+/**
+ * Open the division titled `label` and drop down its settings drawer (the
+ * properties form plus its structural actions). Returns the drawer.
+ */
+export function openSettings(label: string): HTMLElement {
+  fireEvent.click(within(tocRow(label)).getByTestId("toc-title"));
+  // Re-opening an already-open drawer would close it; start from closed.
+  if (screen.queryByTestId("settings-drawer")) {
+    fireEvent.click(screen.getByTestId("settings-drawer-toggle"));
+  }
+  fireEvent.click(screen.getByTestId("settings-drawer-toggle"));
+  return screen.getByTestId("settings-drawer");
+}
+
+/** Open `label`'s settings and read its Type dropdown. */
 export function typeChoices(label: string) {
-  const row = openMenu(label);
-  fireEvent.click(screen.getByText("Edit properties"));
-  const select = within(row).getByText("Type").parentElement!
+  const drawer = openSettings(label);
+  const select = within(drawer).getByText("Type").parentElement!
     .querySelector("select") as HTMLSelectElement;
   const choices = {
     options: [...select.options].map((o) => o.value),
     value: select.value,
     disabled: select.disabled,
   };
-  fireEvent.click(within(row).getByText("Cancel"));
+  fireEvent.click(within(drawer).getByText("Cancel"));
   return choices;
 }

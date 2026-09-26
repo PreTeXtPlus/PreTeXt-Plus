@@ -3,7 +3,7 @@
  *
  * ARCHITECTURE NOTE — the store owns the live editing buffer:
  * `createEditorStore(init)` seeds the editing buffer (`divisions`, `title`,
- * `docinfo`, `activeDivisionId`, …) from the host's initial props *once*.
+ * `docinfo`, `openItem`, …) from the host's initial props *once*.
  * After that, the store is authoritative for what's being edited:
  *   • Internal edit actions (`setDivisionContent`, `patchDivision`, `setTitle`,
  *     …) update the store optimistically and the host callbacks are fired
@@ -186,6 +186,24 @@ type ModalKey =
   | "isFullSourceOpen";
 
 /**
+ * What the code editor has open: a division, a project snippet, or a project
+ * asset, each named by the identifier placeholders use to reach it — a
+ * division's `xmlId`, a snippet's or asset's `ref`. There is always exactly one;
+ * a `ref` that no longer resolves (the item was just removed) is read as the
+ * root division.
+ */
+export type OpenItem = {
+  kind: "division" | "snippet" | "asset";
+  ref: string;
+};
+
+/** The open division's `xmlId`, or `null` while a snippet or asset is open. */
+export const selectOpenDivisionId = (s: {
+  openItem: OpenItem;
+}): string | null =>
+  s.openItem.kind === "division" ? s.openItem.ref : null;
+
+/**
  * The views the project explorer's icon rail switches between. `"find"` is the
  * project-wide find/replace panel, which shares the explorer's slot rather
  * than docking beside it.
@@ -271,7 +289,12 @@ export interface EditorStoreState {
   // Divisions (host-controlled pool)
   divisions: Division[] | undefined;
   rootDivisionId: string | undefined;
-  activeDivisionId: string | null;
+  /**
+   * What the code editor shows. Replaces the old `activeDivisionId`: read the
+   * open division through {@link selectOpenDivisionId}, which is `null` while a
+   * snippet or asset is open.
+   */
+  openItem: OpenItem;
 
   // Computed flags (re-derived each sync)
   canConvertToPretext: boolean;
@@ -306,6 +329,11 @@ export interface EditorStoreState {
   isSnippetPickerOpen: boolean;
   isFullSourceOpen: boolean;
   /**
+   * The settings drawer under the editor's title bar — the open item's
+   * properties and actions. Switching to another item closes it.
+   */
+  isSettingsDrawerOpen: boolean;
+  /**
    * The find/replace panel's query, replacement text and option toggles.
    * Kept in the store (rather than the panel's own `useState`) so switching
    * the explorer to another view and back — the panel unmounts, since it's
@@ -314,7 +342,7 @@ export interface EditorStoreState {
    */
   findPanelState: FindPanelState;
 
-  // TOC inline edit form
+  // Division properties form (rendered in the settings drawer)
   editingId: string | null;
   editDraft: EditDraft | null;
   /**
@@ -328,18 +356,12 @@ export interface EditorStoreState {
    */
   pendingNewDivision: { parentXmlId: string | null } | null;
 
-  /** The asset currently open in the asset edit modal, identified by ref. */
-  editingAssetRef: { ref: string } | null;
-
   /**
    * An unresolved placeholder the user is resolving — opens the asset manager
    * in "resolve this ref" mode, where picking/uploading binds the result to
    * this `ref` instead of copying an embed code.
    */
   assetResolveTarget: { ref: string } | null;
-
-  /** The snippet currently open in the snippet edit modal, identified by ref. */
-  editingSnippetRef: { ref: string } | null;
 
   /**
    * An unresolved placeholder the user is resolving — opens the snippet
@@ -364,8 +386,17 @@ export interface EditorStoreState {
   addDivisionToPool: (division: Division) => void;
   /** Optimistically remove a division from the local pool. */
   removeDivisionFromPool: (xmlId: string) => void;
-  /** Set the active (open-for-editing) division id. */
-  setActiveDivisionId: (id: string | null) => void;
+  /**
+   * Open `item` in the code editor. Closes the settings drawer and drops any
+   * unsaved properties draft, since both describe the item being left.
+   */
+  setOpenItem: (item: OpenItem) => void;
+  /** Open a division in the code editor (store only — no host notification). */
+  openDivision: (xmlId: string | null) => void;
+  /** Open a project snippet's source in the code editor. */
+  openSnippet: (ref: string) => void;
+  /** Open a project asset's source in the code editor. */
+  openAsset: (ref: string) => void;
   /** Optimistically set the document title. */
   setTitle: (title: string) => void;
   /** Optimistically set the document language. */
@@ -406,6 +437,8 @@ export interface EditorStoreState {
   togglePasteAutoConvert: () => void;
   openModal: (modal: ModalKey) => void;
   closeModal: (modal: ModalKey) => void;
+  /** Open or close the settings drawer. Closing drops any properties draft. */
+  setSettingsDrawerOpen: (open: boolean) => void;
 
   // TOC section / division actions (stable — delegate to bag.cbs)
   selectSection: (id: string) => void;
@@ -415,7 +448,7 @@ export interface EditorStoreState {
   /** Update a parent division's content after a structural DnD change. */
   divisionContentChange: (xmlId: string, content: string) => void;
 
-  // TOC inline edit form
+  // Division properties form (opens the settings drawer)
   startSectionEdit: (section: Division) => void;
   /** Open the properties form for a new, not-yet-created child of `parentXmlId`. */
   startNewDivision: (parentXmlId: string | null, draft: EditDraft) => void;
@@ -429,9 +462,6 @@ export interface EditorStoreState {
   // Assets / content
   insertAsset: (asset: Asset) => void;
   insertAtCursor: (content: string) => void;
-  /** Open the asset edit modal for the asset identified by `ref`. */
-  openAssetEditor: (ref: string) => void;
-  closeAssetEditor: () => void;
   /** Open the asset manager in resolve mode for an unresolved `ref`. */
   openAssetResolver: (ref: string) => void;
   closeAssetResolver: () => void;
@@ -464,9 +494,6 @@ export interface EditorStoreState {
 
   // Snippets / content
   insertSnippet: (snippet: Snippet) => void;
-  /** Open the snippet edit modal for the snippet identified by `ref`. */
-  openSnippetEditor: (ref: string) => void;
-  closeSnippetEditor: () => void;
   /** Open the snippet manager in resolve mode for an unresolved `ref`. */
   openSnippetResolver: (ref: string) => void;
   closeSnippetResolver: () => void;
@@ -514,7 +541,6 @@ export type EditorSyncableState = Pick<
   | "userEmail"
   | "divisions"
   | "rootDivisionId"
-  | "activeDivisionId"
   | "canConvertToPretext"
   | "activeEditorSource"
   | "hasFeedback"
@@ -553,6 +579,47 @@ export interface EditorStoreHandle {
   bindCallbacks: (cbs: EditorCallbacks) => void;
 }
 
+const sameOpenItem = (a: OpenItem, b: OpenItem): boolean =>
+  a.kind === b.kind && a.ref === b.ref;
+
+/**
+ * The state change that opens `item`. A different item closes the settings
+ * drawer and drops any properties draft — both belong to the item being left —
+ * while re-opening the current one changes nothing.
+ */
+const openItemState = (
+  s: Pick<EditorStoreState, "openItem">,
+  item: OpenItem,
+): Partial<EditorStoreState> =>
+  sameOpenItem(s.openItem, item)
+    ? {}
+    : {
+      openItem: item,
+      isSettingsDrawerOpen: false,
+      editingId: null,
+      editDraft: null,
+      pendingNewDivision: null,
+    };
+
+/**
+ * Where the editor lands when its open item goes away: the root division —
+ * named by the host when it has synced one, else the first root-typed division
+ * left in the pool, else whatever division is left.
+ */
+const rootItem = (
+  s: Pick<EditorStoreState, "rootDivisionId" | "divisions">,
+): OpenItem => {
+  const remaining = s.divisions ?? [];
+  const root =
+    (s.rootDivisionId &&
+      remaining.find((d) => d.xmlId === s.rootDivisionId)) ||
+    remaining.find(
+      (d) => d.type === "book" || d.type === "article" || d.type === "slideshow",
+    ) ||
+    remaining[0];
+  return { kind: "division", ref: root?.xmlId ?? "" };
+};
+
 export function createEditorStore(init: EditorStoreInit): EditorStoreHandle {
   // Plain mutable bag — NOT React state.  Not tracked by Zustand, so updating
   // it does not trigger any re-renders.  Store actions close over this object.
@@ -588,7 +655,7 @@ export function createEditorStore(init: EditorStoreInit): EditorStoreHandle {
     userEmail: undefined,
     divisions: init.divisions,
     rootDivisionId: undefined,
-    activeDivisionId: init.activeDivisionId,
+    openItem: { kind: "division", ref: init.activeDivisionId ?? "" },
     canConvertToPretext: true,
     activeEditorSource: init.source,
     hasFeedback: false,
@@ -609,20 +676,28 @@ export function createEditorStore(init: EditorStoreInit): EditorStoreHandle {
     isAssetPickerOpen: false,
     isSnippetPickerOpen: false,
     isFullSourceOpen: false,
+    isSettingsDrawerOpen: false,
     findPanelState: initialFindPanelState,
     editingId: null,
     editDraft: null,
     pendingNewDivision: null,
-    editingAssetRef: null,
     assetResolveTarget: null,
-    editingSnippetRef: null,
     snippetResolveTarget: null,
 
     // ── Actions ────────────────────────────────────────────────────────────
     syncState: (partial) => set(partial),
 
     // ── Authoritative editing-buffer actions ─────────────────────────────────
-    applyExternalUpdate: (partial) => set(partial),
+    // The host still speaks in `activeDivisionId`; it names a division to open.
+    applyExternalUpdate: ({ activeDivisionId, ...partial }) =>
+      set((s) =>
+        activeDivisionId === undefined
+          ? partial
+          : {
+            ...partial,
+            ...openItemState(s, { kind: "division", ref: activeDivisionId ?? "" }),
+          },
+      ),
     setDivisionContent: (xmlId, content) =>
       set((s) => {
         if (!s.divisions) return {};
@@ -639,6 +714,13 @@ export function createEditorStore(init: EditorStoreInit): EditorStoreHandle {
     patchDivision: (xmlId, changes) =>
       set((s) => {
         if (!s.divisions) return {};
+        // A renamed division that is open stays open under its new id.
+        const openItem =
+          changes.xmlId != null &&
+          s.openItem.kind === "division" &&
+          s.openItem.ref === xmlId
+            ? { kind: "division" as const, ref: changes.xmlId }
+            : s.openItem;
         const divisions = s.divisions.map((d) =>
           d.xmlId === xmlId
             ? {
@@ -652,7 +734,7 @@ export function createEditorStore(init: EditorStoreInit): EditorStoreHandle {
             }
             : d,
         );
-        return { divisions };
+        return { divisions, openItem };
       }),
     addDivisionToPool: (division) =>
       set((s) => {
@@ -661,10 +743,21 @@ export function createEditorStore(init: EditorStoreInit): EditorStoreHandle {
         return { divisions: [...existing, division] };
       }),
     removeDivisionFromPool: (xmlId) =>
-      set((s) => ({
-        divisions: (s.divisions ?? []).filter((d) => d.xmlId !== xmlId),
-      })),
-    setActiveDivisionId: (activeDivisionId) => set({ activeDivisionId }),
+      set((s) => {
+        const divisions = (s.divisions ?? []).filter((d) => d.xmlId !== xmlId);
+        return {
+          divisions,
+          ...(s.openItem.kind === "division" && s.openItem.ref === xmlId
+            ? openItemState(s, rootItem({ ...s, divisions }))
+            : {}),
+        };
+      }),
+    setOpenItem: (item) => set((s) => openItemState(s, item)),
+    openDivision: (xmlId) =>
+      set((s) => openItemState(s, { kind: "division", ref: xmlId ?? "" })),
+    openSnippet: (ref) =>
+      set((s) => openItemState(s, { kind: "snippet", ref })),
+    openAsset: (ref) => set((s) => openItemState(s, { kind: "asset", ref })),
     setTitle: (title) => set({ title }),
     setLanguage: (language) => set({ language }),
     setDocinfo: ({ docinfo, commonDocinfo, useCommonDocinfo }) =>
@@ -702,6 +795,17 @@ export function createEditorStore(init: EditorStoreInit): EditorStoreHandle {
       }),
     openModal: (modal) => set({ [modal]: true } as Pick<EditorStoreState, ModalKey>),
     closeModal: (modal) => set({ [modal]: false } as Pick<EditorStoreState, ModalKey>),
+    setSettingsDrawerOpen: (open) =>
+      set(
+        open
+          ? { isSettingsDrawerOpen: true }
+          : {
+            isSettingsDrawerOpen: false,
+            editingId: null,
+            editDraft: null,
+            pendingNewDivision: null,
+          },
+      ),
 
     // TOC section / division actions — stable closures that read through bag.cbs
     selectSection: (id) => bag.cbs.selectDivision(id),
@@ -711,7 +815,7 @@ export function createEditorStore(init: EditorStoreInit): EditorStoreHandle {
     divisionContentChange: (xmlId, content) =>
       bag.cbs.divisionContentChange?.(xmlId, content),
 
-    // TOC inline edit form
+    // Division properties form — lives in the settings drawer
     startSectionEdit: (section) => {
       // Each format stores its xml:id/label differently: Markdown in YAML
       // frontmatter, LaTeX as the `\label` after `\section` (it has no separate
@@ -746,6 +850,7 @@ export function createEditorStore(init: EditorStoreInit): EditorStoreHandle {
           sourceFormat: section.sourceFormat,
         },
         pendingNewDivision: null,
+        isSettingsDrawerOpen: true,
       });
     },
     startNewDivision: (parentXmlId, editDraft) =>
@@ -753,6 +858,7 @@ export function createEditorStore(init: EditorStoreInit): EditorStoreHandle {
         editingId: null,
         editDraft,
         pendingNewDivision: { parentXmlId },
+        isSettingsDrawerOpen: true,
       }),
     setEditDraft: (editDraft) => set({ editDraft }),
 
@@ -797,12 +903,17 @@ export function createEditorStore(init: EditorStoreInit): EditorStoreHandle {
       if (pendingNewDivision) {
         const xmlId = validateXmlId(null);
         if (!xmlId) return;
+        set({
+          editingId: null,
+          editDraft: null,
+          pendingNewDivision: null,
+          isSettingsDrawerOpen: false,
+        });
         bag.cbs.createDivision(pendingNewDivision.parentXmlId, {
           ...editDraft,
           title: editDraft.title.trim(),
           xmlId,
         });
-        set({ editingId: null, editDraft: null, pendingNewDivision: null });
         return;
       }
 
@@ -825,17 +936,25 @@ export function createEditorStore(init: EditorStoreInit): EditorStoreHandle {
           sourceFormat: editDraft.sourceFormat,
         });
       }
-      set({ editingId: null, editDraft: null, pendingNewDivision: null });
+      set({
+        editingId: null,
+        editDraft: null,
+        pendingNewDivision: null,
+        isSettingsDrawerOpen: false,
+      });
     },
     cancelSectionEdit: () =>
       // Cancelling a draft leaves nothing behind: the division was never
       // created and the parent's source was never touched.
-      set({ editingId: null, editDraft: null, pendingNewDivision: null }),
+      set({
+        editingId: null,
+        editDraft: null,
+        pendingNewDivision: null,
+        isSettingsDrawerOpen: false,
+      }),
 
     insertAsset: (asset) => bag.cbs.assetInsert(asset),
     insertAtCursor: (content) => bag.cbs.insertContentAtCursor?.(content),
-    openAssetEditor: (ref) => set({ editingAssetRef: { ref } }),
-    closeAssetEditor: () => set({ editingAssetRef: null }),
     openAssetResolver: (ref) => set({ assetResolveTarget: { ref } }),
     closeAssetResolver: () => set({ assetResolveTarget: null }),
     removeAsset: (asset) => bag.cbs.assetRemove?.(asset),
@@ -862,18 +981,25 @@ export function createEditorStore(init: EditorStoreInit): EditorStoreHandle {
         const filtered = base.filter(
           (a) => a.ref !== oldRef && !sameAssetRef(a, newAsset),
         );
-        return { projectAssets: [...filtered, newAsset] };
+        const isOpen = s.openItem.kind === "asset" && s.openItem.ref === oldRef;
+        return {
+          projectAssets: [...filtered, newAsset],
+          ...(isOpen && newAsset.ref
+            ? { openItem: { kind: "asset" as const, ref: newAsset.ref } }
+            : {}),
+        };
       }),
     removeAssetFromPool: (asset) =>
       set((s) => ({
         projectAssets: (s.projectAssets ?? []).filter(
           (a) => !sameAssetRef(a, asset),
         ),
+        ...(s.openItem.kind === "asset" && s.openItem.ref === asset.ref
+          ? openItemState(s, rootItem(s))
+          : {}),
       })),
 
     insertSnippet: (snippet) => bag.cbs.snippetInsert(snippet),
-    openSnippetEditor: (ref) => set({ editingSnippetRef: { ref } }),
-    closeSnippetEditor: () => set({ editingSnippetRef: null }),
     openSnippetResolver: (ref) => set({ snippetResolveTarget: { ref } }),
     closeSnippetResolver: () => set({ snippetResolveTarget: null }),
     removeSnippet: (snippet) => bag.cbs.snippetRemove?.(snippet),
@@ -900,13 +1026,22 @@ export function createEditorStore(init: EditorStoreInit): EditorStoreHandle {
         const filtered = base.filter(
           (a) => a.ref !== oldRef && !sameSnippetRef(a, newSnippet),
         );
-        return { projectSnippets: [...filtered, newSnippet] };
+        const isOpen = s.openItem.kind === "snippet" && s.openItem.ref === oldRef;
+        return {
+          projectSnippets: [...filtered, newSnippet],
+          ...(isOpen
+            ? { openItem: { kind: "snippet" as const, ref: newSnippet.ref } }
+            : {}),
+        };
       }),
     removeSnippetFromPool: (snippet) =>
       set((s) => ({
         projectSnippets: (s.projectSnippets ?? []).filter(
           (a) => !sameSnippetRef(a, snippet),
         ),
+        ...(s.openItem.kind === "snippet" && s.openItem.ref === snippet.ref
+          ? openItemState(s, rootItem(s))
+          : {}),
       })),
 
     updateTitle: (title) => bag.cbs.updateTitle(title),

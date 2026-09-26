@@ -1,6 +1,6 @@
 import type { Division } from "../../types/sections";
+import type { SourceFormat } from "../../types/editor";
 import {
-  divisionRefTag,
   insertDivisionRef,
   removeDivisionRef,
 } from "../../sectionUtils";
@@ -13,10 +13,10 @@ import { useEditorStore } from "../../store/hooks";
 export function useDivisionActions() {
   const divisions = useEditorStore((s) => s.divisions);
   const rootDivisionId = useEditorStore((s) => s.rootDivisionId);
-  const activeDivisionId = useEditorStore((s) => s.activeDivisionId);
+  const openItem = useEditorStore((s) => s.openItem);
+  const projectSnippets = useEditorStore((s) => s.projectSnippets);
   const removeSection = useEditorStore((s) => s.removeSection);
   const divisionContentChange = useEditorStore((s) => s.divisionContentChange);
-  const insertAtCursor = useEditorStore((s) => s.insertAtCursor);
 
   const rootDivision = divisions
     ? (divisions.find((d) => d.xmlId === rootDivisionId) ??
@@ -28,14 +28,20 @@ export function useDivisionActions() {
         null)
     : null;
 
-  // The source format of the division currently being edited. Includes the user
-  // inserts/copies must match it: a Markdown division needs the `::type{ref}`
-  // leaf-directive form and a LaTeX division the `\plus{type}{ref}` macro, since
-  // raw `<plus:.../>` XML doesn't survive their conversion. Defaults to PreTeXt
-  // when nothing is active.
-  const activeFormat =
-    divisions?.find((d) => d.xmlId === activeDivisionId)?.sourceFormat ??
-    "pretext";
+  // The source format of the buffer open in the code editor — a division's,
+  // a snippet's own, or PreTeXt for an asset (whose source is PreTeXt). Includes
+  // the user inserts/copies must match it: Markdown needs the `::type{ref}`
+  // leaf-directive form and LaTeX the `\plus{type}{ref}` macro, since raw
+  // `<plus:.../>` XML doesn't survive their conversion.
+  const activeFormat: SourceFormat =
+    openItem.kind === "division"
+      ? (divisions?.find((d) => d.xmlId === openItem.ref)?.sourceFormat ??
+        rootDivision?.sourceFormat ??
+        "pretext")
+      : openItem.kind === "snippet"
+        ? (projectSnippets?.find((s) => s.ref === openItem.ref)?.sourceFormat ??
+          "pretext")
+        : "pretext";
 
   const handleUnplace = (xmlId: string, parentXmlId: string) => {
     if (!divisions) return;
@@ -66,10 +72,6 @@ export function useDivisionActions() {
     removeSection(division.xmlId);
   };
 
-  const handleInsertAtCursor = (division: Division) => {
-    insertAtCursor(divisionRefTag(division.type, division.xmlId, activeFormat));
-  };
-
   const handlePlaceOrphan = (orphan: Division) => {
     if (!rootDivision) return;
     divisionContentChange(
@@ -93,7 +95,6 @@ export function useDivisionActions() {
     activeFormat,
     handleUnplace,
     handleDelete,
-    handleInsertAtCursor,
     handlePlaceOrphan,
     getDivisionType,
   };

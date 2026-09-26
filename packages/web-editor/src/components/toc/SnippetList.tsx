@@ -1,99 +1,31 @@
-import { useState } from "react";
 import clsx from "clsx";
-import DivisionMenu, { type DivisionMenuItem } from "./DivisionMenu";
-import { snippetEmbedCode } from "../../sectionUtils";
 import { buildProjectSnippetView, type SnippetRow } from "../../snippetView";
 import { useEditorStore } from "../../store/hooks";
-import { useDivisionActions } from "./useDivisionActions";
 
 export interface SnippetListProps {
   onOpenSnippetPicker?: (initialTab?: "add") => void;
 }
 
-/** The explorer's Snippets view: every snippet placeholder and project snippet, with status. */
+/**
+ * The explorer's Snippets view: every snippet placeholder and project snippet,
+ * with status. Selecting a snippet opens its source in the code editor, whose
+ * title bar carries its settings; a placeholder with no snippet behind it opens
+ * the snippet manager to link or create one instead, having no source to open.
+ */
 const SnippetList = ({ onOpenSnippetPicker }: SnippetListProps) => {
   const divisions = useEditorStore((s) => s.divisions);
   const projectSnippets = useEditorStore((s) => s.projectSnippets) ?? [];
-  const openSnippetEditor = useEditorStore((s) => s.openSnippetEditor);
+  const openItem = useEditorStore((s) => s.openItem);
+  const openSnippet = useEditorStore((s) => s.openSnippet);
   const openSnippetResolver = useEditorStore((s) => s.openSnippetResolver);
-  const removeSnippet = useEditorStore((s) => s.removeSnippet);
-  const removeSnippetRefFromDocument = useEditorStore((s) => s.removeSnippetRefFromDocument);
-  const duplicateSnippet = useEditorStore((s) => s.duplicateSnippet);
-  const hasSnippetDuplicate = useEditorStore((s) => s.hasSnippetDuplicate);
-  const { activeFormat } = useDivisionActions();
 
   // ── Joined snippet view — placeholders + project snippets, with status ───────
   const snippetView = buildProjectSnippetView(divisions, projectSnippets);
 
-  const [duplicatingSnippetRef, setDuplicatingSnippetRef] = useState<string | null>(null);
-
-  const handleDuplicateSnippet = async (row: SnippetRow) => {
-    if (!row.snippet || duplicatingSnippetRef) return;
-    setDuplicatingSnippetRef(row.ref);
-    try {
-      await duplicateSnippet(row.snippet);
-    } finally {
-      setDuplicatingSnippetRef(null);
-    }
-  };
-
-  // ── Snippet row helpers ─────────────────────────────────────────────────────
   const openSnippetRow = (row: SnippetRow) =>
     row.status === "unlinked"
       ? openSnippetResolver(row.ref)
-      : openSnippetEditor(row.ref);
-
-  const copySnippetEmbed = (ref: string) => {
-    navigator.clipboard
-      ?.writeText(snippetEmbedCode(ref, activeFormat))
-      .catch(() => {});
-  };
-
-  const snippetMenuItems = (row: SnippetRow): DivisionMenuItem[] => {
-    const items: DivisionMenuItem[] = [
-      {
-        label: row.status === "unlinked" ? "Link / create snippet" : "Manage snippet",
-        onClick: () => openSnippetRow(row),
-      },
-      {
-        label: "Copy embed code",
-        onClick: () => copySnippetEmbed(row.ref),
-      },
-    ];
-    if (hasSnippetDuplicate && row.snippet) {
-      items.push({
-        label: "Duplicate snippet",
-        onClick: () => handleDuplicateSnippet(row),
-      });
-    }
-    if (row.status === "unlinked") {
-      items.push({
-        label: "Remove from document",
-        onClick: () => removeSnippetRefFromDocument(row.ref),
-        danger: true,
-      });
-    } else if (row.snippet) {
-      items.push({
-        label: "Remove from project",
-        onClick: () => {
-          if (
-            row.inDocument &&
-            !window.confirm(
-              `Remove snippet "${row.snippet!.ref}" from the project? This also deletes its ${
-                row.inDocument ? "reference(s)" : "reference"
-              } from the document.`,
-            )
-          ) {
-            return;
-          }
-          removeSnippet(row.snippet!);
-          removeSnippetRefFromDocument(row.ref);
-        },
-        danger: true,
-      });
-    }
-    return items;
-  };
+      : openSnippet(row.ref);
 
   return (
     <>
@@ -112,75 +44,61 @@ const SnippetList = ({ onOpenSnippetPicker }: SnippetListProps) => {
             )}
           </p>
         ) : (
-          <div className="flex flex-col">
-            <ul className="list-none m-0 pt-0 px-0 pb-1">
-              {snippetView.map((row) => {
-                const isUnlinked = row.status === "unlinked";
-                const isBusy = duplicatingSnippetRef === row.ref;
-                return (
-                  <li
-                    key={row.ref}
+          <ul className="list-none m-0 pt-0 px-0 pb-1">
+            {snippetView.map((row) => {
+              const isUnlinked = row.status === "unlinked";
+              const isOpen =
+                openItem.kind === "snippet" && openItem.ref === row.ref;
+              return (
+                <li
+                  key={row.ref}
+                  data-testid={`snippet-row-${row.ref}`}
+                  className={clsx(
+                    "flex items-center gap-1.5 py-[3px] pr-1.5 pl-4 min-h-7 border-l-[3px]",
+                    isOpen
+                      ? "bg-[#e0e8ff] border-l-blue-600"
+                      : "border-transparent hover:bg-[#e8eaf0]",
+                  )}
+                >
+                  <span
                     className={clsx(
-                      "group flex items-center gap-1.5 py-[3px] pr-1.5 pl-4 min-h-7 hover:bg-[#e8eaf0]",
-                      isBusy && "opacity-60 pointer-events-none",
+                      "inline-flex items-center justify-center w-[30px] h-[30px] cursor-pointer text-[0.85rem] rounded bg-[#eef2f7] text-slate-400",
+                      isUnlinked && "bg-amber-100 text-amber-700",
                     )}
+                    onClick={() => openSnippetRow(row)}
+                    aria-hidden="true"
+                  >
+                    {isUnlinked ? "⚠" : "⌘"}
+                  </span>
+                  <button
+                    type="button"
+                    className="flex-1 min-w-0 flex flex-col items-start gap-px overflow-hidden border-none bg-transparent p-0 font-[inherit] text-left cursor-pointer"
+                    onClick={() => openSnippetRow(row)}
+                    aria-current={isOpen ? "true" : undefined}
+                    title={
+                      isUnlinked
+                        ? "No snippet for this reference — click to link or create one"
+                        : "Open snippet"
+                    }
                   >
                     <span
                       className={clsx(
-                        "inline-flex items-center justify-center w-[30px] h-[30px] cursor-pointer text-[0.85rem] rounded bg-[#eef2f7] text-slate-400",
-                        isUnlinked && "bg-amber-100 text-amber-700",
+                        "text-[0.78rem] font-mono overflow-hidden text-ellipsis whitespace-nowrap",
+                        isUnlinked ? "text-amber-700" : "text-slate-700",
+                        isOpen && "font-semibold",
                       )}
-                      onClick={() => openSnippetRow(row)}
-                      title={row.status === "unlinked" ? "No snippet — click to link" : undefined}
-                      aria-hidden="true"
                     >
-                      {row.status === "unlinked" ? "⚠" : "⌘"}
+                      {isUnlinked
+                        ? `${row.ref} — needs snippet`
+                        : row.status === "unused"
+                          ? `${row.ref} — not placed`
+                          : row.ref}
                     </span>
-                    <button
-                      type="button"
-                      className="flex-1 min-w-0 flex flex-col items-start gap-px overflow-hidden border-none bg-transparent p-0 font-[inherit] text-left cursor-pointer"
-                      onClick={() => openSnippetRow(row)}
-                      title={
-                        row.status === "unlinked"
-                          ? "No snippet for this reference — click to link or create one"
-                          : "Manage snippet"
-                      }
-                    >
-                      <span
-                        className={clsx(
-                          "text-[0.78rem] font-mono overflow-hidden text-ellipsis whitespace-nowrap",
-                          isUnlinked ? "text-amber-700" : "text-slate-700",
-                        )}
-                      >
-                        {row.status === "unlinked"
-                          ? `${row.ref} — needs snippet`
-                          : row.status === "unused"
-                            ? `${row.ref} — not placed`
-                            : row.ref}
-                      </span>
-                    </button>
-                    <div
-                      className={clsx(
-                        "flex items-center shrink-0 opacity-0 pointer-events-none transition-opacity duration-100 group-hover:opacity-100 group-hover:pointer-events-auto",
-                        isBusy && "opacity-100 pointer-events-auto",
-                      )}
-                    >
-                      {isBusy ? (
-                        <span
-                          className="inline-block w-[14px] h-[14px] border-2 border-slate-300 border-t-emerald-500 rounded-full animate-[spin_0.8s_linear_infinite]"
-                          role="status"
-                          aria-label="Duplicating snippet"
-                          title="Duplicating…"
-                        />
-                      ) : (
-                        <DivisionMenu items={snippetMenuItems(row)} />
-                      )}
-                    </div>
-                  </li>
-                );
-              })}
-            </ul>
-          </div>
+                  </button>
+                </li>
+              );
+            })}
+          </ul>
         )}
       </div>
 

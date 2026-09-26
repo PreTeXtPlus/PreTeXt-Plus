@@ -1,12 +1,18 @@
 require "application_system_test_case"
 
-# The asset editor's fields are not just editor-local UI state: an asset's `ref`
-# is the name `<plus:image ref="..."/>` placeholders resolve against *and* the
-# segment `/projects/:id/external/:ref` serves the file from, so a rename that
-# never reaches the database leaves every build and published page looking the
-# asset up under a name nothing answers to. These drive the real editor because
-# that is where the sync used to break -- the server has always accepted
+# An asset's settings are not just editor-local UI state: its `ref` is the name
+# `<plus:image ref="..."/>` placeholders resolve against *and* the segment
+# `/projects/:id/external/:ref` serves the file from, so a rename that never
+# reaches the database leaves every build and published page looking the asset
+# up under a name nothing answers to. These drive the real editor because that
+# is where the sync used to break -- the server has always accepted
 # `assets_attributes`; the client simply wasn't sending the changed fields.
+#
+# Clicking an asset opens its source in the code editor; its title, id and alt
+# text live in the settings drawer under the editor's title bar. The fixture
+# project is collaborative, so typed source reaches the row the way division
+# content does -- through the shared document and ProjectDocProjection -- while
+# drawer edits are written straight through, host first.
 class AssetEditSyncTest < ApplicationSystemTestCase
   setup do
     @user = users(:one)
@@ -16,49 +22,35 @@ class AssetEditSyncTest < ApplicationSystemTestCase
   end
 
   test "editing an asset's title and id persists them to the database" do
-    open_asset_editor_for(@asset.ref)
+    open_asset_settings_for(@asset)
 
-    fill_in "am-edit-title", with: "Euler Portrait"
-    fill_in "am-edit-ref", with: "euler-portrait"
-    within("[aria-label^='Manage asset']") { click_button "Save" }
-
-    assert_no_selector "[aria-label^='Manage asset']", wait: 10
+    commit_field "asset-settings-title", "Euler Portrait"
+    assert_asset_eventually(title: "Euler Portrait")
+    commit_field "asset-settings-ref", "euler-portrait"
 
     assert_asset_eventually(ref: "euler-portrait", title: "Euler Portrait")
+    # The asset stays open under its new name.
+    assert_selector "[data-testid='editor-target-bar']", text: "euler-portrait"
   end
 
   test "editing an asset's content persists its source" do
-    open_asset_editor_for(@asset.ref)
+    open_asset_for(@asset)
 
-    # The content editor is Monaco, which only accepts keystrokes once its
-    # hidden textarea has focus -- and it only takes focus from a click on a
-    # concrete `.view-line`, never the `.view-lines` container.
-    find("details[data-testid='asset-edit-advanced']").click
-    within("[data-testid='asset-edit-source-editor']") do
-      assert_selector ".view-line", wait: 10
-      first(".view-line").click
-    end
-    page.send_keys "<description>A portrait</description>"
-    within("[aria-label^='Manage asset']") { click_button "Save" }
+    type_into_editor "ZZASSETSOURCEZZ"
 
-    assert_no_selector "[aria-label^='Manage asset']", wait: 10
-
-    assert_asset_eventually(source: "<description>A portrait</description>")
+    assert_asset_eventually(project: true, source: "ZZASSETSOURCEZZ")
   end
 
   test "editing an asset's short description persists it" do
-    open_asset_editor_for(@asset.ref)
+    open_asset_settings_for(@asset)
 
-    fill_in "am-edit-short-description", with: "A portrait of Euler"
-    within("[aria-label^='Manage asset']") { click_button "Save" }
-
-    assert_no_selector "[aria-label^='Manage asset']", wait: 10
+    commit_field "asset-settings-short-description", "A portrait of Euler"
 
     assert_asset_eventually(short_description: "A portrait of Euler")
   end
 
   test "replacing an asset's file hands the replacement the old asset's id" do
-    open_asset_editor_for(@asset.ref)
+    open_asset_settings_for(@asset)
     click_button "Replace image…"
 
     assert_selector "[aria-label='Asset manager']", wait: 10
@@ -97,28 +89,26 @@ class AssetEditSyncTest < ApplicationSystemTestCase
     fill_in "am-author-title", with: "Authored Diagram"
     click_button "Create"
 
-    # A bare authored asset (no source yet) is created, then the standalone
-    # asset editor opens on it automatically -- same hand-off as upload/URL.
+    # A bare authored asset (no source yet) is created, then opened in the
+    # code editor automatically -- same hand-off as upload/URL.
     assert_no_selector "[aria-label='Asset manager']", wait: 10
-    assert_selector "[aria-label^='Manage asset']", wait: 10
-
-    # Unlike a file-backed asset, an authored asset's source editor is shown
-    # directly rather than tucked behind a collapsed "Advanced" disclosure --
-    # it's the asset's entire content, not an optional extra.
-    within("[data-testid='asset-edit-source-editor']") do
-      assert_selector ".view-line", wait: 10
-      first(".view-line").click
-    end
-    page.send_keys "<latex-image>tikzpicture</latex-image>"
-    within("[aria-label^='Manage asset']") { click_button "Save" }
-
-    assert_no_selector "[aria-label^='Manage asset']", wait: 10
+    assert_selector "[data-testid='editor-target-title']", text: "Authored Diagram", wait: 10
 
     asset = eventually { @project.assets.reload.find_by(ref: ref) }
     assert asset, "expected an authored asset to have been created with ref #{ref}"
     assert_equal "authored", asset.kind
     assert_not asset.file.attached?
-    assert_equal "<latex-image>tikzpicture</latex-image>", asset.source
+
+    # An authored asset's source is its entire content, typed straight into
+    # the code editor.
+    type_into_editor "ZZAUTHOREDZZ"
+
+    source = eventually do
+      ProjectDocProjection.new(@project).apply!
+      current = asset.reload.source
+      current if current == "ZZAUTHOREDZZ"
+    end
+    assert_equal "ZZAUTHOREDZZ", source || asset.reload.source
   end
 
   private
@@ -133,25 +123,45 @@ class AssetEditSyncTest < ApplicationSystemTestCase
       assert_text "Signed in successfully.", wait: 10
     end
 
-    # Open the standalone asset editor on the asset with this ref, by way of the
-    # asset manager -- the only route a user has to it.
-    def open_asset_editor_for(ref)
+    # Open the asset in the code editor from the explorer's Assets view.
+    def open_asset_for(asset)
       visit edit_project_path(@project)
+      assert_selector ".monaco-editor", wait: 30
       open_explorer_view(:assets)
-      assert_selector "button[data-testid='toc-assets-btn']", text: "Manage", wait: 20
-      find("button[data-testid='toc-assets-btn']", text: "Manage").click
-
-      assert_selector "[aria-label='Asset manager']", wait: 10
-      find("[data-testid='am-doc-row']", text: ref, wait: 10)
-        .find("button[data-testid='am-row-info-btn']").click
-
-      assert_selector "[aria-label^='Manage asset']", wait: 10
+      find("[data-testid='asset-row-#{asset.ref}'] button", wait: 20).click
+      assert_selector "[data-testid='editor-target-title']", text: asset.title, wait: 10
     end
 
-    # The save is a PATCH the browser fires after the modal closes, so the row
-    # lands a beat later than the assertion above; poll rather than sleep.
-    def assert_asset_eventually(expected)
+    # ...and drop down its settings drawer.
+    def open_asset_settings_for(asset)
+      open_asset_for(asset)
+      find("[data-testid='settings-drawer-toggle']").click
+      assert_selector "[data-testid='settings-drawer']", wait: 10
+    end
+
+    # Drawer fields commit on Enter (or blur), once per edit.
+    def commit_field(id, value)
+      fill_in id, with: value
+      find_field(id).send_keys(:enter)
+    end
+
+    # Monaco only accepts keystrokes once its hidden textarea has focus, and it
+    # only takes focus from a click on a concrete `.view-line`, never the
+    # `.view-lines` container. An asset's buffer has no locked lines, so any
+    # line will do.
+    def type_into_editor(text)
+      first(".monaco-editor .view-line", wait: 10).click
+      page.send_keys text
+      assert_selector ".monaco-editor", text: text, wait: 10
+    end
+
+    # Drawer edits are a PATCH fired after the field commits, so the row lands a
+    # beat later than the UI; typed source reaches the row through the shared
+    # document, so `project:` runs the projection the server runs on a timer.
+    # Poll rather than sleep.
+    def assert_asset_eventually(project: false, **expected)
       actual = eventually do
+        ProjectDocProjection.new(@project).apply! if project
         @asset.reload
         current = expected.keys.index_with { |field| @asset.public_send(field) }
         current if current == expected

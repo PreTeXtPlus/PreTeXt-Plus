@@ -102,23 +102,31 @@ The left sidebar is an always-visible icon rail plus a panel for the selected
 view. The store's `explorerView` names the view and `isTocCollapsed` whether the
 panel is shown; `selectExplorerView` is the rail click (clicking the open view's
 icon collapses to the rail, and that choice is remembered), `showExplorerView` is
-for code that needs a view on screen (Tools → Find in Project, the wrapper-line
-properties form) and never collapses.
+for code that needs a view on screen (Tools → Find in Project) and never
+collapses. Explorer rows have **no menus**: selecting a division, snippet or
+asset opens it in the code editor, and everything else about it lives in the
+settings drawer under the editor's title bar (see below).
 
 - **Contents** (`toc/ArticleToc.tsx`): the document's tree, root down through
   every placed `<plus:* ref/>`, then an "Unplaced divisions" block listing each
-  division the document doesn't reach as the head of its own subtree. Row
-  actions and the root lookup live in `toc/useDivisionActions.ts` (also used by
-  the Snippets/Assets views for the active division's embed format).
+  division the document doesn't reach as the head of its own subtree. The
+  structural handlers and the root lookup live in `toc/useDivisionActions.ts`;
+  which of them a division is offered is decided by its place in the document
+  (`toc/divisionActions.ts`: `findDivisionPlacement` → `divisionActionEntries`).
 - **Snippets** / **Assets** (`toc/SnippetList.tsx`, `toc/AssetList.tsx`); hidden
-  along with their rail icons by `hideSnippets` / `hideAssets`.
+  along with their rail icons by `hideSnippets` / `hideAssets`. A placeholder
+  with no record behind it (`unlinked`) has no source to open, so its row opens
+  the manager modal in resolve mode instead. The manager modals
+  (`SnippetManagerModal`, `AssetManagerModal`) remain the way to add, link and
+  replace; the per-item edit modals are gone.
 - **Find** (`toc/FindReplacePanel.tsx`): project-wide find/replace. Escape
   collapses it; its inputs persist in the store's `findPanelState`.
 - Rail icons are inline SVG components in `toc/explorerIcons.tsx` that stroke
   with `currentColor`, so the button's text color styles them.
-- **"Add new division" creates nothing.** It opens a draft properties form
-  (`pendingNewDivision` in the store, rendered by `toc/NewDivisionRow.tsx` at the
-  position the division will take); the record, the parent's `<plus:* ref/>`
+- **"Add new division" creates nothing.** It opens a draft properties form in
+  the parent's settings drawer (`pendingNewDivision` in the store; the TOC shows
+  a placeholder, `toc/NewDivisionRow.tsx`, at the position the division will
+  take); the record, the parent's `<plus:* ref/>`
   placeholder and the host notification all happen in one go when the form is
   saved (`handleDivisionCreate` in `Editors.tsx`). So Cancel leaves the project
   untouched, and a new division is never renamed — it is created with the id the
@@ -131,11 +139,47 @@ properties form) and never collapses.
   land on top of the structural write and undo it; see
   `__tests__/pendingEditFlush.test.tsx`.
 
+### The open item, title bar and settings drawer
+
+The code editor edits one thing at a time, and it may be a division, a project
+snippet or a project asset. The store's `openItem` (`{ kind, ref }`, always set;
+a division's `ref` is its `xmlId`) says which — it replaced `activeDivisionId`.
+Read the open division through `selectOpenDivisionId`, which is `null` while a
+snippet or asset is open; the host-facing `activeDivisionId` prop and
+`onDivisionSelect` still speak only of divisions. Opening a different item
+closes the drawer and drops any properties draft; removing the open item (or a
+peer removing it) falls back to the root, and renames carry it along.
+
+- `components/editorTarget.ts` resolves `openItem` against the pools.
+  `Editors.tsx` derives the buffer from it: a division's source (locked
+  structure, schema lint, preview, Y.Text binding), a snippet's source in its
+  own format, or an asset's PreTeXt source — the last two with
+  `lockStructure={false}` (no locked lines or structural normalization) and no
+  schema lint. Division-only features read `activeDivision`, which is null
+  while a snippet or asset is open. The preview shows a "coming soon"
+  placeholder for snippets and assets.
+- Snippet/asset source edits update the pool and the doc's text; solo, they are
+  also written to the host (`onSnippetUpdate`/`onAssetUpdate`), coalesced per
+  record on a 1 s trailing debounce and flushed on switching items. A host that
+  answers a write by re-fetching hands back a fresh pool prop — a reset — so a
+  record with a write still pending keeps its local copy through it
+  (`unsavedRecordsRef`).
+- `EditorTargetBar.tsx` sits above the code editor: kind icon, title, id, a
+  status chip, and a hamburger that drops the drawer down over the editor
+  (Escape closes it). The drawer is `settings/DivisionSettings.tsx` (the
+  `SectionEditForm` properties form — Save/Cancel close the drawer — plus
+  embed code and the placement's actions), `settings/SnippetSettings.tsx` or
+  `settings/AssetSettings.tsx` (fields that commit on blur/Enter, embed code,
+  Duplicate / Replace / Remove). Metadata edits go to the host *first* — ref
+  uniqueness is only settled there — then rename placeholders and update the
+  doc in one `collabTransact`. Clicking a division's locked wrapper line opens
+  its drawer.
+
 ### Collaboration (`src/collab/`)
 
 Optional real-time co-editing via Yjs, activated by passing a `collaboration` prop (`{ doc, awareness, user }`) to `Editors`. The **host owns the transport** — it creates, seeds (`seedDocFromState`), and syncs the `Y.Doc` with its server; the editor only binds to it. `yjs` and `y-protocols` are **peer dependencies** so host and editor share one instance.
 
-- `schema.ts` — doc layout: `divisions` map (key = record id → entry with `xmlId`/`sourceFormat`/`title`/`type` + `Y.Text` source), `assets` map (key = record id → LWW metadata only — an asset's *bytes* stay with the host, since the doc is replicated to every peer and persisted as an append-only log), `meta` map (`title`, `docinfo`, `useCommonDocinfo`, all LWW), and `deleted` map (tombstones, record id → `"division" | "asset"`). Division *order* lives in parent sources as `<plus:* ref/>` placeholders, so it needs no structure. `seedDocFromState`/`docToState`/`clearDeletions` are exported for hosts.
+- `schema.ts` — doc layout: `divisions` map (key = record id → entry with `xmlId`/`sourceFormat`/`title`/`type` + `Y.Text` source), `assets` map (key = record id → LWW metadata + `Y.Text` source — an asset's *bytes* stay with the host, since the doc is replicated to every peer and persisted as an append-only log), `snippets` map (key = record id → LWW `ref`/`sourceFormat` + `Y.Text` source), `meta` map (`title`, `docinfo`, `useCommonDocinfo`, all LWW), and `deleted` map (tombstones, record id → `"division" | "asset"`). Division *order* lives in parent sources as `<plus:* ref/>` placeholders, so it needs no structure. `seedDocFromState`/`docToState`/`clearDeletions` are exported for hosts.
 - Tombstones exist because removing an entry from a Y.Map leaves nothing a later save can act on: the peer that removed a record persists that immediately, but if the request never lands, a full reload from the host would resurrect the row. The session leader replays each tombstone as a `_destroy` until the host confirms it, then calls `clearDeletions`. This requires the host's delete to be idempotent — as its create must be, since the same record can be sent by both the acting client and the next bulk save.
 - `bridge.ts` — `CollabBridge` keeps doc ↔ Zustand store equal. Local writes flow through the same `EditorsInner` choke points that update the store (`emitContentChange`, `applyDivision*`, the asset add/update/remove handlers, title/docinfo commits); remote transactions are translated into pure store pool actions (which never fire host persistence callbacks). Origin tags distinguish the two — anything not registered as local is remote. The doc keys assets by record id while the store pool keys them by kind+ref, so the bridge maintains its own index between the two and replays a remote `ref` change as a pool *rename*.
 - `bridge.transact(fn)` (via `collabTransact` in `Editors.tsx`) groups writes that belong together into one update — creating a division and inserting the parent `<plus:* ref/>` that points at it, or renaming an xml:id across division, record, and parent — so peers never observe a placeholder referring to a division they don't have.

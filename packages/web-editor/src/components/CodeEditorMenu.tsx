@@ -58,7 +58,7 @@ interface CodeEditorMenuProps {
   /** Called with the formatted content after a successful format operation. */
   onContentChange: (newContent: string) => void;
   /** Opens the Import dialog (outside material converted to PreTeXt). */
-  onOpenImport: () => void;
+  onOpenImport?: () => void;
   /**
    * Whether pasted LaTeX/Markdown is converted on the way in. Omitted for
    * formats where the question doesn't arise, which hides the menu item.
