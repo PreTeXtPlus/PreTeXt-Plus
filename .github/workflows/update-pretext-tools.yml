@@ -1,0 +1,141 @@
+name: Update pretext-tools packages
+
+# Keeps the @pretextbook/* packages published from PreTeXtBook/pretext-tools
+# (pretext-html, schema, completions, format, import, ...) current. Runs when
+# pretext-tools publishes (repository_dispatch "pretext-tools-release" from its
+# release workflow, which also follows each stable pretext-cli release), weekly
+# as a fallback, or by hand. Opens -- or refreshes -- one PR with the bumps.
+#
+# The PR is opened with secrets.PRETEXT_TOOLS_PR_TOKEN when set, so that CI
+# runs on it (pushes and PRs made with GITHUB_TOKEN don't trigger workflows).
+# Without it, GITHUB_TOKEN is used and "Allow GitHub Actions to create and
+# approve pull requests" must be enabled in the repo's Actions settings.
+# Set the repo variable PRETEXT_TOOLS_AUTO_MERGE=true to auto-merge the PR
+# once required checks pass.
+on:
+  repository_dispatch:
+    types: [pretext-tools-release]
+  schedule:
+    - cron: "17 7 * * 1"
+  workflow_dispatch:
+
+concurrency:
+  group: update-pretext-tools
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+  pull-requests: write
+
+env:
+  BRANCH: automation/update-pretext-tools
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v7
+        with:
+          token: ${{ secrets.PRETEXT_TOOLS_PR_TOKEN || github.token }}
+
+      - name: Set up Node
+        uses: actions/setup-node@v7
+        with:
+          node-version-file: .node-version
+          cache: npm
+
+      # A dispatch arrives right after `npm publish`; give the registry a
+      # moment so `@latest` resolves to what was just published.
+      - name: Wait for the npm registry
+        if: github.event_name == 'repository_dispatch'
+        run: sleep 120
+
+      - name: Install JS dependencies
+        run: npm ci
+
+      - name: Update @pretextbook packages
+        run: |
+          # Every non-workspace @pretextbook dependency, per manifest.
+          update() {
+            local manifest="$1"; shift
+            local names
+            names=$(node -e '
+              const fs = require("fs");
+              const root = JSON.parse(fs.readFileSync("package.json", "utf8"));
+              const workspaces = new Set((root.workspaces || []).map(
+                (dir) => JSON.parse(fs.readFileSync(`${dir}/package.json`, "utf8")).name));
+              const pkg = JSON.parse(fs.readFileSync(process.argv[1], "utf8"));
+              const deps = { ...pkg.dependencies, ...pkg.devDependencies };
+              console.log(Object.keys(deps)
+                .filter((n) => n.startsWith("@pretextbook/") && !workspaces.has(n))
+                .map((n) => `${n}@latest`).join(" "));
+            ' "$manifest")
+            if [ -n "$names" ]; then
+              echo "$manifest: $names"
+              npm install "$@" $names
+            fi
+          }
+          update package.json
+          update packages/web-editor/package.json -w packages/web-editor
+
+      - name: Check for changes
+        id: diff
+        run: |
+          if git diff --quiet -- package.json package-lock.json packages/web-editor/package.json; then
+            echo "Already on the latest pretext-tools packages."
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+          else
+            git diff -- package.json packages/web-editor/package.json
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Lint, typecheck, and test web-editor
+        if: steps.diff.outputs.changed == 'true'
+        run: |
+          npm run lint --workspace=packages/web-editor
+          npm run typecheck --workspace=packages/web-editor
+          npm run test --workspace=packages/web-editor
+          npm test
+
+      - name: Open or update pull request
+        if: steps.diff.outputs.changed == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.PRETEXT_TOOLS_PR_TOKEN || github.token }}
+          CLI_VERSION: ${{ github.event.client_payload.cli_version }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898208+github-actions[bot]@users.noreply.github.com"
+          summary=$(node -e '
+            const lock = require("./package-lock.json").packages;
+            console.log(Object.entries(lock)
+              .filter(([p]) => /^node_modules\/@pretextbook\/[^/]+$/.test(p) && !lock[p].link)
+              .map(([p, v]) => `- \`${p.slice("node_modules/".length)}\` ${v.version}`)
+              .join("\n"));
+          ')
+          title="chore(deps): update pretext-tools packages"
+          body="Updates the @pretextbook packages published from [pretext-tools](https://github.com/PreTeXtBook/pretext-tools) to their latest releases."
+          if [ -n "$CLI_VERSION" ]; then
+            title="$title for pretext-cli v$CLI_VERSION"
+            body="$body This brings the live preview and schemas in line with [pretext-cli v$CLI_VERSION](https://github.com/PreTeXtBook/pretext-cli/releases/tag/v$CLI_VERSION)."
+          fi
+          body="$body"$'\n\n'"$summary"$'\n\n'"_Opened by the update-pretext-tools workflow._"
+
+          git checkout -B "$BRANCH"
+          git add package.json package-lock.json packages/web-editor/package.json
+          git commit -m "$title"
+          git push --force origin "$BRANCH"
+
+          if gh pr view "$BRANCH" --json state -q .state 2>/dev/null | grep -qx OPEN; then
+            gh pr edit "$BRANCH" --title "$title" --body "$body"
+          else
+            gh pr create --head "$BRANCH" --base main --title "$title" --body "$body"
+          fi
+
+      # Opt in with the repo variable PRETEXT_TOOLS_AUTO_MERGE=true, and only
+      # with required status checks on main: without them gh merges at once.
+      - name: Enable auto-merge
+        if: steps.diff.outputs.changed == 'true' && vars.PRETEXT_TOOLS_AUTO_MERGE == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.PRETEXT_TOOLS_PR_TOKEN || github.token }}
+        run: gh pr merge "$BRANCH" --auto --squash
