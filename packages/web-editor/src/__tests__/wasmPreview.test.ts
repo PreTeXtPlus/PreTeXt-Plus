@@ -6,6 +6,8 @@ import {
   applyPrintPreview,
   describePreviewError,
   findWellformednessErrorLine,
+  parsePreviewPage,
+  patchPreviewPage,
   subtreeSourceMap,
 } from '../components/wasmPreview'
 import type { PtxSourceMap } from '@pretextbook/pretext-html'
@@ -170,5 +172,54 @@ describe('applyPrintPreview', () => {
     expect(applyPrintPreview(once, undefined)).toBe(
       applyPrintPreview(PAGE, undefined),
     )
+  })
+})
+
+describe('patchPreviewPage', () => {
+  /** A rendered page, reduced to the block structure the patcher recurses. */
+  const page = (second: string, head = '<title>T</title>') =>
+    `<!doctype html><html><head>${head}</head><body><main>` +
+    '<section id="s1"><p id="p1">One</p>' +
+    `<p id="p2">${second}</p></section></main></body></html>`
+
+  /**
+   * The page as it sits in the iframe. A bare stand-in for the iframe's
+   * window: without MathJax on it, typesetting the patch is a no-op.
+   */
+  const livePage = (html: string) => {
+    const document = parsePreviewPage(html)
+    return { document, win: { document } as unknown as Window }
+  }
+
+  it('replaces only the block that changed', () => {
+    const { document, win } = livePage(page('Two'))
+    const untouched = document.getElementById('p1')
+
+    const ok = patchPreviewPage(
+      win,
+      parsePreviewPage(page('Two')),
+      parsePreviewPage(page('Two, edited')),
+    )
+
+    expect(ok).toBe(true)
+    expect(document.getElementById('p2')?.textContent).toBe('Two, edited')
+    // The same node, not a copy: its typeset math and state survive.
+    expect(document.getElementById('p1')).toBe(untouched)
+  })
+
+  it('declines, leaving the page alone, when the head changed', () => {
+    // Nothing in <head> can be applied to a running page; LivePreview then
+    // delivers the new page from scratch.
+    const { document, win } = livePage(page('Two'))
+    const before = document.documentElement.outerHTML
+
+    const ok = patchPreviewPage(
+      win,
+      parsePreviewPage(page('Two')),
+      parsePreviewPage(page('Two, edited', '<title>Renamed</title><style></style>')),
+    )
+
+    expect(ok).toBe(false)
+    expect(document.documentElement.outerHTML).toBe(before)
   })
 })
