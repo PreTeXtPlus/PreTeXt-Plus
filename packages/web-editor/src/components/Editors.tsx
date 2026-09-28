@@ -541,6 +541,7 @@ const Editors = (props: editorProps) => {
       activeDivisionId: initActiveId,
       projectAssets: props.projectAssets,
       projectSnippets: props.projectSnippets,
+      projectUrl: props.projectUrl,
     });
   });
 

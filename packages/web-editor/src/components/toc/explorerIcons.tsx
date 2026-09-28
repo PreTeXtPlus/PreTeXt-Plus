@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import clsx from "clsx";
 
 /** Shared frame for the explorer rail's 36×36 stroke icons. */
 const Icon = ({ children }: { children: ReactNode }) => (
@@ -58,4 +59,26 @@ export const FindIcon = () => (
     <path d="M17 17L21 21" />
     <path d="M3 11C3 15.4183 6.58172 19 11 19C13.213 19 15.2161 18.1015 16.6644 16.6493C18.1077 15.2022 19 13.2053 19 11C19 6.58172 15.4183 3 11 3C6.58172 3 3 6.58172 3 11Z" />
   </Icon>
+);
+
+/**
+ * A tree row's expand/collapse twisty, after VS Code's: points right while the
+ * row is shut and turns to point down once it is open.
+ */
+export const ChevronIcon = ({ open }: { open: boolean }) => (
+  <svg
+    width="16"
+    height="16"
+    viewBox="0 0 16 16"
+    fill="none"
+    stroke="currentColor"
+    strokeWidth="1.5"
+    strokeLinecap="round"
+    strokeLinejoin="round"
+    xmlns="http://www.w3.org/2000/svg"
+    aria-hidden="true"
+    className={clsx("transition-transform duration-100", open && "rotate-90")}
+  >
+    <path d="M6 3.5L10.5 8L6 12.5" />
+  </svg>
 );

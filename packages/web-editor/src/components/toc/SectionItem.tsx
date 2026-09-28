@@ -2,6 +2,7 @@ import clsx from "clsx";
 import type { Division, DivisionType } from "../../types/sections";
 import SectionEditForm from "./SectionEditForm";
 import DivisionMenu, { type DivisionMenuItem } from "./DivisionMenu";
+import { ChevronIcon } from "./explorerIcons";
 import { type EditDraft, TYPE_FULL_LABELS } from "./types";
 
 interface SectionItemProps {
@@ -65,13 +66,14 @@ const SectionItem = ({
       >
         <button
           type="button"
-          className="shrink-0 py-0 px-0.5 bg-transparent border-none rounded-[3px] cursor-pointer text-[0.7rem] leading-none text-[#aaa] w-4 text-center hover:text-[#555] hover:bg-[#dde0e6]"
+          className="shrink-0 flex items-center justify-center w-5 h-5 p-0 bg-transparent border-none rounded-[3px] cursor-pointer text-slate-500 hover:text-slate-800 hover:bg-[#dde0e6]"
           onClick={onToggleExpand}
           aria-label={isExpanded ? "Collapse" : "Expand"}
+          aria-expanded={hasChildren ? isExpanded : undefined}
           tabIndex={hasChildren ? 0 : -1}
           style={{ visibility: hasChildren ? "visible" : "hidden" }}
         >
-          {isExpanded ? "▾" : "▸"}
+          <ChevronIcon open={isExpanded} />
         </button>
 
         <button
