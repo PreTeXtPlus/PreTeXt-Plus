@@ -109,7 +109,16 @@ properties form) and never collapses.
   every placed `<plus:* ref/>`, then an "Unplaced divisions" block listing each
   division the document doesn't reach as the head of its own subtree. Row
   actions and the root lookup live in `toc/useDivisionActions.ts` (also used by
-  the Snippets/Assets views for the active division's embed format).
+  the Snippets/Assets views for the active division's embed format). The tree's
+  shape lives in the store, not the component, because switching views unmounts
+  it: `tocExpansion` holds only the rows the author has toggled (anything else
+  defaults to shut, bar the root), `isTocOrphansCollapsed` folds the unplaced
+  block, and `tocRevealedId` records which active division's ancestors were last
+  opened, so the tree follows the active division (opening the rows above it,
+  and its own row one level) without re-opening a branch
+  the author shut when it remounts. The first two are also saved to
+  localStorage per project, keyed by the host's `projectUrl` (no URL, no
+  persistence).
 - **Snippets** / **Assets** (`toc/SnippetList.tsx`, `toc/AssetList.tsx`); hidden
   along with their rail icons by `hideSnippets` / `hideAssets`.
 - **Find** (`toc/FindReplacePanel.tsx`): project-wide find/replace. Escape

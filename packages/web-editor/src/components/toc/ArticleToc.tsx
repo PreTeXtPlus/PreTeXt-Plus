@@ -1,6 +1,7 @@
-import { Fragment, useState } from "react";
+import { Fragment, useLayoutEffect } from "react";
 import SectionItem from "./SectionItem";
 import NewDivisionRow from "./NewDivisionRow";
+import { ChevronIcon } from "./explorerIcons";
 import { canContainDivisions } from "./types";
 import { useDivisionActions } from "./useDivisionActions";
 
@@ -8,8 +9,44 @@ import {
   buildDivisionTree,
   canEmbedDivisionRefs,
   getOrphanRoots,
+  type DivisionTreeNode,
 } from "../../sectionUtils";
 import { useEditorStore } from "../../store/hooks";
+
+/**
+ * The rows of `nodes` — a `buildDivisionTree` walk down from `startId` — that
+ * are on screen: those whose every ancestor up to `startId` is expanded. One
+ * pass, since the walk is depth-first and so reaches a parent before its
+ * children.
+ */
+function visibleRows(
+  startId: string,
+  nodes: DivisionTreeNode[],
+  isExpanded: (id: string) => boolean,
+): DivisionTreeNode[] {
+  const visible: DivisionTreeNode[] = [];
+  const openParents = new Set<string>();
+  if (isExpanded(startId)) openParents.add(startId);
+  for (const node of nodes) {
+    if (openParents.has(node.parentXmlId)) {
+      visible.push(node);
+      if (isExpanded(node.division.xmlId)) openParents.add(node.division.xmlId);
+    }
+  }
+  return visible;
+}
+
+/**
+ * The ids from `id`'s parent up to the walk's start division, nearest first,
+ * or `null` if `id` isn't in `nodes` at all.
+ */
+function ancestorsOf(nodes: DivisionTreeNode[], id: string): string[] | null {
+  const parentOf = new Map(nodes.map((n) => [n.division.xmlId, n.parentXmlId]));
+  if (!parentOf.has(id)) return null;
+  const out: string[] = [];
+  for (let cur = parentOf.get(id); cur; cur = parentOf.get(cur)) out.push(cur);
+  return out;
+}
 
 export interface ArticleTocProps {
   /** If true, hides every structural action (add/remove/edit/place a division). */
@@ -35,6 +72,15 @@ const ArticleToc = ({ readOnly }: ArticleTocProps) => {
   const editDraft = useEditorStore((s) => s.editDraft);
   const pendingNewDivision = useEditorStore((s) => s.pendingNewDivision);
 
+  const tocExpansion = useEditorStore((s) => s.tocExpansion);
+  const setTocExpanded = useEditorStore((s) => s.setTocExpanded);
+  const tocRevealedId = useEditorStore((s) => s.tocRevealedId);
+  const revealInToc = useEditorStore((s) => s.revealInToc);
+  const isOrphansCollapsed = useEditorStore((s) => s.isTocOrphansCollapsed);
+  const toggleOrphansCollapsed = useEditorStore(
+    (s) => s.toggleTocOrphansCollapsed,
+  );
+
   const {
     divisions,
     rootDivision,
@@ -51,73 +97,73 @@ const ArticleToc = ({ readOnly }: ArticleTocProps) => {
       ? buildDivisionTree(divisions, rootDivision.xmlId)
       : [];
 
-  const orphanRoots =
+  const orphanTrees =
     rootDivision && divisions
-      ? getOrphanRoots(divisions, rootDivision.xmlId)
+      ? getOrphanRoots(divisions, rootDivision.xmlId).map((orphan) => ({
+          orphan,
+          subtree: buildDivisionTree(divisions, orphan.xmlId),
+        }))
       : [];
 
-  // ── Expand/collapse: track which IDs are collapsed (empty = all open) ───────
-  const [collapsedIds, setCollapsedIds] = useState<Set<string>>(new Set());
+  // ── Expand/collapse ─────────────────────────────────────────────────────────
+  // A row the author hasn't toggled falls back to the default: only the root
+  // is open, so the tree starts as the document's top-level divisions.
+  const isExpanded = (id: string) =>
+    tocExpansion[id] ?? id === rootDivision?.xmlId;
 
-  const isExpanded = (id: string) => !collapsedIds.has(id);
+  const toggleExpand = (id: string) => setTocExpanded(id, !isExpanded(id));
 
-  const toggleExpand = (id: string) => {
-    setCollapsedIds((prev) => {
-      const next = new Set(prev);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
-      return next;
-    });
+  // Adding a child to a shut row opens it, so the draft row sits after the
+  // existing children — where saving it will put the division.
+  const addChild = (parentXmlId: string) => {
+    setTocExpanded(parentXmlId, true);
+    addSection(parentXmlId);
   };
 
-  // Auto-expand ancestors when the active division changes so it's always
-  // visible. Done during render (with a previous-value guard) rather than in an
-  // effect to avoid cascading renders.
-  const [prevActiveId, setPrevActiveId] = useState(activeDivisionId);
-  if (activeDivisionId !== prevActiveId) {
-    setPrevActiveId(activeDivisionId);
-    if (activeDivisionId && rootDivision) {
-      const nodeMap = new Map(treeNodes.map((n) => [n.division.xmlId, n]));
-      const toReveal = new Set<string>();
-      toReveal.add(rootDivision.xmlId);
-      let cur: string | null = activeDivisionId;
-      while (cur) {
-        const node = nodeMap.get(cur);
-        if (!node?.parentXmlId) break;
-        toReveal.add(node.parentXmlId);
-        cur = node.parentXmlId;
-      }
-      setCollapsedIds((prev) => {
-        if ([...toReveal].every((id) => !prev.has(id))) return prev;
-        const next = new Set(prev);
-        toReveal.forEach((id) => next.delete(id));
-        return next;
-      });
+  // ── Keep the active division on screen ──────────────────────────────────────
+  // Whenever the active division changes — including one the TOC hasn't
+  // revealed yet on mount — open the rows above it, and its own row so the
+  // author sees what it contains. Tracked in the store rather than per mount so
+  // switching the explorer's view and back doesn't re-open a branch the author
+  // has since shut.
+  const pendingReveal = (() => {
+    if (!activeDivisionId || activeDivisionId === tocRevealedId) return null;
+    if (!rootDivision) return null;
+    if (activeDivisionId === rootDivision.xmlId) {
+      return { ancestors: [], inOrphans: false };
     }
-  }
+    const placed = ancestorsOf(treeNodes, activeDivisionId);
+    if (placed) return { ancestors: placed, inOrphans: false };
+    for (const { orphan, subtree } of orphanTrees) {
+      const ancestors =
+        orphan.xmlId === activeDivisionId
+          ? []
+          : ancestorsOf(subtree, activeDivisionId);
+      if (ancestors) return { ancestors, inOrphans: true };
+    }
+    // Not in any tree yet (e.g. a just-created division whose ref hasn't
+    // landed in its parent): left unrevealed, so it's retried once it is.
+    return null;
+  })();
+
+  useLayoutEffect(() => {
+    if (pendingReveal && activeDivisionId) {
+      revealInToc(
+        activeDivisionId,
+        pendingReveal.ancestors,
+        pendingReveal.inOrphans,
+      );
+    }
+  }, [pendingReveal, activeDivisionId, revealInToc]);
 
   // ── Which IDs have children (used to show/hide the chevron) ────────────────
   const idsWithChildren = new Set(
     treeNodes.map((n) => n.parentXmlId).filter(Boolean) as string[],
   );
 
-  // ── Compute visible placed nodes (single O(n) depth-first pass) ─────────────
-  // visibleParents: IDs whose children should be rendered.
-  // A node is rendered if its direct parentXmlId is in visibleParents.
-  // It's added to visibleParents only if it itself is not collapsed.
-  const visibleNodes: typeof treeNodes = [];
-  if (rootDivision) {
-    const visibleParents = new Set<string>();
-    if (isExpanded(rootDivision.xmlId)) visibleParents.add(rootDivision.xmlId);
-    for (const node of treeNodes) {
-      if (node.parentXmlId && visibleParents.has(node.parentXmlId)) {
-        visibleNodes.push(node);
-        if (isExpanded(node.division.xmlId)) {
-          visibleParents.add(node.division.xmlId);
-        }
-      }
-    }
-  }
+  const visibleNodes = rootDivision
+    ? visibleRows(rootDivision.xmlId, treeNodes, isExpanded)
+    : [];
 
   // ── Where a not-yet-created division's draft row goes ──────────────────────
   // At the end of its parent's visible subtree, which is where saving it will
@@ -192,7 +238,7 @@ const ArticleToc = ({ readOnly }: ArticleTocProps) => {
                       ? [
                           {
                             label: "Add new division",
-                            onClick: () => addSection(rootDivision.xmlId),
+                            onClick: () => addChild(rootDivision.xmlId),
                           },
                         ]
                       : []),
@@ -236,7 +282,7 @@ const ArticleToc = ({ readOnly }: ArticleTocProps) => {
                       ? [
                           {
                             label: "Add new division",
-                            onClick: () => addSection(node.division.xmlId),
+                            onClick: () => addChild(node.division.xmlId),
                           },
                         ]
                       : []),
@@ -261,64 +307,78 @@ const ArticleToc = ({ readOnly }: ArticleTocProps) => {
         {draftPlacement?.after === null && draftRow}
       </ul>
 
-      {/* Unplaced divisions */}
-      {orphanRoots.length > 0 && (
-        <div className="shrink-0 border-t-2 border-dashed border-[#e2c97e] bg-amber-50">
-          <div className="text-[0.7rem] font-bold uppercase tracking-[0.06em] text-amber-800 pt-[5px] px-2.5 pb-0.5">
-            Unplaced divisions
-          </div>
-          <ul className="list-none m-0 flex-initial overflow-y-visible">
-            {orphanRoots.map((orphan) => {
-              const subtree = divisions
-                ? buildDivisionTree(divisions, orphan.xmlId)
-                : [];
-              const subtreeIdsWithChildren = new Set(
-                subtree.map((n) => n.parentXmlId).filter(Boolean) as string[],
-              );
-              return (
-                <Fragment key={orphan.xmlId}>
-                  <SectionItem
-                    division={orphan}
-                    depth={0}
-                    isActive={activeDivisionId === orphan.xmlId}
-                    hasChildren={subtreeIdsWithChildren.has(orphan.xmlId)}
-                    isExpanded={isExpanded(orphan.xmlId)}
-                    onToggleExpand={() => toggleExpand(orphan.xmlId)}
-                    editDraft={editingId === orphan.xmlId ? editDraft : null}
-                    onSelect={() => selectSection(orphan.xmlId)}
-                    onDraftChange={setEditDraft}
-                    onEditCommit={commitSectionEdit}
-                    onEditCancel={cancelSectionEdit}
-                    menuItems={
-                      readOnly
-                        ? []
-                        : [
-                            {
-                              label: "Edit properties",
-                              onClick: () => startSectionEdit(orphan),
-                            },
-                            {
-                              label: "Place in document",
-                              onClick: () => handlePlaceOrphan(orphan),
-                            },
-                            {
-                              label: "Insert at cursor",
-                              onClick: () => handleInsertAtCursor(orphan),
-                            },
-                            {
-                              label: "Delete from project",
-                              onClick: () => handleDelete(orphan, null),
-                              danger: true,
-                            },
-                          ]
-                    }
-                    // Unplaced, but "Place in document" puts it directly under
-                    // the root — so the root's rules are the ones that apply,
-                    // and e.g. an article project never offers Part/Chapter.
-                    parentType={rootDivision?.type ?? null}
-                  />
-                  {isExpanded(orphan.xmlId) &&
-                    subtree.map((node) => (
+      {/* Unplaced divisions — capped below half the panel and foldable to its
+          header, so a long list never crowds out the document's own tree. */}
+      {orphanTrees.length > 0 && (
+        <div
+          data-testid="toc-unplaced"
+          className="shrink-0 flex flex-col max-h-[45%] min-h-0 border-t-2 border-dashed border-[#e2c97e] bg-amber-50"
+        >
+          <button
+            type="button"
+            className="shrink-0 flex items-center gap-0.5 w-full py-1 px-1 bg-transparent border-none cursor-pointer text-left text-amber-800 hover:bg-amber-100"
+            onClick={toggleOrphansCollapsed}
+            aria-expanded={!isOrphansCollapsed}
+          >
+            <span className="flex items-center justify-center w-5 h-5 shrink-0">
+              <ChevronIcon open={!isOrphansCollapsed} />
+            </span>
+            <span className="text-[0.7rem] font-bold uppercase tracking-[0.06em]">
+              Unplaced divisions
+            </span>
+            <span className="ml-1 text-[0.68rem] font-semibold text-white bg-amber-600/70 rounded-full px-[5px] py-0 leading-[1.4] shrink-0">
+              {orphanTrees.length}
+            </span>
+          </button>
+          {!isOrphansCollapsed && (
+            <ul className="list-none m-0 min-h-0 overflow-y-auto">
+              {orphanTrees.map(({ orphan, subtree }) => {
+                const subtreeIdsWithChildren = new Set(
+                  subtree.map((n) => n.parentXmlId).filter(Boolean) as string[],
+                );
+                return (
+                  <Fragment key={orphan.xmlId}>
+                    <SectionItem
+                      division={orphan}
+                      depth={0}
+                      isActive={activeDivisionId === orphan.xmlId}
+                      hasChildren={subtreeIdsWithChildren.has(orphan.xmlId)}
+                      isExpanded={isExpanded(orphan.xmlId)}
+                      onToggleExpand={() => toggleExpand(orphan.xmlId)}
+                      editDraft={editingId === orphan.xmlId ? editDraft : null}
+                      onSelect={() => selectSection(orphan.xmlId)}
+                      onDraftChange={setEditDraft}
+                      onEditCommit={commitSectionEdit}
+                      onEditCancel={cancelSectionEdit}
+                      menuItems={
+                        readOnly
+                          ? []
+                          : [
+                              {
+                                label: "Edit properties",
+                                onClick: () => startSectionEdit(orphan),
+                              },
+                              {
+                                label: "Place in document",
+                                onClick: () => handlePlaceOrphan(orphan),
+                              },
+                              {
+                                label: "Insert at cursor",
+                                onClick: () => handleInsertAtCursor(orphan),
+                              },
+                              {
+                                label: "Delete from project",
+                                onClick: () => handleDelete(orphan, null),
+                                danger: true,
+                              },
+                            ]
+                      }
+                      // Unplaced, but "Place in document" puts it directly under
+                      // the root — so the root's rules are the ones that apply,
+                      // and e.g. an article project never offers Part/Chapter.
+                      parentType={rootDivision?.type ?? null}
+                    />
+                    {visibleRows(orphan.xmlId, subtree, isExpanded).map((node) => (
                       <SectionItem
                         key={node.division.xmlId}
                         division={node.division}
@@ -354,10 +414,11 @@ const ArticleToc = ({ readOnly }: ArticleTocProps) => {
                         parentType={getDivisionType(node.parentXmlId)}
                       />
                     ))}
-                </Fragment>
-              );
-            })}
-          </ul>
+                  </Fragment>
+                );
+              })}
+            </ul>
+          )}
         </div>
       )}
     </>
