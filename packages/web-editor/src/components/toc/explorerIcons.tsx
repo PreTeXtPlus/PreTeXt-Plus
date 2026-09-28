@@ -9,7 +9,7 @@ const Icon = ({ children }: { children: ReactNode }) => (
     viewBox="0 0 24 24"
     fill="none"
     stroke="currentColor"
-    strokeWidth="0.8"
+    strokeWidth="1.2"
     strokeLinecap="round"
     strokeLinejoin="round"
     xmlns="http://www.w3.org/2000/svg"
@@ -22,16 +22,19 @@ const Icon = ({ children }: { children: ReactNode }) => (
 export const TocIcon = () => (
   <Icon>
     <path d="M9 5L21 5" />
-    <path d="M5 7L5 3L3.5 4.5" />
-    <path d="m 14.750039,20.75 h -2 l 1.90471,-2.9629 c 0.06221,-0.0968 0.09744,-0.2103 0.07238,-0.3226 -0.05774,-0.2588 -0.26109,-0.7145 -0.97709,-0.7145 -0.99999,0 -1,0.8889 -1,0.8889 0,0 0,0 0,0 v 0.2222" />
     <path d="m 17,12 h 4" />
     <path d="m 17,19 h 4" />
     <path d="M 17,5 V 18.932107" />
-    <path d="m 14.25,13.999894 v -4 l -1.5,1.5" />
-    <path d="m 8.75,13.999894 v -4 l -1.5,1.5" />
-    <path d="m 8.75,20.749894 v -4 l -1.5,1.5" />
-    <path d="M11.218067 14.218067h0" />
-    <path d="M11.218067 20.718067h0" />
+    {/* The numerals stay thinner than the frame so "1.1" and "1.2" don't close up. */}
+    <g strokeWidth="1">
+      <path d="M5 7L5 3L3.5 4.5" />
+      <path d="m 14.750039,20.75 h -2 l 1.90471,-2.9629 c 0.06221,-0.0968 0.09744,-0.2103 0.07238,-0.3226 -0.05774,-0.2588 -0.26109,-0.7145 -0.97709,-0.7145 -0.99999,0 -1,0.8889 -1,0.8889 0,0 0,0 0,0 v 0.2222" />
+      <path d="m 14.25,13.999894 v -4 l -1.5,1.5" />
+      <path d="m 8.75,13.999894 v -4 l -1.5,1.5" />
+      <path d="m 8.75,20.749894 v -4 l -1.5,1.5" />
+      <path d="M11.218067 14.218067h0" />
+      <path d="M11.218067 20.718067h0" />
+    </g>
   </Icon>
 );
 
@@ -56,8 +59,8 @@ export const AssetsIcon = () => (
 
 export const FindIcon = () => (
   <Icon>
-    <path d="M17 17L21 21" />
-    <path d="M3 11C3 15.4183 6.58172 19 11 19C13.213 19 15.2161 18.1015 16.6644 16.6493C18.1077 15.2022 19 13.2053 19 11C19 6.58172 15.4183 3 11 3C6.58172 3 3 6.58172 3 11Z" />
+    <circle cx="10" cy="10" r="6" />
+    <path d="M14.25 14.25L20 20" />
   </Icon>
 );
 
