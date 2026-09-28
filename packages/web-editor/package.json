@@ -40,7 +40,7 @@
     "@pretextbook/latex-pretext": "^0.3.1",
     "@pretextbook/latex-style-pretext": "^0.5.1",
     "@pretextbook/markdown-style-pretext": "^0.1.4",
-    "@pretextbook/pretext-html": "^0.15.0",
+    "@pretextbook/pretext-html": "^0.16.0",
     "@pretextbook/remark-pretext": "^0.2.0",
     "@pretextbook/schema": "^0.7.0",
     "@tailwindcss/vite": "^4.3.3",
