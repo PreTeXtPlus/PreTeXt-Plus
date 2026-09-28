@@ -27,9 +27,15 @@ class PreviewAssetTest < ApplicationSystemTestCase
       write_into_preview(preview_html)
       within_frame("livePreview") do
         next nil unless has_selector?("img[src$='external/#{@asset.ref}.png']", wait: 1)
-        width = page.evaluate_script(
-          "document.querySelector(\"img[src$='external/#{@asset.ref}.png']\").naturalWidth"
-        )
+        # The editor's own first render (slow on a cold start) can replace our
+        # srcdoc between has_selector? and here, so the img may be gone again;
+        # report 0 and let `eventually` rewrite the preview rather than raising.
+        width = page.evaluate_script(<<~JS)
+          (function () {
+            var img = document.querySelector("img[src$='external/#{@asset.ref}.png']");
+            return img ? img.naturalWidth : 0;
+          })()
+        JS
         width if width.to_i > 0
       end
     end
