@@ -36,7 +36,7 @@ const EditorTitleField = ({
   );
 
   return (
-    <div className="flex items-center min-w-0 max-sm:basis-full">
+    <div className="flex items-center min-w-0">
       {titleOverride !== undefined ? (
         <span className={titleTextClasses}>{titleOverride}</span>
       ) : editingTitle ? (
@@ -55,7 +55,7 @@ const EditorTitleField = ({
           }}
         />
       ) : (
-        <span className="flex items-baseline gap-2 min-w-0 max-sm:w-full">
+        <span className="flex items-baseline gap-2 min-w-0">
           <button
             type="button"
             className={titleTextClasses}

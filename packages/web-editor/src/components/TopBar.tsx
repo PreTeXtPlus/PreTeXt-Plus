@@ -127,10 +127,16 @@ export interface TopBarProps {
 /**
  * Below this width, `TopBar` folds the Account menu into File (see
  * `accountMenuEntries`) and reflows into two rows — see the grid classes in
- * the JSX below, which use the same breakpoint via Tailwind's `max-sm:`
- * (`@media (width < 40rem)`).
+ * the JSX below, which use the same breakpoint as `max-[52rem]:` (Tailwind
+ * only sees literal class names, so the value is repeated there; change them
+ * together).
+ *
+ * Set by what the one-row layout needs: logo, File…Help & Feedback, the
+ * primary action and Account come to about 760px, and anything narrower slides
+ * the primary action over the Help menu. The margin above that is for fonts
+ * that set the menu labels wider than the ones it was measured with.
  */
-const COMPACT_TOPBAR_QUERY = "(width < 40rem)";
+const COMPACT_TOPBAR_QUERY = "(width < 52rem)";
 
 /**
  * The media query backing `isCompact`, or `undefined` where
@@ -222,11 +228,11 @@ const TopBar = (props: TopBarProps) => {
   ];
 
   return (
-    <div className="grid grid-cols-[auto_1fr_auto_auto] min-h-16 bg-white border-b border-gray-300 [grid-template-areas:'logo_title_action_account'_'logo_menu_action_account'] max-sm:[grid-template-areas:'logo_title_action_action'_'menu_menu_menu_menu']">
-      <div className="flex items-center pr-1 pl-4 max-sm:pl-1 [grid-area:logo]">
+    <div className="grid grid-cols-[auto_1fr_auto_auto] min-h-16 bg-white border-b border-gray-300 [grid-template-areas:'logo_title_action_account'_'logo_menu_action_account'] max-[52rem]:[grid-template-areas:'logo_title_action_action'_'menu_menu_menu_menu']">
+      <div className="flex items-center pr-1 pl-4 max-[52rem]:pl-1 [grid-area:logo]">
         {props.logo ?? <span aria-hidden>✏️</span>}
       </div>
-      <div className="flex items-center sm:pt-2 min-w-0 [grid-area:title]">
+      <div className="flex items-center min-[52rem]:pt-2 min-w-0 [grid-area:title]">
         <EditorTitleField
           readOnly={props.titleOverride != null}
           titleOverride={props.titleOverride}
@@ -282,15 +288,15 @@ const TopBar = (props: TopBarProps) => {
         </div>
       </div>
       {primaryAction && (
-        <div className="flex items-center pl-2 pr-3 max-sm:pr-2 [grid-area:action]">
+        <div className="flex items-center pl-2 pr-3 max-[52rem]:pr-2 [grid-area:action]">
           <button
             type="button"
-            className="flex items-center gap-1.5 rounded-md bg-indigo-600 px-3 py-1.5 text-sm font-medium text-white cursor-pointer hover:bg-indigo-500 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-600 max-sm:px-2"
+            className="flex items-center gap-1.5 rounded-md bg-indigo-600 px-3 py-1.5 text-sm font-medium text-white cursor-pointer hover:bg-indigo-500 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-600 max-[52rem]:px-2"
             title={primaryAction.title}
             onClick={primaryAction.onSelect}
           >
             {primaryAction.icon}
-            <span className={clsx(primaryAction.icon != null && "max-sm:sr-only")}>
+            <span className={clsx(primaryAction.icon != null && "max-[52rem]:sr-only")}>
               {primaryAction.label}
             </span>
           </button>
