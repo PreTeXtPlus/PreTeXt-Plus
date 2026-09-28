@@ -7,7 +7,7 @@
 import "./index.css";
 
 export { default as Editors } from "./components/Editors";
-export type { editorProps } from "./components/Editors";
+export type { editorProps, EditorsHandle } from "./components/Editors";
 export {
   convertLatexToPretext,
   derivePretextContent,
@@ -140,6 +140,8 @@ export { default as CodeEditor } from "./components/CodeEditor";
 // keyboard-identical to the editor's own File/Edit/Insert/Tools menus.
 export { default as MenuDropdown } from "./components/MenuDropdown";
 export type { MenuDropdownProps, MenuEntry } from "./components/MenuDropdown";
+export type { TopBarPrimaryAction } from "./components/TopBar";
+export type { SaveStatus } from "./components/SaveStatusIndicator";
 //export { VisualEditor } from "@pretextbook/visual-editor";
 export { default as LivePreview } from "./components/LivePreview";
 export { default as FeedbackLink } from "./components/FeedbackLink";

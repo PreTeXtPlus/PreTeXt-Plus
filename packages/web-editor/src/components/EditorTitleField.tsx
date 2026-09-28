@@ -36,7 +36,7 @@ const EditorTitleField = ({
   );
 
   return (
-    <div className="flex items-center max-sm:basis-full">
+    <div className="flex items-center min-w-0 max-sm:basis-full">
       {titleOverride !== undefined ? (
         <span className={titleTextClasses}>{titleOverride}</span>
       ) : editingTitle ? (

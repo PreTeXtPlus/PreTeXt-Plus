@@ -95,6 +95,35 @@ import { buildAccountEntries } from "./accountEntries";
 // ---------------------------------------------------------------------------
 
 const AUTOSAVE_MS = 10000;
+// The most a `keepalive` save may carry. Browsers allow 64 KiB across every
+// keepalive body in flight at once; the margin leaves room for another one.
+const KEEPALIVE_MAX_BYTES = 63 * 1024;
+// How long leaving the editor waits for the server to record a collaborative
+// session's last edits before asking the author whether to leave without them.
+const ACK_WAIT_MS = 5000;
+// How often the top bar's save status is refreshed from a collaborative
+// session's provider.
+const COLLAB_STATUS_POLL_MS = 500;
+
+// The top bar's "Manage project" icon: Lucide's "layout-dashboard" (ISC license).
+const MANAGE_ICON = (
+  <svg
+    width="16"
+    height="16"
+    viewBox="0 0 24 24"
+    fill="none"
+    stroke="currentColor"
+    strokeWidth="2"
+    strokeLinecap="round"
+    strokeLinejoin="round"
+    aria-hidden="true"
+  >
+    <rect width="7" height="9" x="3" y="3" rx="1" />
+    <rect width="7" height="5" x="14" y="3" rx="1" />
+    <rect width="7" height="9" x="14" y="12" rx="1" />
+    <rect width="7" height="5" x="3" y="16" rx="1" />
+  </svg>
+);
 
 // --- Rails JSON  <->  web-editor shapes ------------------------------------
 // The per-record mappers, `railsToEditorState` and the assembly it feeds all
@@ -441,8 +470,8 @@ function EditorApp({ config }) {
 
   // ----- WRITE: save via TanStack mutation ---------------------------------
   const saveMutation = useMutation({
-    mutationFn: async ({ state, deletes }) => {
-      const payload = editorStateToRailsPayload(state, deletes);
+    mutationFn: async ({ state, deletes, keepalive = false }) => {
+      const body = JSON.stringify(editorStateToRailsPayload(state, deletes));
       const res = await fetch(apiBase, {
         method: "PATCH",
         headers: {
@@ -450,7 +479,12 @@ function EditorApp({ config }) {
           Accept: "application/json",
           "X-CSRF-Token": csrfToken,
         },
-        body: JSON.stringify(payload),
+        body,
+        // `keepalive` lets the request outlive the page, for a save started as
+        // the author leaves. Browsers refuse a keepalive body over 64 KiB
+        // outright, so a bigger project goes as an ordinary request, which a
+        // departing page may cancel -- the unsaved-changes prompt covers that.
+        keepalive: keepalive && new Blob([body]).size <= KEEPALIVE_MAX_BYTES,
       });
       if (!res.ok) throw new Error(`Save failed: ${res.status}`);
       return state;
@@ -467,23 +501,52 @@ function EditorApp({ config }) {
     return persistableShape(working.current) !== persistableShape(serverSnapshot.current);
   }, []);
 
+  // What the top bar shows beside the title (see the web-editor's SaveStatus).
+  // A solo session reports it from `save` below and marks edits with
+  // `noteEdit`; a collaborative one derives it from the provider (see the
+  // effect after the autosave). An error stays up through later edits, until a
+  // save succeeds, since those edits are no safer than the ones that failed.
+  const [saveStatus, setSaveStatus] = useState("saved");
+  const noteEdit = useCallback(() => {
+    if (providerRef.current) return;
+    setSaveStatus((status) => (status === "error" ? status : "unsaved"));
+  }, []);
+
+  // The solo save currently on the wire, if any, so a save started as the page
+  // is hidden or closed does not send the same payload a second time.
+  const inFlightSave = useRef(null);
+
+  // The mounted <Editors>. Typing reaches `onContentChange` on a 500ms
+  // debounce, so anything that reads the working copy to save it, or to decide
+  // there is nothing to save, first has the editor hand over what it holds.
+  const editorsRef = useRef(null);
+  const flushPendingEdits = useCallback(() => editorsRef.current?.flushPendingEdits(), []);
+
   // Save the current document.  `hard` saves even when not dirty (used by
   // the Save button and before copy-conversion).  Snapshots the buffer up
   // front so edits made *during* the in-flight save aren't mistakenly marked
-  // saved.
+  // saved.  `keepalive` is for a save started as the author leaves (see the
+  // mutation).
   //
   // In collab mode there is nothing here to persist: the shared doc is already
   // on the server, durably, and the server writes it out to the project's rows
   // itself. What an explicit save means there is "make those rows agree with
   // the doc before I look at them" -- which is the flush endpoint, and which
   // matters because the two callers of `save(true)` are about to read the rows
-  // (navigate to the project page) or copy them (copy_conversion). A soft save
-  // asks for nothing: ProjectDocProjectionJob is already doing it on a timer.
+  // (navigate to the project page) or copy them (copy_conversion). It waits for
+  // the server to record this client's last keystrokes first, or the flush
+  // would write out a doc without them. A soft save asks for nothing:
+  // ProjectDocProjectionJob is already doing it on a timer.
   const save = useCallback(
-    async (hard = false) => {
-      if (providerRef.current) {
+    async (hard = false, { keepalive = false } = {}) => {
+      flushPendingEdits();
+      const provider = providerRef.current;
+      if (provider) {
         if (!hard) return true;
         try {
+          if (!(await provider.whenAcknowledged(ACK_WAIT_MS))) {
+            throw new Error("Timed out waiting for the server to record edits");
+          }
           const res = await fetch(flushDocUrl, {
             method: "POST",
             headers: { Accept: "application/json", "X-CSRF-Token": csrfToken },
@@ -498,19 +561,29 @@ function EditorApp({ config }) {
       }
 
       if (!working.current) return false;
-      if (!hard && !isDirty()) return true;
+      if (!hard && !isDirty()) {
+        setSaveStatus("saved");
+        return true;
+      }
       const snapshot = structuredClone(working.current);
+      const request = saveMutation.mutateAsync({ state: snapshot, deletes: [], keepalive });
+      inFlightSave.current = request;
+      setSaveStatus("saving");
       try {
-        await saveMutation.mutateAsync({ state: snapshot, deletes: [] });
+        await request;
         serverSnapshot.current = snapshot;
+        setSaveStatus(isDirty() ? "unsaved" : "saved");
         return true;
       } catch (error) {
         console.error("Error saving:", error);
+        setSaveStatus("error");
         if (hard) alert("An error occurred while saving.");
         return false;
+      } finally {
+        if (inFlightSave.current === request) inFlightSave.current = null;
       }
     },
-    [isDirty, saveMutation, flushDocUrl, csrfToken],
+    [isDirty, saveMutation, flushDocUrl, csrfToken, flushPendingEdits],
   );
 
   // ----- Autosave: fire `save` every AUTOSAVE_MS, only when dirty ----------
@@ -531,18 +604,49 @@ function EditorApp({ config }) {
     return () => clearInterval(id);
   }, [saveMutation.isPending]);
 
+  // ----- Save status in a collaborative session -----------------------------
+  // Nothing here saves -- every keystroke goes to the server over the socket --
+  // so the status is read off the provider: an edit it holds unacknowledged is
+  // still only in this tab, and a dropped socket holds every edit until it
+  // reconnects. yrby-client emits no event for an ack, so this polls; both
+  // reads are plain getters.
+  useEffect(() => {
+    if (collabStatus !== "ready") return;
+    const provider = providerRef.current;
+    const update = () =>
+      setSaveStatus(
+        !provider.isConnected ? "offline" : provider.hasPending ? "saving" : "saved",
+      );
+    update();
+    const id = setInterval(update, COLLAB_STATUS_POLL_MS);
+    return () => clearInterval(id);
+  }, [collabStatus]);
+
   // ----- Editor callbacks: update the working copy in place ----------------
   const onContentChange = useCallback((change) => {
     const w = working.current;
     if (!w) return;
+    // The editor also reports content it already had (a division opening, a
+    // re-derivation), which must not read as an unsaved edit.
+    let edited = false;
     const division = w.divisions.find((d) => d.xmlId === change.xmlId);
     if (division) {
-      if (change.source !== undefined) division.source = change.source;
-      if (change.sourceFormat !== undefined) division.sourceFormat = change.sourceFormat;
+      if (change.source !== undefined && change.source !== division.source) {
+        division.source = change.source;
+        edited = true;
+      }
+      if (change.sourceFormat !== undefined && change.sourceFormat !== division.sourceFormat) {
+        division.sourceFormat = change.sourceFormat;
+        edited = true;
+      }
     }
     // Document-wide docinfo edits arrive against the root division.
-    if (change.docinfo !== undefined) w.docinfo = change.docinfo;
-  }, []);
+    if (change.docinfo !== undefined && change.docinfo !== w.docinfo) {
+      w.docinfo = change.docinfo;
+      edited = true;
+    }
+    if (edited) noteEdit();
+  }, [noteEdit]);
 
   // Converters for the code editor's Tools → Import…. Shared with the
   // new-project dialog so both read the same formats.
@@ -648,6 +752,7 @@ function EditorApp({ config }) {
         sourceFormat: division.sourceFormat ?? "pretext",
       };
       w.divisions.push(record);
+      noteEdit();
       try {
         // division.title/type aren't sent: like the root division, they're
         // derivable from `source` itself (the wrapping tag + <title>) rather
@@ -675,7 +780,7 @@ function EditorApp({ config }) {
         console.error("Error creating division:", error);
       }
     },
-    [patchProjectJson],
+    [patchProjectJson, noteEdit],
   );
 
   // Division removal persists immediately (like every asset mutation), rather
@@ -730,7 +835,8 @@ function EditorApp({ config }) {
       if (w.rootDivisionId === division.xmlId) w.rootDivisionId = newXmlId;
       division.xmlId = newXmlId;
     }
-  }, []);
+    noteEdit();
+  }, [noteEdit]);
 
   // ----- Assets ------------------------------------------------------------
   // The web-editor owns the live project-asset pool (seeded from the
@@ -1002,11 +1108,14 @@ function EditorApp({ config }) {
     // itself rather than off the (nonexistent) XML.
     const root = w.divisions.find((d) => d.xmlId === w.rootDivisionId);
     if (root && root.sourceFormat !== "pretext") root.title = w.title;
-  }, []);
+    noteEdit();
+  }, [noteEdit]);
 
   const onLanguageChange = useCallback((value) => {
-    if (working.current) working.current.language = value || DEFAULT_LANGUAGE;
-  }, []);
+    if (!working.current) return;
+    working.current.language = value || DEFAULT_LANGUAGE;
+    noteEdit();
+  }, [noteEdit]);
 
   const onUseCommonDocinfoChange = useCallback(
     (value) => {
@@ -1023,7 +1132,85 @@ function EditorApp({ config }) {
     if (working.current) working.current.commonDocinfo = value ?? "";
   }, []);
 
-  const onSaveAndClose = useCallback(async () => {
+  // ----- Leaving the editor --------------------------------------------------
+  // Whether this tab holds edits the server does not: a solo working copy ahead
+  // of its last save (one still in flight counts, since the snapshot advances
+  // only once it lands), or a collaborative edit not yet acknowledged.
+  const hasUnsavedWork = useCallback(() => {
+    flushPendingEdits();
+    const provider = providerRef.current;
+    return provider ? provider.hasPending : isDirty();
+  }, [isDirty, flushPendingEdits]);
+
+  // Resolves to whether everything this tab holds has reached the server. A
+  // solo session waits out any save already in flight, then saves what is left.
+  const flushEdits = useCallback(async () => {
+    const provider = providerRef.current;
+    if (provider) return provider.whenAcknowledged(ACK_WAIT_MS);
+    await inFlightSave.current?.catch(() => {});
+    return save();
+  }, [save]);
+
+  // Set once the author has chosen to leave with edits unsaved, so the
+  // browser's own prompt does not ask them a second time.
+  const leavingAnyway = useRef(false);
+
+  // Every way out the editor itself offers -- the logo, the Account menu, Sign
+  // out -- comes through here, to save first and to ask before leaving
+  // anything behind.
+  const leave = useCallback(
+    async (go) => {
+      if (!(await flushEdits())) {
+        const confirmed = window.confirm(
+          "Your latest changes couldn't be saved. Leave anyway and lose them?",
+        );
+        if (!confirmed) return;
+        leavingAnyway.current = true;
+      }
+      go();
+    },
+    [flushEdits],
+  );
+  const leaveTo = useCallback(
+    (url) =>
+      leave(() => {
+        window.location.href = url;
+      }),
+    [leave],
+  );
+
+  // The browser's own ways out -- closing the tab, reloading, Back, a typed URL
+  // -- cannot wait for a save, so they get the next best thing. Hiding the page
+  // (switching tabs, and the first step of closing one on a phone, where
+  // `beforeunload` is unreliable) starts a save. Unloading with edits unsaved
+  // starts one too, as a keepalive request that can outlive the page when the
+  // project is small enough, and has the browser ask the author to confirm: one
+  // who stays sees it finish, one who leaves has been warned.
+  useEffect(() => {
+    const saveOnTheWayOut = () => {
+      if (!inFlightSave.current) saveRef.current(false, { keepalive: true });
+    };
+    const onVisibilityChange = () => {
+      if (document.visibilityState === "hidden") saveOnTheWayOut();
+    };
+    const onBeforeUnload = (event) => {
+      if (leavingAnyway.current || !hasUnsavedWork()) return;
+      saveOnTheWayOut();
+      event.preventDefault();
+      // For browsers that predate preventDefault() here (Chrome/Edge < 119).
+      event.returnValue = true;
+    };
+    document.addEventListener("visibilitychange", onVisibilityChange);
+    window.addEventListener("beforeunload", onBeforeUnload);
+    return () => {
+      document.removeEventListener("visibilitychange", onVisibilityChange);
+      window.removeEventListener("beforeunload", onBeforeUnload);
+    };
+  }, [hasUnsavedWork]);
+
+  // The top bar's "Manage project" and File → Manage Project. A hard save
+  // rather than `leave`, because the project page reads the rows (see `save`).
+  const openProjectPage = useCallback(async () => {
     if (await save(true)) window.location.href = projectUrl;
   }, [save, projectUrl]);
 
@@ -1034,12 +1221,26 @@ function EditorApp({ config }) {
   // `data-turbo="false"` on `_form.html.erb`, so a plain link would send a
   // GET instead of the DELETE `destroy_user_session_path` requires.
   const signOutFormRef = useRef(null);
-  const onSignOut = useCallback(() => {
-    signOutFormRef.current?.requestSubmit();
-  }, []);
+  const onSignOut = useCallback(
+    () => leave(() => signOutFormRef.current?.requestSubmit()),
+    [leave],
+  );
+
+  // Still a real link, so a modified or middle click opens a new tab as usual
+  // (leaving nothing); a plain click goes through `leaveTo` to save first.
+  const onLogoClick = useCallback(
+    (event) => {
+      if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) {
+        return;
+      }
+      event.preventDefault();
+      leaveTo(event.currentTarget.href);
+    },
+    [leaveTo],
+  );
 
   const logo = (
-    <a href={rootPath} className="flex items-center">
+    <a href={rootPath} className="flex items-center" onClick={onLogoClick}>
       <img src="/icon.svg" className="h-14" alt="PreTeXtPlus Logo" />
     </a>
   );
@@ -1188,6 +1389,7 @@ function EditorApp({ config }) {
         </div>
       )}
       <Editors
+        ref={editorsRef}
         title={state.title}
         docinfo={state.docinfo}
         commonDocinfo={state.commonDocinfo}
@@ -1221,6 +1423,7 @@ function EditorApp({ config }) {
               settingsPath={settingsPath}
               subscriptionsPath={subscriptionsPath}
               onSignOut={onSignOut}
+              navigate={leaveTo}
             />
           ),
           accountMenuEntries: buildAccountEntries({
@@ -1231,7 +1434,15 @@ function EditorApp({ config }) {
             settingsPath,
             subscriptionsPath,
             onSignOut,
+            navigate: leaveTo,
           }),
+          saveStatus,
+          primaryAction: {
+            label: "Manage project",
+            title: "Save, then open the project page to manage its outputs, collaborators and settings",
+            icon: MANAGE_ICON,
+            onSelect: openProjectPage,
+          },
           helpMenu: (helpers) => ({
             label: "Help & Feedback",
             entries: [
@@ -1266,8 +1477,8 @@ function EditorApp({ config }) {
         onUseCommonDocinfoChange={onUseCommonDocinfoChange}
         onCommonDocinfoChange={onCommonDocinfoChange}
         onSave={() => save()}
-        onSaveAndClose={onSaveAndClose}
-        saveAndCloseLabel="Save and manage project"
+        onSaveAndClose={openProjectPage}
+        saveAndCloseLabel="Manage Project"
         onPreviewRebuild={onPreviewRebuild}
         onCreatePretextProjectCopy={onCreatePretextProjectCopy}
         onFeedbackSubmit={onFeedbackSubmit}
