@@ -2,7 +2,7 @@
  * @vitest-environment jsdom
  */
 import { describe, it, expect, vi } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { act, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import CodeEditor from "../components/CodeEditor";
 
@@ -21,6 +21,22 @@ const baseProps = {
 };
 
 describe("CodeEditor", () => {
+  it("delivers typing still held by its debounce when it unmounts, rather than dropping it", () => {
+    const onChange = vi.fn();
+    const { unmount } = render(<CodeEditor {...baseProps} onChange={onChange} />);
+    const monacoProps = monacoEditorMock.mock.lastCall![0] as unknown as {
+      onChange: (value: string, event: object) => void;
+    };
+
+    act(() => monacoProps.onChange("<article>typed</article>", {}));
+    // Still inside the 500 ms debounce.
+    expect(onChange).not.toHaveBeenCalled();
+
+    unmount();
+    expect(onChange).toHaveBeenCalledTimes(1);
+    expect(onChange).toHaveBeenCalledWith("<article>typed</article>");
+  });
+
   it("passes readOnly: true to Monaco when the readOnly prop is set", () => {
     render(<CodeEditor {...baseProps} readOnly />);
     const calls = monacoEditorMock.mock.calls;

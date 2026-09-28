@@ -20,6 +20,7 @@ import { buildAccountEntries } from "./accountEntries";
  * @param {() => void} [props.onSignOut] - Called when "Sign out" is selected.
  * @param {string} [props.newUserPath] - Signed-out only.
  * @param {string} [props.newSessionPath] - Signed-out only.
+ * @param {(path: string) => void} [props.navigate] - See `buildAccountEntries`.
  * @returns {JSX.Element}
  */
 function AccountArea({
@@ -33,6 +34,7 @@ function AccountArea({
   onSignOut,
   newUserPath,
   newSessionPath,
+  navigate,
 }) {
   const [openMenu, setOpenMenu] = useState(/** @type {string|null} */ (null));
 
@@ -46,6 +48,7 @@ function AccountArea({
     onSignOut,
     newUserPath,
     newSessionPath,
+    navigate,
   });
 
   const menus = [
@@ -56,7 +59,7 @@ function AccountArea({
     },
   ];
 
-  const navigate = (from, direction) => {
+  const moveBetweenMenus = (from, direction) => {
     setOpenMenu(menus[(from + direction + menus.length) % menus.length].key);
   };
 
@@ -74,7 +77,7 @@ function AccountArea({
           isOpen={openMenu === menu.key}
           onOpenChange={(open) => setOpenMenu(open ? menu.key : null)}
           menubarActive={openMenu !== null}
-          onNavigate={(direction) => navigate(index, direction)}
+          onNavigate={(direction) => moveBetweenMenus(index, direction)}
           align="right"
         />
       ))}

@@ -57,6 +57,10 @@ const RELAY_SILENCE_MS = AWARENESS_HEARTBEAT_MS * 2.5;
 // not free -- it buys the repair for a broadcast lost under a healthy socket,
 // which nothing else here would ever notice.
 const RESYNC_INTERVAL_MS = 30000;
+// How often `whenAcknowledged` looks at the unacked queue. yrby-client has no
+// event for an ack, and one normally lands within a round trip, so a short poll
+// costs nothing and keeps a waiting navigation from feeling sticky.
+const ACK_POLL_MS = 50;
 
 export class YCableProvider {
   /** @param {ProviderConfig} config */
@@ -318,6 +322,46 @@ export class YCableProvider {
   resync() {
     if (this.destroyed) return;
     this.provider?.session?.onConnect();
+  }
+
+  // ── Delivery ───────────────────────────────────────────────────────────────
+
+  /**
+   * Whether any local edit is still waiting for the server to record it.
+   *
+   * The server acks an update only after storing it (ProjectDocChannel's
+   * on_change), so until then the edit exists in this tab alone: closing it
+   * loses the edit, where closing it a moment later would not.
+   * @returns {boolean}
+   */
+  get hasPending() {
+    return this.provider?.hasPending ?? false;
+  }
+
+  /**
+   * Whether the socket is up. A dropped one reads "connecting" while
+   * ActionCable retries (see yrby-client's ProviderStatus), and edits made then
+   * wait in the unacked queue for it to come back.
+   * @returns {boolean}
+   */
+  get isConnected() {
+    const status = this.provider?.status;
+    return status === "connected" || status === "synced";
+  }
+
+  /**
+   * Resolve once the server has recorded every local edit, or once `timeoutMs`
+   * has passed, to whether it did.
+   * @param {number} timeoutMs
+   * @returns {Promise<boolean>}
+   */
+  async whenAcknowledged(timeoutMs) {
+    const deadline = Date.now() + timeoutMs;
+    while (this.hasPending) {
+      if (Date.now() >= deadline) return false;
+      await new Promise((resolve) => setTimeout(resolve, ACK_POLL_MS));
+    }
+    return true;
   }
 
   destroy() {

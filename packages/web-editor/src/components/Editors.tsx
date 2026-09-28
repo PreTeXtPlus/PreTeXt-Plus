@@ -1,11 +1,14 @@
 import { Group, Panel, Separator } from "react-resizable-panels";
 import {
+  forwardRef,
   useEffect,
+  useImperativeHandle,
   useLayoutEffect,
   useMemo,
   useRef,
   useState,
   useSyncExternalStore,
+  type ForwardedRef,
   type ReactNode,
 } from "react";
 import clsx from "clsx";
@@ -29,7 +32,11 @@ import AssetManagerModal, { type AssetManagerMainTab } from "./AssetManagerModal
 import AssetEditModal from "./AssetEditModal";
 import SnippetManagerModal, { type SnippetManagerMainTab } from "./SnippetManagerModal";
 import SnippetEditModal from "./SnippetEditModal";
-import TopBar, { type TopBarAccountAreaHelpers } from "./TopBar";
+import TopBar, {
+  type TopBarAccountAreaHelpers,
+  type TopBarPrimaryAction,
+} from "./TopBar";
+import type { SaveStatus } from "./SaveStatusIndicator";
 import type { MenuEntry } from "./MenuDropdown";
 import ProjectExplorer from "./ProjectExplorer";
 import ErrorBoundary from "./ErrorBoundary";
@@ -432,6 +439,18 @@ export interface editorProps {
      * with nothing to persist a title edit to (a demo/tryit project).
      */
     titleOverride?: ReactNode;
+    /**
+     * The project's save state, shown beside the title. While it is `unsaved`
+     * or `error` it offers to save now, which calls `onSave`. Omit to show
+     * none.
+     */
+    saveStatus?: SaveStatus;
+    /**
+     * A labeled button at the right of the bar, before the account area —
+     * the host's main way on from the editor, e.g. "Manage project" to its
+     * project page.
+     */
+    primaryAction?: TopBarPrimaryAction;
   };
 
   /**
@@ -501,7 +520,21 @@ function rewriteDivisionMetadata(
   }
 }
 
-const Editors = (props: editorProps) => {
+/** What a host can ask of a mounted `Editors` through its `ref`. */
+export interface EditorsHandle {
+  /**
+   * Deliver any edit the code editor is still holding to `onContentChange`,
+   * synchronously. Typing reaches the host 500 ms late (the code editor
+   * debounces it), so a host must call this before it saves, or before it
+   * decides there is nothing to save — e.g. as the page unloads.
+   */
+  flushPendingEdits: () => void;
+}
+
+const Editors = forwardRef(function Editors(
+  props: editorProps,
+  ref: ForwardedRef<EditorsHandle>,
+) {
   // Store + bindCallbacks are created once per mount via lazy useState.
   // bindCallbacks is a plain function (not a React ref), so passing it during
   // render does not trigger the react-hooks/refs lint rule.
@@ -565,16 +598,18 @@ const Editors = (props: editorProps) => {
         {...props}
         bindCallbacks={handle.bindCallbacks}
         bridge={bridge}
+        handleRef={ref}
       />
     </EditorStoreProvider>
   );
-};
+});
 
 // ── Inner component: all editing logic ────────────────────────────────────
 
 interface EditorsInnerProps extends editorProps {
   bindCallbacks: (cbs: EditorCallbacks) => void;
   bridge: CollabBridge | null;
+  handleRef: ForwardedRef<EditorsHandle>;
 }
 
 const EditorsInner = (props: EditorsInnerProps) => {
@@ -692,6 +727,13 @@ const EditorsInner = (props: EditorsInnerProps) => {
 
   const livePreviewRef = useRef<LivePreviewHandle>(null);
   const codeEditorRef = useRef<CodeEditorHandle>(null);
+  useImperativeHandle(
+    props.handleRef,
+    () => ({
+      flushPendingEdits: () => codeEditorRef.current?.flushPendingChange(),
+    }),
+    [],
+  );
   // Monaco-derived state (undo/redo/selection/find-in-file + actions), lifted
   // from CodeEditor so TopBar can render the Edit/Insert/Tools toolbar
   // outside the code-editor panel. Null until CodeEditor's first report.
@@ -2308,6 +2350,9 @@ const EditorsInner = (props: EditorsInnerProps) => {
         accountMenuEntries={props.topBar.accountMenuEntries}
         helpMenu={props.topBar.helpMenu}
         titleOverride={props.topBar.titleOverride}
+        saveStatus={props.topBar.saveStatus}
+        onSaveNow={props.onSave}
+        primaryAction={props.topBar.primaryAction}
         readOnly={props.readOnly}
         onSaveAndClose={props.onSaveAndClose}
         saveAndCloseLabel={props.saveAndCloseLabel}

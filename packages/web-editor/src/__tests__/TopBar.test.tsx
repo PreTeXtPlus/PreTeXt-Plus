@@ -219,6 +219,66 @@ describe("TopBar", () => {
     await user.click(screen.getByRole("menuitem", { name: /^Select All/ }));
   });
 
+  it("shows no save status unless the host reports one", () => {
+    renderWithStore();
+    expect(screen.queryByTestId("save-status")).not.toBeInTheDocument();
+  });
+
+  it("shows the save status beside the title as an icon, not a button while nothing needs saving", () => {
+    const onSaveNow = vi.fn();
+    const { unmount } = renderWithStore({ saveStatus: "saved", onSaveNow });
+    expect(screen.getByRole("img", { name: "Saved" })).toHaveAttribute(
+      "title",
+      "All changes saved",
+    );
+    expect(screen.queryByRole("button", { name: /Saved/ })).not.toBeInTheDocument();
+    unmount();
+
+    renderWithStore({ saveStatus: "saving", onSaveNow });
+    expect(screen.getByRole("img", { name: "Saving…" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /Saving/ })).not.toBeInTheDocument();
+  });
+
+  it("offers to save now while there are unsaved changes or a failed save", async () => {
+    const user = userEvent.setup();
+    const onSaveNow = vi.fn();
+    const { unmount } = renderWithStore({ saveStatus: "unsaved", onSaveNow });
+    const unsaved = screen.getByRole("button", { name: "Unsaved changes" });
+    expect(unsaved).toHaveAttribute("title", "Unsaved changes — click to save now");
+    await user.click(unsaved);
+    expect(onSaveNow).toHaveBeenCalledTimes(1);
+    unmount();
+
+    renderWithStore({ saveStatus: "error", onSaveNow });
+    await user.click(screen.getByRole("button", { name: "Not saved" }));
+    expect(onSaveNow).toHaveBeenCalledTimes(2);
+  });
+
+  it("renders the primary action as a labeled button", async () => {
+    const user = userEvent.setup();
+    const onSelect = vi.fn();
+    renderWithStore({
+      primaryAction: {
+        label: "Manage project",
+        title: "Open the project page",
+        icon: <svg data-testid="action-icon" />,
+        onSelect,
+      },
+    });
+    const button = screen.getByRole("button", { name: "Manage project" });
+    expect(button).toHaveAttribute("title", "Open the project page");
+    expect(screen.getByTestId("action-icon")).toBeInTheDocument();
+    await user.click(button);
+    expect(onSelect).toHaveBeenCalled();
+  });
+
+  it("renders no primary action button when none is supplied", () => {
+    renderWithStore();
+    expect(
+      screen.queryByRole("button", { name: "Manage project" }),
+    ).not.toBeInTheDocument();
+  });
+
   describe("compact viewport", () => {
     /** Stubs `window.matchMedia` to report a fixed `matches` for every query. */
     function stubMatchMedia(matches: boolean) {
