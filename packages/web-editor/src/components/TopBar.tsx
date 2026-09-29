@@ -1,4 +1,4 @@
-import { useEffect, useState, type ReactNode } from "react";
+import { useState, type ReactNode } from "react";
 import clsx from "clsx";
 import CodeEditorMenu, { type EditorMenuActions, type BarMenu } from "./CodeEditorMenu";
 import type { MenuEntry } from "./MenuDropdown";
@@ -54,16 +54,11 @@ export interface TopBarProps {
   logo?: ReactNode;
   /**
    * Rendered flush right, spanning the bar's full height — e.g. the host's
-   * Account dropdown menu. Hidden below the compact-viewport breakpoint —
-   * see `accountMenuEntries`.
+   * Account dropdown menu. Below the compact-viewport breakpoint it sits at
+   * the right of the title row, so it should shrink to fit — e.g. an
+   * icon-only `MenuDropdown` (see its `iconOnlyWhenCompact`).
    */
   accountArea?: ReactNode;
-  /**
-   * The Account menu's entries. Folded into the File menu, with the separate
-   * `accountArea` hidden, below the compact-viewport breakpoint — above it,
-   * unused (the host's own `accountArea` renders them instead).
-   */
-  accountMenuEntries?: MenuEntry[];
   /**
    * Builds a "Help"/"Help & Feedback" menu rendered inline with
    * File/Edit/Insert/Tools/Language, sharing that row's open/keyboard-nav
@@ -124,29 +119,18 @@ export interface TopBarProps {
   menuState: CodeEditorMenuState | null;
 }
 
-/**
- * Below this width, `TopBar` folds the Account menu into File (see
- * `accountMenuEntries`) and reflows into two rows — see the grid classes in
- * the JSX below, which use the same breakpoint as `max-[52rem]:` (Tailwind
- * only sees literal class names, so the value is repeated there; change them
- * together).
+/*
+ * Below 52rem (`max-[52rem]:` in the classes below, and in `MenuDropdown`'s
+ * `iconOnlyWhenCompact` — Tailwind only sees literal class names, so the value
+ * is repeated; change them together), `TopBar` reflows into two rows: the menu
+ * row drops below the title, the primary action and account area stay at the
+ * right of the title row and shrink to their icons.
  *
  * Set by what the one-row layout needs: logo, File…Help & Feedback, the
  * primary action and Account come to about 760px, and anything narrower slides
  * the primary action over the Help menu. The margin above that is for fonts
  * that set the menu labels wider than the ones it was measured with.
  */
-const COMPACT_TOPBAR_QUERY = "(width < 52rem)";
-
-/**
- * The media query backing `isCompact`, or `undefined` where
- * `matchMedia` doesn't exist (e.g. this package's jsdom-based tests, unless a
- * test stubs it) — callers treat that as "not compact".
- */
-const compactMediaQuery = (): MediaQueryList | undefined =>
-  typeof window !== "undefined" && typeof window.matchMedia === "function"
-    ? window.matchMedia(COMPACT_TOPBAR_QUERY)
-    : undefined;
 
 /**
  * The unified ~64px top bar for a host that wants one full-width bar in place
@@ -161,17 +145,6 @@ const TopBar = (props: TopBarProps) => {
   const language = useEditorStore((s) => s.language);
   const updateLanguage = useEditorStore((s) => s.updateLanguage);
   const [isFeedbackOpen, setIsFeedbackOpen] = useState(false);
-  const [isCompact, setIsCompact] = useState(
-    () => compactMediaQuery()?.matches ?? false,
-  );
-
-  useEffect(() => {
-    const mql = compactMediaQuery();
-    if (!mql) return;
-    const handler = () => setIsCompact(mql.matches);
-    mql.addEventListener("change", handler);
-    return () => mql.removeEventListener("change", handler);
-  }, []);
 
   const languageEntries: MenuEntry[] = LANGUAGES.map(({ code, label }) => ({
     kind: "item",
@@ -219,16 +192,10 @@ const TopBar = (props: TopBarProps) => {
           },
         ]
       : []),
-    ...(isCompact && props.accountMenuEntries?.length
-      ? [
-          { kind: "separator" as const, key: "account-sep" },
-          ...props.accountMenuEntries,
-        ]
-      : []),
   ];
 
   return (
-    <div className="grid grid-cols-[auto_1fr_auto_auto] min-h-16 bg-white border-b border-gray-300 [grid-template-areas:'logo_title_action_account'_'logo_menu_action_account'] max-[52rem]:[grid-template-areas:'logo_title_action_action'_'menu_menu_menu_menu']">
+    <div className="grid grid-cols-[auto_1fr_auto_auto] min-h-16 bg-white border-b border-gray-300 [grid-template-areas:'logo_title_action_account'_'logo_menu_action_account'] max-[52rem]:[grid-template-areas:'logo_title_action_account'_'menu_menu_menu_menu']">
       <div className="flex items-center pr-1 pl-4 max-[52rem]:pl-1 [grid-area:logo]">
         {props.logo ?? <span aria-hidden>✏️</span>}
       </div>
@@ -302,8 +269,8 @@ const TopBar = (props: TopBarProps) => {
           </button>
         </div>
       )}
-      {props.accountArea && !isCompact && (
-        <div className="flex items-center border-l border-gray-200 px-2 [grid-area:account]">
+      {props.accountArea && (
+        <div className="flex items-center px-2 max-[52rem]:px-1 [grid-area:account]">
           {props.accountArea}
         </div>
       )}

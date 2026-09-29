@@ -1,4 +1,4 @@
-import { useEffect, useRef, type KeyboardEvent } from "react";
+import { useEffect, useRef, type KeyboardEvent, type ReactNode } from "react";
 import clsx from "clsx";
 
 /**
@@ -50,10 +50,23 @@ export interface MenuDropdownProps {
    * viewport.
    */
   align?: "left" | "right";
+  /** Shown before the label in the trigger button. */
+  icon?: ReactNode;
+  /**
+   * When true (and `icon` is set), the label is visually hidden below the
+   * compact top-bar breakpoint (52rem, see `TopBar.tsx`), leaving just the
+   * icon; it still names the button for screen readers.
+   */
+  iconOnlyWhenCompact?: boolean;
+  /**
+   * Gives the trigger button a rounded gray border, setting it apart as a
+   * standalone button (e.g. Account) rather than one of a row of menus.
+   */
+  outlined?: boolean;
 }
 
 const BUTTON_CLASSES =
-  "shrink-0 py-[5px] px-2.5 border border-transparent rounded-[3px] cursor-pointer text-[13px] font-medium leading-[1.3] bg-transparent text-[#1f1f1f] transition-colors duration-150 ease-in-out enabled:hover:bg-[#e8e8e8] disabled:text-gray-400 disabled:cursor-not-allowed";
+  "shrink-0 py-[5px] px-2.5 border cursor-pointer text-[13px] font-medium leading-[1.3] bg-transparent text-[#1f1f1f] transition-colors duration-150 ease-in-out enabled:hover:bg-[#e8e8e8] disabled:text-gray-400 disabled:cursor-not-allowed";
 
 const ITEM_CLASSES =
   "flex w-full items-center gap-6 py-1.5 px-2.5 text-left bg-transparent border-none rounded cursor-pointer text-[13px] font-medium leading-[1.3] whitespace-nowrap text-[#1f1f1f] enabled:hover:bg-[#e8e8e8] enabled:focus-visible:bg-[#e8e8e8] focus:outline-none disabled:text-gray-400 disabled:cursor-not-allowed";
@@ -79,6 +92,9 @@ const MenuDropdown = ({
   onNavigate,
   disabled,
   align = "left",
+  icon,
+  iconOnlyWhenCompact,
+  outlined,
 }: MenuDropdownProps) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const buttonRef = useRef<HTMLButtonElement>(null);
@@ -156,16 +172,26 @@ const MenuDropdown = ({
   };
 
   return (
-    // Below the `sm` breakpoint (40rem), drop `relative` so an open panel's
-    // `absolute` positioning falls through to the menubar row itself (see
-    // CodeEditorMenu.tsx), anchoring it to the row's left edge rather than
-    // this specific button's.
-    <div className="relative inline-flex max-sm:static" ref={containerRef}>
+    // Below the `sm` breakpoint (40rem), a left-aligned menu drops `relative`
+    // so an open panel's `absolute` positioning falls through to the menubar
+    // row itself (see CodeEditorMenu.tsx), anchoring it to the row's left edge
+    // rather than this specific button's. A right-aligned menu (e.g. Account)
+    // stays anchored to its own button at every width.
+    <div
+      className={clsx("relative inline-flex", align === "left" && "max-sm:static")}
+      ref={containerRef}
+    >
       <button
         ref={buttonRef}
         type="button"
         disabled={disabled}
-        className={clsx(BUTTON_CLASSES, open && "bg-[#e0e0e0] border-[#d0d0d0]")}
+        className={clsx(
+          BUTTON_CLASSES,
+          outlined ? "rounded-md border-gray-300" : "rounded-[3px] border-transparent",
+          icon != null && "inline-flex items-center gap-1.5",
+          open && "bg-[#e0e0e0]",
+          open && !outlined && "border-[#d0d0d0]",
+        )}
         aria-haspopup="menu"
         aria-expanded={open}
         onClick={() => {
@@ -192,7 +218,12 @@ const MenuDropdown = ({
           }
         }}
       >
-        {label}
+        {icon}
+        {icon != null && iconOnlyWhenCompact ? (
+          <span className="max-[52rem]:sr-only">{label}</span>
+        ) : (
+          label
+        )}
       </button>
 
       {open && (
@@ -201,12 +232,12 @@ const MenuDropdown = ({
           role="menu"
           aria-label={label}
           className={clsx(
-            "absolute top-[calc(100%+4px)] z-20 flex flex-col min-w-[220px] max-h-[70vh] w-full sm:w-auto overflow-y-auto p-1 bg-white border border-[#d0d0d0] rounded-md shadow-[0_6px_16px_rgba(0,0,0,0.14)]",
+            "absolute top-[calc(100%+4px)] z-20 flex flex-col min-w-[220px] max-h-[70vh] overflow-y-auto p-1 bg-white border border-[#d0d0d0] rounded-md shadow-[0_6px_16px_rgba(0,0,0,0.14)]",
             // Compact: nudge 2px off the row's left edge, shrinking to match
             // so the full-width panel doesn't overflow the viewport.
             align === "right"
               ? "right-0"
-              : "left-0 max-sm:left-0.5 max-sm:w-[calc(100%-2px)]",
+              : "left-0 w-full sm:w-auto max-sm:left-0.5 max-sm:w-[calc(100%-2px)]",
           )}
           onKeyDown={handlePanelKeyDown}
         >

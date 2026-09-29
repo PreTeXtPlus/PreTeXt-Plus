@@ -25,7 +25,6 @@ import {
 } from "./railsProjectMapping";
 import AccountArea from "./AccountArea";
 import { HELP_ENTRIES } from "./helpEntries";
-import { buildAccountEntries } from "./accountEntries";
 
 /** @typedef {import("@pretextbook/web-editor").Asset} Asset */
 /** @typedef {import("@pretextbook/web-editor").Division} Division */
@@ -1426,16 +1425,6 @@ function EditorApp({ config }) {
               navigate={leaveTo}
             />
           ),
-          accountMenuEntries: buildAccountEntries({
-            signedIn: true,
-            projectsPath: rootPath,
-            hasProfilePage,
-            profilePath,
-            settingsPath,
-            subscriptionsPath,
-            onSignOut,
-            navigate: leaveTo,
-          }),
           saveStatus,
           primaryAction: {
             label: "Manage project",
