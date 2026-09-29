@@ -140,6 +140,8 @@ export { default as CodeEditor } from "./components/CodeEditor";
 // keyboard-identical to the editor's own File/Edit/Insert/Tools menus.
 export { default as MenuDropdown } from "./components/MenuDropdown";
 export type { MenuDropdownProps, MenuEntry } from "./components/MenuDropdown";
+// The editor's shared icon set, for host-built controls in the top bar.
+export { DashboardIcon, UserIcon } from "./components/icons";
 export type { TopBarPrimaryAction } from "./components/TopBar";
 export type { SaveStatus } from "./components/SaveStatusIndicator";
 //export { VisualEditor } from "@pretextbook/visual-editor";

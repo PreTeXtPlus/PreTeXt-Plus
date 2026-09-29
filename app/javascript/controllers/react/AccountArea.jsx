@@ -1,25 +1,6 @@
 import React, { useState } from "react";
-import { MenuDropdown } from "@pretextbook/web-editor";
+import { MenuDropdown, UserIcon } from "@pretextbook/web-editor";
 import { buildAccountEntries } from "./accountEntries";
-
-// The Account menu's icon: Lucide's "user" (ISC license). Below the top bar's
-// compact breakpoint it stands in for the "Account" label.
-const USER_ICON = (
-  <svg
-    width="16"
-    height="16"
-    viewBox="0 0 24 24"
-    fill="none"
-    stroke="currentColor"
-    strokeWidth="2"
-    strokeLinecap="round"
-    strokeLinejoin="round"
-    aria-hidden="true"
-  >
-    <path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2" />
-    <circle cx="12" cy="7" r="4" />
-  </svg>
-);
 
 /**
  * The Account menu for the unified editor top bar, matching the equivalent
@@ -74,7 +55,7 @@ function AccountArea({
     {
       key: "account",
       label: "Account",
-      icon: USER_ICON,
+      icon: <UserIcon />,
       entries: accountEntries,
     },
   ];

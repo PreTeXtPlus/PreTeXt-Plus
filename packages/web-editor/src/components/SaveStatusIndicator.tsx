@@ -1,4 +1,5 @@
 import clsx from "clsx";
+import { CloudIcon } from "./icons";
 
 /**
  * Where the host's copy of the project stands relative to its server:
@@ -10,38 +11,6 @@ import clsx from "clsx";
  * - `offline` — the connection dropped; edits wait for it to come back.
  */
 export type SaveStatus = "saved" | "saving" | "unsaved" | "error" | "offline";
-
-/** A thin-stroked cloud outline with a mark inside it for each status. */
-const CloudIcon = ({ status }: { status: SaveStatus }) => (
-  <svg
-    width="20"
-    height="20"
-    viewBox="0 0 24 24"
-    fill="none"
-    stroke="currentColor"
-    strokeWidth="1.25"
-    strokeLinecap="round"
-    strokeLinejoin="round"
-    xmlns="http://www.w3.org/2000/svg"
-    aria-hidden="true"
-  >
-    <path d="M17.5 19H9a7 7 0 1 1 6.71-9h1.79a4.5 4.5 0 1 1 0 9Z" />
-    {status === "saved" && <path d="M9 13.75l2 2 4-4" />}
-    {(status === "saving" || status === "unsaved") && (
-      <>
-        <path d="M12 16.5v-5" />
-        <path d="M9.75 13.75L12 11.5l2.25 2.25" />
-      </>
-    )}
-    {status === "error" && (
-      <>
-        <path d="M12 10.75v3" />
-        <path d="M12 16.25h.01" />
-      </>
-    )}
-    {status === "offline" && <path d="M4 4l16 16" />}
-  </svg>
-);
 
 const STATUS_TEXT: Record<SaveStatus, { label: string; title: string }> = {
   saved: { label: "Saved", title: "All changes saved" },
