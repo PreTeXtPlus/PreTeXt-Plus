@@ -66,7 +66,7 @@ export interface MenuDropdownProps {
 }
 
 const BUTTON_CLASSES =
-  "shrink-0 py-[5px] px-2.5 border cursor-pointer text-[13px] font-medium leading-[1.3] bg-transparent text-[#1f1f1f] transition-colors duration-150 ease-in-out enabled:hover:bg-[#e8e8e8] disabled:text-gray-400 disabled:cursor-not-allowed";
+  "shrink-0 py-1.5 px-3 max-[52rem]:px-2 border cursor-pointer text-[13px] font-medium leading-[1.3] bg-transparent text-[#1f1f1f] transition-colors duration-150 ease-in-out enabled:hover:bg-[#e8e8e8] disabled:text-gray-400 disabled:cursor-not-allowed";
 
 const ITEM_CLASSES =
   "flex w-full items-center gap-6 py-1.5 px-2.5 text-left bg-transparent border-none rounded cursor-pointer text-[13px] font-medium leading-[1.3] whitespace-nowrap text-[#1f1f1f] enabled:hover:bg-[#e8e8e8] enabled:focus-visible:bg-[#e8e8e8] focus:outline-none disabled:text-gray-400 disabled:cursor-not-allowed";
