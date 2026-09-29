@@ -1,8 +1,5 @@
 /**
- * Builds the Account menu's entries — same content for the standalone
- * "Account" dropdown (`AccountArea.jsx`) and for folding into the File menu
- * on small viewports (`TopBar`'s `accountMenuEntries` prop), so both stay in
- * sync from one source.
+ * Builds the entries of the "Account" dropdown (`AccountArea.jsx`).
  *
  * @param {Object} props
  * @param {boolean} [props.signedIn]

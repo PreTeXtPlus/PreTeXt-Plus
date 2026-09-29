@@ -1,7 +1,7 @@
 import { Fragment, useLayoutEffect } from "react";
 import SectionItem from "./SectionItem";
 import NewDivisionRow from "./NewDivisionRow";
-import { ChevronIcon } from "./explorerIcons";
+import { ChevronIcon } from "../icons";
 import { canContainDivisions } from "./types";
 import { useDivisionActions } from "./useDivisionActions";
 

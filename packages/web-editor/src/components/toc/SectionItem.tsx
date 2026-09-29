@@ -2,7 +2,7 @@ import clsx from "clsx";
 import type { Division, DivisionType } from "../../types/sections";
 import SectionEditForm from "./SectionEditForm";
 import DivisionMenu, { type DivisionMenuItem } from "./DivisionMenu";
-import { ChevronIcon } from "./explorerIcons";
+import { ChevronIcon } from "../icons";
 import { type EditDraft, TYPE_FULL_LABELS } from "./types";
 
 interface SectionItemProps {

@@ -416,15 +416,10 @@ export interface editorProps {
     logo?: ReactNode;
     /**
      * Rendered flush right, spanning the bar's full height — e.g. the host's
-     * Account dropdown menu. Omit to render no flush-right content. Hidden
-     * below the compact-viewport breakpoint — see `accountMenuEntries`.
+     * Account dropdown menu. Omit to render no flush-right content. See
+     * `TopBarProps.accountArea` for how it should fit compact viewports.
      */
     accountArea?: ReactNode;
-    /**
-     * The Account menu's entries. Folded into the File menu, with the
-     * separate `accountArea` hidden, below the compact-viewport breakpoint.
-     */
-    accountMenuEntries?: MenuEntry[];
     /**
      * Builds a "Help"/"Help & Feedback" menu rendered inline with
      * File/Edit/Insert/Tools/Language. Called with helpers (e.g.
@@ -2347,7 +2342,6 @@ const EditorsInner = (props: EditorsInnerProps) => {
       <TopBar
         logo={props.topBar.logo}
         accountArea={props.topBar.accountArea}
-        accountMenuEntries={props.topBar.accountMenuEntries}
         helpMenu={props.topBar.helpMenu}
         titleOverride={props.topBar.titleOverride}
         saveStatus={props.topBar.saveStatus}

@@ -9,7 +9,7 @@ import {
   FindIcon,
   SnippetsIcon,
   TocIcon,
-} from "./toc/explorerIcons";
+} from "./icons";
 import { buildProjectAssetView } from "../assetView";
 import { buildProjectSnippetView } from "../snippetView";
 import type { ExplorerView } from "../store/editorStore";

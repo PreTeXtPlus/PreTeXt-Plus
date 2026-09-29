@@ -10,6 +10,7 @@ import {
 import {
   Editors,
   configureSpellCheck,
+  DashboardIcon,
   DEFAULT_LANGUAGE,
 } from "@pretextbook/web-editor";
 import { buildImportEngines } from "./importEngines";
@@ -25,7 +26,6 @@ import {
 } from "./railsProjectMapping";
 import AccountArea from "./AccountArea";
 import { HELP_ENTRIES } from "./helpEntries";
-import { buildAccountEntries } from "./accountEntries";
 
 /** @typedef {import("@pretextbook/web-editor").Asset} Asset */
 /** @typedef {import("@pretextbook/web-editor").Division} Division */
@@ -104,26 +104,6 @@ const ACK_WAIT_MS = 5000;
 // How often the top bar's save status is refreshed from a collaborative
 // session's provider.
 const COLLAB_STATUS_POLL_MS = 500;
-
-// The top bar's "Manage project" icon: Lucide's "layout-dashboard" (ISC license).
-const MANAGE_ICON = (
-  <svg
-    width="16"
-    height="16"
-    viewBox="0 0 24 24"
-    fill="none"
-    stroke="currentColor"
-    strokeWidth="2"
-    strokeLinecap="round"
-    strokeLinejoin="round"
-    aria-hidden="true"
-  >
-    <rect width="7" height="9" x="3" y="3" rx="1" />
-    <rect width="7" height="5" x="14" y="3" rx="1" />
-    <rect width="7" height="9" x="14" y="12" rx="1" />
-    <rect width="7" height="5" x="3" y="16" rx="1" />
-  </svg>
-);
 
 // --- Rails JSON  <->  web-editor shapes ------------------------------------
 // The per-record mappers, `railsToEditorState` and the assembly it feeds all
@@ -1426,21 +1406,11 @@ function EditorApp({ config }) {
               navigate={leaveTo}
             />
           ),
-          accountMenuEntries: buildAccountEntries({
-            signedIn: true,
-            projectsPath: rootPath,
-            hasProfilePage,
-            profilePath,
-            settingsPath,
-            subscriptionsPath,
-            onSignOut,
-            navigate: leaveTo,
-          }),
           saveStatus,
           primaryAction: {
             label: "Manage project",
             title: "Save, then open the project page to manage its outputs, collaborators and settings",
-            icon: MANAGE_ICON,
+            icon: <DashboardIcon />,
             onSelect: openProjectPage,
           },
           helpMenu: (helpers) => ({

@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { MenuDropdown } from "@pretextbook/web-editor";
+import { MenuDropdown, UserIcon } from "@pretextbook/web-editor";
 import { buildAccountEntries } from "./accountEntries";
 
 /**
@@ -55,6 +55,7 @@ function AccountArea({
     {
       key: "account",
       label: "Account",
+      icon: <UserIcon />,
       entries: accountEntries,
     },
   ];
@@ -73,6 +74,9 @@ function AccountArea({
         <MenuDropdown
           key={menu.key}
           label={menu.label}
+          icon={menu.icon}
+          iconOnlyWhenCompact
+          outlined
           entries={menu.entries}
           isOpen={openMenu === menu.key}
           onOpenChange={(open) => setOpenMenu(open ? menu.key : null)}
