@@ -246,6 +246,42 @@ describe("opening an asset", () => {
     expect(assetUpdates[assetUpdates.length - 1]).toMatchObject({ ref: "fig", shortDescription: "A plot" });
     expect(screen.queryByText("missing short description")).toBeNull();
   });
+
+  it("shows an uploaded image and its file type in the preview panel, not the drawer", () => {
+    const photo: Asset = {
+      id: "a2",
+      ref: "photo",
+      title: "A photo",
+      isFile: true,
+      url: "https://example.com/photo.png",
+      fileRef: "photo.png",
+      contentType: "image/png",
+      shortDescription: "A photo",
+    };
+    renderEditors({ projectAssets: [asset, photo] });
+    openAssetRow("photo");
+
+    const preview = screen.getByTestId("asset-preview");
+    expect(within(preview).getByRole("img")).toHaveAttribute(
+      "src",
+      "https://example.com/photo.png",
+    );
+    expect(screen.getByTestId("asset-preview-type")).toHaveTextContent("image/png");
+    expect(screen.getByTestId("asset-preview-type")).toHaveTextContent("photo.png");
+    expect(screen.queryByTestId("preview-coming-soon")).toBeNull();
+
+    fireEvent.click(screen.getByTestId("settings-drawer-toggle"));
+    expect(within(screen.getByTestId("settings-drawer")).queryByRole("img")).toBeNull();
+  });
+
+  it("shows a placeholder for an authored asset, which has no image", () => {
+    renderEditors();
+    openAssetRow("fig");
+    expect(screen.getByTestId("asset-preview")).toHaveTextContent(
+      "Preview coming soon for authored assets.",
+    );
+    expect(screen.queryByTestId("live-preview")).toBeNull();
+  });
 });
 
 describe("the settings drawer", () => {

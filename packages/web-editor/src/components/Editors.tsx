@@ -35,6 +35,7 @@ import FullSourceModal from "./FullSourceModal";
 import AssetManagerModal, { type AssetManagerMainTab } from "./AssetManagerModal";
 import SnippetManagerModal, { type SnippetManagerMainTab } from "./SnippetManagerModal";
 import EditorTargetBar from "./EditorTargetBar";
+import AssetPreview from "./AssetPreview";
 import {
   editorTargetKey,
   resolveEditorTarget,
@@ -2463,15 +2464,18 @@ const EditorsInner = (props: EditorsInnerProps) => {
 
   // ── Preview panel ─────────────────────────────────────────────────────────
   let preview: ReactNode;
-  if (showLivePreview && canPreview && !isDivisionOpen) {
-    // Snippets and assets only render inside a division today; previewing
-    // them on their own is planned.
+  if (showLivePreview && editorTarget?.kind === "asset") {
+    // A stored image needs no renderer, so this doesn't wait on `canPreview`.
+    preview = <AssetPreview asset={editorTarget.asset} />;
+  } else if (showLivePreview && canPreview && !isDivisionOpen) {
+    // Snippets only render inside a division today; previewing them on their
+    // own is planned.
     preview = (
       <div
         data-testid="preview-coming-soon"
         className="flex flex-1 h-full items-center justify-center p-6 bg-[#fafafa] text-center text-[0.9rem] text-slate-500"
       >
-        Preview coming soon for snippets and assets.
+        Preview coming soon for snippets.
       </div>
     );
   } else if (showLivePreview && canPreview) {

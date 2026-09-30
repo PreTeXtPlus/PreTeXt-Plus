@@ -28,8 +28,9 @@ export interface AssetSettingsProps {
 }
 
 /**
- * An asset's settings: its preview, title, id, alt text, the embed code, and
- * the project-level actions. Its PreTeXt source is the code editor itself.
+ * An asset's settings: its title, id, alt text, the embed code, and the
+ * project-level actions. Its PreTeXt source is the code editor itself, and its
+ * image is shown in the preview panel (see `AssetPreview`).
  */
 const AssetSettings = ({
   asset,
@@ -139,23 +140,6 @@ const AssetSettings = ({
 
   return (
     <div className="flex flex-col gap-2.5">
-      {asset.url && (
-        <div className="flex items-start gap-3">
-          <img
-            src={asset.url}
-            alt={shortDescription || asset.title}
-            className="max-w-[180px] max-h-[120px] object-contain border border-slate-200 rounded bg-slate-50"
-            onError={(e) => {
-              (e.currentTarget as HTMLImageElement).style.display = "none";
-            }}
-          />
-          {asset.contentType && (
-            <span className="text-[0.72rem] text-slate-400 font-mono">
-              {asset.contentType}
-            </span>
-          )}
-        </div>
-      )}
       <SettingsField label="Title" htmlFor="asset-settings-title">
         <CommitField
           id="asset-settings-title"
