@@ -17,6 +17,7 @@
  * most common paste — one paragraph of prose — used to arrive as bare text and
  * was rejected wherever the cursor was not already inside a paragraph.
  */
+/// <reference types="node" />
 import { describe, it, expect, beforeAll, afterAll, vi } from "vitest";
 import fs from "node:fs";
 import path from "node:path";

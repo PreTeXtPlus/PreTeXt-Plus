@@ -18,6 +18,7 @@ import {
   DialogActions,
   DialogButton,
 } from "./Dialog";
+import { DEFAULT_LATEX_IMAGE_PREAMBLE } from "../sectionUtils";
 
 export interface DocinfoEditorCloseValue {
   /** The project-specific docinfo XML from this editor session. */
@@ -162,7 +163,7 @@ const TAB_DESCRIPTIONS: Record<DocinfoTab, string> = {
   macros:
     "LaTeX macros available throughout the document. Stored in <macros> inside <docinfo>. Use \\newcommand to define new macros (avoid using \\def).",
   preamble:
-    "LaTeX macros for rendering TikZ/LaTeX images. Stored in <latex-image-preamble> inside <docinfo>.",
+    `LaTeX macros for rendering TikZ/LaTeX images. Stored in <latex-image-preamble> inside <docinfo>. Every build loads ${DEFAULT_LATEX_IMAGE_PREAMBLE} before these, so there is no need to add it.`,
   other:
     "Any additional <docinfo> child elements (e.g. <cross-references>, <rename>). Edit as raw XML — one element per line.",
 };

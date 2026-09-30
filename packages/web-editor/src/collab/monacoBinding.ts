@@ -89,6 +89,15 @@ export class MonacoCollabBinding {
     }
   }
 
+  /**
+   * True while a remote delta is being written into the model, so other
+   * content listeners (the typing shortcuts) can tell a peer's edit from
+   * local typing.
+   */
+  get isApplyingRemote(): boolean {
+    return this.applyingRemote;
+  }
+
   dispose(): void {
     if (this.disposed) return;
     this.disposed = true;

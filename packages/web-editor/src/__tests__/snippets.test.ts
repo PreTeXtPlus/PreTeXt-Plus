@@ -20,6 +20,7 @@
  * The grammar is read from the installed package with `fetch` stubbed to serve
  * it, exactly as `pretextSchema.test.ts` does, so the suite stays offline.
  */
+/// <reference types="node" />
 import { describe, it, expect, beforeAll, afterAll, vi } from "vitest";
 import fs from "node:fs";
 import path from "node:path";

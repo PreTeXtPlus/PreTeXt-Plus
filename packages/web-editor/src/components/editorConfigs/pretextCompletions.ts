@@ -1,5 +1,14 @@
 import { getPretextCompletions } from "@pretextbook/completions";
-import type { CompletionItem, TextEdit } from "vscode-languageserver/node";
+
+/** The LSP-shaped values the completer returns, derived so this module needs
+ * no direct dependency on `vscode-languageserver-types`. */
+type CompletionItem = NonNullable<
+  Awaited<ReturnType<typeof getPretextCompletions>>
+>[number];
+type TextEdit = Extract<
+  NonNullable<CompletionItem["textEdit"]>,
+  { range: unknown }
+>;
 
 const mapCompletionKind = (kind: number | undefined, monaco: any) => {
   switch (kind) {
