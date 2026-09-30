@@ -7,7 +7,12 @@ import ProjectExplorer, {
   type ProjectExplorerProps,
 } from "../components/ProjectExplorer";
 import type { Division } from "../types/sections";
-import { divisions, renderWithStore } from "./tocTestUtils";
+import {
+  divisions,
+  renderWithStore,
+  toggleRow,
+  visibleTitles,
+} from "./tocTestUtils";
 
 const withOrphan: Division[] = [
   ...divisions,
@@ -65,6 +70,77 @@ describe("ProjectExplorer", () => {
     fireEvent.click(tab("snippets"));
     expect(store.getState().isTocCollapsed).toBe(false);
     expect(screen.getByText("No snippets in this project yet.")).toBeInTheDocument();
+  });
+
+  it("keeps the Contents tree's shape across view switches", () => {
+    // Switching views unmounts the tree, so its shape has to live in the store.
+    const nested: Division[] = [
+      {
+        ...withOrphan[0],
+        source:
+          '<article xml:id="doc"><title>Document</title><plus:section ref="sec"/><plus:section ref="sec2"/></article>',
+      },
+      {
+        ...withOrphan[1],
+        source:
+          '<section xml:id="sec"><title>A section</title><plus:subsection ref="sub"/></section>',
+      },
+      {
+        id: "4",
+        xmlId: "sec2",
+        title: "Another section",
+        type: "section",
+        sourceFormat: "pretext",
+        source:
+          '<section xml:id="sec2"><title>Another section</title><plus:subsection ref="sub2"/></section>',
+      },
+      {
+        id: "5",
+        xmlId: "sub",
+        title: "A subsection",
+        type: "subsection",
+        sourceFormat: "pretext",
+        source: '<subsection xml:id="sub"><title>A subsection</title></subsection>',
+      },
+      {
+        id: "6",
+        xmlId: "sub2",
+        title: "Another subsection",
+        type: "subsection",
+        sourceFormat: "pretext",
+        source:
+          '<subsection xml:id="sub2"><title>Another subsection</title></subsection>',
+      },
+      withOrphan[2],
+    ];
+    renderWithStore(
+      <ProjectExplorer onJumpToMatch={vi.fn()} onReplaceMatches={vi.fn()} />,
+      nested,
+      (store) => {
+        store.getState().setIsTocCollapsed(false);
+        store.getState().openDivision("sub");
+      },
+    );
+    // Opened on load to show the active subsection; the author then shuts
+    // that branch, opens the other one and folds the unplaced block.
+    expect(visibleTitles()).toContain("A subsection");
+    toggleRow("A section");
+    toggleRow("Another section");
+    fireEvent.click(screen.getByText("Unplaced divisions"));
+    const shape = [
+      "Document",
+      "A section",
+      "Another section",
+      "Another subsection",
+    ];
+    expect(visibleTitles()).toEqual(shape);
+
+    fireEvent.click(tab("snippets"));
+    fireEvent.click(tab("toc"));
+    expect(visibleTitles()).toEqual(shape);
+    expect(
+      screen.getByText("Unplaced divisions").closest("button"),
+    ).toHaveAttribute("aria-expanded", "false");
   });
 
   it("omits the icons for hidden snippets and assets", () => {

@@ -97,6 +97,63 @@ export const defaultTocCollapsed = (): boolean =>
   isNarrowViewport() ? true : (readStoredTocCollapsed() ?? false);
 
 /**
+ * Where the TOC tree's shape — which rows are open, whether the unplaced block
+ * is folded — is remembered across sessions, one entry per project. Keyed by
+ * the host's `projectUrl`, the only project identity the editor is given; a
+ * host that passes none (a scratch page) gets no persistence, since there is
+ * nothing to tell its sessions apart by.
+ */
+const tocTreeKey = (projectUrl: string) =>
+  `pretext-plus:toc-tree:${projectUrl}`;
+
+/** The persisted part of the TOC tree's state. */
+type StoredTocTree = Pick<
+  EditorStoreState,
+  "tocExpansion" | "isTocOrphansCollapsed"
+>;
+
+/** The stored tree shape for `projectUrl`, or `null` if none / unreadable. */
+const readStoredTocTree = (
+  projectUrl: string | undefined,
+): StoredTocTree | null => {
+  if (!projectUrl) return null;
+  try {
+    const stored = localStorage.getItem(tocTreeKey(projectUrl));
+    if (stored === null) return null;
+    const parsed: unknown = JSON.parse(stored);
+    if (typeof parsed !== "object" || parsed === null) return null;
+    const { tocExpansion, isTocOrphansCollapsed } = parsed as Record<
+      string,
+      unknown
+    >;
+    return {
+      // Only boolean entries survive, so a hand-edited or older entry can't
+      // put a non-boolean where `isExpanded` expects one.
+      tocExpansion:
+        typeof tocExpansion === "object" && tocExpansion !== null
+          ? Object.fromEntries(
+              Object.entries(tocExpansion).filter(
+                (e): e is [string, boolean] => typeof e[1] === "boolean",
+              ),
+            )
+          : {},
+      isTocOrphansCollapsed: isTocOrphansCollapsed === true,
+    };
+  } catch {
+    // Storage blocked or the entry isn't JSON: start from the default shape.
+    return null;
+  }
+};
+
+const writeStoredTocTree = (projectUrl: string, tree: StoredTocTree): void => {
+  try {
+    localStorage.setItem(tocTreeKey(projectUrl), JSON.stringify(tree));
+  } catch {
+    // Storage blocked or full — the shape just doesn't outlive this session.
+  }
+};
+
+/**
  * Whether pasting LaTeX or Markdown into a PreTeXt division converts it on the
  * way in (see `pasteConvert.ts`).
  *
@@ -342,6 +399,26 @@ export interface EditorStoreState {
    */
   findPanelState: FindPanelState;
 
+  // TOC tree shape
+  /**
+   * TOC rows the author has explicitly opened (`true`) or shut (`false`),
+   * keyed by xml:id. A row with no entry falls back to the default — only the
+   * root is open — so a long book starts as its list of chapters. Kept in the
+   * store, like `findPanelState`, because the TOC unmounts whenever the
+   * explorer switches view or hides, and would otherwise spring back open.
+   * Also saved per project across sessions — see {@link tocTreeKey}.
+   */
+  tocExpansion: Record<string, boolean>;
+  /** Whether the "Unplaced divisions" block is folded down to its header. Saved like `tocExpansion`. */
+  isTocOrphansCollapsed: boolean;
+  /**
+   * The active division whose ancestors the TOC last opened — see
+   * `revealInToc`. Remembered so remounting the TOC doesn't re-open a branch
+   * the author has since shut. Deliberately *not* saved: a new session opens
+   * the path to wherever the author lands, on top of the restored shape.
+   */
+  tocRevealedId: string | null;
+
   // Division properties form (rendered in the settings drawer)
   editingId: string | null;
   editDraft: EditDraft | null;
@@ -456,6 +533,20 @@ export interface EditorStoreState {
 
   /** Merge `partial` into the find/replace panel's inputs. */
   setFindPanelState: (partial: Partial<FindPanelState>) => void;
+
+  /** Open or shut one TOC row's children. */
+  setTocExpanded: (xmlId: string, expanded: boolean) => void;
+  /**
+   * Open every row in `ancestorIds` (and the unplaced block, if `inOrphans`)
+   * so the TOC shows `activeId`, open `activeId` itself so its children show
+   * too — one level, not its whole subtree — and record it as revealed.
+   */
+  revealInToc: (
+    activeId: string,
+    ancestorIds: string[],
+    inOrphans: boolean,
+  ) => void;
+  toggleTocOrphansCollapsed: () => void;
   commitSectionEdit: () => void;
   cancelSectionEdit: () => void;
 
@@ -563,6 +654,8 @@ export interface EditorStoreInit {
   projectAssets: Asset[] | undefined;
   /** Optional (unlike `projectAssets`) so existing hosts/tests need no change to keep compiling. */
   projectSnippets?: Snippet[];
+  /** The host's URL for the project; keys the saved TOC tree shape (see {@link tocTreeKey}). */
+  projectUrl?: string;
 }
 
 /** The Zustand vanilla store instance type. */
@@ -640,6 +733,8 @@ export function createEditorStore(init: EditorStoreInit): EditorStoreHandle {
     },
   };
 
+  const storedTocTree = readStoredTocTree(init.projectUrl);
+
   const store = createStore<EditorStoreState>()((set, get) => ({
     // ── Initial data ───────────────────────────────────────────────────────
     source: init.source,
@@ -651,7 +746,7 @@ export function createEditorStore(init: EditorStoreInit): EditorStoreHandle {
     commonDocinfo: init.commonDocinfo,
     useCommonDocinfo: init.useCommonDocinfo,
     language: init.language,
-    projectUrl: undefined,
+    projectUrl: init.projectUrl,
     userEmail: undefined,
     divisions: init.divisions,
     rootDivisionId: undefined,
@@ -678,6 +773,9 @@ export function createEditorStore(init: EditorStoreInit): EditorStoreHandle {
     isFullSourceOpen: false,
     isSettingsDrawerOpen: false,
     findPanelState: initialFindPanelState,
+    tocExpansion: storedTocTree?.tocExpansion ?? {},
+    isTocOrphansCollapsed: storedTocTree?.isTocOrphansCollapsed ?? false,
+    tocRevealedId: null,
     editingId: null,
     editDraft: null,
     pendingNewDivision: null,
@@ -734,7 +832,22 @@ export function createEditorStore(init: EditorStoreInit): EditorStoreHandle {
             }
             : d,
         );
-        return { divisions, openItem };
+        // The TOC keys a row's open/shut state by xml:id, so a rename carries
+        // it across rather than snapping an open branch shut.
+        const renamed =
+          changes.xmlId != null && changes.xmlId !== xmlId ? changes.xmlId : null;
+        if (!renamed) return { divisions, openItem };
+        const { [xmlId]: expanded, ...tocExpansion } = s.tocExpansion;
+        return {
+          divisions,
+          openItem,
+          tocExpansion:
+            expanded === undefined
+              ? s.tocExpansion
+              : { ...tocExpansion, [renamed]: expanded },
+          tocRevealedId:
+            s.tocRevealedId === xmlId ? renamed : s.tocRevealedId,
+        };
       }),
     addDivisionToPool: (division) =>
       set((s) => {
@@ -864,6 +977,22 @@ export function createEditorStore(init: EditorStoreInit): EditorStoreHandle {
 
     setFindPanelState: (partial) =>
       set((s) => ({ findPanelState: { ...s.findPanelState, ...partial } })),
+
+    setTocExpanded: (xmlId, expanded) =>
+      set((s) => ({ tocExpansion: { ...s.tocExpansion, [xmlId]: expanded } })),
+    revealInToc: (activeId, ancestorIds, inOrphans) =>
+      set((s) => ({
+        tocExpansion: {
+          ...s.tocExpansion,
+          ...Object.fromEntries(
+            [...ancestorIds, activeId].map((id) => [id, true]),
+          ),
+        },
+        isTocOrphansCollapsed: inOrphans ? false : s.isTocOrphansCollapsed,
+        tocRevealedId: activeId,
+      })),
+    toggleTocOrphansCollapsed: () =>
+      set((s) => ({ isTocOrphansCollapsed: !s.isTocOrphansCollapsed })),
     commitSectionEdit: () => {
       const { editingId, editDraft, divisions, pendingNewDivision } = get();
       if (!editDraft) return;
@@ -1048,6 +1177,23 @@ export function createEditorStore(init: EditorStoreInit): EditorStoreHandle {
     updateLanguage: (language) => bag.cbs.updateLanguage(language),
     feedbackSubmit: (feedback) => bag.cbs.feedbackSubmit?.(feedback),
   }));
+
+  // Save the TOC tree's shape whenever it changes, whichever action changed
+  // it. Keyed by the project the store was created for.
+  const { projectUrl } = init;
+  if (projectUrl) {
+    store.subscribe((s, prev) => {
+      if (
+        s.tocExpansion !== prev.tocExpansion ||
+        s.isTocOrphansCollapsed !== prev.isTocOrphansCollapsed
+      ) {
+        writeStoredTocTree(projectUrl, {
+          tocExpansion: s.tocExpansion,
+          isTocOrphansCollapsed: s.isTocOrphansCollapsed,
+        });
+      }
+    });
+  }
 
   return { store, bindCallbacks: (cbs) => { bag.cbs = cbs; } };
 }

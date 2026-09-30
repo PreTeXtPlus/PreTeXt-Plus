@@ -31,6 +31,7 @@ const DivisionSettings = ({ division, embedFormat }: DivisionSettingsProps) => {
   const commitSectionEdit = useEditorStore((s) => s.commitSectionEdit);
   const cancelSectionEdit = useEditorStore((s) => s.cancelSectionEdit);
   const addSection = useEditorStore((s) => s.addSection);
+  const setTocExpanded = useEditorStore((s) => s.setTocExpanded);
   const {
     divisions,
     rootDivision,
@@ -68,7 +69,12 @@ const DivisionSettings = ({ division, embedFormat }: DivisionSettingsProps) => {
   }
 
   const actions = divisionActionEntries(division, placement, {
-    addChild: (parentXmlId) => addSection(parentXmlId),
+    // Adding a child to a shut TOC row opens it, so the draft row sits after
+    // the existing children — where saving it will put the division.
+    addChild: (parentXmlId) => {
+      setTocExpanded(parentXmlId, true);
+      addSection(parentXmlId);
+    },
     unplace: handleUnplace,
     remove: handleDelete,
     placeInDocument: handlePlaceOrphan,

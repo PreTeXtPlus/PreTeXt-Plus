@@ -111,3 +111,29 @@ export function typeChoices(label: string) {
   fireEvent.click(within(drawer).getByText("Cancel"));
   return choices;
 }
+
+/** Open every TOC row, so tests about a nested row's menu can reach it. */
+export function expandAll(store: TestStore) {
+  const { divisions, setTocExpanded } = store.getState();
+  for (const d of divisions ?? []) setTocExpanded(d.xmlId, true);
+}
+
+/** The titles of the TOC rows on screen, top to bottom. */
+export function visibleTitles() {
+  return [...document.querySelectorAll('[data-testid="toc-title"]')].map(
+    (el) => el.textContent,
+  );
+}
+
+/** Click the expand/collapse chevron on the TOC row titled `label`. */
+export function toggleRow(label: string) {
+  const row = [...document.querySelectorAll('[data-testid^="toc-item-"]')]
+    .find(
+      (li) =>
+        li.querySelector('[data-testid="toc-title"]')?.textContent === label,
+    ) as HTMLElement | undefined;
+  if (!row) throw new Error(`no TOC row for "${label}"`);
+  fireEvent.click(
+    within(row).getByRole("button", { name: /^(Expand|Collapse)$/ }),
+  );
+}

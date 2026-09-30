@@ -17,6 +17,8 @@ import {
   findEntryForLine,
   findWellformednessErrorLine,
   isLocalPreviewAvailable,
+  parsePreviewPage,
+  patchPreviewPage,
   previewThemeMessage,
   renderPreviewHtml,
   type PreviewTheme,
@@ -206,6 +208,33 @@ function entryForClick(
 }
 
 /**
+ * The page in the iframe, as much as patching the next render into it needs.
+ */
+interface ShownPage {
+  /**
+   * The HTML it shows, as rendered — pristine, before any of its scripts ran.
+   * After a patch this is the render patched *in*, not the `srcdoc` the page
+   * originally loaded from.
+   */
+  html: string;
+  /** `html` parsed, filled in the first time a patch needs it. */
+  doc: Document | null;
+  /**
+   * What the page is, for deciding whether the next render may be patched into
+   * it: only a re-render of the same division is, since anything else is a
+   * different page. Null for a page that must always load from scratch — a
+   * slideshow, which reveal.js lays out once at initialize, and print preview,
+   * which pretext-core.js builds destructively on load.
+   */
+  patchKey: string | null;
+  /**
+   * Whether the iframe has finished loading it. A page still loading is not
+   * yet the document `html` describes, so there is nothing to patch.
+   */
+  loaded: boolean;
+}
+
+/**
  * The key pretext-core.js reads to decide light/dark. Because the preview
  * shares this origin — and so this exact `localStorage` — with the editor, an
  * author's choice in the preview's own readability menu survives every rebuild
@@ -287,13 +316,17 @@ const LivePreview = forwardRef<LivePreviewHandle, LivePreviewProps>(
     // it, so switching costs a re-delivery and not a re-render.
     const [printouts, setPrintouts] = useState<PrintoutInfo[]>([]);
     const [printoutId, setPrintoutId] = useState<string | null>(null);
-    // Which division the print selection above belongs to. Re-rendering the
-    // same division on every keystroke must not drag the author out of print
-    // preview — or back into it — so the default is applied once per division
-    // rather than once per render. The initial `null` is a sentinel no
-    // `divisionId` can equal, including `undefined` in document mode.
-    const printoutDivision = useRef<string | undefined | null>(null);
+    // Which division the latest render belongs to. Two things key off it: the
+    // print selection above — re-rendering the same division on every
+    // keystroke must not drag the author out of print preview, or back into
+    // it, so the default is applied once per division rather than once per
+    // render — and whether the render may be patched into the page on screen.
+    // The initial `null` is a sentinel no `divisionId` can equal, including
+    // `undefined` in document mode.
+    const renderedDivision = useRef<string | undefined | null>(null);
     const iframeRef = useRef<HTMLIFrameElement>(null);
+    // What the iframe is showing; null until the first local delivery.
+    const shownPage = useRef<ShownPage | null>(null);
     const savedScrollPosition = useRef<{ x: number; y: number } | null>(null);
     // Only the newest render may commit: a fast second rebuild must not be
     // overwritten by a slower one that started earlier.
@@ -322,9 +355,10 @@ const LivePreview = forwardRef<LivePreviewHandle, LivePreviewProps>(
       const source = content;
       const previewTitle = title || "Document Title";
 
-      // Save scroll position before rebuilding so the author keeps their place.
-      // Readable for a local render (same-origin); a cross-origin server
-      // preview will throw, which is fine.
+      // Save scroll position before rebuilding so the author keeps their place
+      // should the new page have to be loaded from scratch; a page patched in
+      // place never loses it. Readable for a local render (same-origin); a
+      // cross-origin server preview will throw, which is fine.
       try {
         const iframeWindow = iframeRef.current?.contentWindow;
         if (iframeWindow) {
@@ -356,12 +390,12 @@ const LivePreview = forwardRef<LivePreviewHandle, LivePreviewProps>(
             sourceMapRef.current = sourceMap;
             setRenderTarget(target);
             setPrintouts(printouts);
-            if (printoutDivision.current !== divisionId) {
+            if (renderedDivision.current !== divisionId) {
               // A division the author has just switched to. Open it on paper
               // when the division *is* a printout — editing `worksheet-3.ptx`,
               // where the paper layout is the whole point — and on screen when
               // it merely contains some.
-              printoutDivision.current = divisionId;
+              renderedDivision.current = divisionId;
               setPrintoutId(rootPrintout ?? null);
             } else {
               // Same division, edited: the printout being shown may have just
@@ -438,13 +472,50 @@ const LivePreview = forwardRef<LivePreviewHandle, LivePreviewProps>(
       return applyPrintPreview(page, printoutId ?? undefined);
     }, [previewHtml, renderTarget, revealView, revealZoom, printoutId]);
 
+    // Put the page on screen. A re-render of the page already there is patched
+    // into it (see patchPreviewPage): only the blocks that changed are replaced
+    // and re-typeset, so the preview updates without blanking, and the author
+    // keeps their scroll position and whatever they had opened. Anything else
+    // — a first page, another division, a slideshow, print preview, or a
+    // change the patcher declines — is delivered as a fresh document.
+    //
+    // `srcdoc` is set here rather than passed as a prop: a patched page must
+    // keep the `srcdoc` it loaded from, and the next fresh delivery must reload
+    // even when its HTML happens to equal that stale attribute (an edit undone
+    // after a patch), which React would skip as unchanged.
+    useEffect(() => {
+      const iframe = iframeRef.current;
+      if (!renderLocally || pageHtml === null || !iframe) return;
+      const shown = shownPage.current;
+      if (shown?.html === pageHtml) return;
+      const patchKey =
+        renderTarget === "html" && printoutId === null
+          ? `division:${renderedDivision.current ?? ""}`
+          : null;
+      const win = iframe.contentWindow;
+      if (patchKey !== null && shown?.loaded && shown.patchKey === patchKey && win) {
+        const next = parsePreviewPage(pageHtml);
+        shown.doc ??= parsePreviewPage(shown.html);
+        if (patchPreviewPage(win, shown.doc, next)) {
+          shownPage.current = { html: pageHtml, doc: next, patchKey, loaded: true };
+          // No load follows to consume it, and the page never lost its place.
+          savedScrollPosition.current = null;
+          return;
+        }
+      }
+      shownPage.current = { html: pageHtml, doc: null, patchKey, loaded: false };
+      iframe.srcdoc = pageHtml;
+    }, [pageHtml, renderTarget, printoutId, renderLocally]);
+
     /**
      * Wire up a document that has just appeared in the iframe: preview → source
      * sync, and the scroll position saved before the rebuild.
      *
      * Called once per loaded document, so the listener is attached fresh each
-     * time and there is nothing to clean up. Passive and non-capturing: the
-     * page's own links and knowls behave normally.
+     * time and there is nothing to clean up. A patch keeps the document, and
+     * with it the listener, which reads the source map through a ref and so
+     * follows each render. Passive and non-capturing: the page's own links and
+     * knowls behave normally.
      */
     const wireRenderedDocument = useCallback(() => {
       const doc = iframeRef.current?.contentDocument;
@@ -538,6 +609,8 @@ const LivePreview = forwardRef<LivePreviewHandle, LivePreviewProps>(
       if (!renderLocally) {
         setIsRebuilding(false);
       } else {
+        // Null for the iframe's initial about:blank, which is not a page.
+        if (shownPage.current) shownPage.current.loaded = true;
         wireRenderedDocument();
       }
     };
@@ -721,10 +794,10 @@ const LivePreview = forwardRef<LivePreviewHandle, LivePreviewProps>(
             name="livePreview"
             title="PreTeXt preview"
             onLoad={handleIframeLoad}
-            // Two transports, one element. A local render is delivered as
-            // `srcdoc`; the server path posts a form into this iframe *by
-            // name*, so it must have no `srcdoc` attribute set at all.
-            {...(renderLocally && pageHtml !== null ? { srcDoc: pageHtml } : {})}
+            // Two transports, one element. A local render is patched in or
+            // delivered as `srcdoc` by the effect above; the server path posts
+            // a form into this iframe *by name*, so it must have no `srcdoc`
+            // attribute set at all.
           />
           {showBrowserTip && (
             <div

@@ -5,7 +5,7 @@ import { buildProjectAssetView } from "../assetView";
 import { buildProjectSnippetView } from "../snippetView";
 import { useEditorStore } from "../store/hooks";
 import type { EditorTarget } from "./editorTarget";
-import { AssetsIcon, SnippetsIcon, TocIcon } from "./toc/explorerIcons";
+import { AssetsIcon, SnippetsIcon, TocIcon } from "./icons";
 import { divisionDisplayTitle, TYPE_FULL_LABELS } from "./toc/types";
 import { useDivisionActions } from "./toc/useDivisionActions";
 import { findDivisionPlacement } from "./toc/divisionActions";

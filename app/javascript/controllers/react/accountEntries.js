@@ -1,8 +1,5 @@
 /**
- * Builds the Account menu's entries — same content for the standalone
- * "Account" dropdown (`AccountArea.jsx`) and for folding into the File menu
- * on small viewports (`TopBar`'s `accountMenuEntries` prop), so both stay in
- * sync from one source.
+ * Builds the entries of the "Account" dropdown (`AccountArea.jsx`).
  *
  * @param {Object} props
  * @param {boolean} [props.signedIn]
@@ -14,6 +11,8 @@
  * @param {() => void} [props.onSignOut]
  * @param {string} [props.newUserPath] - Signed-out only.
  * @param {string} [props.newSessionPath] - Signed-out only.
+ * @param {(path: string) => void} [props.navigate] - Follows an entry's link.
+ *   Defaults to a plain page load; the editor passes one that saves first.
  * @returns {import("@pretextbook/web-editor").MenuEntry[]}
  */
 export function buildAccountEntries({
@@ -26,6 +25,9 @@ export function buildAccountEntries({
   onSignOut,
   newUserPath,
   newSessionPath,
+  navigate = (path) => {
+    window.location.href = path;
+  },
 }) {
   return signedIn
     ? [
@@ -33,9 +35,7 @@ export function buildAccountEntries({
           kind: "item",
           key: "projects",
           label: "Projects",
-          onSelect: () => {
-            window.location.href = projectsPath;
-          },
+          onSelect: () => navigate(projectsPath),
         },
         { kind: "separator", key: "projects-sep" },
         ...(hasProfilePage
@@ -44,9 +44,7 @@ export function buildAccountEntries({
                 kind: "item",
                 key: "profile",
                 label: "Public Profile",
-                onSelect: () => {
-                  window.location.href = profilePath;
-                },
+                onSelect: () => navigate(profilePath),
               },
             ]
           : []),
@@ -54,17 +52,13 @@ export function buildAccountEntries({
           kind: "item",
           key: "settings",
           label: "Settings",
-          onSelect: () => {
-            window.location.href = settingsPath;
-          },
+          onSelect: () => navigate(settingsPath),
         },
         {
           kind: "item",
           key: "subscriptions",
           label: "Manage Subscriptions",
-          onSelect: () => {
-            window.location.href = subscriptionsPath;
-          },
+          onSelect: () => navigate(subscriptionsPath),
         },
         {
           kind: "item",
@@ -78,17 +72,13 @@ export function buildAccountEntries({
           kind: "item",
           key: "create-account",
           label: "Create account",
-          onSelect: () => {
-            window.location.href = newUserPath;
-          },
+          onSelect: () => navigate(newUserPath),
         },
         {
           kind: "item",
           key: "sign-in",
           label: "Sign in",
-          onSelect: () => {
-            window.location.href = newSessionPath;
-          },
+          onSelect: () => navigate(newSessionPath),
         },
       ];
 }

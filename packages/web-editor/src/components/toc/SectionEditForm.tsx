@@ -1,4 +1,4 @@
-import { useRef } from "react";
+import { useEffect, useRef } from "react";
 import type { SourceFormat } from "../../types/editor";
 import type { DivisionType } from "../../types/sections";
 import {
@@ -65,11 +65,20 @@ const SectionEditForm = ({
   // since renaming it rewrites every reference to it.
   const idFollowsTitle = useRef(isNew);
 
+  // Open with the title selected, so typing replaces it outright: a rename is
+  // the usual reason to open the form, and a new division's title is only a
+  // placeholder.
+  const titleRef = useRef<HTMLInputElement>(null);
+  useEffect(() => {
+    titleRef.current?.select();
+  }, []);
+
   return (
   <div className="flex flex-col gap-1.5 py-2 px-2 pl-2.5 bg-indigo-50 border-t border-indigo-200">
     <label className={FIELD_LABEL_CLASSES}>
       <span className={FIELD_LABEL_TEXT_CLASSES}>Title</span>
       <input
+        ref={titleRef}
         className={FIELD_CONTROL_CLASSES}
         type="text"
         value={draft.title}

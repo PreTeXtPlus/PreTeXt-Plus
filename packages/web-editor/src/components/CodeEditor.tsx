@@ -316,6 +316,12 @@ const CodeEditor = forwardRef<CodeEditorHandle, CodeEditorProps>(({
   // Read from the mount-time paste listener, likewise registered once.
   const pasteAutoConvertRef = useRef(pasteAutoConvert);
   pasteAutoConvertRef.current = pasteAutoConvert;
+  // Read from `handleEditorMount`, which @monaco-editor/react keeps from its
+  // first render: a remount (the layout switch) can hand the previous editor's
+  // unreported typing to the host after that render, so the closure's
+  // `content` would be the text from before it.
+  const contentRef = useRef(content);
+  contentRef.current = content;
   /** Removes the DOM paste listener; see `handleEditorMount`. */
   const pasteListenerRef = useRef<(() => void) | null>(null);
   const lockedDecorationsRef = useRef<any>(null);
@@ -551,7 +557,14 @@ const CodeEditor = forwardRef<CodeEditorHandle, CodeEditorProps>(({
       editGuardRef.current?.();
       editGuardRef.current = null;
       findStateListenerRef.current?.dispose?.();
+      // Deliver a change the debounce is still holding, never drop it: the
+      // editor can unmount under the author's hands (crossing the tabbed/split
+      // layout breakpoint remounts it), and the last 500 ms of typing would
+      // otherwise vanish with it, unseen by the host and never saved.
       if (debounceRef.current) clearTimeout(debounceRef.current);
+      const pending = pendingChangeRef.current;
+      pendingChangeRef.current = null;
+      pending?.();
     };
   }, []);
 
@@ -928,8 +941,8 @@ const CodeEditor = forwardRef<CodeEditorHandle, CodeEditorProps>(({
     // collab mode the binding (created below) aligns the model to the shared
     // text instead.
     const model = editor.getModel();
-    if (!collabRef.current && model && model.getValue() !== content) {
-      setModelValueSafely(model, content);
+    if (!collabRef.current && model && model.getValue() !== contentRef.current) {
+      setModelValueSafely(model, contentRef.current);
     }
     // Install the collab edit guard once per mount. It enforces only while a
     // binding is live (`isEnabled`), so it is inert in solo mode where the

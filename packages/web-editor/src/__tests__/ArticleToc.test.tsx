@@ -2,14 +2,17 @@
  * @vitest-environment jsdom
  */
 import { describe, it, expect } from "vitest";
-import { fireEvent, screen, within } from "@testing-library/react";
+import { act, fireEvent, screen, within } from "@testing-library/react";
 import type { Division } from "../types/sections";
 import {
   divisions,
+  expandAll,
   openSettings,
   renderWithStore,
   tocRow,
+  toggleRow,
   typeChoices,
+  visibleTitles,
   type TestStore,
 } from "./tocTestUtils";
 import TocWithSettings from "./TocWithSettings";
@@ -25,6 +28,53 @@ function renderToc(
     configure,
   );
 }
+
+// book › chapter › (introduction, section › exercises)
+const bookDivisions: Division[] = [
+  {
+    id: "1",
+    xmlId: "bk",
+    title: "Book",
+    type: "book",
+    sourceFormat: "pretext",
+    source:
+      '<book xml:id="bk"><title>Book</title><plus:chapter ref="ch"/></book>',
+  },
+  {
+    id: "2",
+    xmlId: "ch",
+    title: "Chapter one",
+    type: "chapter",
+    sourceFormat: "pretext",
+    source:
+      '<chapter xml:id="ch"><title>Chapter one</title><plus:introduction ref="intro"/><plus:section ref="sec"/></chapter>',
+  },
+  {
+    id: "3",
+    xmlId: "intro",
+    title: "",
+    type: "introduction",
+    sourceFormat: "pretext",
+    source: '<introduction xml:id="intro"><p>Hello.</p></introduction>',
+  },
+  {
+    id: "4",
+    xmlId: "sec",
+    title: "A section",
+    type: "section",
+    sourceFormat: "pretext",
+    source:
+      '<section xml:id="sec"><title>A section</title><plus:exercises ref="ex"/></section>',
+  },
+  {
+    id: "5",
+    xmlId: "ex",
+    title: "Exercises",
+    type: "exercises",
+    sourceFormat: "pretext",
+    source: '<exercises xml:id="ex"><title>Exercises</title></exercises>',
+  },
+];
 
 describe("ArticleToc", () => {
   it("has no per-row menus: a row only opens its division", () => {
@@ -48,55 +98,28 @@ describe("ArticleToc", () => {
   });
 });
 
+describe("ArticleToc properties form", () => {
+  it("opens with the title focused and selected", () => {
+    renderToc(false);
+    const drawer = openSettings("A section");
+    const title = within(drawer).getByDisplayValue("A section") as HTMLInputElement;
+    expect(document.activeElement).toBe(title);
+    expect(title.selectionStart).toBe(0);
+    expect(title.selectionEnd).toBe("A section".length);
+  });
+});
+
 // The Type dropdown is what Save persists, so anything it offers is a
 // structure the author can produce with one click. These pin down that it only
 // ever offers types valid where the division sits.
 describe("ArticleToc division type choices", () => {
-  const bookDivisions: Division[] = [
-    {
-      id: "1",
-      xmlId: "bk",
-      title: "Book",
-      type: "book",
-      sourceFormat: "pretext",
-      source:
-        '<book xml:id="bk"><title>Book</title><plus:chapter ref="ch"/></book>',
-    },
-    {
-      id: "2",
-      xmlId: "ch",
-      title: "Chapter one",
-      type: "chapter",
-      sourceFormat: "pretext",
-      source:
-        '<chapter xml:id="ch"><title>Chapter one</title><plus:introduction ref="intro"/><plus:section ref="sec"/></chapter>',
-    },
-    {
-      id: "3",
-      xmlId: "intro",
-      title: "",
-      type: "introduction",
-      sourceFormat: "pretext",
-      source: '<introduction xml:id="intro"><p>Hello.</p></introduction>',
-    },
-    {
-      id: "4",
-      xmlId: "sec",
-      title: "A section",
-      type: "section",
-      sourceFormat: "pretext",
-      source:
-        '<section xml:id="sec"><title>A section</title><plus:exercises ref="ex"/></section>',
-    },
-    {
-      id: "5",
-      xmlId: "ex",
-      title: "Exercises",
-      type: "exercises",
-      sourceFormat: "pretext",
-      source: '<exercises xml:id="ex"><title>Exercises</title></exercises>',
-    },
-  ];
+  const renderToc = (readOnly?: boolean, docDivisions?: Division[]) =>
+    renderWithStore(
+      <TocWithSettings readOnly={readOnly} />,
+      docDivisions,
+      expandAll,
+    );
+
 
   it("offers the root only the root document types", () => {
     renderToc(false, bookDivisions);
@@ -262,5 +285,179 @@ describe("ArticleToc division type choices", () => {
       expect(value, label).toBe(type);
       expect(options, label).toContain(type);
     }
+  });
+});
+
+describe("ArticleToc expand/collapse", () => {
+  // Two unplaced divisions: a chapter heading its own two-deep subtree, and a
+  // lone section.
+  const withOrphans: Division[] = [
+    ...bookDivisions,
+    {
+      id: "6",
+      xmlId: "loose",
+      title: "Loose chapter",
+      type: "chapter",
+      sourceFormat: "pretext",
+      source:
+        '<chapter xml:id="loose"><title>Loose chapter</title><plus:section ref="loose-sec"/></chapter>',
+    },
+    {
+      id: "7",
+      xmlId: "loose-sec",
+      title: "Loose section",
+      type: "section",
+      sourceFormat: "pretext",
+      source:
+        '<section xml:id="loose-sec"><title>Loose section</title><plus:subsection ref="loose-sub"/></section>',
+    },
+    {
+      id: "8",
+      xmlId: "loose-sub",
+      title: "Loose subsection",
+      type: "subsection",
+      sourceFormat: "pretext",
+      source:
+        '<subsection xml:id="loose-sub"><title>Loose subsection</title></subsection>',
+    },
+    {
+      id: "9",
+      xmlId: "stray",
+      title: "Stray section",
+      type: "section",
+      sourceFormat: "pretext",
+      source: '<section xml:id="stray"><title>Stray section</title></section>',
+    },
+  ];
+
+  const unplacedHeader = () =>
+    screen.getByText("Unplaced divisions").closest("button")!;
+
+  it("opens showing only the root's children", () => {
+    renderToc(false, bookDivisions);
+    expect(visibleTitles()).toEqual(["Book", "Chapter one"]);
+  });
+
+  it("opens and shuts a row from its chevron", () => {
+    renderToc(false, bookDivisions);
+    toggleRow("Chapter one");
+    expect(visibleTitles()).toEqual([
+      "Book",
+      "Chapter one",
+      "Introduction",
+      "A section",
+    ]);
+    toggleRow("Chapter one");
+    expect(visibleTitles()).toEqual(["Book", "Chapter one"]);
+  });
+
+  it("shuts the whole tree from the root's chevron", () => {
+    renderToc(false, bookDivisions);
+    toggleRow("Book");
+    expect(visibleTitles()).toEqual(["Book"]);
+  });
+
+  it("opens the rows above the division that is active on load", () => {
+    renderToc(false, bookDivisions, (store) =>
+      store.getState().openDivision("ex"),
+    );
+    expect(visibleTitles()).toEqual([
+      "Book",
+      "Chapter one",
+      "Introduction",
+      "A section",
+      "Exercises",
+    ]);
+  });
+
+  it("opens the rows above a division that becomes active", () => {
+    const { store } = renderToc(false, bookDivisions);
+    act(() => store.getState().openDivision("sec"));
+    expect(visibleTitles()).toContain("A section");
+  });
+
+  it("opens a division that becomes active one level deep", () => {
+    const { store } = renderToc(false, bookDivisions);
+    act(() => store.getState().openDivision("ch"));
+    // The chapter's children show, but the section below it stays shut.
+    expect(visibleTitles()).toEqual([
+      "Book",
+      "Chapter one",
+      "Introduction",
+      "A section",
+    ]);
+  });
+
+  it("opens a division when the author selects it in the TOC", () => {
+    renderToc(false, bookDivisions);
+    fireEvent.click(within(tocRow("Chapter one")).getByTestId("toc-title"));
+    expect(visibleTitles()).toContain("A section");
+  });
+
+  it("leaves shut an active division the author has since shut", () => {
+    const { store } = renderToc(false, bookDivisions);
+    act(() => store.getState().openDivision("ch"));
+    toggleRow("Chapter one");
+    expect(visibleTitles()).toEqual(["Book", "Chapter one"]);
+  });
+
+  it("opens a shut row that a new division is being added to", () => {
+    const { store } = renderToc(false, bookDivisions);
+    const drawer = openSettings("Chapter one");
+    // Opening the chapter reveals it; shut it again so adding has to reopen it.
+    toggleRow("Chapter one");
+    expect(store.getState().tocExpansion.ch).toBe(false);
+    fireEvent.click(within(drawer).getByText("Add new division"));
+    expect(store.getState().tocExpansion.ch).toBe(true);
+    expect(visibleTitles()).toContain("A section");
+  });
+
+  it("keeps a renamed row open", () => {
+    const { store } = renderToc(false, bookDivisions);
+    toggleRow("Chapter one");
+    act(() => store.getState().patchDivision("ch", { xmlId: "ch-renamed" }));
+    const { tocExpansion } = store.getState();
+    expect(tocExpansion["ch-renamed"]).toBe(true);
+    expect(tocExpansion).not.toHaveProperty("ch");
+  });
+
+  it("lists unplaced divisions shut, one row per dangling subtree", () => {
+    renderToc(false, withOrphans);
+    expect(visibleTitles()).toEqual([
+      "Book",
+      "Chapter one",
+      "Loose chapter",
+      "Stray section",
+    ]);
+    expect(unplacedHeader()).toHaveTextContent("2");
+  });
+
+  it("opens an unplaced subtree one level at a time", () => {
+    renderToc(false, withOrphans);
+    toggleRow("Loose chapter");
+    expect(visibleTitles()).toContain("Loose section");
+    expect(visibleTitles()).not.toContain("Loose subsection");
+    toggleRow("Loose section");
+    expect(visibleTitles()).toContain("Loose subsection");
+  });
+
+  it("folds the unplaced block down to its header", () => {
+    const { store } = renderToc(false, withOrphans);
+    expect(unplacedHeader()).toHaveAttribute("aria-expanded", "true");
+    fireEvent.click(unplacedHeader());
+    expect(unplacedHeader()).toHaveAttribute("aria-expanded", "false");
+    expect(visibleTitles()).toEqual(["Book", "Chapter one"]);
+    expect(store.getState().isTocOrphansCollapsed).toBe(true);
+    fireEvent.click(unplacedHeader());
+    expect(visibleTitles()).toContain("Stray section");
+  });
+
+  it("unfolds the unplaced block to show an active division inside it", () => {
+    renderToc(false, withOrphans, (store) => {
+      store.getState().toggleTocOrphansCollapsed();
+      store.getState().openDivision("loose-sub");
+    });
+    expect(unplacedHeader()).toHaveAttribute("aria-expanded", "true");
+    expect(visibleTitles()).toContain("Loose subsection");
   });
 });

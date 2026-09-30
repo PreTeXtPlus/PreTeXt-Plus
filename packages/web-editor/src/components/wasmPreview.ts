@@ -31,11 +31,12 @@ import type {
   RenderTarget,
   SourceMapEntry,
 } from "@pretextbook/pretext-html";
-// `./reveal` and `./theme` are dependency-free leaf modules of the same
-// package — no libxslt-wasm, no top-level await — so unlike the renderer entry
-// these are imported statically. They only rewrite/describe HTML the renderer
-// already produced, which is what lets the slideshow view and the preview
-// theme change without paying for a re-render.
+// `./reveal`, `./theme`, `./printout` and `./live-patch` are dependency-free
+// leaf modules of the same package — no libxslt-wasm, no top-level await — so
+// unlike the renderer entry these are imported statically. They only
+// rewrite/describe HTML the renderer already produced, or apply it to the page
+// on screen, which is what lets the slideshow view and the preview theme change
+// without paying for a re-render, and a re-render land without a reload.
 import { injectRevealBridge, type RevealView } from "@pretextbook/pretext-html/reveal";
 import {
   previewThemeMessage,
@@ -45,6 +46,11 @@ import {
   injectPrintPreview,
   type PrintoutInfo,
 } from "@pretextbook/pretext-html/printout";
+import {
+  patchDocument,
+  typesetPatch,
+  type LivePatchResult,
+} from "@pretextbook/pretext-html/live-patch";
 
 export type { PreviewTheme, RevealView, PrintoutInfo };
 export { previewThemeMessage };
@@ -305,6 +311,53 @@ export function applyPrintPreview(
   printoutId: string | undefined,
 ): string {
   return injectPrintPreview(html, printoutId);
+}
+
+/**
+ * A pristine parse of a delivered page, for {@link patchPreviewPage} to diff.
+ *
+ * Parsed from the HTML rather than read off the iframe: the live document has
+ * been rewritten by MathJax and pretext-core.js since it loaded, so a diff
+ * against it would find changes everywhere. Scripts in a parsed document never
+ * run.
+ */
+export function parsePreviewPage(html: string): Document {
+  return new DOMParser().parseFromString(html, "text/html");
+}
+
+/**
+ * Bring the page running in `win` — delivered from `previous` — up to date
+ * with `next` in place, touching only the blocks that changed and having
+ * MathJax typeset just those. Everything else on the page is left exactly as
+ * it was: the scroll position, typeset math, opened knowls and proofs.
+ *
+ * Returns false when the patcher declines — a change to the page head, to a
+ * script or a Runestone exercise, or a live page it can no longer match to
+ * `previous`. The page is then untouched, and the caller must deliver `next`
+ * as a fresh document instead, which is always correct, just not smooth.
+ *
+ * Called from the editor's window on the iframe's document, which only works
+ * because the preview is same-origin; the patcher creates its nodes with the
+ * live document's `importNode`, so they belong to the iframe's realm.
+ */
+export function patchPreviewPage(
+  win: Window,
+  previous: Document,
+  next: Document,
+): boolean {
+  let result: LivePatchResult;
+  try {
+    result = patchDocument(win.document, previous, next);
+  } catch (err) {
+    // A bug in the patcher rather than a decline. It may have left the page
+    // half-patched, but the fresh delivery that follows replaces all of it.
+    console.error("PreTeXt preview: live patch failed", err);
+    return false;
+  }
+  if (!result.ok) return false;
+  // Never rejects: typesetting failures are logged by the patcher itself.
+  void typesetPatch(win, result);
+  return true;
 }
 
 /**

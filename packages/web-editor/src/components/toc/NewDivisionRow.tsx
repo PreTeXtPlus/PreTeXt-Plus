@@ -24,7 +24,7 @@ const NewDivisionRow = ({ draft, depth }: NewDivisionRowProps) => (
       className="flex items-center gap-0.5 px-1 min-h-8"
       style={depth > 0 ? { paddingLeft: `${depth * 14}px` } : undefined}
     >
-      <span className="shrink-0 w-4" aria-hidden="true" />
+      <span className="shrink-0 w-5" aria-hidden="true" />
       <span className="flex-1 min-w-0 py-1 px-0.5 overflow-hidden">
         <span className="block overflow-hidden text-ellipsis whitespace-nowrap text-[0.83rem] italic text-indigo-700">
           {draft.title.trim() ||

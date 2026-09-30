@@ -1,7 +1,7 @@
 /**
  * @vitest-environment jsdom
  */
-import { describe, it, expect, vi, afterEach } from "vitest";
+import { describe, it, expect, vi } from "vitest";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type { ReactNode } from "react";
@@ -219,60 +219,75 @@ describe("TopBar", () => {
     await user.click(screen.getByRole("menuitem", { name: /^Select All/ }));
   });
 
-  describe("compact viewport", () => {
-    /** Stubs `window.matchMedia` to report a fixed `matches` for every query. */
-    function stubMatchMedia(matches: boolean) {
-      const mql = {
-        matches,
-        media: "",
-        addEventListener: vi.fn(),
-        removeEventListener: vi.fn(),
-      } as unknown as MediaQueryList;
-      vi.stubGlobal("matchMedia", vi.fn().mockReturnValue(mql));
-    }
+  it("shows no save status unless the host reports one", () => {
+    renderWithStore();
+    expect(screen.queryByTestId("save-status")).not.toBeInTheDocument();
+  });
 
-    afterEach(() => {
-      vi.unstubAllGlobals();
-    });
+  it("shows the save status beside the title as an icon, not a button while nothing needs saving", () => {
+    const onSaveNow = vi.fn();
+    const { unmount } = renderWithStore({ saveStatus: "saved", onSaveNow });
+    expect(screen.getByRole("img", { name: "Saved" })).toHaveAttribute(
+      "title",
+      "All changes saved",
+    );
+    expect(screen.queryByRole("button", { name: /Saved/ })).not.toBeInTheDocument();
+    unmount();
 
-    const accountMenuEntries = [
-      {
-        kind: "item" as const,
-        key: "sign-out",
-        label: "Sign out",
-        onSelect: vi.fn(),
+    renderWithStore({ saveStatus: "saving", onSaveNow });
+    expect(screen.getByRole("img", { name: "Saving…" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /Saving/ })).not.toBeInTheDocument();
+  });
+
+  it("offers to save now while there are unsaved changes or a failed save", async () => {
+    const user = userEvent.setup();
+    const onSaveNow = vi.fn();
+    const { unmount } = renderWithStore({ saveStatus: "unsaved", onSaveNow });
+    const unsaved = screen.getByRole("button", { name: "Unsaved changes" });
+    expect(unsaved).toHaveAttribute("title", "Unsaved changes — click to save now");
+    await user.click(unsaved);
+    expect(onSaveNow).toHaveBeenCalledTimes(1);
+    unmount();
+
+    renderWithStore({ saveStatus: "error", onSaveNow });
+    await user.click(screen.getByRole("button", { name: "Not saved" }));
+    expect(onSaveNow).toHaveBeenCalledTimes(2);
+  });
+
+  it("renders the primary action as a labeled button", async () => {
+    const user = userEvent.setup();
+    const onSelect = vi.fn();
+    renderWithStore({
+      primaryAction: {
+        label: "Manage project",
+        title: "Open the project page",
+        icon: <svg data-testid="action-icon" />,
+        onSelect,
       },
-    ];
-
-    it("folds account entries into File and hides accountArea when compact", async () => {
-      stubMatchMedia(true);
-      const user = userEvent.setup();
-      renderWithStore({
-        accountArea: <span>Account stuff</span>,
-        accountMenuEntries,
-      });
-
-      expect(screen.queryByText("Account stuff")).not.toBeInTheDocument();
-
-      await user.click(screen.getByRole("button", { name: "File" }));
-      expect(
-        screen.getByRole("menuitem", { name: "Sign out" }),
-      ).toBeInTheDocument();
     });
+    const button = screen.getByRole("button", { name: "Manage project" });
+    expect(button).toHaveAttribute("title", "Open the project page");
+    expect(screen.getByTestId("action-icon")).toBeInTheDocument();
+    await user.click(button);
+    expect(onSelect).toHaveBeenCalled();
+  });
 
-    it("keeps accountArea and leaves File unchanged without a matchMedia stub", async () => {
-      const user = userEvent.setup();
-      renderWithStore({
-        accountArea: <span>Account stuff</span>,
-        accountMenuEntries,
-      });
+  it("renders no primary action button when none is supplied", () => {
+    renderWithStore();
+    expect(
+      screen.queryByRole("button", { name: "Manage project" }),
+    ).not.toBeInTheDocument();
+  });
 
-      expect(screen.getByText("Account stuff")).toBeInTheDocument();
+  it("keeps the account area in the bar and out of File", async () => {
+    const user = userEvent.setup();
+    renderWithStore({ accountArea: <span>Account stuff</span> });
 
-      await user.click(screen.getByRole("button", { name: "File" }));
-      expect(
-        screen.queryByRole("menuitem", { name: "Sign out" }),
-      ).not.toBeInTheDocument();
-    });
+    expect(screen.getByText("Account stuff")).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "File" }));
+    expect(
+      screen.queryByRole("menuitem", { name: "Sign out" }),
+    ).not.toBeInTheDocument();
   });
 });
