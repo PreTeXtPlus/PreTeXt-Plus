@@ -48,6 +48,15 @@ export interface CleanSupport {
   describeFix: (fix: CleanFix) => string;
 }
 
+/** What `CodeEditor` knows about the editor beyond Monaco itself. */
+export interface MonacoExtensionContext {
+  /**
+   * True while the collab binding is writing a peer's edit into the model.
+   * Read lazily: the binding comes and goes after registration.
+   */
+  isRemoteChange: () => boolean;
+}
+
 /** Per-format Monaco editor configuration. */
 export interface FormatEditorConfig {
   /** Monaco language identifier for syntax highlighting. */
@@ -71,5 +80,6 @@ export interface FormatEditorConfig {
   registerMonacoExtensions?: (
     monaco: any,
     editor: any,
+    context: MonacoExtensionContext,
   ) => { dispose: () => void } | null;
 }

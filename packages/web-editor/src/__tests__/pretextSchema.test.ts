@@ -11,6 +11,7 @@
  * `fetch` stubbed to serve it, so the suite stays offline.
  */
 
+/// <reference types="node" />
 import { describe, it, expect, beforeAll, afterAll, vi } from "vitest";
 import fs from "node:fs";
 import path from "node:path";

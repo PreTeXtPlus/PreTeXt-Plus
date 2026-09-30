@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import { fromXml } from 'xast-util-from-xml'
+import type { Element } from 'xast'
 import {
   splitDocument,
   mergeDocument,
@@ -32,6 +33,7 @@ import {
   assembleProjectSource,
   assembleFullProjectSource,
   wrapDivisionForPreview,
+  DEFAULT_LATEX_IMAGE_PREAMBLE,
 } from '../sectionUtils'
 import type { Division } from '../types/sections'
 import type { Asset, Snippet } from '../types/editor'
@@ -690,9 +692,12 @@ describe('wrapDivisionForPreview — the project root type', () => {
   const SLIDES =
     '<section xml:id="sec"><title>Sec</title><slide><title>One</title><p>Hi</p></slide></section>'
 
-  /** The wrapper element's tag name — it also carries a root `@label`. */
+  /**
+   * The wrapper element's tag name — it also carries a root `@label`. Past the
+   * `<docinfo>`, which every document has, if only for its image preamble.
+   */
   const wrapperTag = (xml: string) =>
-    xml.match(/^<pretext[^>]*>\s*<([a-z-]+)/)?.[1]
+    xml.match(/^<pretext[^>]*>\s*(?:<docinfo>[\s\S]*?<\/docinfo>\s*)?<([a-z-]+)/)?.[1]
 
   it('wraps a non-root division of a slideshow in <slideshow>', () => {
     const xml = wrapDivisionForPreview('section', SLIDES, '', 'My Deck', undefined, 'slideshow')
@@ -819,6 +824,103 @@ describe('root @label on an assembled document', () => {
   it('leaves a bare division fragment untouched', () => {
     const section = '<section xml:id="s1"><title>First</title><p>Body</p></section>'
     expect(assembleProjectSource([div(section, 'section')], 'a1')).toBe(section)
+  })
+})
+
+// A TikZ <latex-image> needs TikZ loaded in the image preamble, which authors
+// kept having to discover for themselves. Every assembled document now loads it.
+describe('default latex-image preamble', () => {
+  const div: Division = {
+    id: '1',
+    xmlId: 'a1',
+    title: 'My Article',
+    type: 'article',
+    sourceFormat: 'pretext',
+    source: ARTICLE,
+  }
+  const build = (docinfo: string) => assembleFullProjectSource([div], 'a1', docinfo)
+
+  const childElements = (node: { children: unknown[] }, name: string) =>
+    (node.children as Element[]).filter((n) => n.type === 'element' && n.name === name)
+
+  /** Every `<latex-image-preamble>` directly inside the document's `<docinfo>`. */
+  const preamblesOf = (xml: string) => {
+    const [pretext] = childElements(fromXml(xml), 'pretext')
+    const [docinfo] = childElements(pretext, 'docinfo')
+    return childElements(docinfo, 'latex-image-preamble')
+  }
+
+  /** The preamble PreTeXt reads: the first one without `@syntax`. */
+  const preambleOf = (xml: string) => {
+    const preamble = preamblesOf(xml).find((el) => !('syntax' in el.attributes))
+    return preamble?.children.map((c) => ('value' in c ? c.value : '')).join('').trim()
+  }
+
+  it('adds a docinfo when the project has none', () => {
+    expect(preambleOf(build(''))).toBe(DEFAULT_LATEX_IMAGE_PREAMBLE)
+    expect(preambleOf(build('<docinfo/>'))).toBe(DEFAULT_LATEX_IMAGE_PREAMBLE)
+  })
+
+  it('adds a preamble alongside the rest of the docinfo', () => {
+    const docinfo = `<docinfo>
+  <macros>\\newcommand{\\R}{\\mathbb{R}}</macros>
+  <cross-references text="type-global"/>
+</docinfo>`
+    const xml = build(docinfo)
+    expect(xml).toContain(`<docinfo>
+  <macros>\\newcommand{\\R}{\\mathbb{R}}</macros>
+  <cross-references text="type-global"/>
+  <latex-image-preamble>
+${DEFAULT_LATEX_IMAGE_PREAMBLE}
+</latex-image-preamble>
+</docinfo>`)
+    expect(preambleOf(xml)).toBe(DEFAULT_LATEX_IMAGE_PREAMBLE)
+  })
+
+  it("puts TikZ ahead of the author's own preamble, which may build on it", () => {
+    const docinfo =
+      '<docinfo><latex-image-preamble>\\usetikzlibrary{arrows}\n</latex-image-preamble></docinfo>'
+    const xml = build(docinfo)
+    expect(preamblesOf(xml)).toHaveLength(1)
+    expect(preambleOf(xml)).toBe(`${DEFAULT_LATEX_IMAGE_PREAMBLE}\n\\usetikzlibrary{arrows}`)
+  })
+
+  it('fills in an empty preamble element', () => {
+    expect(preambleOf(build('<docinfo><latex-image-preamble/></docinfo>'))).toBe(
+      DEFAULT_LATEX_IMAGE_PREAMBLE,
+    )
+  })
+
+  it('leaves a preamble for another @syntax alone', () => {
+    const pgf = '<latex-image-preamble syntax="PGF">\\pgfkeys{}</latex-image-preamble>'
+    const alone = build(`<docinfo>${pgf}</docinfo>`)
+    expect(alone).toContain(pgf)
+    expect(preambleOf(alone)).toBe(DEFAULT_LATEX_IMAGE_PREAMBLE)
+
+    const beside = build(
+      `<docinfo>${pgf}<latex-image-preamble>\\usepackage{x}</latex-image-preamble></docinfo>`,
+    )
+    expect(beside).toContain(pgf)
+    expect(preamblesOf(beside)).toHaveLength(2)
+    expect(preambleOf(beside)).toBe(`${DEFAULT_LATEX_IMAGE_PREAMBLE}\n\\usepackage{x}`)
+  })
+
+  it('is not fooled by a preamble in a comment or nested deeper', () => {
+    const docinfo =
+      '<docinfo><!-- <latex-image-preamble> --><rename><latex-image-preamble/></rename></docinfo>'
+    const xml = build(docinfo)
+    expect(xml).toContain('<!-- <latex-image-preamble> --><rename><latex-image-preamble/></rename>')
+    expect(preambleOf(xml)).toBe(DEFAULT_LATEX_IMAGE_PREAMBLE)
+    expectWellFormed(xml)
+  })
+
+  it('passes a docinfo it cannot read through unchanged', () => {
+    expect(build('<macros>x</macros>')).toContain('<pretext>\n<macros>x</macros>\n<article')
+  })
+
+  it('is in a division preview too', () => {
+    const xml = wrapDivisionForPreview('section', '<section xml:id="s1"/>', '', 'Title')
+    expect(preambleOf(xml)).toBe(DEFAULT_LATEX_IMAGE_PREAMBLE)
   })
 })
 
