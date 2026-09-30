@@ -194,8 +194,11 @@ const TopBar = (props: TopBarProps) => {
       : []),
   ];
 
+  // `relative z-30` lifts the whole bar — and so its open menus — above the
+  // workspace below it, whose own z-indexes (the editor title bar and its
+  // settings drawer, the preview's overlays) are contained by `isolate` there.
   return (
-    <div className="grid grid-cols-[auto_1fr_auto_auto] min-h-16 bg-white border-b border-gray-300 [grid-template-areas:'logo_title_action_account'_'logo_menu_action_account'] max-[52rem]:[grid-template-areas:'logo_title_action_account'_'menu_menu_menu_menu']">
+    <div className="relative z-30 grid grid-cols-[auto_1fr_auto_auto] min-h-16 bg-white border-b border-gray-300 [grid-template-areas:'logo_title_action_account'_'logo_menu_action_account'] max-[52rem]:[grid-template-areas:'logo_title_action_account'_'menu_menu_menu_menu']">
       <div className="flex items-center pr-1 pl-4 max-[52rem]:pl-1 [grid-area:logo]">
         {props.logo ?? <span aria-hidden>✏️</span>}
       </div>

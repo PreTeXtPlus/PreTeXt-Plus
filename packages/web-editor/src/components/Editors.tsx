@@ -2598,8 +2598,10 @@ const EditorsInner = (props: EditorsInnerProps) => {
 
   let editorDisplays: ReactNode;
   if (isNarrowScreen) {
+    // `isolate` keeps every z-index in the workspace (the editor title bar and
+    // drawer, the preview's overlays) below TopBar's open menus.
     editorDisplays = (
-      <div className="h-full w-full flex flex-row overflow-hidden">
+      <div className="h-full w-full flex flex-row overflow-hidden isolate">
         {explorerSidebar}
         <div className="flex flex-col flex-1 min-w-0 h-full">
           <div className="flex border-b border-[#ddd] bg-[#f8f8f8]" role="tablist">
@@ -2651,7 +2653,7 @@ const EditorsInner = (props: EditorsInnerProps) => {
     );
   } else {
     editorDisplays = (
-      <div className="flex flex-row w-full h-full overflow-hidden">
+      <div className="flex flex-row w-full h-full overflow-hidden isolate">
         {explorerSidebar}
         <Group orientation="horizontal" className="h-full w-full">
           <Panel
