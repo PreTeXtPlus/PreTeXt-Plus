@@ -43,7 +43,7 @@
     "@pretextbook/pretext-html": "^0.16.0",
     "@pretextbook/remark-pretext": "^0.2.0",
     "@pretextbook/schema": "^0.7.0",
-    "@pretextbook/typing-shortcuts": "^0.0.0",
+    "@pretextbook/typing-shortcuts": "^0.1.0",
     "@tailwindcss/vite": "^4.3.3",
     "clsx": "^2.1.1",
     "constrained-editor-plugin": "^1.4.0",

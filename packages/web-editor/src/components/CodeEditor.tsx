@@ -13,6 +13,7 @@ import type { EditorMenuActions } from "./CodeEditorMenu";
 import type * as Y from "yjs";
 import type { Awareness } from "y-protocols/awareness";
 import { editorConfigs } from "./editorConfigs";
+import type { MonacoExtensionContext } from "./editorConfigs/types";
 import { applyCleanFixes, fixesForModel } from "./editorConfigs/latexClean";
 import { summarizeCleanFixes, type CleanFinding } from "../cleanFindings";
 import { usePretextDiagnostics } from "./editorConfigs/usePretextDiagnostics";
@@ -271,6 +272,11 @@ const CodeEditor = forwardRef<CodeEditorHandle, CodeEditorProps>(({
   const collabRef = useRef(collab);
   collabRef.current = collab;
   const collabBindingRef = useRef<MonacoCollabBinding | null>(null);
+  // Handed to each format's `registerMonacoExtensions`. It reads the binding
+  // lazily, since the binding is created (and replaced) after they register.
+  const extensionContextRef = useRef<MonacoExtensionContext>({
+    isRemoteChange: () => collabBindingRef.current?.isApplyingRemote ?? false,
+  });
   const constrainedRef = useRef<ReturnType<typeof constrainedEditor> | null>(null);
   // Removes the collab edit guard's patch from the model. Installed once at
   // mount; the guard itself only enforces while a collab binding is live.
@@ -497,6 +503,7 @@ const CodeEditor = forwardRef<CodeEditorHandle, CodeEditorProps>(({
         ? (config.registerMonacoExtensions?.(
             monacoRef.current,
             editorRef.current,
+            extensionContextRef.current,
           ) ?? null)
         : null;
     // Switching format toggles whether the wrapper is locked (PreTeXt only).
@@ -1037,7 +1044,11 @@ const CodeEditor = forwardRef<CodeEditorHandle, CodeEditorProps>(({
     languageExtensionsRef.current?.dispose?.();
     const config = editorConfigs[sourceFormat];
     languageExtensionsRef.current =
-      config.registerMonacoExtensions?.(monaco, editor) ?? null;
+      config.registerMonacoExtensions?.(
+        monaco,
+        editor,
+        extensionContextRef.current,
+      ) ?? null;
 
     applyConstraints();
     rebindCollab();
