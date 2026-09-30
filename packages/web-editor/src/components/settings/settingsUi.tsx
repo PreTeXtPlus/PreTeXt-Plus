@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from "react";
+import { useState, type ButtonHTMLAttributes, type ReactNode } from "react";
 import clsx from "clsx";
 import type { SourceFormat } from "../../types/editor";
 import { SOURCE_FORMAT_LABELS } from "../toc/types";
@@ -60,26 +60,50 @@ export interface SettingsAction {
   title?: string;
 }
 
+const SETTINGS_BUTTON_VARIANTS = {
+  primary: "text-white bg-blue-600 border-blue-700 hover:bg-blue-700",
+  default:
+    "text-slate-700 bg-white border-slate-300 hover:bg-slate-100 hover:border-slate-400",
+  danger:
+    "text-red-700 bg-white border-red-200 hover:bg-red-50 hover:border-red-300",
+};
+
+/**
+ * A settings-panel button: `primary` for a form's Save, `danger` for removal,
+ * `default` for everything else.
+ */
+export const SettingsButton = ({
+  variant = "default",
+  className,
+  ...rest
+}: ButtonHTMLAttributes<HTMLButtonElement> & {
+  variant?: keyof typeof SETTINGS_BUTTON_VARIANTS;
+}) => (
+  <button
+    type="button"
+    className={clsx(
+      "font-[inherit] text-[0.76rem] py-[3px] px-2.5 rounded cursor-pointer border disabled:opacity-50 disabled:cursor-default",
+      SETTINGS_BUTTON_VARIANTS[variant],
+      className,
+    )}
+    {...rest}
+  />
+);
+
 /** The row of action buttons at the bottom of a panel. */
 export const SettingsActions = ({ actions }: { actions: SettingsAction[] }) =>
   actions.length === 0 ? null : (
     <div className="flex flex-wrap gap-1.5 pt-2 border-t border-slate-200">
       {actions.map((action) => (
-        <button
+        <SettingsButton
           key={action.label}
-          type="button"
-          className={clsx(
-            "font-[inherit] text-[0.76rem] py-[3px] px-2.5 rounded cursor-pointer border bg-white disabled:opacity-50 disabled:cursor-default",
-            action.danger
-              ? "text-red-700 border-red-200 hover:bg-red-50 hover:border-red-300"
-              : "text-slate-700 border-slate-300 hover:bg-slate-100 hover:border-slate-400",
-          )}
+          variant={action.danger ? "danger" : "default"}
           onClick={action.onClick}
           disabled={action.disabled}
           title={action.title}
         >
           {action.label}
-        </button>
+        </SettingsButton>
       ))}
     </div>
   );
@@ -112,7 +136,7 @@ export const EmbedCode = ({
       <SettingsField label="Embed code">
         <select
           aria-label="Embed code format"
-          className={clsx(FIELD_CONTROL_CLASSES, "w-auto self-start")}
+          className={clsx(FIELD_CONTROL_CLASSES, "max-w-[200px]")}
           value={format}
           onChange={(e) => setFormat(e.target.value as SourceFormat)}
         >

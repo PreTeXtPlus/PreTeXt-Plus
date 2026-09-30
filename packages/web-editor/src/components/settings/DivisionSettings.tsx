@@ -50,7 +50,7 @@ const DivisionSettings = ({ division, embedFormat }: DivisionSettingsProps) => {
   if (pendingNewDivision && editDraft) {
     const parentType = getDivisionType(pendingNewDivision.parentXmlId);
     return (
-      <div className="flex flex-col gap-2" data-testid="settings-new-division">
+      <div className="flex flex-col gap-2.5" data-testid="settings-new-division">
         <SettingsNote>
           New division inside{" "}
           <strong>{divisionDisplayTitle(division) || division.xmlId}</strong>.
