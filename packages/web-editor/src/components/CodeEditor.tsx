@@ -83,6 +83,14 @@ interface CodeEditorProps {
    * body has no such structure, so it passes false and every line is editable.
    */
   lockStructure?: boolean;
+  /**
+   * Generated lines drawn, locked, around the buffer without being part of it —
+   * an asset's `<image>` wrapper around its authored source. They're rendered
+   * as Monaco view zones, so the model (and a collab binding to it) holds only
+   * the buffer's own text. Clicking one calls `onRequestWrapperEdit`. Memoize
+   * it; a new identity each render redraws the zones.
+   */
+  virtualWrapper?: VirtualWrapper;
   /** When true, Monaco is non-editable. */
   readOnly?: boolean;
   /**
@@ -256,6 +264,16 @@ const baseOptions = {
  *
  * Exposes a {@link CodeEditorHandle} via `forwardRef` for programmatic control.
  */
+/** See {@link CodeEditorProps.virtualWrapper}. */
+export interface VirtualWrapper {
+  /** Lines drawn above the first line of the buffer. */
+  before: string[];
+  /** Lines drawn below the last line of the buffer. */
+  after: string[];
+  /** Tooltip shown when hovering over the wrapper lines. */
+  hoverMessage?: string;
+}
+
 const CodeEditor = forwardRef<CodeEditorHandle, CodeEditorProps>(({
   content,
   sourceFormat,
@@ -266,6 +284,7 @@ const CodeEditor = forwardRef<CodeEditorHandle, CodeEditorProps>(({
   onOpenFindInProject,
   onRequestWrapperEdit,
   lockStructure = true,
+  virtualWrapper,
   readOnly,
   pasteAutoConvert = true,
   onMenuStateChange,
@@ -357,6 +376,15 @@ const CodeEditor = forwardRef<CodeEditorHandle, CodeEditorProps>(({
   // would scroll the preview back — a loop between the two panes.
   const suppressCursorReportRef = useRef(false);
   const onRequestWrapperEditRef = useRef(onRequestWrapperEdit);
+  const virtualWrapperRef = useRef(virtualWrapper);
+  virtualWrapperRef.current = virtualWrapper;
+  // The view zones currently drawing `virtualWrapper`, and what they were drawn
+  // for: the wrapper, and the line count the closing zone is anchored below.
+  const wrapperZonesRef = useRef<{
+    ids: string[];
+    wrapper: VirtualWrapper | undefined;
+    lineCount: number;
+  }>({ ids: [], wrapper: undefined, lineCount: 0 });
   // Per-format Monaco language extensions (completions, diagnostics, syntax),
   // torn down and re-registered whenever the source format changes.
   const languageExtensionsRef = useRef<{ dispose: () => void } | null>(null);
@@ -516,6 +544,10 @@ const CodeEditor = forwardRef<CodeEditorHandle, CodeEditorProps>(({
   useEffect(() => {
     onRequestWrapperEditRef.current = onRequestWrapperEdit;
   }, [onRequestWrapperEdit]);
+
+  useEffect(() => {
+    syncVirtualWrapper();
+  }, [virtualWrapper, isEditorMounted]);
   // const [isFocused, setIsFocused] = useState(false);
 
   useEffect(() => {
@@ -799,6 +831,65 @@ const CodeEditor = forwardRef<CodeEditorHandle, CodeEditorProps>(({
   };
   applyConstraintsRef.current = applyConstraints;
 
+  /**
+   * Draw `virtualWrapper` as view zones: its `before` lines above line 1 and its
+   * `after` lines below the last line. The closing zone is anchored to a line
+   * number, so it's re-anchored whenever the line count changes — called from
+   * the content listener after every edit, local or remote. Reads only refs, so
+   * the mount-time listener's copy of it is always current.
+   */
+  const syncVirtualWrapper = () => {
+    const editor = editorRef.current;
+    const monaco = monacoRef.current;
+    const model = editor?.getModel?.();
+    if (!editor || !monaco || !model) return;
+    if (typeof editor.changeViewZones !== "function") return;
+    const zones = wrapperZonesRef.current;
+    const wrapper = virtualWrapperRef.current;
+    const lineCount = model.getLineCount();
+    if (zones.wrapper === wrapper && zones.lineCount === lineCount) return;
+
+    const fontInfo = editor.getOption(monaco.editor.EditorOption.fontInfo);
+    const makeNode = (lines: string[]) => {
+      const node = document.createElement("div");
+      node.className =
+        "pretext-plus-editor__locked-line pretext-plus-editor__virtual-wrapper";
+      node.dataset.testid = "virtual-wrapper";
+      if (wrapper?.hoverMessage) node.title = wrapper.hoverMessage;
+      node.style.fontFamily = fontInfo.fontFamily;
+      node.style.fontSize = `${fontInfo.fontSize}px`;
+      node.style.lineHeight = `${fontInfo.lineHeight}px`;
+      node.style.whiteSpace = "pre";
+      for (const line of lines) {
+        const row = document.createElement("div");
+        row.className = "pretext-plus-editor__locked-line-text";
+        row.textContent = line;
+        node.appendChild(row);
+      }
+      return node;
+    };
+
+    editor.changeViewZones((accessor: any) => {
+      for (const id of zones.ids) accessor.removeZone(id);
+      zones.ids = [];
+      if (!wrapper) return;
+      const add = (afterLineNumber: number, lines: string[]) => {
+        if (lines.length === 0) return;
+        zones.ids.push(
+          accessor.addZone({
+            afterLineNumber,
+            heightInLines: lines.length,
+            domNode: makeNode(lines),
+          }),
+        );
+      };
+      add(0, wrapper.before);
+      add(lineCount, wrapper.after);
+    });
+    zones.wrapper = wrapper;
+    zones.lineCount = lineCount;
+  };
+
   const setModelValueSafely = (model: any, nextValue: string) => {
     if (model.getValue() === nextValue) return;
     isProgrammaticUpdateRef.current = true;
@@ -1003,6 +1094,7 @@ const CodeEditor = forwardRef<CodeEditorHandle, CodeEditorProps>(({
       // `applyConstraints`) since this listener is registered once here and
       // never re-subscribed when `sourceFormat` changes later.
       if (collabRef.current) applyConstraintsRef.current();
+      syncVirtualWrapper();
     });
     updateUndoRedoState();
 
@@ -1029,6 +1121,15 @@ const CodeEditor = forwardRef<CodeEditorHandle, CodeEditorProps>(({
     // be edited in place.
     mouseListenerRef.current?.dispose?.();
     mouseListenerRef.current = editor.onMouseDown((e: any) => {
+      // A click on a `virtualWrapper` line — drawn in a view zone, so it has
+      // no model position — asks for the same metadata editor.
+      if (
+        e?.target?.type === monaco.editor.MouseTargetType.CONTENT_VIEW_ZONE &&
+        wrapperZonesRef.current.ids.includes(e.target.detail?.viewZoneId)
+      ) {
+        onRequestWrapperEditRef.current?.();
+        return;
+      }
       const line = e?.target?.position?.lineNumber;
       if (
         lockedRef.current &&

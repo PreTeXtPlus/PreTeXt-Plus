@@ -13,7 +13,11 @@ import {
 } from "react";
 import clsx from "clsx";
 
-import CodeEditor, { type CodeEditorHandle, type CodeEditorMenuState } from "./CodeEditor";
+import CodeEditor, {
+  type CodeEditorHandle,
+  type CodeEditorMenuState,
+  type VirtualWrapper,
+} from "./CodeEditor";
 //import { VisualEditor } from "@pretextbook/visual-editor";
 import LivePreview, { type LivePreviewHandle } from "./LivePreview";
 import { isLocalPreviewAvailable, type PreviewTheme } from "./wasmPreview";
@@ -88,6 +92,7 @@ import {
   type EditDraft,
 } from "./toc/types";
 import { buildProjectAssetView, makeUniqueAssetRef } from "../assetView";
+import { assetWrapperLines } from "../assetTransforms";
 import { buildProjectSnippetView, makeUniqueSnippetRef } from "../snippetView";
 import { newRecordId } from "../recordId";
 import type { ImportEngine } from "@pretextbook/import/react";
@@ -803,6 +808,30 @@ const EditorsInner = (props: EditorsInnerProps) => {
       : editorTarget?.kind === "asset"
         ? (editorTarget.asset.source ?? "")
         : divisionActiveSource;
+  // An asset's source is only the inside of its generated `<image>`; the code
+  // editor draws that wrapper, locked, around it (edited from Asset settings).
+  // Keyed on the fields the wrapper reads, not the asset itself — the asset is
+  // replaced on every source edit, which would redraw the wrapper each time.
+  const editedAsset = editorTarget?.kind === "asset" ? editorTarget.asset : null;
+  const isAssetOpen = editedAsset !== null;
+  const assetWrapper: VirtualWrapper | undefined = useMemo(
+    () =>
+      editedAsset
+        ? {
+            ...assetWrapperLines(editedAsset),
+            hoverMessage:
+              "This markup is generated from the asset — edit it from Asset settings.",
+          }
+        : undefined,
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [
+      isAssetOpen,
+      editedAsset?.ref,
+      editedAsset?.isFile,
+      editedAsset?.fileRef,
+      editedAsset?.shortDescription,
+    ],
+  );
   const editorFormat: SourceFormat =
     editorTarget?.kind === "snippet"
       ? editorTarget.snippet.sourceFormat
@@ -1272,6 +1301,11 @@ const EditorsInner = (props: EditorsInnerProps) => {
     if (!activeDivision) return;
     startSectionEdit(activeDivision);
   };
+
+  // The asset counterpart: its wrapper lines open the settings drawer, where
+  // its alt text lives.
+  const setSettingsDrawerOpen = useEditorStore((s) => s.setSettingsDrawerOpen);
+  const handleRequestAssetSettings = () => setSettingsDrawerOpen(true);
 
   // Opens a properties form for a new child of `parentXmlId` (or an unplaced
   // division, if `null`). Nothing is created here — the draft lives in the form
@@ -2361,6 +2395,7 @@ const EditorsInner = (props: EditorsInnerProps) => {
       // the assembled document, which a snippet or asset fragment isn't.
       pretextValidation={isDivisionOpen ? pretextValidation : undefined}
       lockStructure={isDivisionOpen}
+      virtualWrapper={assetWrapper}
       collab={
         props.collaboration && bridge && activeCollabText && editorKey
           ? {
@@ -2387,7 +2422,13 @@ const EditorsInner = (props: EditorsInnerProps) => {
       // line is actually present, so it's safe to wire up for all formats.
       // Suppressed when read-only, where the drawer holds no form.
       onRequestWrapperEdit={
-        props.readOnly || !isDivisionOpen ? undefined : handleRequestWrapperEdit
+        props.readOnly
+          ? undefined
+          : isDivisionOpen
+            ? handleRequestWrapperEdit
+            : editorTarget?.kind === "asset"
+              ? handleRequestAssetSettings
+              : undefined
       }
       readOnly={props.readOnly}
       pasteAutoConvert={pasteAutoConvert}
