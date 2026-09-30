@@ -166,8 +166,12 @@ peer removing it) falls back to the root, and renames carry it along.
   own format, or an asset's PreTeXt source — the last two with
   `lockStructure={false}` (no locked lines or structural normalization) and no
   schema lint. Division-only features read `activeDivision`, which is null
-  while a snippet or asset is open. The preview shows a "coming soon"
-  placeholder for snippets and assets.
+  while a snippet or asset is open. An asset's generated `<image>` wrapper is
+  drawn around its source as locked Monaco view zones (`virtualWrapper`), so
+  the model — and its Y.Text binding — holds only the stored source. The
+  preview renders a snippet on its own inside a plain article
+  (`assembleSnippetPreviewSource`), and shows an asset's uploaded image and
+  file type (`AssetPreview.tsx`).
 - Snippet/asset source edits update the pool and the doc's text; solo, they are
   also written to the host (`onSnippetUpdate`/`onAssetUpdate`), coalesced per
   record on a 1 s trailing debounce and flushed on switching items. A host that

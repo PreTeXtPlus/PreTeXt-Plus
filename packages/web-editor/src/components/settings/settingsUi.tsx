@@ -104,12 +104,15 @@ export const EmbedCode = ({
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
   };
+  // The code gets a full-width row of its own below the label and format
+  // picker: next to them it had only the label grid's value column, which a
+  // long ref pushed past the drawer's edge, taking the Copy button with it.
   return (
-    <SettingsField label="Embed code">
-      <div className="flex items-center gap-1.5 min-w-0">
+    <div className="flex flex-col gap-1.5 min-w-0">
+      <SettingsField label="Embed code">
         <select
           aria-label="Embed code format"
-          className={clsx(FIELD_CONTROL_CLASSES, "w-auto shrink-0")}
+          className={clsx(FIELD_CONTROL_CLASSES, "w-auto self-start")}
           value={format}
           onChange={(e) => setFormat(e.target.value as SourceFormat)}
         >
@@ -119,9 +122,11 @@ export const EmbedCode = ({
             </option>
           ))}
         </select>
+      </SettingsField>
+      <div className="flex items-start gap-1.5 min-w-0">
         <code
           data-testid="settings-embed-code"
-          className="flex-1 min-w-0 font-mono text-[0.75rem] text-slate-900 bg-slate-100 border border-slate-200 rounded py-1 px-2 overflow-x-auto whitespace-nowrap"
+          className="flex-1 min-w-0 font-mono text-[0.75rem] text-slate-900 bg-slate-100 border border-slate-200 rounded py-1 px-2 whitespace-pre-wrap break-all"
         >
           {code}
         </code>
@@ -139,7 +144,7 @@ export const EmbedCode = ({
           {copied ? "Copied!" : "Copy"}
         </button>
       </div>
-    </SettingsField>
+    </div>
   );
 };
 
