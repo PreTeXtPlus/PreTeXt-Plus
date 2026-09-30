@@ -3117,13 +3117,95 @@ export function assembleProjectSource(
 }
 
 /**
+ * The line every build's `<latex-image-preamble>` starts with, so a TikZ
+ * `<latex-image>` builds without its author first having to find the docinfo
+ * editor and load the package there. An author who loads it anyway loses
+ * nothing: a second `\usepackage` of the same package is a no-op.
+ */
+export const DEFAULT_LATEX_IMAGE_PREAMBLE = "\\usepackage{tikz, pgf}";
+
+const SYNTAX_ATTR_RE = /\ssyntax\s*=/;
+
+/**
+ * `docinfo` with {@link DEFAULT_LATEX_IMAGE_PREAMBLE} as the first line of its
+ * `<latex-image-preamble>`, adding that element — or the whole `<docinfo>` —
+ * when there isn't one.
+ *
+ * PreTeXt reads only the first `<latex-image-preamble>` without `@syntax`
+ * (the `latex-image-preamble` variable in pretext-common.xsl), so that is the
+ * one written to; one with `@syntax` belongs to some other image language.
+ * Prepended rather than appended so the author's own `\usetikzlibrary` and
+ * `\tikzset` lines find TikZ already loaded.
+ *
+ * A splice rather than a parse, like {@link ensureRootLabel}, so the author's
+ * docinfo reaches the build unchanged apart from the one line. A docinfo the
+ * scanner cannot make sense of is returned as it came: it will fail the build
+ * on its own terms, and this should not be what reports it.
+ */
+function withDefaultLatexImagePreamble(docinfo: string): string {
+  const element = `<latex-image-preamble>\n${DEFAULT_LATEX_IMAGE_PREAMBLE}\n</latex-image-preamble>`;
+  if (!docinfo.trim()) return `<docinfo>\n  ${element}\n</docinfo>`;
+
+  const root = nextTag(docinfo, 0);
+  if (!root || root.closing || root.name !== "docinfo") return docinfo;
+  if (root.selfClosing) {
+    const openTag = `${docinfo.slice(root.open, root.close - 2).trimEnd()}>`;
+    return (
+      docinfo.slice(0, root.open) +
+      `${openTag}\n  ${element}\n</docinfo>` +
+      docinfo.slice(root.close)
+    );
+  }
+
+  // Walk <docinfo>'s direct children, skipping each one's whole subtree.
+  let i = root.close;
+  for (;;) {
+    const tag = nextTag(docinfo, i);
+    if (!tag) return docinfo;
+    if (tag.closing) {
+      // </docinfo>, with no preamble in it: add one.
+      const lead = docinfo[tag.open - 1] === "\n" ? "" : "\n";
+      return docinfo.slice(0, tag.open) + `${lead}  ${element}\n` + docinfo.slice(tag.open);
+    }
+    const startTag = docinfo.slice(tag.open, tag.close);
+    if (tag.name === "latex-image-preamble" && !SYNTAX_ATTR_RE.test(startTag)) {
+      if (tag.selfClosing) {
+        const openTag = `${startTag.slice(0, -2).trimEnd()}>`;
+        return (
+          docinfo.slice(0, tag.open) +
+          `${openTag}\n${DEFAULT_LATEX_IMAGE_PREAMBLE}\n</latex-image-preamble>` +
+          docinfo.slice(tag.close)
+        );
+      }
+      return (
+        docinfo.slice(0, tag.close) +
+        `\n${DEFAULT_LATEX_IMAGE_PREAMBLE}\n` +
+        docinfo.slice(tag.close)
+      );
+    }
+    i = tag.close;
+    if (tag.selfClosing) continue;
+    let depth = 1;
+    while (depth > 0) {
+      const inner = nextTag(docinfo, i);
+      if (!inner) return docinfo;
+      i = inner.close;
+      if (inner.closing) depth--;
+      else if (!inner.selfClosing) depth++;
+    }
+  }
+}
+
+/**
  * Wrap a resolved document body in the outer `<pretext>` element with
  * `<docinfo>` inserted as its sibling, matching real PreTeXt document shape.
+ * The docinfo always carries {@link DEFAULT_LATEX_IMAGE_PREAMBLE}, so every
+ * document a build is handed has one even when the author wrote none.
  * `lang`, when provided (a BCP-47 code like `"en-US"`), is written as
  * `@xml:lang` on the root `<pretext>` element.
  */
 function wrapInPretextDocument(body: string, docinfo: string, lang?: string): string {
-  const docinfoBlock = docinfo.trim() ? `${docinfo.trim()}\n` : "";
+  const docinfoBlock = `${withDefaultLatexImagePreamble(docinfo.trim())}\n`;
   const langAttr = lang ? ` xml:lang="${lang}"` : "";
   return ensureRootLabel(`<pretext${langAttr}>\n${docinfoBlock}${body}\n</pretext>`);
 }
