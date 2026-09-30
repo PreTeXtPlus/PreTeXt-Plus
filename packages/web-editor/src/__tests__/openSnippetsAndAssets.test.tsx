@@ -45,7 +45,13 @@ vi.mock("../components/CodeEditor", () => {
 });
 
 vi.mock("../components/LivePreview", () => {
-  const Mock = forwardRef(() => <div data-testid="live-preview" />);
+  const Mock = forwardRef((props: { content: string; title?: string }) => (
+    <div
+      data-testid="live-preview"
+      data-content={props.content}
+      data-title={props.title}
+    />
+  ));
   return { __esModule: true, default: Mock };
 });
 
@@ -139,9 +145,16 @@ describe("opening a snippet", () => {
     expect(barTitle()).toHaveTextContent("greeting");
     expect(editor().value).toBe("<p>Hello</p>");
     expect(editor().dataset.locked).toBe("false");
-    // Previewing snippets on their own isn't built yet.
-    expect(screen.getByTestId("preview-coming-soon")).toBeInTheDocument();
-    expect(screen.queryByTestId("live-preview")).toBeNull();
+  });
+
+  it("previews the snippet inside a plain article titled \"snippet preview\"", () => {
+    renderEditors();
+    openSnippetRow("greeting");
+    const preview = screen.getByTestId("live-preview");
+    expect(preview.dataset.title).toBe("snippet preview");
+    expect(preview.dataset.content).toContain(
+      "<title>snippet preview</title>\n<p>Hello</p>\n</article>",
+    );
   });
 
   it("saves source edits to the snippet, not to any division", async () => {
@@ -224,7 +237,9 @@ describe("opening a snippet", () => {
     fireEvent.click(screen.getByText("Main", { selector: '[data-testid="toc-title"]' }));
     expect(barTitle()).toHaveTextContent("Main");
     expect(editor().value).toContain('<article xml:id="doc">');
-    expect(screen.getByTestId("live-preview")).toBeInTheDocument();
+    expect(screen.getByTestId("live-preview").dataset.content).not.toContain(
+      "snippet preview",
+    );
   });
 });
 
@@ -268,7 +283,6 @@ describe("opening an asset", () => {
     );
     expect(screen.getByTestId("asset-preview-type")).toHaveTextContent("image/png");
     expect(screen.getByTestId("asset-preview-type")).toHaveTextContent("photo.png");
-    expect(screen.queryByTestId("preview-coming-soon")).toBeNull();
 
     fireEvent.click(screen.getByTestId("settings-drawer-toggle"));
     expect(within(screen.getByTestId("settings-drawer")).queryByRole("img")).toBeNull();

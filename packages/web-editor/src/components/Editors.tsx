@@ -69,6 +69,8 @@ import {
   createDivisionWithId,
   insertDivisionRef,
   wrapDivisionForPreview,
+  assembleSnippetPreviewSource,
+  SNIPPET_PREVIEW_TITLE,
   assembleProjectSource,
   assembleFullProjectSource,
   extractDivisionMetadata,
@@ -2187,6 +2189,35 @@ const EditorsInner = (props: EditorsInnerProps) => {
     [activeDivisionFormat, divisionActiveSource, previewContent],
   );
 
+  // A snippet previews on its own: resolved as an embed of it would be, inside
+  // a plain article (see `assembleSnippetPreviewSource`). Only while the
+  // preview is open — it walks the snippet's nested refs, and runs the
+  // converter for a LaTeX or Markdown snippet.
+  const activeSnippet =
+    editorTarget?.kind === "snippet" ? editorTarget.snippet : null;
+  const snippetPreviewContent = useMemo(
+    () =>
+      showLivePreview && activeSnippet
+        ? assembleSnippetPreviewSource(
+            activeSnippet.ref,
+            divisions,
+            projectSnippets ?? [],
+            projectAssets ?? [],
+            effectiveDocinfo,
+            language,
+          )
+        : undefined,
+    [
+      showLivePreview,
+      activeSnippet,
+      divisions,
+      projectSnippets,
+      projectAssets,
+      effectiveDocinfo,
+      language,
+    ],
+  );
+
   // ── Preview rebuild helpers ──────────────────────────────────────────────
   // The full preview no longer needs a host-provided build server: when the
   // browser supports WebAssembly JSPI it renders in-page via
@@ -2412,7 +2443,11 @@ const EditorsInner = (props: EditorsInnerProps) => {
           : undefined
       }
       onChange={handleEditorChange}
-      onRebuild={canPreview && isDivisionOpen ? triggerRebuild : undefined}
+      onRebuild={
+        canPreview && (isDivisionOpen || activeSnippet)
+          ? triggerRebuild
+          : undefined
+      }
       onSave={triggerSaveAndRebuild}
       onCursorLineChange={isDivisionOpen ? handleCursorLineChange : undefined}
       onOpenFindInProject={handleOpenFindPanel}
@@ -2467,31 +2502,40 @@ const EditorsInner = (props: EditorsInnerProps) => {
   if (showLivePreview && editorTarget?.kind === "asset") {
     // A stored image needs no renderer, so this doesn't wait on `canPreview`.
     preview = <AssetPreview asset={editorTarget.asset} />;
-  } else if (showLivePreview && canPreview && !isDivisionOpen) {
-    // Snippets only render inside a division today; previewing them on their
-    // own is planned.
-    preview = (
-      <div
-        data-testid="preview-coming-soon"
-        className="flex flex-1 h-full items-center justify-center p-6 bg-[#fafafa] text-center text-[0.9rem] text-slate-500"
-      >
-        Preview coming soon for snippets.
-      </div>
-    );
   } else if (showLivePreview && canPreview) {
+    // A snippet renders as a standalone document, so there is no surrounding
+    // project to number it against and no division for either sync direction
+    // to translate through. Its `divisionId` is only the key LivePreview
+    // rebuilds on when the open item changes — not an xml:id.
+    const target = activeSnippet
+      ? {
+          content: snippetPreviewContent || "",
+          serverContent: snippetPreviewContent || "",
+          title: SNIPPET_PREVIEW_TITLE,
+          documentTarget: "html" as const,
+          onSyncToSource: undefined,
+          divisionId: `snippet:${activeSnippet.ref}`,
+          previewLineMap: null,
+          fragment: false,
+          contextSource: undefined,
+        }
+      : {
+          content: previewSource || "",
+          serverContent: previewContent || "",
+          title,
+          documentTarget:
+            previewRootType === "slideshow" ? ("slides" as const) : ("html" as const),
+          onSyncToSource: handleSyncToSource,
+          divisionId: activeDivision?.xmlId,
+          previewLineMap,
+          fragment: !previewingWholeDocument,
+          contextSource: previewContextSource,
+        };
     preview = (
       <LivePreview
         ref={livePreviewRef}
-        content={previewSource || ""}
-        serverContent={previewContent || ""}
-        title={title}
-        documentTarget={previewRootType === "slideshow" ? "slides" : "html"}
+        {...target}
         onRebuild={props.onPreviewRebuild}
-        onSyncToSource={handleSyncToSource}
-        divisionId={activeDivision?.xmlId}
-        previewLineMap={previewLineMap}
-        fragment={!previewingWholeDocument}
-        contextSource={previewContextSource}
         docinfo={effectiveDocinfo}
         theme={props.previewTheme}
         bannerMessage={

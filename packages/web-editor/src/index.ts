@@ -51,6 +51,8 @@ export {
   getOrphanRoots,
   buildDivisionTree,
   wrapDivisionForPreview,
+  assembleSnippetPreviewSource,
+  SNIPPET_PREVIEW_TITLE,
   // Division content utilities
   // TODO: update these to work for generic divisions, not just sections
   updateDivisionTitle,
