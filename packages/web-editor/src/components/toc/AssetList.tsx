@@ -3,7 +3,7 @@ import { buildProjectAssetView, type AssetRow } from "../../assetView";
 import { useEditorStore } from "../../store/hooks";
 
 export interface AssetListProps {
-  /** Offer "Add", which opens the new-asset form in the editor pane. */
+  /** Offer "Add one" when empty, which opens the new-asset form in the editor pane. */
   canCreate?: boolean;
 }
 
@@ -122,19 +122,6 @@ const AssetList = ({ canCreate }: AssetListProps) => {
           </ul>
         )}
       </div>
-
-      {canCreate && (
-        <div className="block w-full bg-transparent border-none border-t border-[#dde0e6] py-[7px] px-2.5 font-[inherit] text-[0.78rem] text-left shrink-0 flex">
-          <button
-            type="button"
-            data-testid="toc-new-asset-btn"
-            className="bg-transparent border-none text-blue-600 cursor-pointer hover:bg-blue-50 hover:underline"
-            onClick={() => startCreate({ kind: "asset" })}
-          >
-            + New asset
-          </button>
-        </div>
-      )}
     </>
   );
 };

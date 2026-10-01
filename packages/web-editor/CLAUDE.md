@@ -214,8 +214,9 @@ a peer removing the open item does not (`openItemState`'s `byAuthor`).
   `handleAssetReplaceCommit` hands the replacement the old ref).
 - `handleSnippetCreated` / `handleAssetCreated` in `Editors.tsx` add the host's
   record to the pool and doc, copy its embed code (plain create only), and open
-  it. Entry points: the drawer action above, the explorer lists' "+ New …"
-  buttons, File → New Asset… / New Snippet…, unlinked rows, Replace image….
+  it. Entry points: the drawer action above, the [+] button in the
+  Snippets/Assets panel header, File → New Asset… / New Snippet…, unlinked
+  rows, Replace image….
 
 ### Collaboration (`src/collab/`)
 
