@@ -16,7 +16,7 @@ import Editors from "../components/Editors";
 import type { Division } from "../types/sections";
 import type { EditorContentChange } from "../types/editor";
 import type { DivisionChanges } from "../store/editorStore";
-import { openSettings } from "./tocTestUtils";
+import { tocRow } from "./tocTestUtils";
 
 // Monaco loads itself from a CDN; the TOC is what's under test here.
 vi.mock("@monaco-editor/react", () => ({
@@ -78,9 +78,9 @@ function renderEditors() {
   return { added, changes, updates, sourceOf };
 }
 
-/** "Add new division" from `label`'s settings drawer. */
+/** Start a new sub-division from the [+] on `label`'s Contents row. */
 function addUnder(label: string) {
-  fireEvent.click(within(openSettings(label)).getByText("Add new division"));
+  fireEvent.click(within(tocRow(label)).getByTestId("toc-add-child"));
 }
 
 /** The draft's properties form (in the editor pane), and the fields/buttons inside it. */

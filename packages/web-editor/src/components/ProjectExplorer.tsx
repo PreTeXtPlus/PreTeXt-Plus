@@ -173,7 +173,7 @@ const ProjectExplorer = ({
               </button>
             )}
           </div>
-          {activeView === "toc" && <ArticleToc />}
+          {activeView === "toc" && <ArticleToc readOnly={readOnly} />}
           {activeView === "snippets" && (
             <SnippetList canCreate={canCreateSnippet} />
           )}

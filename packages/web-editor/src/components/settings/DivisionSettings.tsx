@@ -32,15 +32,12 @@ export interface DivisionSettingsProps {
  * A division's settings: its title, type and id — each saved on its own, on
  * Enter or blur (a select on change), like a snippet's or asset's fields — its
  * embed code, and the structural actions its place in the document allows.
- * "Add new division" hands the editor pane over to the new child's creation
- * form (`create/NewItemPane.tsx`).
+ * (A new sub-division is started from the division's Contents row [+].)
  */
 const DivisionSettings = ({ division, embedFormat }: DivisionSettingsProps) => {
   const updateDivisionProperties = useEditorStore(
     (s) => s.updateDivisionProperties,
   );
-  const addSection = useEditorStore((s) => s.addSection);
-  const setTocExpanded = useEditorStore((s) => s.setTocExpanded);
   const {
     divisions,
     rootDivision,
@@ -76,12 +73,6 @@ const DivisionSettings = ({ division, embedFormat }: DivisionSettingsProps) => {
   };
 
   const actions = divisionActionEntries(division, placement, {
-    // Adding a child to a shut TOC row opens it, so the draft row sits after
-    // the existing children — where saving it will put the division.
-    addChild: (parentXmlId) => {
-      setTocExpanded(parentXmlId, true);
-      addSection(parentXmlId);
-    },
     unplace: handleUnplace,
     remove: handleDelete,
     placeInDocument: handlePlaceOrphan,

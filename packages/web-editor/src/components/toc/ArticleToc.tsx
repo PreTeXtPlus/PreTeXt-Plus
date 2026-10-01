@@ -3,6 +3,7 @@ import SectionItem from "./SectionItem";
 import NewDivisionRow from "./NewDivisionRow";
 import { ChevronIcon } from "../icons";
 import { useDivisionActions } from "./useDivisionActions";
+import { canAddChildDivision } from "./divisionActions";
 
 import {
   buildDivisionTree,
@@ -52,12 +53,14 @@ function ancestorsOf(nodes: DivisionTreeNode[], id: string): string[] | null {
  * down through every placed `<plus:* ref/>`, followed by the divisions the
  * document doesn't reach, each heading its own dangling subtree. Selecting a
  * row opens that division; its properties and structural actions live in the
- * settings drawer under the editor's title bar.
+ * settings drawer under the editor's title bar. A placed row's [+] starts a
+ * new sub-division of it.
  */
-const ArticleToc = () => {
+const ArticleToc = ({ readOnly }: { readOnly?: boolean }) => {
   const activeDivisionId = useEditorStore(selectOpenDivisionId);
 
   const selectSection = useEditorStore((s) => s.selectSection);
+  const addSection = useEditorStore((s) => s.addSection);
   const editDraft = useEditorStore((s) => s.editDraft);
   const creating = useEditorStore((s) => s.creating);
   const pendingNewDivision = creating?.kind === "division" ? creating : null;
@@ -94,6 +97,13 @@ const ArticleToc = () => {
     tocExpansion[id] ?? id === rootDivision?.xmlId;
 
   const toggleExpand = (id: string) => setTocExpanded(id, !isExpanded(id));
+
+  // Adding a child to a shut row opens it, so the draft row sits after the
+  // existing children — where saving it will put the division.
+  const addChild = (parentXmlId: string) => {
+    setTocExpanded(parentXmlId, true);
+    addSection(parentXmlId);
+  };
 
   // ── Keep the active division on screen ──────────────────────────────────────
   // Whenever the active division changes — including one the TOC hasn't
@@ -186,6 +196,11 @@ const ArticleToc = () => {
             isExpanded={isExpanded(rootDivision.xmlId)}
             onToggleExpand={() => toggleExpand(rootDivision.xmlId)}
             onSelect={() => selectSection(rootDivision.xmlId)}
+            onAddChild={
+              !readOnly && canAddChildDivision(rootDivision, { kind: "root" })
+                ? () => addChild(rootDivision.xmlId)
+                : undefined
+            }
           />
         )}
 
@@ -201,6 +216,15 @@ const ArticleToc = () => {
             isExpanded={isExpanded(node.division.xmlId)}
             onToggleExpand={() => toggleExpand(node.division.xmlId)}
             onSelect={() => selectSection(node.division.xmlId)}
+            onAddChild={
+              !readOnly &&
+              canAddChildDivision(node.division, {
+                kind: "placed",
+                parentXmlId: node.parentXmlId,
+              })
+                ? () => addChild(node.division.xmlId)
+                : undefined
+            }
           />
           {draftPlacement?.after === index && draftRow}
           </Fragment>

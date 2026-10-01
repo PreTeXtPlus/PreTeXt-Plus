@@ -26,7 +26,7 @@ export default function TocWithSettings({ readOnly }: { readOnly?: boolean }) {
   );
   return (
     <>
-      <ArticleToc />
+      <ArticleToc readOnly={readOnly} />
       <EditorTargetBar
         target={target}
         readOnly={readOnly}

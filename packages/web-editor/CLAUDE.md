@@ -109,7 +109,8 @@ settings drawer under the editor's title bar (see below).
 
 - **Contents** (`toc/ArticleToc.tsx`): the document's tree, root down through
   every placed `<plus:* ref/>`, then an "Unplaced divisions" block listing each
-  division the document doesn't reach as the head of its own subtree. The
+  division the document doesn't reach as the head of its own subtree. A row's
+  [+] (shown on hover, focus, or the open row) starts a sub-division. The
   structural handlers and the root lookup live in `toc/useDivisionActions.ts`;
   which of them a division is offered is decided by its place in
   the document (`toc/divisionActions.ts`: `findDivisionPlacement` →
@@ -195,8 +196,9 @@ cancel. The author opening any item (even the current one — clicking its row i
 how they get back) abandons the form; the host restating the open division or
 a peer removing the open item does not (`openItemState`'s `byAuthor`).
 
-- **Division** (`startNewDivision`, from "Add new division" in a division's
-  drawer via `addSection` → `handleDivisionAdd`): `editDraft` holds the fields
+- **Division** (`startNewDivision`, from the [+] on a Contents row — the root
+  or a placed division whose type holds divisions, `canAddChildDivision` — via
+  `addSection` → `handleDivisionAdd`): `editDraft` holds the fields
   of `toc/SectionEditForm.tsx`; the TOC shows `toc/NewDivisionRow.tsx` where the
   division will land. Create runs `commitSectionEdit` → `handleDivisionCreate`,
   which writes the record, the parent's `<plus:* ref/>` and the host
@@ -214,7 +216,7 @@ a peer removing the open item does not (`openItemState`'s `byAuthor`).
   `handleAssetReplaceCommit` hands the replacement the old ref).
 - `handleSnippetCreated` / `handleAssetCreated` in `Editors.tsx` add the host's
   record to the pool and doc, copy its embed code (plain create only), and open
-  it. Entry points: the drawer action above, the [+] button in the
+  it. Entry points: a Contents row's [+], the [+] button in the
   Snippets/Assets panel header, File → New Asset… / New Snippet…, unlinked
   rows, Replace image….
 

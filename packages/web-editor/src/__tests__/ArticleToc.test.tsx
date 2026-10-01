@@ -1,7 +1,7 @@
 /**
  * @vitest-environment jsdom
  */
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi } from "vitest";
 import { act, fireEvent, screen, within } from "@testing-library/react";
 import type { Division } from "../types/sections";
 import {
@@ -95,6 +95,14 @@ describe("ArticleToc", () => {
     expect(tocRow("Document")).toBeInTheDocument();
     expect(tocRow("A section")).toBeInTheDocument();
     expect(screen.queryByTestId("settings-drawer-toggle")).toBeNull();
+    expect(screen.queryAllByTestId("toc-add-child")).toHaveLength(0);
+  });
+
+  it("starts a sub-division of the row whose [+] is clicked", () => {
+    const addSection = vi.fn();
+    renderToc(false, divisions, (store) => store.setState({ addSection }));
+    fireEvent.click(within(tocRow("A section")).getByTestId("toc-add-child"));
+    expect(addSection).toHaveBeenCalledWith("sec");
   });
 });
 
@@ -160,12 +168,9 @@ describe("ArticleToc division type choices", () => {
   it("offers no way to nest a division under a leaf type", () => {
     renderToc(false, bookDivisions);
     // <exercises> holds exercises, not divisions — there is no valid child
-    // type for one, so it offers no "Add new division" at all.
-    let drawer = openSettings("Exercises");
-    expect(within(drawer).getByText("Type")).toBeInTheDocument();
-    expect(within(drawer).queryByText("Add new division")).toBeNull();
-    drawer = openSettings("A section");
-    expect(within(drawer).getByText("Add new division")).toBeInTheDocument();
+    // type for one, so its row offers no [+] at all.
+    expect(within(tocRow("Exercises")).queryByTestId("toc-add-child")).toBeNull();
+    expect(within(tocRow("A section")).getByTestId("toc-add-child")).toBeInTheDocument();
   });
 
   it("offers a section's child subsections", () => {
@@ -403,11 +408,8 @@ describe("ArticleToc expand/collapse", () => {
 
   it("opens a shut row that a new division is being added to", () => {
     const { store } = renderToc(false, bookDivisions);
-    const drawer = openSettings("Chapter one");
-    // Opening the chapter reveals it; shut it again so adding has to reopen it.
-    toggleRow("Chapter one");
-    expect(store.getState().tocExpansion.ch).toBe(false);
-    fireEvent.click(within(drawer).getByText("Add new division"));
+    expect(visibleTitles()).not.toContain("A section");
+    fireEvent.click(within(tocRow("Chapter one")).getByTestId("toc-add-child"));
     expect(store.getState().tocExpansion.ch).toBe(true);
     expect(visibleTitles()).toContain("A section");
   });

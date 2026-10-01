@@ -48,10 +48,26 @@ export interface DivisionAction {
   danger?: boolean;
 }
 
+/**
+ * Whether `division` can take a new child where it sits — what the Contents
+ * row's [+] is offered for. All three formats can hold a child placeholder
+ * today (see canEmbedDivisionRefs); the gate stays for a future leaf-only
+ * format. A division whose *type* holds no divisions (an <exercises>, a
+ * <glossary>) would have no valid type to offer the new child; the root always
+ * can. An unplaced division is offered none: it is not in the document to
+ * grow.
+ */
+export function canAddChildDivision(
+  division: Division,
+  placement: DivisionPlacement,
+): boolean {
+  if (!canEmbedDivisionRefs(division.sourceFormat)) return false;
+  if (placement.kind === "root") return true;
+  return placement.kind === "placed" && canContainDivisions(division.type);
+}
+
 /** What the structural actions do — see `useDivisionActions`. */
 export interface DivisionActionHandlers {
-  /** Open a draft for a new child of `parentXmlId`. */
-  addChild: (parentXmlId: string) => void;
   /** Drop the division's placeholder from `parentXmlId` (the division stays). */
   unplace: (xmlId: string, parentXmlId: string) => void;
   /** Delete the division from the project, and its placeholder from `parentXmlId`. */
@@ -61,38 +77,22 @@ export interface DivisionActionHandlers {
 }
 
 /**
- * The structural actions offered for a division, by where it sits. The root
- * can only grow; a placed division can also be taken out of the document or
- * deleted; an unplaced one can be deleted, and — when it heads its own subtree
- * — put back under the root.
+ * The structural actions offered in a division's settings drawer, by where it
+ * sits. The root has none (it grows from its Contents row's [+], see
+ * `canAddChildDivision`); a placed division can be taken out of the document
+ * or deleted; an unplaced one can be deleted, and — when it heads its own
+ * subtree — put back under the root.
  */
 export function divisionActionEntries(
   division: Division,
   placement: DivisionPlacement,
   handlers: DivisionActionHandlers,
 ): DivisionAction[] {
-  // All three formats can hold a child placeholder today (see
-  // canEmbedDivisionRefs); the gate stays for a future leaf-only format. A
-  // division whose *type* holds no divisions (an <exercises>, a <glossary>)
-  // would have no valid type to offer the new child. The root always can.
-  const canAddChild =
-    canEmbedDivisionRefs(division.sourceFormat) &&
-    (placement.kind === "root" || canContainDivisions(division.type));
-  const addChild: DivisionAction[] = canAddChild
-    ? [
-      {
-        label: "Add new division",
-        onClick: () => handlers.addChild(division.xmlId),
-      },
-    ]
-    : [];
-
   switch (placement.kind) {
     case "root":
-      return addChild;
+      return [];
     case "placed":
       return [
-        ...addChild,
         {
           label: "Remove from document",
           onClick: () => handlers.unplace(division.xmlId, placement.parentXmlId),

@@ -12,12 +12,14 @@ interface SectionItemProps {
   isExpanded: boolean;
   onToggleExpand: () => void;
   onSelect: () => void;
+  /** Start a new sub-division of this one; the row shows no [+] when omitted. */
+  onAddChild?: () => void;
 }
 
 /**
  * One row of the Contents tree. Selecting it opens the division in the code
  * editor, whose title bar carries its properties and actions — the row itself
- * only expands, collapses and selects.
+ * only expands, collapses, selects and, through its [+], adds a sub-division.
  */
 const SectionItem = ({
   division,
@@ -27,6 +29,7 @@ const SectionItem = ({
   isExpanded,
   onToggleExpand,
   onSelect,
+  onAddChild,
 }: SectionItemProps) => {
   const title = divisionDisplayTitle(division);
 
@@ -79,6 +82,35 @@ const SectionItem = ({
             </span>
           )}
         </button>
+
+        {onAddChild && (
+          <button
+            type="button"
+            data-testid="toc-add-child"
+            className={clsx(
+              "shrink-0 ml-auto flex items-center justify-center w-5 h-5 p-0 bg-transparent border-none rounded-[3px] cursor-pointer text-slate-500 hover:text-slate-800 hover:bg-[#dde0e6] focus-visible:opacity-100",
+              // Out of the way until the row is pointed at, focused or open,
+              // so a long book's tree doesn't bristle with them.
+              isActive ? "opacity-100" : "opacity-0 group-hover:opacity-100",
+            )}
+            onClick={onAddChild}
+            aria-label={`Add sub-division to ${title || division.xmlId}`}
+            title="Add sub-division"
+          >
+            <svg
+              width="14"
+              height="14"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              aria-hidden="true"
+            >
+              <path d="M12 5v14M5 12h14" />
+            </svg>
+          </button>
+        )}
       </div>
     </li>
   );

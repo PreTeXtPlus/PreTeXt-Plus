@@ -1,5 +1,6 @@
 import { describe, it, expect, vi } from "vitest";
 import {
+  canAddChildDivision,
   divisionActionEntries,
   findDivisionPlacement,
   type DivisionActionHandlers,
@@ -22,7 +23,6 @@ const pool: Division[] = [
 ];
 
 const handlers = (): DivisionActionHandlers => ({
-  addChild: vi.fn(),
   unplace: vi.fn(),
   remove: vi.fn(),
   placeInDocument: vi.fn(),
@@ -57,18 +57,33 @@ describe("findDivisionPlacement", () => {
   });
 });
 
-describe("divisionActionEntries", () => {
-  it("lets the root only grow", () => {
-    expect(labels("doc")).toEqual(["Add new division"]);
+describe("canAddChildDivision", () => {
+  const canAdd = (xmlId: string) =>
+    canAddChildDivision(
+      pool.find((d) => d.xmlId === xmlId)!,
+      findDivisionPlacement(pool, "doc", xmlId),
+    );
+
+  it("lets the root and placed divisions grow, when their type holds divisions", () => {
+    expect(canAdd("doc")).toBe(true);
+    expect(canAdd("sec")).toBe(true);
+    // <exercises> holds no divisions, so there is no child to add.
+    expect(canAdd("ex")).toBe(false);
   });
 
-  it("offers a placed division removal and deletion, and children when its type allows", () => {
-    expect(labels("sec")).toEqual([
-      "Add new division",
-      "Remove from document",
-      "Delete from project",
-    ]);
-    // <exercises> holds no divisions, so there is no child to add.
+  it("offers an unplaced division no child", () => {
+    expect(canAdd("orph")).toBe(false);
+    expect(canAdd("orphchild")).toBe(false);
+  });
+});
+
+describe("divisionActionEntries", () => {
+  it("offers the root no drawer actions", () => {
+    expect(labels("doc")).toEqual([]);
+  });
+
+  it("offers a placed division removal and deletion", () => {
+    expect(labels("sec")).toEqual(["Remove from document", "Delete from project"]);
     expect(labels("ex")).toEqual(["Remove from document", "Delete from project"]);
   });
 
@@ -83,10 +98,8 @@ describe("divisionActionEntries", () => {
     const entries = divisionActionEntries(sec, { kind: "placed", parentXmlId: "doc" }, h);
     entries.find((a) => a.label === "Remove from document")!.onClick();
     entries.find((a) => a.label === "Delete from project")!.onClick();
-    entries.find((a) => a.label === "Add new division")!.onClick();
     expect(h.unplace).toHaveBeenCalledWith("sec", "doc");
     expect(h.remove).toHaveBeenCalledWith(sec, "doc");
-    expect(h.addChild).toHaveBeenCalledWith("sec");
     expect(entries.find((a) => a.label === "Delete from project")!.danger).toBe(true);
   });
 });
