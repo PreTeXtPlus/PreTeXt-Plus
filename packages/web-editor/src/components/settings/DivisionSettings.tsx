@@ -3,9 +3,7 @@ import type { Division, DivisionType } from "../../types/sections";
 import type { SourceFormat } from "../../types/editor";
 import { divisionRefTag } from "../../sectionUtils";
 import { useEditorStore } from "../../store/hooks";
-import SectionEditForm from "../toc/SectionEditForm";
 import {
-  divisionDisplayTitle,
   divisionSourceXmlId,
   divisionTypeOptions,
   TYPE_FULL_LABELS,
@@ -34,18 +32,13 @@ export interface DivisionSettingsProps {
  * A division's settings: its title, type and id — each saved on its own, on
  * Enter or blur (a select on change), like a snippet's or asset's fields — its
  * embed code, and the structural actions its place in the document allows.
- * While a new child is being drafted the panel is that draft's form instead,
- * with Save/Cancel, so the author names it where they asked for it.
+ * "Add new division" hands the editor pane over to the new child's creation
+ * form (`create/NewItemPane.tsx`).
  */
 const DivisionSettings = ({ division, embedFormat }: DivisionSettingsProps) => {
   const updateDivisionProperties = useEditorStore(
     (s) => s.updateDivisionProperties,
   );
-  const editDraft = useEditorStore((s) => s.editDraft);
-  const pendingNewDivision = useEditorStore((s) => s.pendingNewDivision);
-  const setEditDraft = useEditorStore((s) => s.setEditDraft);
-  const commitSectionEdit = useEditorStore((s) => s.commitSectionEdit);
-  const cancelSectionEdit = useEditorStore((s) => s.cancelSectionEdit);
   const addSection = useEditorStore((s) => s.addSection);
   const setTocExpanded = useEditorStore((s) => s.setTocExpanded);
   const {
@@ -62,26 +55,6 @@ const DivisionSettings = ({ division, embedFormat }: DivisionSettingsProps) => {
     rootDivision?.xmlId ?? null,
     division.xmlId,
   );
-
-  if (pendingNewDivision && editDraft) {
-    const parentType = getDivisionType(pendingNewDivision.parentXmlId);
-    return (
-      <div className="flex flex-col gap-2.5" data-testid="settings-new-division">
-        <SettingsNote>
-          New division inside{" "}
-          <strong>{divisionDisplayTitle(division) || division.xmlId}</strong>.
-          Nothing is created until you save.
-        </SettingsNote>
-        <SectionEditForm
-          draft={editDraft}
-          parentType={parentType}
-          onDraftChange={setEditDraft}
-          onCommit={commitSectionEdit}
-          onCancel={cancelSectionEdit}
-        />
-      </div>
-    );
-  }
 
   // Unplaced, "Place in document" puts it directly under the root, so the
   // root's rules are the ones that apply — an article project never offers

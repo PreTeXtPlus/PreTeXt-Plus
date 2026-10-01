@@ -29,12 +29,12 @@ const EXPLORER_VIEWS: {
 ];
 
 export interface ProjectExplorerProps {
-  /** When provided, shows the Manage/Add affordances in the Assets view. */
-  onOpenAssetPicker?: (initialTab?: "add") => void;
+  /** Offer "New asset" in the Assets view (the host keeps a project-asset pool). */
+  canCreateAssets?: boolean;
   /** If true, hides the Assets view entirely. */
   hideAssets?: boolean;
-  /** When provided, shows the Manage/Add affordances in the Snippets view. */
-  onOpenSnippetPicker?: (initialTab?: "add") => void;
+  /** Offer "New snippet" in the Snippets view (the host keeps a snippet pool). */
+  canCreateSnippets?: boolean;
   /** If true, hides the Snippets view entirely. */
   hideSnippets?: boolean;
   /** If true, hides every structural action (add/remove/edit/place a division). */
@@ -50,9 +50,9 @@ export interface ProjectExplorerProps {
  * their data from the editor store.
  */
 const ProjectExplorer = ({
-  onOpenAssetPicker,
+  canCreateAssets,
   hideAssets,
-  onOpenSnippetPicker,
+  canCreateSnippets,
   hideSnippets,
   readOnly,
   onJumpToMatch,
@@ -140,10 +140,10 @@ const ProjectExplorer = ({
           </div>
           {activeView === "toc" && <ArticleToc />}
           {activeView === "snippets" && (
-            <SnippetList onOpenSnippetPicker={onOpenSnippetPicker} />
+            <SnippetList canCreate={canCreateSnippets && !readOnly} />
           )}
           {activeView === "assets" && (
-            <AssetList onOpenAssetPicker={onOpenAssetPicker} />
+            <AssetList canCreate={canCreateAssets && !readOnly} />
           )}
           {activeView === "find" && (
             <FindReplacePanel

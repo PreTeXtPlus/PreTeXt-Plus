@@ -96,9 +96,9 @@ interface CodeEditorMenuProps {
    * Should be `false` when conversion has failed.
    */
   canConvertToPretext?: boolean;
-  /** If provided, an "Assets…" item is shown (PreTeXt mode only). */
+  /** If provided, a "New Asset…" item is shown (PreTeXt mode only). */
   onOpenAssets?: () => void;
-  /** If provided, a "Snippets…" item is shown (PreTeXt mode only). */
+  /** If provided, a "New Snippet…" item is shown (PreTeXt mode only). */
   onOpenSnippets?: () => void;
   /** Opens the assembled-source modal. */
   onShowFullSource: () => void;

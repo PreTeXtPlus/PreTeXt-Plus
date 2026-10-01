@@ -3,28 +3,31 @@ import { buildProjectSnippetView, type SnippetRow } from "../../snippetView";
 import { useEditorStore } from "../../store/hooks";
 
 export interface SnippetListProps {
-  onOpenSnippetPicker?: (initialTab?: "add") => void;
+  /** Offer "Add", which opens the new-snippet form in the editor pane. */
+  canCreate?: boolean;
 }
 
 /**
  * The explorer's Snippets view: every snippet placeholder and project snippet,
  * with status. Selecting a snippet opens its source in the code editor, whose
  * title bar carries its settings; a placeholder with no snippet behind it opens
- * the snippet manager to link or create one instead, having no source to open.
+ * the "Link snippet" form in the editor pane instead, having no source to open.
  */
-const SnippetList = ({ onOpenSnippetPicker }: SnippetListProps) => {
+const SnippetList = ({ canCreate }: SnippetListProps) => {
   const divisions = useEditorStore((s) => s.divisions);
   const projectSnippets = useEditorStore((s) => s.projectSnippets) ?? [];
   const openItem = useEditorStore((s) => s.openItem);
   const openSnippet = useEditorStore((s) => s.openSnippet);
-  const openSnippetResolver = useEditorStore((s) => s.openSnippetResolver);
+  const startCreate = useEditorStore((s) => s.startCreate);
+  const resolveSnippet = (ref: string) =>
+    startCreate({ kind: "snippet", resolveRef: ref });
 
   // ── Joined snippet view — placeholders + project snippets, with status ───────
   const snippetView = buildProjectSnippetView(divisions, projectSnippets);
 
   const openSnippetRow = (row: SnippetRow) =>
     row.status === "unlinked"
-      ? openSnippetResolver(row.ref)
+      ? resolveSnippet(row.ref)
       : openSnippet(row.ref);
 
   return (
@@ -33,11 +36,11 @@ const SnippetList = ({ onOpenSnippetPicker }: SnippetListProps) => {
         {snippetView.length === 0 ? (
           <p className="m-0 py-2 px-3 text-slate-400 text-[0.78rem]">
             No snippets in this project yet.{" "}
-            {onOpenSnippetPicker && (
+            {canCreate && (
               <button
                 type="button"
                 className="bg-transparent border-none text-blue-600 cursor-pointer font-[inherit] text-[0.78rem] p-0 hover:underline"
-                onClick={() => onOpenSnippetPicker("add")}
+                onClick={() => startCreate({ kind: "snippet" })}
               >
                 Add one
               </button>
@@ -102,23 +105,15 @@ const SnippetList = ({ onOpenSnippetPicker }: SnippetListProps) => {
         )}
       </div>
 
-      {onOpenSnippetPicker && (
-        <div className="block w-full bg-transparent border-none border-t border-[#dde0e6] py-[7px] px-2.5 font-[inherit] text-[0.78rem] text-left shrink-0 flex justify-around">
+      {canCreate && (
+        <div className="block w-full bg-transparent border-none border-t border-[#dde0e6] py-[7px] px-2.5 font-[inherit] text-[0.78rem] text-left shrink-0 flex">
           <button
             type="button"
-            data-testid="toc-snippets-btn"
+            data-testid="toc-new-snippet-btn"
             className="bg-transparent border-none text-blue-600 cursor-pointer hover:bg-blue-50 hover:underline"
-            onClick={() => onOpenSnippetPicker()}
+            onClick={() => startCreate({ kind: "snippet" })}
           >
-            Manage
-          </button>
-          <button
-            type="button"
-            data-testid="toc-snippets-btn"
-            className="bg-transparent border-none text-blue-600 cursor-pointer hover:bg-blue-50 hover:underline"
-            onClick={() => onOpenSnippetPicker("add")}
-          >
-            Add
+            + New snippet
           </button>
         </div>
       )}

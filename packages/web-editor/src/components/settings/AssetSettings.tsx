@@ -22,7 +22,7 @@ export interface AssetSettingsProps {
    * changed. Rejects with the host's error, which the field shows.
    */
   onSave: (asset: Asset, prevRef: string) => Promise<void>;
-  /** Start replacing the asset's file (the asset manager's replace flow). Hidden when omitted. */
+  /** Start replacing the asset's file (the "Replace asset" form). Hidden when omitted. */
   onReplace?: (asset: Asset) => void;
   readOnly?: boolean;
 }

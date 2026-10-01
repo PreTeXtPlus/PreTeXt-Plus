@@ -103,8 +103,8 @@ export function buildDocumentActionEntries({
       entries.push({
         kind: "item",
         key: "assets",
-        label: "Assets…",
-        title: "Manage the project's images and other assets",
+        label: "New Asset…",
+        title: "Add an image or other asset to the project",
         onSelect: onOpenAssets,
       });
     }
@@ -112,8 +112,8 @@ export function buildDocumentActionEntries({
       entries.push({
         kind: "item",
         key: "snippets",
-        label: "Snippets…",
-        title: "Manage the project's reusable source snippets",
+        label: "New Snippet…",
+        title: "Add a reusable source snippet to the project",
         onSelect: onOpenSnippets,
       });
     }

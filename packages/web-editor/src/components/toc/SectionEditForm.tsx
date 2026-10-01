@@ -27,7 +27,7 @@ interface SectionEditFormProps {
 /**
  * The properties form for a new, not-yet-created division. Unlike an existing
  * division's fields, which save one at a time, a draft is saved (and the
- * division created) all at once with Save — there is nothing to save a field
+ * division created) all at once with Create — there is nothing to save a field
  * *to* until then.
  */
 const SectionEditForm = ({
@@ -147,7 +147,7 @@ const SectionEditForm = ({
       </SettingsField>
       <div className="flex gap-1.5">
         <SettingsButton variant="primary" onClick={onCommit}>
-          Save
+          Create
         </SettingsButton>
         <SettingsButton onClick={onCancel}>Cancel</SettingsButton>
       </div>

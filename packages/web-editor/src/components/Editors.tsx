@@ -32,8 +32,7 @@ import type { CleanFinding } from "../cleanFindings";
 import ConvertToPretextDialog from "./ConvertToPretextDialog";
 import DocinfoEditor from "./DocinfoEditor";
 import FullSourceModal from "./FullSourceModal";
-import AssetManagerModal, { type AssetManagerMainTab } from "./AssetManagerModal";
-import SnippetManagerModal, { type SnippetManagerMainTab } from "./SnippetManagerModal";
+import NewItemPane from "./create/NewItemPane";
 import EditorTargetBar from "./EditorTargetBar";
 import AssetPreview from "./AssetPreview";
 import {
@@ -85,6 +84,8 @@ import {
   removeAssetRef,
   renameSnippetRef,
   removeSnippetRef,
+  assetEmbedCode,
+  snippetEmbedCode,
   updateSectionMetadata,
   normalizeDivisionsOnLoad,
   isRootDivisionType,
@@ -104,6 +105,7 @@ import {
   createEditorStore,
   defaultTocCollapsed,
   isNarrowViewport,
+  type CreateRequest,
   type DivisionChanges,
   type EditorCallbacks,
   type EditorStoreHandle,
@@ -360,11 +362,11 @@ export interface editorProps {
    */
   onAssetFetchUrl?: (url: string) => Promise<File>;
   /**
-   * Called when the user creates a new authored (file-less) asset via the
-   * asset manager's "Author" tab. Host derives the ref from `title` itself
+   * Called when the user creates a new authored (file-less) asset from the
+   * "New asset" form's Custom tab. Host derives the ref from `title` itself
    * (the same way it already does for `onAssetUpload`) and returns the
    * created asset — its `source` is empty until the user fills it in via the
-   * asset editor.
+   * code editor.
    */
   onCreateAuthored?: (title: string) => Promise<Asset>;
   /**
@@ -383,7 +385,7 @@ export interface editorProps {
    * the document pointing at an asset the host can no longer find.
    */
   onAssetUpdate?: (asset: Asset) => Promise<void> | void;
-  /** If true, the TOC and asset manager hide all assets. */
+  /** If true, the explorer's Assets view and the "New Asset…" menu item are hidden. */
   hideAssets?: boolean;
 
   /**
@@ -392,13 +394,14 @@ export interface editorProps {
    */
   projectSnippets?: Snippet[];
   /**
-   * Called when the user creates a new snippet via the snippet manager's
-   * "Add" tab. Host derives the record from `ref` (which the user typed
-   * directly, unlike an asset's derived-from-title ref) and returns the
-   * created snippet — its `source` is empty until the user fills it in via
-   * the snippet editor.
+   * Called when the user creates a new snippet from the "New snippet" form.
+   * Host derives the record from `ref` (which the user typed directly, unlike
+   * an asset's derived-from-title ref) and the chosen `sourceFormat` (omitted
+   * by callers predating it — treat as `"pretext"`), and returns the created
+   * snippet — its `source` is empty until the user fills it in via the code
+   * editor.
    */
-  onCreateSnippet?: (ref: string) => Promise<Snippet>;
+  onCreateSnippet?: (ref: string, sourceFormat?: SourceFormat) => Promise<Snippet>;
   /**
    * Called when the user removes a snippet from the project.
    */
@@ -410,11 +413,11 @@ export interface editorProps {
    */
   onSnippetUpdate?: (snippet: Snippet) => Promise<void> | void;
   /**
-   * Called when the user duplicates a snippet from the snippet manager/editor.
+   * Called when the user duplicates a snippet from its settings drawer.
    * When omitted, the Duplicate control is hidden.
    */
   onSnippetDuplicate?: (snippet: Snippet) => void | Promise<void>;
-  /** If true, the snippet manager is hidden entirely. */
+  /** If true, the explorer's Snippets view and the "New Snippet…" menu item are hidden. */
   hideSnippets?: boolean;
 
   /**
@@ -656,23 +659,13 @@ const EditorsInner = (props: EditorsInnerProps) => {
   const isCleanDialogOpen = useEditorStore((s) => s.isCleanDialogOpen);
   const isConvertDialogOpen = useEditorStore((s) => s.isConvertDialogOpen);
   const isDocinfoEditorOpen = useEditorStore((s) => s.isDocinfoEditorOpen);
-  const isAssetPickerOpen = useEditorStore((s) => s.isAssetPickerOpen);
-  const isSnippetPickerOpen = useEditorStore((s) => s.isSnippetPickerOpen);
   const isFullSourceOpen = useEditorStore((s) => s.isFullSourceOpen);
   const openItem = useEditorStore((s) => s.openItem);
   const openDivision = useEditorStore((s) => s.openDivision);
   const openAsset = useEditorStore((s) => s.openAsset);
   const openSnippet = useEditorStore((s) => s.openSnippet);
-  const assetResolveTarget = useEditorStore((s) => s.assetResolveTarget);
-  const closeAssetResolver = useEditorStore((s) => s.closeAssetResolver);
-  const snippetResolveTarget = useEditorStore((s) => s.snippetResolveTarget);
-  const closeSnippetResolver = useEditorStore((s) => s.closeSnippetResolver);
-  // Replace target is local UI state (only Editors + the asset manager need it).
-  const [assetReplaceTarget, setAssetReplaceTarget] = useState<Asset | null>(null);
-  // Which tab the asset manager should open on — local UI state, reset per open.
-  const [assetPickerInitialTab, setAssetPickerInitialTab] = useState<AssetManagerMainTab>("in-document");
-  // Which tab the snippet manager should open on — local UI state, reset per open.
-  const [snippetPickerInitialTab, setSnippetPickerInitialTab] = useState<SnippetManagerMainTab>("in-document");
+  const creating = useEditorStore((s) => s.creating);
+  const startCreate = useEditorStore((s) => s.startCreate);
   const openModal = useEditorStore((s) => s.openModal);
   const closeModal = useEditorStore((s) => s.closeModal);
   const syncState = useEditorStore((s) => s.syncState);
@@ -1384,8 +1377,8 @@ const EditorsInner = (props: EditorsInnerProps) => {
   // ── Asset embedding ─────────────────────────────────────────────────────
   // Assets are no longer inserted at the Monaco cursor (which silently fails
   // inside a division's locked header). Instead a newly added asset is dropped
-  // into the project pool and its embed code copied to the clipboard (by the
-  // asset manager), so the author pastes it wherever it belongs.
+  // into the project pool and its embed code copied to the clipboard (see
+  // `handleAssetCreated`), so the author pastes it wherever it belongs.
   const handleAssetAdded = (asset: Asset) => {
     // Add to the authoritative pool optimistically so it's editable immediately,
     // even before the host echoes it back as an updated `projectAssets` prop.
@@ -1465,8 +1458,8 @@ const EditorsInner = (props: EditorsInnerProps) => {
   };
 
   /**
-   * Replace an asset with the user's freshly created `newAsset` (from the asset
-   * manager's replace mode), then drop the old one. The new asset adopts the old
+   * Replace an asset with the user's freshly created `newAsset` (from the
+   * "Replace asset" form), then drop the old one. The new asset adopts the old
    * ref/title/source (`onAssetUpdate`) so the document's references don't move,
    * and it's safe because each asset owns its own file.
    */
@@ -1531,8 +1524,8 @@ const EditorsInner = (props: EditorsInnerProps) => {
 
   // ── Snippet embedding ─────────────────────────────────────────────────────
   // Mirrors "Asset embedding" above: a newly added snippet is dropped into the
-  // project pool and its embed code copied to the clipboard (by the snippet
-  // manager), so the author pastes it wherever it belongs.
+  // project pool and its embed code copied to the clipboard (see
+  // `handleSnippetCreated`), so the author pastes it wherever it belongs.
   const handleSnippetAdded = (snippet: Snippet) => {
     addSnippetToPool(snippet);
     bridge?.localSnippetAdd(snippet);
@@ -1557,7 +1550,7 @@ const EditorsInner = (props: EditorsInnerProps) => {
       buildProjectSnippetView(divisions, projectSnippets).map((r) => r.ref),
     );
     const newRef = makeUniqueSnippetRef(snippet.ref, taken);
-    const created = await props.onCreateSnippet(newRef);
+    const created = await props.onCreateSnippet(newRef, snippet.sourceFormat);
     const copy: Snippet = {
       ...created,
       ref: newRef,
@@ -1592,6 +1585,53 @@ const EditorsInner = (props: EditorsInnerProps) => {
         emitContentChange(division.xmlId, next, division.sourceFormat);
       }
     }
+  };
+
+  // ── Creation form results ────────────────────────────────────────────────
+  // What the "New snippet" / "New asset" forms (`create/NewItemPane.tsx`) do
+  // with the record the host created: add it to the project, bind the
+  // placeholder it was created for or take over the asset it replaces, and
+  // open it in the editor. A plain create also copies its embed code, so the
+  // author can paste it wherever it belongs.
+  const copyEmbedCode = (code: string) => {
+    navigator.clipboard?.writeText(code).catch(() => {});
+  };
+
+  const handleSnippetCreated = (
+    snippet: Snippet,
+    request: CreateRequest & { kind: "snippet" },
+  ) => {
+    handleSnippetAdded(snippet);
+    if (request.resolveRef) {
+      renameSnippetRefEverywhere(request.resolveRef, snippet.ref);
+    } else {
+      copyEmbedCode(snippetEmbedCode(snippet.ref, editorFormat));
+    }
+    openSnippet(snippet.ref);
+  };
+
+  const handleAssetCreated = async (
+    asset: Asset,
+    request: CreateRequest & { kind: "asset" },
+  ) => {
+    if (request.replaceRef) {
+      const old = projectAssets?.find((a) => a.ref === request.replaceRef);
+      if (old) {
+        // Close the form first: the swap below awaits the host, and the
+        // replacement opens under the old ref once it lands.
+        openAsset(request.replaceRef);
+        await handleAssetReplaceCommit(old, asset);
+      }
+      return;
+    }
+    handleAssetAdded(asset);
+    if (!asset.ref) return;
+    if (request.resolveRef) {
+      renameAssetRefEverywhere(request.resolveRef, asset.ref);
+    } else {
+      copyEmbedCode(assetEmbedCode(asset.ref, editorFormat));
+    }
+    openAsset(asset.ref);
   };
 
   // ── Snippet / asset buffers ──────────────────────────────────────────────
@@ -2404,11 +2444,11 @@ const EditorsInner = (props: EditorsInnerProps) => {
   const canConvertToPretext = divisionConvertedPretext !== undefined;
   const onOpenAssets =
     props.projectAssets !== undefined && editorFormat === "pretext"
-      ? () => openModal("isAssetPickerOpen")
+      ? () => startCreate({ kind: "asset" })
       : undefined;
   const onOpenSnippets =
     props.projectSnippets !== undefined && editorFormat === "pretext"
-      ? () => openModal("isSnippetPickerOpen")
+      ? () => startCreate({ kind: "snippet" })
       : undefined;
   const onShowFullSource = () => openModal("isFullSourceOpen");
 
@@ -2473,20 +2513,36 @@ const EditorsInner = (props: EditorsInnerProps) => {
   );
 
   // The code editor under its title bar, whose drawer holds the open item's
-  // settings and actions (dropping down over the editor).
+  // settings and actions (dropping down over the editor). While the author is
+  // creating something, the creation form takes the pane instead; the editor
+  // stays mounted underneath (hidden), so its buffer, undo history and any
+  // collaboration binding are untouched when the form goes away.
   const editorPane = (
     <div className="flex flex-col flex-1 h-full min-h-0">
-      <EditorTargetBar
-        target={editorTarget}
-        readOnly={props.readOnly}
-        onSaveSnippet={handleSnippetSave}
-        onSaveAsset={handleAssetSave}
-        onReplaceAsset={
-          canReplaceAsset ? (asset) => setAssetReplaceTarget(asset) : undefined
-        }
-        saveError={isDivisionOpen ? null : bufferSaveError}
-      />
-      <div className="flex flex-col flex-1 min-h-0 relative">{codeEditor}</div>
+      {creating && (
+        <NewItemPane
+          onCreateSnippet={props.onCreateSnippet}
+          onUploadAsset={props.onAssetUpload}
+          onFetchAssetUrl={props.onAssetFetchUrl}
+          onCreateAuthoredAsset={props.onCreateAuthored}
+          onSnippetCreated={handleSnippetCreated}
+          onAssetCreated={(asset, request) => void handleAssetCreated(asset, request)}
+        />
+      )}
+      <div
+        className={clsx("flex flex-col flex-1 min-h-0", creating && "hidden")}
+        data-testid="editor-pane-main"
+      >
+        <EditorTargetBar
+          target={editorTarget}
+          readOnly={props.readOnly}
+          onSaveSnippet={handleSnippetSave}
+          onSaveAsset={handleAssetSave}
+          canReplaceAsset={canReplaceAsset}
+          saveError={isDivisionOpen ? null : bufferSaveError}
+        />
+        <div className="flex flex-col flex-1 min-h-0 relative">{codeEditor}</div>
+      </div>
     </div>
   );
 
@@ -2562,23 +2618,9 @@ const EditorsInner = (props: EditorsInnerProps) => {
     <ProjectExplorer
       hideAssets={props.hideAssets}
       readOnly={props.readOnly}
-      onOpenAssetPicker={
-        props.projectAssets !== undefined
-          ? (initialTab) => {
-              setAssetPickerInitialTab(initialTab ?? "in-document");
-              openModal("isAssetPickerOpen");
-            }
-          : undefined
-      }
+      canCreateAssets={props.projectAssets !== undefined}
       hideSnippets={props.hideSnippets}
-      onOpenSnippetPicker={
-        props.projectSnippets !== undefined
-          ? (initialTab) => {
-              setSnippetPickerInitialTab(initialTab ?? "in-document");
-              openModal("isSnippetPickerOpen");
-            }
-          : undefined
-      }
+      canCreateSnippets={props.projectSnippets !== undefined}
       onJumpToMatch={handleJumpToMatch}
       onReplaceMatches={handleReplaceMatches}
     />
@@ -2768,55 +2810,10 @@ const EditorsInner = (props: EditorsInnerProps) => {
             }}
           />
         ) : null}
-        {(isAssetPickerOpen || assetResolveTarget || assetReplaceTarget) &&
-        props.projectAssets !== undefined ? (
-          <AssetManagerModal
-            open={isAssetPickerOpen || !!assetResolveTarget || !!assetReplaceTarget}
-            initialTab={assetPickerInitialTab}
-            resolveTarget={assetResolveTarget}
-            replaceTarget={assetReplaceTarget}
-            onClose={() => {
-              closeModal("isAssetPickerOpen");
-              closeAssetResolver();
-              setAssetReplaceTarget(null);
-              setAssetPickerInitialTab("in-document");
-            }}
-            onUpload={props.onAssetUpload}
-            onFetchUrl={props.onAssetFetchUrl}
-            onCreateAuthored={props.onCreateAuthored}
-            onRemoveAsset={props.onAssetRemove ? handleAssetRemove : undefined}
-            onDuplicateAsset={
-              canDuplicateAsset ? handleAssetDuplicate : undefined
-            }
-            onAssetAdded={handleAssetAdded}
-            onResolveRef={renameAssetRefEverywhere}
-            onReplaceAsset={handleAssetReplaceCommit}
-          />
-        ) : null}
         {isFullSourceOpen ? (
           <FullSourceModal
             source={fullProjectSource}
             onClose={() => closeModal("isFullSourceOpen")}
-          />
-        ) : null}
-        {(isSnippetPickerOpen || snippetResolveTarget) &&
-        props.projectSnippets !== undefined ? (
-          <SnippetManagerModal
-            open={isSnippetPickerOpen || !!snippetResolveTarget}
-            initialTab={snippetPickerInitialTab}
-            resolveTarget={snippetResolveTarget}
-            onClose={() => {
-              closeModal("isSnippetPickerOpen");
-              closeSnippetResolver();
-              setSnippetPickerInitialTab("in-document");
-            }}
-            onCreateSnippet={props.onCreateSnippet}
-            onRemoveSnippet={props.onSnippetRemove ? handleSnippetRemove : undefined}
-            onDuplicateSnippet={
-              canDuplicateSnippet ? handleSnippetDuplicate : undefined
-            }
-            onSnippetAdded={handleSnippetAdded}
-            onResolveRef={renameSnippetRefEverywhere}
           />
         ) : null}
       </div>

@@ -53,13 +53,14 @@ class AssetEditSyncTest < ApplicationSystemTestCase
     open_asset_settings_for(@asset)
     click_button "Replace image…"
 
-    assert_selector "[aria-label='Asset manager']", wait: 10
+    # The "Replace asset" form takes the editor's place.
+    assert_selector "[data-testid='new-item-pane']", text: "Replace asset", wait: 10
     attach_file(Rails.root.join("test/fixtures/files/test_image.png"), make_visible: true) do
       find("[aria-label='Paste an image, drag and drop to upload, or click to browse files']").click
     end
-    click_button "Add to Project"
+    within("[data-testid='new-item-pane']") { click_button "Replace" }
 
-    assert_no_selector "[aria-label='Asset manager']", wait: 10
+    assert_no_selector "[data-testid='new-item-pane']", wait: 10
 
     # The replacement inherits the ref (and title) so every embed already in the
     # document keeps resolving; the row it replaced is gone. Getting there takes
@@ -80,18 +81,18 @@ class AssetEditSyncTest < ApplicationSystemTestCase
 
     visit edit_project_path(@project)
     open_explorer_view(:assets)
-    assert_selector "button[data-testid='toc-assets-btn']", text: "Add", wait: 20
-    find("button[data-testid='toc-assets-btn']", text: "Add").click
+    find("button[data-testid='toc-new-asset-btn']", wait: 20).click
 
-    assert_selector "[aria-label='Asset manager']", wait: 10
-    click_button "Custom"
-
-    fill_in "am-author-title", with: "Authored Diagram"
-    click_button "Create"
+    # The "New asset" form takes the editor's place.
+    within("[data-testid='new-item-pane']", wait: 10) do
+      click_button "Custom"
+      fill_in "Title", with: "Authored Diagram"
+      click_button "Create"
+    end
 
     # A bare authored asset (no source yet) is created, then opened in the
     # code editor automatically -- same hand-off as upload/URL.
-    assert_no_selector "[aria-label='Asset manager']", wait: 10
+    assert_no_selector "[data-testid='new-item-pane']", wait: 10
     assert_selector "[data-testid='editor-target-title']", text: "Authored Diagram", wait: 10
 
     asset = eventually { @project.assets.reload.find_by(ref: ref) }

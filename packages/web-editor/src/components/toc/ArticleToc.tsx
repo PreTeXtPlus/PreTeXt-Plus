@@ -59,7 +59,8 @@ const ArticleToc = () => {
 
   const selectSection = useEditorStore((s) => s.selectSection);
   const editDraft = useEditorStore((s) => s.editDraft);
-  const pendingNewDivision = useEditorStore((s) => s.pendingNewDivision);
+  const creating = useEditorStore((s) => s.creating);
+  const pendingNewDivision = creating?.kind === "division" ? creating : null;
 
   const tocExpansion = useEditorStore((s) => s.tocExpansion);
   const setTocExpanded = useEditorStore((s) => s.setTocExpanded);

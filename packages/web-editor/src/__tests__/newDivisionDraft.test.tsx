@@ -83,8 +83,8 @@ function addUnder(label: string) {
   fireEvent.click(within(openSettings(label)).getByText("Add new division"));
 }
 
-/** The draft's properties form (in the drawer), and the fields/buttons inside it. */
-const draftRow = () => screen.getByTestId("settings-new-division");
+/** The draft's properties form (in the editor pane), and the fields/buttons inside it. */
+const draftRow = () => screen.getByTestId("new-item-pane");
 const titleField = () =>
   within(draftRow()).getByText("Title").parentElement!
     .querySelector("input") as HTMLInputElement;
@@ -127,7 +127,7 @@ describe("a new division is a draft until it is saved", () => {
     fireEvent.change(titleField(), { target: { value: "My New Bit" } });
     expect(idField().value).toBe("sec-my-new-bit");
 
-    fireEvent.click(within(draftRow()).getByText("Save"));
+    fireEvent.click(within(draftRow()).getByText("Create"));
 
     expect(added).toHaveLength(1);
     expect(added[0].xmlId).toBe("sec-my-new-bit");
@@ -146,7 +146,7 @@ describe("a new division is a draft until it is saved", () => {
       const { added, changes } = renderEditors();
       addUnder("Main");
       fireEvent.change(idField(), { target: { value: "one" } });
-      fireEvent.click(within(draftRow()).getByText("Save"));
+      fireEvent.click(within(draftRow()).getByText("Create"));
 
       expect(alert).toHaveBeenCalledOnce();
       expect(draftRow()).toBeInTheDocument();
@@ -161,7 +161,7 @@ describe("a new division is a draft until it is saved", () => {
     const { added, sourceOf } = renderEditors();
     addUnder("One");
     fireEvent.change(titleField(), { target: { value: "Deeper" } });
-    fireEvent.click(within(draftRow()).getByText("Save"));
+    fireEvent.click(within(draftRow()).getByText("Create"));
 
     expect(added[0].type).toBe("subsection");
     expect(sourceOf("one")).toContain(

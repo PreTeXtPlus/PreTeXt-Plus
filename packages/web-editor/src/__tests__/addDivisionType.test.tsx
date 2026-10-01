@@ -76,8 +76,8 @@ function addDivisionUnder(label: string) {
 
 /** Save the open draft, creating the division. */
 function saveDraft() {
-  const form = screen.getByTestId("settings-new-division");
-  fireEvent.click(within(form).getByText("Save"));
+  const form = screen.getByTestId("new-item-pane");
+  fireEvent.click(within(form).getByText("Create"));
 }
 
 /** The Type dropdown of the open properties form. */

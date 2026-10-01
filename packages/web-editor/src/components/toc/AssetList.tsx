@@ -3,27 +3,30 @@ import { buildProjectAssetView, type AssetRow } from "../../assetView";
 import { useEditorStore } from "../../store/hooks";
 
 export interface AssetListProps {
-  onOpenAssetPicker?: (initialTab?: "add") => void;
+  /** Offer "Add", which opens the new-asset form in the editor pane. */
+  canCreate?: boolean;
 }
 
 /**
  * The explorer's Assets view: every asset placeholder and project asset, with
  * status. Selecting an asset opens its source in the code editor, whose title
  * bar carries its settings; a placeholder with no asset behind it opens the
- * asset manager to link or upload one instead, having no source to open.
+ * "Link asset" form in the editor pane instead, having no source to open.
  */
-const AssetList = ({ onOpenAssetPicker }: AssetListProps) => {
+const AssetList = ({ canCreate }: AssetListProps) => {
   const divisions = useEditorStore((s) => s.divisions);
   const projectAssets = useEditorStore((s) => s.projectAssets) ?? [];
   const openItem = useEditorStore((s) => s.openItem);
   const openAsset = useEditorStore((s) => s.openAsset);
-  const openAssetResolver = useEditorStore((s) => s.openAssetResolver);
+  const startCreate = useEditorStore((s) => s.startCreate);
+  const resolveAsset = (ref: string) =>
+    startCreate({ kind: "asset", resolveRef: ref });
 
   // ── Joined asset view — placeholders + project assets, with status ───────
   const assetView = buildProjectAssetView(divisions, projectAssets);
 
   const openAssetRow = (row: AssetRow) =>
-    row.status === "unlinked" ? openAssetResolver(row.ref) : openAsset(row.ref);
+    row.status === "unlinked" ? resolveAsset(row.ref) : openAsset(row.ref);
 
   return (
     <>
@@ -31,11 +34,11 @@ const AssetList = ({ onOpenAssetPicker }: AssetListProps) => {
         {assetView.length === 0 ? (
           <p className="m-0 py-2 px-3 text-slate-400 text-[0.78rem]">
             No assets in this project yet.{" "}
-            {onOpenAssetPicker && (
+            {canCreate && (
               <button
                 type="button"
                 className="bg-transparent border-none text-blue-600 cursor-pointer font-[inherit] text-[0.78rem] p-0 hover:underline"
-                onClick={() => onOpenAssetPicker("add")}
+                onClick={() => startCreate({ kind: "asset" })}
               >
                 Add one
               </button>
@@ -120,23 +123,15 @@ const AssetList = ({ onOpenAssetPicker }: AssetListProps) => {
         )}
       </div>
 
-      {onOpenAssetPicker && (
-        <div className="block w-full bg-transparent border-none border-t border-[#dde0e6] py-[7px] px-2.5 font-[inherit] text-[0.78rem] text-left shrink-0 flex justify-around">
+      {canCreate && (
+        <div className="block w-full bg-transparent border-none border-t border-[#dde0e6] py-[7px] px-2.5 font-[inherit] text-[0.78rem] text-left shrink-0 flex">
           <button
             type="button"
-            data-testid="toc-assets-btn"
+            data-testid="toc-new-asset-btn"
             className="bg-transparent border-none text-blue-600 cursor-pointer hover:bg-blue-50 hover:underline"
-            onClick={() => onOpenAssetPicker()}
+            onClick={() => startCreate({ kind: "asset" })}
           >
-            Manage
-          </button>
-          <button
-            type="button"
-            data-testid="toc-assets-btn"
-            className="bg-transparent border-none text-blue-600 cursor-pointer hover:bg-blue-50 hover:underline"
-            onClick={() => onOpenAssetPicker("add")}
-          >
-            Add
+            + New asset
           </button>
         </div>
       )}

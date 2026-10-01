@@ -59,7 +59,7 @@ describe("the open item", () => {
     expect(selectOpenDivisionId(store.getState())).toBeNull();
   });
 
-  it("closes the settings drawer and drops any draft when another item opens", () => {
+  it("abandons the creation form when the author opens an item", () => {
     const store = makeStore();
     store.getState().startNewDivision("sec", {
       title: "New",
@@ -68,12 +68,35 @@ describe("the open item", () => {
       label: "",
       sourceFormat: "pretext",
     });
-    expect(store.getState().isSettingsDrawerOpen).toBe(true);
+    expect(store.getState().creating).toEqual({
+      kind: "division",
+      parentXmlId: "sec",
+    });
 
     store.getState().openSnippet("greeting");
-    expect(store.getState().isSettingsDrawerOpen).toBe(false);
     expect(store.getState().editDraft).toBeNull();
-    expect(store.getState().pendingNewDivision).toBeNull();
+    expect(store.getState().creating).toBeNull();
+
+    // Re-opening the item that was already open abandons it too: clicking its
+    // row is how the author gets back to it.
+    store.getState().startCreate({ kind: "asset" });
+    store.getState().openSnippet("greeting");
+    expect(store.getState().creating).toBeNull();
+  });
+
+  it("keeps the creation form when the host restates the open division", () => {
+    const store = makeStore();
+    const { openItem } = store.getState();
+    store.getState().startCreate({ kind: "snippet" });
+    store.getState().applyExternalUpdate({ activeDivisionId: openItem.ref });
+    expect(store.getState().creating).toEqual({ kind: "snippet" });
+  });
+
+  it("closes the settings drawer when another item opens", () => {
+    const store = makeStore();
+    store.getState().setSettingsDrawerOpen(true);
+    store.getState().openSnippet("greeting");
+    expect(store.getState().isSettingsDrawerOpen).toBe(false);
   });
 
   it("leaves the drawer alone when the open item is reopened", () => {

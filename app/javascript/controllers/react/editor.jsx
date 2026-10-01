@@ -874,7 +874,7 @@ function EditorApp({ config }) {
   // Creates a file-less "authored" asset -- unlike onAssetUpload there's no
   // file to multipart-upload, so this goes through patchProjectJson (like
   // onDivisionAdd) instead of patchProjectAssetUpload. `title` comes from the
-  // asset manager's create form; the ref is derived from it exactly like
+  // editor's "New asset" form; the ref is derived from it exactly like
   // onAssetUpload derives one from an uploaded file's title. `source` starts
   // empty and is filled in afterward through onAssetUpdate, the same as any
   // other edit.
@@ -1032,13 +1032,14 @@ function EditorApp({ config }) {
   }, [queryClient, projectId]);
 
   // Unlike an asset (whose ref is derived from a title), a snippet's ref is
-  // typed directly by the user in the snippet manager -- already sanitized and
-  // checked against the live pools there. The server (HasUniqueRef) is still
-  // the final authority; a collision surfaces as a normal rejected PATCH.
+  // typed directly by the user in the "New snippet" form -- already sanitized
+  // and checked against the live pools there -- along with its source format.
+  // The server (HasUniqueRef) is still the final authority; a collision
+  // surfaces as a normal rejected PATCH.
   const onCreateSnippet = useCallback(
-    async (ref) => {
+    async (ref, sourceFormat = "pretext") => {
       const json = await patchProjectJson({
-        snippets_attributes: [ { ref, source: "", source_format: "pretext" } ],
+        snippets_attributes: [ { ref, source: "", source_format: sourceFormat } ],
       });
       const created = (json.snippets ?? []).find((s) => s.ref === ref);
       invalidateSnippetQueries();

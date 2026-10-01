@@ -21,8 +21,8 @@ export interface EditorTargetBarProps {
   onSaveSnippet: (snippet: Snippet, prevRef: string) => Promise<void>;
   /** Persist an asset metadata edit — see `AssetSettings`' `onSave`. */
   onSaveAsset: (asset: Asset, prevRef: string) => Promise<void>;
-  /** Start replacing an asset's file; hidden when omitted. */
-  onReplaceAsset?: (asset: Asset) => void;
+  /** Offer "Replace image…", which opens the "Replace asset" form. */
+  canReplaceAsset?: boolean;
   /** A failed autosave of the open buffer, shown until the next save succeeds. */
   saveError?: string | null;
 }
@@ -34,7 +34,7 @@ const KIND_LABELS: Record<EditorTarget["kind"], string> = {
 };
 
 /** The explorer rail's icons, drawn at bar size. */
-const KindIcon = ({ kind }: { kind: EditorTarget["kind"] }) => {
+export const KindIcon = ({ kind }: { kind: EditorTarget["kind"] }) => {
   const Icon = kind === "division" ? TocIcon : kind === "snippet" ? SnippetsIcon : AssetsIcon;
   return (
     <span
@@ -79,9 +79,10 @@ const EditorTargetBar = ({
   readOnly,
   onSaveSnippet,
   onSaveAsset,
-  onReplaceAsset,
+  canReplaceAsset,
   saveError,
 }: EditorTargetBarProps) => {
+  const startCreate = useEditorStore((s) => s.startCreate);
   const isOpen = useEditorStore((s) => s.isSettingsDrawerOpen);
   const setSettingsDrawerOpen = useEditorStore((s) => s.setSettingsDrawerOpen);
   const divisions = useEditorStore((s) => s.divisions);
@@ -235,7 +236,11 @@ const EditorTargetBar = ({
                 asset={target.asset}
                 embedFormat={embedFormat}
                 onSave={onSaveAsset}
-                onReplace={onReplaceAsset}
+                onReplace={
+                  canReplaceAsset
+                    ? (asset) => startCreate({ kind: "asset", replaceRef: asset.ref })
+                    : undefined
+                }
                 readOnly={readOnly}
               />
             )}

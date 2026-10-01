@@ -254,9 +254,23 @@ type ModalKey =
   | "isCleanDialogOpen"
   | "isConvertDialogOpen"
   | "isDocinfoEditorOpen"
-  | "isAssetPickerOpen"
-  | "isSnippetPickerOpen"
   | "isFullSourceOpen";
+
+/**
+ * Something the author is creating, shown in the editor pane in place of the
+ * code editor (see `NewItemPane`). Nothing exists until the form is saved: no
+ * record, no placeholder, nothing sent to the host — so Cancel means cancel.
+ *
+ * - `division`: a new child of `parentXmlId` (`null` for an unplaced one); its
+ *   fields live in `editDraft`.
+ * - `snippet` / `asset`: a new project record. With `resolveRef`, the record
+ *   binds an unlinked `<plus:* ref/>` placeholder; with `replaceRef`, a new
+ *   image takes the place of that asset under the same ref.
+ */
+export type CreateRequest =
+  | { kind: "division"; parentXmlId: string | null }
+  | { kind: "snippet"; resolveRef?: string }
+  | { kind: "asset"; resolveRef?: string; replaceRef?: string };
 
 /**
  * What the code editor has open: a division, a project snippet, or a project
@@ -398,8 +412,6 @@ export interface EditorStoreState {
   isCleanDialogOpen: boolean;
   isConvertDialogOpen: boolean;
   isDocinfoEditorOpen: boolean;
-  isAssetPickerOpen: boolean;
-  isSnippetPickerOpen: boolean;
   isFullSourceOpen: boolean;
   /**
    * The settings drawer under the editor's title bar — the open item's
@@ -436,35 +448,17 @@ export interface EditorStoreState {
   tocRevealedId: string | null;
 
   /**
-   * The properties of a division that does not exist yet, drafted in the
-   * settings drawer. An existing division's properties are saved field by
-   * field (see `updateDivisionProperties`) and need no draft.
+   * What the author is creating, if anything — see {@link CreateRequest}.
+   * While set, the editor pane shows the creation form instead of the code
+   * editor; opening any item abandons it.
+   */
+  creating: CreateRequest | null;
+  /**
+   * The properties of a division that does not exist yet, drafted while
+   * `creating` is a division. An existing division's properties are saved
+   * field by field (see `updateDivisionProperties`) and need no draft.
    */
   editDraft: EditDraft | null;
-  /**
-   * Set while `editDraft` is being drafted, naming the parent the new division
-   * will be placed under (`null` for an unplaced one).
-   *
-   * A new division is *only* a draft until the author saves it: no record, no
-   * `<plus:* ref/>` in the parent, nothing sent to the host. That is what makes
-   * Cancel mean cancel, and it is why a new division never has to be renamed —
-   * it is created with the id the author chose.
-   */
-  pendingNewDivision: { parentXmlId: string | null } | null;
-
-  /**
-   * An unresolved placeholder the user is resolving — opens the asset manager
-   * in "resolve this ref" mode, where picking/uploading binds the result to
-   * this `ref` instead of copying an embed code.
-   */
-  assetResolveTarget: { ref: string } | null;
-
-  /**
-   * An unresolved placeholder the user is resolving — opens the snippet
-   * manager in "resolve this ref" mode, where creating a snippet binds the
-   * result to this `ref` instead of copying an embed code.
-   */
-  snippetResolveTarget: { ref: string } | null;
 
   // ── Actions ────────────────────────────────────────────────────────────────
 
@@ -553,8 +547,15 @@ export interface EditorStoreState {
     xmlId: string,
     changes: DivisionChanges,
   ) => string | undefined;
-  /** Open the properties form for a new, not-yet-created child of `parentXmlId`. */
+  /** Open the creation form for a new, not-yet-created child of `parentXmlId`. */
   startNewDivision: (parentXmlId: string | null, draft: EditDraft) => void;
+  /**
+   * Replace the editor with the creation form for a new snippet or asset (a
+   * division goes through `addSection`, which drafts its defaults first).
+   */
+  startCreate: (request: CreateRequest) => void;
+  /** Abandon the creation form; nothing was created. */
+  cancelCreate: () => void;
   setEditDraft: (draft: EditDraft) => void;
 
   /** Merge `partial` into the find/replace panel's inputs. */
@@ -579,9 +580,6 @@ export interface EditorStoreState {
   // Assets / content
   insertAsset: (asset: Asset) => void;
   insertAtCursor: (content: string) => void;
-  /** Open the asset manager in resolve mode for an unresolved `ref`. */
-  openAssetResolver: (ref: string) => void;
-  closeAssetResolver: () => void;
   /** Remove a project asset (pool + host persistence). */
   removeAsset: (asset: Asset) => void;
   /** Remove every placeholder for an unresolved `ref` from the document. */
@@ -611,9 +609,6 @@ export interface EditorStoreState {
 
   // Snippets / content
   insertSnippet: (snippet: Snippet) => void;
-  /** Open the snippet manager in resolve mode for an unresolved `ref`. */
-  openSnippetResolver: (ref: string) => void;
-  closeSnippetResolver: () => void;
   /** Remove a project snippet (pool + host persistence). */
   removeSnippet: (snippet: Snippet) => void;
   /** Remove every placeholder for an unresolved `ref` from the document. */
@@ -701,23 +696,29 @@ export interface EditorStoreHandle {
 const sameOpenItem = (a: OpenItem, b: OpenItem): boolean =>
   a.kind === b.kind && a.ref === b.ref;
 
+/** The state change that abandons the creation form, if one is open. */
+const noCreation = {
+  creating: null,
+  editDraft: null,
+} satisfies Partial<EditorStoreState>;
+
 /**
  * The state change that opens `item`. A different item closes the settings
- * drawer and drops any properties draft — both belong to the item being left —
- * while re-opening the current one changes nothing.
+ * drawer, which belongs to the item being left. When the author opens an item
+ * — even the current one, since clicking its row is how they get back to it —
+ * the creation form is abandoned too. When the host or a peer changes what is
+ * open (`byAuthor` false: the host restating the open division, the open item
+ * being removed), the form is the author's and stays.
  */
 const openItemState = (
-  s: Pick<EditorStoreState, "openItem">,
+  s: Pick<EditorStoreState, "openItem" | "creating">,
   item: OpenItem,
-): Partial<EditorStoreState> =>
-  sameOpenItem(s.openItem, item)
-    ? {}
-    : {
-      openItem: item,
-      isSettingsDrawerOpen: false,
-      editDraft: null,
-      pendingNewDivision: null,
-    };
+  byAuthor = true,
+): Partial<EditorStoreState> => {
+  const leaveCreation = s.creating && byAuthor ? noCreation : {};
+  if (sameOpenItem(s.openItem, item)) return leaveCreation;
+  return { openItem: item, isSettingsDrawerOpen: false, ...leaveCreation };
+};
 
 /**
  * Where the editor lands when its open item goes away: the root division —
@@ -793,18 +794,14 @@ export function createEditorStore(init: EditorStoreInit): EditorStoreHandle {
     isCleanDialogOpen: false,
     isConvertDialogOpen: false,
     isDocinfoEditorOpen: false,
-    isAssetPickerOpen: false,
-    isSnippetPickerOpen: false,
     isFullSourceOpen: false,
     isSettingsDrawerOpen: false,
     findPanelState: initialFindPanelState,
     tocExpansion: storedTocTree?.tocExpansion ?? {},
     isTocOrphansCollapsed: storedTocTree?.isTocOrphansCollapsed ?? false,
     tocRevealedId: null,
+    creating: null,
     editDraft: null,
-    pendingNewDivision: null,
-    assetResolveTarget: null,
-    snippetResolveTarget: null,
 
     // ── Actions ────────────────────────────────────────────────────────────
     syncState: (partial) => set(partial),
@@ -817,7 +814,11 @@ export function createEditorStore(init: EditorStoreInit): EditorStoreHandle {
           ? partial
           : {
             ...partial,
-            ...openItemState(s, { kind: "division", ref: activeDivisionId ?? "" }),
+            ...openItemState(
+              s,
+              { kind: "division", ref: activeDivisionId ?? "" },
+              false,
+            ),
           },
       ),
     setDivisionContent: (xmlId, content) =>
@@ -885,7 +886,7 @@ export function createEditorStore(init: EditorStoreInit): EditorStoreHandle {
         return {
           divisions,
           ...(s.openItem.kind === "division" && s.openItem.ref === xmlId
-            ? openItemState(s, rootItem({ ...s, divisions }))
+            ? openItemState(s, rootItem({ ...s, divisions }), false)
             : {}),
         };
       }),
@@ -932,16 +933,7 @@ export function createEditorStore(init: EditorStoreInit): EditorStoreHandle {
       }),
     openModal: (modal) => set({ [modal]: true } as Pick<EditorStoreState, ModalKey>),
     closeModal: (modal) => set({ [modal]: false } as Pick<EditorStoreState, ModalKey>),
-    setSettingsDrawerOpen: (open) =>
-      set(
-        open
-          ? { isSettingsDrawerOpen: true }
-          : {
-            isSettingsDrawerOpen: false,
-            editDraft: null,
-            pendingNewDivision: null,
-          },
-      ),
+    setSettingsDrawerOpen: (open) => set({ isSettingsDrawerOpen: open }),
 
     // TOC section / division actions — stable closures that read through bag.cbs
     selectSection: (id) => bag.cbs.selectDivision(id),
@@ -965,9 +957,12 @@ export function createEditorStore(init: EditorStoreInit): EditorStoreHandle {
     startNewDivision: (parentXmlId, editDraft) =>
       set({
         editDraft,
-        pendingNewDivision: { parentXmlId },
-        isSettingsDrawerOpen: true,
+        creating: { kind: "division", parentXmlId },
+        isSettingsDrawerOpen: false,
       }),
+    startCreate: (creating) =>
+      set({ creating, editDraft: null, isSettingsDrawerOpen: false }),
+    cancelCreate: () => set(noCreation),
     setEditDraft: (editDraft) => set({ editDraft }),
 
     setFindPanelState: (partial) =>
@@ -989,8 +984,8 @@ export function createEditorStore(init: EditorStoreInit): EditorStoreHandle {
     toggleTocOrphansCollapsed: () =>
       set((s) => ({ isTocOrphansCollapsed: !s.isTocOrphansCollapsed })),
     commitSectionEdit: () => {
-      const { editDraft, divisions, pendingNewDivision } = get();
-      if (!editDraft || !pendingNewDivision) return;
+      const { editDraft, divisions, creating } = get();
+      if (!editDraft || creating?.kind !== "division") return;
 
       // Saving a draft is where a new division is created — the first moment
       // anything is written. It is created with the id, type and format the
@@ -1003,12 +998,8 @@ export function createEditorStore(init: EditorStoreInit): EditorStoreHandle {
         window.alert(error);
         return;
       }
-      set({
-        editDraft: null,
-        pendingNewDivision: null,
-        isSettingsDrawerOpen: false,
-      });
-      bag.cbs.createDivision(pendingNewDivision.parentXmlId, {
+      set(noCreation);
+      bag.cbs.createDivision(creating.parentXmlId, {
         ...editDraft,
         title: editDraft.title.trim(),
         xmlId,
@@ -1017,16 +1008,10 @@ export function createEditorStore(init: EditorStoreInit): EditorStoreHandle {
     cancelSectionEdit: () =>
       // Cancelling a draft leaves nothing behind: the division was never
       // created and the parent's source was never touched.
-      set({
-        editDraft: null,
-        pendingNewDivision: null,
-        isSettingsDrawerOpen: false,
-      }),
+      set(noCreation),
 
     insertAsset: (asset) => bag.cbs.assetInsert(asset),
     insertAtCursor: (content) => bag.cbs.insertContentAtCursor?.(content),
-    openAssetResolver: (ref) => set({ assetResolveTarget: { ref } }),
-    closeAssetResolver: () => set({ assetResolveTarget: null }),
     removeAsset: (asset) => bag.cbs.assetRemove?.(asset),
     removeAssetRefFromDocument: (ref) => bag.cbs.assetRefRemove?.(ref),
     duplicateAsset: async (asset) => {
@@ -1065,13 +1050,11 @@ export function createEditorStore(init: EditorStoreInit): EditorStoreHandle {
           (a) => !sameAssetRef(a, asset),
         ),
         ...(s.openItem.kind === "asset" && s.openItem.ref === asset.ref
-          ? openItemState(s, rootItem(s))
+          ? openItemState(s, rootItem(s), false)
           : {}),
       })),
 
     insertSnippet: (snippet) => bag.cbs.snippetInsert(snippet),
-    openSnippetResolver: (ref) => set({ snippetResolveTarget: { ref } }),
-    closeSnippetResolver: () => set({ snippetResolveTarget: null }),
     removeSnippet: (snippet) => bag.cbs.snippetRemove?.(snippet),
     removeSnippetRefFromDocument: (ref) => bag.cbs.snippetRefRemove?.(ref),
     duplicateSnippet: async (snippet) => {
@@ -1110,7 +1093,7 @@ export function createEditorStore(init: EditorStoreInit): EditorStoreHandle {
           (a) => !sameSnippetRef(a, snippet),
         ),
         ...(s.openItem.kind === "snippet" && s.openItem.ref === snippet.ref
-          ? openItemState(s, rootItem(s))
+          ? openItemState(s, rootItem(s), false)
           : {}),
       })),
 
