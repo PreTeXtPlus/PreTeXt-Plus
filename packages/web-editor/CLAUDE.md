@@ -180,14 +180,19 @@ peer removing it) falls back to the root, and renames carry it along.
   (`unsavedRecordsRef`).
 - `EditorTargetBar.tsx` sits above the code editor: kind icon, title, id, a
   status chip, and a hamburger that drops the drawer down over the editor
-  (Escape closes it). The drawer is `settings/DivisionSettings.tsx` (the
-  `SectionEditForm` properties form — Save/Cancel close the drawer — plus
-  embed code and the placement's actions), `settings/SnippetSettings.tsx` or
-  `settings/AssetSettings.tsx` (fields that commit on blur/Enter, embed code,
-  Duplicate / Replace / Remove). Metadata edits go to the host *first* — ref
-  uniqueness is only settled there — then rename placeholders and update the
-  doc in one `collabTransact`. Clicking a division's locked wrapper line opens
-  its drawer.
+  (Escape closes it). The drawer is `settings/DivisionSettings.tsx`,
+  `settings/SnippetSettings.tsx` or `settings/AssetSettings.tsx`, all built
+  from `settings/settingsUi.tsx` and all saving **per field**: a text field
+  (`CommitField`) commits on Enter/blur and Escape reverts it (a second Escape
+  closes the drawer), a select commits on change, and the drawer stays open.
+  A division's fields go through the store's `updateDivisionProperties`, which
+  validates an xml:id and returns the refusal to show inline. The one
+  exception is a new division's draft (`toc/SectionEditForm.tsx`): nothing
+  exists to save a field to until it is created, so it keeps Save/Cancel.
+  Snippet/asset metadata edits go to the host *first* — ref uniqueness is only
+  settled there — then rename placeholders and update the doc in one
+  `collabTransact`. Clicking a locked wrapper line (a division's, or an
+  asset's virtual `<image>` lines) opens the drawer.
 
 ### Collaboration (`src/collab/`)
 

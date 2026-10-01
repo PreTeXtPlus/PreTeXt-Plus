@@ -99,13 +99,12 @@ function tocRow(label: string): HTMLElement {
   return row;
 }
 
-/** Change the Type dropdown of `label`'s properties form and save. */
+/** Change the Type dropdown of `label`'s settings, which saves it at once. */
 function retypeFromToc(label: string, type: string) {
   const drawer = openSettings(label);
   const select = within(drawer).getByText("Type").parentElement!
     .querySelector("select") as HTMLSelectElement;
   fireEvent.change(select, { target: { value: type } });
-  fireEvent.click(within(drawer).getByText("Save"));
 }
 
 /** Retype the active division's source in the (mocked) code editor. */

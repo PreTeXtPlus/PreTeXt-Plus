@@ -4,25 +4,19 @@ import type { SourceFormat } from "../../types/editor";
 import type { DivisionType } from "../../types/sections";
 import {
   deriveXmlId,
+  divisionTypeOptions,
   type EditDraft,
-  getSelectableDivisionTypes,
   SOURCE_FORMAT_LABELS,
-  SWITCHABLE_ROOT_TYPES,
   TYPE_FULL_LABELS,
 } from "./types";
 import {
   FIELD_CONTROL_CLASSES,
   SettingsField,
-  SettingsNote,
   SettingsButton,
 } from "../settings/settingsUi";
 
 interface SectionEditFormProps {
   draft: EditDraft;
-  /** True only while editing a division that hasn't been saved yet — only then is `sourceFormat` choosable. */
-  isNew?: boolean;
-  /** The root division: its Type dropdown offers article/book instead of the parent-restricted list, since it has no parent. */
-  isRoot?: boolean;
   /** The type of the division this one is (or would be) nested under; `null` if unplaced. Determines which types are offered below. */
   parentType?: DivisionType | null;
   onDraftChange: (draft: EditDraft) => void;
@@ -30,44 +24,27 @@ interface SectionEditFormProps {
   onCancel: () => void;
 }
 
+/**
+ * The properties form for a new, not-yet-created division. Unlike an existing
+ * division's fields, which save one at a time, a draft is saved (and the
+ * division created) all at once with Save — there is nothing to save a field
+ * *to* until then.
+ */
 const SectionEditForm = ({
   draft,
-  isNew = false,
-  isRoot = false,
   parentType = null,
   onDraftChange,
   onCommit,
   onCancel,
 }: SectionEditFormProps) => {
-  const selectableTypes = getSelectableDivisionTypes(parentType, draft.type);
+  const typeOptions = divisionTypeOptions(draft.type, { parentType });
 
-  // The root's own type dropdown offers article/book, the two root elements that
-  // can be freely swapped: they hold the same children, so switching leaves the
-  // document valid.
-  //
-  // A root type outside that set (a slideshow) is offered as the *only* option,
-  // not prepended to the switchable ones. Article and slideshow do not hold the
-  // same children — a deck's <slide>s are illegal in an article, and a
-  // slideshow's build targets stop existing — so converting is a rewrite of the
-  // document, not a change of one tag. Keeping it in the list would present that
-  // as a routine choice and produce a document that cannot build. The <select>
-  // still always has an <option> matching what's stored, which is the guarantee
-  // `getSelectableDivisionTypes` gives every other division.
-  const rootTypeOptions = SWITCHABLE_ROOT_TYPES.includes(draft.type)
-    ? SWITCHABLE_ROOT_TYPES
-    : [draft.type];
+  // A draft starts with an id derived from its placeholder title, and keeps
+  // following the title as the author types it. Edit the Id field once and
+  // it's theirs: we stop overwriting it.
+  const idFollowsTitle = useRef(true);
 
-  const typeOptions = isRoot ? rootTypeOptions : selectableTypes;
-
-  // A division being drafted starts with an id derived from its placeholder
-  // title, and keeps following the title as the author types it. Edit the Id
-  // field once and it's theirs: we stop overwriting it. Only relevant for
-  // `isNew` — an existing division's id is never auto-derived from its title,
-  // since renaming it rewrites every reference to it.
-  const idFollowsTitle = useRef(isNew);
-
-  // Open with the title selected, so typing replaces it outright: a rename is
-  // the usual reason to open the form, and a new division's title is only a
+  // Open with the title selected, so typing replaces it outright: it's only a
   // placeholder.
   const titleRef = useRef<HTMLInputElement>(null);
   useEffect(() => {
@@ -104,36 +81,30 @@ const SectionEditForm = ({
           autoFocus
         />
       </SettingsField>
-      {/* Source format can only be chosen while the division is new (unsaved) —
-          an existing division's source can't be losslessly translated between
-          formats. */}
-      {isNew && (
-        <SettingsField label="Source format" htmlFor={`${fieldId}-format`}>
-          <select
-            id={`${fieldId}-format`}
-            className={clsx(FIELD_CONTROL_CLASSES, "max-w-[200px]")}
-            value={draft.sourceFormat}
-            onChange={(e) =>
-              onDraftChange({
-                ...draft,
-                sourceFormat: e.target.value as SourceFormat,
-              })
-            }
-          >
-            {(Object.keys(SOURCE_FORMAT_LABELS) as SourceFormat[]).map((f) => (
-              <option key={f} value={f}>
-                {SOURCE_FORMAT_LABELS[f]}
-              </option>
-            ))}
-          </select>
-        </SettingsField>
-      )}
+      {/* Only a draft chooses its format — an existing division's source can't
+          be losslessly translated between formats. */}
+      <SettingsField label="Source format" htmlFor={`${fieldId}-format`}>
+        <select
+          id={`${fieldId}-format`}
+          className={clsx(FIELD_CONTROL_CLASSES, "max-w-[200px]")}
+          value={draft.sourceFormat}
+          onChange={(e) =>
+            onDraftChange({
+              ...draft,
+              sourceFormat: e.target.value as SourceFormat,
+            })
+          }
+        >
+          {(Object.keys(SOURCE_FORMAT_LABELS) as SourceFormat[]).map((f) => (
+            <option key={f} value={f}>
+              {SOURCE_FORMAT_LABELS[f]}
+            </option>
+          ))}
+        </select>
+      </SettingsField>
       {/* Type applies to every format: a LaTeX `\section` can still be authored
           as any division type — the type is applied when its conversion is
-          tagged, not stored in the LaTeX source. For the root, this switches
-          the document's own wrapper element (e.g. <article> to <book>); it
-          doesn't touch any existing children, so their types may need a
-          follow-up edit to stay valid under the new root. */}
+          tagged, not stored in the LaTeX source. */}
       <SettingsField label="Type" htmlFor={`${fieldId}-type`}>
         <select
           id={`${fieldId}-type`}
@@ -173,12 +144,6 @@ const SectionEditForm = ({
           }}
           onKeyDown={handleKeyDown}
         />
-        {!isNew && !isRoot && (
-          <SettingsNote>
-            Used in the embed code. Changing it updates every reference to this
-            division already in your document.
-          </SettingsNote>
-        )}
       </SettingsField>
       <div className="flex gap-1.5">
         <SettingsButton variant="primary" onClick={onCommit}>

@@ -1,4 +1,4 @@
-import { useState, type ButtonHTMLAttributes, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ButtonHTMLAttributes, type ReactNode } from "react";
 import clsx from "clsx";
 import type { SourceFormat } from "../../types/editor";
 import { SOURCE_FORMAT_LABELS } from "../toc/types";
@@ -185,6 +185,7 @@ export const CommitField = ({
   disabled,
   placeholder,
   mono,
+  autoSelect,
 }: {
   id: string;
   value: string;
@@ -192,7 +193,15 @@ export const CommitField = ({
   disabled?: boolean;
   placeholder?: string;
   mono?: boolean;
+  /** Focus the field and select its text when it first appears. */
+  autoSelect?: boolean;
 }) => {
+  const inputRef = useRef<HTMLInputElement>(null);
+  useEffect(() => {
+    if (autoSelect) inputRef.current?.select();
+    // Only on mount: re-selecting as the author types would be hostile.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
   const [draft, setDraft] = useState(value);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -220,6 +229,8 @@ export const CommitField = ({
   return (
     <>
       <input
+        ref={inputRef}
+        autoFocus={autoSelect}
         id={id}
         type="text"
         className={clsx(FIELD_CONTROL_CLASSES, mono && "font-mono")}
@@ -232,8 +243,9 @@ export const CommitField = ({
           if (e.key === "Enter") {
             e.preventDefault();
             void commit();
-          } else if (e.key === "Escape") {
+          } else if (e.key === "Escape" && (draft !== value || error)) {
             // Revert rather than let the drawer close with a half-typed value.
+            // With nothing to revert, Escape goes on to close the drawer.
             e.stopPropagation();
             setDraft(value);
             setError(null);

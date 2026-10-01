@@ -1,15 +1,28 @@
-import type { Division } from "../../types/sections";
+import clsx from "clsx";
+import type { Division, DivisionType } from "../../types/sections";
 import type { SourceFormat } from "../../types/editor";
 import { divisionRefTag } from "../../sectionUtils";
 import { useEditorStore } from "../../store/hooks";
 import SectionEditForm from "../toc/SectionEditForm";
-import { divisionDisplayTitle } from "../toc/types";
+import {
+  divisionDisplayTitle,
+  divisionSourceXmlId,
+  divisionTypeOptions,
+  TYPE_FULL_LABELS,
+} from "../toc/types";
 import { useDivisionActions } from "../toc/useDivisionActions";
 import {
   divisionActionEntries,
   findDivisionPlacement,
 } from "../toc/divisionActions";
-import { EmbedCode, SettingsActions, SettingsNote } from "./settingsUi";
+import {
+  CommitField,
+  EmbedCode,
+  FIELD_CONTROL_CLASSES,
+  SettingsActions,
+  SettingsField,
+  SettingsNote,
+} from "./settingsUi";
 
 export interface DivisionSettingsProps {
   division: Division;
@@ -18,13 +31,16 @@ export interface DivisionSettingsProps {
 }
 
 /**
- * A division's settings: its properties form (title, type, id — saved with the
- * form's Save), its embed code, and the structural actions its place in the
- * document allows. While a new child is being drafted the panel is that
- * draft's form instead, so the author names it where they asked for it.
+ * A division's settings: its title, type and id — each saved on its own, on
+ * Enter or blur (a select on change), like a snippet's or asset's fields — its
+ * embed code, and the structural actions its place in the document allows.
+ * While a new child is being drafted the panel is that draft's form instead,
+ * with Save/Cancel, so the author names it where they asked for it.
  */
 const DivisionSettings = ({ division, embedFormat }: DivisionSettingsProps) => {
-  const editingId = useEditorStore((s) => s.editingId);
+  const updateDivisionProperties = useEditorStore(
+    (s) => s.updateDivisionProperties,
+  );
   const editDraft = useEditorStore((s) => s.editDraft);
   const pendingNewDivision = useEditorStore((s) => s.pendingNewDivision);
   const setEditDraft = useEditorStore((s) => s.setEditDraft);
@@ -58,7 +74,6 @@ const DivisionSettings = ({ division, embedFormat }: DivisionSettingsProps) => {
         </SettingsNote>
         <SectionEditForm
           draft={editDraft}
-          isNew
           parentType={parentType}
           onDraftChange={setEditDraft}
           onCommit={commitSectionEdit}
@@ -67,6 +82,25 @@ const DivisionSettings = ({ division, embedFormat }: DivisionSettingsProps) => {
       </div>
     );
   }
+
+  // Unplaced, "Place in document" puts it directly under the root, so the
+  // root's rules are the ones that apply — an article project never offers
+  // Part/Chapter.
+  const typeOptions = divisionTypeOptions(division.type, {
+    isRoot: placement.kind === "root",
+    parentType:
+      placement.kind === "root"
+        ? null
+        : getDivisionType(placement.parentXmlId ?? rootDivision?.xmlId ?? null),
+  });
+
+  const commitTitle = (next: string): string | void => {
+    const title = next.trim();
+    if (!title) return "Enter a title, or press Escape to keep the current one.";
+    if (title !== division.title) {
+      return updateDivisionProperties(division.xmlId, { title });
+    }
+  };
 
   const actions = divisionActionEntries(division, placement, {
     // Adding a child to a shut TOC row opens it, so the draft row sits after
@@ -82,26 +116,58 @@ const DivisionSettings = ({ division, embedFormat }: DivisionSettingsProps) => {
 
   return (
     <div className="flex flex-col gap-2.5">
-      {editDraft && editingId === division.xmlId && (
-        <SectionEditForm
-          // Re-seed the form's own state (its id-follows-title tracking) when a
-          // different division's draft arrives.
-          key={division.xmlId}
-          draft={editDraft}
-          isRoot={placement.kind === "root"}
-          // Unplaced, "Place in document" puts it directly under the root, so
-          // the root's rules are the ones that apply — an article project never
-          // offers Part/Chapter.
-          parentType={
-            placement.kind === "root"
-              ? null
-              : getDivisionType(placement.parentXmlId ?? rootDivision?.xmlId ?? null)
-          }
-          onDraftChange={setEditDraft}
-          onCommit={commitSectionEdit}
-          onCancel={cancelSectionEdit}
+      <SettingsField label="Title" htmlFor="division-settings-title">
+        <CommitField
+          id="division-settings-title"
+          value={division.title}
+          onCommit={commitTitle}
+          autoSelect
         />
-      )}
+      </SettingsField>
+      {/* Type applies to every format: a LaTeX `\section` can still be
+          authored as any division type — the type is applied when its
+          conversion is tagged, not stored in the LaTeX source. For the root,
+          this switches the document's own wrapper element (e.g. <article> to
+          <book>); it doesn't touch any existing children, so their types may
+          need a follow-up edit to stay valid under the new root. */}
+      <SettingsField label="Type" htmlFor="division-settings-type">
+        <select
+          id="division-settings-type"
+          className={clsx(FIELD_CONTROL_CLASSES, "max-w-[200px]")}
+          value={division.type}
+          // Nothing to choose: a slideshow root has no legal switch target, so
+          // an enabled control would only offer the type it already is.
+          disabled={typeOptions.length < 2}
+          onChange={(e) =>
+            updateDivisionProperties(division.xmlId, {
+              type: e.target.value as DivisionType,
+            })
+          }
+        >
+          {typeOptions.map((t) => (
+            <option key={t} value={t}>
+              {TYPE_FULL_LABELS[t]}
+            </option>
+          ))}
+        </select>
+      </SettingsField>
+      {/* xml:id applies to every format — for LaTeX it's written as the
+          `\section`'s `\label`. */}
+      <SettingsField label="Id" htmlFor="division-settings-id">
+        <CommitField
+          id="division-settings-id"
+          value={divisionSourceXmlId(division)}
+          onCommit={(next) => updateDivisionProperties(division.xmlId, { xmlId: next })}
+          placeholder="unique identifier"
+          mono
+        />
+        {placement.kind !== "root" && (
+          <SettingsNote>
+            Used in the embed code. Changing it updates every reference to this
+            division already in your document.
+          </SettingsNote>
+        )}
+      </SettingsField>
       {placement.kind !== "root" && (
         <EmbedCode
           codeFor={(format) =>

@@ -1,6 +1,11 @@
 import type { Division, DivisionType } from "../../types/sections";
 import type { SourceFormat } from "../../types/editor";
-import { slugifyTitle } from "../../sectionUtils";
+import {
+  extractLatexSectionLabel,
+  extractMarkdownDivisionMetadata,
+  getSectionAttributes,
+  slugifyTitle,
+} from "../../sectionUtils";
 
 /** Draft state for the inline division edit form. */
 export interface EditDraft {
@@ -315,6 +320,52 @@ export function getSelectableDivisionTypes(
   const allowed = allowedChildTypes(parentType) ?? REGULAR_DIVISION_TYPES;
   if (!currentType || allowed.includes(currentType)) return allowed;
   return [currentType, ...allowed];
+}
+
+/**
+ * The Type dropdown's options for a division of type `currentType`.
+ *
+ * A root offers article/book, the two root elements that can be freely
+ * swapped: they hold the same children, so switching leaves the document
+ * valid. A root type outside that set (a slideshow) is offered as the *only*
+ * option, not prepended to the switchable ones. Article and slideshow do not
+ * hold the same children — a deck's <slide>s are illegal in an article, and a
+ * slideshow's build targets stop existing — so converting is a rewrite of the
+ * document, not a change of one tag. The list still always contains the stored
+ * type, which is the guarantee `getSelectableDivisionTypes` gives every other
+ * division.
+ */
+export function divisionTypeOptions(
+  currentType: DivisionType,
+  { isRoot = false, parentType = null }: {
+    isRoot?: boolean;
+    parentType?: DivisionType | null;
+  },
+): DivisionType[] {
+  if (!isRoot) return getSelectableDivisionTypes(parentType, currentType);
+  return SWITCHABLE_ROOT_TYPES.includes(currentType)
+    ? SWITCHABLE_ROOT_TYPES
+    : [currentType];
+}
+
+/**
+ * The xml:id a division's own source gives it. Each format stores it
+ * differently: Markdown in YAML frontmatter, LaTeX as the `\label` after
+ * `\section`, PreTeXt as the wrapper element's attribute. All three fall back
+ * to the record id when their source carries none yet, so the field shows the
+ * division's current identity rather than a misleadingly blank one — notably
+ * the root division, whose <article>/<book> wrapper is valid PreTeXt with only
+ * a `label` and no `xml:id` at all (see ensureRootLabel in sectionUtils.ts).
+ */
+export function divisionSourceXmlId(division: Division): string {
+  switch (division.sourceFormat) {
+    case "markdown":
+      return extractMarkdownDivisionMetadata(division.source)?.xmlId || division.xmlId;
+    case "latex":
+      return extractLatexSectionLabel(division.source) || division.xmlId;
+    default:
+      return getSectionAttributes(division.source).xmlId || division.xmlId;
+  }
 }
 
 /** Introduction must be first, conclusion must be last within a parent. */

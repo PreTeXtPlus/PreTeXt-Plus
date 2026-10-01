@@ -84,7 +84,6 @@ const EditorTargetBar = ({
 }: EditorTargetBarProps) => {
   const isOpen = useEditorStore((s) => s.isSettingsDrawerOpen);
   const setSettingsDrawerOpen = useEditorStore((s) => s.setSettingsDrawerOpen);
-  const startSectionEdit = useEditorStore((s) => s.startSectionEdit);
   const divisions = useEditorStore((s) => s.divisions);
   const projectSnippets = useEditorStore((s) => s.projectSnippets);
   const projectAssets = useEditorStore((s) => s.projectAssets);
@@ -109,12 +108,7 @@ const EditorTargetBar = ({
   // (disabled) settings, which carry information — embed code, alt text.
   const canOpenDrawer = !(readOnly && target.kind === "division");
 
-  const toggle = () => {
-    if (isOpen) setSettingsDrawerOpen(false);
-    // A division's drawer is its properties form, seeded from the division.
-    else if (target.kind === "division") startSectionEdit(target.division);
-    else setSettingsDrawerOpen(true);
-  };
+  const toggle = () => setSettingsDrawerOpen(!isOpen);
 
   let title: string;
   let id: string;
@@ -218,6 +212,9 @@ const EditorTargetBar = ({
           <div className="max-w-[640px]">
             {target.kind === "division" && (
               <DivisionSettings
+                // Re-seed field drafts when a different division opens. Keyed
+                // on the record id, which (unlike the xml:id) survives a rename.
+                key={target.division.id ?? target.division.xmlId}
                 division={target.division}
                 embedFormat={embedFormat}
               />

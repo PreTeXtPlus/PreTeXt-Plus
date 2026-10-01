@@ -108,7 +108,8 @@ export function typeChoices(label: string) {
     value: select.value,
     disabled: select.disabled,
   };
-  fireEvent.click(within(drawer).getByText("Cancel"));
+  // Nothing to discard: the drawer's fields save one at a time.
+  fireEvent.keyDown(window, { key: "Escape" });
   return choices;
 }
 

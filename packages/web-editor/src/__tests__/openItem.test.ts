@@ -61,14 +61,19 @@ describe("the open item", () => {
 
   it("closes the settings drawer and drops any draft when another item opens", () => {
     const store = makeStore();
-    store.getState().startSectionEdit(divisions[1]);
+    store.getState().startNewDivision("sec", {
+      title: "New",
+      type: "subsection",
+      xmlId: "new",
+      label: "",
+      sourceFormat: "pretext",
+    });
     expect(store.getState().isSettingsDrawerOpen).toBe(true);
-    expect(store.getState().editingId).toBe("sec");
 
     store.getState().openSnippet("greeting");
     expect(store.getState().isSettingsDrawerOpen).toBe(false);
-    expect(store.getState().editingId).toBeNull();
     expect(store.getState().editDraft).toBeNull();
+    expect(store.getState().pendingNewDivision).toBeNull();
   });
 
   it("leaves the drawer alone when the open item is reopened", () => {
@@ -116,9 +121,15 @@ describe("the open item", () => {
     expect(store.getState().openItem).toEqual({ kind: "division", ref: "sec" });
   });
 
-  it("closes the drawer on save or cancel of a properties form", () => {
+  it("closes the drawer when a new-division draft is cancelled", () => {
     const store = makeStore();
-    store.getState().startSectionEdit(divisions[1]);
+    store.getState().startNewDivision("sec", {
+      title: "New",
+      type: "subsection",
+      xmlId: "new",
+      label: "",
+      sourceFormat: "pretext",
+    });
     store.getState().cancelSectionEdit();
     expect(store.getState().isSettingsDrawerOpen).toBe(false);
     expect(store.getState().editDraft).toBeNull();

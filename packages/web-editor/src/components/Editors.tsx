@@ -714,7 +714,6 @@ const EditorsInner = (props: EditorsInnerProps) => {
   const removeDivisionFromPool = useEditorStore(
     (s) => s.removeDivisionFromPool,
   );
-  const startSectionEdit = useEditorStore((s) => s.startSectionEdit);
   const setTitle = useEditorStore((s) => s.setTitle);
   const setLanguage = useEditorStore((s) => s.setLanguage);
   const setDocinfo = useEditorStore((s) => s.setDocinfo);
@@ -1300,15 +1299,11 @@ const EditorsInner = (props: EditorsInnerProps) => {
 
   // Clicking the locked wrapper line in the code editor opens the division's
   // properties form in the settings drawer under the editor's title bar.
-  const handleRequestWrapperEdit = () => {
-    if (!activeDivision) return;
-    startSectionEdit(activeDivision);
-  };
-
-  // The asset counterpart: its wrapper lines open the settings drawer, where
-  // its alt text lives.
+  // Clicking a locked wrapper line opens the open item's settings drawer, where
+  // the properties those lines show are edited: a division's title/type/id,
+  // an asset's alt text.
   const setSettingsDrawerOpen = useEditorStore((s) => s.setSettingsDrawerOpen);
-  const handleRequestAssetSettings = () => setSettingsDrawerOpen(true);
+  const handleRequestWrapperEdit = () => setSettingsDrawerOpen(true);
 
   // Opens a properties form for a new child of `parentXmlId` (or an unplaced
   // division, if `null`). Nothing is created here — the draft lives in the form
@@ -2460,11 +2455,9 @@ const EditorsInner = (props: EditorsInnerProps) => {
       onRequestWrapperEdit={
         props.readOnly
           ? undefined
-          : isDivisionOpen
+          : isDivisionOpen || editorTarget?.kind === "asset"
             ? handleRequestWrapperEdit
-            : editorTarget?.kind === "asset"
-              ? handleRequestAssetSettings
-              : undefined
+            : undefined
       }
       readOnly={props.readOnly}
       pasteAutoConvert={pasteAutoConvert}
