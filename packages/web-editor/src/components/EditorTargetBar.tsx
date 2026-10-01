@@ -152,9 +152,6 @@ const EditorTargetBar = ({
         className="flex items-center gap-2 h-9 px-2 bg-[#f5f6f8] border-b border-[#dde0e6] select-none"
       >
         <KindIcon kind={target.kind} />
-        <span className="text-[0.66rem] font-bold uppercase tracking-[0.06em] text-slate-400 shrink-0">
-          {KIND_LABELS[target.kind]}
-        </span>
         <span
           data-testid="editor-target-title"
           className={clsx(
