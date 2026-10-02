@@ -37,7 +37,8 @@ class FullBuildJobTest < ActiveJob::TestCase
   end
 
   test "the collaborative document is projected into the rows before they are read" do
-    @project.divisions.find_by(is_root: true).update!(is_root: false)
+    # Deleted outright: the model refuses to demote or destroy a root.
+    @project.divisions.where(is_root: true).delete_all
     @project.divisions.create!(id: ROOT_ID, ref: "placeholder", source: "<book/>",
                                source_format: "pretext", is_root: true)
     ProjectDoc.seed(@project, collab_fixture("projection_state"))
