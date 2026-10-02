@@ -87,7 +87,9 @@ class SourceAssemblerTest < ActionDispatch::IntegrationTest
   # is a separate question, answered by the build server rejecting it.
   test "a project with no root division assembles to nothing" do
     skip_without_bundle
-    @project.divisions.destroy_all
+    # Unreachable through the models now, which keep exactly one root, but rows
+    # from before that rule may still be rootless.
+    @project.divisions.delete_all
 
     assert_equal "", SourceAssembler.new(@project.reload).call
   end

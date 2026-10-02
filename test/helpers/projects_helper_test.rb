@@ -9,8 +9,8 @@ class ProjectsHelperTest < ActionView::TestCase
   end
 
   test "project_format_icon renders the Markdown logo for a Markdown-format project" do
-    project = Project.create!(user: users(:one))
-    project.divisions.create!(ref: "document", is_root: true, source_format: :markdown)
+    project = Project.create!(user: users(:one),
+                              divisions_attributes: [ { ref: "document", is_root: true, source_format: :markdown } ])
 
     html = project_format_icon(project)
 

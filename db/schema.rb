@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_09_24_120000) do
+ActiveRecord::Schema[8.1].define(version: 2026_10_02_120000) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
   enable_extension "pgcrypto"
@@ -112,6 +112,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_09_24_120000) do
     t.integer "source_format", default: 0, null: false
     t.datetime "updated_at", null: false
     t.index ["project_id"], name: "index_divisions_on_project_id"
+    t.index ["project_id"], name: "index_divisions_on_project_id_unique_root", unique: true, where: "is_root"
   end
 
   create_table "pay_charges", id: :uuid, default: -> { "gen_random_uuid()" }, force: :cascade do |t|

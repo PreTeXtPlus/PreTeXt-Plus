@@ -8,7 +8,16 @@ class Division < ApplicationRecord
   belongs_to :project, touch: :source_updated_at
   enum :source_format, { pretext: 0, latex: 1, markdown: 2 }, default: :pretext, suffix: true, validate: true
 
+  # A project has exactly one root division, and nothing done to a division may
+  # change that. At most one: this validation, backed by a partial unique index.
+  # At least one: a root can neither stop being the root, move to another
+  # project, nor be destroyed except along with its project. Project ensures
+  # every new project starts with one (see Project#build_root_division).
   validates :is_root, uniqueness: { scope: :project_id, message: "root division already exists for this project" }, if: :is_root?
+  validate :root_and_project_unchanged, on: :update
+  # destroyed_by_association is set only when the project's `dependent: :destroy`
+  # cascades here -- that is, when the project itself is going.
+  before_destroy :keep_root, unless: :destroyed_by_association
 
   before_create :set_default_source
 
@@ -39,6 +48,18 @@ class Division < ApplicationRecord
   end
 
   private
+
+  def root_and_project_unchanged
+    errors.add(:is_root, "cannot be changed") if will_save_change_to_is_root?
+    errors.add(:project, "cannot be changed") if will_save_change_to_project_id?
+  end
+
+  def keep_root
+    return unless is_root?
+
+    errors.add(:base, "The root division cannot be deleted")
+    throw :abort
+  end
 
   # Only the *root* division of a slideshow gets the deck starter. A non-root division
   # is a <section>, which is spelled the same either way, and handing it a second
