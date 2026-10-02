@@ -62,6 +62,21 @@ class AbilityTest < ActiveSupport::TestCase
     assert_not outsider.can?(:destroy, collaboration)
   end
 
+  test "no one can destroy a root division, but non-root ones stay manageable" do
+    project = projects(:one)
+    root = divisions(:one)
+    extra = project.divisions.create!(ref: "extra", source: "<section/>")
+    admin = users(:subscribed)
+    admin.update!(admin: true)
+
+    { owner: users(:one), collaborator: users(:two), admin: admin }.each do |who, user|
+      ability = Ability.new(user)
+      assert_not ability.can?(:destroy, root), "#{who} should not destroy the root division"
+      assert ability.can?(:update, root), "#{who} should still update the root division"
+      assert ability.can?(:destroy, extra), "#{who} should destroy a non-root division"
+    end
+  end
+
   test "collaborator gets the whole build pipeline on a shared project" do
     ability = Ability.new(users(:two)) # accepted collaborator on project one
     project = projects(:one)
