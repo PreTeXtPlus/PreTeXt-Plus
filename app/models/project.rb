@@ -42,8 +42,9 @@ class Project < ApplicationRecord
 
   # All three nested collections accept ids the editor minted itself; see
   # #tolerate_client_minted_ids for why, and for what these overrides do.
+  # Divisions additionally never lose their root this way; see #keep_root_division.
   def divisions_attributes=(attributes)
-    super(tolerate_client_minted_ids(divisions, attributes))
+    super(keep_root_division(tolerate_client_minted_ids(divisions, attributes)))
   end
 
   def assets_attributes=(attributes)
@@ -401,6 +402,27 @@ class Project < ApplicationRecord
         association.build(id: id)
         known << id
         entry
+      end
+    end
+
+    # The root division is the document itself, so it goes only with its project
+    # (through `dependent: :destroy`), never through a nested `_destroy`. Nested
+    # attributes never consult Ability, so this is the one place it is enforced.
+    # The `_destroy` is dropped rather than failing the save, since the editor
+    # re-sends tombstones until they stick (see #tolerate_client_minted_ids) and
+    # would otherwise block every later save with it.
+    #
+    # Runs after #tolerate_client_minted_ids, which has already loaded the target.
+    def keep_root_division(attributes)
+      entries = nested_attribute_entries(attributes)
+      return attributes if entries.empty?
+
+      root_ids = divisions.select(&:is_root?).filter_map { |division| division.id&.to_s }
+      return attributes if root_ids.empty?
+
+      entries.map do |entry|
+        id = (entry[:id] || entry["id"]).presence&.to_s
+        root_ids.include?(id) ? entry.except(:_destroy, "_destroy") : entry
       end
     end
 

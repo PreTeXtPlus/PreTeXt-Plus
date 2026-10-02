@@ -147,7 +147,6 @@ class ProjectsController < ApplicationController
     # load_and_authorize_resource also uses to build a brand-new project on :create,
     # before @project.user is ever assigned.
     params[:project]&.delete(:visibility) if cannot?(:update_visibility, @project)
-    drop_forbidden_division_destroys
 
     respond_to do |format|
       if @project.update(project_params)
@@ -384,24 +383,6 @@ class ProjectsController < ApplicationController
   end
 
   private
-    # Nested attributes destroy rows without ever asking CanCan, so a `_destroy` the
-    # Ability forbids (the root division's) is enforced here. Dropped rather than
-    # refused, like visibility above: the editor re-sends division tombstones until
-    # they stick, so failing the request would block every later save with it.
-    def drop_forbidden_division_destroys
-      attrs = params.dig(:project, :divisions_attributes)
-      return if attrs.blank?
-
-      entries = attrs.respond_to?(:values) ? attrs.values : Array(attrs)
-      entries.each do |entry|
-        next unless entry.respond_to?(:key?) && entry.key?(:_destroy)
-        next unless ActiveModel::Type::Boolean.new.cast(entry[:_destroy])
-
-        division = @project.divisions.find_by(id: entry[:id])
-        entry.delete(:_destroy) if division && cannot?(:destroy, division)
-      end
-    end
-
     # Seconds since `started`, or "?" when the failure came before the clock did.
     def pandoc_elapsed(started)
       started ? (Process.clock_gettime(Process::CLOCK_MONOTONIC) - started).round(1) : "?"

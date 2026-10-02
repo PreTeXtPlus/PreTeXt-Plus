@@ -29,8 +29,6 @@ class Ability
 
     if user.admin?
       can :manage, :all
-      # Even an admin cannot remove the root division on its own (see below).
-      cannot :destroy, Division, is_root: true
       return
     end
 
@@ -70,10 +68,6 @@ class Ability
     # Divisions belonging to own projects
     can :manage, Division, project: { user_id: user.id }
     can :manage, Division, project: { collaborations: { user_id: user.id } }
-    # The root division is the document itself, so it goes only with its project.
-    # Destroying the project still removes it: that cascades through
-    # `dependent: :destroy`, which never consults this Ability.
-    cannot :destroy, Division, is_root: true
 
     # Snippets belonging to own projects
     can :manage, Snippet, project: { user_id: user.id }

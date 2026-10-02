@@ -370,6 +370,19 @@ class ProjectTest < ActiveSupport::TestCase
     assert_not project.divisions.exists?(division.id)
   end
 
+  test "a nested _destroy never removes the root division" do
+    project = projects(:one)
+    root = project.root_division
+
+    stub_build_server do
+      project.reload.update!(divisions_attributes: [ { id: root.id, _destroy: true } ])
+      # The index-keyed hash a multipart form produces.
+      project.reload.update!(divisions_attributes: { "0" => { "id" => root.id, "_destroy" => "1" } })
+    end
+
+    assert project.divisions.exists?(root.id)
+  end
+
   test "destroying an asset that is already gone is a no-op, not an error" do
     project = projects(:one)
     asset = project.assets.create!(ref: "doomed-asset", kind: "authored", title: "Doomed")
