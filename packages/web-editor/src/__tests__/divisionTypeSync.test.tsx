@@ -18,6 +18,7 @@ import Editors from "../components/Editors";
 import type { Division } from "../types/sections";
 import type { EditorContentChange } from "../types/editor";
 import type { DivisionChanges } from "../store/editorStore";
+import { openSettings } from "./tocTestUtils";
 
 // Monaco loads itself from a CDN. Standing in a plain textarea keeps the real
 // `onChange` wiring (which is what's under test for the source direction) while
@@ -98,15 +99,12 @@ function tocRow(label: string): HTMLElement {
   return row;
 }
 
-/** Change the Type dropdown of `label`'s "Edit properties" form and save. */
+/** Change the Type dropdown of `label`'s settings, which saves it at once. */
 function retypeFromToc(label: string, type: string) {
-  const row = tocRow(label);
-  fireEvent.click(within(row).getByTitle("More options"));
-  fireEvent.click(screen.getByText("Edit properties"));
-  const select = within(row).getByText("Type").parentElement!
+  const drawer = openSettings(label);
+  const select = within(drawer).getByText("Type").parentElement!
     .querySelector("select") as HTMLSelectElement;
   fireEvent.change(select, { target: { value: type } });
-  fireEvent.click(within(row).getByText("Save"));
 }
 
 /** Retype the active division's source in the (mocked) code editor. */

@@ -5,6 +5,10 @@ class ProjectDocProjectionTest < ActiveSupport::TestCase
   CHILD_ID = "44444444-4444-4444-8444-444444444444".freeze
   GONE_DIVISION_ID = "55555555-5555-4555-8555-555555555555".freeze
   GONE_ASSET_ID = "66666666-6666-4666-8666-666666666666".freeze
+  SNIPPET_ID = "77777777-7777-4777-8777-777777777777".freeze
+  ASSET_ID = "88888888-8888-4888-8888-888888888888".freeze
+  UNKNOWN_ASSET_ID = "99999999-9999-4999-8999-999999999999".freeze
+  GONE_SNIPPET_ID = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa".freeze
 
   def fixture(name)
     File.binread(Rails.root.join("test/fixtures/files/collab/#{name}.bin"))
@@ -177,5 +181,52 @@ class ProjectDocProjectionTest < ActiveSupport::TestCase
     @project.reload
     assert_equal true, @project.use_common_docinfo
     assert_equal "de-DE", @project.language
+  end
+
+  # ---- snippets and assets ----
+  #
+  # Their source is shared text in the document, edited in the same code editor
+  # as a division's, so it reaches the rows the same way.
+
+  test "snippets are written from the document, including ones the editor minted" do
+    ProjectDoc.seed(@project, fixture("projection_records_state"))
+
+    project!
+
+    snippet = Snippet.find(SNIPPET_ID)
+    assert_equal @project.id, snippet.project_id
+    assert_equal "projected-note", snippet.ref
+    assert_equal "A \\emph{projected} note.", snippet.source
+    assert_equal "latex", snippet.source_format
+  end
+
+  test "an asset the project has takes its text from the document" do
+    @project.assets.create!(id: ASSET_ID, ref: "stale-plot", kind: :authored, title: "Stale", source: "")
+    ProjectDoc.seed(@project, fixture("projection_records_state"))
+
+    project!
+
+    asset = Asset.find(ASSET_ID)
+    assert_equal "projected-plot", asset.ref
+    assert_equal "Projected Plot", asset.title
+    assert_equal "<latex-image>p</latex-image>", asset.source
+    assert_equal "A plot of the projection", asset.short_description
+  end
+
+  test "an asset the project lacks is never created by a projection" do
+    ProjectDoc.seed(@project, fixture("projection_records_state"))
+
+    assert_no_difference("Asset.count") { project! }
+    assert_not Asset.exists?(UNKNOWN_ASSET_ID),
+      "an asset row comes from its upload; a projection has no file to give it"
+  end
+
+  test "a snippet tombstone removes the snippet" do
+    @project.snippets.create!(id: GONE_SNIPPET_ID, ref: "gone-note", source: "", source_format: "pretext")
+    ProjectDoc.seed(@project, fixture("projection_records_state"))
+
+    project!
+
+    assert_not Snippet.exists?(GONE_SNIPPET_ID)
   end
 end

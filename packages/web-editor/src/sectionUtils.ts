@@ -3305,6 +3305,33 @@ export function wrapDivisionForPreview(
   );
 }
 
+/** The `<title>` of the article a snippet is previewed inside of. */
+export const SNIPPET_PREVIEW_TITLE = "snippet preview";
+
+/**
+ * A complete PreTeXt document for previewing one snippet on its own: the
+ * snippet resolved exactly as an embed of it would be (converted from
+ * LaTeX/Markdown, its own `<plus:* ref/>` placeholders expanded — see
+ * {@link resolveSnippetRef}), injected into a plain `<article>` titled
+ * {@link SNIPPET_PREVIEW_TITLE}, and wrapped in `<pretext>` with `docinfo`,
+ * like a division preview.
+ */
+export function assembleSnippetPreviewSource(
+  snippetRef: string,
+  divisions: Division[],
+  snippets: Snippet[],
+  assets: Asset[],
+  docinfo: string,
+  lang?: string,
+): string {
+  const body = resolveSnippetRef(snippetRef, snippets, divisions, assets, new Set());
+  return wrapInPretextDocument(
+    `<article>\n<title>${SNIPPET_PREVIEW_TITLE}</title>\n${body}\n</article>`,
+    docinfo,
+    lang,
+  );
+}
+
 // ---------------------------------------------------------------------------
 // Initial-load normalization
 // ---------------------------------------------------------------------------

@@ -51,6 +51,8 @@ export {
   getOrphanRoots,
   buildDivisionTree,
   wrapDivisionForPreview,
+  assembleSnippetPreviewSource,
+  SNIPPET_PREVIEW_TITLE,
   // Division content utilities
   // TODO: update these to work for generic divisions, not just sections
   updateDivisionTitle,
@@ -102,6 +104,8 @@ export {
   getMetaMap,
   getDeletedMap,
   getDivisionText,
+  getSnippetText,
+  getAssetText,
 } from "./collab/schema";
 export type {
   CollabAssetSnapshot,

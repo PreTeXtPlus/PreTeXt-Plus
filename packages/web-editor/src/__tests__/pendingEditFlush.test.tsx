@@ -25,6 +25,7 @@ import { render, screen, within, fireEvent, act } from "@testing-library/react";
 import Editors from "../components/Editors";
 import type { Division } from "../types/sections";
 import type { EditorContentChange } from "../types/editor";
+import { tocRow } from "./tocTestUtils";
 
 // Monaco loads itself from a CDN, so stand in a textarea — but one that keeps
 // the two parts of the real editor this test is about: the 500 ms debounce
@@ -125,33 +126,21 @@ function renderEditors(divisions: Division[]) {
   return { sourceOf };
 }
 
-/** The TOC row whose title is `label`. */
-function tocRow(label: string): HTMLElement {
-  const row = [...document.querySelectorAll('[data-testid^="toc-item-"]')].find(
-    (li) =>
-      li.querySelector('[data-testid="toc-title"]')?.textContent === label,
-  ) as HTMLElement | undefined;
-  if (!row) throw new Error(`no TOC row for "${label}"`);
-  return row;
-}
-
-/** "Add new division" from `label`'s row menu. */
+/** Start a new sub-division from the [+] on `label`'s Contents row. */
 function addUnder(label: string) {
-  const row = tocRow(label);
-  fireEvent.click(within(row).getByTitle("More options"));
-  fireEvent.click(screen.getByText("Add new division"));
+  fireEvent.click(within(tocRow(label)).getByTestId("toc-add-child"));
 }
 
 /** Title the open draft and save it; returns the xml:id it created. */
 function saveForm(title: string): string {
-  const row = screen.getByTestId("toc-new-division");
+  const row = screen.getByTestId("new-item-pane");
   const input = within(row).getByText("Title").parentElement!
     .querySelector("input") as HTMLInputElement;
   fireEvent.change(input, { target: { value: title } });
   const xmlId = (
     within(row).getByPlaceholderText("unique identifier") as HTMLInputElement
   ).value;
-  fireEvent.click(within(row).getByText("Save"));
+  fireEvent.click(within(row).getByText("Create"));
   return xmlId;
 }
 
@@ -186,22 +175,20 @@ describe("a new division survives a pending edit in its parent's buffer", () => 
     }
   });
 
-  it("settles a keystroke typed into the parent while the draft form is open", () => {
+  it("keeps a keystroke typed just before the form replaced the editor", () => {
     vi.useFakeTimers();
     try {
       const { sourceOf } = renderEditors(project());
-      addUnder("Main");
-      // Glance back at the parent while the form is up, tweak a line, then
-      // return to the form and save within the debounce window.
-      fireEvent.click(
-        within(tocRow("Main")).getByTestId("toc-title").closest("button")!,
-      );
+      // The form takes the editor's place, but the editor stays mounted
+      // underneath, so the edit it is still holding is delivered on time…
       typeIntoEditor("<p>Intro.</p>", "<p>Intro!</p>");
-      const xmlId = saveForm("My New Bit");
+      addUnder("Main");
       act(() => vi.advanceTimersByTime(600));
-
       expect(sourceOf("doc")).toContain("<p>Intro!</p>");
-      expect(sourceOf("doc")).toContain(`<plus:section ref="${xmlId}"/>`);
+
+      // …and saving afterwards builds on it rather than on a stale source.
+      const xmlId = saveForm("My New Bit");
+      expect(sourceOf("doc")).toContain("<p>Intro!</p>");
       expect(sourceOf("doc")!.match(/<plus:\w+ ref="[^"]+"\/>/g)).toEqual([
         '<plus:section ref="one"/>',
         `<plus:section ref="${xmlId}"/>`,

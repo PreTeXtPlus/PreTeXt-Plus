@@ -141,11 +141,12 @@ function slugifyRef(value) {
 // naming a row that is already gone), which is what makes a removal survive the
 // acting client's own request failing or its tab closing mid-flight.
 //
-// Asset/snippet *content* is NOT in this payload: an asset's bytes can't
-// ride in the shared doc, and a snippet is persisted immediately per edit
-// the same way (see the asset/snippet callbacks) so its content stays out of
-// the deferred bulk save too. Only asset/snippet *destroys* are re-sent from
-// here.
+// Asset/snippet *content* is NOT in this payload. Solo, the editor persists
+// each snippet/asset edit itself through the asset/snippet callbacks (source
+// edits debounced, metadata edits immediately); in a collaborative session
+// their source is shared text in the doc, which ProjectDocProjection writes to
+// the rows exactly as it does division content. Only asset/snippet *destroys*
+// are re-sent from here.
 //
 // Neither is the assembled document. The browser used to send it as
 // `pretext_source`, which is how an idle collaborator's tab came to overwrite
@@ -873,7 +874,7 @@ function EditorApp({ config }) {
   // Creates a file-less "authored" asset -- unlike onAssetUpload there's no
   // file to multipart-upload, so this goes through patchProjectJson (like
   // onDivisionAdd) instead of patchProjectAssetUpload. `title` comes from the
-  // asset manager's create form; the ref is derived from it exactly like
+  // editor's "New asset" form; the ref is derived from it exactly like
   // onAssetUpload derives one from an uploaded file's title. `source` starts
   // empty and is filled in afterward through onAssetUpdate, the same as any
   // other edit.
@@ -939,10 +940,11 @@ function EditorApp({ config }) {
     [assetFetchUrl, csrfToken],
   );
 
-  // Persists an edit to an existing asset made through the web-editor's asset
-  // editor -- its `ref`, its `title`, its authored `source` (e.g. an image's
-  // <description> XML), and its `short_description` (an image's plain-text
-  // alt description, auto-rendered as <shortdescription>).  Also the commit
+  // Persists an edit to an existing asset made in the web-editor -- its
+  // `ref`, `title` and `short_description` (an image's plain-text alt
+  // description, auto-rendered as <shortdescription>) from the settings
+  // drawer, and its authored `source` (e.g. an image's <description> XML)
+  // typed into the code editor, debounced, when editing solo.  Also the commit
   // step of Duplicate and Replace, which upload a file first and then give
   // the resulting asset its real ref/title/source/short_description.
   //
@@ -1030,13 +1032,14 @@ function EditorApp({ config }) {
   }, [queryClient, projectId]);
 
   // Unlike an asset (whose ref is derived from a title), a snippet's ref is
-  // typed directly by the user in the snippet manager -- already sanitized and
-  // checked against the live pools there. The server (HasUniqueRef) is still
-  // the final authority; a collision surfaces as a normal rejected PATCH.
+  // typed directly by the user in the "New snippet" form -- already sanitized
+  // and checked against the live pools there -- along with its source format.
+  // The server (HasUniqueRef) is still the final authority; a collision
+  // surfaces as a normal rejected PATCH.
   const onCreateSnippet = useCallback(
-    async (ref) => {
+    async (ref, sourceFormat = "pretext") => {
       const json = await patchProjectJson({
-        snippets_attributes: [ { ref, source: "", source_format: "pretext" } ],
+        snippets_attributes: [ { ref, source: "", source_format: sourceFormat } ],
       });
       const created = (json.snippets ?? []).find((s) => s.ref === ref);
       invalidateSnippetQueries();
@@ -1047,7 +1050,10 @@ function EditorApp({ config }) {
 
   // Persists an edit to an existing snippet -- its `ref`, `source`, and
   // `source_format` -- keyed by `id` (stable across renames), mirroring
-  // onAssetUpdate.
+  // onAssetUpdate. The editor calls this for metadata edits made in its
+  // settings drawer and, when editing solo, for source typed into the code
+  // editor (debounced per snippet); it keeps its own copy of a snippet whose
+  // write is still pending, so the refetch this triggers can't undo typing.
   const onSnippetUpdate = useCallback(
     async (snippet) => {
       await patchProjectJson({

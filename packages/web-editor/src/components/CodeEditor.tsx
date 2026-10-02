@@ -28,13 +28,16 @@ import type { CollabUser } from "../collab/types";
 import type { SourceFormat } from "../types/editor";
 import { installPasteConvertListener } from "../pasteConvert";
 
-/** Live-collaboration wiring for the active division's shared text. */
+/** Live-collaboration wiring for the open buffer's shared text. */
 export interface CodeEditorCollab {
   ytext: Y.Text;
   awareness: Awareness;
   user: CollabUser;
-  /** Identifies the division (for scoping remote cursors to this buffer). */
-  divisionKey: string;
+  /**
+   * Identifies the open buffer — a division, snippet or asset — so remote
+   * cursors are drawn only in the buffer they belong to.
+   */
+  bufferKey: string;
   /** Register/unregister the Monaco binding as a local Y.Doc origin. */
   registerLocalOrigin: (origin: unknown) => void;
   unregisterLocalOrigin: (origin: unknown) => void;
@@ -73,6 +76,21 @@ interface CodeEditorProps {
    * since the tag/title/xml:id aren't editable in-place.
    */
   onRequestWrapperEdit?: () => void;
+  /**
+   * Whether the buffer is a division, whose structural lines (the PreTeXt
+   * wrapper tag and title, the Markdown frontmatter, the LaTeX `\section`
+   * header) are locked and normalized. Defaults to true. A snippet or asset
+   * body has no such structure, so it passes false and every line is editable.
+   */
+  lockStructure?: boolean;
+  /**
+   * Generated lines drawn, locked, around the buffer without being part of it —
+   * an asset's `<image>` wrapper around its authored source. They're rendered
+   * as Monaco view zones, so the model (and a collab binding to it) holds only
+   * the buffer's own text. Clicking one calls `onRequestWrapperEdit`. Memoize
+   * it; a new identity each render redraws the zones.
+   */
+  virtualWrapper?: VirtualWrapper;
   /** When true, Monaco is non-editable. */
   readOnly?: boolean;
   /**
@@ -246,6 +264,16 @@ const baseOptions = {
  *
  * Exposes a {@link CodeEditorHandle} via `forwardRef` for programmatic control.
  */
+/** See {@link CodeEditorProps.virtualWrapper}. */
+export interface VirtualWrapper {
+  /** Lines drawn above the first line of the buffer. */
+  before: string[];
+  /** Lines drawn below the last line of the buffer. */
+  after: string[];
+  /** Tooltip shown when hovering over the wrapper lines. */
+  hoverMessage?: string;
+}
+
 const CodeEditor = forwardRef<CodeEditorHandle, CodeEditorProps>(({
   content,
   sourceFormat,
@@ -255,6 +283,8 @@ const CodeEditor = forwardRef<CodeEditorHandle, CodeEditorProps>(({
   onCursorLineChange,
   onOpenFindInProject,
   onRequestWrapperEdit,
+  lockStructure = true,
+  virtualWrapper,
   readOnly,
   pasteAutoConvert = true,
   onMenuStateChange,
@@ -290,6 +320,21 @@ const CodeEditor = forwardRef<CodeEditorHandle, CodeEditorProps>(({
   // The live source format, read from inside the mount-time guard closure.
   const sourceFormatRef = useRef(sourceFormat);
   sourceFormatRef.current = sourceFormat;
+  // Likewise read from mount-time closures (the guard, Mod+A, insertion).
+  const lockStructureRef = useRef(lockStructure);
+  lockStructureRef.current = lockStructure;
+  // The latest `content` prop, for realigning the model when a collab binding
+  // goes away with nothing to replace it (see rebindCollab).
+  const contentPropRef = useRef(content);
+  contentPropRef.current = content;
+  /**
+   * The structural lines of the buffer, or `null` when nothing is locked —
+   * always the case for a buffer that isn't a division.
+   */
+  const lockedRegionOf = (model: any) =>
+    lockStructureRef.current
+      ? computeLockedRegion(model, sourceFormatRef.current)
+      : null;
   // Read from the mount-time Mod+A handler, which is registered once.
   const readOnlyRef = useRef(readOnly);
   readOnlyRef.current = readOnly;
@@ -331,6 +376,15 @@ const CodeEditor = forwardRef<CodeEditorHandle, CodeEditorProps>(({
   // would scroll the preview back — a loop between the two panes.
   const suppressCursorReportRef = useRef(false);
   const onRequestWrapperEditRef = useRef(onRequestWrapperEdit);
+  const virtualWrapperRef = useRef(virtualWrapper);
+  virtualWrapperRef.current = virtualWrapper;
+  // The view zones currently drawing `virtualWrapper`, and what they were drawn
+  // for: the wrapper, and the line count the closing zone is anchored below.
+  const wrapperZonesRef = useRef<{
+    ids: string[];
+    wrapper: VirtualWrapper | undefined;
+    lineCount: number;
+  }>({ ids: [], wrapper: undefined, lineCount: 0 });
   // Per-format Monaco language extensions (completions, diagnostics, syntax),
   // torn down and re-registered whenever the source format changes.
   const languageExtensionsRef = useRef<{ dispose: () => void } | null>(null);
@@ -490,6 +544,10 @@ const CodeEditor = forwardRef<CodeEditorHandle, CodeEditorProps>(({
   useEffect(() => {
     onRequestWrapperEditRef.current = onRequestWrapperEdit;
   }, [onRequestWrapperEdit]);
+
+  useEffect(() => {
+    syncVirtualWrapper();
+  }, [virtualWrapper, isEditorMounted]);
   // const [isFocused, setIsFocused] = useState(false);
 
   useEffect(() => {
@@ -510,6 +568,13 @@ const CodeEditor = forwardRef<CodeEditorHandle, CodeEditorProps>(({
     applyConstraints();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sourceFormat]);
+
+  // Switching between a division and a snippet/asset buffer toggles the lock
+  // even when the text happens to be identical (no content change to ride on).
+  useEffect(() => {
+    applyConstraints();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [lockStructure]);
 
   usePretextDiagnostics(
     monacoRef,
@@ -689,26 +754,30 @@ const CodeEditor = forwardRef<CodeEditorHandle, CodeEditorProps>(({
 
     normalizingRef.current = true;
     try {
-      trimPretextTrailingBlankLines(editor, model, monaco);
+      // Everything below reshapes a division's structure; a snippet or asset
+      // body has none, and its blank lines are the author's.
+      if (lockStructureRef.current) {
+        trimPretextTrailingBlankLines(editor, model, monaco);
 
-      // A PreTeXt division whose body is emptied collapses to just its locked
-      // wrapper tags (`<section…>` / `</section>`) on adjacent lines. With no line
-      // between them there's nowhere unlocked to type — and `computeLockedRegion`
-      // bails (`lineCount < 3`), dropping the wrapper protection entirely. Insert a
-      // blank middle line so the wrapper stays locked and there is always a clean,
-      // editable line in between to add content back into.
-      //
-      // This runs in collab mode too. Two peers staring at the same emptied
-      // division would each insert a newline, leaving one stray blank line — a
-      // cosmetic, self-limiting outcome (the condition stops holding once either
-      // lands), and far cheaper than leaving the wrapper unguarded.
-      ensurePretextBodyLine(editor, model, monaco);
-      ensureLatexHeaderBlankLine(editor, model, monaco);
+        // A PreTeXt division whose body is emptied collapses to just its locked
+        // wrapper tags (`<section…>` / `</section>`) on adjacent lines. With no line
+        // between them there's nowhere unlocked to type — and `computeLockedRegion`
+        // bails (`lineCount < 3`), dropping the wrapper protection entirely. Insert a
+        // blank middle line so the wrapper stays locked and there is always a clean,
+        // editable line in between to add content back into.
+        //
+        // This runs in collab mode too. Two peers staring at the same emptied
+        // division would each insert a newline, leaving one stray blank line — a
+        // cosmetic, self-limiting outcome (the condition stops holding once either
+        // lands), and far cheaper than leaving the wrapper unguarded.
+        ensurePretextBodyLine(editor, model, monaco);
+        ensureLatexHeaderBlankLine(editor, model, monaco);
+      }
     } finally {
       normalizingRef.current = false;
     }
 
-    const region = computeLockedRegion(model, sourceFormat);
+    const region = lockedRegionOf(model);
     lockedRef.current = region !== null;
     leadingLockedLinesRef.current = region?.leadingLockedLines ?? 0;
 
@@ -762,6 +831,65 @@ const CodeEditor = forwardRef<CodeEditorHandle, CodeEditorProps>(({
   };
   applyConstraintsRef.current = applyConstraints;
 
+  /**
+   * Draw `virtualWrapper` as view zones: its `before` lines above line 1 and its
+   * `after` lines below the last line. The closing zone is anchored to a line
+   * number, so it's re-anchored whenever the line count changes — called from
+   * the content listener after every edit, local or remote. Reads only refs, so
+   * the mount-time listener's copy of it is always current.
+   */
+  const syncVirtualWrapper = () => {
+    const editor = editorRef.current;
+    const monaco = monacoRef.current;
+    const model = editor?.getModel?.();
+    if (!editor || !monaco || !model) return;
+    if (typeof editor.changeViewZones !== "function") return;
+    const zones = wrapperZonesRef.current;
+    const wrapper = virtualWrapperRef.current;
+    const lineCount = model.getLineCount();
+    if (zones.wrapper === wrapper && zones.lineCount === lineCount) return;
+
+    const fontInfo = editor.getOption(monaco.editor.EditorOption.fontInfo);
+    const makeNode = (lines: string[]) => {
+      const node = document.createElement("div");
+      node.className =
+        "pretext-plus-editor__locked-line pretext-plus-editor__virtual-wrapper";
+      node.dataset.testid = "virtual-wrapper";
+      if (wrapper?.hoverMessage) node.title = wrapper.hoverMessage;
+      node.style.fontFamily = fontInfo.fontFamily;
+      node.style.fontSize = `${fontInfo.fontSize}px`;
+      node.style.lineHeight = `${fontInfo.lineHeight}px`;
+      node.style.whiteSpace = "pre";
+      for (const line of lines) {
+        const row = document.createElement("div");
+        row.className = "pretext-plus-editor__locked-line-text";
+        row.textContent = line;
+        node.appendChild(row);
+      }
+      return node;
+    };
+
+    editor.changeViewZones((accessor: any) => {
+      for (const id of zones.ids) accessor.removeZone(id);
+      zones.ids = [];
+      if (!wrapper) return;
+      const add = (afterLineNumber: number, lines: string[]) => {
+        if (lines.length === 0) return;
+        zones.ids.push(
+          accessor.addZone({
+            afterLineNumber,
+            heightInLines: lines.length,
+            domNode: makeNode(lines),
+          }),
+        );
+      };
+      add(0, wrapper.before);
+      add(lineCount, wrapper.after);
+    });
+    zones.wrapper = wrapper;
+    zones.lineCount = lineCount;
+  };
+
   const setModelValueSafely = (model: any, nextValue: string) => {
     if (model.getValue() === nextValue) return;
     isProgrammaticUpdateRef.current = true;
@@ -792,6 +920,15 @@ const CodeEditor = forwardRef<CodeEditorHandle, CodeEditorProps>(({
     if (!editor) return;
     const model = editor.getModel();
     if (!model) return;
+    // Leaving a shared buffer for one that isn't shared (collaboration off, or
+    // an item not yet in the doc): this effect runs before the rebind effect
+    // below, so the old binding is still listening. Drop it first, or the
+    // setValue that follows would be written into the *previous* buffer's
+    // shared text as a delete-everything + insert.
+    if (collabBindingRef.current) {
+      collabBindingRef.current.dispose();
+      collabBindingRef.current = null;
+    }
     if (model.getValue() !== content) {
       const position = editor.getPosition();
       const selections = editor.getSelections();
@@ -816,9 +953,19 @@ const CodeEditor = forwardRef<CodeEditorHandle, CodeEditorProps>(({
     const c = collabRef.current;
     const editor = editorRef.current;
     const monaco = monacoRef.current;
-    if (!c || !editor || !monaco) return;
+    if (!editor || !monaco) return;
     const model = editor.getModel();
     if (!model) return;
+    if (!c) {
+      // Unbound now. The content effect normally realigns the model, but it
+      // only fires on a *changed* prop — if the unshared buffer happens to hold
+      // what the prop already said, restore it (and the solo-mode plugin) here.
+      if (previous) {
+        setModelValueSafely(model, contentPropRef.current);
+        applyConstraints();
+      }
+      return;
+    }
     // The shared text is authoritative; align the model before binding so the
     // binding never observes a divergent starting state.
     setModelValueSafely(model, c.ytext.toString());
@@ -832,7 +979,7 @@ const CodeEditor = forwardRef<CodeEditorHandle, CodeEditorProps>(({
       monaco,
       awareness: c.awareness,
       user: c.user,
-      divisionKey: c.divisionKey,
+      bufferKey: c.bufferKey,
     });
     // The binding's transactions are local writes; the bridge must not echo
     // them back into the store as remote changes.
@@ -875,8 +1022,7 @@ const CodeEditor = forwardRef<CodeEditorHandle, CodeEditorProps>(({
     if (!editor || !model) return;
     const editable = readOnlyRef.current
       ? null
-      : (computeLockedRegion(model, sourceFormatRef.current)?.editableRange ??
-        null);
+      : (lockedRegionOf(model)?.editableRange ?? null);
     selectEditableRegion(editor, editable);
   };
 
@@ -909,10 +1055,7 @@ const CodeEditor = forwardRef<CodeEditorHandle, CodeEditorProps>(({
       getEditableRange: () => {
         const current = editorRef.current?.getModel?.();
         if (!current) return null;
-        return (
-          computeLockedRegion(current, sourceFormatRef.current)?.editableRange ??
-          null
-        );
+        return lockedRegionOf(current)?.editableRange ?? null;
       },
     });
     // Report line changes for source → preview sync.
@@ -951,6 +1094,7 @@ const CodeEditor = forwardRef<CodeEditorHandle, CodeEditorProps>(({
       // `applyConstraints`) since this listener is registered once here and
       // never re-subscribed when `sourceFormat` changes later.
       if (collabRef.current) applyConstraintsRef.current();
+      syncVirtualWrapper();
     });
     updateUndoRedoState();
 
@@ -977,6 +1121,15 @@ const CodeEditor = forwardRef<CodeEditorHandle, CodeEditorProps>(({
     // be edited in place.
     mouseListenerRef.current?.dispose?.();
     mouseListenerRef.current = editor.onMouseDown((e: any) => {
+      // A click on a `virtualWrapper` line — drawn in a view zone, so it has
+      // no model position — asks for the same metadata editor.
+      if (
+        e?.target?.type === monaco.editor.MouseTargetType.CONTENT_VIEW_ZONE &&
+        wrapperZonesRef.current.ids.includes(e.target.detail?.viewZoneId)
+      ) {
+        onRequestWrapperEditRef.current?.();
+        return;
+      }
       const line = e?.target?.position?.lineNumber;
       if (
         lockedRef.current &&
@@ -1111,7 +1264,7 @@ const CodeEditor = forwardRef<CodeEditorHandle, CodeEditorProps>(({
     const editor = editorRef.current;
     const model = editor?.getModel?.();
     if (!editor || !model) return;
-    const region = computeLockedRegion(model, sourceFormatRef.current);
+    const region = lockedRegionOf(model);
     if (!region) return;
     const selection = editor.getSelection();
     if (selection && isRangeWithin(region.editableRange, selection)) return;
@@ -1124,7 +1277,7 @@ const CodeEditor = forwardRef<CodeEditorHandle, CodeEditorProps>(({
     model: any,
     position: { lineNumber: number; column: number },
   ): boolean => {
-    const region = computeLockedRegion(model, sourceFormatRef.current);
+    const region = lockedRegionOf(model);
     if (!region) return true;
     return isRangeWithin(region.editableRange, {
       startLineNumber: position.lineNumber,

@@ -3,13 +3,15 @@ import * as Y from "yjs";
 import {
   seedDocFromState,
   docToState,
+  getAssetText,
   getDivisionText,
   getDivisionsMap,
+  getSnippetText,
   markDeleted,
 } from "../collab/schema";
 import { diffReplace } from "../collab/textDiff";
 import { CollabBridge } from "../collab/bridge";
-import { createEditorStore } from "../store/editorStore";
+import { createEditorStore, selectOpenDivisionId } from "../store/editorStore";
 import { Awareness } from "y-protocols/awareness";
 import type { CollabSession } from "../collab/types";
 import type { Division } from "../types/sections";
@@ -120,6 +122,33 @@ describe("collab schema", () => {
       source: "<p>Hi.</p>",
       sourceFormat: "pretext",
     });
+    expect(getSnippetText(doc, "snip-1")).toBeInstanceOf(Y.Text);
+  });
+
+  it("merges concurrent edits to one snippet's and one asset's source", () => {
+    const docA = new Y.Doc();
+    seedDocFromState(docA, {
+      ...seedState(),
+      snippets: [{ id: "snip-1", ref: "note", source: "<p>Hi.</p>", sourceFormat: "pretext" }],
+      assets: [{ id: "asset-1", ref: "plot", title: "Plot", source: "<x/>" }],
+    });
+    const docB = new Y.Doc();
+    Y.applyUpdate(docB, Y.encodeStateAsUpdate(docA));
+
+    // Both peers type before either hears from the other.
+    getSnippetText(docA, "snip-1")!.insert(0, "<p>First.</p>");
+    const snippetB = getSnippetText(docB, "snip-1")!;
+    snippetB.insert(snippetB.length, "<p>Last.</p>");
+    getAssetText(docA, "asset-1")!.insert(0, "<a/>");
+    getAssetText(docB, "asset-1")!.insert(4, "<b/>");
+    Y.applyUpdate(docA, Y.encodeStateAsUpdate(docB));
+    Y.applyUpdate(docB, Y.encodeStateAsUpdate(docA));
+
+    for (const doc of [docA, docB]) {
+      const state = docToState(doc);
+      expect(state.snippets[0].source).toBe("<p>First.</p><p>Hi.</p><p>Last.</p>");
+      expect(state.assets[0].source).toBe("<a/><x/><b/>");
+    }
   });
 });
 
@@ -258,14 +287,14 @@ describe("CollabBridge", () => {
     expect(renamed).toBeDefined();
     expect(renamed?.title).toBe("Alpha!");
     // B was viewing sec-a; it must follow the rename.
-    expect(storeB.store.getState().activeDivisionId).toBe("sec-a-renamed");
+    expect(selectOpenDivisionId(storeB.store.getState())).toBe("sec-a-renamed");
 
     bridgeA.localDivisionRemove("sec-a-renamed");
     expect(
       storeB.store.getState().divisions?.some((d) => d.xmlId === "sec-a-renamed"),
     ).toBe(false);
     // Active falls back to the root rather than pointing at a ghost.
-    expect(storeB.store.getState().activeDivisionId).toBe("doc-root");
+    expect(selectOpenDivisionId(storeB.store.getState())).toBe("doc-root");
   });
 
   it("mirrors title and docinfo, and does not echo local changes back", () => {
@@ -344,6 +373,61 @@ describe("CollabBridge", () => {
 
     bridgeA.localSnippetRemove(snippet);
     expect(storeB.store.getState().projectSnippets ?? []).toHaveLength(0);
+  });
+
+  // A snippet's and an asset's source are edited in the code editor like a
+  // division's, so they are shared text, not a last-writer-wins field.
+  it("mirrors a snippet's source through shared text", () => {
+    const { bridgeA, bridgeB, storeA, storeB } = makeLinkedPair();
+    const snippet: Snippet = {
+      id: "snippet-1",
+      ref: "note",
+      source: "<p>A note.</p>",
+      sourceFormat: "pretext",
+    };
+    storeA.store.getState().addSnippetToPool(snippet);
+    bridgeA.localSnippetAdd(snippet);
+    const textB = bridgeB.getSnippetText("note");
+    expect(textB).toBeInstanceOf(Y.Text);
+    expect(textB?.toString()).toBe("<p>A note.</p>");
+
+    // A local source change reaches the peer's pool through the text.
+    bridgeA.localSnippetSourceChange("note", "<p>A longer note.</p>");
+    expect(
+      storeB.store.getState().projectSnippets?.find((sn) => sn.ref === "note")?.source,
+    ).toBe("<p>A longer note.</p>");
+
+    // A metadata edit leaves the text object in place, so an editor bound to
+    // it stays bound and concurrent typing isn't overwritten.
+    bridgeA.localSnippetUpdate({
+      ...snippet,
+      source: "<p>A longer note.</p>",
+      sourceFormat: "latex",
+    });
+    expect(bridgeB.getSnippetText("note")).toBe(textB);
+    expect(
+      storeB.store.getState().projectSnippets?.find((sn) => sn.ref === "note")?.sourceFormat,
+    ).toBe("latex");
+  });
+
+  it("mirrors an asset's source through shared text", () => {
+    const { bridgeA, bridgeB, storeA, storeB } = makeLinkedPair();
+    const asset: Asset = {
+      id: "asset-1",
+      ref: "plot",
+      title: "Plot",
+      source: "<latex-image>a</latex-image>",
+    };
+    storeA.store.getState().addAssetToPool(asset);
+    bridgeA.localAssetAdd(asset);
+    expect(bridgeB.getAssetText("plot")?.toString()).toBe(
+      "<latex-image>a</latex-image>",
+    );
+
+    bridgeA.localAssetSourceChange("plot", "<latex-image>b</latex-image>");
+    expect(
+      storeB.store.getState().projectAssets?.find((a) => a.ref === "plot")?.source,
+    ).toBe("<latex-image>b</latex-image>");
   });
 
   // The pool keys on ref, the doc on record id, so a rename has to move

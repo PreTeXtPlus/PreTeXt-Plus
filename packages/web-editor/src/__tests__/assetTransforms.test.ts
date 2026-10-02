@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { resolveAssetRef } from '../assetTransforms'
+import { assetWrapperLines, resolveAssetRef } from '../assetTransforms'
 import type { Asset } from '../types/editor'
 
 const baseAsset: Asset = {
@@ -86,5 +86,29 @@ describe('resolveAssetRef', () => {
     expect(resolveAssetRef('missing-ref', [])).toBe(
       '<!-- missing asset: missing-ref -->',
     )
+  })
+})
+
+describe('assetWrapperLines', () => {
+  it('wraps an authored asset in a bare <image>', () => {
+    expect(assetWrapperLines(baseAsset)).toEqual({
+      before: ['<image>'],
+      after: ['</image>'],
+    })
+  })
+
+  it('carries the file source attribute for a file-based asset', () => {
+    const asset: Asset = { ...baseAsset, isFile: true, fileRef: 'euler-painting.png' }
+    expect(assetWrapperLines(asset).before).toEqual([
+      '<image source="euler-painting.png">',
+    ])
+  })
+
+  it('includes the escaped short description after the opening tag', () => {
+    const asset: Asset = { ...baseAsset, shortDescription: ' Euler & friends ' }
+    expect(assetWrapperLines(asset).before).toEqual([
+      '<image>',
+      '<shortdescription>Euler &amp; friends</shortdescription>',
+    ])
   })
 })

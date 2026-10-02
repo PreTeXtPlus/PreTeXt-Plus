@@ -57,8 +57,8 @@ export interface Asset {
   url?: string;
   /**
    * A small resized preview of the file, distinct from {@link url} (the full
-   * file). Used for the asset list's `<img src>` in the asset manager and
-   * table of contents. Undefined when no preview is possible (no file, or a
+   * file). Used for the asset rows' `<img src>` in the explorer's Assets
+   * view. Undefined when no preview is possible (no file, or a
    * file type that can't be rastered) — callers should fall back to
    * {@link url} or a generic icon.
    */
