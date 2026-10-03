@@ -184,6 +184,8 @@ Rails.application.routes.draw do
       get "source" => "projects#source", as: "share_source"
       get "share/source" => "projects#source", to: redirect("/projects/%{id}/source")
       post "share/copy" => "projects#copy", as: "copy"
+      # Automatic backups are restored into a new project; see ProjectBackup.
+      post "backups/:backup_id/restore" => "projects#restore_backup", as: "restore_backup"
       get "(*_)/external/:ref" => "assets#share", as: "share_asset"
       get "(*_)/external/:ref/thumbnail" => "assets#share_thumbnail", as: "share_asset_thumbnail"
       post "preview" => "projects#preview", as: "preview"

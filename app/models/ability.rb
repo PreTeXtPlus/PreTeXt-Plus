@@ -42,7 +42,8 @@ class Ability
       :update,
       :download,
       :editor_state,
-      :update_editor_state
+      :update_editor_state,
+      :restore_backup
       ], Project, collaborations: { user_id: user.id }
     # Copying and viewing source is allowed provided the project is not private.
     can [ :copy ], Project do |project|

@@ -84,7 +84,23 @@ class Project < ApplicationRecord
     where(user: user).or(where(id: user.shared_projects.select(:id)))
   }
 
-  default_scope { order(updated_at: :desc) }
+  # Automatic backups (see ProjectBackup) are Project rows too, so that restoring
+  # one is just a full_dup, but they are not projects anyone should ever meet as
+  # such: not on a dashboard, not in search, not behind a /projects/:id URL. Hiding
+  # them here rather than at each call site is what makes that hold for every
+  # query that already exists and every one written later. Reach them only
+  # through #backups (Project.unscoped), from the project they back up.
+  default_scope { where(backup_of_id: nil).order(updated_at: :desc) }
+
+  # A backup's slot in the rotation, and how old the backup in that slot may get
+  # before the next one down is promoted over it. Ordered youngest first.
+  BACKUP_TIERS = {
+    recent: 10.minutes,
+    hourly: 1.hour,
+    three_hourly: 3.hours,
+    daily: 1.day
+  }.freeze
+  enum :backup_tier, BACKUP_TIERS.keys.each_with_index.to_h, prefix: :backup
 
   # Attributes a build actually consumes. Changing any of them makes every built target
   # stale; changing `title` does not. Divisions and assets bump the same timestamp from
@@ -113,12 +129,25 @@ class Project < ApplicationRecord
   # The collaborative document is addressed by key rather than held through an
   # association, so nothing cascades to it on its own.
   after_destroy { ProjectDoc.reset!(self) }
+  # The user's `has_many :projects, dependent: :destroy` goes through the default
+  # scope and so never sees a backup; backups go with the project they belong to.
+  before_destroy { backups.destroy_all }
 
   # "Private" is supposed to mean nothing here is publicly reachable, so it has to take
   # every published target down with it, not just stop listing the project. update_all
   # because these are denormalized flags, not a change worth a callback chain per row
   # (mirrors Target#sync_from_builds! using update_columns for the same reason).
   after_update :unpublish_targets_if_private, if: :saved_change_to_visibility?
+
+  def backup?
+    backup_of_id.present?
+  end
+
+  # A method rather than a has_many: the association's `backup_of_id = ?` and the
+  # default scope's `backup_of_id IS NULL` would otherwise both apply.
+  def backups
+    Project.unscoped.where(backup_of_id: id).order(:backup_tier)
+  end
 
   def root_division
     divisions.find_by(is_root: true)
@@ -237,6 +266,9 @@ class Project < ApplicationRecord
     transaction do
       collaborations.find_by!(user: new_owner).destroy!
       update!(user: new_owner)
+      # Backups belong to whoever owns the project, so they don't hold a foreign
+      # key on an account that has nothing to do with it any more.
+      backups.update_all(user_id: new_owner.id)
       collaborations.create!(
         user: previous_owner, invited_email: previous_owner.email,
         accepted_at: Time.current, skip_limit_check: true
@@ -307,6 +339,9 @@ class Project < ApplicationRecord
     end
     duplicate.title = "Copy of #{title}"
     duplicate.is_template = false
+    # A copy of a backup (which is what restoring one is) is an ordinary project;
+    # ProjectBackup sets these again on the copies it means to keep as backups.
+    duplicate.backup_of_id = duplicate.backup_tier = duplicate.backed_up_at = nil
     # Carry the target *configuration* but none of its build history, and never the
     # published flag -- a copy is not entitled to the original's public URLs. All three
     # denormalized build pointers have to go: leaving latest_build_id behind (as this
@@ -424,7 +459,7 @@ class Project < ApplicationRecord
     # derived from the document type rather than taken from the caller -- this hook is
     # not the place to trust user input, now or later.
     def build_default_target
-      return if targets.any?
+      return if backup? || targets.any?
 
       targets.build(**(slideshow_document_type? ? DEFAULT_SLIDESHOW_TARGET : DEFAULT_TARGET))
     end

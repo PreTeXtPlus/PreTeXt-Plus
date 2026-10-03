@@ -223,6 +223,25 @@ class ProjectsController < ApplicationController
     end
   end
 
+  # POST /projects/:id/backups/:backup_id/restore
+  #
+  # Always into a new project, never over this one: a collaborative project's live
+  # document would merge the replaced content straight back in from any editor
+  # still connected. The restorer owns the copy, as with #copy.
+  def restore_backup
+    backup = @project.backups.find(params[:backup_id])
+    restored = backup.full_dup(current_user)
+    restored.title = "#{@project.title} (restored from #{backup.backed_up_at.in_time_zone.strftime('%b %-d, %Y %-l:%M %p %Z')})"
+    restored.html_source = nil
+    restored.visibility = "private"
+    if restored.save
+      redirect_to restored, notice: "Backup restored as a new project."
+    else
+      alert = restored.errors.full_messages.to_sentence.presence || "Restore failed."
+      redirect_to @project, alert: alert
+    end
+  end
+
   # GET /projects/:project_id/share/copy
   def copy
     project_copy = @project.full_dup(current_user)

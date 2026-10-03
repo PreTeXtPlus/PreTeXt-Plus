@@ -480,6 +480,16 @@ class ProjectTest < ActiveSupport::TestCase
     assert_equal users(:one).email, demoted.invited_email
   end
 
+  test "transfer_ownership_to! moves the project's backups to the new owner" do
+    project = projects(:one)
+    users(:one).update!(admin: true)
+    backup = ProjectBackup.new(project).rotate!
+
+    assert project.transfer_ownership_to!(users(:two))
+
+    assert_equal users(:two), backup.reload.user
+  end
+
   test "transfer_ownership_to! is a no-op when handing the project to its current owner" do
     project = projects(:one)
 

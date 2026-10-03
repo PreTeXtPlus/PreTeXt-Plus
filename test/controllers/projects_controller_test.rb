@@ -1214,6 +1214,65 @@ class ProjectsControllerTest < ActionDispatch::IntegrationTest
   end
 
 
+  test "restore_backup creates a new private project owned by the restorer" do
+    project = projects(:team)
+    sign_in users(:subscribed)
+    backup = ProjectBackup.new(project).rotate!
+
+    assert_difference -> { Project.count }, 1 do
+      post restore_backup_project_url(project, backup_id: backup.id)
+    end
+    restored = Project.where(user: users(:subscribed)).find_by("title LIKE ?", "%(restored from%")
+    assert_redirected_to project_url(restored)
+    assert restored.private_visibility?
+    assert_not restored.backup?
+    assert_equal project.divisions.pluck(:ref).sort, restored.divisions.pluck(:ref).sort
+  end
+
+  test "restore_backup still works after the owner's subscription lapses" do
+    @user.update!(admin: true)
+    backup = ProjectBackup.new(@project).rotate!
+    @user.update!(admin: false)
+
+    assert_difference -> { Project.count }, 1 do
+      post restore_backup_project_url(@project, backup_id: backup.id)
+    end
+  end
+
+  test "restore_backup is denied to someone without access to the project" do
+    project = projects(:team)
+    backup = ProjectBackup.new(project).rotate!
+
+    assert_no_difference -> { Project.unscoped.count } do
+      post restore_backup_project_url(project, backup_id: backup.id)
+    end
+  end
+
+  test "a backup cannot be opened as a project" do
+    users(:one).update!(admin: true)
+    backup = ProjectBackup.new(@project).rotate!
+    users(:one).update!(admin: false)
+
+    get project_url(backup)
+    assert_response :not_found
+  end
+
+  test "dashboard lists backups for subscribers" do
+    project = projects(:team)
+    sign_in users(:subscribed)
+    backup = ProjectBackup.new(project).rotate!
+
+    get project_url(project)
+    assert_response :success
+    assert_select "form[action=?]", restore_backup_project_path(project, backup_id: backup.id)
+  end
+
+  test "dashboard offers backups to an unsubscribed owner" do
+    get project_url(@project)
+    assert_response :success
+    assert_match "Subscribers' projects are backed up automatically", response.body
+  end
+
   private
     # POST to #preview and return the form body it sent *upstream*, parsed. The
     # shared stub only fakes a response; what matters here is the request, since
