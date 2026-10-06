@@ -132,6 +132,39 @@ describe("CodeEditorMenu", () => {
       await user.click(menuItem(/^Find in current editor…/));
       expect(actions.runCommand).toHaveBeenCalledWith(MONACO_COMMANDS.find.id);
     });
+
+    it("wraps the selection in an element, showing the shortcut", async () => {
+      render(<CodeEditorMenu {...baseProps()} sourceFormat="pretext" />);
+      const user = await openMenu("Edit");
+      const wrap = menuItem(/^Wrap Selection in Element…/);
+      expect(wrap).toHaveTextContent(/Alt\+Shift\+W|⌥⇧W/);
+
+      await user.click(wrap);
+      expect(actions.runCommand).toHaveBeenCalledWith(
+        MONACO_COMMANDS.wrapSelection.id,
+      );
+    });
+
+    it("disables wrapping when nothing is selected", async () => {
+      render(
+        <CodeEditorMenu
+          {...baseProps()}
+          sourceFormat="pretext"
+          hasSelection={false}
+        />,
+      );
+      await openMenu("Edit");
+      expect(menuItem(/^Wrap Selection in Element…/)).toBeDisabled();
+    });
+
+    it.each<SourceFormat>(["latex", "markdown"])(
+      "offers no wrapping in %s, which has no PreTeXt elements to wrap in",
+      async (sourceFormat) => {
+        render(<CodeEditorMenu {...baseProps()} sourceFormat={sourceFormat} />);
+        await openMenu("Edit");
+        expect(queryMenuItem(/^Wrap Selection/)).not.toBeInTheDocument();
+      },
+    );
   });
 
   describe("Insert", () => {
@@ -259,6 +292,7 @@ describe("CodeEditorMenu", () => {
       expect(menuItem(/^Find in current editor…/)).toBeInTheDocument();
       expect(queryMenuItem(/^Undo/)).not.toBeInTheDocument();
       expect(queryMenuItem(/^Paste/)).not.toBeInTheDocument();
+      expect(queryMenuItem(/^Wrap Selection/)).not.toBeInTheDocument();
     });
   });
 
