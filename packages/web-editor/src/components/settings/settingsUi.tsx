@@ -244,9 +244,8 @@ export const CommitField = ({
             e.preventDefault();
             void commit();
           } else if (e.key === "Escape" && (draft !== value || error)) {
-            // Revert rather than let a division's drawer close with a
-            // half-typed value. With nothing to revert, Escape goes on to close
-            // it (a snippet's or asset's panel stays put).
+            // Revert rather than let the drawer close with a half-typed value.
+            // With nothing to revert, Escape goes on to close the drawer.
             e.stopPropagation();
             setDraft(value);
             setError(null);

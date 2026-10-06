@@ -328,16 +328,18 @@ describe("the settings drawer", () => {
     expect(screen.queryByDisplayValue("Main")).toBeNull();
   });
 
-  it("is always shown, with no toggle, for a snippet or asset", () => {
+  it("opens by default for a snippet or asset, and toggles", () => {
     renderEditors();
     openSnippetRow("greeting");
-    expect(screen.queryByTestId("settings-drawer-toggle")).toBeNull();
     expect(screen.getByTestId("settings-drawer")).toBeInTheDocument();
+    fireEvent.click(screen.getByTestId("settings-drawer-toggle"));
+    expect(screen.queryByTestId("settings-drawer")).toBeNull();
+    fireEvent.click(screen.getByTestId("settings-drawer-toggle"));
     fireEvent.keyDown(window, { key: "Escape" });
-    expect(screen.getByTestId("settings-drawer")).toBeInTheDocument();
+    expect(screen.queryByTestId("settings-drawer")).toBeNull();
 
+    // Another record starts open again.
     openAssetRow("fig");
-    expect(screen.queryByTestId("settings-drawer-toggle")).toBeNull();
     expect(screen.getByTestId("settings-drawer")).toBeInTheDocument();
   });
 

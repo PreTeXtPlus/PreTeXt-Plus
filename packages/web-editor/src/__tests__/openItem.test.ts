@@ -92,18 +92,34 @@ describe("the open item", () => {
     expect(store.getState().creating).toEqual({ kind: "snippet" });
   });
 
-  it("closes the settings drawer when another item opens", () => {
+  it("resets the settings drawer to the opened item's default", () => {
     const store = makeStore();
-    store.getState().setSettingsDrawerOpen(true);
+    expect(store.getState().isSettingsDrawerOpen).toBe(false);
+    // Open for a snippet or asset…
     store.getState().openSnippet("greeting");
+    expect(store.getState().isSettingsDrawerOpen).toBe(true);
+    store.getState().setSettingsDrawerOpen(false);
+    store.getState().openAsset("fig");
+    expect(store.getState().isSettingsDrawerOpen).toBe(true);
+    // …closed for a division.
+    store.getState().openDivision("sec");
     expect(store.getState().isSettingsDrawerOpen).toBe(false);
   });
 
   it("leaves the drawer alone when the open item is reopened", () => {
     const store = makeStore();
     store.getState().openSnippet("greeting");
-    store.getState().setSettingsDrawerOpen(true);
+    store.getState().setSettingsDrawerOpen(false);
     store.getState().openSnippet("greeting");
+    expect(store.getState().isSettingsDrawerOpen).toBe(false);
+  });
+
+  it("shows a snippet's drawer again after a creation form is cancelled", () => {
+    const store = makeStore();
+    store.getState().openSnippet("greeting");
+    store.getState().setSettingsDrawerOpen(false);
+    store.getState().startCreate({ kind: "asset" });
+    store.getState().cancelCreate();
     expect(store.getState().isSettingsDrawerOpen).toBe(true);
   });
 

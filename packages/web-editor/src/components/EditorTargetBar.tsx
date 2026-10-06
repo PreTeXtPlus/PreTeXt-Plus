@@ -52,9 +52,9 @@ const StatusChip = ({ children }: { children: ReactNode }) => (
 
 /**
  * The bar above the code editor: what is open (a division, snippet or asset),
- * and a panel under it, pushing the editor down, with that item's settings and
- * actions. A snippet's or asset's panel is always shown; a division's opens
- * from the bar's gear. It replaces the explorer's per-row menus and the old
+ * and a drawer under it, pushing the editor down, with that item's settings
+ * and actions, toggled by the bar's gear. A snippet's or asset's drawer starts
+ * open; a division's starts closed. It replaces the explorer's per-row menus and the old
  * per-item edit dialogs — every item is managed from the one place it is
  * edited.
  */
@@ -74,27 +74,24 @@ const EditorTargetBar = ({
   const { rootDivision } = useDivisionActions();
   const embedFormat: SourceFormat = rootDivision?.sourceFormat ?? "pretext";
 
-  const isDivision = target?.kind === "division";
-
-  // Escape closes a division's drawer (a field that wants Escape for itself —
-  // reverting a half-typed value — stops it from getting here). A snippet's or
-  // asset's panel doesn't close.
+  // Escape closes the drawer (a field that wants Escape for itself — reverting
+  // a half-typed value — stops it from getting here).
   useEffect(() => {
-    if (!isOpen || !isDivision) return;
+    if (!isOpen) return;
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === "Escape") setSettingsDrawerOpen(false);
     };
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [isOpen, isDivision, setSettingsDrawerOpen]);
+  }, [isOpen, setSettingsDrawerOpen]);
 
   if (!target) return null;
 
   // A read-only viewer can't change a division's structure, so there is
   // nothing for its drawer to hold. Snippets and assets still show their
   // (disabled) settings, which carry information — embed code, alt text.
-  const canToggleDrawer = isDivision && !readOnly;
-  const showPanel = isDivision ? canToggleDrawer && isOpen : true;
+  const canToggleDrawer = !(readOnly && target.kind === "division");
+  const showPanel = canToggleDrawer && isOpen;
 
   const toggle = () => setSettingsDrawerOpen(!isOpen);
 

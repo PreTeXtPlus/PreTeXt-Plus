@@ -414,9 +414,9 @@ export interface EditorStoreState {
   isDocinfoEditorOpen: boolean;
   isFullSourceOpen: boolean;
   /**
-   * The settings drawer under the editor's title bar — the open division's
-   * properties and actions. Only divisions toggle it (a snippet's or asset's
-   * settings are always shown). Switching to another item closes it.
+   * The settings drawer under the editor's title bar — the open item's
+   * properties and actions. Opening another item resets it to that item's
+   * default: closed for a division, open for a snippet or asset.
    */
   isSettingsDrawerOpen: boolean;
   /**
@@ -704,8 +704,15 @@ const noCreation = {
 } satisfies Partial<EditorStoreState>;
 
 /**
- * The state change that opens `item`. A different item closes the settings
- * drawer, which belongs to the item being left. When the author opens an item
+ * Whether `item`'s settings drawer starts out open: a snippet's or asset's
+ * settings are most of what there is to it, so they show unless closed; a
+ * division's stay out of the way of its source unless asked for.
+ */
+const drawerOpenByDefault = (item: OpenItem) => item.kind !== "division";
+
+/**
+ * The state change that opens `item`. A different item resets the settings
+ * drawer — which belongs to the item being left — to the new item's default. When the author opens an item
  * — even the current one, since clicking its row is how they get back to it —
  * the creation form is abandoned too. When the host or a peer changes what is
  * open (`byAuthor` false: the host restating the open division, the open item
@@ -718,7 +725,11 @@ const openItemState = (
 ): Partial<EditorStoreState> => {
   const leaveCreation = s.creating && byAuthor ? noCreation : {};
   if (sameOpenItem(s.openItem, item)) return leaveCreation;
-  return { openItem: item, isSettingsDrawerOpen: false, ...leaveCreation };
+  return {
+    openItem: item,
+    isSettingsDrawerOpen: drawerOpenByDefault(item),
+    ...leaveCreation,
+  };
 };
 
 /**
@@ -955,14 +966,20 @@ export function createEditorStore(init: EditorStoreInit): EditorStoreHandle {
       bag.cbs.updateDivision(xmlId, changes);
       return undefined;
     },
+    // A creation form takes the editor's place; the open item's drawer is
+    // back at its default when the form goes away.
     startNewDivision: (parentXmlId, editDraft) =>
-      set({
+      set((s) => ({
         editDraft,
         creating: { kind: "division", parentXmlId },
-        isSettingsDrawerOpen: false,
-      }),
+        isSettingsDrawerOpen: drawerOpenByDefault(s.openItem),
+      })),
     startCreate: (creating) =>
-      set({ creating, editDraft: null, isSettingsDrawerOpen: false }),
+      set((s) => ({
+        creating,
+        editDraft: null,
+        isSettingsDrawerOpen: drawerOpenByDefault(s.openItem),
+      })),
     cancelCreate: () => set(noCreation),
     setEditDraft: (editDraft) => set({ editDraft }),
 

@@ -174,20 +174,21 @@ peer removing it) falls back to the root, and renames carry it along.
   before a solo reset the editor flushes it and keeps the *open* record's local
   source; solo, that buffer is the only place newer text for it can come from.
 - `EditorTargetBar.tsx` sits above the code editor: kind icon, title, id, a
-  status chip, and a settings panel under it that pushes the editor down. A
-  snippet's or asset's panel is always shown; a division's is a drawer toggled
-  by the bar's gear (Escape closes it; the store's `isSettingsDrawerOpen`). The drawer is `settings/DivisionSettings.tsx`,
+  status chip, and a gear toggling a settings drawer under it that pushes the
+  editor down (Escape closes it; the store's `isSettingsDrawerOpen`). Opening
+  an item resets the drawer to its default: open for a snippet or asset, closed
+  for a division. The drawer is `settings/DivisionSettings.tsx`,
   `settings/SnippetSettings.tsx` or `settings/AssetSettings.tsx`, all built
   from `settings/settingsUi.tsx` and all saving **per field**: a text field
   (`CommitField`) commits on Enter/blur and Escape reverts it (a second Escape
-  closes a division's drawer), a select commits on change, and the drawer stays open.
+  closes the drawer), a select commits on change, and the drawer stays open.
   A division's fields go through the store's `updateDivisionProperties`, which
   validates an xml:id and returns the refusal to show inline. (A new item's
   form is not in the drawer — see "Creating things".)
   Snippet/asset metadata edits go to the host *first* — ref uniqueness is only
   settled there — then rename placeholders and update the doc in one
-  `collabTransact`. Clicking a division's locked wrapper line opens its
-  drawer.
+  `collabTransact`. Clicking a locked wrapper line (a division's, or an
+  asset's virtual `<image>` lines) opens the drawer.
 
 ### Creating things (`src/components/create/`)
 
