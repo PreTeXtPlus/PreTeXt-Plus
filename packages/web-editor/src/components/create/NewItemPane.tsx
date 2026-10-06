@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import type { Asset, Snippet, SourceFormat } from "../../types/editor";
 import { useEditorStore } from "../../store/hooks";
 import type { CreateRequest } from "../../store/editorStore";
@@ -6,7 +6,7 @@ import { KindIcon } from "../EditorTargetBar";
 import SectionEditForm from "../toc/SectionEditForm";
 import { divisionDisplayTitle } from "../toc/types";
 import { useDivisionActions } from "../toc/useDivisionActions";
-import { SettingsNote } from "../settings/settingsUi";
+import { SettingsActions, SettingsNote } from "../settings/settingsUi";
 import NewSnippetForm from "./NewSnippetForm";
 import NewAssetForm from "./NewAssetForm";
 
@@ -60,16 +60,51 @@ const NewItemPane = ({
   const setEditDraft = useEditorStore((s) => s.setEditDraft);
   const commitSectionEdit = useEditorStore((s) => s.commitSectionEdit);
   const { divisions, getDivisionType } = useDivisionActions();
+  const removeSnippetRefFromDocument = useEditorStore(
+    (s) => s.removeSnippetRefFromDocument,
+  );
+  const removeAssetRefFromDocument = useEditorStore(
+    (s) => s.removeAssetRefFromDocument,
+  );
+
+  // While the form waits on the host, Cancel would only pretend: the request
+  // can't be called back. So Escape and ✕ wait too (the forms disable their
+  // own Cancel button the same way).
+  const [isBusy, setIsBusy] = useState(false);
+  const cancel = () => {
+    if (!isBusy) cancelCreate();
+  };
 
   useEffect(() => {
+    if (isBusy) return;
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === "Escape") cancelCreate();
     };
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [cancelCreate]);
+  }, [isBusy, cancelCreate]);
 
   if (!creating) return null;
+
+  // A placeholder with nothing behind it may be one the author no longer
+  // wants, rather than one to fill in: offer to drop it instead.
+  const unlinkedRef = creating.kind !== "division" ? creating.resolveRef : undefined;
+  const removeUnlinked = unlinkedRef && (
+    <SettingsActions
+      actions={[
+        {
+          label: "Remove from document",
+          danger: true,
+          disabled: isBusy,
+          onClick: () => {
+            if (creating.kind === "snippet") removeSnippetRefFromDocument(unlinkedRef);
+            else removeAssetRefFromDocument(unlinkedRef);
+            cancelCreate();
+          },
+        },
+      ]}
+    />
+  );
 
   const ref =
     creating.kind === "asset"
@@ -118,7 +153,9 @@ const NewItemPane = ({
           onCreate={onCreateSnippet}
           onCreated={(snippet) => onSnippetCreated(snippet, creating)}
           onCancel={cancelCreate}
+          onBusyChange={setIsBusy}
         />
+        {removeUnlinked}
       </>
     );
   } else {
@@ -144,7 +181,9 @@ const NewItemPane = ({
           onCreateAuthored={onCreateAuthoredAsset}
           onCreated={(asset) => onAssetCreated(asset, creating)}
           onCancel={cancelCreate}
+          onBusyChange={setIsBusy}
         />
+        {removeUnlinked}
       </>
     );
   }
@@ -167,8 +206,9 @@ const NewItemPane = ({
         <span className="flex-1" />
         <button
           type="button"
-          className="flex items-center justify-center w-8 h-7 p-0 border-none rounded-[3px] cursor-pointer text-slate-600 bg-transparent hover:bg-slate-200"
-          onClick={cancelCreate}
+          className="flex items-center justify-center w-8 h-7 p-0 border-none rounded-[3px] cursor-pointer text-slate-600 bg-transparent hover:bg-slate-200 disabled:cursor-default disabled:opacity-40 disabled:hover:bg-transparent"
+          onClick={cancel}
+          disabled={isBusy}
           aria-label="Cancel"
           title="Cancel"
         >

@@ -21,19 +21,26 @@ class ProjectDocsControllerTest < ActionDispatch::IntegrationTest
   end
 
   test "seed creates the document once" do
-    post seed_doc_project_url(@project), params: { state: b64(fixture("seed_state")) }, as: :json
+    post seed_doc_project_url(@project), params: { state: b64(fixture("seed_state")), schema_version: ProjectDoc::SCHEMA_VERSION }, as: :json
     assert_response :created
     assert_includes stored_source, "Fixture Book"
   end
 
+  test "a seed from another version of the document layout is refused" do
+    assert_no_difference("Y::Document.count") do
+      post seed_doc_project_url(@project), params: { state: b64(fixture("seed_state")) }, as: :json
+    end
+    assert_response :upgrade_required
+  end
+
   test "the race loser is told to join rather than seeding again" do
-    post seed_doc_project_url(@project), params: { state: b64(fixture("seed_state")) }, as: :json
+    post seed_doc_project_url(@project), params: { state: b64(fixture("seed_state")), schema_version: ProjectDoc::SCHEMA_VERSION }, as: :json
     assert_response :created
 
     # Two accepted seeds would not overwrite each other -- the CRDT would merge
     # them as concurrent inserts and every division's text would appear twice.
     assert_no_difference("Y::Document.count") do
-      post seed_doc_project_url(@project), params: { state: b64(fixture("rival_state")) }, as: :json
+      post seed_doc_project_url(@project), params: { state: b64(fixture("rival_state")), schema_version: ProjectDoc::SCHEMA_VERSION }, as: :json
     end
     assert_response :conflict
 
@@ -43,12 +50,12 @@ class ProjectDocsControllerTest < ActionDispatch::IntegrationTest
 
   test "a collaborator may seed, an outsider may not" do
     sign_in users(:two) # accepted collaborator on project one
-    post seed_doc_project_url(@project), params: { state: b64(fixture("seed_state")) }, as: :json
+    post seed_doc_project_url(@project), params: { state: b64(fixture("seed_state")), schema_version: ProjectDoc::SCHEMA_VERSION }, as: :json
     assert_response :created
 
     sign_in users(:subscribed)
     post seed_doc_project_url(projects(:one)),
-      params: { state: b64(fixture("rival_state")) },
+      params: { state: b64(fixture("rival_state")), schema_version: ProjectDoc::SCHEMA_VERSION },
       as: :json
     assert_response :forbidden
   end

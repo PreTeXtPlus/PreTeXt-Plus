@@ -569,13 +569,6 @@ const CodeEditor = forwardRef<CodeEditorHandle, CodeEditorProps>(({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sourceFormat]);
 
-  // Switching between a division and a snippet/asset buffer toggles the lock
-  // even when the text happens to be identical (no content change to ride on).
-  useEffect(() => {
-    applyConstraints();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [lockStructure]);
-
   usePretextDiagnostics(
     monacoRef,
     editorRef,
@@ -997,6 +990,17 @@ const CodeEditor = forwardRef<CodeEditorHandle, CodeEditorProps>(({
     rebindCollab();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [collab?.ytext]);
+
+  // Switching between a division and a snippet/asset buffer toggles the lock
+  // even when the text happens to be identical (no content change to ride on).
+  // Declared after the rebind effect on purpose — effects run in order. Its
+  // normalizations reshape a division, and on a switch from a shared snippet
+  // they must not run while the snippet's binding is still attached, or they
+  // would be written into the snippet's shared text and sent to every peer.
+  useEffect(() => {
+    applyConstraints();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [lockStructure]);
 
   useEffect(() => {
     return () => {

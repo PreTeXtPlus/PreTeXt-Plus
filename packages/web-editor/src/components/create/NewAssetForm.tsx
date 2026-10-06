@@ -31,7 +31,8 @@ export interface NewAssetFormProps {
   onCreateAuthored?: (title: string) => Promise<Asset>;
   /** The asset now exists — see `NewItemPane`. */
   onCreated: (asset: Asset) => void;
-  onCancel: () => void;
+  onCancel: () => void;  /** Told when a request to the host starts and settles. */
+  onBusyChange?: (busy: boolean) => void;
 }
 
 type SourceTab = "upload" | "url" | "authored";
@@ -70,6 +71,7 @@ const NewAssetForm = ({
   onCreateAuthored,
   onCreated,
   onCancel,
+  onBusyChange,
 }: NewAssetFormProps) => {
   const canAuthor = !!onCreateAuthored && !isReplace;
   const [tab, setTab] = useState<SourceTab>(
@@ -79,6 +81,10 @@ const NewAssetForm = ({
   const [error, setError] = useState<string | null>(null);
   const [isBusy, setIsBusy] = useState(false);
   const fieldId = useId();
+
+  useEffect(() => {
+    onBusyChange?.(isBusy);
+  }, [isBusy, onBusyChange]);
 
   // A picked file is held for preview until the author confirms.
   const [file, setFile] = useState<File | null>(null);

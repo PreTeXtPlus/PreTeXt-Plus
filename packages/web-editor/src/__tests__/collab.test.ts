@@ -410,6 +410,40 @@ describe("CollabBridge", () => {
     ).toBe("latex");
   });
 
+  // `bump` re-renders the editor so it can look a ref's shared text up again.
+  // Only adding, removing or renaming a record can change that lookup — a
+  // peer's typing must not re-render the whole editor per keystroke.
+  it("re-renders on a snippet's add or rename, not on a peer's typing", () => {
+    const { bridgeA, bridgeB, storeA } = makeLinkedPair();
+    const snippet: Snippet = {
+      id: "snippet-1",
+      ref: "note",
+      source: "<p>A note.</p>",
+      sourceFormat: "pretext",
+    };
+    const asset: Asset = { id: "asset-1", ref: "plot", title: "Plot", source: "a" };
+    let version = bridgeB.getVersion();
+    const bumped = () => {
+      const changed = bridgeB.getVersion() !== version;
+      version = bridgeB.getVersion();
+      return changed;
+    };
+
+    storeA.store.getState().addSnippetToPool(snippet);
+    bridgeA.localSnippetAdd(snippet);
+    storeA.store.getState().addAssetToPool(asset);
+    bridgeA.localAssetAdd(asset);
+    expect(bumped()).toBe(true);
+
+    bridgeA.localRecordSourceChange("snippet", "note", "<p>Typed.</p>");
+    bridgeA.localRecordSourceChange("asset", "plot", "b");
+    bridgeA.localSnippetUpdate({ ...snippet, sourceFormat: "latex" });
+    expect(bumped()).toBe(false);
+
+    bridgeA.localSnippetUpdate({ ...snippet, ref: "memo" }, "note");
+    expect(bumped()).toBe(true);
+  });
+
   it("mirrors an asset's source through shared text", () => {
     const { bridgeA, bridgeB, storeA, storeB } = makeLinkedPair();
     const asset: Asset = {

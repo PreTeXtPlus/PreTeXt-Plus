@@ -1,7 +1,7 @@
 import { createConsumer } from "@rails/actioncable";
 import * as Y from "yjs";
 import { ActionCableProvider } from "yrby-client";
-import { seedDocFromState } from "@pretextbook/web-editor";
+import { COLLAB_SCHEMA_VERSION, seedDocFromState } from "@pretextbook/web-editor";
 import { reportCollabIncident } from "./reportIncident";
 
 /**
@@ -102,7 +102,10 @@ export class YCableProvider {
       this.doc,
       this.watchedConsumer(this.consumer),
       "ProjectDocChannel",
-      { project_id: this.projectId },
+      // The server refuses any other version of the doc's layout (see
+      // ProjectDoc::SCHEMA_VERSION), so a tab left open across a change to it
+      // can't write the old shape into the new doc.
+      { project_id: this.projectId, schema_version: COLLAB_SCHEMA_VERSION },
     );
     this.awareness = this.provider.awareness;
     // Presence identity. Set before connecting so our first awareness frame
@@ -149,7 +152,7 @@ export class YCableProvider {
           Accept: "application/json",
           "X-CSRF-Token": this.csrfToken,
         },
-        body: JSON.stringify({ state }),
+        body: JSON.stringify({ state, schema_version: COLLAB_SCHEMA_VERSION }),
       });
     } catch (error) {
       console.error("Failed to offer a seed for the collaborative doc:", error);

@@ -1394,9 +1394,17 @@ const EditorsInner = (props: EditorsInnerProps) => {
     openDivision(newDiv.xmlId);
     // Drop focus straight into the code editor so the author can start typing
     // the body without an extra click. Only on create: cancelling a draft
-    // leaves them where they were.
-    codeEditorRef.current?.focus();
+    // leaves them where they were. Not now, though: the editor is still hidden
+    // under the creation form, and a hidden element can't take focus. The
+    // effect below does it once the form has gone.
+    focusEditorWhenShownRef.current = true;
   };
+  const focusEditorWhenShownRef = useRef(false);
+  useEffect(() => {
+    if (creating || !focusEditorWhenShownRef.current) return;
+    focusEditorWhenShownRef.current = false;
+    codeEditorRef.current?.focus();
+  }, [creating]);
 
   // ── Asset embedding ─────────────────────────────────────────────────────
   // Assets are no longer inserted at the Monaco cursor (which silently fails
@@ -1504,12 +1512,12 @@ const EditorsInner = (props: EditorsInnerProps) => {
     //    the ref. Removing first is what makes the rename land in the database
     //    rather than failing there and leaving the replacement under whatever
     //    ref its upload was given.
-    //  - The pool is keyed by ref, and after the swap both assets share
-    //    one — so dropping the old one from the pool last would take the
-    //    replacement with it.
+    //  - The pool is keyed by ref, and after the swap both assets share one,
+    //    so the replacement simply takes the old asset's place there. Removing
+    //    the old one from the pool instead would also close it in the editor
+    //    (the open asset is matched by ref), sending the author to the root.
     await props.onAssetRemove?.(oldAsset);
     await props.onAssetUpdate?.(replaced);
-    removeAssetFromPool(oldAsset);
     updateAssetInPool(replaced);
     // The replacement keeps the old ref, so peers see one asset swap its file
     // rather than a removal followed by an unrelated addition.
@@ -1621,10 +1629,19 @@ const EditorsInner = (props: EditorsInnerProps) => {
     navigator.clipboard?.writeText(code).catch(() => {});
   };
 
+  // A host request can't be called back, so a result that arrives after its
+  // form was abandoned (the author opened another item mid-upload) is
+  // dropped: the author is no longer waiting for it, and for "Replace image…"
+  // acting on it would delete the asset they decided to keep. The host's own
+  // record stays, and reaches the pool as an unused one on its next refetch.
+  const isCurrentRequest = (request: CreateRequest) =>
+    storeApi.getState().creating === request;
+
   const handleSnippetCreated = (
     snippet: Snippet,
     request: CreateRequest & { kind: "snippet" },
   ) => {
+    if (!isCurrentRequest(request)) return;
     handleSnippetAdded(snippet);
     if (request.resolveRef) {
       renameSnippetRefEverywhere(request.resolveRef, snippet.ref);
@@ -1638,6 +1655,7 @@ const EditorsInner = (props: EditorsInnerProps) => {
     asset: Asset,
     request: CreateRequest & { kind: "asset" },
   ) => {
+    if (!isCurrentRequest(request)) return;
     if (request.replaceRef) {
       const old = projectAssets?.find((a) => a.ref === request.replaceRef);
       if (old) {
@@ -2639,6 +2657,10 @@ const EditorsInner = (props: EditorsInnerProps) => {
                 activeTab === "preview" && "border-b-blue-600 font-semibold",
               )}
               onClick={() => setActiveTab("preview")}
+              // Switching tabs would unmount the creation form, taking a
+              // picked file with it.
+              disabled={!!creating}
+              title={creating ? "Finish or cancel the form first" : undefined}
             >
               Preview
             </button>

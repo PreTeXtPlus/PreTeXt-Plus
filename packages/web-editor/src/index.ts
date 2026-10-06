@@ -98,6 +98,7 @@ export type { SnippetRow, SnippetStatus } from "./snippetView";
 // and the session types the `collaboration` prop expects. The host owns the
 // transport (creating, seeding, and syncing the Y.Doc with its server).
 export {
+  COLLAB_SCHEMA_VERSION,
   seedDocFromState,
   docToState,
   clearDeletions,

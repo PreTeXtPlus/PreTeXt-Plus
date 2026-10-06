@@ -9,6 +9,21 @@
 # lets ProjectDocChannel answer a joining client's state vector with exactly
 # the updates that client is missing.
 module ProjectDoc
+  # The layout of the document this app's editor writes -- the web-editor's
+  # COLLAB_SCHEMA_VERSION, which says what each version changed. A client
+  # speaking any other is refused, on the channel and at the seed: a tab
+  # opened before a change to the layout would otherwise keep syncing the old
+  # shape into the document that replaced it (see
+  # ResetProjectDocsForTextSources), and every up-to-date client would read
+  # that shape as empty text. Keep it equal to the editor's; a test checks.
+  SCHEMA_VERSION = 2
+
+  # Whether a client's declared layout is the one this server holds. A client
+  # from before the version existed declares nothing, and is refused.
+  def self.compatible?(declared)
+    declared.to_s == SCHEMA_VERSION.to_s
+  end
+
   # yrby addresses documents by one opaque string. Deliberately not the
   # polymorphic record binding the gem also offers: its `record_id` is a bigint
   # by default where projects have uuid primary keys, and the one caller that

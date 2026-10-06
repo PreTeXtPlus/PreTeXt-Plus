@@ -176,6 +176,15 @@ describe("opening a snippet", () => {
     expect(snippetUpdates).toEqual([]);
   });
 
+  it("flags a snippet the document doesn't use as not placed", () => {
+    const spare: Snippet = { id: "s2", ref: "spare", source: "", sourceFormat: "pretext" };
+    renderEditors({ projectSnippets: [snippet, spare] });
+    openSnippetRow("greeting");
+    expect(screen.getByTestId("editor-target-bar")).not.toHaveTextContent("not placed");
+    fireEvent.click(within(screen.getByTestId("snippet-row-spare")).getByRole("button"));
+    expect(screen.getByTestId("editor-target-bar")).toHaveTextContent("not placed");
+  });
+
   it("keeps the open snippet's typing when the host resets the pool", () => {
     // The Rails host answers a metadata write by re-fetching the project,
     // which hands the editor a new `projectSnippets` — a reset — built from
@@ -296,6 +305,24 @@ describe("opening an asset", () => {
     expect(screen.getByTestId("asset-preview-type")).toHaveTextContent("photo.png");
 
     expect(within(screen.getByTestId("settings-drawer")).queryByRole("img")).toBeNull();
+  });
+
+  it("still shows the next asset's image after one fails to load", () => {
+    const image = (ref: string): Asset => ({
+      id: ref,
+      ref,
+      title: ref,
+      isFile: true,
+      url: `https://example.com/${ref}.png`,
+    });
+    renderEditors({ projectAssets: [image("broken"), image("fine")] });
+    openAssetRow("broken");
+    fireEvent.error(within(screen.getByTestId("asset-preview")).getByRole("img"));
+    expect(screen.getByTestId("asset-preview")).toHaveTextContent("couldn't be loaded");
+
+    // The Assets view is already showing; just pick the next row.
+    fireEvent.click(within(screen.getByTestId("asset-row-fine")).getByRole("button"));
+    expect(within(screen.getByTestId("asset-preview")).getByRole("img")).toBeVisible();
   });
 
   it("shows a placeholder for an authored asset, which has no image", () => {

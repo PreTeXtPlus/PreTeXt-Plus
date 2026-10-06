@@ -22,7 +22,15 @@ class ProjectDocsController < ApplicationController
   # handshake hands the document back. That keeps one path into the document
   # for every client, seeder included, instead of a second one that has to stay
   # byte-identical to the first.
+  #
+  # A seed from a client on another version of the document's layout is
+  # refused outright (see ProjectDoc::SCHEMA_VERSION): it would create the
+  # document in a shape the current editor misreads.
   def seed
+    unless ProjectDoc.compatible?(params[:schema_version])
+      head :upgrade_required
+      return
+    end
     if ProjectDoc.seed(@project, decoded_state)
       head :created
     else

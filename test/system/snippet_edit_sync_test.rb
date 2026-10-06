@@ -46,6 +46,25 @@ class SnippetEditSyncTest < ApplicationSystemTestCase
     assert_selector "[data-testid='editor-target-title']", text: "salutation"
   end
 
+  # A division's clean-ups (trailing blank lines trimmed, a body line kept
+  # between its wrapper tags) belong to divisions only. Switching from a shared
+  # snippet to a division must not run them on the snippet's text, which every
+  # peer -- and, through the projection, the row -- would then receive.
+  test "switching from a snippet to a division leaves the snippet's text alone" do
+    @snippet.update!(source: "<p>\nKept.\n</p>\n\n\n")
+    open_snippet
+    assert_selector ".monaco-editor", text: "Kept.", wait: 10
+
+    find("[data-testid='explorer-tab-toc']").click
+    find("[data-testid='toc-item-document'] [data-testid='toc-title']", wait: 10).click
+    assert_selector "[data-testid='editor-target-title']", text: /\A(?!greeting)/, wait: 10
+    # Give anything that was going to reach the server time to.
+    sleep 1
+
+    ProjectDocProjection.new(@project).apply!
+    assert_equal "<p>\nKept.\n</p>\n\n\n", @snippet.reload.source
+  end
+
   private
     def open_snippet
       visit edit_project_path(@project)

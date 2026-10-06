@@ -1,4 +1,4 @@
-import { useEffect, type ReactNode } from "react";
+import { useEffect, useMemo, type ReactNode } from "react";
 import clsx from "clsx";
 import type { Asset, Snippet, SourceFormat } from "../types/editor";
 import { buildProjectAssetView } from "../assetView";
@@ -85,6 +85,29 @@ const EditorTargetBar = ({
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [isOpen, setSettingsDrawerOpen]);
 
+  // Whether the open item is reachable from the document. Working that out
+  // parses every division's placeholders, so it is redone only when the pools
+  // or the open item change — not on every render of the bar.
+  const rootXmlId = rootDivision?.xmlId ?? null;
+  const notPlaced = useMemo(() => {
+    if (!target) return false;
+    if (target.kind === "division") {
+      return (
+        findDivisionPlacement(divisions ?? [], rootXmlId, target.division.xmlId)
+          .kind === "unplaced"
+      );
+    }
+    const row =
+      target.kind === "snippet"
+        ? buildProjectSnippetView(divisions, projectSnippets ?? []).find(
+          (r) => r.ref === target.snippet.ref,
+        )
+        : buildProjectAssetView(divisions, projectAssets ?? []).find(
+          (r) => r.ref === target.asset.ref,
+        );
+    return !!row && !row.inDocument;
+  }, [target, divisions, rootXmlId, projectSnippets, projectAssets]);
+
   if (!target) return null;
 
   // A read-only viewer can't change a division's structure, so there is
@@ -104,28 +127,17 @@ const EditorTargetBar = ({
       divisionDisplayTitle(division) ||
       `Untitled ${(TYPE_FULL_LABELS[division.type] ?? "division").toLowerCase()}`;
     id = division.xmlId;
-    const placement = findDivisionPlacement(
-      divisions ?? [],
-      rootDivision?.xmlId ?? null,
-      division.xmlId,
-    );
-    if (placement.kind === "unplaced") status = "not placed";
+    if (notPlaced) status = "not placed";
   } else if (target.kind === "snippet") {
     const { snippet } = target;
     title = snippet.ref;
     id = "";
-    const row = buildProjectSnippetView(divisions, projectSnippets ?? []).find(
-      (r) => r.ref === snippet.ref,
-    );
-    if (row && !row.inDocument) status = "not placed";
+    if (notPlaced) status = "not placed";
   } else {
     const { asset } = target;
     title = asset.title || asset.ref || "Untitled asset";
     id = asset.ref ?? "";
-    const row = buildProjectAssetView(divisions, projectAssets ?? []).find(
-      (r) => r.ref === asset.ref,
-    );
-    if (row && !row.inDocument) status = "not placed";
+    if (notPlaced) status = "not placed";
     else if (!asset.shortDescription?.trim()) status = "missing short description";
   }
 

@@ -674,6 +674,9 @@ export class CollabBridge {
     if (this.isLocal(transaction)) return;
     const state = this.store.getState();
     const assets = getAssetsMap(this.doc);
+    // As for divisions, only a change to which text a ref names re-renders
+    // the editor (see `bump`) — not every keystroke a peer types.
+    let structureChanged = false;
 
     for (const event of events) {
       if (event.target === assets) {
@@ -685,11 +688,13 @@ export class CollabBridge {
             const previous = this.untrackAssetKey(key);
             if (previous === undefined) return;
             state.removeAssetFromPool({ id: key, ref: previous, title: "" });
+            structureChanged = true;
             return;
           }
           const entry = assets.get(key);
           if (!entry) return;
           this.applyRemoteAsset(key, assetEntryToSnapshot(key, entry));
+          structureChanged = true;
         });
       } else if (
         // Record fields on one entry (path [key]), or its source text
@@ -700,14 +705,17 @@ export class CollabBridge {
         const key = String(event.path[0]);
         const entry = assets.get(key);
         if (!entry) continue;
-        this.applyRemoteAsset(key, assetEntryToSnapshot(key, entry));
+        if (this.applyRemoteAsset(key, assetEntryToSnapshot(key, entry))) {
+          structureChanged = true;
+        }
       }
     }
 
-    this.bump();
+    if (structureChanged) this.bump();
   };
 
-  private applyRemoteAsset(key: string, asset: Asset): void {
+  /** Returns whether the record's ref changed (or it is newly tracked). */
+  private applyRemoteAsset(key: string, asset: Asset): boolean {
     const state = this.store.getState();
     const previous = this.keyToAssetRef.get(key);
     const current = asset.ref ?? "";
@@ -723,6 +731,7 @@ export class CollabBridge {
       state.updateAssetInPool(asset);
     }
     this.trackAssetKey(key, asset);
+    return previous !== current;
   }
 
   /** Mirrors {@link onAssetsEvents} — see there for the ref-keyed-pool reasoning. */
@@ -733,6 +742,7 @@ export class CollabBridge {
     if (this.isLocal(transaction)) return;
     const state = this.store.getState();
     const snippets = getSnippetsMap(this.doc);
+    let structureChanged = false;
 
     for (const event of events) {
       if (event.target === snippets) {
@@ -746,11 +756,13 @@ export class CollabBridge {
               source: "",
               sourceFormat: "pretext",
             });
+            structureChanged = true;
             return;
           }
           const entry = snippets.get(key);
           if (!entry) return;
           this.applyRemoteSnippet(key, snippetEntryToSnapshot(key, entry));
+          structureChanged = true;
         });
       } else if (
         (event.target instanceof Y.Map && event.path.length === 1) ||
@@ -759,14 +771,17 @@ export class CollabBridge {
         const key = String(event.path[0]);
         const entry = snippets.get(key);
         if (!entry) continue;
-        this.applyRemoteSnippet(key, snippetEntryToSnapshot(key, entry));
+        if (this.applyRemoteSnippet(key, snippetEntryToSnapshot(key, entry))) {
+          structureChanged = true;
+        }
       }
     }
 
-    this.bump();
+    if (structureChanged) this.bump();
   };
 
-  private applyRemoteSnippet(key: string, snippet: Snippet): void {
+  /** Returns whether the record's ref changed (or it is newly tracked). */
+  private applyRemoteSnippet(key: string, snippet: Snippet): boolean {
     const state = this.store.getState();
     const previous = this.keyToSnippetRef.get(key);
     const current = snippet.ref ?? "";
@@ -780,6 +795,7 @@ export class CollabBridge {
       state.updateSnippetInPool(snippet);
     }
     this.trackSnippetKey(key, snippet);
+    return previous !== current;
   }
 
   private onMetaEvent = (

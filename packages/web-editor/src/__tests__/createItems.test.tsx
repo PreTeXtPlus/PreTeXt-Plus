@@ -13,6 +13,9 @@ import Editors from "../components/Editors";
 import type { Division } from "../types/sections";
 import type { Asset, EditorContentChange, Snippet, SourceFormat } from "../types/editor";
 
+/** One entry per `focus()` on the code editor: whether it was visible then. */
+const focusCalls: boolean[] = [];
+
 vi.mock("../components/CodeEditor", () => {
   const Mock = forwardRef(
     (
@@ -20,7 +23,15 @@ vi.mock("../components/CodeEditor", () => {
       ref,
     ) => {
       useImperativeHandle(ref, () => ({
-        focus: () => {},
+        // Records whether the editor could actually take focus: a hidden
+        // element can't.
+        focus: () => {
+          focusCalls.push(
+            !document
+              .querySelector('[data-testid="editor-pane-main"]')
+              ?.classList.contains("hidden"),
+          );
+        },
         flushPendingChange: () => {},
       }));
       return (
@@ -253,6 +264,156 @@ describe("creating an asset", () => {
     expect(within(pane()).queryByText("Custom")).toBeNull();
     // The asset's always-open settings go with the editor pane the form hides.
     expect(screen.getByTestId("editor-pane-main")).toHaveClass("hidden");
+  });
+});
+
+describe("an unlinked placeholder", () => {
+  it.each([
+    ["snippet", "missing", '<plus:snippet ref="missing"/>'],
+    ["asset", "nofig", '<plus:image ref="nofig"/>'],
+  ] as const)("can be removed from the document instead of linked (%s)", (kind, ref, tag) => {
+    const { sourceOf } = renderEditors();
+    if (kind === "snippet") showSnippets();
+    else showAssets();
+    fireEvent.click(within(screen.getByTestId(`${kind}-row-${ref}`)).getByRole("button"));
+
+    fireEvent.click(within(pane()).getByText("Remove from document"));
+
+    expect(screen.queryByTestId("new-item-pane")).toBeNull();
+    expect(sourceOf("doc")).not.toContain(tag);
+    expect(screen.queryByTestId(`${kind}-row-${ref}`)).toBeNull();
+  });
+});
+
+describe("on a narrow screen", () => {
+  it("shows the form on the Editor tab even when started from Preview", () => {
+    const width = window.innerWidth;
+    window.innerWidth = 600;
+    try {
+      renderEditors();
+      fireEvent.click(screen.getByRole("tab", { name: "Preview" }));
+      expect(screen.queryByTestId("code-editor")).toBeNull();
+
+      showSnippets();
+      fireEvent.click(screen.getByTestId("toc-new-snippet-btn"));
+
+      expect(screen.getByTestId("new-item-pane")).toBeInTheDocument();
+      expect(screen.getByRole("tab", { name: "Editor" })).toHaveAttribute(
+        "aria-selected",
+        "true",
+      );
+      // Leaving for Preview would unmount the form.
+      expect(screen.getByRole("tab", { name: "Preview" })).toBeDisabled();
+    } finally {
+      window.innerWidth = width;
+    }
+  });
+});
+
+describe("creating a division", () => {
+  it("puts focus in the code editor once the form has gone", () => {
+    focusCalls.length = 0;
+    renderEditors();
+    fireEvent.click(
+      within(screen.getByTestId("toc-item-doc")).getByTestId("toc-add-child"),
+    );
+    const title = within(pane()).getByText("Title").parentElement!
+      .querySelector("input") as HTMLInputElement;
+    fireEvent.change(title, { target: { value: "Fresh" } });
+    fireEvent.click(within(pane()).getByText("Create"));
+
+    expect(screen.queryByTestId("new-item-pane")).toBeNull();
+    expect(focusCalls).toEqual([true]);
+  });
+});
+
+describe("replacing an asset", () => {
+  it("keeps the asset open, now holding the new file", async () => {
+    const removed: Asset[] = [];
+    renderEditors({
+      onAssetUpload: async (file) => ({
+        id: "up",
+        ref: "up",
+        title: file.name,
+        url: "https://example.com/new.png",
+      }),
+      onAssetRemove: async (a) => {
+        removed.push(a);
+      },
+    });
+    showAssets();
+    fireEvent.click(within(screen.getByTestId("asset-row-fig")).getByRole("button"));
+    fireEvent.click(screen.getByText("Replace image…"));
+
+    const input = pane().querySelector('input[type="file"]') as HTMLInputElement;
+    fireEvent.change(input, {
+      target: { files: [new File(["png"], "new.png", { type: "image/png" })] },
+    });
+    await act(async () => {
+      fireEvent.click(within(pane()).getByText("Replace"));
+    });
+
+    expect(removed.map((a) => a.id)).toEqual(["a1"]);
+    // Still on the asset, under its old ref and title — not the root division.
+    expect(screen.queryByTestId("new-item-pane")).toBeNull();
+    expect(barTitle()).toHaveTextContent("A figure");
+    expect(screen.getByTestId("asset-row-fig")).toBeInTheDocument();
+  });
+});
+
+describe("while an upload is in flight", () => {
+  /** An upload the test settles by hand. */
+  function pendingUpload() {
+    let settle!: (asset: Asset) => void;
+    const upload = vi.fn(
+      () => new Promise<Asset>((resolve) => {
+        settle = resolve;
+      }),
+    );
+    return { upload, settle: (asset: Asset) => settle(asset) };
+  }
+
+  function startReplacingFig() {
+    showAssets();
+    fireEvent.click(within(screen.getByTestId("asset-row-fig")).getByRole("button"));
+    fireEvent.click(screen.getByText("Replace image…"));
+    const input = pane().querySelector('input[type="file"]') as HTMLInputElement;
+    fireEvent.change(input, {
+      target: { files: [new File(["png"], "new.png", { type: "image/png" })] },
+    });
+    fireEvent.click(within(pane()).getByText("Replace"));
+  }
+
+  it("ignores Escape and ✕, which couldn't stop it", () => {
+    const { upload } = pendingUpload();
+    renderEditors({ onAssetUpload: upload, onAssetRemove: async () => {} });
+    startReplacingFig();
+    expect(upload).toHaveBeenCalled();
+
+    fireEvent.keyDown(window, { key: "Escape" });
+    expect(screen.getByTestId("new-item-pane")).toBeInTheDocument();
+    // Both the header's ✕ and the form's own Cancel button.
+    const cancels = within(pane()).getAllByRole("button", { name: "Cancel" });
+    expect(cancels).toHaveLength(2);
+    for (const button of cancels) expect(button).toBeDisabled();
+  });
+
+  it("keeps the old asset when the author leaves before a replacement lands", async () => {
+    const { upload, settle } = pendingUpload();
+    const onAssetRemove = vi.fn(async () => {});
+    renderEditors({ onAssetUpload: upload, onAssetRemove });
+    startReplacingFig();
+
+    // Opening another item abandons the form…
+    showSnippets();
+    fireEvent.click(within(screen.getByTestId("snippet-row-greeting")).getByRole("button"));
+    expect(screen.queryByTestId("new-item-pane")).toBeNull();
+    // …so the upload landing afterwards replaces nothing.
+    await act(async () => {
+      settle({ id: "up", ref: "up", title: "new.png" });
+    });
+    expect(onAssetRemove).not.toHaveBeenCalled();
+    expect(barTitle()).toHaveTextContent("greeting");
   });
 });
 

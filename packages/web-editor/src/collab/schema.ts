@@ -47,6 +47,17 @@ import * as Y from "yjs";
 import type { DivisionType } from "../types/sections";
 import type { Asset, Snippet, SourceFormat } from "../types/editor";
 
+/**
+ * The version of the layout above. Bump it whenever a change means a client
+ * of one version would misread a doc written by another — as when snippet and
+ * asset sources moved from plain strings to nested `Y.Text` (version 2). The
+ * host's transport must refuse a client speaking any other version, or a tab
+ * left open across the change keeps writing the old shape into the doc that
+ * replaced it. The PreTeXt-Plus server checks it as
+ * `ProjectDoc::SCHEMA_VERSION`; keep the two equal.
+ */
+export const COLLAB_SCHEMA_VERSION = 2;
+
 /** One division as it crosses the doc boundary (seed input / serialize output). */
 export interface CollabDivisionSnapshot {
   /** The entry's key in the divisions map — the division's record id. */

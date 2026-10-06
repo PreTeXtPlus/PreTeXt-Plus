@@ -1,4 +1,4 @@
-import { useId, useState, type KeyboardEvent } from "react";
+import { useEffect, useId, useState, type KeyboardEvent } from "react";
 import clsx from "clsx";
 import type { Snippet, SourceFormat } from "../../types/editor";
 import { sanitizeXmlId } from "../../sectionUtils";
@@ -22,7 +22,8 @@ export interface NewSnippetFormProps {
   onCreate?: (ref: string, sourceFormat: SourceFormat) => Promise<Snippet>;
   /** The snippet now exists — see `NewItemPane`. */
   onCreated: (snippet: Snippet) => void;
-  onCancel: () => void;
+  onCancel: () => void;  /** Told when a request to the host starts and settles. */
+  onBusyChange?: (busy: boolean) => void;
 }
 
 /**
@@ -43,6 +44,7 @@ const NewSnippetForm = ({
   onCreate,
   onCreated,
   onCancel,
+  onBusyChange,
 }: NewSnippetFormProps) => {
   const divisions = useEditorStore((s) => s.divisions);
   const projectSnippets = useEditorStore((s) => s.projectSnippets);
@@ -53,6 +55,10 @@ const NewSnippetForm = ({
   const [error, setError] = useState<string | null>(null);
   const [isCreating, setIsCreating] = useState(false);
   const fieldId = useId();
+
+  useEffect(() => {
+    onBusyChange?.(isCreating);
+  }, [isCreating, onBusyChange]);
 
   const handleCreate = async () => {
     if (isCreating) return;

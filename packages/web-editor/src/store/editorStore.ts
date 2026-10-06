@@ -967,18 +967,21 @@ export function createEditorStore(init: EditorStoreInit): EditorStoreHandle {
       return undefined;
     },
     // A creation form takes the editor's place; the open item's drawer is
-    // back at its default when the form goes away.
+    // back at its default when the form goes away. On a narrow screen the form
+    // is on the Editor tab, so that's where the author is taken.
     startNewDivision: (parentXmlId, editDraft) =>
       set((s) => ({
         editDraft,
         creating: { kind: "division", parentXmlId },
         isSettingsDrawerOpen: drawerOpenByDefault(s.openItem),
+        activeTab: "editor",
       })),
     startCreate: (creating) =>
       set((s) => ({
         creating,
         editDraft: null,
         isSettingsDrawerOpen: drawerOpenByDefault(s.openItem),
+        activeTab: "editor",
       })),
     cancelCreate: () => set(noCreation),
     setEditDraft: (editDraft) => set({ editDraft }),
