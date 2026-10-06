@@ -81,6 +81,46 @@ class LeavingTheEditorTest < ApplicationSystemTestCase
     assert_not unload_prompted?, "the snippet edit has been saved"
   end
 
+  # A settings edit makes the host re-fetch the project, which hands the editor
+  # a fresh snippet pool built from the server's rows. A snippet that isn't
+  # open, with typing the next save hasn't sent yet, must come back with that
+  # typing (the host lays its working copy's sources over the server's), not
+  # with the stale server copy -- and the typing must still be saved.
+  test "a refetch keeps a closed snippet's unsaved typing" do
+    project = projects(:two)
+    alpha = project.snippets.create!(ref: "alpha", source: "Alpha text", source_format: :pretext)
+    beta = project.snippets.create!(ref: "beta", source: "Beta text", source_format: :pretext)
+    open_editor(project, as: users(:two))
+    open_explorer_view(:snippets)
+
+    open_snippet_row(alpha)
+    type_into_editor("Alpha text", "ZZREFETCHZZ")
+    assert_selector "[data-testid='save-status'][data-status='unsaved']", wait: 5
+
+    # Leave it unsaved and closed, then rename the other snippet: a PATCH,
+    # then the re-fetch.
+    open_snippet_row(beta)
+    requests_before = project_json_requests(project)
+    fill_in "snippet-settings-ref", with: "beta-renamed"
+    find_field("snippet-settings-ref").send_keys(:enter)
+    assert_selector "[data-testid='editor-target-title']", text: "beta-renamed", wait: 10
+    assert_equal "beta-renamed", beta.reload.ref
+    assert_operator project_json_requests(project), :>=, requests_before + 2,
+      "expected the rename's PATCH and the re-fetch it triggers"
+
+    # The premise: the typing hasn't been saved yet, so only the overlay could
+    # have kept it through the re-fetch.
+    assert_selector "[data-testid='save-status'][data-status='unsaved']"
+    assert_not_includes alpha.reload.source, "ZZREFETCHZZ"
+
+    open_snippet_row(alpha)
+    assert_selector ".monaco-editor", text: "ZZREFETCHZZ", wait: 10
+
+    find("[data-testid='save-status'][data-status='unsaved']").click
+    assert_selector "[data-testid='save-status'][data-status='saved']", wait: 10
+    assert_includes alpha.reload.source, "ZZREFETCHZZ"
+  end
+
   test "Manage project flushes a collaborative project's last edits to the project page" do
     project = projects(:one)
     assert project.collaborative?, "fixture project should have a collaborator"
@@ -115,6 +155,22 @@ class LeavingTheEditorTest < ApplicationSystemTestCase
       find(".monaco-editor .view-line", text: line_text).click
       page.send_keys token
       assert_selector ".monaco-editor", text: token, wait: 10
+    end
+
+    def open_snippet_row(snippet)
+      find("[data-testid='snippet-row-#{snippet.ref}'] button", wait: 20).click
+      assert_selector "[data-testid='editor-target-title']", text: snippet.ref, wait: 10
+    end
+
+    # Requests the page has made to the project's JSON endpoint (the load,
+    # each save and settings PATCH, each re-fetch). Resource timing doesn't
+    # record a method, so a PATCH and a GET count alike.
+    def project_json_requests(project)
+      page.evaluate_script(<<~JS)
+        performance.getEntriesByType("resource")
+          .filter((e) => new URL(e.name).pathname === "#{project_path(project, format: :json)}")
+          .length
+      JS
     end
 
     def unload_prompted?
