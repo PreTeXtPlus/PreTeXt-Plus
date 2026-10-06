@@ -157,28 +157,30 @@ describe("opening a snippet", () => {
     );
   });
 
-  it("saves source edits to the snippet, not to any division", async () => {
+  it("reports source edits as the snippet's content, not any division's", () => {
     const { changes, snippetUpdates } = renderEditors();
     openSnippetRow("greeting");
 
     fireEvent.change(editor(), { target: { value: "<p>Hello there</p>" } });
     fireEvent.change(editor(), { target: { value: "<p>Hello there!</p>" } });
     expect(editor().value).toBe("<p>Hello there!</p>");
-    // Host writes are coalesced: nothing yet…
-    expect(snippetUpdates).toEqual([]);
-    await act(async () => {
-      vi.advanceTimersByTime(1100);
+    // Typing is content, for the host to save with the rest of its working
+    // copy; the metadata callback isn't involved.
+    expect(changes[changes.length - 1]).toEqual({
+      kind: "snippet",
+      id: snippet.id,
+      ref: "greeting",
+      source: "<p>Hello there!</p>",
     });
-    // …then one write carrying the latest text.
-    expect(snippetUpdates).toHaveLength(1);
-    expect(snippetUpdates[0]).toMatchObject({ ref: "greeting", source: "<p>Hello there!</p>" });
-    expect(changes).toEqual([]);
+    expect(changes.every((c) => c.kind === "snippet")).toBe(true);
+    expect(snippetUpdates).toEqual([]);
   });
 
-  it("keeps unsaved typing when the host resets the pool mid-save", async () => {
-    // The Rails host answers each write by re-fetching the project, which
-    // hands the editor a new `projectSnippets` — a reset. One that lands while
-    // a write is still pending must not take back what was typed.
+  it("keeps the open snippet's typing when the host resets the pool", () => {
+    // The Rails host answers a metadata write by re-fetching the project,
+    // which hands the editor a new `projectSnippets` — a reset — built from
+    // what it has heard. Text the open buffer holds must survive it, while
+    // the record's other fields are taken from the reset.
     const props = {
       divisions,
       rootDivisionId: "doc",
@@ -187,7 +189,6 @@ describe("opening a snippet", () => {
       topBar: {},
       projectAssets: [asset],
       onContentChange: () => {},
-      onSnippetUpdate: async () => {},
     };
     const { rerender } = render(
       <Editors {...props} projectSnippets={[snippet]} />,
@@ -195,17 +196,16 @@ describe("opening a snippet", () => {
     openSnippetRow("greeting");
     fireEvent.change(editor(), { target: { value: "<p>Typed.</p>" } });
 
-    rerender(<Editors {...props} projectSnippets={[{ ...snippet }]} />);
-    expect(editor().value).toBe("<p>Typed.</p>");
-
-    // Once stored, a reset is authoritative again.
-    await act(async () => {
-      vi.advanceTimersByTime(1100);
-    });
     rerender(
-      <Editors {...props} projectSnippets={[{ ...snippet, source: "<p>Server.</p>" }]} />,
+      <Editors
+        {...props}
+        projectSnippets={[{ ...snippet, sourceFormat: "latex" }]}
+      />,
     );
-    expect(editor().value).toBe("<p>Server.</p>");
+    expect(editor().value).toBe("<p>Typed.</p>");
+    expect(
+      (screen.getByLabelText("Source format") as HTMLSelectElement).value,
+    ).toBe("latex");
   });
 
   it("renames its id from the drawer, rewriting every embed of it", async () => {
@@ -220,7 +220,7 @@ describe("opening a snippet", () => {
 
     // Persisted to the host first, then the placeholder follows.
     expect(snippetUpdates[0]).toMatchObject({ ref: "salutation" });
-    const docChanges = changes.filter((c) => c.xmlId === "doc");
+    const docChanges = changes.filter((c) => "xmlId" in c && c.xmlId === "doc");
     const docSource = docChanges[docChanges.length - 1]?.source;
     expect(docSource).toContain('<plus:snippet ref="salutation"/>');
     // Still open, under its new name.
@@ -258,6 +258,19 @@ describe("opening an asset", () => {
     });
     expect(assetUpdates[assetUpdates.length - 1]).toMatchObject({ ref: "fig", shortDescription: "A plot" });
     expect(screen.queryByText("missing short description")).toBeNull();
+  });
+
+  it("reports source edits as the asset's content", () => {
+    const { changes, assetUpdates } = renderEditors();
+    openAssetRow("fig");
+    fireEvent.change(editor(), { target: { value: "<description>A plot</description>" } });
+    expect(changes[changes.length - 1]).toEqual({
+      kind: "asset",
+      id: asset.id,
+      ref: "fig",
+      source: "<description>A plot</description>",
+    });
+    expect(assetUpdates).toEqual([]);
   });
 
   it("shows an uploaded image and its file type in the preview panel, not the drawer", () => {

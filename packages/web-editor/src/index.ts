@@ -17,6 +17,8 @@ export type {
   Asset,
   EditorContentChange,
   EditorContentState,
+  EditorDivisionContentChange,
+  EditorRecordSourceChange,
   FeedbackSubmission,
   Snippet,
   SourceFormat,

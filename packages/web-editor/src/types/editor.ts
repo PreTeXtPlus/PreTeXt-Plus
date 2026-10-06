@@ -172,16 +172,39 @@ export interface EditorContentState {
 }
 
 /**
- * The value passed to `onContentChange`.  Extends {@link EditorContentState}
- * with the `xmlId` of the division the change applies to, so a single callback
- * can describe every kind of change: a division content edit, a structural
- * reorder (which rewrites a parent division's content), or a document-wide
- * docinfo edit (reported against the root/document division).
+ * A division's change, as passed to `onContentChange`.  Extends
+ * {@link EditorContentState} with the `xmlId` of the division the change
+ * applies to, so it can describe a division content edit, a structural reorder
+ * (which rewrites a parent division's content), or a document-wide docinfo
+ * edit (reported against the root/document division).
  */
-export interface EditorContentChange extends EditorContentState {
+export interface EditorDivisionContentChange extends EditorContentState {
+  kind?: "division";
   /**
    * The `xml:id` of the division whose content changed.  For document-wide
    * changes such as docinfo edits, this is the root/document division.
    */
   xmlId: string;
 }
+
+/**
+ * A project snippet's or asset's source, as typed into the code editor and
+ * passed to `onContentChange`. The host keeps it with the rest of its unsaved
+ * content and persists it the same way; `onSnippetUpdate`/`onAssetUpdate` are
+ * for metadata edits only.
+ */
+export interface EditorRecordSourceChange {
+  kind: "snippet" | "asset";
+  /** The record's id (stable across renames), when the host gave it one. */
+  id?: string;
+  ref: string;
+  source: string;
+}
+
+/**
+ * The value passed to `onContentChange`: a division's change, or a snippet's
+ * or asset's source. Narrow on `kind`.
+ */
+export type EditorContentChange =
+  | EditorDivisionContentChange
+  | EditorRecordSourceChange;

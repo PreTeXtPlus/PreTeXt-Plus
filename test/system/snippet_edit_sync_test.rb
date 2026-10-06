@@ -1,7 +1,7 @@
 require "application_system_test_case"
 
 # A snippet opens in the code editor like a division: its source is typed there
-# and its id is renamed from the settings drawer under the editor's title bar.
+# and its id is renamed from the settings panel under the editor's title bar.
 # The fixture project is collaborative, so typed source reaches the row through
 # the shared document and ProjectDocProjection -- the path division content
 # takes -- while a rename is written straight through, host first.
@@ -33,9 +33,8 @@ class SnippetEditSyncTest < ApplicationSystemTestCase
     assert_equal "ZZSNIPPETZZ", source || @snippet.reload.source
   end
 
-  test "renaming a snippet from the drawer persists its id" do
+  test "renaming a snippet from its settings persists its id" do
     open_snippet
-    find("[data-testid='settings-drawer-toggle']").click
     fill_in "snippet-settings-ref", with: "salutation"
     find_field("snippet-settings-ref").send_keys(:enter)
 

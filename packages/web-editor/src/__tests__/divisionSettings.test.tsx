@@ -78,7 +78,7 @@ function renderEditors() {
   );
   /** The last source emitted for `xmlId`, or undefined if it never changed. */
   const sourceOf = (xmlId: string) => {
-    const forDivision = changes.filter((c) => c.xmlId === xmlId);
+    const forDivision = changes.filter((c) => "xmlId" in c && c.xmlId === xmlId);
     return forDivision[forDivision.length - 1]?.source;
   };
   return { sourceOf };

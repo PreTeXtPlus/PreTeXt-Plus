@@ -59,6 +59,28 @@ class LeavingTheEditorTest < ApplicationSystemTestCase
     assert_not unload_prompted?, "the edit has been saved"
   end
 
+  # A snippet's typed source is unsaved work like a division's: it holds the
+  # status at "unsaved", guards the unload, and goes out with the save.
+  test "a snippet's typed source counts as unsaved and is saved on leaving" do
+    project = projects(:two)
+    snippet = project.snippets.create!(ref: "greeting", source: "Hello snippet", source_format: :pretext)
+    open_editor(project, as: users(:two))
+    open_explorer_view(:snippets)
+    find("[data-testid='snippet-row-#{snippet.ref}'] button", wait: 20).click
+    assert_selector "[data-testid='editor-target-title']", text: snippet.ref, wait: 10
+    assert_selector "[data-testid='save-status'][data-status='saved']"
+
+    type_into_editor("Hello snippet", "ZZSNIPPETSAVEZZ")
+    # The editor reports typing on a 500ms debounce.
+    assert_selector "[data-testid='save-status'][data-status='unsaved']", wait: 5
+    # Asking also starts the save, as the page would on its way out.
+    assert unload_prompted?, "an unsaved snippet edit should be guarded"
+
+    assert_selector "[data-testid='save-status'][data-status='saved']", wait: 10
+    assert_includes snippet.reload.source, "ZZSNIPPETSAVEZZ"
+    assert_not unload_prompted?, "the snippet edit has been saved"
+  end
+
   test "Manage project flushes a collaborative project's last edits to the project page" do
     project = projects(:one)
     assert project.collaborative?, "fixture project should have a collaborator"

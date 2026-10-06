@@ -107,7 +107,7 @@ describe("adding a division", () => {
     expect(added[0].source).toContain("<chapter ");
 
     // The placeholder written into the parent names the same type.
-    const parentChange = changes.find((c) => c.xmlId === "bk");
+    const parentChange = changes.find((c) => "xmlId" in c && c.xmlId === "bk");
     expect(parentChange?.source).toContain(
       `<plus:chapter ref="${added[0].xmlId}"/>`,
     );

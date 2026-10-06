@@ -162,12 +162,17 @@ peer removing it) falls back to the root, and renames carry it along.
   preview renders a snippet on its own inside a plain article
   (`assembleSnippetPreviewSource`), and shows an asset's uploaded image and
   file type (`AssetPreview.tsx`).
-- Snippet/asset source edits update the pool and the doc's text; solo, they are
-  also written to the host (`onSnippetUpdate`/`onAssetUpdate`), coalesced per
-  record on a 1 s trailing debounce and flushed on switching items. A host that
-  answers a write by re-fetching hands back a fresh pool prop — a reset — so a
-  record with a write still pending keeps its local copy through it
-  (`unsavedRecordsRef`).
+- Snippet/asset source edits update the pool and the doc's text, and reach
+  the host through `onContentChange` like a division's: `EditorContentChange`
+  is a union, and a snippet's or asset's change is `{ kind, id, ref, source }`
+  (narrow on `kind`). So typed source is part of the host's working copy, dirty
+  check and save. There is no editor-side save for it; `onSnippetUpdate`/
+  `onAssetUpdate` are for metadata edits, Duplicate and Replace. A host that
+  answers a metadata write by re-fetching hands back a fresh pool prop — a
+  reset — and must build it with its unsaved sources laid over (the Rails host
+  does). The one gap a host can't cover is the code editor's 500 ms debounce, so
+  before a solo reset the editor flushes it and keeps the *open* record's local
+  source; solo, that buffer is the only place newer text for it can come from.
 - `EditorTargetBar.tsx` sits above the code editor: kind icon, title, id, a
   status chip, and a settings panel under it that pushes the editor down. A
   snippet's or asset's panel is always shown; a division's is a drawer toggled

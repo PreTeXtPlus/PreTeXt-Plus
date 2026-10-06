@@ -23,8 +23,6 @@ export interface EditorTargetBarProps {
   onSaveAsset: (asset: Asset, prevRef: string) => Promise<void>;
   /** Offer "Replace image…", which opens the "Replace asset" form. */
   canReplaceAsset?: boolean;
-  /** A failed autosave of the open buffer, shown until the next save succeeds. */
-  saveError?: string | null;
 }
 
 const KIND_LABELS: Record<EditorTarget["kind"], string> = {
@@ -66,7 +64,6 @@ const EditorTargetBar = ({
   onSaveSnippet,
   onSaveAsset,
   canReplaceAsset,
-  saveError,
 }: EditorTargetBarProps) => {
   const startCreate = useEditorStore((s) => s.startCreate);
   const isOpen = useEditorStore((s) => s.isSettingsDrawerOpen);
@@ -158,15 +155,6 @@ const EditorTargetBar = ({
           </span>
         )}
         {status && <StatusChip>{status}</StatusChip>}
-        {saveError && (
-          <span
-            role="alert"
-            className="min-w-0 overflow-hidden text-ellipsis whitespace-nowrap text-[0.7rem] text-red-700"
-            title={saveError}
-          >
-            Not saved: {saveError}
-          </span>
-        )}
         <span className="flex-1" />
         {canToggleDrawer && (
           <button

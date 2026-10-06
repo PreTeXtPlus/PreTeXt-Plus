@@ -102,7 +102,7 @@ function renderEditors(overrides: Partial<Parameters<typeof Editors>[0]> = {}) {
     />,
   );
   const sourceOf = (xmlId: string) => {
-    const forDivision = changes.filter((c) => c.xmlId === xmlId);
+    const forDivision = changes.filter((c) => "xmlId" in c && c.xmlId === xmlId);
     return forDivision[forDivision.length - 1]?.source;
   };
   return { changes, createdSnippets, authored, sourceOf };

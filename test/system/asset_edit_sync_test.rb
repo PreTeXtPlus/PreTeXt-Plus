@@ -9,10 +9,10 @@ require "application_system_test_case"
 # `assets_attributes`; the client simply wasn't sending the changed fields.
 #
 # Clicking an asset opens its source in the code editor; its title, id and alt
-# text live in the settings drawer under the editor's title bar. The fixture
+# text live in the settings panel under the editor's title bar. The fixture
 # project is collaborative, so typed source reaches the row the way division
 # content does -- through the shared document and ProjectDocProjection -- while
-# drawer edits are written straight through, host first.
+# settings edits are written straight through, host first.
 class AssetEditSyncTest < ApplicationSystemTestCase
   setup do
     @user = users(:one)
@@ -133,10 +133,9 @@ class AssetEditSyncTest < ApplicationSystemTestCase
       assert_selector "[data-testid='editor-target-title']", text: asset.title, wait: 10
     end
 
-    # ...and drop down its settings drawer.
+    # ...whose settings panel is always shown under the title bar.
     def open_asset_settings_for(asset)
       open_asset_for(asset)
-      find("[data-testid='settings-drawer-toggle']").click
       assert_selector "[data-testid='settings-drawer']", wait: 10
     end
 

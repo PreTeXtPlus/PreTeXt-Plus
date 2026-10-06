@@ -55,6 +55,7 @@ import { derivePretextContent } from "../contentConversion";
 import { DEFAULT_LANGUAGE } from "../languages";
 import type {
   EditorContentChange,
+  EditorDivisionContentChange,
   Asset,
   FeedbackSubmission,
   Snippet,
@@ -165,10 +166,12 @@ export interface editorProps {
   onLanguageChange?: (value: string) => void;
   /**
    * Called whenever content changes — a division edit, a structural reorder
-   * (which rewrites a parent division's content), or a document-wide docinfo
-   * edit.  The single {@link EditorContentChange} payload carries the affected
-   * division's `xmlId` along with the derived content state, so the host can
-   * update the right record in its divisions pool.
+   * (which rewrites a parent division's content), a document-wide docinfo
+   * edit, or a snippet's or asset's source typed into the code editor.  A
+   * division's {@link EditorContentChange} carries its `xmlId` along with the
+   * derived content state; a snippet's or asset's carries `kind`, `id`, `ref`
+   * and `source`. Either way it is unsaved content the host persists with the
+   * rest of its working copy.
    */
   onContentChange: (change: EditorContentChange) => void;
   /** Document title shown in the menu bar title field. */
@@ -376,9 +379,11 @@ export interface editorProps {
    */
   onAssetRemove?: (asset: Asset) => Promise<void> | void;
   /**
-   * Called when the user saves edits to an existing asset. The asset is
-   * identified by its `id` (stable across renames) and every user-editable
-   * field on it may have changed — `ref`, `title` and `source` — so all three
+   * Called when the user saves a metadata edit to an existing asset from its
+   * settings, and to give a Duplicate's or Replace's new record its fields.
+   * (Source typed into the code editor arrives through `onContentChange`.)
+   * The asset is identified by its `id` (stable across renames) and every
+   * user-editable field on it may have changed — `ref`, `title` and `source` — so all three
    * must be persisted, not just the authored `source`. `ref` in particular is
    * the name every `<plus:* ref="..."/>` placeholder (and every built
    * `<image source>`) resolves against, so a rename that isn't stored leaves
@@ -407,9 +412,11 @@ export interface editorProps {
    */
   onSnippetRemove?: (snippet: Snippet) => Promise<void> | void;
   /**
-   * Called when the user saves edits to an existing snippet. The snippet is
-   * identified by its `id` (stable across renames); `ref`, `source`, and
-   * `sourceFormat` may all have changed, so all three must be persisted.
+   * Called when the user saves a metadata edit to an existing snippet from its
+   * settings, or duplicates one. (Source typed into the code editor arrives
+   * through `onContentChange`.) The snippet is identified by its `id` (stable
+   * across renames); `ref`, `source`, and `sourceFormat` may all have changed,
+   * so all three must be persisted.
    */
   onSnippetUpdate?: (snippet: Snippet) => Promise<void> | void;
   /**
@@ -889,7 +896,7 @@ const EditorsInner = (props: EditorsInnerProps) => {
     xmlId: string,
     content: string,
     format: SourceFormat,
-    extra?: Partial<EditorContentChange>,
+    extra?: Partial<EditorDivisionContentChange>,
   ) => {
     setDivisionContent(xmlId, content);
     // Mirror into the shared doc as a minimal diff. For Monaco keystrokes the
@@ -1636,61 +1643,12 @@ const EditorsInner = (props: EditorsInnerProps) => {
 
   // ── Snippet / asset buffers ──────────────────────────────────────────────
   // A snippet's or asset's source is edited in the same code editor as a
-  // division, and travels the same way: the pool is updated optimistically and
-  // the shared doc by minimal diff (a no-op while the Monaco binding owns the
-  // text). Only solo mode tells the host — in collab mode the server reads
-  // content from the doc, exactly as it does for divisions.
-  //
-  // Host writes are coalesced per record: the code editor already debounces
-  // keystrokes, but a request per pause would still be one PATCH every half
-  // second of typing. The pending write reads the record from the store when
-  // it fires, so it always carries the latest text; switching items or
-  // unmounting flushes it rather than dropping it.
-  const [bufferSaveError, setBufferSaveError] = useState<string | null>(null);
-  const pendingHostSavesRef = useRef(
-    new Map<string, { timer: ReturnType<typeof setTimeout>; fire: () => void }>(),
-  );
-  // Records with a host write still scheduled or in flight, counted per record
-  // key. A host that answers each write by re-fetching (the Rails app does)
-  // hands back a fresh `projectSnippets`/`projectAssets` — which is a reset —
-  // that can predate text typed since the write left. While a record is listed
-  // here the reset keeps the local copy of it (see the external-update effect).
-  const unsavedRecordsRef = useRef(new Map<string, number>());
-  const scheduleHostSave = (key: string, save: () => Promise<void> | void) => {
-    const pending = pendingHostSavesRef.current;
-    const unsaved = unsavedRecordsRef.current;
-    const existing = pending.get(key);
-    if (existing) clearTimeout(existing.timer);
-    else unsaved.set(key, (unsaved.get(key) ?? 0) + 1);
-    const fire = () => {
-      pending.delete(key);
-      Promise.resolve()
-        .then(save)
-        .then(
-          () => setBufferSaveError(null),
-          (err: unknown) =>
-            setBufferSaveError(
-              err instanceof Error ? err.message : "the change could not be saved",
-            ),
-        )
-        .finally(() => {
-          const left = (unsaved.get(key) ?? 1) - 1;
-          if (left > 0) unsaved.set(key, left);
-          else unsaved.delete(key);
-        });
-    };
-    pending.set(key, { timer: setTimeout(fire, 1000), fire });
-  };
-  useEffect(() => {
-    const pending = pendingHostSavesRef.current;
-    return () => {
-      for (const { timer, fire } of [...pending.values()]) {
-        clearTimeout(timer);
-        fire();
-      }
-    };
-  }, [editorKey]);
-
+  // division, and travels the same way: the pool is updated optimistically, the
+  // shared doc by minimal diff (a no-op while the Monaco binding owns the
+  // text), and the host hears it through `onContentChange` — the same channel
+  // as division content, so it lands in the host's working copy, dirty check
+  // and save. Metadata edits are different: they go to the host first (see
+  // `handleSnippetSave`), since only the host can settle a rename.
   const applySnippetSourceChange = (
     ref: string,
     content: string | undefined,
@@ -1702,15 +1660,7 @@ const EditorsInner = (props: EditorsInnerProps) => {
     if (!current || current.source === source) return;
     updateSnippetInPool({ ...current, source });
     bridge?.localSnippetSourceChange(ref, source);
-    const onSnippetUpdate = props.onSnippetUpdate;
-    if (props.collaboration || !onSnippetUpdate) return;
-    const id = current.id;
-    scheduleHostSave(`snippet:${id ?? ref}`, () => {
-      const latest = storeApi
-        .getState()
-        .projectSnippets?.find((sn) => (id ? sn.id === id : sn.ref === ref));
-      if (latest) return onSnippetUpdate(latest);
-    });
+    props.onContentChange({ kind: "snippet", id: current.id, ref, source });
   };
 
   const applyAssetSourceChange = (ref: string, content: string | undefined) => {
@@ -1721,15 +1671,7 @@ const EditorsInner = (props: EditorsInnerProps) => {
     if (!current || (current.source ?? "") === source) return;
     updateAssetInPool({ ...current, source });
     bridge?.localAssetSourceChange(ref, source);
-    const onAssetUpdate = props.onAssetUpdate;
-    if (props.collaboration || !onAssetUpdate) return;
-    const id = current.id;
-    scheduleHostSave(`asset:${id ?? ref}`, () => {
-      const latest = storeApi
-        .getState()
-        .projectAssets?.find((a) => (id ? a.id === id : a.ref === ref));
-      if (latest) return onAssetUpdate(latest);
-    });
+    props.onContentChange({ kind: "asset", id: current.id, ref, source });
   };
 
   /**
@@ -1894,29 +1836,44 @@ const EditorsInner = (props: EditorsInnerProps) => {
     // reset would delete, from every client, whatever this one hadn't yet
     // fetched. The doc's own asset map keeps the pool current instead.
     //
-    // Solo, a reset still must not undo typing the host hasn't stored yet: a
-    // record whose source write is scheduled or in flight keeps its local copy.
-    const unsaved = unsavedRecordsRef.current;
-    const keepUnsaved = <T extends { id?: string; ref?: string }>(
+    // Solo, the host builds a reset from its working copy, which every source
+    // edit has reached through `onContentChange` — every edit but the
+    // keystrokes the code editor still holds on its debounce. Deliver those
+    // first, then keep the open record's local source: solo, its buffer is the
+    // one place newer text for it can come from. Metadata still comes from the
+    // incoming record.
+    const resetsAssets =
+      !bridge &&
+      props.projectAssets !== undefined &&
+      props.projectAssets !== prev.projectAssets;
+    const resetsSnippets =
+      !bridge &&
+      props.projectSnippets !== undefined &&
+      props.projectSnippets !== prev.projectSnippets;
+    const { openItem } = storeApi.getState();
+    if (
+      (resetsAssets && openItem.kind === "asset") ||
+      (resetsSnippets && openItem.kind === "snippet")
+    ) {
+      codeEditorRef.current?.flushPendingChange();
+    }
+    const keepOpenSource = <T extends { id?: string; ref?: string; source?: string }>(
       kind: "snippet" | "asset",
       incoming: T[],
       local: T[] | undefined,
-    ): T[] =>
-      unsaved.size === 0
-        ? incoming
-        : incoming.map((record) => {
-          const key = `${kind}:${record.id ?? record.ref}`;
-          if (!unsaved.has(key)) return record;
-          return (
-            local?.find((l) => `${kind}:${l.id ?? l.ref}` === key) ?? record
-          );
-        });
-    if (
-      !bridge &&
-      props.projectAssets !== undefined &&
-      props.projectAssets !== prev.projectAssets
-    ) {
-      update.projectAssets = keepUnsaved(
+    ): T[] => {
+      if (openItem.kind !== kind) return incoming;
+      const open = local?.find((l) => l.ref === openItem.ref);
+      if (!open) return incoming;
+      return incoming.map((record) =>
+        (open.id ? record.id === open.id : record.ref === open.ref) &&
+        record.source !== open.source
+          ? { ...record, source: open.source }
+          : record,
+      );
+    };
+    if (resetsAssets && props.projectAssets) {
+      update.projectAssets = keepOpenSource(
         "asset",
         props.projectAssets,
         storeApi.getState().projectAssets,
@@ -1925,12 +1882,8 @@ const EditorsInner = (props: EditorsInnerProps) => {
     }
 
     // Same reasoning as the asset pool above, for snippets.
-    if (
-      !bridge &&
-      props.projectSnippets !== undefined &&
-      props.projectSnippets !== prev.projectSnippets
-    ) {
-      update.projectSnippets = keepUnsaved(
+    if (resetsSnippets && props.projectSnippets) {
+      update.projectSnippets = keepOpenSource(
         "snippet",
         props.projectSnippets,
         storeApi.getState().projectSnippets,
@@ -2539,7 +2492,6 @@ const EditorsInner = (props: EditorsInnerProps) => {
           onSaveSnippet={handleSnippetSave}
           onSaveAsset={handleAssetSave}
           canReplaceAsset={canReplaceAsset}
-          saveError={isDivisionOpen ? null : bufferSaveError}
         />
         <div className="flex flex-col flex-1 min-h-0 relative">{codeEditor}</div>
       </div>

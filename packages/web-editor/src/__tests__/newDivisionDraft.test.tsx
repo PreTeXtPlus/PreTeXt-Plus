@@ -72,7 +72,7 @@ function renderEditors() {
     />,
   );
   const sourceOf = (xmlId: string) => {
-    const forDivision = changes.filter((c) => c.xmlId === xmlId);
+    const forDivision = changes.filter((c) => "xmlId" in c && c.xmlId === xmlId);
     return forDivision[forDivision.length - 1]?.source;
   };
   return { added, changes, updates, sourceOf };
