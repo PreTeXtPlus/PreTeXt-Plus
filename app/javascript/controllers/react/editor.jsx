@@ -14,7 +14,7 @@ import {
   DEFAULT_LANGUAGE,
 } from "@pretextbook/web-editor";
 import { buildImportEngines } from "./importEngines";
-import { YCableProvider } from "./collab/yCableProvider";
+import { CollabOutdatedError, YCableProvider } from "./collab/yCableProvider";
 import { reportCollabIncident } from "./collab/reportIncident";
 import {
   railsDivisionToEditor,
@@ -496,6 +496,10 @@ function EditorApp({ config }) {
   // session is joined and fully usable, it just isn't hearing peers in real time
   // (see YCableProvider.startWatchdog), so this warns rather than blocks.
   const [relayStalled, setRelayStalled] = useState(false);
+  // The server holds a newer layout of the shared document than this tab's
+  // editor writes (a deploy changed it), so it refuses to sync with this tab.
+  // Nothing typed here can reach anyone until the page is reloaded.
+  const [collabOutdated, setCollabOutdated] = useState(false);
 
   useEffect(() => {
     const data = projectQuery.data;
@@ -508,6 +512,7 @@ function EditorApp({ config }) {
         color: colorForUser(data.editorUser?.id),
       },
       onRelayStatusChange: (status) => setRelayStalled(status === "stalled"),
+      onOutdated: () => setCollabOutdated(true),
     });
     providerRef.current = provider;
     setCollabStatus("connecting");
@@ -515,6 +520,12 @@ function EditorApp({ config }) {
       .connect(() => editorStateToCollabSeed(data))
       .then(() => setCollabStatus("ready"))
       .catch((error) => {
+        // Expected after a deploy, not an incident: the page just needs
+        // reloading, and the notice says so.
+        if (error instanceof CollabOutdatedError) {
+          setCollabOutdated(true);
+          return;
+        }
         console.error("Failed to join collaborative session:", error);
         setCollabStatus("error");
         // The user sees a "please reload" screen and will usually just reload,
@@ -1500,6 +1511,42 @@ function EditorApp({ config }) {
   // A collaborative project's editor waits for the shared doc: mounting before
   // it arrives would show (and let the user edit) state the session may have
   // long since moved past.
+  // Blocking, on joining or mid-session alike: an edit made now would sit in
+  // this tab with nowhere to go.
+  if (collabOutdated) {
+    return (
+      <div
+        role="alertdialog"
+        aria-labelledby="collab-outdated-title"
+        data-testid="collab-outdated"
+        className="fixed inset-0 z-50 flex items-center justify-center bg-black/40"
+      >
+        <div className="mx-5 max-w-md rounded-md bg-white p-6 text-center shadow-lg">
+          <h2 id="collab-outdated-title" className="mb-2 text-lg font-semibold">
+            Please reload the page
+          </h2>
+          <p className="mb-4 text-sm text-slate-700">
+            PreTeXt.Plus has been updated, and this tab can no longer save to the
+            shared document. Reload to keep editing. Anything typed in the last
+            few moments may not have been saved.
+          </p>
+          <button
+            type="button"
+            className="rounded bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700"
+            onClick={() => {
+              // What this tab still holds can't be saved now, so the
+              // unsaved-changes prompt would only be in the way.
+              leavingAnyway.current = true;
+              window.location.reload();
+            }}
+          >
+            Reload
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   if (projectQuery.data?.collaborative && collabStatus !== "ready") {
     if (collabStatus === "error") {
       return (

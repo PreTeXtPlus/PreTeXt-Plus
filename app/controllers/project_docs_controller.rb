@@ -58,6 +58,16 @@ class ProjectDocsController < ApplicationController
     head :no_content
   end
 
+  # GET /projects/:id/doc/version
+  #
+  # The document layout this server holds (ProjectDoc::SCHEMA_VERSION). A
+  # client whose channel subscription is refused asks this to tell "you are
+  # out of date, reload" apart from every other reason for a refusal, which
+  # ActionCable gives no way to state.
+  def version
+    render json: { schema_version: ProjectDoc::SCHEMA_VERSION }
+  end
+
   private
 
   def set_project

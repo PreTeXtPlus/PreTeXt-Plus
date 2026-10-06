@@ -33,6 +33,18 @@ class ProjectDocsControllerTest < ActionDispatch::IntegrationTest
     assert_response :upgrade_required
   end
 
+  # A client refused by the channel asks this to learn whether the reason is a
+  # layout change it can only fix by reloading.
+  test "version reports the document layout this server holds" do
+    get doc_version_project_url(@project), as: :json
+    assert_response :ok
+    assert_equal ProjectDoc::SCHEMA_VERSION, response.parsed_body["schema_version"]
+
+    sign_in users(:subscribed)
+    get doc_version_project_url(@project), as: :json
+    assert_response :forbidden
+  end
+
   test "the race loser is told to join rather than seeding again" do
     post seed_doc_project_url(@project), params: { state: b64(fixture("seed_state")), schema_version: ProjectDoc::SCHEMA_VERSION }, as: :json
     assert_response :created

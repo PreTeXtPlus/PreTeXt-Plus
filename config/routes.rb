@@ -180,6 +180,7 @@ Rails.application.routes.draw do
       # sync protocol.
       post "doc/seed" => "project_docs#seed", as: "seed_doc"
       post "doc/flush" => "project_docs#flush", as: "flush_doc"
+      get "doc/version" => "project_docs#version", as: "doc_version"
       get "share" => "projects#share", as: "share"
       get "source" => "projects#source", as: "share_source"
       get "share/source" => "projects#source", to: redirect("/projects/%{id}/source")
