@@ -187,6 +187,9 @@ export interface EditorDivisionContentChange extends EditorContentState {
   xmlId: string;
 }
 
+/** The two kinds of project record a division embeds by `ref`. */
+export type RecordKind = "snippet" | "asset";
+
 /**
  * A project snippet's or asset's source, as typed into the code editor and
  * passed to `onContentChange`. The host keeps it with the rest of its unsaved
@@ -194,7 +197,7 @@ export interface EditorDivisionContentChange extends EditorContentState {
  * for metadata edits only.
  */
 export interface EditorRecordSourceChange {
-  kind: "snippet" | "asset";
+  kind: RecordKind;
   /** The record's id (stable across renames), when the host gave it one. */
   id?: string;
   ref: string;

@@ -19,6 +19,7 @@ export type {
   EditorContentState,
   EditorDivisionContentChange,
   EditorRecordSourceChange,
+  RecordKind,
   FeedbackSubmission,
   Snippet,
   SourceFormat,

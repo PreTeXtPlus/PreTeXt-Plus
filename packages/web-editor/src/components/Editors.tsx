@@ -58,6 +58,7 @@ import type {
   EditorDivisionContentChange,
   Asset,
   FeedbackSubmission,
+  RecordKind,
   Snippet,
   SourceFormat,
 } from "../types/editor";
@@ -546,6 +547,22 @@ export interface EditorsHandle {
    * decides there is nothing to save — e.g. as the page unloads.
    */
   flushPendingEdits: () => void;
+}
+
+type RecordOf<K extends RecordKind> = K extends "snippet" ? Snippet : Asset;
+
+/** The store, doc and host operations `Editors` applies to one kind of record. */
+interface RecordOps<T extends Snippet | Asset> {
+  /** The live pool, read at call time. */
+  pool: () => T[] | undefined;
+  update: (record: T) => void;
+  rename: (prevRef: string, record: T) => void;
+  /** Rewrite every placeholder naming `from` to name `to`. */
+  renameRefs: (from: string, to: string) => void;
+  /** Write a metadata edit to the host. */
+  persist?: (record: T) => Promise<void> | void;
+  /** Mirror a metadata edit into the shared doc. */
+  mirror: (record: T, prevRef?: string) => void;
 }
 
 const Editors = forwardRef(function Editors(
@@ -1648,69 +1665,71 @@ const EditorsInner = (props: EditorsInnerProps) => {
   // text), and the host hears it through `onContentChange` — the same channel
   // as division content, so it lands in the host's working copy, dirty check
   // and save. Metadata edits are different: they go to the host first (see
-  // `handleSnippetSave`), since only the host can settle a rename.
-  const applySnippetSourceChange = (
+  // `saveRecord`), since only the host can settle a rename.
+  //
+  // Snippets and assets are handled alike; `recordOps` holds the per-kind
+  // store, doc and host operations, so each step below is written once.
+  const recordOps: { [K in RecordKind]: RecordOps<RecordOf<K>> } = {
+    snippet: {
+      pool: () => storeApi.getState().projectSnippets,
+      update: updateSnippetInPool,
+      rename: renameSnippetInPool,
+      renameRefs: renameSnippetRefEverywhere,
+      persist: props.onSnippetUpdate,
+      mirror: (snippet, prevRef) => bridge?.localSnippetUpdate(snippet, prevRef),
+    },
+    asset: {
+      pool: () => storeApi.getState().projectAssets,
+      update: updateAssetInPool,
+      rename: renameAssetInPool,
+      renameRefs: renameAssetRefEverywhere,
+      persist: props.onAssetUpdate,
+      mirror: (asset, prevRef) => bridge?.localAssetUpdate(asset, prevRef),
+    },
+  };
+
+  const applyRecordSourceChange = <K extends RecordKind>(
+    kind: K,
     ref: string,
     content: string | undefined,
   ) => {
-    const current = storeApi
-      .getState()
-      .projectSnippets?.find((sn) => sn.ref === ref);
-    const source = content ?? "";
-    if (!current || current.source === source) return;
-    updateSnippetInPool({ ...current, source });
-    bridge?.localSnippetSourceChange(ref, source);
-    props.onContentChange({ kind: "snippet", id: current.id, ref, source });
-  };
-
-  const applyAssetSourceChange = (ref: string, content: string | undefined) => {
-    const current = storeApi
-      .getState()
-      .projectAssets?.find((a) => a.ref === ref);
+    const ops: RecordOps<RecordOf<K>> = recordOps[kind];
+    const current = ops.pool()?.find((r) => r.ref === ref);
     const source = content ?? "";
     if (!current || (current.source ?? "") === source) return;
-    updateAssetInPool({ ...current, source });
-    bridge?.localAssetSourceChange(ref, source);
-    props.onContentChange({ kind: "asset", id: current.id, ref, source });
+    ops.update({ ...current, source });
+    bridge?.localRecordSourceChange(kind, ref, source);
+    props.onContentChange({ kind, id: current.id, ref, source });
   };
 
   /**
-   * Persist a snippet metadata edit from the settings drawer (its ref or source
-   * format). The host goes first: a ref has to be unique across the whole
-   * project, which is more than the drawer can check against its own pool (a
-   * division can hold the name too), so the host is the only place a rename is
-   * truly settled. Letting it fail first means the error is reported with the
-   * document still intact, rather than every placeholder rewritten to a ref
-   * nothing owns.
+   * Persist a snippet's or asset's metadata edit from its settings (a
+   * snippet's ref or source format; an asset's title, ref or short
+   * description). The host goes first: a ref has to be unique across the whole
+   * project, which is more than the settings can check against their own pool
+   * (a division can hold the name too), so the host is the only place a rename
+   * is truly settled. Letting it fail first means the error is reported with
+   * the document still intact, rather than every placeholder rewritten to a
+   * ref nothing owns.
    */
-  const handleSnippetSave = async (snippet: Snippet, prevRef: string) => {
-    await props.onSnippetUpdate?.(snippet);
+  const saveRecord = async <K extends RecordKind>(
+    kind: K,
+    record: RecordOf<K>,
+    prevRef: string,
+  ) => {
+    const ops: RecordOps<RecordOf<K>> = recordOps[kind];
+    await ops.persist?.(record);
     // A ref rename also rewrites every placeholder that names it, so the whole
     // edit goes to peers as one transaction — otherwise they would briefly
     // hold placeholders pointing at neither ref.
     collabTransact(() => {
-      if (snippet.ref && snippet.ref !== prevRef) {
-        renameSnippetRefEverywhere(prevRef, snippet.ref);
-        renameSnippetInPool(prevRef, snippet);
-        bridge?.localSnippetUpdate(snippet, prevRef);
+      if (record.ref && record.ref !== prevRef) {
+        ops.renameRefs(prevRef, record.ref);
+        ops.rename(prevRef, record);
+        ops.mirror(record, prevRef);
       } else {
-        updateSnippetInPool(snippet);
-        bridge?.localSnippetUpdate(snippet);
-      }
-    });
-  };
-
-  /** {@link handleSnippetSave} for an asset's title, ref and short description. */
-  const handleAssetSave = async (asset: Asset, prevRef: string) => {
-    await props.onAssetUpdate?.(asset);
-    collabTransact(() => {
-      if (asset.ref && asset.ref !== prevRef) {
-        renameAssetRefEverywhere(prevRef, asset.ref);
-        renameAssetInPool(prevRef, asset);
-        bridge?.localAssetUpdate(asset, prevRef);
-      } else {
-        updateAssetInPool(asset);
-        bridge?.localAssetUpdate(asset);
+        ops.update(record);
+        ops.mirror(record);
       }
     });
   };
@@ -2360,25 +2379,26 @@ const EditorsInner = (props: EditorsInnerProps) => {
   // The open buffer's shared text, when collaboration is on and the record has
   // reached the doc (a just-created one lands after its host id resolves — the
   // bridge version subscription re-renders us then).
+  const openRecord =
+    editorTarget?.kind === "snippet"
+      ? { kind: "snippet" as const, ref: editorTarget.snippet.ref }
+      : editorTarget?.kind === "asset"
+        ? { kind: "asset" as const, ref: editorTarget.asset.ref ?? "" }
+        : null;
   const activeCollabText = !bridge || !editorTarget
     ? undefined
-    : editorTarget.kind === "division"
-      ? bridge.getYText(editorTarget.division.xmlId)
-      : editorTarget.kind === "snippet"
-        ? bridge.getSnippetText(editorTarget.snippet.ref)
-        : bridge.getAssetText(editorTarget.asset.ref ?? "");
+    : openRecord
+      ? bridge.getRecordText(openRecord.kind, openRecord.ref)
+      : editorTarget.kind === "division"
+        ? bridge.getYText(editorTarget.division.xmlId)
+        : undefined;
 
   // Where the code editor's edits go, by what is open. Re-created per render
   // and closing over *this* render's target, so a delivery the code editor is
   // still holding when the author switches away lands on the record that was
   // open when it was typed — not on whatever `openItem` says by then.
-  const openSnippetRef =
-    editorTarget?.kind === "snippet" ? editorTarget.snippet.ref : null;
-  const openAssetRef =
-    editorTarget?.kind === "asset" ? (editorTarget.asset.ref ?? "") : null;
   const handleEditorChange = (content: string | undefined) => {
-    if (openSnippetRef !== null) applySnippetSourceChange(openSnippetRef, content);
-    else if (openAssetRef !== null) applyAssetSourceChange(openAssetRef, content);
+    if (openRecord) applyRecordSourceChange(openRecord.kind, openRecord.ref, content);
     else handleDivisionContentChange(content);
   };
   const isDivisionOpen = editorTarget?.kind === "division";
@@ -2489,8 +2509,8 @@ const EditorsInner = (props: EditorsInnerProps) => {
         <EditorTargetBar
           target={editorTarget}
           readOnly={props.readOnly}
-          onSaveSnippet={handleSnippetSave}
-          onSaveAsset={handleAssetSave}
+          onSaveSnippet={(snippet, prevRef) => saveRecord("snippet", snippet, prevRef)}
+          onSaveAsset={(asset, prevRef) => saveRecord("asset", asset, prevRef)}
           canReplaceAsset={canReplaceAsset}
         />
         <div className="flex flex-col flex-1 min-h-0 relative">{codeEditor}</div>

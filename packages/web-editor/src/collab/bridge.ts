@@ -32,7 +32,7 @@
 import * as Y from "yjs";
 import type { Division } from "../types/sections";
 import type { DivisionChanges, EditorStoreInstance } from "../store/editorStore";
-import type { Asset, Snippet } from "../types/editor";
+import type { Asset, RecordKind, Snippet } from "../types/editor";
 import type { CollabSession } from "./types";
 import {
   applyAssetFields,
@@ -48,6 +48,7 @@ import {
   makeAssetEntry,
   makeDivisionEntry,
   makeSnippetEntry,
+  makeText,
   markDeleted,
   snippetEntryToSnapshot,
   type CollabDivisionSnapshot,
@@ -169,21 +170,16 @@ export class CollabBridge {
   getYText(xmlId: string): Y.Text | undefined {
     const key = this.xmlIdToKey.get(xmlId);
     if (!key) return undefined;
-    const entry = getDivisionsMap(this.doc).get(key);
-    const text = entry?.get("source");
-    return text instanceof Y.Text ? text : undefined;
+    return getEntryText(getDivisionsMap(this.doc).get(key));
   }
 
-  /** The shared text for a project snippet's source, by its `ref`. */
-  getSnippetText(ref: string): Y.Text | undefined {
-    const key = this.snippetRefToKey.get(ref);
-    return key ? getEntryText(getSnippetsMap(this.doc).get(key)) : undefined;
-  }
-
-  /** The shared text for a project asset's source, by its `ref`. */
-  getAssetText(ref: string): Y.Text | undefined {
-    const key = this.assetRefToKey.get(ref);
-    return key ? getEntryText(getAssetsMap(this.doc).get(key)) : undefined;
+  /** The shared text for a project snippet's or asset's source, by its `ref`. */
+  getRecordText(kind: RecordKind, ref: string): Y.Text | undefined {
+    const key =
+      kind === "snippet" ? this.snippetRefToKey.get(ref) : this.assetRefToKey.get(ref);
+    if (!key) return undefined;
+    const map = kind === "snippet" ? getSnippetsMap(this.doc) : getAssetsMap(this.doc);
+    return getEntryText(map.get(key));
   }
 
   // ── local → doc ──────────────────────────────────────────────────────────
@@ -197,11 +193,7 @@ export class CollabBridge {
   private syncEntryText(entry: Y.Map<unknown>, source: string | undefined): void {
     const text = getEntryText(entry);
     if (text) diffReplace(text, source ?? "");
-    else {
-      const fresh = new Y.Text();
-      if (source) fresh.insert(0, source);
-      entry.set("source", fresh);
-    }
+    else entry.set("source", makeText(source));
   }
 
   /**
@@ -220,16 +212,9 @@ export class CollabBridge {
     this.doc.transact(() => diffReplace(ytext, content), this.localOrigin);
   }
 
-  /** {@link localContentChange} for a project snippet's source. */
-  localSnippetSourceChange(ref: string, source: string): void {
-    const ytext = this.getSnippetText(ref);
-    if (!ytext) return;
-    this.doc.transact(() => diffReplace(ytext, source), this.localOrigin);
-  }
-
-  /** {@link localContentChange} for a project asset's source. */
-  localAssetSourceChange(ref: string, source: string): void {
-    const ytext = this.getAssetText(ref);
+  /** {@link localContentChange} for a project snippet's or asset's source. */
+  localRecordSourceChange(kind: RecordKind, ref: string, source: string): void {
+    const ytext = this.getRecordText(kind, ref);
     if (!ytext) return;
     this.doc.transact(() => diffReplace(ytext, source), this.localOrigin);
   }

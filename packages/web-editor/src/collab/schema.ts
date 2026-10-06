@@ -181,7 +181,7 @@ const ASSET_FIELDS = [
 ] as const;
 
 /** A fresh `Y.Text` holding `source`. */
-const makeText = (source: string | undefined): Y.Text => {
+export const makeText = (source: string | undefined): Y.Text => {
   const text = new Y.Text();
   if (source) text.insert(0, source);
   return text;

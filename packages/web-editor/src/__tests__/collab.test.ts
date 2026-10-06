@@ -387,12 +387,12 @@ describe("CollabBridge", () => {
     };
     storeA.store.getState().addSnippetToPool(snippet);
     bridgeA.localSnippetAdd(snippet);
-    const textB = bridgeB.getSnippetText("note");
+    const textB = bridgeB.getRecordText("snippet", "note");
     expect(textB).toBeInstanceOf(Y.Text);
     expect(textB?.toString()).toBe("<p>A note.</p>");
 
     // A local source change reaches the peer's pool through the text.
-    bridgeA.localSnippetSourceChange("note", "<p>A longer note.</p>");
+    bridgeA.localRecordSourceChange("snippet", "note", "<p>A longer note.</p>");
     expect(
       storeB.store.getState().projectSnippets?.find((sn) => sn.ref === "note")?.source,
     ).toBe("<p>A longer note.</p>");
@@ -404,7 +404,7 @@ describe("CollabBridge", () => {
       source: "<p>A longer note.</p>",
       sourceFormat: "latex",
     });
-    expect(bridgeB.getSnippetText("note")).toBe(textB);
+    expect(bridgeB.getRecordText("snippet", "note")).toBe(textB);
     expect(
       storeB.store.getState().projectSnippets?.find((sn) => sn.ref === "note")?.sourceFormat,
     ).toBe("latex");
@@ -420,11 +420,11 @@ describe("CollabBridge", () => {
     };
     storeA.store.getState().addAssetToPool(asset);
     bridgeA.localAssetAdd(asset);
-    expect(bridgeB.getAssetText("plot")?.toString()).toBe(
+    expect(bridgeB.getRecordText("asset", "plot")?.toString()).toBe(
       "<latex-image>a</latex-image>",
     );
 
-    bridgeA.localAssetSourceChange("plot", "<latex-image>b</latex-image>");
+    bridgeA.localRecordSourceChange("asset", "plot", "<latex-image>b</latex-image>");
     expect(
       storeB.store.getState().projectAssets?.find((a) => a.ref === "plot")?.source,
     ).toBe("<latex-image>b</latex-image>");

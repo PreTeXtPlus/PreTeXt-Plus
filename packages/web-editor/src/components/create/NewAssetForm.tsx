@@ -54,16 +54,6 @@ function namePastedImageFile(file: File): File {
   return new File([file], `pasted-image-${Date.now()}`, { type: file.type });
 }
 
-/** Client-only ref for an authored asset when no host derives one. */
-function slugifyTitle(title: string): string {
-  const slug = title
-    .toLowerCase()
-    .trim()
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-+|-+$/g, "");
-  return slug || "asset";
-}
-
 const errorMessage = (err: unknown, fallback: string) =>
   err instanceof Error ? err.message : fallback;
 
@@ -172,16 +162,10 @@ const NewAssetForm = ({
           url: trimmedUrl,
         });
       }
-    } else if (tab === "authored") {
-      if (onCreateAuthored) {
-        void run(() => onCreateAuthored(trimmedTitle), "Failed to create asset.");
-      } else {
-        onCreated({
-          id: localAssetId("authored"),
-          title: trimmedTitle,
-          ref: slugifyTitle(trimmedTitle),
-        });
-      }
+    } else if (tab === "authored" && onCreateAuthored) {
+      // Only offered when the host can create one (`canAuthor`), since only
+      // the host derives an authored asset's ref.
+      void run(() => onCreateAuthored(trimmedTitle), "Failed to create asset.");
     }
   };
 
