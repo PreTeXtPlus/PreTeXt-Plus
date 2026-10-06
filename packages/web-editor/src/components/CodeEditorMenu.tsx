@@ -281,6 +281,20 @@ const CodeEditorMenu: React.FC<CodeEditorMenuProps> = ({
         ]
       : [];
 
+  // The same as typing `<` over the selection: the element's name goes into
+  // both tags at once, with the completions open. PreTeXt only, since the
+  // action is registered with the PreTeXt typing shortcuts.
+  const wrapSelectionEntry: MenuEntry[] =
+    sourceFormat === "pretext"
+      ? [
+          separator("wrap"),
+          commandEntry(MONACO_COMMANDS.wrapSelection, run, {
+            title: "Wrap the selection in an element, typing its name into both tags at once",
+            disabled: !hasSelection,
+          }),
+        ]
+      : [];
+
   const findInProjectEntry: MenuEntry[] = onOpenFindInProject
     ? [
         {
@@ -332,6 +346,7 @@ const CodeEditorMenu: React.FC<CodeEditorMenuProps> = ({
         ),
         ...convertPasteEntry,
         selectAllEntry,
+        ...wrapSelectionEntry,
         separator("find"),
         commandEntry(MONACO_COMMANDS.find, run),
         commandEntry(MONACO_COMMANDS.replace, run),
