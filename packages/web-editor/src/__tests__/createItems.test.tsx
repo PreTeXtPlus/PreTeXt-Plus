@@ -246,13 +246,13 @@ describe("creating an asset", () => {
     });
     showAssets();
     fireEvent.click(within(screen.getByTestId("asset-row-fig")).getByRole("button"));
-    fireEvent.click(screen.getByTestId("settings-drawer-toggle"));
     fireEvent.click(screen.getByText("Replace image…"));
 
     expect(screen.getByTestId("new-item-heading")).toHaveTextContent("Replace asset");
     expect(within(pane()).getByText("Upload")).toBeInTheDocument();
     expect(within(pane()).queryByText("Custom")).toBeNull();
-    expect(screen.queryByTestId("settings-drawer")).toBeNull();
+    // The asset's always-open settings go with the editor pane the form hides.
+    expect(screen.getByTestId("editor-pane-main")).toHaveClass("hidden");
   });
 });
 

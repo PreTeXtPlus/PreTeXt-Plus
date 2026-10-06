@@ -414,8 +414,9 @@ export interface EditorStoreState {
   isDocinfoEditorOpen: boolean;
   isFullSourceOpen: boolean;
   /**
-   * The settings drawer under the editor's title bar — the open item's
-   * properties and actions. Switching to another item closes it.
+   * The settings drawer under the editor's title bar — the open division's
+   * properties and actions. Only divisions toggle it (a snippet's or asset's
+   * settings are always shown). Switching to another item closes it.
    */
   isSettingsDrawerOpen: boolean;
   /**

@@ -1292,9 +1292,9 @@ const EditorsInner = (props: EditorsInnerProps) => {
 
   // Clicking the locked wrapper line in the code editor opens the division's
   // properties form in the settings drawer under the editor's title bar.
-  // Clicking a locked wrapper line opens the open item's settings drawer, where
-  // the properties those lines show are edited: a division's title/type/id,
-  // an asset's alt text.
+  // That's where the properties those lines show are edited (title/type/id).
+  // An asset's settings — alt text included — are always shown, so its virtual
+  // wrapper lines have nothing to open.
   const setSettingsDrawerOpen = useEditorStore((s) => s.setSettingsDrawerOpen);
   const handleRequestWrapperEdit = () => setSettingsDrawerOpen(true);
 
@@ -2495,7 +2495,7 @@ const EditorsInner = (props: EditorsInnerProps) => {
       onRequestWrapperEdit={
         props.readOnly
           ? undefined
-          : isDivisionOpen || editorTarget?.kind === "asset"
+          : isDivisionOpen
             ? handleRequestWrapperEdit
             : undefined
       }
@@ -2512,8 +2512,8 @@ const EditorsInner = (props: EditorsInnerProps) => {
     />
   );
 
-  // The code editor under its title bar, whose drawer holds the open item's
-  // settings and actions (dropping down over the editor). While the author is
+  // The code editor under its title bar, whose panel holds the open item's
+  // settings and actions (pushing the editor down). While the author is
   // creating something, the creation form takes the pane instead; the editor
   // stays mounted underneath (hidden), so its buffer, undo history and any
   // collaboration binding are untouched when the form goes away.

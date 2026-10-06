@@ -5,7 +5,7 @@ import { buildProjectAssetView } from "../assetView";
 import { buildProjectSnippetView } from "../snippetView";
 import { useEditorStore } from "../store/hooks";
 import type { EditorTarget } from "./editorTarget";
-import { AssetsIcon, SnippetsIcon, TocIcon } from "./icons";
+import { AssetsIcon, GearIcon, SnippetsIcon, TocIcon } from "./icons";
 import { divisionDisplayTitle, TYPE_FULL_LABELS } from "./toc/types";
 import { useDivisionActions } from "./toc/useDivisionActions";
 import { findDivisionPlacement } from "./toc/divisionActions";
@@ -46,21 +46,6 @@ export const KindIcon = ({ kind }: { kind: EditorTarget["kind"] }) => {
   );
 };
 
-const HamburgerIcon = () => (
-  <svg
-    width="18"
-    height="18"
-    viewBox="0 0 24 24"
-    fill="none"
-    stroke="currentColor"
-    strokeWidth="2"
-    strokeLinecap="round"
-    aria-hidden="true"
-  >
-    <path d="M4 6h16M4 12h16M4 18h16" />
-  </svg>
-);
-
 const StatusChip = ({ children }: { children: ReactNode }) => (
   <span className="shrink-0 text-[0.66rem] font-semibold text-amber-800 bg-amber-100 rounded-full px-2 py-px whitespace-nowrap">
     {children}
@@ -69,8 +54,9 @@ const StatusChip = ({ children }: { children: ReactNode }) => (
 
 /**
  * The bar above the code editor: what is open (a division, snippet or asset),
- * and a hamburger that drops a drawer down over the editor with that item's
- * settings and actions. It replaces the explorer's per-row menus and the old
+ * and a panel under it, pushing the editor down, with that item's settings and
+ * actions. A snippet's or asset's panel is always shown; a division's opens
+ * from the bar's gear. It replaces the explorer's per-row menus and the old
  * per-item edit dialogs — every item is managed from the one place it is
  * edited.
  */
@@ -91,23 +77,27 @@ const EditorTargetBar = ({
   const { rootDivision } = useDivisionActions();
   const embedFormat: SourceFormat = rootDivision?.sourceFormat ?? "pretext";
 
-  // Escape closes the drawer (a field that wants Escape for itself — reverting
-  // a half-typed value — stops it from getting here).
+  const isDivision = target?.kind === "division";
+
+  // Escape closes a division's drawer (a field that wants Escape for itself —
+  // reverting a half-typed value — stops it from getting here). A snippet's or
+  // asset's panel doesn't close.
   useEffect(() => {
-    if (!isOpen) return;
+    if (!isOpen || !isDivision) return;
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === "Escape") setSettingsDrawerOpen(false);
     };
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [isOpen, setSettingsDrawerOpen]);
+  }, [isOpen, isDivision, setSettingsDrawerOpen]);
 
   if (!target) return null;
 
   // A read-only viewer can't change a division's structure, so there is
   // nothing for its drawer to hold. Snippets and assets still show their
   // (disabled) settings, which carry information — embed code, alt text.
-  const canOpenDrawer = !(readOnly && target.kind === "division");
+  const canToggleDrawer = isDivision && !readOnly;
+  const showPanel = isDivision ? canToggleDrawer && isOpen : true;
 
   const toggle = () => setSettingsDrawerOpen(!isOpen);
 
@@ -146,7 +136,7 @@ const EditorTargetBar = ({
   }
 
   return (
-    <div className="relative shrink-0 z-20">
+    <div className="shrink-0">
       <div
         data-testid="editor-target-bar"
         className="flex items-center gap-2 h-9 px-2 bg-[#f5f6f8] border-b border-[#dde0e6] select-none"
@@ -178,7 +168,7 @@ const EditorTargetBar = ({
           </span>
         )}
         <span className="flex-1" />
-        {canOpenDrawer && (
+        {canToggleDrawer && (
           <button
             type="button"
             data-testid="settings-drawer-toggle"
@@ -194,18 +184,18 @@ const EditorTargetBar = ({
             aria-label={isOpen ? "Close settings" : `${KIND_LABELS[target.kind]} settings`}
             title={isOpen ? "Close settings" : `${KIND_LABELS[target.kind]} settings`}
           >
-            <HamburgerIcon />
+            <GearIcon />
           </button>
         )}
       </div>
 
-      {isOpen && canOpenDrawer && (
+      {showPanel && (
         <div
           id="editor-settings-drawer"
           data-testid="settings-drawer"
           role="region"
           aria-label={`${KIND_LABELS[target.kind]} settings`}
-          className="absolute left-0 right-0 top-full max-h-[60vh] overflow-y-auto bg-white border-b border-[#dde0e6] shadow-[0_6px_16px_rgba(0,0,0,0.12)] py-3 px-3"
+          className="max-h-[60vh] overflow-y-auto bg-white border-b border-[#dde0e6] py-3 px-3"
         >
           <div className="max-w-[640px]">
             {target.kind === "division" && (

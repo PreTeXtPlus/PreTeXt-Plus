@@ -211,7 +211,6 @@ describe("opening a snippet", () => {
   it("renames its id from the drawer, rewriting every embed of it", async () => {
     const { changes, snippetUpdates } = renderEditors();
     openSnippetRow("greeting");
-    fireEvent.click(screen.getByTestId("settings-drawer-toggle"));
 
     const idField = screen.getByLabelText("Id") as HTMLInputElement;
     fireEvent.change(idField, { target: { value: "salutation" } });
@@ -252,7 +251,6 @@ describe("opening an asset", () => {
     expect(editor().dataset.format).toBe("pretext");
     expect(screen.getByText("missing short description")).toBeInTheDocument();
 
-    fireEvent.click(screen.getByTestId("settings-drawer-toggle"));
     const alt = screen.getByLabelText("Short description") as HTMLInputElement;
     fireEvent.change(alt, { target: { value: "A plot" } });
     await act(async () => {
@@ -284,7 +282,6 @@ describe("opening an asset", () => {
     expect(screen.getByTestId("asset-preview-type")).toHaveTextContent("image/png");
     expect(screen.getByTestId("asset-preview-type")).toHaveTextContent("photo.png");
 
-    fireEvent.click(screen.getByTestId("settings-drawer-toggle"));
     expect(within(screen.getByTestId("settings-drawer")).queryByRole("img")).toBeNull();
   });
 
@@ -315,7 +312,20 @@ describe("the settings drawer", () => {
     renderEditors();
     fireEvent.click(screen.getByTestId("settings-drawer-toggle"));
     openSnippetRow("greeting");
-    expect(screen.queryByTestId("settings-drawer")).toBeNull();
+    expect(screen.queryByDisplayValue("Main")).toBeNull();
+  });
+
+  it("is always shown, with no toggle, for a snippet or asset", () => {
+    renderEditors();
+    openSnippetRow("greeting");
+    expect(screen.queryByTestId("settings-drawer-toggle")).toBeNull();
+    expect(screen.getByTestId("settings-drawer")).toBeInTheDocument();
+    fireEvent.keyDown(window, { key: "Escape" });
+    expect(screen.getByTestId("settings-drawer")).toBeInTheDocument();
+
+    openAssetRow("fig");
+    expect(screen.queryByTestId("settings-drawer-toggle")).toBeNull();
+    expect(screen.getByTestId("settings-drawer")).toBeInTheDocument();
   });
 
   it("falls back to the root when the open snippet is removed", () => {
@@ -323,7 +333,6 @@ describe("the settings drawer", () => {
     try {
       renderEditors({ onSnippetRemove: () => {} });
       openSnippetRow("greeting");
-      fireEvent.click(screen.getByTestId("settings-drawer-toggle"));
       fireEvent.click(screen.getByText("Remove from project"));
       expect(barTitle()).toHaveTextContent("Main");
       expect(editor().value).not.toContain("plus:snippet");
