@@ -2,7 +2,7 @@ import React, { useCallback, useRef } from "react";
 import ReactDOM from "react-dom/client";
 import { Editors } from "@pretextbook/web-editor";
 import AccountArea from "./AccountArea";
-import { HELP_ENTRIES } from "./helpEntries";
+import { buildHelpMenu } from "./helpEntries";
 
 /**
  * @typedef {Object} RailsDivision
@@ -136,7 +136,7 @@ function TryItApp({ config }) {
             newSessionPath={newSessionPath}
           />
         ),
-        helpMenu: () => ({ label: "Help", entries: HELP_ENTRIES }),
+        helpMenu: () => buildHelpMenu(),
         titleOverride: "Try PreTeXt in Your Browser!",
       }}
     />

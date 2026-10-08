@@ -370,6 +370,49 @@ class ProjectTest < ActiveSupport::TestCase
     assert_not project.divisions.exists?(division.id)
   end
 
+  test "a new project with no divisions gets a default root" do
+    project = Project.create!(user: users(:one), title: "Bare")
+
+    assert_equal 1, project.divisions.count
+    assert_equal "document", project.root_division.ref
+  end
+
+  test "a new project keeps the root it was given" do
+    project = Project.create!(user: users(:one), title: "Given",
+                              divisions_attributes: [ { ref: "main", is_root: true, source_format: :latex } ])
+
+    assert_equal [ "main" ], project.divisions.pluck(:ref)
+  end
+
+  test "a new project cannot have two roots" do
+    project = Project.new(user: users(:one), title: "Two",
+                          divisions_attributes: [ { ref: "a", is_root: true }, { ref: "b", is_root: true } ])
+
+    assert_not project.save
+    assert_includes project.errors[:divisions], "must include exactly one root division"
+  end
+
+  test "a nested update cannot demote the root division" do
+    project = projects(:one)
+    root = project.root_division
+
+    assert_not project.update(divisions_attributes: [ { id: root.id, is_root: false } ])
+    assert root.reload.is_root?
+  end
+
+  test "a nested _destroy never removes the root division" do
+    project = projects(:one)
+    root = project.root_division
+
+    stub_build_server do
+      project.reload.update!(divisions_attributes: [ { id: root.id, _destroy: true } ])
+      # The index-keyed hash a multipart form produces.
+      project.reload.update!(divisions_attributes: { "0" => { "id" => root.id, "_destroy" => "1" } })
+    end
+
+    assert project.divisions.exists?(root.id)
+  end
+
   test "destroying an asset that is already gone is a no-op, not an error" do
     project = projects(:one)
     asset = project.assets.create!(ref: "doomed-asset", kind: "authored", title: "Doomed")

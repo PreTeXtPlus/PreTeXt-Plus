@@ -425,6 +425,19 @@ class ProjectsControllerTest < ActionDispatch::IntegrationTest
     assert_not Division.exists?(division.id)
   end
 
+  # Nested attributes bypass CanCan, so the controller enforces the Ability's
+  # rule itself -- by dropping the _destroy, not failing the save.
+  test "update ignores a _destroy for the root division" do
+    root = @project.root_division
+    assert_no_difference("@project.divisions.count") do
+      patch project_url(@project),
+        params: { project: { divisions_attributes: [ { id: root.id, _destroy: true } ] } },
+        as: :json
+    end
+    assert_response :success
+    assert Division.exists?(root.id)
+  end
+
   # The collaborative editor mints its own uuids and sends the division under
   # one, so a create no longer waits on this request to learn an id.
   test "update creates a division under a client-minted id" do
@@ -568,6 +581,12 @@ class ProjectsControllerTest < ActionDispatch::IntegrationTest
     end
 
     assert_redirected_to projects_url
+  end
+
+  test "destroying a project takes its root division with it" do
+    root = @project.root_division
+    delete project_url(@project)
+    assert_not Division.exists?(root.id)
   end
 
   test "non-owner cannot view project" do

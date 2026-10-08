@@ -23,10 +23,10 @@ class ProjectDocProjectionTest < ActiveSupport::TestCase
   end
 
   # Make the division the document knows by `id` this project's root, so the
-  # projection can find it. The existing root steps down first: only one row per
-  # project may claim it (Division#is_root uniqueness).
+  # projection can find it. A root can no longer be demoted or destroyed through
+  # the model, so the existing one is deleted outright to make room.
   def make_root(id)
-    @project.divisions.find_by(is_root: true)&.update!(is_root: false)
+    @project.divisions.where(is_root: true).delete_all
     @project.divisions.create!(id: id, ref: "placeholder", source: "<book/>",
                                source_format: "pretext", is_root: true)
     @project.divisions.reload

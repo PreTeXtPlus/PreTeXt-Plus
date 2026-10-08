@@ -42,8 +42,9 @@ class Project < ApplicationRecord
 
   # All three nested collections accept ids the editor minted itself; see
   # #tolerate_client_minted_ids for why, and for what these overrides do.
+  # Divisions additionally never lose their root this way; see #keep_root_division.
   def divisions_attributes=(attributes)
-    super(tolerate_client_minted_ids(divisions, attributes))
+    super(keep_root_division(tolerate_client_minted_ids(divisions, attributes)))
   end
 
   def assets_attributes=(attributes)
@@ -107,6 +108,10 @@ class Project < ApplicationRecord
 
   before_validation :stamp_source_updated_at, if: -> { (changed & SOURCE_ATTRIBUTES).any? }
   before_validation(on: :create) { self.source_updated_at ||= Time.current }
+  # Every project starts with exactly one root division; Division keeps it that
+  # way from then on.
+  before_validation :build_root_division, on: :create
+  validate :exactly_one_root_division, on: :create
   # Built (not created) so it saves in the same transaction as the project. Skipped when
   # targets are already present, which is how full_dup carries a project's own set over.
   before_create :build_default_target
@@ -402,6 +407,38 @@ class Project < ApplicationRecord
         known << id
         entry
       end
+    end
+
+    # The root division is the document itself, so it goes only with its project
+    # (through `dependent: :destroy`), never through a nested `_destroy`.
+    # Division refuses the destroy itself (see Division#keep_root), but from here
+    # that refusal would raise out of the save; the `_destroy` is dropped instead,
+    # since the editor re-sends tombstones until they stick (see
+    # #tolerate_client_minted_ids) and would otherwise block every later save.
+    #
+    # Runs after #tolerate_client_minted_ids, which has already loaded the target.
+    def keep_root_division(attributes)
+      entries = nested_attribute_entries(attributes)
+      return attributes if entries.empty?
+
+      root_ids = divisions.select(&:is_root?).filter_map { |division| division.id&.to_s }
+      return attributes if root_ids.empty?
+
+      entries.map do |entry|
+        id = (entry[:id] || entry["id"]).presence&.to_s
+        root_ids.include?(id) ? entry.except(:_destroy, "_destroy") : entry
+      end
+    end
+
+    # A caller that supplied no root (POST /projects with only a title) gets the
+    # default one, exactly as #new offers it.
+    def build_root_division
+      divisions.build(is_root: true, ref: "document") if divisions.none?(&:is_root?)
+    end
+
+    def exactly_one_root_division
+      roots = divisions.reject(&:marked_for_destruction?).count(&:is_root?)
+      errors.add(:divisions, "must include exactly one root division") unless roots == 1
     end
 
     # Nested attributes reach a model either as an array of entries or as the
