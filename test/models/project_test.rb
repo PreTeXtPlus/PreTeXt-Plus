@@ -283,9 +283,19 @@ class ProjectTest < ActiveSupport::TestCase
 
   # --- Collaboration ---
 
+  # COLLAB PREVIEW CLEANUP (after Nov 1, 2026): unwrap the travel_to block.
   test "collaborator_limit follows the owner's subscription" do
-    assert_equal 1, projects(:one).collaborator_limit
-    assert_equal 5, Project.new(user: users(:subscribed)).collaborator_limit
+    travel_to Project::COLLABORATION_PREVIEW_ENDS do
+      assert_equal 1, projects(:one).collaborator_limit
+      assert_equal Float::INFINITY, Project.new(user: users(:subscribed)).collaborator_limit
+    end
+  end
+
+  # COLLAB PREVIEW CLEANUP (after Nov 1, 2026): delete this test.
+  test "collaborator_limit is unlimited for everyone during the collaboration preview" do
+    travel_to Project::COLLABORATION_PREVIEW_ENDS - 1.second do
+      assert_equal Float::INFINITY, projects(:one).collaborator_limit
+    end
   end
 
   test "editable_by? covers the owner and accepted collaborators only" do
@@ -538,9 +548,10 @@ class ProjectTest < ActiveSupport::TestCase
   end
 
   test "transfer_ownership_to! succeeds even when it leaves the new owner over their own collaborator_limit" do
-    # A subscriber's project (cap 5) fully staffed, including one free-tier
-    # collaborator. Transferring to that free-tier user (cap 1) must still
-    # succeed -- the swap doesn't grow the roster, it only changes whose
+    travel_to Project::COLLABORATION_PREVIEW_ENDS # COLLAB PREVIEW CLEANUP (after Nov 1, 2026): delete this line.
+    # A subscriber's project (uncapped) with five collaborators, including one
+    # free-tier collaborator. Transferring to that free-tier user (cap 1) must
+    # still succeed -- the swap doesn't grow the roster, it only changes whose
     # collaboration row is missing from it.
     project = Project.create!(user: users(:subscribed), title: "Team book")
     free_user = users(:one)

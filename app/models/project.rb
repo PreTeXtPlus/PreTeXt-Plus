@@ -160,12 +160,31 @@ class Project < ApplicationRecord
     root_element.presence || document_type
   end
 
+  # Until this moment every owner gets the subscriber (unlimited) cap as a
+  # feature preview; from it on, free owners are back to 1. Nothing needs
+  # deploying when it passes.
+  #
+  # COLLAB PREVIEW CLEANUP (after Nov 1, 2026): delete this comment, the
+  # constant, and self.collaboration_preview? below. Every other spot to
+  # clean up carries this same tag -- `grep -rn "COLLAB PREVIEW CLEANUP" app test`.
+  COLLABORATION_PREVIEW_ENDS = Time.find_zone("Pacific Time (US & Canada)").local(2026, 11, 1)
+
+  def self.collaboration_preview?
+    Time.current < COLLABORATION_PREVIEW_ENDS
+  end
+
   # How many collaborators (accepted + pending invites) this project may have.
   # Keyed to the OWNER's standing, not the inviter's or invitee's. Enforced
   # only when adding (see Collaboration#within_collaborator_limit), so a lapsed
-  # subscription grandfathers existing collaborators rather than evicting them.
+  # subscription -- or the end of the preview -- grandfathers existing
+  # collaborators rather than evicting them.
+  #
+  # COLLAB PREVIEW CLEANUP (after Nov 1, 2026): drop
+  # `|| Project.collaboration_preview?` below, and "-- or the end of the
+  # preview --" from the comment above.
   def collaborator_limit
-    user.has_subscriber_benefits? ? 5 : 1
+    return Float::INFINITY if user.has_subscriber_benefits? || Project.collaboration_preview?
+    1
   end
 
   # Words the authors have taught the editor's spell checker ("Add to
