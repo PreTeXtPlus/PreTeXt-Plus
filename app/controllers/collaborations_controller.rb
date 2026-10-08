@@ -1,5 +1,9 @@
 class CollaborationsController < ApplicationController
   before_action :set_project
+  # Each invite emails an arbitrary address, and with no collaborator cap for
+  # subscribers (or anyone, during a preview) nothing else bounds how many.
+  rate_limit to: 30, within: 1.hour, only: :create,
+             with: -> { redirect_to project_path(params[:project_id]), alert: "You've sent a lot of invitations recently. Please wait a while and try again." }
 
   # POST /projects/:project_id/collaborations
   # Invite by email. Any registered account under that address becomes a

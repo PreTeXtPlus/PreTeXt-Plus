@@ -26,22 +26,34 @@ class CollaborationTest < ActiveSupport::TestCase
     assert collaboration.errors[:invited_email].any?
   end
 
+  # COLLAB PREVIEW CLEANUP (after Nov 1, 2026): unwrap the travel_to block.
   test "free owner is capped at 1 collaborator" do
-    project = projects(:one) # owner is the unsubscribed user one; fixture :accepted fills the cap
-    assert_equal 1, project.collaborator_limit
-    collaboration = project.collaborations.build(invited_email: "extra@example.com")
-    assert_not collaboration.valid?
-    assert_match(/limit/i, collaboration.errors[:base].to_sentence)
+    travel_to Project::COLLABORATION_PREVIEW_ENDS do
+      project = projects(:one) # owner is the unsubscribed user one; fixture :accepted fills the cap
+      assert_equal 1, project.collaborator_limit
+      collaboration = project.collaborations.build(invited_email: "extra@example.com")
+      assert_not collaboration.valid?
+      assert_match(/limit/i, collaboration.errors[:base].to_sentence)
+    end
   end
 
-  test "subscribed owner is capped at 5 collaborators" do
-    project = Project.create!(user: users(:subscribed), title: "Team book")
-    assert_equal 5, project.collaborator_limit
-    5.times do |n|
-      assert project.collaborations.create(invited_email: "person#{n}@example.com").persisted?
+  # COLLAB PREVIEW CLEANUP (after Nov 1, 2026): delete this test.
+  test "free owner is uncapped during the collaboration preview" do
+    travel_to Project::COLLABORATION_PREVIEW_ENDS - 1.second do
+      project = projects(:one) # the cap that fixture :accepted fills after the preview
+      assert project.collaborations.create(invited_email: "extra@example.com").persisted?
     end
-    over = project.collaborations.build(invited_email: "person5@example.com")
-    assert_not over.valid?
+  end
+
+  # COLLAB PREVIEW CLEANUP (after Nov 1, 2026): unwrap the travel_to block.
+  test "subscribed owner has no collaborator cap" do
+    travel_to Project::COLLABORATION_PREVIEW_ENDS do
+      project = Project.create!(user: users(:subscribed), title: "Team book")
+      assert_equal Float::INFINITY, project.collaborator_limit
+      10.times do |n|
+        assert project.collaborations.create(invited_email: "person#{n}@example.com").persisted?
+      end
+    end
   end
 
   test "cap is not enforced on existing rows (grandfathering)" do
