@@ -25,7 +25,7 @@ import {
   railsToEditorState,
 } from "./railsProjectMapping";
 import AccountArea from "./AccountArea";
-import { HELP_ENTRIES } from "./helpEntries";
+import { buildHelpMenu } from "./helpEntries";
 
 /** @typedef {import("@pretextbook/web-editor").Asset} Asset */
 /** @typedef {import("@pretextbook/web-editor").Division} Division */
@@ -1413,19 +1413,8 @@ function EditorApp({ config }) {
             icon: <DashboardIcon />,
             onSelect: openProjectPage,
           },
-          helpMenu: (helpers) => ({
-            label: "Help & Feedback",
-            entries: [
-              ...HELP_ENTRIES,
-              { kind: "separator", key: "feedback-sep" },
-              {
-                kind: "item",
-                key: "feedback",
-                label: "Support / Feedback",
-                onSelect: helpers.onGiveFeedback,
-              },
-            ],
-          }),
+          helpMenu: (helpers) =>
+            buildHelpMenu({ onGiveFeedback: helpers.onGiveFeedback }),
         }}
         onContentChange={onContentChange}
         importEngines={importEngines}

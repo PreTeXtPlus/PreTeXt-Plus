@@ -59,22 +59,7 @@
                 <%= link_to announcements_path, class: "my-1 text-gray-800 hover:text-blue-500 lg:mx-4 lg:my-0" do %>
                   Announcements
                 <% end %>
-                <% if current_user.present? %>
-                  <%= render layout: "layouts/nav_dropdown", locals: { toggle_id: "helpMenuToggle", label: "Help ▾".html_safe } do %>
-                    <a href="https://docs.pretext.plus" target="_blank" class="block px-4 py-2 text-gray-800 hover:bg-blue-50 hover:text-blue-500 rounded-t-md">
-                      PreTeXt.Plus Documentation
-                    </a>
-                    <a href="https://pretextbook.org/doc/guide/html/" target="_blank" class="block px-4 py-2 text-gray-800 hover:bg-blue-50 hover:text-blue-500">
-                      PreTeXt Guide
-                    </a>
-                    <a href="https://pretextbook.org/examples/sample-article/annotated/" target="_blank" class="block px-4 py-2 text-gray-800 hover:bg-blue-50 hover:text-blue-500 rounded-t-md">
-                      PreTeXt Sample Article
-                    </a>
-                    <a href="mailto:support@pretext.plus" target="_blank" class="block px-4 py-2 text-gray-800 hover:bg-blue-50 hover:text-blue-500">
-                      Email Support
-                    </a>
-                  <% end %>
-                <% end %>
+                <%= render "layouts/help_menu" %>
                 <% if current_user&.admin? %>
                   <div class="relative group my-1 lg:m-0">
                     <label for="adminMenu" class="my-1 text-gray-800 cursor-pointer hover:text-blue-500 lg:mx-4 lg:my-0 select-none">
