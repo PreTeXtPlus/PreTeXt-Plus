@@ -3,18 +3,21 @@
  *
  * The Monaco half of paste-and-convert.
  *
- * The placement rules themselves (`isInlineContext`, `placeConvertedMarkup`)
+ * The placement rules themselves (`pasteTargetAt`, `placeConvertedMarkup`)
  * are `@pretextbook/import`'s and are tested there; what is checked here is
- * what this package adds — reading a placement context out of a Monaco model
- * with its 1-based coordinates, and the decline-or-convert decision — plus a
- * few end-to-end cases that pin the behaviour an author actually sees.
+ * what this package adds — reading a paste target and placement context out of
+ * a Monaco model with its 1-based coordinates, and the decline-or-convert
+ * decision — plus a few end-to-end cases that pin the behaviour an author
+ * actually sees.
  */
 import { describe, it, expect } from "vitest";
 import {
   convertPastedSnippet,
   installPasteConvertListener,
+  pasteTargetIn,
   placementContextAt,
   type PasteContextModel,
+  type PastePosition,
 } from "../pasteConvert";
 
 /** A stand-in for Monaco's text model, backed by a plain string. */
@@ -59,38 +62,90 @@ const INSIDE_PARAGRAPH = { lineNumber: 4, column: 5 };
 /** Line 6, just past the indent — between the paragraph and the closing tag. */
 const BETWEEN_BLOCKS = { lineNumber: 6, column: 3 };
 
+// A division with a place in it for each kind of content a paste must arrive
+// in verbatim, and one (a caption) that takes running text without a `<p>`.
+const LITERAL_DIVISION = [
+  '<section xml:id="sec-y">', // 1
+  "  <title>Another section</title>", // 2
+  "  <p>", // 3
+  "    Let <m>x</m> be real.", // 4
+  "  </p>", // 5
+  "  <figure>", // 6
+  "    <caption>A diagram</caption>", // 7
+  "    <image>", // 8
+  "      <latex-image>", // 9
+  "        ", // 10
+  "      </latex-image>", // 11
+  "    </image>", // 12
+  "  </figure>", // 13
+  "  <!--  -->", // 14
+  "</section>", // 15
+].join("\n");
+
+/** Line 4, between `<m>` and the `x` — inside inline math. */
+const INSIDE_MATH = { lineNumber: 4, column: 12 };
+/** Line 7, just past `<caption>`. */
+const INSIDE_CAPTION = { lineNumber: 7, column: 14 };
+/** Line 10, past the indent — inside the `<latex-image>`. */
+const INSIDE_LATEX_IMAGE = { lineNumber: 10, column: 9 };
+/** Line 14, between the comment's delimiters. */
+const INSIDE_COMMENT = { lineNumber: 14, column: 8 };
+
+/** The placement context at `position`, read the way a paste reads it. */
+function placementAt(model: PasteContextModel, position: PastePosition) {
+  return placementContextAt(model, position, pasteTargetIn(model, position));
+}
+
+describe("pasteTargetIn", () => {
+  const model = modelFor(LITERAL_DIVISION);
+
+  it("leaves ordinary division content open to conversion", () => {
+    expect(pasteTargetIn(modelFor(DIVISION), INSIDE_PARAGRAPH).literal).toBeUndefined();
+    expect(pasteTargetIn(modelFor(DIVISION), BETWEEN_BLOCKS).literal).toBeUndefined();
+    expect(pasteTargetIn(model, INSIDE_CAPTION).literal).toBeUndefined();
+  });
+
+  it("takes text literally inside math, verbatim content and comments", () => {
+    expect(pasteTargetIn(model, INSIDE_MATH).literal).toMatch(/<m>/);
+    expect(pasteTargetIn(model, INSIDE_LATEX_IMAGE).literal).toMatch(
+      /<latex-image>/,
+    );
+    expect(pasteTargetIn(model, INSIDE_COMMENT).literal).toMatch(/comment/);
+  });
+});
+
 describe("placementContextAt", () => {
   it("sees an unclosed paragraph as inline context", () => {
-    expect(placementContextAt(modelFor(DIVISION), INSIDE_PARAGRAPH).inline).toBe(
+    expect(placementAt(modelFor(DIVISION), INSIDE_PARAGRAPH).inline).toBe(true);
+  });
+
+  it("sees a closed paragraph as block context", () => {
+    expect(placementAt(modelFor(DIVISION), BETWEEN_BLOCKS).inline).toBe(false);
+  });
+
+  // No `<p>` is open, but the schema gives a caption running text, not
+  // paragraphs — so a paste there must not arrive wrapped in one.
+  it("sees a caption as inline context", () => {
+    expect(placementAt(modelFor(LITERAL_DIVISION), INSIDE_CAPTION).inline).toBe(
       true,
     );
   });
 
-  it("sees a closed paragraph as block context", () => {
-    expect(placementContextAt(modelFor(DIVISION), BETWEEN_BLOCKS).inline).toBe(
-      false,
-    );
-  });
-
   it("reads the indent of the line the cursor is on", () => {
-    expect(
-      placementContextAt(modelFor(DIVISION), INSIDE_PARAGRAPH).baseIndent,
-    ).toBe("    ");
-    expect(
-      placementContextAt(modelFor(DIVISION), BETWEEN_BLOCKS).baseIndent,
-    ).toBe("  ");
+    expect(placementAt(modelFor(DIVISION), INSIDE_PARAGRAPH).baseIndent).toBe(
+      "    ",
+    );
+    expect(placementAt(modelFor(DIVISION), BETWEEN_BLOCKS).baseIndent).toBe(
+      "  ",
+    );
   });
 
   // Monaco counts columns from 1, so this is the boundary that would be off by
   // one if the VS Code host's `character > 0` were copied across unchanged.
   it("treats column 1 as the start of the line and anything past it as mid-line", () => {
     const model = modelFor(DIVISION);
-    expect(placementContextAt(model, { lineNumber: 4, column: 1 }).midLine).toBe(
-      false,
-    );
-    expect(placementContextAt(model, { lineNumber: 4, column: 2 }).midLine).toBe(
-      true,
-    );
+    expect(placementAt(model, { lineNumber: 4, column: 1 }).midLine).toBe(false);
+    expect(placementAt(model, { lineNumber: 4, column: 2 }).midLine).toBe(true);
   });
 });
 
@@ -175,6 +230,60 @@ describe("convertPastedSnippet", () => {
     );
     expect(result?.markup).toContain("<subsection>");
     expect(result?.warning).toMatch(/subsection/);
+  });
+
+  // Its backslashes are already inside the element they belong in; the LaTeX
+  // converter would escape the tags into text.
+  it("declines a snippet that already carries PreTeXt markup", () => {
+    expect(
+      convertPastedSnippet(
+        "This is math: <m>\\frac{1}{2}</m>.",
+        model,
+        INSIDE_PARAGRAPH,
+      ),
+    ).toBeUndefined();
+  });
+
+  describe("where the paste lands", () => {
+    const literalModel = modelFor(LITERAL_DIVISION);
+    // Each scores as LaTeX on its own, so a decline below is the target's doing.
+    const FRACTION = "\\frac{1}{2}";
+    const TIKZ =
+      "\\begin{tikzpicture}\n\\draw (0,0) -- (1,1);\n\\end{tikzpicture}";
+
+    it("would convert these snippets somewhere ordinary", () => {
+      expect(convertPastedSnippet(FRACTION, model, INSIDE_PARAGRAPH)).toBeDefined();
+      expect(convertPastedSnippet(TIKZ, model, BETWEEN_BLOCKS)).toBeDefined();
+    });
+
+    it("leaves LaTeX pasted into math as LaTeX", () => {
+      expect(
+        convertPastedSnippet(FRACTION, literalModel, INSIDE_MATH),
+      ).toBeUndefined();
+    });
+
+    it("leaves TikZ pasted into a latex-image as TikZ", () => {
+      expect(
+        convertPastedSnippet(TIKZ, literalModel, INSIDE_LATEX_IMAGE),
+      ).toBeUndefined();
+    });
+
+    it("leaves a paste into a comment alone", () => {
+      expect(
+        convertPastedSnippet(TIKZ, literalModel, INSIDE_COMMENT),
+      ).toBeUndefined();
+    });
+
+    it("converts into a caption without wrapping it in a paragraph", () => {
+      const result = convertPastedSnippet(
+        "Let $G$ be a \\emph{group} of order $n$.",
+        literalModel,
+        INSIDE_CAPTION,
+      );
+      expect(result?.markup).toBe(
+        "Let <m>G</m> be a <em>group</em> of order <m>n</m>.",
+      );
+    });
   });
 });
 
