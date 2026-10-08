@@ -62,7 +62,7 @@ Book projects add a chapter layer: the host passes a `chapters` array, and the e
 ### Sub-editors
 
 - **CodeEditor** (`src/components/CodeEditor.tsx`): Monaco Editor with PreTeXt/LaTeX/Markdown syntax highlighting and completions (`src/components/codeEditorCompletions.ts`)
-- **Editor menus** (`TopBar.tsx`, `CodeEditorMenu.tsx`, `MenuDropdown.tsx`, `documentActionMenuEntries.ts`, `editorCommands.ts`, `editorConfigs/snippets.ts`): `TopBar` is the unified ~64px top bar — logo, a title row (with the host-reported `saveStatus`, see `SaveStatusIndicator.tsx`), a File/Edit/Insert/Tools menubar, and the host's optional `primaryAction` button before its account area (`CodeEditorMenu` rendered with a `File` `leadingMenus` entry and `showDocumentActionsInTools={false}`). `CodeEditor` no longer renders its own toolbar; it reports the Monaco-derived reactive state (`canUndo`/`canRedo`/`hasSelection`/the clipboard-select-all-insert actions/find-in-file status) up to `Editors` via `onMenuStateChange`, which `TopBar` renders from. Every format gets the same Edit/Insert/Tools shape — only contents differ — with the format-specific document actions (Format PreTeXt, Import, Clean up LaTeX, Edit Macros vs. Edit Preamble, Assets, Snippets, Display Full Source) built once by `buildDocumentActionEntries` in `documentActionMenuEntries.ts` and placed in File (Tools keeps only the generic Monaco commands). "Convert to PreTeXt" is the one action that changes what the project *is*: it stays a button (in `CodeEditor`, floating next to the source-format badge) rather than being folded into the menu-driven document actions, but Tools also carries it as a plain item for discoverability.
+- **Editor menus** (`TopBar.tsx`, `CodeEditorMenu.tsx`, `MenuDropdown.tsx`, `documentActionMenuEntries.ts`, `editorCommands.ts`, `editorConfigs/snippets.ts`): `TopBar` is the unified ~64px top bar — logo, a title row (with the host-reported `saveStatus`, see `SaveStatusIndicator.tsx`), a File/Edit/Insert/Tools menubar, and the host's optional `primaryAction` button before its account area (`CodeEditorMenu` rendered with a `File` `leadingMenus` entry and `showDocumentActionsInTools={false}`). `CodeEditor` no longer renders its own toolbar; it reports the Monaco-derived reactive state (`canUndo`/`canRedo`/`hasSelection`/the clipboard-select-all-insert actions/find-in-file status) up to `Editors` via `onMenuStateChange`, which `TopBar` renders from. Every format gets the same Edit/Insert/Tools shape — only contents differ — with the format-specific document actions (Format PreTeXt, Import, Clean up LaTeX, Edit Macros vs. Edit Preamble, New Asset, New Snippet, Display Full Source) built once by `buildDocumentActionEntries` in `documentActionMenuEntries.ts` and placed in File (Tools keeps only the generic Monaco commands). "Convert to PreTeXt" is the one action that changes what the project *is*: it stays a button (in `CodeEditor`, floating next to the source-format badge) rather than being folded into the menu-driven document actions, but Tools also carries it as a plain item for discoverability.
 - **Import dialog** (`ImportDialog.tsx`, `importConvert.ts`): Tools → Import… (PreTeXt divisions only) converts outside material and hands it back as text to copy — it never writes to the project, so the result reaches undo, collab, and the host as an ordinary paste. Text in the left pane (typed, pasted, or a `.tex`/`.md`/`.ptx` file) goes through this package's own converters, LaTeX clean-up included — or, if the author ticks "Convert with … instead", through the host's alternative engine for that format (`alternateTextEngine`, the same `alternateFor` pick the import wizard offers; pandoc in the Rails app), which receives the cleaned text as an `import.tex`/`import.md` file. The source-format override lists only LaTeX and Markdown: detection settles documents and LaTeX, but ties go to LaTeX, so short Markdown snippets with `$…$` math, blockquotes or pipe tables need it; PreTeXt is only ever a detection result, meaning "nothing to convert". Any other file goes to the host's `importEngines` (falling back to `@pretextbook/import`'s built-in converter) and the left pane shows only its name. Both paths end in `fitImportForDivision`: cut down to the body (an engine returns a whole `<pretext>` document), retarget divisions one rung below the open division, rename ids the project already uses (records *and* in-source `xml:id`s), wrap loose text in `<p>`. The importer's own insert destination is deliberately not used — it treats the whole document as the inserted division, keeping the `<article>` wrapper and pushing its sections two rungs down. Images an engine extracts are reported, not carried: a clipboard holds text only.
   - `editorCommands.ts` holds every Monaco action id in one place, plus the operations Monaco can't serve from a menu. Clipboard actions go through `navigator.clipboard` rather than Monaco's own `clipboardCopyAction` and friends, which copy whatever the *document* selection is — by the time a menu item is clicked that's the menu, not the buffer. Reading the clipboard is the one thing a browser may refuse outright, so `paste` resolves `false` and the menu says so instead of doing nothing. Select All is ours too (`selectEditableRegion`): it selects only the editable body (see `lockedRegion.ts`), since a selection covering the locked wrapper lines can't be typed over or cut. `CodeEditor` rebinds Mod+A to the same handler, scoped to `editorTextFocus` so Monaco's own select-all still serves the find box; a read-only buffer selects everything, there being nothing editable to narrow to.
   - The Insert menu is **one shared catalog** with per-format bodies, so a construct has the same label in the same group in all three formats and only the inserted text changes. A format omits a key its converter can't handle (Markdown has no table, figure or link support in `@pretextbook/remark-pretext` yet — they become `<TODO>` placeholders). `__tests__/snippets.test.ts` runs every body through the real PreTeXt schema and the real LaTeX/Markdown converters, so the catalog can't drift from what the pipeline accepts; that test is what caught PreTeXt requiring lists and displayed math *inside* a `<p>`, deprecating `<me>` for `<md>`, and `<program>` wanting `<code>` rather than `<input>`. A PreTeXt body is run through `assembleFullProjectSource` before it is validated, exactly as the schema linter does, since a body may contain a `<plus:* ref/>` placeholder (the Figure snippet writes one for its image) that only assembly can expand into something the grammar accepts.
@@ -102,37 +102,36 @@ The left sidebar is an always-visible icon rail plus a panel for the selected
 view. The store's `explorerView` names the view and `isTocCollapsed` whether the
 panel is shown; `selectExplorerView` is the rail click (clicking the open view's
 icon collapses to the rail, and that choice is remembered), `showExplorerView` is
-for code that needs a view on screen (Tools → Find in Project, the wrapper-line
-properties form) and never collapses.
+for code that needs a view on screen (Tools → Find in Project) and never
+collapses. Explorer rows have **no menus**: selecting a division, snippet or
+asset opens it in the code editor, and everything else about it lives in the
+settings drawer under the editor's title bar (see below).
 
 - **Contents** (`toc/ArticleToc.tsx`): the document's tree, root down through
   every placed `<plus:* ref/>`, then an "Unplaced divisions" block listing each
-  division the document doesn't reach as the head of its own subtree. Row
-  actions and the root lookup live in `toc/useDivisionActions.ts` (also used by
-  the Snippets/Assets views for the active division's embed format). The tree's
-  shape lives in the store, not the component, because switching views unmounts
-  it: `tocExpansion` holds only the rows the author has toggled (anything else
-  defaults to shut, bar the root), `isTocOrphansCollapsed` folds the unplaced
-  block, and `tocRevealedId` records which active division's ancestors were last
-  opened, so the tree follows the active division (opening the rows above it,
-  and its own row one level) without re-opening a branch
-  the author shut when it remounts. The first two are also saved to
-  localStorage per project, keyed by the host's `projectUrl` (no URL, no
-  persistence).
+  division the document doesn't reach as the head of its own subtree. A row's
+  [+] (shown on hover, focus, or the open row) starts a sub-division. The
+  structural handlers and the root lookup live in `toc/useDivisionActions.ts`;
+  which of them a division is offered is decided by its place in
+  the document (`toc/divisionActions.ts`: `findDivisionPlacement` →
+  `divisionActionEntries`). The tree's shape lives in the store, not the
+  component, because switching views unmounts it: `tocExpansion` holds only the
+  rows the author has toggled (anything else defaults to shut, bar the root),
+  `isTocOrphansCollapsed` folds the unplaced block, and `tocRevealedId` records
+  which open division's ancestors were last opened, so the tree follows the open
+  division (opening the rows above it, and its own row one level) without
+  re-opening a branch the author shut when it remounts. The first two are also
+  saved to localStorage per project, keyed by the host's `projectUrl` (no URL,
+  no persistence).
 - **Snippets** / **Assets** (`toc/SnippetList.tsx`, `toc/AssetList.tsx`); hidden
-  along with their rail icons by `hideSnippets` / `hideAssets`.
+  along with their rail icons by `hideSnippets` / `hideAssets`. A placeholder
+  with no record behind it (`unlinked`) has no source to open, so its row opens
+  the "Link" creation form instead (see "Creating things" below). There are no
+  manager or per-item edit modals.
 - **Find** (`toc/FindReplacePanel.tsx`): project-wide find/replace. Escape
   collapses it; its inputs persist in the store's `findPanelState`.
-- Rail icons are inline SVG components in `toc/explorerIcons.tsx` that stroke
+- Rail icons are inline SVG components in `icons.tsx` that stroke
   with `currentColor`, so the button's text color styles them.
-- **"Add new division" creates nothing.** It opens a draft properties form
-  (`pendingNewDivision` in the store, rendered by `toc/NewDivisionRow.tsx` at the
-  position the division will take); the record, the parent's `<plus:* ref/>`
-  placeholder and the host notification all happen in one go when the form is
-  saved (`handleDivisionCreate` in `Editors.tsx`). So Cancel leaves the project
-  untouched, and a new division is never renamed — it is created with the id the
-  author chose, which is why only *existing* divisions reach
-  `syncParentDivisionRef`.
 - Any explorer action that rewrites a division's source computes it from the pool,
   and the code editor reports typing on a 500 ms debounce — so it must call
   `settledDivisions()` (flush the pending keystroke, then re-read the store)
@@ -140,11 +139,99 @@ properties form) and never collapses.
   land on top of the structural write and undo it; see
   `__tests__/pendingEditFlush.test.tsx`.
 
+### The open item, title bar and settings drawer
+
+The code editor edits one thing at a time, and it may be a division, a project
+snippet or a project asset. The store's `openItem` (`{ kind, ref }`, always set;
+a division's `ref` is its `xmlId`) says which — it replaced `activeDivisionId`.
+Read the open division through `selectOpenDivisionId`, which is `null` while a
+snippet or asset is open; the host-facing `activeDivisionId` prop and
+`onDivisionSelect` still speak only of divisions. Opening a different item
+closes the drawer and abandons any creation form; removing the open item (or a
+peer removing it) falls back to the root, and renames carry it along.
+
+- `components/editorTarget.ts` resolves `openItem` against the pools.
+  `Editors.tsx` derives the buffer from it: a division's source (locked
+  structure, schema lint, preview, Y.Text binding), a snippet's source in its
+  own format, or an asset's PreTeXt source — the last two with
+  `lockStructure={false}` (no locked lines or structural normalization) and no
+  schema lint. Division-only features read `activeDivision`, which is null
+  while a snippet or asset is open. An asset's generated `<image>` wrapper is
+  drawn around its source as locked Monaco view zones (`virtualWrapper`), so
+  the model — and its Y.Text binding — holds only the stored source. The
+  preview renders a snippet on its own inside a plain article
+  (`assembleSnippetPreviewSource`), and shows an asset's uploaded image and
+  file type (`AssetPreview.tsx`).
+- Snippet/asset source edits update the pool and the doc's text, and reach
+  the host through `onContentChange` like a division's: `EditorContentChange`
+  is a union, and a snippet's or asset's change is `{ kind, id, ref, source }`
+  (narrow on `kind`). So typed source is part of the host's working copy, dirty
+  check and save. There is no editor-side save for it; `onSnippetUpdate`/
+  `onAssetUpdate` are for metadata edits, Duplicate and Replace. A host that
+  answers a metadata write by re-fetching hands back a fresh pool prop — a
+  reset — and must build it with its unsaved sources laid over (the Rails host
+  does). The one gap a host can't cover is the code editor's 500 ms debounce, so
+  before a solo reset the editor flushes it and keeps the *open* record's local
+  source; solo, that buffer is the only place newer text for it can come from.
+- `EditorTargetBar.tsx` sits above the code editor: kind icon, title, id, a
+  status chip, and a gear toggling a settings drawer under it that pushes the
+  editor down (Escape closes it; the store's `isSettingsDrawerOpen`). Opening
+  an item resets the drawer to its default: open for a snippet or asset, closed
+  for a division. The drawer is `settings/DivisionSettings.tsx`,
+  `settings/SnippetSettings.tsx` or `settings/AssetSettings.tsx`, all built
+  from `settings/settingsUi.tsx` and all saving **per field**: a text field
+  (`CommitField`) commits on Enter/blur and Escape reverts it (a second Escape
+  closes the drawer), a select commits on change, and the drawer stays open.
+  A division's fields go through the store's `updateDivisionProperties`, which
+  validates an xml:id and returns the refusal to show inline. (A new item's
+  form is not in the drawer — see "Creating things".)
+  Snippet/asset metadata edits go to the host *first* — ref uniqueness is only
+  settled there — then rename placeholders and update the doc in one
+  `collabTransact`. Clicking a locked wrapper line (a division's, or an
+  asset's virtual `<image>` lines) opens the drawer.
+
+### Creating things (`src/components/create/`)
+
+Divisions, snippets and assets are all created the same way: the store's
+`creating` (a `CreateRequest`) is set, and `Editors`' editor pane shows
+`create/NewItemPane.tsx` — a header like the title bar plus the kind's form —
+in place of the title bar and code editor. The code editor stays mounted
+underneath, hidden, so its buffer, pending debounced edit, undo history and
+collab binding survive. **Nothing exists until the form is submitted**: no
+record, no placeholder, nothing sent to the host, so Cancel / ✕ / Escape mean
+cancel. The author opening any item (even the current one — clicking its row is
+how they get back) abandons the form; the host restating the open division or
+a peer removing the open item does not (`openItemState`'s `byAuthor`).
+
+- **Division** (`startNewDivision`, from the [+] on a Contents row — the root
+  or a placed division whose type holds divisions, `canAddChildDivision` — via
+  `addSection` → `handleDivisionAdd`): `editDraft` holds the fields
+  of `toc/SectionEditForm.tsx`; the TOC shows `toc/NewDivisionRow.tsx` where the
+  division will land. Create runs `commitSectionEdit` → `handleDivisionCreate`,
+  which writes the record, the parent's `<plus:* ref/>` and the host
+  notification in one go — under the id the author chose, so a new division is
+  never renamed, which is why only *existing* divisions reach
+  `syncParentDivisionRef`.
+- **Snippet** (`create/NewSnippetForm.tsx`): ref (checked against every
+  division/asset/snippet ref) and source format → `onCreateSnippet(ref,
+  sourceFormat)`.
+- **Asset** (`create/NewAssetForm.tsx`): Upload / External URL / Custom →
+  `onAssetUpload` / `onAssetFetchUrl` + `onAssetUpload` / `onCreateAuthored`.
+- A request may carry `resolveRef` (an `unlinked` explorer row: the new record
+  binds that placeholder, renaming it when the ref differs) or, for assets,
+  `replaceRef` ("Replace image…" in the asset drawer: only image sources, and
+  `handleAssetReplaceCommit` hands the replacement the old ref).
+- `handleSnippetCreated` / `handleAssetCreated` in `Editors.tsx` add the host's
+  record to the pool and doc, copy its embed code (plain create only), and open
+  it. Entry points: a Contents row's [+], the [+] button in the
+  Snippets/Assets panel header, File → New Asset… / New Snippet…, unlinked
+  rows, Replace image….
+
 ### Collaboration (`src/collab/`)
 
 Optional real-time co-editing via Yjs, activated by passing a `collaboration` prop (`{ doc, awareness, user }`) to `Editors`. The **host owns the transport** — it creates, seeds (`seedDocFromState`), and syncs the `Y.Doc` with its server; the editor only binds to it. `yjs` and `y-protocols` are **peer dependencies** so host and editor share one instance.
 
-- `schema.ts` — doc layout: `divisions` map (key = record id → entry with `xmlId`/`sourceFormat`/`title`/`type` + `Y.Text` source), `assets` map (key = record id → LWW metadata only — an asset's *bytes* stay with the host, since the doc is replicated to every peer and persisted as an append-only log), `meta` map (`title`, `docinfo`, `useCommonDocinfo`, all LWW), and `deleted` map (tombstones, record id → `"division" | "asset"`). Division *order* lives in parent sources as `<plus:* ref/>` placeholders, so it needs no structure. `seedDocFromState`/`docToState`/`clearDeletions` are exported for hosts.
+- `schema.ts` — doc layout: `divisions` map (key = record id → entry with `xmlId`/`sourceFormat`/`title`/`type` + `Y.Text` source), `assets` map (key = record id → LWW metadata + `Y.Text` source — an asset's *bytes* stay with the host, since the doc is replicated to every peer and persisted as an append-only log), `snippets` map (key = record id → LWW `ref`/`sourceFormat` + `Y.Text` source), `meta` map (`title`, `docinfo`, `useCommonDocinfo`, all LWW), and `deleted` map (tombstones, record id → `"division" | "asset"`). Division *order* lives in parent sources as `<plus:* ref/>` placeholders, so it needs no structure. `seedDocFromState`/`docToState`/`clearDeletions` are exported for hosts.
 - Tombstones exist because removing an entry from a Y.Map leaves nothing a later save can act on: the peer that removed a record persists that immediately, but if the request never lands, a full reload from the host would resurrect the row. The session leader replays each tombstone as a `_destroy` until the host confirms it, then calls `clearDeletions`. This requires the host's delete to be idempotent — as its create must be, since the same record can be sent by both the acting client and the next bulk save.
 - `bridge.ts` — `CollabBridge` keeps doc ↔ Zustand store equal. Local writes flow through the same `EditorsInner` choke points that update the store (`emitContentChange`, `applyDivision*`, the asset add/update/remove handlers, title/docinfo commits); remote transactions are translated into pure store pool actions (which never fire host persistence callbacks). Origin tags distinguish the two — anything not registered as local is remote. The doc keys assets by record id while the store pool keys them by kind+ref, so the bridge maintains its own index between the two and replays a remote `ref` change as a pool *rename*.
 - `bridge.transact(fn)` (via `collabTransact` in `Editors.tsx`) groups writes that belong together into one update — creating a division and inserting the parent `<plus:* ref/>` that points at it, or renaming an xml:id across division, record, and parent — so peers never observe a placeholder referring to a division they don't have.

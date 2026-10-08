@@ -19,28 +19,47 @@ class ProjectDocChannelTest < ActionCable::Channel::TestCase
 
   test "owner and collaborator can subscribe" do
     stub_connection current_user: users(:one)
-    subscribe project_id: projects(:one).id
+    subscribe project_id: projects(:one).id, schema_version: ProjectDoc::SCHEMA_VERSION
     assert subscription.confirmed?
 
     stub_connection current_user: users(:two) # accepted collaborator
-    subscribe project_id: projects(:one).id
+    subscribe project_id: projects(:one).id, schema_version: ProjectDoc::SCHEMA_VERSION
     assert subscription.confirmed?
   end
 
   test "non-collaborator and missing project are rejected" do
     stub_connection current_user: users(:subscribed)
-    subscribe project_id: projects(:one).id
+    subscribe project_id: projects(:one).id, schema_version: ProjectDoc::SCHEMA_VERSION
     assert subscription.rejected?
 
     stub_connection current_user: users(:one)
-    subscribe project_id: SecureRandom.uuid
+    subscribe project_id: SecureRandom.uuid, schema_version: ProjectDoc::SCHEMA_VERSION
     assert subscription.rejected?
+  end
+
+  # A tab opened before a change to the document's layout must not rejoin: it
+  # would sync the old shape into the document that replaced it.
+  test "a client on another version of the document layout is rejected" do
+    stub_connection current_user: users(:one)
+    subscribe project_id: projects(:one).id
+    assert subscription.rejected?, "a client from before the version existed declares none"
+
+    subscribe project_id: projects(:one).id, schema_version: ProjectDoc::SCHEMA_VERSION - 1
+    assert subscription.rejected?
+  end
+
+  # The editor owns the layout; the server only checks it. The two constants
+  # have to move together, and nothing but this would notice if they didn't.
+  test "the server's layout version is the editor's" do
+    schema = Rails.root.join("packages/web-editor/src/collab/schema.ts").read
+    editor_version = schema[/export const COLLAB_SCHEMA_VERSION = (\d+);/, 1]
+    assert_equal ProjectDoc::SCHEMA_VERSION.to_s, editor_version
   end
 
   test "subscribing opens the handshake with the server's state vector" do
     project = projects(:one)
     stub_connection current_user: users(:one)
-    subscribe project_id: project.id
+    subscribe project_id: project.id, schema_version: ProjectDoc::SCHEMA_VERSION
 
     assert_has_stream stream_for(project)
     opening = transmissions.last
@@ -52,7 +71,7 @@ class ProjectDocChannelTest < ActionCable::Channel::TestCase
   test "a document update is recorded before it is relayed, then acked" do
     project = projects(:one)
     stub_connection current_user: users(:one)
-    subscribe project_id: project.id
+    subscribe project_id: project.id, schema_version: ProjectDoc::SCHEMA_VERSION
 
     assert_difference("Y::DocumentUpdate.count", 1) do
       perform :receive, update: frame(Y.wrap_update(fixture("seed_state"))), id: 7
@@ -70,7 +89,7 @@ class ProjectDocChannelTest < ActionCable::Channel::TestCase
   test "the stored document is the real editor document, readable from Ruby" do
     project = projects(:one)
     stub_connection current_user: users(:one)
-    subscribe project_id: project.id
+    subscribe project_id: project.id, schema_version: ProjectDoc::SCHEMA_VERSION
 
     perform :receive, update: frame(Y.wrap_update(fixture("seed_state"))), id: 1
     perform :receive, update: frame(Y.wrap_update(fixture("one_update"))), id: 2
@@ -89,7 +108,7 @@ class ProjectDocChannelTest < ActionCable::Channel::TestCase
   test "an update whose recording fails is neither acked nor relayed" do
     project = projects(:one)
     stub_connection current_user: users(:one)
-    subscribe project_id: project.id
+    subscribe project_id: project.id, schema_version: ProjectDoc::SCHEMA_VERSION
     before = broadcasts(stream_for(project)).size
 
     ProjectDoc.stub(:record, ->(*) { raise ActiveRecord::StatementInvalid, "no" }) do
@@ -108,7 +127,7 @@ class ProjectDocChannelTest < ActionCable::Channel::TestCase
   test "awareness is relayed without being stored" do
     project = projects(:one)
     stub_connection current_user: users(:one)
-    subscribe project_id: project.id
+    subscribe project_id: project.id, schema_version: ProjectDoc::SCHEMA_VERSION
 
     # A real presence frame. The server validates the payload rather than
     # trusting the tag, but never stores it: presence outlives nobody.
@@ -124,7 +143,7 @@ class ProjectDocChannelTest < ActionCable::Channel::TestCase
   test "a frame past the size cap is dropped rather than stored" do
     project = projects(:one)
     stub_connection current_user: users(:one)
-    subscribe project_id: project.id
+    subscribe project_id: project.id, schema_version: ProjectDoc::SCHEMA_VERSION
 
     oversized = Y.wrap_update(fixture("seed_state")) + ("x" * ProjectDocChannel.max_frame_bytes)
     assert_no_difference("Y::DocumentUpdate.count") do

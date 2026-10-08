@@ -1,7 +1,7 @@
 import { createConsumer } from "@rails/actioncable";
 import * as Y from "yjs";
 import { ActionCableProvider } from "yrby-client";
-import { seedDocFromState } from "@pretextbook/web-editor";
+import { COLLAB_SCHEMA_VERSION, seedDocFromState } from "@pretextbook/web-editor";
 import { reportCollabIncident } from "./reportIncident";
 
 /**
@@ -40,6 +40,8 @@ import { reportCollabIncident } from "./reportIncident";
  * @property {string} [csrfToken]
  * @property {{name: string, color: string}} user
  * @property {(status: "ready"|"stalled") => void} [onRelayStatusChange]
+ * @property {() => void} [onOutdated] - The server holds another layout of the
+ *   document than this tab's editor writes; only a reload can fix it.
  */
 
 // y-protocols expires a peer after 30s and refreshes our own awareness entry
@@ -62,13 +64,28 @@ const RESYNC_INTERVAL_MS = 30000;
 // costs nothing and keeps a waiting navigation from feeling sticky.
 const ACK_POLL_MS = 50;
 
+/**
+ * This tab's editor speaks an older (or newer) layout of the shared document
+ * than the server holds -- a deploy changed it while the tab was open. Only a
+ * reload can fix that: the server refuses to sync with this tab at all.
+ */
+export class CollabOutdatedError extends Error {
+  constructor() {
+    super("The collaborative document has changed format; reload the page.");
+    this.name = "CollabOutdatedError";
+  }
+}
+
 export class YCableProvider {
   /** @param {ProviderConfig} config */
-  constructor({ projectId, csrfToken, user, onRelayStatusChange }) {
+  constructor({ projectId, csrfToken, user, onRelayStatusChange, onOutdated }) {
     this.projectId = projectId;
     this.csrfToken = csrfToken;
     this.user = user;
     this.onRelayStatusChange = onRelayStatusChange ?? (() => {});
+    // Called once if the server turns out to hold another layout of the
+    // document than this tab's editor writes (see checkOutdated).
+    this.onOutdated = onOutdated ?? (() => {});
     this.doc = new Y.Doc();
     this.provider = null;
     this.consumer = null;
@@ -102,7 +119,10 @@ export class YCableProvider {
       this.doc,
       this.watchedConsumer(this.consumer),
       "ProjectDocChannel",
-      { project_id: this.projectId },
+      // The server refuses any other version of the doc's layout (see
+      // ProjectDoc::SCHEMA_VERSION), so a tab left open across a change to it
+      // can't write the old shape into the new doc.
+      { project_id: this.projectId, schema_version: COLLAB_SCHEMA_VERSION },
     );
     this.awareness = this.provider.awareness;
     // Presence identity. Set before connecting so our first awareness frame
@@ -141,19 +161,50 @@ export class YCableProvider {
     const state = toBase64(Y.encodeStateAsUpdate(seedDoc));
     seedDoc.destroy();
 
+    let res;
     try {
-      await fetch(`/projects/${this.projectId}/doc/seed`, {
+      res = await fetch(`/projects/${this.projectId}/doc/seed`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
           Accept: "application/json",
           "X-CSRF-Token": this.csrfToken,
         },
-        body: JSON.stringify({ state }),
+        body: JSON.stringify({ state, schema_version: COLLAB_SCHEMA_VERSION }),
       });
     } catch (error) {
       console.error("Failed to offer a seed for the collaborative doc:", error);
+      return;
     }
+    // The server checks the layout before anything else, so this answer comes
+    // whether or not the document exists yet -- and the channel would refuse
+    // this tab too, leaving it waiting on a handshake that never comes.
+    if (res.status === 426) throw new CollabOutdatedError();
+  }
+
+  /**
+   * After the channel refuses this tab, find out whether the reason is a
+   * layout change, and if so say so (once). ActionCable carries no reason with
+   * a refusal; the other ones (access revoked, project gone) are left to the
+   * connection status as before.
+   * @returns {Promise<boolean>} whether this tab is out of date
+   */
+  async checkOutdated() {
+    if (this.outdated) return true;
+    let version;
+    try {
+      const res = await fetch(`/projects/${this.projectId}/doc/version`, {
+        headers: { Accept: "application/json" },
+      });
+      if (!res.ok) return false;
+      ({ schema_version: version } = await res.json());
+    } catch {
+      return false;
+    }
+    if (version === COLLAB_SCHEMA_VERSION || this.destroyed) return false;
+    this.outdated = true;
+    this.onOutdated();
+    return true;
   }
 
   /**
@@ -225,6 +276,13 @@ export class YCableProvider {
             received: (message) => {
               this.noteInbound();
               mixin?.received?.(message);
+            },
+            // A refusal is how the server turns away a tab on an old layout
+            // of the document -- on joining, or on resubscribing after a
+            // deploy dropped the socket.
+            rejected: () => {
+              mixin?.rejected?.();
+              void this.checkOutdated();
             },
           }),
       },

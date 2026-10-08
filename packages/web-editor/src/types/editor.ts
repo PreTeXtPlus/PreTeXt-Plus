@@ -57,8 +57,8 @@ export interface Asset {
   url?: string;
   /**
    * A small resized preview of the file, distinct from {@link url} (the full
-   * file). Used for the asset list's `<img src>` in the asset manager and
-   * table of contents. Undefined when no preview is possible (no file, or a
+   * file). Used for the asset rows' `<img src>` in the explorer's Assets
+   * view. Undefined when no preview is possible (no file, or a
    * file type that can't be rastered) — callers should fall back to
    * {@link url} or a generic icon.
    */
@@ -172,16 +172,42 @@ export interface EditorContentState {
 }
 
 /**
- * The value passed to `onContentChange`.  Extends {@link EditorContentState}
- * with the `xmlId` of the division the change applies to, so a single callback
- * can describe every kind of change: a division content edit, a structural
- * reorder (which rewrites a parent division's content), or a document-wide
- * docinfo edit (reported against the root/document division).
+ * A division's change, as passed to `onContentChange`.  Extends
+ * {@link EditorContentState} with the `xmlId` of the division the change
+ * applies to, so it can describe a division content edit, a structural reorder
+ * (which rewrites a parent division's content), or a document-wide docinfo
+ * edit (reported against the root/document division).
  */
-export interface EditorContentChange extends EditorContentState {
+export interface EditorDivisionContentChange extends EditorContentState {
+  kind?: "division";
   /**
    * The `xml:id` of the division whose content changed.  For document-wide
    * changes such as docinfo edits, this is the root/document division.
    */
   xmlId: string;
 }
+
+/** The two kinds of project record a division embeds by `ref`. */
+export type RecordKind = "snippet" | "asset";
+
+/**
+ * A project snippet's or asset's source, as typed into the code editor and
+ * passed to `onContentChange`. The host keeps it with the rest of its unsaved
+ * content and persists it the same way; `onSnippetUpdate`/`onAssetUpdate` are
+ * for metadata edits only.
+ */
+export interface EditorRecordSourceChange {
+  kind: RecordKind;
+  /** The record's id (stable across renames), when the host gave it one. */
+  id?: string;
+  ref: string;
+  source: string;
+}
+
+/**
+ * The value passed to `onContentChange`: a division's change, or a snippet's
+ * or asset's source. Narrow on `kind`.
+ */
+export type EditorContentChange =
+  | EditorDivisionContentChange
+  | EditorRecordSourceChange;

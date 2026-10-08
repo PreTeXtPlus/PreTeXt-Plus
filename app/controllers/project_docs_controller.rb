@@ -22,7 +22,15 @@ class ProjectDocsController < ApplicationController
   # handshake hands the document back. That keeps one path into the document
   # for every client, seeder included, instead of a second one that has to stay
   # byte-identical to the first.
+  #
+  # A seed from a client on another version of the document's layout is
+  # refused outright (see ProjectDoc::SCHEMA_VERSION): it would create the
+  # document in a shape the current editor misreads.
   def seed
+    unless ProjectDoc.compatible?(params[:schema_version])
+      head :upgrade_required
+      return
+    end
     if ProjectDoc.seed(@project, decoded_state)
       head :created
     else
@@ -48,6 +56,16 @@ class ProjectDocsController < ApplicationController
   def flush
     ProjectDocProjection.new(@project).apply!
     head :no_content
+  end
+
+  # GET /projects/:id/doc/version
+  #
+  # The document layout this server holds (ProjectDoc::SCHEMA_VERSION). A
+  # client whose channel subscription is refused asks this to tell "you are
+  # out of date, reload" apart from every other reason for a refusal, which
+  # ActionCable gives no way to state.
+  def version
+    render json: { schema_version: ProjectDoc::SCHEMA_VERSION }
   end
 
   private

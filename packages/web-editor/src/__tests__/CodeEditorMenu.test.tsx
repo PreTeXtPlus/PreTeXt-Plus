@@ -248,7 +248,7 @@ describe("CodeEditorMenu", () => {
         />,
       );
       await openMenu("Tools");
-      expect(queryMenuItem("Assets…")).not.toBeInTheDocument();
+      expect(queryMenuItem("New Asset…")).not.toBeInTheDocument();
     });
   });
 
@@ -277,7 +277,7 @@ describe("CodeEditorMenu", () => {
         expect(queryMenuItem("Edit Macros…")).not.toBeInTheDocument();
         expect(queryMenuItem("Edit Preamble…")).not.toBeInTheDocument();
         expect(queryMenuItem("Clean up LaTeX…")).not.toBeInTheDocument();
-        expect(queryMenuItem("Assets…")).not.toBeInTheDocument();
+        expect(queryMenuItem("New Asset…")).not.toBeInTheDocument();
         expect(queryMenuItem("Convert to PreTeXt")).not.toBeInTheDocument();
       },
     );

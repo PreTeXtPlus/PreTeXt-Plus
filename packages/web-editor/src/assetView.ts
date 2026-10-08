@@ -6,7 +6,7 @@
  *      (what the document *references*), and
  *   2. the DB-backed project-asset pool (what actually *exists*).
  *
- * Both the TOC sidebar and the asset manager render from this view so the two
+ * Both the explorer's Assets view and the title bar render from this view so the two
  * surfaces always agree, and so every reference carries an explicit status the
  * UI can act on (link an unresolved ref, copy the embed code for an unused
  * asset, etc.).

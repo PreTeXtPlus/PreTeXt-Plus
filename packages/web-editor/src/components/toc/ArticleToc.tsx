@@ -2,15 +2,15 @@ import { Fragment, useLayoutEffect } from "react";
 import SectionItem from "./SectionItem";
 import NewDivisionRow from "./NewDivisionRow";
 import { ChevronIcon } from "../icons";
-import { canContainDivisions } from "./types";
 import { useDivisionActions } from "./useDivisionActions";
+import { canAddChildDivision } from "./divisionActions";
 
 import {
   buildDivisionTree,
-  canEmbedDivisionRefs,
   getOrphanRoots,
   type DivisionTreeNode,
 } from "../../sectionUtils";
+import { selectOpenDivisionId } from "../../store/editorStore";
 import { useEditorStore } from "../../store/hooks";
 
 /**
@@ -48,29 +48,22 @@ function ancestorsOf(nodes: DivisionTreeNode[], id: string): string[] | null {
   return out;
 }
 
-export interface ArticleTocProps {
-  /** If true, hides every structural action (add/remove/edit/place a division). */
-  readOnly?: boolean;
-}
-
 /**
  * The explorer's Contents view: the document's division tree, from the root
  * down through every placed `<plus:* ref/>`, followed by the divisions the
- * document doesn't reach, each heading its own dangling subtree.
+ * document doesn't reach, each heading its own dangling subtree. Selecting a
+ * row opens that division; its properties and structural actions live in the
+ * settings drawer under the editor's title bar. A placed row's [+] starts a
+ * new sub-division of it.
  */
-const ArticleToc = ({ readOnly }: ArticleTocProps) => {
-  const activeDivisionId = useEditorStore((s) => s.activeDivisionId);
+const ArticleToc = ({ readOnly }: { readOnly?: boolean }) => {
+  const activeDivisionId = useEditorStore(selectOpenDivisionId);
 
   const selectSection = useEditorStore((s) => s.selectSection);
   const addSection = useEditorStore((s) => s.addSection);
-
-  const startSectionEdit = useEditorStore((s) => s.startSectionEdit);
-  const setEditDraft = useEditorStore((s) => s.setEditDraft);
-  const commitSectionEdit = useEditorStore((s) => s.commitSectionEdit);
-  const cancelSectionEdit = useEditorStore((s) => s.cancelSectionEdit);
-  const editingId = useEditorStore((s) => s.editingId);
   const editDraft = useEditorStore((s) => s.editDraft);
-  const pendingNewDivision = useEditorStore((s) => s.pendingNewDivision);
+  const creating = useEditorStore((s) => s.creating);
+  const pendingNewDivision = creating?.kind === "division" ? creating : null;
 
   const tocExpansion = useEditorStore((s) => s.tocExpansion);
   const setTocExpanded = useEditorStore((s) => s.setTocExpanded);
@@ -81,15 +74,7 @@ const ArticleToc = ({ readOnly }: ArticleTocProps) => {
     (s) => s.toggleTocOrphansCollapsed,
   );
 
-  const {
-    divisions,
-    rootDivision,
-    handleUnplace,
-    handleDelete,
-    handleInsertAtCursor,
-    handlePlaceOrphan,
-    getDivisionType,
-  } = useDivisionActions();
+  const { divisions, rootDivision } = useDivisionActions();
 
   // ── Tree structure ──────────────────────────────────────────────────────────
   const treeNodes =
@@ -194,14 +179,7 @@ const ArticleToc = ({ readOnly }: ArticleTocProps) => {
 
   const draftRow =
     draftPlacement && editDraft ? (
-      <NewDivisionRow
-        draft={editDraft}
-        depth={draftPlacement.depth}
-        parentType={getDivisionType(pendingNewDivision!.parentXmlId)}
-        onDraftChange={setEditDraft}
-        onCommit={commitSectionEdit}
-        onCancel={cancelSectionEdit}
-      />
+      <NewDivisionRow draft={editDraft} depth={draftPlacement.depth} />
     ) : null;
 
   // ── Render ───────────────────────────────────────────────────────────────────
@@ -217,34 +195,12 @@ const ArticleToc = ({ readOnly }: ArticleTocProps) => {
             hasChildren={idsWithChildren.has(rootDivision.xmlId)}
             isExpanded={isExpanded(rootDivision.xmlId)}
             onToggleExpand={() => toggleExpand(rootDivision.xmlId)}
-            editDraft={editingId === rootDivision.xmlId ? editDraft : null}
             onSelect={() => selectSection(rootDivision.xmlId)}
-            onDraftChange={setEditDraft}
-            onEditCommit={commitSectionEdit}
-            onEditCancel={cancelSectionEdit}
-            menuItems={
-              readOnly
-                ? []
-                : [
-                    {
-                      label: "Edit properties",
-                      onClick: () => startSectionEdit(rootDivision),
-                    },
-                    // All three source formats can hold a child ref placeholder — see
-                    // canEmbedDivisionRefs / types/sections.ts — so this is always
-                    // shown today, but stays gated for a future leaf-only format.
-                    // (A root type always allows children, so no type gate here.)
-                    ...(canEmbedDivisionRefs(rootDivision.sourceFormat)
-                      ? [
-                          {
-                            label: "Add new division",
-                            onClick: () => addChild(rootDivision.xmlId),
-                          },
-                        ]
-                      : []),
-                  ]
+            onAddChild={
+              !readOnly && canAddChildDivision(rootDivision, { kind: "root" })
+                ? () => addChild(rootDivision.xmlId)
+                : undefined
             }
-            isRoot
           />
         )}
 
@@ -259,45 +215,16 @@ const ArticleToc = ({ readOnly }: ArticleTocProps) => {
             hasChildren={idsWithChildren.has(node.division.xmlId)}
             isExpanded={isExpanded(node.division.xmlId)}
             onToggleExpand={() => toggleExpand(node.division.xmlId)}
-            editDraft={editingId === node.division.xmlId ? editDraft : null}
             onSelect={() => selectSection(node.division.xmlId)}
-            onDraftChange={setEditDraft}
-            onEditCommit={commitSectionEdit}
-            onEditCancel={cancelSectionEdit}
-            menuItems={
-              readOnly
-                ? []
-                : [
-                    {
-                      label: "Edit properties",
-                      onClick: () => startSectionEdit(node.division),
-                    },
-                    // Add division, but only if the format can embed child refs —
-                    // all three (PreTeXt/Markdown/LaTeX) do today; gated for a future
-                    // leaf-only format — and only if the division's *type* can hold
-                    // divisions at all (an <exercises> or <glossary> can't, so there
-                    // would be no valid type to offer the new child).
-                    ...(canEmbedDivisionRefs(node.division.sourceFormat) &&
-                    canContainDivisions(node.division.type)
-                      ? [
-                          {
-                            label: "Add new division",
-                            onClick: () => addChild(node.division.xmlId),
-                          },
-                        ]
-                      : []),
-                    {
-                      label: "Remove from document",
-                      onClick: () => handleUnplace(node.division.xmlId, node.parentXmlId!),
-                    },
-                    {
-                      label: "Delete from project",
-                      onClick: () => handleDelete(node.division, node.parentXmlId),
-                      danger: true,
-                    },
-                  ]
+            onAddChild={
+              !readOnly &&
+              canAddChildDivision(node.division, {
+                kind: "placed",
+                parentXmlId: node.parentXmlId,
+              })
+                ? () => addChild(node.division.xmlId)
+                : undefined
             }
-            parentType={getDivisionType(node.parentXmlId)}
           />
           {draftPlacement?.after === index && draftRow}
           </Fragment>
@@ -345,38 +272,7 @@ const ArticleToc = ({ readOnly }: ArticleTocProps) => {
                       hasChildren={subtreeIdsWithChildren.has(orphan.xmlId)}
                       isExpanded={isExpanded(orphan.xmlId)}
                       onToggleExpand={() => toggleExpand(orphan.xmlId)}
-                      editDraft={editingId === orphan.xmlId ? editDraft : null}
                       onSelect={() => selectSection(orphan.xmlId)}
-                      onDraftChange={setEditDraft}
-                      onEditCommit={commitSectionEdit}
-                      onEditCancel={cancelSectionEdit}
-                      menuItems={
-                        readOnly
-                          ? []
-                          : [
-                              {
-                                label: "Edit properties",
-                                onClick: () => startSectionEdit(orphan),
-                              },
-                              {
-                                label: "Place in document",
-                                onClick: () => handlePlaceOrphan(orphan),
-                              },
-                              {
-                                label: "Insert at cursor",
-                                onClick: () => handleInsertAtCursor(orphan),
-                              },
-                              {
-                                label: "Delete from project",
-                                onClick: () => handleDelete(orphan, null),
-                                danger: true,
-                              },
-                            ]
-                      }
-                      // Unplaced, but "Place in document" puts it directly under
-                      // the root — so the root's rules are the ones that apply,
-                      // and e.g. an article project never offers Part/Chapter.
-                      parentType={rootDivision?.type ?? null}
                     />
                     {visibleRows(orphan.xmlId, subtree, isExpanded).map((node) => (
                       <SectionItem
@@ -387,31 +283,7 @@ const ArticleToc = ({ readOnly }: ArticleTocProps) => {
                         hasChildren={subtreeIdsWithChildren.has(node.division.xmlId)}
                         isExpanded={isExpanded(node.division.xmlId)}
                         onToggleExpand={() => toggleExpand(node.division.xmlId)}
-                        editDraft={editingId === node.division.xmlId ? editDraft : null}
                         onSelect={() => selectSection(node.division.xmlId)}
-                        onDraftChange={setEditDraft}
-                        onEditCommit={commitSectionEdit}
-                        onEditCancel={cancelSectionEdit}
-                        menuItems={
-                          readOnly
-                            ? []
-                            : [
-                                {
-                                  label: "Edit properties",
-                                  onClick: () => startSectionEdit(node.division),
-                                },
-                                {
-                                  label: "Insert at cursor",
-                                  onClick: () => handleInsertAtCursor(node.division),
-                                },
-                                {
-                                  label: "Delete from project",
-                                  onClick: () => handleDelete(node.division, node.parentXmlId),
-                                  danger: true,
-                                },
-                              ]
-                        }
-                        parentType={getDivisionType(node.parentXmlId)}
                       />
                     ))}
                   </Fragment>

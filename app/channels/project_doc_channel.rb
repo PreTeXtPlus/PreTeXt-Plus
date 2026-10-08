@@ -42,7 +42,8 @@ class ProjectDocChannel < ApplicationCable::Channel
   def subscribed
     project = Project.find_by(id: params[:project_id])
     ability = Ability.new(current_user)
-    if project.nil? || ability.cannot?(:update, project)
+    if project.nil? || ability.cannot?(:update, project) ||
+       !ProjectDoc.compatible?(params[:schema_version])
       reject
       return
     end

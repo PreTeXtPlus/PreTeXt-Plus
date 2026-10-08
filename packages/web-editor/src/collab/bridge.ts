@@ -32,7 +32,7 @@
 import * as Y from "yjs";
 import type { Division } from "../types/sections";
 import type { DivisionChanges, EditorStoreInstance } from "../store/editorStore";
-import type { Asset, Snippet } from "../types/editor";
+import type { Asset, RecordKind, Snippet } from "../types/editor";
 import type { CollabSession } from "./types";
 import {
   applyAssetFields,
@@ -42,11 +42,13 @@ import {
   getAssetsMap,
   getDeletedMap,
   getDivisionsMap,
+  getEntryText,
   getMetaMap,
   getSnippetsMap,
   makeAssetEntry,
   makeDivisionEntry,
   makeSnippetEntry,
+  makeText,
   markDeleted,
   snippetEntryToSnapshot,
   type CollabDivisionSnapshot,
@@ -168,12 +170,31 @@ export class CollabBridge {
   getYText(xmlId: string): Y.Text | undefined {
     const key = this.xmlIdToKey.get(xmlId);
     if (!key) return undefined;
-    const entry = getDivisionsMap(this.doc).get(key);
-    const text = entry?.get("source");
-    return text instanceof Y.Text ? text : undefined;
+    return getEntryText(getDivisionsMap(this.doc).get(key));
+  }
+
+  /** The shared text for a project snippet's or asset's source, by its `ref`. */
+  getRecordText(kind: RecordKind, ref: string): Y.Text | undefined {
+    const key =
+      kind === "snippet" ? this.snippetRefToKey.get(ref) : this.assetRefToKey.get(ref);
+    if (!key) return undefined;
+    const map = kind === "snippet" ? getSnippetsMap(this.doc) : getAssetsMap(this.doc);
+    return getEntryText(map.get(key));
   }
 
   // ── local → doc ──────────────────────────────────────────────────────────
+
+  /**
+   * Bring an entry's `Y.Text` source to `source` by minimal diff, so a
+   * whole-record write merges with concurrent remote typing instead of
+   * replacing it. An entry without text yet gets one. Callers own the
+   * transaction.
+   */
+  private syncEntryText(entry: Y.Map<unknown>, source: string | undefined): void {
+    const text = getEntryText(entry);
+    if (text) diffReplace(text, source ?? "");
+    else entry.set("source", makeText(source));
+  }
 
   /**
    * Run several local doc writes as one transaction, so peers apply them
@@ -189,6 +210,13 @@ export class CollabBridge {
     const ytext = this.getYText(xmlId);
     if (!ytext) return; // not (yet) in the doc — content lands when the entry is created
     this.doc.transact(() => diffReplace(ytext, content), this.localOrigin);
+  }
+
+  /** {@link localContentChange} for a project snippet's or asset's source. */
+  localRecordSourceChange(kind: RecordKind, ref: string, source: string): void {
+    const ytext = this.getRecordText(kind, ref);
+    if (!ytext) return;
+    this.doc.transact(() => diffReplace(ytext, source), this.localOrigin);
   }
 
   /**
@@ -273,8 +301,10 @@ export class CollabBridge {
     const assets = getAssetsMap(this.doc);
     this.doc.transact(() => {
       const existing = assets.get(asset.id as string);
-      if (existing) applyAssetFields(existing, asset);
-      else assets.set(asset.id as string, makeAssetEntry(asset));
+      if (existing) {
+        applyAssetFields(existing, asset);
+        this.syncEntryText(existing, asset.source);
+      } else assets.set(asset.id as string, makeAssetEntry(asset));
       getDeletedMap(this.doc).delete(asset.id as string);
     }, this.localOrigin);
     this.trackAssetKey(asset.id, asset);
@@ -292,8 +322,10 @@ export class CollabBridge {
     const assets = getAssetsMap(this.doc);
     this.doc.transact(() => {
       const entry = assets.get(key);
-      if (entry) applyAssetFields(entry, asset);
-      else assets.set(key, makeAssetEntry(asset));
+      if (entry) {
+        applyAssetFields(entry, asset);
+        this.syncEntryText(entry, asset.source);
+      } else assets.set(key, makeAssetEntry(asset));
     }, this.localOrigin);
     // `previousRef` located the entry above; retiring the old `ref` index is
     // trackAssetKey's job, and it only does so when this key still owns it.
@@ -345,8 +377,10 @@ export class CollabBridge {
     const snippets = getSnippetsMap(this.doc);
     this.doc.transact(() => {
       const existing = snippets.get(snippet.id as string);
-      if (existing) applySnippetFields(existing, snippet);
-      else snippets.set(snippet.id as string, makeSnippetEntry(snippet));
+      if (existing) {
+        applySnippetFields(existing, snippet);
+        this.syncEntryText(existing, snippet.source);
+      } else snippets.set(snippet.id as string, makeSnippetEntry(snippet));
       getDeletedMap(this.doc).delete(snippet.id as string);
     }, this.localOrigin);
     this.trackSnippetKey(snippet.id, snippet);
@@ -364,8 +398,10 @@ export class CollabBridge {
     const snippets = getSnippetsMap(this.doc);
     this.doc.transact(() => {
       const entry = snippets.get(key);
-      if (entry) applySnippetFields(entry, snippet);
-      else snippets.set(key, makeSnippetEntry(snippet));
+      if (entry) {
+        applySnippetFields(entry, snippet);
+        this.syncEntryText(entry, snippet.source);
+      } else snippets.set(key, makeSnippetEntry(snippet));
     }, this.localOrigin);
     this.trackSnippetKey(key, snippet);
     this.bump();
@@ -582,20 +618,9 @@ export class CollabBridge {
             this.keyToXmlId.delete(key);
             if (xmlId === undefined) return;
             this.xmlIdToKey.delete(xmlId);
+            // Also moves the editor off it if it was open (see the store).
             state.removeDivisionFromPool(xmlId);
             structureChanged = true;
-            // Never leave the editor pointing at a removed division.
-            if (this.store.getState().activeDivisionId === xmlId) {
-              const remaining = this.store.getState().divisions ?? [];
-              const fallback =
-                remaining.find(
-                  (d) =>
-                    d.type === "book" ||
-                    d.type === "article" ||
-                    d.type === "slideshow",
-                ) ?? remaining[0];
-              state.setActiveDivisionId(fallback?.xmlId ?? null);
-            }
           }
         });
       } else if (event.target instanceof Y.Text) {
@@ -628,9 +653,7 @@ export class CollabBridge {
           this.keyToXmlId.set(key, changes.xmlId);
           this.xmlIdToKey.delete(oldXmlId);
           this.xmlIdToKey.set(changes.xmlId, key);
-          if (this.store.getState().activeDivisionId === oldXmlId) {
-            state.setActiveDivisionId(changes.xmlId);
-          }
+          // patchDivision has already moved an open division to its new id.
           structureChanged = true;
         }
       }
@@ -651,6 +674,9 @@ export class CollabBridge {
     if (this.isLocal(transaction)) return;
     const state = this.store.getState();
     const assets = getAssetsMap(this.doc);
+    // As for divisions, only a change to which text a ref names re-renders
+    // the editor (see `bump`) — not every keystroke a peer types.
+    let structureChanged = false;
 
     for (const event of events) {
       if (event.target === assets) {
@@ -662,24 +688,34 @@ export class CollabBridge {
             const previous = this.untrackAssetKey(key);
             if (previous === undefined) return;
             state.removeAssetFromPool({ id: key, ref: previous, title: "" });
+            structureChanged = true;
             return;
           }
           const entry = assets.get(key);
           if (!entry) return;
           this.applyRemoteAsset(key, assetEntryToSnapshot(key, entry));
+          structureChanged = true;
         });
-      } else if (event.target instanceof Y.Map && event.path.length === 1) {
+      } else if (
+        // Record fields on one entry (path [key]), or its source text
+        // (path [key, "source"]) — either way the entry's snapshot is current.
+        (event.target instanceof Y.Map && event.path.length === 1) ||
+        event.target instanceof Y.Text
+      ) {
         const key = String(event.path[0]);
         const entry = assets.get(key);
         if (!entry) continue;
-        this.applyRemoteAsset(key, assetEntryToSnapshot(key, entry));
+        if (this.applyRemoteAsset(key, assetEntryToSnapshot(key, entry))) {
+          structureChanged = true;
+        }
       }
     }
 
-    this.bump();
+    if (structureChanged) this.bump();
   };
 
-  private applyRemoteAsset(key: string, asset: Asset): void {
+  /** Returns whether the record's ref changed (or it is newly tracked). */
+  private applyRemoteAsset(key: string, asset: Asset): boolean {
     const state = this.store.getState();
     const previous = this.keyToAssetRef.get(key);
     const current = asset.ref ?? "";
@@ -695,6 +731,7 @@ export class CollabBridge {
       state.updateAssetInPool(asset);
     }
     this.trackAssetKey(key, asset);
+    return previous !== current;
   }
 
   /** Mirrors {@link onAssetsEvents} — see there for the ref-keyed-pool reasoning. */
@@ -705,6 +742,7 @@ export class CollabBridge {
     if (this.isLocal(transaction)) return;
     const state = this.store.getState();
     const snippets = getSnippetsMap(this.doc);
+    let structureChanged = false;
 
     for (const event of events) {
       if (event.target === snippets) {
@@ -718,24 +756,32 @@ export class CollabBridge {
               source: "",
               sourceFormat: "pretext",
             });
+            structureChanged = true;
             return;
           }
           const entry = snippets.get(key);
           if (!entry) return;
           this.applyRemoteSnippet(key, snippetEntryToSnapshot(key, entry));
+          structureChanged = true;
         });
-      } else if (event.target instanceof Y.Map && event.path.length === 1) {
+      } else if (
+        (event.target instanceof Y.Map && event.path.length === 1) ||
+        event.target instanceof Y.Text
+      ) {
         const key = String(event.path[0]);
         const entry = snippets.get(key);
         if (!entry) continue;
-        this.applyRemoteSnippet(key, snippetEntryToSnapshot(key, entry));
+        if (this.applyRemoteSnippet(key, snippetEntryToSnapshot(key, entry))) {
+          structureChanged = true;
+        }
       }
     }
 
-    this.bump();
+    if (structureChanged) this.bump();
   };
 
-  private applyRemoteSnippet(key: string, snippet: Snippet): void {
+  /** Returns whether the record's ref changed (or it is newly tracked). */
+  private applyRemoteSnippet(key: string, snippet: Snippet): boolean {
     const state = this.store.getState();
     const previous = this.keyToSnippetRef.get(key);
     const current = snippet.ref ?? "";
@@ -749,6 +795,7 @@ export class CollabBridge {
       state.updateSnippetInPool(snippet);
     }
     this.trackSnippetKey(key, snippet);
+    return previous !== current;
   }
 
   private onMetaEvent = (

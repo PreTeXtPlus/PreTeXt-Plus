@@ -14,7 +14,7 @@ import {
   DEFAULT_LANGUAGE,
 } from "@pretextbook/web-editor";
 import { buildImportEngines } from "./importEngines";
-import { YCableProvider } from "./collab/yCableProvider";
+import { CollabOutdatedError, YCableProvider } from "./collab/yCableProvider";
 import { reportCollabIncident } from "./collab/reportIncident";
 import {
   railsDivisionToEditor,
@@ -73,15 +73,18 @@ import { buildHelpMenu } from "./helpEntries";
 //     (editorStateToRailsPayload) -- EXCEPT a brand new division, which is
 //     persisted immediately in onDivisionAdd so the web-editor can learn its
 //     real server id right away.
-//   * every asset action (upload/edit/remove) is persisted immediately, each
-//     as its own single-entry PATCH, then invalidates the project query so
-//     the `projectAssets` prop reconciles to server truth on the next read.
-//     Assets are deliberately excluded from the bulk save payload for the
-//     same reason.
+//   * snippet/asset *source*, typed into the code editor, is content like a
+//     division's: it reaches us through onContentChange, sits in the working
+//     copy and goes out with the bulk save.
+//   * every other snippet/asset action (create/metadata edit/remove) is
+//     persisted immediately, each as its own single-entry PATCH, then
+//     invalidates the project query so the `projectAssets`/`projectSnippets`
+//     props reconcile to server truth on the next read.
 //
 // A fresh `projectAssets` array identity is an authoritative reset of the
-// editor's pool, so we only ever hand it the query's current data, never a
-// stale-but-new-identity array.
+// editor's pool, so we only ever hand it the query's current data -- with the
+// working copy's unsaved sources laid over it -- never a stale-but-new-identity
+// array.
 //
 // ALL OF THE ABOVE IS THE SOLO CASE. When the project has collaborators, the
 // buffer moves into a shared Yjs doc the server holds and records every
@@ -141,11 +144,14 @@ function slugifyRef(value) {
 // naming a row that is already gone), which is what makes a removal survive the
 // acting client's own request failing or its tab closing mid-flight.
 //
-// Asset/snippet *content* is NOT in this payload: an asset's bytes can't
-// ride in the shared doc, and a snippet is persisted immediately per edit
-// the same way (see the asset/snippet callbacks) so its content stays out of
-// the deferred bulk save too. Only asset/snippet *destroys* are re-sent from
-// here.
+// Asset/snippet *source* rides along, but only for records whose source
+// differs from `baseline` (the last-saved snapshot): those are the only ones
+// with anything to say, and naming a record the server no longer has would be
+// read as an insert (see Project#tolerate_client_minted_ids) missing its ref.
+// Their metadata is not here -- the asset/snippet callbacks write it straight
+// through. In a collaborative session their source is shared text in the doc,
+// which ProjectDocProjection writes to the rows exactly as it does division
+// content.
 //
 // Neither is the assembled document. The browser used to send it as
 // `pretext_source`, which is how an idle collaborator's tab came to overwrite
@@ -156,9 +162,11 @@ function slugifyRef(value) {
 /**
  * @param {EditorState} state
  * @param {{id: string, kind: "division"|"asset"|"snippet"}[]} [deletes] - Records to destroy.
+ * @param {EditorState|null} [baseline] - The last-saved state; snippet/asset
+ *   sources that differ from it are sent.
  * @returns {{project: Object}}
  */
-function editorStateToRailsPayload(state, deletes = []) {
+function editorStateToRailsPayload(state, deletes = [], baseline = null) {
   const project = {
     title: state.title,
     docinfo: state.docinfo,
@@ -176,15 +184,91 @@ function editorStateToRailsPayload(state, deletes = []) {
         .map(({ id }) => ({ id, _destroy: true })),
     ],
   };
-  const assetDeletes = deletes
-    .filter((d) => d.kind === "asset")
-    .map(({ id }) => ({ id, _destroy: true }));
-  if (assetDeletes.length) project.assets_attributes = assetDeletes;
-  const snippetDeletes = deletes
-    .filter((d) => d.kind === "snippet")
-    .map(({ id }) => ({ id, _destroy: true }));
-  if (snippetDeletes.length) project.snippets_attributes = snippetDeletes;
+  for (const kind of ["asset", "snippet"]) {
+    const entries = [
+      ...changedRecordSources(state, baseline, kind),
+      ...deletes
+        .filter((d) => d.kind === kind)
+        .map(({ id }) => ({ id, _destroy: true })),
+    ];
+    if (entries.length) project[`${kind}s_attributes`] = entries;
+  }
   return { project };
+}
+
+// --- Snippet/asset records in the working copy ------------------------------
+// `working` and `serverSnapshot` each hold the project's snippets and assets
+// (`projectSnippets`/`projectAssets`), so typed source is unsaved work like a
+// division's. Records are matched by `id`, the identity persistence uses.
+
+const RECORD_POOLS = { snippet: "projectSnippets", asset: "projectAssets" };
+
+/**
+ * Add `record` to `state`'s pool of `kind`, or merge it into the entry with its id.
+ * @param {EditorState|null} state
+ * @param {"snippet"|"asset"} kind
+ * @param {Snippet|Asset} record
+ */
+function upsertRecord(state, kind, record) {
+  if (!state || !record?.id) return;
+  const key = RECORD_POOLS[kind];
+  const pool = (state[key] ??= []);
+  const index = pool.findIndex((r) => r.id === record.id);
+  if (index === -1) pool.push({ ...record });
+  else pool[index] = { ...pool[index], ...record };
+}
+
+/**
+ * @param {EditorState|null} state
+ * @param {"snippet"|"asset"} kind
+ * @param {string} id
+ */
+function removeRecord(state, kind, id) {
+  if (!state) return;
+  const key = RECORD_POOLS[kind];
+  state[key] = (state[key] ?? []).filter((r) => r.id !== id);
+}
+
+/**
+ * `{id, source}` for each record of `kind` whose source differs from `baseline`'s.
+ * A record the baseline doesn't have was never persisted, so it isn't sent.
+ * @param {EditorState} state
+ * @param {EditorState|null} baseline
+ * @param {"snippet"|"asset"} kind
+ * @returns {{id: string, source: string}[]}
+ */
+function changedRecordSources(state, baseline, kind) {
+  const key = RECORD_POOLS[kind];
+  const saved = new Map((baseline?.[key] ?? []).map((r) => [r.id, r.source ?? ""]));
+  return (state[key] ?? [])
+    .filter((r) => saved.has(r.id) && saved.get(r.id) !== (r.source ?? ""))
+    .map((r) => ({ id: r.id, source: r.source ?? "" }));
+}
+
+/**
+ * `pool` with each record's source replaced by the working copy's, where the
+ * working copy has the record.
+ * @template {Snippet|Asset} T
+ * @param {T[]} pool
+ * @param {T[]|undefined} workingPool
+ * @returns {T[]}
+ */
+function withWorkingSources(pool, workingPool) {
+  if (!workingPool?.length) return pool;
+  const sources = new Map(workingPool.map((r) => [r.id, r.source]));
+  return pool.map((r) => (sources.has(r.id) ? { ...r, source: sources.get(r.id) } : r));
+}
+
+/**
+ * Whether any snippet/asset source in `state` would be sent by a save against `baseline`.
+ * @param {EditorState} state
+ * @param {EditorState} baseline
+ * @returns {boolean}
+ */
+function hasUnsavedRecordSources(state, baseline) {
+  return ["snippet", "asset"].some(
+    (kind) => changedRecordSources(state, baseline, kind).length > 0,
+  );
 }
 
 // The subset of working state that actually persists — used for dirty checks so
@@ -208,9 +292,8 @@ function persistableShape(state) {
     // Tombstones count as unsaved work: a removal whose own PATCH failed is
     // only ever retried because the next dirty check still sees it here.
     deletes: (state.deletes ?? []).map((d) => `${d.kind}:${d.id}`).sort(),
-    // Asset *content* is deliberately excluded: it's persisted immediately via
-    // its own single-entry PATCH, so it never participates in the document
-    // dirty check.
+    // Snippet/asset sources are compared separately (hasUnsavedRecordSources),
+    // by the same rule the save uses to pick what to send.
   });
 }
 
@@ -413,6 +496,10 @@ function EditorApp({ config }) {
   // session is joined and fully usable, it just isn't hearing peers in real time
   // (see YCableProvider.startWatchdog), so this warns rather than blocks.
   const [relayStalled, setRelayStalled] = useState(false);
+  // The server holds a newer layout of the shared document than this tab's
+  // editor writes (a deploy changed it), so it refuses to sync with this tab.
+  // Nothing typed here can reach anyone until the page is reloaded.
+  const [collabOutdated, setCollabOutdated] = useState(false);
 
   useEffect(() => {
     const data = projectQuery.data;
@@ -425,6 +512,7 @@ function EditorApp({ config }) {
         color: colorForUser(data.editorUser?.id),
       },
       onRelayStatusChange: (status) => setRelayStalled(status === "stalled"),
+      onOutdated: () => setCollabOutdated(true),
     });
     providerRef.current = provider;
     setCollabStatus("connecting");
@@ -432,6 +520,12 @@ function EditorApp({ config }) {
       .connect(() => editorStateToCollabSeed(data))
       .then(() => setCollabStatus("ready"))
       .catch((error) => {
+        // Expected after a deploy, not an incident: the page just needs
+        // reloading, and the notice says so.
+        if (error instanceof CollabOutdatedError) {
+          setCollabOutdated(true);
+          return;
+        }
         console.error("Failed to join collaborative session:", error);
         setCollabStatus("error");
         // The user sees a "please reload" screen and will usually just reload,
@@ -450,8 +544,8 @@ function EditorApp({ config }) {
 
   // ----- WRITE: save via TanStack mutation ---------------------------------
   const saveMutation = useMutation({
-    mutationFn: async ({ state, deletes, keepalive = false }) => {
-      const body = JSON.stringify(editorStateToRailsPayload(state, deletes));
+    mutationFn: async ({ state, deletes, baseline, keepalive = false }) => {
+      const body = JSON.stringify(editorStateToRailsPayload(state, deletes, baseline));
       const res = await fetch(apiBase, {
         method: "PATCH",
         headers: {
@@ -478,7 +572,10 @@ function EditorApp({ config }) {
   const isDirty = useCallback(() => {
     if (providerRef.current) return false;
     if (!working.current || !serverSnapshot.current) return false;
-    return persistableShape(working.current) !== persistableShape(serverSnapshot.current);
+    return (
+      persistableShape(working.current) !== persistableShape(serverSnapshot.current) ||
+      hasUnsavedRecordSources(working.current, serverSnapshot.current)
+    );
   }, []);
 
   // What the top bar shows beside the title (see the web-editor's SaveStatus).
@@ -546,7 +643,12 @@ function EditorApp({ config }) {
         return true;
       }
       const snapshot = structuredClone(working.current);
-      const request = saveMutation.mutateAsync({ state: snapshot, deletes: [], keepalive });
+      const request = saveMutation.mutateAsync({
+        state: snapshot,
+        deletes: [],
+        baseline: serverSnapshot.current,
+        keepalive,
+      });
       inFlightSave.current = request;
       setSaveStatus("saving");
       try {
@@ -606,6 +708,17 @@ function EditorApp({ config }) {
   const onContentChange = useCallback((change) => {
     const w = working.current;
     if (!w) return;
+    // A snippet's or asset's source, typed into the code editor.
+    if (change.kind === "snippet" || change.kind === "asset") {
+      const record = (w[RECORD_POOLS[change.kind]] ?? []).find((r) =>
+        change.id ? r.id === change.id : r.ref === change.ref,
+      );
+      if (record && (record.source ?? "") !== change.source) {
+        record.source = change.source;
+        noteEdit();
+      }
+      return;
+    }
     // The editor also reports content it already had (a division opening, a
     // re-derivation), which must not read as an unsaved edit.
     let edited = false;
@@ -830,6 +943,30 @@ function EditorApp({ config }) {
   // directly to a project, with no cross-project join) no asset library to
   // pick an existing upload from -- every project's assets are its own.
 
+  // A record the server has just created is persisted as it stands: it joins
+  // both the working copy and the snapshot, so it starts out saved.
+  const recordCreated = useCallback((kind, record) => {
+    upsertRecord(working.current, kind, record);
+    upsertRecord(serverSnapshot.current, kind, record);
+  }, []);
+
+  // A metadata write carries the record's every field, its source included,
+  // so the working copy takes it at once and the snapshot once it lands.
+  // Typing that arrives while the write is in flight lands in the working
+  // copy afterwards, and stays unsaved.
+  const writeRecord = useCallback(async (kind, record, write) => {
+    upsertRecord(working.current, kind, record);
+    await write();
+    upsertRecord(serverSnapshot.current, kind, record);
+  }, []);
+
+  // A removed record leaves both, or a later save would name an id the server
+  // has dropped -- which it would read as an insert.
+  const recordRemoved = useCallback((kind, id) => {
+    removeRecord(working.current, kind, id);
+    removeRecord(serverSnapshot.current, kind, id);
+  }, []);
+
   // Invalidate the project query (whose `assets` drive the `projectAssets`
   // prop) after a mutation settles.
   const invalidateAssetQueries = useCallback(() => {
@@ -862,18 +999,21 @@ function EditorApp({ config }) {
       title = title || "New Asset";
       const ref = uniqueRef(slugifyRef(title.replace(/\.[^.]+$/, "")));
       const json = await patchProjectAssetUpload({ ref, kind: "file", title, file });
-      const created = (json.assets ?? []).find((a) => a.ref === ref);
+      const created = toEditorAsset(
+        railsAssetToEditor((json.assets ?? []).find((a) => a.ref === ref)),
+      );
+      recordCreated("asset", created);
       invalidateAssetQueries();
       // contentType comes off the File itself -- a UI hint the server doesn't echo.
-      return { ...toEditorAsset(railsAssetToEditor(created)), contentType: file.type || undefined };
+      return { ...created, contentType: file.type || undefined };
     },
-    [uniqueRef, patchProjectAssetUpload, invalidateAssetQueries],
+    [uniqueRef, patchProjectAssetUpload, invalidateAssetQueries, recordCreated],
   );
 
   // Creates a file-less "authored" asset -- unlike onAssetUpload there's no
   // file to multipart-upload, so this goes through patchProjectJson (like
   // onDivisionAdd) instead of patchProjectAssetUpload. `title` comes from the
-  // asset manager's create form; the ref is derived from it exactly like
+  // editor's "New asset" form; the ref is derived from it exactly like
   // onAssetUpload derives one from an uploaded file's title. `source` starts
   // empty and is filled in afterward through onAssetUpdate, the same as any
   // other edit.
@@ -883,11 +1023,14 @@ function EditorApp({ config }) {
       const json = await patchProjectJson({
         assets_attributes: [ { ref, kind: "authored", title, source: "" } ],
       });
-      const created = (json.assets ?? []).find((a) => a.ref === ref);
+      const created = toEditorAsset(
+        railsAssetToEditor((json.assets ?? []).find((a) => a.ref === ref)),
+      );
+      recordCreated("asset", created);
       invalidateAssetQueries();
-      return toEditorAsset(railsAssetToEditor(created));
+      return created;
     },
-    [uniqueRef, patchProjectJson, invalidateAssetQueries],
+    [uniqueRef, patchProjectJson, invalidateAssetQueries, recordCreated],
   );
 
   // Fetches the image bytes server-side and hands back a File -- it does not
@@ -939,12 +1082,13 @@ function EditorApp({ config }) {
     [assetFetchUrl, csrfToken],
   );
 
-  // Persists an edit to an existing asset made through the web-editor's asset
-  // editor -- its `ref`, its `title`, its authored `source` (e.g. an image's
-  // <description> XML), and its `short_description` (an image's plain-text
-  // alt description, auto-rendered as <shortdescription>).  Also the commit
-  // step of Duplicate and Replace, which upload a file first and then give
-  // the resulting asset its real ref/title/source/short_description.
+  // Persists an edit to an existing asset made in the web-editor -- its
+  // `ref`, `title` and `short_description` (an image's plain-text alt
+  // description, auto-rendered as <shortdescription>) from its settings.
+  // Also the commit step of Duplicate and Replace, which upload a file first
+  // and then give the resulting asset its real ref/title/source/
+  // short_description. (Source typed into the code editor is not sent from
+  // here: it arrives through onContentChange and goes with the bulk save.)
   //
   // All fields go every time, keyed by `id` (the UUID, stable across
   // renames -- never `ref`, which is the thing being changed).  `ref`
@@ -961,18 +1105,20 @@ function EditorApp({ config }) {
   // untouched.
   const onAssetUpdate = useCallback(
     async (asset) => {
-      await patchProjectJson({
-        assets_attributes: [ {
-          id: asset.id,
-          ref: asset.ref,
-          title: asset.title,
-          source: asset.source ?? "",
-          short_description: asset.shortDescription ?? "",
-        } ],
-      });
+      await writeRecord("asset", toEditorAsset(asset), () =>
+        patchProjectJson({
+          assets_attributes: [ {
+            id: asset.id,
+            ref: asset.ref,
+            title: asset.title,
+            source: asset.source ?? "",
+            short_description: asset.shortDescription ?? "",
+          } ],
+        }),
+      );
       invalidateAssetQueries();
     },
-    [patchProjectJson, invalidateAssetQueries],
+    [patchProjectJson, invalidateAssetQueries, writeRecord],
   );
 
   // Drop this asset from the project entirely (Asset belongs to exactly one
@@ -991,16 +1137,18 @@ function EditorApp({ config }) {
   // than rejects on failure (the alert below is the report) -- a Replace whose
   // removal failed then fails again, visibly, on the rename.
   const onAssetRemove = useCallback(
-    (asset) =>
-      patchProjectJson({ assets_attributes: [{ id: asset.id, _destroy: true }] })
+    (asset) => {
+      recordRemoved("asset", asset.id);
+      return patchProjectJson({ assets_attributes: [{ id: asset.id, _destroy: true }] })
         .then(() => invalidateAssetQueries())
         .catch((error) => {
           console.error("Error removing asset:", error);
           if (!providerRef.current) {
             alert("An error occurred while removing the asset.");
           }
-        }),
-    [patchProjectJson, invalidateAssetQueries],
+        });
+    },
+    [patchProjectJson, invalidateAssetQueries, recordRemoved],
   );
 
   // The Asset Manager calls this when it opens; the editor overwrites its pool
@@ -1030,53 +1178,65 @@ function EditorApp({ config }) {
   }, [queryClient, projectId]);
 
   // Unlike an asset (whose ref is derived from a title), a snippet's ref is
-  // typed directly by the user in the snippet manager -- already sanitized and
-  // checked against the live pools there. The server (HasUniqueRef) is still
-  // the final authority; a collision surfaces as a normal rejected PATCH.
+  // typed directly by the user in the "New snippet" form -- already sanitized
+  // and checked against the live pools there -- along with its source format.
+  // The server (HasUniqueRef) is still the final authority; a collision
+  // surfaces as a normal rejected PATCH.
   const onCreateSnippet = useCallback(
-    async (ref) => {
+    async (ref, sourceFormat = "pretext") => {
       const json = await patchProjectJson({
-        snippets_attributes: [ { ref, source: "", source_format: "pretext" } ],
+        snippets_attributes: [ { ref, source: "", source_format: sourceFormat } ],
       });
-      const created = (json.snippets ?? []).find((s) => s.ref === ref);
+      const created = toEditorSnippet(
+        railsSnippetToEditor((json.snippets ?? []).find((s) => s.ref === ref)),
+      );
+      recordCreated("snippet", created);
       invalidateSnippetQueries();
-      return toEditorSnippet(railsSnippetToEditor(created));
+      return created;
     },
-    [patchProjectJson, invalidateSnippetQueries],
+    [patchProjectJson, invalidateSnippetQueries, recordCreated],
   );
 
   // Persists an edit to an existing snippet -- its `ref`, `source`, and
   // `source_format` -- keyed by `id` (stable across renames), mirroring
-  // onAssetUpdate.
+  // onAssetUpdate. The editor calls this for metadata edits made in its
+  // settings, and for a Duplicate's new record. Typed source arrives through
+  // onContentChange instead; the refetch this triggers can't undo it, since
+  // the `projectSnippets` prop lays the working copy's sources over the
+  // server's.
   const onSnippetUpdate = useCallback(
     async (snippet) => {
-      await patchProjectJson({
-        snippets_attributes: [ {
-          id: snippet.id,
-          ref: snippet.ref,
-          source: snippet.source ?? "",
-          source_format: snippet.sourceFormat,
-        } ],
-      });
+      await writeRecord("snippet", toEditorSnippet(snippet), () =>
+        patchProjectJson({
+          snippets_attributes: [ {
+            id: snippet.id,
+            ref: snippet.ref,
+            source: snippet.source ?? "",
+            source_format: snippet.sourceFormat,
+          } ],
+        }),
+      );
       invalidateSnippetQueries();
     },
-    [patchProjectJson, invalidateSnippetQueries],
+    [patchProjectJson, invalidateSnippetQueries, writeRecord],
   );
 
   // Drop this snippet from the project entirely. Mirrors onAssetRemove: the
   // editor has already removed it from its pool, so this is fire-and-forget
   // persistence, then a reconcile via invalidate.
   const onSnippetRemove = useCallback(
-    (snippet) =>
-      patchProjectJson({ snippets_attributes: [{ id: snippet.id, _destroy: true }] })
+    (snippet) => {
+      recordRemoved("snippet", snippet.id);
+      return patchProjectJson({ snippets_attributes: [{ id: snippet.id, _destroy: true }] })
         .then(() => invalidateSnippetQueries())
         .catch((error) => {
           console.error("Error removing snippet:", error);
           if (!providerRef.current) {
             alert("An error occurred while removing the snippet.");
           }
-        }),
-    [patchProjectJson, invalidateSnippetQueries],
+        });
+    },
+    [patchProjectJson, invalidateSnippetQueries, recordRemoved],
   );
 
   const onTitleChange = useCallback((value) => {
@@ -1313,14 +1473,27 @@ function EditorApp({ config }) {
   // the query data itself -- the identity changes only when an asset mutation
   // invalidates the project query and a refetch lands fresh server truth, never
   // on an unrelated re-render (which would feed a stale-but-new-identity array).
+  //
+  // Server truth is not the whole truth for a source, though: typing the next
+  // save hasn't sent yet lives only in the working copy, and a refetch landing
+  // in between would otherwise hand the editor the last-saved text. So each
+  // record's source comes from the working copy.
   const projectAssets = useMemo(
-    () => (projectQuery.data?.projectAssets ?? []).map(toEditorAsset),
+    () =>
+      withWorkingSources(
+        projectQuery.data?.projectAssets ?? [],
+        working.current?.projectAssets,
+      ).map(toEditorAsset),
     [projectQuery.data],
   );
 
   // Same reasoning as `projectAssets`, for snippets.
   const projectSnippets = useMemo(
-    () => (projectQuery.data?.projectSnippets ?? []).map(toEditorSnippet),
+    () =>
+      withWorkingSources(
+        projectQuery.data?.projectSnippets ?? [],
+        working.current?.projectSnippets,
+      ).map(toEditorSnippet),
     [projectQuery.data],
   );
 
@@ -1338,6 +1511,42 @@ function EditorApp({ config }) {
   // A collaborative project's editor waits for the shared doc: mounting before
   // it arrives would show (and let the user edit) state the session may have
   // long since moved past.
+  // Blocking, on joining or mid-session alike: an edit made now would sit in
+  // this tab with nowhere to go.
+  if (collabOutdated) {
+    return (
+      <div
+        role="alertdialog"
+        aria-labelledby="collab-outdated-title"
+        data-testid="collab-outdated"
+        className="fixed inset-0 z-50 flex items-center justify-center bg-black/40"
+      >
+        <div className="mx-5 max-w-md rounded-md bg-white p-6 text-center shadow-lg">
+          <h2 id="collab-outdated-title" className="mb-2 text-lg font-semibold">
+            Please reload the page
+          </h2>
+          <p className="mb-4 text-sm text-slate-700">
+            PreTeXt.Plus has been updated, and this tab can no longer save to the
+            shared document. Reload to keep editing. Anything typed in the last
+            few moments may not have been saved.
+          </p>
+          <button
+            type="button"
+            className="rounded bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700"
+            onClick={() => {
+              // What this tab still holds can't be saved now, so the
+              // unsaved-changes prompt would only be in the way.
+              leavingAnyway.current = true;
+              window.location.reload();
+            }}
+          >
+            Reload
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   if (projectQuery.data?.collaborative && collabStatus !== "ready") {
     if (collabStatus === "error") {
       return (
