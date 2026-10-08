@@ -7,7 +7,7 @@ import {
   railsAssetToEditor,
   railsSnippetToEditor,
 } from "./railsProjectMapping";
-import { HELP_ENTRIES } from "./helpEntries";
+import { buildHelpMenu } from "./helpEntries";
 
 /** @typedef {import("./railsProjectMapping").RailsDivision} RailsDivision */
 /** @typedef {import("./railsProjectMapping").RailsAsset} RailsAsset */
@@ -116,7 +116,7 @@ function SharedSourceApp({ config }) {
       onContentChange={() => {}}
       topBar={{
         logo,
-        helpMenu: () => ({ label: "Help", entries: HELP_ENTRIES }),
+        helpMenu: () => buildHelpMenu(),
         titleOverride: `${state.title} (Shared source)`,
       }}
     />
