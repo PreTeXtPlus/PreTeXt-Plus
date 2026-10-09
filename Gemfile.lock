@@ -159,7 +159,7 @@ GEM
       raabro (~> 1.4)
     globalid (1.4.0)
       activesupport (>= 6.1)
-    honeybadger (6.9.2)
+    honeybadger (6.9.3)
       logger
       ostruct
     i18n (1.15.2)
