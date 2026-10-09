@@ -33,7 +33,7 @@ gem "solid_cable"
 # they carry -- the CRDT every collaborative session's text lives in -- is not
 # something to let a minor bump change under us.
 gem "yrby", "~> 0.7.1"
-gem "yrby-rails", "~> 0.6.1"
+gem "yrby-rails", "~> 0.7.0"
 
 # Reduces boot times through caching; required in config/boot.rb
 gem "bootsnap", require: false
