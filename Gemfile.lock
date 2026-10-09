@@ -253,11 +253,11 @@ GEM
       racc
     pay (12.1.0)
       rails (>= 7.0.0)
-    pg (1.6.3)
-    pg (1.6.3-aarch64-linux)
-    pg (1.6.3-aarch64-linux-musl)
-    pg (1.6.3-x86_64-linux)
-    pg (1.6.3-x86_64-linux-musl)
+    pg (1.7.0)
+    pg (1.7.0-aarch64-linux)
+    pg (1.7.0-aarch64-linux-musl)
+    pg (1.7.0-x86_64-linux)
+    pg (1.7.0-x86_64-linux-musl)
     postmark (1.25.1)
       json
     postmark-rails (0.22.1)
@@ -486,7 +486,7 @@ DEPENDENCIES
   minitest (~> 5.27)
   nokogiri (~> 1.19)
   pay (~> 12.1)
-  pg (~> 1.6)
+  pg (~> 1.7)
   postmark-rails (~> 0.22)
   propshaft
   puma (>= 8.0.2)
