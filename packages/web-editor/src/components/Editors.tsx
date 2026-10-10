@@ -49,6 +49,7 @@ import type {
   EditorContentChange,
   Asset,
   FeedbackSubmission,
+  ImportShare,
   Snippet,
   SourceFormat,
 } from "../types/editor";
@@ -86,8 +87,7 @@ import {
 import { buildProjectAssetView, makeUniqueAssetRef } from "../assetView";
 import { buildProjectSnippetView, makeUniqueSnippetRef } from "../snippetView";
 import { newRecordId } from "../recordId";
-import type { ImportEngine } from "@pretextbook/import/react";
-import { takenImportIds } from "../importConvert";
+import { takenImportIds, type HostImportEngine } from "../importConvert";
 import {
   createEditorStore,
   defaultTocCollapsed,
@@ -295,8 +295,19 @@ export interface editorProps {
    * They come from the host because a remote converter needs its URL and its
    * credentials; fitting the result to the division being edited is this
    * component's. See `importConvert.ts`.
+   *
+   * An engine with `experimental: true` gets a warning in the dialog, and its
+   * conversions are what `onImportShare` receives.
    */
-  importEngines?: ImportEngine[];
+  importEngines?: HostImportEngine[];
+
+  /**
+   * Called with each file an `experimental` import engine converts, and the
+   * result or the error, when the author ticks "Share conversion
+   * privately…" in the Import dialog. Omit it and that checkbox is not shown.
+   * Not awaited; a rejection is logged and otherwise ignored.
+   */
+  onImportShare?: (share: ImportShare) => void | Promise<void>;
 
   /**
    * Called when the user deletes a division via the TOC UI.
@@ -2376,6 +2387,7 @@ const EditorsInner = (props: EditorsInnerProps) => {
         {isImportDialogOpen ? (
           <ImportDialog
             engines={props.importEngines}
+            onShare={props.onImportShare}
             parentType={activeDivision?.type}
             takenIds={takenImportIds(divisions, projectAssets, projectSnippets)}
             onClose={() => closeModal("isImportDialogOpen")}

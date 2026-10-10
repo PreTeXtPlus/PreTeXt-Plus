@@ -271,4 +271,133 @@ describe("ImportDialog", () => {
       expect(pandocBox()).not.toBeInTheDocument();
     });
   });
+
+  describe("an experimental engine", () => {
+    const shareLabel =
+      "Share conversion privately with pretext.plus developers to improve the service";
+    const shareBox = () => screen.queryByLabelText(shareLabel);
+    const notice = () => screen.queryByTestId("import-experimental-notice");
+
+    /** A dependable engine for archives, and an experimental one for Word. */
+    const hostEngines = (result: unknown = wordDocument) => {
+      const builtin = {
+        id: "builtin",
+        label: "Built-in",
+        acceptExtensions: [".zip"],
+        convertFile: vi.fn(() =>
+          Promise.resolve(wordDocument as unknown as ImportedProjectResult),
+        ),
+      };
+      const pandoc = {
+        ...docxEngine(result),
+        label: "Pandoc",
+        experimental: true,
+      };
+      return [builtin, pandoc];
+    };
+
+    const renderWithShare = (engines = hostEngines()) => {
+      const onShare = vi.fn();
+      render(
+        <ImportDialog
+          engines={engines}
+          onShare={onShare}
+          parentType="section"
+          takenIds={[]}
+          onClose={() => {}}
+        />,
+      );
+      return { onShare };
+    };
+
+    it("is announced before any file is chosen, sharing off", () => {
+      renderWithShare();
+
+      expect(notice()).toHaveTextContent(
+        "Conversion from docx, epub, html, and other formats other than tex " +
+          "and md uses Pandoc and is still experimental and might not " +
+          "produce good results.",
+      );
+      expect(shareBox()).not.toBeChecked();
+    });
+
+    it("shares the file and what it converted to once the author opts in", async () => {
+      const { onShare } = renderWithShare();
+      const file = new File(["binary"], "report.docx");
+
+      fireEvent.click(shareBox()!);
+      chooseFile(file);
+
+      await waitFor(() => expect(onShare).toHaveBeenCalledTimes(1));
+      expect(onShare).toHaveBeenCalledWith({
+        file,
+        engine: "Pandoc",
+        pretext: wordDocument.pretextSource,
+      });
+      // Still in view beside the file it applied to.
+      expect(shareBox()).toBeChecked();
+
+      // Converting the same file again sends nothing new.
+      await waitFor(() => expect(outputBox().value).not.toBe(""));
+      fireEvent.click(screen.getByRole("button", { name: "Convert" }));
+      await waitFor(() =>
+        expect(screen.getByRole("button", { name: "Convert" })).toBeEnabled(),
+      );
+      expect(onShare).toHaveBeenCalledTimes(1);
+    });
+
+    it("shares a failure too", async () => {
+      const { onShare } = renderWithShare(
+        hostEngines({
+          pretextError: "Pandoc could not read this file.",
+          statusMessages: [],
+          warnings: [],
+        }),
+      );
+      const file = new File(["x"], "report.docx");
+
+      fireEvent.click(shareBox()!);
+      chooseFile(file);
+
+      await screen.findByRole("alert");
+      expect(onShare).toHaveBeenCalledWith({
+        file,
+        engine: "Pandoc",
+        error: "Pandoc could not read this file.",
+      });
+    });
+
+    it("shares nothing unless the author opts in", async () => {
+      const { onShare } = renderWithShare();
+
+      chooseFile(new File(["binary"], "report.docx"));
+
+      await waitFor(() => expect(outputBox().value).not.toBe(""));
+      expect(onShare).not.toHaveBeenCalled();
+    });
+
+    it("leaves other conversions alone", async () => {
+      const { onShare } = renderWithShare();
+
+      fireEvent.click(shareBox()!);
+      chooseFile(new File(["zip"], "thesis.zip"));
+
+      await waitFor(() => expect(outputBox().value).not.toBe(""));
+      expect(notice()).not.toBeInTheDocument();
+      expect(onShare).not.toHaveBeenCalled();
+    });
+
+    it("warns without offering to share when the host takes no shares", () => {
+      renderDialog(hostEngines());
+
+      expect(notice()).toBeInTheDocument();
+      expect(shareBox()).not.toBeInTheDocument();
+    });
+
+    it("says nothing when no engine is experimental", () => {
+      renderDialog([docxEngine(wordDocument)]);
+
+      expect(notice()).not.toBeInTheDocument();
+    });
+  });
 });

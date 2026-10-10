@@ -1,0 +1,26 @@
+Shared Import Conversion
+=====================================
+
+An author converted <%= @file_name %> with <%= @engine.presence || "an experimental converter" %> in the editor's Import dialog and chose to share it.
+<% if @error.present? %>
+
+The conversion failed:
+<%= @error %>
+<% end %>
+
+Details:
+--------
+Original file: <%= @file_name %> (<%= number_to_human_size(@file_size) %>) -- <%= @file_attached ? "attached" : "too large to attach" %>
+<% if @pretext_attached %>
+Converted PreTeXt: attached as <%= @pretext_name %> (<%= number_to_human_size(@pretext_size) %>)
+<% elsif @pretext_size > 0 %>
+Converted PreTeXt: too large to attach (<%= number_to_human_size(@pretext_size) %>)
+<% else %>
+Converted PreTeXt: none
+<% end %>
+<% if @project_url.present? %>
+Project URL: <%= @project_url %>
+<% end %>
+<% if @user.present? %>
+User: <%= @user.email %> (ID: <%= @user.id %>)
+<% end %>

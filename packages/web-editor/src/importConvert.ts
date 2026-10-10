@@ -43,6 +43,14 @@ import type { SourceFormat } from "./types/editor";
 import type { DivisionType } from "./types/sections";
 import { defaultChildDivisionType } from "./components/toc/types";
 
+/**
+ * An engine as the host hands it over. `experimental` marks one whose results
+ * are not yet dependable — pandoc, in the Rails app — so the dialog warns
+ * before a file goes to it, and offers to share what it made with the host's
+ * developers (see `ImportShare`).
+ */
+export type HostImportEngine = ImportEngine & { experimental?: boolean };
+
 /** A conversion before it is fitted to a division. */
 export interface ConvertedImport {
   /** PreTeXt as the converter produced it — a body, or a whole document. */
@@ -87,12 +95,12 @@ export function textFormatForFileName(fileName: string): SourceFormat | undefine
 /** How the dialog should treat a file the author chose. */
 export type ImportFileRoute =
   | { kind: "text"; format: SourceFormat }
-  | { kind: "engine"; engine: ImportEngine }
+  | { kind: "engine"; engine: HostImportEngine }
   | { kind: "unsupported"; message: string };
 
 export function routeImportFile(
   fileName: string,
-  engines: ImportEngine[],
+  engines: HostImportEngine[],
 ): ImportFileRoute {
   const format = textFormatForFileName(fileName);
   if (format) return { kind: "text", format };
@@ -123,8 +131,31 @@ export const BUILTIN_IMPORT_ENGINE: ImportEngine = {
   convertFile: (file, options) => handleImportUploadFile(file, options),
 };
 
-export function resolveImportEngines(engines?: ImportEngine[]): ImportEngine[] {
+export function resolveImportEngines(
+  engines?: HostImportEngine[],
+): HostImportEngine[] {
   return engines && engines.length > 0 ? engines : [BUILTIN_IMPORT_ENGINE];
+}
+
+/** The engine the experimental-conversion notice speaks for, if the host wired one. */
+export function experimentalEngine(
+  engines: HostImportEngine[],
+): HostImportEngine | undefined {
+  return engines.find((engine) => engine.experimental);
+}
+
+/**
+ * The experimental engine a file would go to, or `undefined` when it goes
+ * anywhere else — read as text, or to a dependable engine.
+ */
+export function experimentalEngineFor(
+  fileName: string,
+  engines: HostImportEngine[],
+): HostImportEngine | undefined {
+  const route = routeImportFile(fileName, engines);
+  return route.kind === "engine" && route.engine.experimental
+    ? route.engine
+    : undefined;
 }
 
 // ── Converting ───────────────────────────────────────────────────────────────

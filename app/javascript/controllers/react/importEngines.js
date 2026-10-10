@@ -143,6 +143,10 @@ function buildPandocEngine({ pandocUrl, csrfToken }) {
 
   return {
     ...engine,
+    // Read by the editor's Tools → Import… dialog, which warns that this
+    // converter's results are not yet dependable and offers to mail us each
+    // file it converts (`onImportShare` in `editor.jsx`). The wizard ignores it.
+    experimental: true,
     // Same split rule as the built-in engine, reached differently.
     // `importSplitToSubsections` can afford to convert twice because its second
     // pass is local; here the conversion is a file upload and up to 25s of

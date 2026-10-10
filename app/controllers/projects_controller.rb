@@ -1,7 +1,7 @@
 class ProjectsController < ApplicationController
   allow_unauthenticated_access only: %i[ share preview source ]
   require_unauthenticated_access only: %i[ tryit ]
-  load_and_authorize_resource except: %i[ index owned shared new tryit preview pandoc feedback create_from_template create_from_import ]
+  load_and_authorize_resource except: %i[ index owned shared new tryit preview pandoc feedback import_share create_from_template create_from_import ]
   skip_authorize_resource only: %i[ share ]
   after_action :allow_iframe, only: :share
   rate_limit to: 25, within: 10.minutes, only: :preview,
@@ -12,6 +12,10 @@ class ProjectsController < ApplicationController
   # occupy a build-server worker for up to its 25s budget.
   rate_limit to: 20, within: 10.minutes, only: :pandoc,
              with: -> { render plain: "Too many conversions in a short time. Please wait a few minutes and try again.", status: :too_many_requests }
+  # One share follows each pandoc conversion at most, so the same allowance --
+  # counted apart, or every share would spend one of the author's conversions.
+  rate_limit to: 20, within: 10.minutes, only: :import_share, name: "import_share",
+             with: -> { head :too_many_requests }
 
   # Conversions the lite build server accepts on #preview. Its own vocabulary,
   # which is the PreTeXt CLI's -- the editor speaks pretext-html's ("slides")
@@ -31,6 +35,12 @@ class ProjectsController < ApplicationController
   # whichever of the two fires still arrives as a real message rather than a
   # bare abort. See DEFAULT_REMOTE_PANDOC_TIMEOUT_MS in @pretextbook/import.
   PANDOC_READ_TIMEOUT = 28
+
+  # What #import_share attaches to its email. Postmark refuses a message over
+  # 10MB all told, base64 included, so the two together stay well under it; a
+  # file or result past its cap is named in the email instead of attached.
+  IMPORT_SHARE_MAX_FILE_BYTES = 4.megabytes
+  IMPORT_SHARE_MAX_PRETEXT_BYTES = 2.megabytes
 
   # GET /projects
   def index
@@ -380,6 +390,35 @@ class ProjectsController < ApplicationController
   rescue StandardError => e
     Rails.logger.error("Feedback submission error: #{e.message}")
     render json: { error: "Failed to submit feedback" }, status: :internal_server_error
+  end
+
+  # A pandoc conversion the author shared from the editor's Import dialog
+  # (`onImportShare` in react/editor.jsx): the file they chose, and what pandoc
+  # made of it or why it failed. Mailed to us, never stored.
+  #
+  # The bytes are base64 here because the mail goes out from a job, and job
+  # arguments are JSON.
+  def import_share
+    upload = params[:file]
+    unless upload.respond_to?(:tempfile)
+      return render json: { error: "No file provided" }, status: :bad_request
+    end
+
+    pretext = params[:pretext].to_s
+    FeedbackMailer.import_share(
+      user: current_user,
+      engine: params[:engine],
+      error: params[:error].presence,
+      project_url: params[:project_url],
+      file_name: upload.original_filename.presence || "upload",
+      file_type: upload.content_type.presence || "application/octet-stream",
+      file_size: upload.size,
+      file_data: (upload.size <= IMPORT_SHARE_MAX_FILE_BYTES ? [ upload.read ].pack("m0") : nil),
+      pretext: (pretext.bytesize <= IMPORT_SHARE_MAX_PRETEXT_BYTES ? pretext.presence : nil),
+      pretext_size: pretext.bytesize
+    ).deliver_later
+
+    head :accepted
   end
 
   private

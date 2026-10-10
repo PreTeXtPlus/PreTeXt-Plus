@@ -18,9 +18,11 @@ export type {
   EditorContentChange,
   EditorContentState,
   FeedbackSubmission,
+  ImportShare,
   Snippet,
   SourceFormat,
 } from "./types/editor";
+export type { HostImportEngine } from "./importConvert";
 export type {
   Division,
   DivisionType,

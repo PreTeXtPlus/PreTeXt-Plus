@@ -168,6 +168,9 @@ Rails.application.routes.draw do
       # wizard. On the collection, not a member: no project exists yet.
       post "pandoc" => "projects#pandoc", as: "pandoc"
       post "feedback" => "projects#feedback", as: "feedback"
+      # The editor's Import dialog mails us a pandoc conversion here when the
+      # author opts in to sharing it.
+      post "import_share" => "projects#import_share", as: "import_share"
       get "lunr-pretext-search-index.js", to: redirect("/ptx-search.js")
       get "*_/lunr-pretext-search-index.js", to: redirect("/ptx-search.js")
       get ":id/*_.html", to: redirect("/projects/%{id}/share")

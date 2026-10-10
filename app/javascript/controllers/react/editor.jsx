@@ -311,6 +311,9 @@ function EditorApp({ config }) {
   // project, it just mails what the form sends (the project is identified by the
   // `project_url` in the body).
   const feedbackUrl = "/projects/feedback";
+  // Where the Import dialog sends a pandoc conversion the author agreed to
+  // share. A collection route for the same reason as feedback.
+  const importShareUrl = "/projects/import_share";
   // Fetches the bytes of a remote image server-side (CORS workaround only --
   // does not persist anything; see onAssetFetchUrl below).
   const assetFetchUrl = "/asset_fetches";
@@ -1307,6 +1310,28 @@ function EditorApp({ config }) {
     [feedbackUrl, csrfToken],
   );
 
+  // A pandoc conversion from Tools → Import… that the author ticked "Share
+  // conversion privately…" for: the file, and what it became or why it
+  // failed. The author is not waiting on this, so a failure is logged rather
+  // than shown.
+  const onImportShare = useCallback(
+    async (share) => {
+      const body = new FormData();
+      body.append("file", share.file);
+      body.append("engine", share.engine);
+      body.append("project_url", feedbackProjectUrl);
+      if (share.pretext !== undefined) body.append("pretext", share.pretext);
+      if (share.error !== undefined) body.append("error", share.error);
+      const res = await fetch(importShareUrl, {
+        method: "POST",
+        headers: { Accept: "application/json", "X-CSRF-Token": csrfToken },
+        body,
+      });
+      if (!res.ok) throw new Error(`Failed to share conversion: ${res.status}`);
+    },
+    [importShareUrl, feedbackProjectUrl, csrfToken],
+  );
+
   // The `projectAssets` prop seeds the editor's pool on mount and acts as an
   // external reset channel thereafter: a new array *identity* is treated as
   // authoritative and overwrites the editor's working pool.  So we memoize on
@@ -1418,6 +1443,7 @@ function EditorApp({ config }) {
         }}
         onContentChange={onContentChange}
         importEngines={importEngines}
+        onImportShare={onImportShare}
         onDivisionAdd={onDivisionAdd}
         onDivisionRemove={onDivisionRemove}
         onDivisionUpdate={onDivisionUpdate}
