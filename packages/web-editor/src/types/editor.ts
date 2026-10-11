@@ -137,22 +137,6 @@ export interface FeedbackSubmission {
 }
 
 /**
- * A file conversion the author agreed, in Tools → Import…, to share with the
- * host's developers. Only conversions by an engine the host marked
- * `experimental` are shared, whether they succeeded or failed.
- */
-export interface ImportShare {
-  /** The file exactly as the author chose it. */
-  file: File;
-  /** Label of the engine that converted it. */
-  engine: string;
-  /** What the engine produced, before it was fitted to the division. Absent on failure. */
-  pretext?: string;
-  /** Why the conversion failed. Absent on success. */
-  error?: string;
-}
-
-/**
  * Represents the full content state of the editor at any point in time.
  * When `sourceFormat` is `"pretext"`, `pretextSource` mirrors `source`.
  * When `sourceFormat` is `"latex"`, `pretextSource` holds the result of

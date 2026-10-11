@@ -278,6 +278,11 @@ describe("ImportDialog", () => {
     const shareBox = () => screen.queryByLabelText(shareLabel);
     const notice = () => screen.queryByTestId("import-experimental-notice");
 
+    const NOTICE =
+      "Conversion from docx, epub, html, and other formats other than tex " +
+      "and md uses Pandoc and is still experimental and might not produce " +
+      "good results.";
+
     /** A dependable engine for archives, and an experimental one for Word. */
     const hostEngines = (result: unknown = wordDocument) => {
       const builtin = {
@@ -290,8 +295,9 @@ describe("ImportDialog", () => {
       };
       const pandoc = {
         ...docxEngine(result),
+        id: "pandoc",
         label: "Pandoc",
-        experimental: true,
+        experimentalNotice: NOTICE,
       };
       return [builtin, pandoc];
     };
@@ -310,14 +316,10 @@ describe("ImportDialog", () => {
       return { onShare };
     };
 
-    it("is announced before any file is chosen, sharing off", () => {
+    it("is announced in the host's words before any file is chosen, sharing off", () => {
       renderWithShare();
 
-      expect(notice()).toHaveTextContent(
-        "Conversion from docx, epub, html, and other formats other than tex " +
-          "and md uses Pandoc and is still experimental and might not " +
-          "produce good results.",
-      );
+      expect(notice()).toHaveTextContent(NOTICE);
       expect(shareBox()).not.toBeChecked();
     });
 
@@ -331,7 +333,8 @@ describe("ImportDialog", () => {
       await waitFor(() => expect(onShare).toHaveBeenCalledTimes(1));
       expect(onShare).toHaveBeenCalledWith({
         file,
-        engine: "Pandoc",
+        engineId: "pandoc",
+        engineLabel: "Pandoc",
         pretext: wordDocument.pretextSource,
       });
       // Still in view beside the file it applied to.
@@ -362,7 +365,8 @@ describe("ImportDialog", () => {
       await screen.findByRole("alert");
       expect(onShare).toHaveBeenCalledWith({
         file,
-        engine: "Pandoc",
+        engineId: "pandoc",
+        engineLabel: "Pandoc",
         error: "Pandoc could not read this file.",
       });
     });

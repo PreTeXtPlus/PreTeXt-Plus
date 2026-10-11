@@ -3,7 +3,7 @@
 
   <p>
     An author converted <strong><%= @file_name %></strong> with <%= @engine.presence || "an experimental converter" %>
-    in the editor's Import dialog and chose to share it.
+    and chose to share it.
   </p>
 
   <% if @error.present? %>
@@ -13,6 +13,11 @@
 
   <h3>Details</h3>
   <dl style="margin: 16px 0;">
+    <% if @context.present? %>
+      <dt style="font-weight: bold; margin-top: 8px;">Shared from:</dt>
+      <dd style="margin: 0 0 12px 0;"><%= @context %></dd>
+    <% end %>
+
     <dt style="font-weight: bold; margin-top: 8px;">Original file:</dt>
     <dd style="margin: 0 0 12px 0;">
       <%= @file_name %> (<%= number_to_human_size(@file_size) %>)

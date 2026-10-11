@@ -392,9 +392,9 @@ class ProjectsController < ApplicationController
     render json: { error: "Failed to submit feedback" }, status: :internal_server_error
   end
 
-  # A pandoc conversion the author shared from the editor's Import dialog
-  # (`onImportShare` in react/editor.jsx): the file they chose, and what pandoc
-  # made of it or why it failed. Mailed to us, never stored.
+  # A pandoc conversion an author shared, from the new-project wizard or the
+  # editor's Import dialog (see react/importShare.js): the file they chose, and
+  # what pandoc made of it or why it failed. Mailed to us, never stored.
   #
   # The bytes are base64 here because the mail goes out from a job, and job
   # arguments are JSON.
@@ -408,6 +408,7 @@ class ProjectsController < ApplicationController
     FeedbackMailer.import_share(
       user: current_user,
       engine: params[:engine],
+      context: params[:context].presence,
       error: params[:error].presence,
       project_url: params[:project_url],
       file_name: upload.original_filename.presence || "upload",

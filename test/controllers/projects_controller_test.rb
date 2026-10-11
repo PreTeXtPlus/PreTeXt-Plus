@@ -1239,6 +1239,7 @@ class ProjectsControllerTest < ActionDispatch::IntegrationTest
       post import_share_projects_url, params: {
         file: pandoc_upload,
         engine: "Pandoc",
+        context: "Editor import dialog",
         pretext: "<pretext><article><p>Hi</p></article></pretext>",
         project_url: "https://pretext.plus/projects/1"
       }
@@ -1254,6 +1255,21 @@ class ProjectsControllerTest < ActionDispatch::IntegrationTest
                  mail.attachments["import_sample.ptx"].decoded
     assert_includes mail.text_part.decoded, @user.email
     assert_includes mail.text_part.decoded, "https://pretext.plus/projects/1"
+    assert_includes mail.text_part.decoded, "Shared from: Editor import dialog"
+  end
+
+  # The wizard shares before any project exists, so there is no link to send.
+  test "import_share mails a share from the new-project wizard without a project link" do
+    perform_enqueued_jobs do
+      post import_share_projects_url, params: {
+        file: pandoc_upload, engine: "Pandoc", context: "New project import", pretext: "<pretext/>"
+      }
+    end
+
+    assert_response :accepted
+    text = ActionMailer::Base.deliveries.last.text_part.decoded
+    assert_includes text, "Shared from: New project import"
+    assert_not_includes text, "Project URL"
   end
 
   test "import_share mails a failed conversion with its error" do

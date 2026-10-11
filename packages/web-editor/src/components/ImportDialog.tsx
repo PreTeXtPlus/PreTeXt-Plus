@@ -11,8 +11,8 @@
  * right pane holds the result, fitted to the division it is headed for (see
  * `importConvert.ts`) and editable before it is copied.
  *
- * An engine the host marks `experimental` (pandoc, in the Rails app) gets a
- * warning, and — when the host takes `onShare` — an opt-in checkbox that
+ * An engine with an `experimentalNotice` (pandoc, in the Rails app) has that
+ * notice shown, and — when the host takes `onShare` — an opt-in checkbox that
  * hands each file it converts to the host along with the result, so the
  * people working on that converter see where it falls short.
  *
@@ -29,6 +29,8 @@ import {
   type DragEvent,
 } from "react";
 import { Editor } from "@monaco-editor/react";
+import { experimentalEngineFor, experimentalEngines } from "@pretextbook/import";
+import type { ConversionShare, ImportEngine } from "@pretextbook/import/react";
 import {
   acceptedImportExtensions,
   alternateTextEngine,
@@ -36,15 +38,12 @@ import {
   convertImportText,
   convertImportTextWithEngine,
   detectImportFormat,
-  experimentalEngine,
-  experimentalEngineFor,
   fitImportForDivision,
   resolveImportEngines,
   routeImportFile,
-  type HostImportEngine,
 } from "../importConvert";
 import type { CleanFinding } from "../cleanFindings";
-import type { ImportShare, SourceFormat } from "../types/editor";
+import type { SourceFormat } from "../types/editor";
 import type { DivisionType } from "../types/sections";
 import CleanFindingsList from "./CleanFindingsList";
 import StoreFeedbackLink from "./StoreFeedbackLink";
@@ -74,13 +73,13 @@ interface ImportDialogProps {
    * Converters for files that are not plain text, in precedence order.
    * Defaults to `@pretextbook/import`'s built-in one.
    */
-  engines?: HostImportEngine[];
+  engines?: ImportEngine[];
   /**
    * Receives a file an experimental engine converted, and what came of it,
    * when the author leaves sharing on. Not awaited; omit it and the checkbox
    * is not offered.
    */
-  onShare?: (share: ImportShare) => void | Promise<void>;
+  onShare?: (share: ConversionShare) => void | Promise<void>;
   /** Type of the division the result is for; imported divisions are fitted inside it. */
   parentType?: DivisionType | null;
   /** Every id the project already uses, so imported ones can be renamed away from them. */
@@ -133,7 +132,7 @@ const ImportDialog = ({
     [engineList],
   );
   const noticeEngine = useMemo(
-    () => experimentalEngine(engineList),
+    () => experimentalEngines(engineList)[0],
     [engineList],
   );
 
@@ -203,7 +202,7 @@ const ImportDialog = ({
    * Hand a conversion to the host, once per file. Fire and forget: the author
    * is waiting on the result, not on this, so a failure is only logged.
    */
-  const share = (submission: ImportShare) => {
+  const share = (submission: ConversionShare) => {
     if (!onShare || sharedFilesRef.current.has(submission.file)) return;
     sharedFilesRef.current.add(submission.file);
     Promise.resolve()
@@ -218,7 +217,7 @@ const ImportDialog = ({
     setCopyStatus("idle");
     const shareEngine =
       source && shareConversion
-        ? experimentalEngineFor(source.name, engineList)
+        ? experimentalEngineFor(engineList, source.name)
         : undefined;
     try {
       const options = { clean: cleanBeforeConvert };
@@ -230,7 +229,12 @@ const ImportDialog = ({
       // Shared even if the author has since moved on: it is still what this
       // file converted to.
       if (source && shareEngine) {
-        share({ file: source, engine: shareEngine.label, pretext: converted.pretext });
+        share({
+          file: source,
+          engineId: shareEngine.id,
+          engineLabel: shareEngine.label,
+          pretext: converted.pretext,
+        });
       }
       if (request !== requestRef.current) return;
       const fitted = fitImportForDivision(converted.pretext, {
@@ -243,7 +247,12 @@ const ImportDialog = ({
       if (!fitted.source) setError("The conversion came back empty.");
     } catch (caught) {
       if (source && shareEngine) {
-        share({ file: source, engine: shareEngine.label, error: errorMessage(caught) });
+        share({
+          file: source,
+          engineId: shareEngine.id,
+          engineLabel: shareEngine.label,
+          error: errorMessage(caught),
+        });
       }
       if (request !== requestRef.current) return;
       console.error("Error converting import:", caught);
@@ -331,7 +340,7 @@ const ImportDialog = ({
   // — always, for the source pane — and with a file only if it went there.
   const showNotice =
     noticeEngine !== undefined &&
-    (file === null || experimentalEngineFor(file.name, engineList) !== undefined);
+    (file === null || experimentalEngineFor(engineList, file.name) !== undefined);
 
   return (
     <DialogOverlay onClick={onClose}>
@@ -463,16 +472,12 @@ const ImportDialog = ({
                 )}
               </>
             )}
-            {showNotice && noticeEngine && (
+            {showNotice && noticeEngine?.experimentalNotice && (
               <div
                 className="mt-1 py-[0.4rem] px-[0.6rem] bg-amber-100 text-amber-900 rounded text-[0.83rem] flex flex-col gap-1"
                 data-testid="import-experimental-notice"
               >
-                <p className="m-0">
-                  Conversion from docx, epub, html, and other formats other
-                  than tex and md uses {noticeEngine.label} and is still
-                  experimental and might not produce good results.
-                </p>
+                <p className="m-0">{noticeEngine.experimentalNotice}</p>
                 {onShare && (
                   <label className="inline-flex items-start gap-[0.45rem]">
                     <input

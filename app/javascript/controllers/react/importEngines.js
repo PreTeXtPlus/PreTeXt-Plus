@@ -143,10 +143,15 @@ function buildPandocEngine({ pandocUrl, csrfToken }) {
 
   return {
     ...engine,
-    // Read by the editor's Tools → Import… dialog, which warns that this
-    // converter's results are not yet dependable and offers to mail us each
-    // file it converts (`onImportShare` in `editor.jsx`). The wizard ignores it.
-    experimental: true,
+    // Marks this converter experimental. Both the wizard and the editor's
+    // Tools → Import… dialog show this sentence before a file goes to it, and
+    // offer to mail us what it made of one (see `importShare.js`). It names the
+    // formats rather than "files pandoc reads" because pandoc reads .tex and
+    // .md too, yet those go to the built-in converter.
+    experimentalNotice:
+      "Conversion from docx, epub, html, and other formats other than tex " +
+      "and md uses Pandoc and is still experimental and might not produce " +
+      "good results.",
     // Same split rule as the built-in engine, reached differently.
     // `importSplitToSubsections` can afford to convert twice because its second
     // pass is local; here the conversion is a file upload and up to 25s of

@@ -49,7 +49,6 @@ import type {
   EditorContentChange,
   Asset,
   FeedbackSubmission,
-  ImportShare,
   Snippet,
   SourceFormat,
 } from "../types/editor";
@@ -87,7 +86,8 @@ import {
 import { buildProjectAssetView, makeUniqueAssetRef } from "../assetView";
 import { buildProjectSnippetView, makeUniqueSnippetRef } from "../snippetView";
 import { newRecordId } from "../recordId";
-import { takenImportIds, type HostImportEngine } from "../importConvert";
+import type { ConversionShare, ImportEngine } from "@pretextbook/import/react";
+import { takenImportIds } from "../importConvert";
 import {
   createEditorStore,
   defaultTocCollapsed,
@@ -296,18 +296,20 @@ export interface editorProps {
    * credentials; fitting the result to the division being edited is this
    * component's. See `importConvert.ts`.
    *
-   * An engine with `experimental: true` gets a warning in the dialog, and its
+   * An engine with an `experimentalNotice` has it shown in the dialog, and its
    * conversions are what `onImportShare` receives.
    */
-  importEngines?: HostImportEngine[];
+  importEngines?: ImportEngine[];
 
   /**
-   * Called with each file an `experimental` import engine converts, and the
-   * result or the error, when the author ticks "Share conversion
-   * privately…" in the Import dialog. Omit it and that checkbox is not shown.
-   * Not awaited; a rejection is logged and otherwise ignored.
+   * Called with each file an experimental import engine (one with an
+   * `experimentalNotice`) converts, and the result or the error, when the
+   * author ticks "Share conversion privately…" in the Import dialog. Omit it
+   * and that checkbox is not shown. Not awaited; a rejection is logged and
+   * otherwise ignored. It takes the same `ConversionShare` as the import
+   * wizard's `shareConversion.onShare`, so a host can hand both one function.
    */
-  onImportShare?: (share: ImportShare) => void | Promise<void>;
+  onImportShare?: (share: ConversionShare) => void | Promise<void>;
 
   /**
    * Called when the user deletes a division via the TOC UI.

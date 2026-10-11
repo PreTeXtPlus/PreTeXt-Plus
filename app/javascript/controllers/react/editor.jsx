@@ -14,6 +14,7 @@ import {
   DEFAULT_LANGUAGE,
 } from "@pretextbook/web-editor";
 import { buildImportEngines } from "./importEngines";
+import { buildImportShare } from "./importShare";
 import { YCableProvider } from "./collab/yCableProvider";
 import { reportCollabIncident } from "./collab/reportIncident";
 import {
@@ -311,9 +312,6 @@ function EditorApp({ config }) {
   // project, it just mails what the form sends (the project is identified by the
   // `project_url` in the body).
   const feedbackUrl = "/projects/feedback";
-  // Where the Import dialog sends a pandoc conversion the author agreed to
-  // share. A collection route for the same reason as feedback.
-  const importShareUrl = "/projects/import_share";
   // Fetches the bytes of a remote image server-side (CORS workaround only --
   // does not persist anything; see onAssetFetchUrl below).
   const assetFetchUrl = "/asset_fetches";
@@ -1311,25 +1309,16 @@ function EditorApp({ config }) {
   );
 
   // A pandoc conversion from Tools → Import… that the author ticked "Share
-  // conversion privately…" for: the file, and what it became or why it
-  // failed. The author is not waiting on this, so a failure is logged rather
-  // than shown.
-  const onImportShare = useCallback(
-    async (share) => {
-      const body = new FormData();
-      body.append("file", share.file);
-      body.append("engine", share.engine);
-      body.append("project_url", feedbackProjectUrl);
-      if (share.pretext !== undefined) body.append("pretext", share.pretext);
-      if (share.error !== undefined) body.append("error", share.error);
-      const res = await fetch(importShareUrl, {
-        method: "POST",
-        headers: { Accept: "application/json", "X-CSRF-Token": csrfToken },
-        body,
-      });
-      if (!res.ok) throw new Error(`Failed to share conversion: ${res.status}`);
-    },
-    [importShareUrl, feedbackProjectUrl, csrfToken],
+  // conversion privately…" for. The dialog does not wait on it and only logs a
+  // failure; the wizard shares through the same function (see importShare.js).
+  const onImportShare = useMemo(
+    () =>
+      buildImportShare({
+        context: "Editor import dialog",
+        csrfToken,
+        projectUrl: feedbackProjectUrl,
+      }),
+    [csrfToken, feedbackProjectUrl],
   );
 
   // The `projectAssets` prop seeds the editor's pool on mount and acts as an

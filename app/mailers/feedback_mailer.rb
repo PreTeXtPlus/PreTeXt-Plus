@@ -15,12 +15,13 @@ class FeedbackMailer < ApplicationMailer
     )
   end
 
-  # A conversion shared from the editor's Import dialog (see
-  # ProjectsController#import_share). The original file and the converted
-  # PreTeXt ride as attachments, so either can be fed straight back in.
+  # A conversion shared from the new-project wizard or the editor's Import
+  # dialog (see ProjectsController#import_share). The original file and the
+  # converted PreTeXt ride as attachments, so either can be fed straight back in.
   def import_share(share)
     @user = share[:user]
     @engine = share[:engine]
+    @context = share[:context]
     @error = share[:error]
     @project_url = share[:project_url]
     @file_name = share[:file_name]

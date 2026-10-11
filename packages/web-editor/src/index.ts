@@ -18,11 +18,11 @@ export type {
   EditorContentChange,
   EditorContentState,
   FeedbackSubmission,
-  ImportShare,
   Snippet,
   SourceFormat,
 } from "./types/editor";
-export type { HostImportEngine } from "./importConvert";
+// The same payload the import wizard hands its host, so one handler serves both.
+export type { ConversionShare } from "@pretextbook/import/react";
 export type {
   Division,
   DivisionType,
