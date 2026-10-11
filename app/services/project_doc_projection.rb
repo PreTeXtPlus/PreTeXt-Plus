@@ -46,6 +46,8 @@ class ProjectDocProjection
     meta = read_map(doc, "meta")
     deleted = read_map(doc, "deleted")
     divisions = read_map(doc, "divisions")
+    snippets = read_map(doc, "snippets")
+    assets = read_map(doc, "assets")
 
     attributes = {
       title: meta["title"].to_s,
@@ -60,10 +62,10 @@ class ProjectDocProjection
     root = root_element(divisions)
     attributes[:root_element] = root unless root.nil?
 
-    destroys = destroy_attributes(deleted, "asset")
-    attributes[:assets_attributes] = destroys if destroys.any?
-    destroys = destroy_attributes(deleted, "snippet")
-    attributes[:snippets_attributes] = destroys if destroys.any?
+    rows = asset_attributes(assets, deleted)
+    attributes[:assets_attributes] = rows if rows.any?
+    rows = snippet_attributes(snippets, deleted)
+    attributes[:snippets_attributes] = rows if rows.any?
 
     attributes
   end
@@ -82,6 +84,45 @@ class ProjectDocProjection
       }
     end
     present + destroy_attributes(deleted, "division")
+  end
+
+  # A snippet's source is shared text in the document exactly like a division's,
+  # so it is projected the same way. Its id may be one the editor minted and the
+  # host has not stored yet; Project#snippets_attributes= creates that row.
+  def snippet_attributes(snippets, deleted)
+    present = snippets.filter_map do |id, entry|
+      next if deleted[id] == "snippet"
+
+      {
+        id: id,
+        ref: entry["ref"].to_s,
+        source: entry["source"].to_s,
+        source_format: entry["sourceFormat"].presence || "pretext"
+      }
+    end
+    present + destroy_attributes(deleted, "snippet")
+  end
+
+  # An asset's text -- its source, title, id and alt text -- is projected like a
+  # snippet's, but only onto an asset the project already has. The row is always
+  # created by its upload (the file has to exist first), and the uploader only
+  # publishes the entry once that has happened; an entry naming an asset this
+  # project lacks is one whose upload never landed, and projecting it would build
+  # a fileless asset out of nothing.
+  def asset_attributes(assets, deleted)
+    known = @project.assets.pluck(:id).map(&:to_s).to_set
+    present = assets.filter_map do |id, entry|
+      next if deleted[id] == "asset" || !known.include?(id)
+
+      {
+        id: id,
+        ref: entry["ref"].to_s,
+        title: entry["title"].to_s,
+        source: entry["source"].to_s,
+        short_description: entry["shortDescription"].to_s
+      }
+    end
+    present + destroy_attributes(deleted, "asset")
   end
 
   # Rails drops a `_destroy` naming a row that is already gone, which is what

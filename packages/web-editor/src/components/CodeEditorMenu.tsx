@@ -58,7 +58,7 @@ interface CodeEditorMenuProps {
   /** Called with the formatted content after a successful format operation. */
   onContentChange: (newContent: string) => void;
   /** Opens the Import dialog (outside material converted to PreTeXt). */
-  onOpenImport: () => void;
+  onOpenImport?: () => void;
   /**
    * Whether pasted LaTeX/Markdown is converted on the way in. Omitted for
    * formats where the question doesn't arise, which hides the menu item.
@@ -96,9 +96,9 @@ interface CodeEditorMenuProps {
    * Should be `false` when conversion has failed.
    */
   canConvertToPretext?: boolean;
-  /** If provided, an "Assets…" item is shown (PreTeXt mode only). */
+  /** If provided, a "New Asset…" item is shown (PreTeXt mode only). */
   onOpenAssets?: () => void;
-  /** If provided, a "Snippets…" item is shown (PreTeXt mode only). */
+  /** If provided, a "New Snippet…" item is shown (PreTeXt mode only). */
   onOpenSnippets?: () => void;
   /** Opens the assembled-source modal. */
   onShowFullSource: () => void;

@@ -1,27 +1,32 @@
 /**
  * @vitest-environment jsdom
  */
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi } from "vitest";
 import { act, fireEvent, screen, within } from "@testing-library/react";
-import ArticleToc from "../components/toc/ArticleToc";
 import type { Division } from "../types/sections";
 import {
   divisions,
   expandAll,
-  openMenu,
+  openSettings,
   renderWithStore,
+  tocRow,
   toggleRow,
   typeChoices,
   visibleTitles,
   type TestStore,
 } from "./tocTestUtils";
+import TocWithSettings from "./TocWithSettings";
 
 function renderToc(
   readOnly?: boolean,
   docDivisions: Division[] = divisions,
   configure?: (store: TestStore) => void,
 ) {
-  return renderWithStore(<ArticleToc readOnly={readOnly} />, docDivisions, configure);
+  return renderWithStore(
+    <TocWithSettings readOnly={readOnly} />,
+    docDivisions,
+    configure,
+  );
 }
 
 // book › chapter › (introduction, section › exercises)
@@ -72,25 +77,40 @@ const bookDivisions: Division[] = [
 ];
 
 describe("ArticleToc", () => {
-  it("hides every division menu trigger when readOnly", () => {
-    renderToc(true);
-    expect(screen.getByText("Document")).toBeInTheDocument();
-    expect(screen.getByText("A section")).toBeInTheDocument();
+  it("has no per-row menus: a row only opens its division", () => {
+    const { store } = renderToc(false);
     expect(screen.queryAllByTitle("More options")).toHaveLength(0);
+    fireEvent.click(within(tocRow("A section")).getByTestId("toc-title"));
+    expect(store.getState().openItem).toEqual({ kind: "division", ref: "sec" });
+    expect(screen.getByTestId("editor-target-title")).toHaveTextContent(
+      "A section",
+    );
+    expect(
+      within(tocRow("A section")).getByRole("button", { current: true }),
+    ).toBeInTheDocument();
   });
 
-  it("shows division menu triggers by default", () => {
-    renderToc(false);
-    expect(screen.queryAllByTitle("More options").length).toBeGreaterThan(0);
+  it("offers no division settings when readOnly", () => {
+    renderToc(true);
+    expect(tocRow("Document")).toBeInTheDocument();
+    expect(tocRow("A section")).toBeInTheDocument();
+    expect(screen.queryByTestId("settings-drawer-toggle")).toBeNull();
+    expect(screen.queryAllByTestId("toc-add-child")).toHaveLength(0);
+  });
+
+  it("starts a sub-division of the row whose [+] is clicked", () => {
+    const addSection = vi.fn();
+    renderToc(false, divisions, (store) => store.setState({ addSection }));
+    fireEvent.click(within(tocRow("A section")).getByTestId("toc-add-child"));
+    expect(addSection).toHaveBeenCalledWith("sec");
   });
 });
 
 describe("ArticleToc properties form", () => {
   it("opens with the title focused and selected", () => {
     renderToc(false);
-    const row = openMenu("A section");
-    fireEvent.click(screen.getByText("Edit properties"));
-    const title = within(row).getByDisplayValue("A section") as HTMLInputElement;
+    const drawer = openSettings("A section");
+    const title = within(drawer).getByDisplayValue("A section") as HTMLInputElement;
     expect(document.activeElement).toBe(title);
     expect(title.selectionStart).toBe(0);
     expect(title.selectionEnd).toBe("A section".length);
@@ -102,7 +122,11 @@ describe("ArticleToc properties form", () => {
 // ever offers types valid where the division sits.
 describe("ArticleToc division type choices", () => {
   const renderToc = (readOnly?: boolean, docDivisions?: Division[]) =>
-    renderWithStore(<ArticleToc readOnly={readOnly} />, docDivisions, expandAll);
+    renderWithStore(
+      <TocWithSettings readOnly={readOnly} />,
+      docDivisions,
+      expandAll,
+    );
 
 
   it("offers the root only the root document types", () => {
@@ -144,12 +168,9 @@ describe("ArticleToc division type choices", () => {
   it("offers no way to nest a division under a leaf type", () => {
     renderToc(false, bookDivisions);
     // <exercises> holds exercises, not divisions — there is no valid child
-    // type for one, so it offers no "Add new division" at all.
-    openMenu("Exercises");
-    expect(screen.getByText("Edit properties")).toBeInTheDocument();
-    expect(screen.queryByText("Add new division")).toBeNull();
-    openMenu("A section");
-    expect(screen.getByText("Add new division")).toBeInTheDocument();
+    // type for one, so its row offers no [+] at all.
+    expect(within(tocRow("Exercises")).queryByTestId("toc-add-child")).toBeNull();
+    expect(within(tocRow("A section")).getByTestId("toc-add-child")).toBeInTheDocument();
   });
 
   it("offers a section's child subsections", () => {
@@ -343,7 +364,7 @@ describe("ArticleToc expand/collapse", () => {
 
   it("opens the rows above the division that is active on load", () => {
     renderToc(false, bookDivisions, (store) =>
-      store.getState().setActiveDivisionId("ex"),
+      store.getState().openDivision("ex"),
     );
     expect(visibleTitles()).toEqual([
       "Book",
@@ -356,13 +377,13 @@ describe("ArticleToc expand/collapse", () => {
 
   it("opens the rows above a division that becomes active", () => {
     const { store } = renderToc(false, bookDivisions);
-    act(() => store.getState().setActiveDivisionId("sec"));
+    act(() => store.getState().openDivision("sec"));
     expect(visibleTitles()).toContain("A section");
   });
 
   it("opens a division that becomes active one level deep", () => {
     const { store } = renderToc(false, bookDivisions);
-    act(() => store.getState().setActiveDivisionId("ch"));
+    act(() => store.getState().openDivision("ch"));
     // The chapter's children show, but the section below it stays shut.
     expect(visibleTitles()).toEqual([
       "Book",
@@ -373,29 +394,22 @@ describe("ArticleToc expand/collapse", () => {
   });
 
   it("opens a division when the author selects it in the TOC", () => {
-    const { store } = renderToc(false, bookDivisions);
-    // The test store binds no host callbacks, so stand in for the host's
-    // selectDivision, which makes the clicked division active.
-    act(() =>
-      store.setState({
-        selectSection: (id) => store.getState().setActiveDivisionId(id),
-      }),
-    );
-    fireEvent.click(screen.getByText("Chapter one"));
+    renderToc(false, bookDivisions);
+    fireEvent.click(within(tocRow("Chapter one")).getByTestId("toc-title"));
     expect(visibleTitles()).toContain("A section");
   });
 
   it("leaves shut an active division the author has since shut", () => {
     const { store } = renderToc(false, bookDivisions);
-    act(() => store.getState().setActiveDivisionId("ch"));
+    act(() => store.getState().openDivision("ch"));
     toggleRow("Chapter one");
     expect(visibleTitles()).toEqual(["Book", "Chapter one"]);
   });
 
   it("opens a shut row that a new division is being added to", () => {
     const { store } = renderToc(false, bookDivisions);
-    openMenu("Chapter one");
-    fireEvent.click(screen.getByText("Add new division"));
+    expect(visibleTitles()).not.toContain("A section");
+    fireEvent.click(within(tocRow("Chapter one")).getByTestId("toc-add-child"));
     expect(store.getState().tocExpansion.ch).toBe(true);
     expect(visibleTitles()).toContain("A section");
   });
@@ -443,7 +457,7 @@ describe("ArticleToc expand/collapse", () => {
   it("unfolds the unplaced block to show an active division inside it", () => {
     renderToc(false, withOrphans, (store) => {
       store.getState().toggleTocOrphansCollapsed();
-      store.getState().setActiveDivisionId("loose-sub");
+      store.getState().openDivision("loose-sub");
     });
     expect(unplacedHeader()).toHaveAttribute("aria-expanded", "true");
     expect(visibleTitles()).toContain("Loose subsection");

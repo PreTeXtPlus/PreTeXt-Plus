@@ -16,6 +16,7 @@ import Editors from "../components/Editors";
 import type { Division } from "../types/sections";
 import type { EditorContentChange } from "../types/editor";
 import type { DivisionChanges } from "../store/editorStore";
+import { tocRow } from "./tocTestUtils";
 
 // Monaco loads itself from a CDN; the TOC is what's under test here.
 vi.mock("@monaco-editor/react", () => ({
@@ -71,30 +72,19 @@ function renderEditors() {
     />,
   );
   const sourceOf = (xmlId: string) => {
-    const forDivision = changes.filter((c) => c.xmlId === xmlId);
+    const forDivision = changes.filter((c) => "xmlId" in c && c.xmlId === xmlId);
     return forDivision[forDivision.length - 1]?.source;
   };
   return { added, changes, updates, sourceOf };
 }
 
-/** The TOC row whose title is `label`. */
-function tocRow(label: string): HTMLElement {
-  const row = [...document.querySelectorAll('[data-testid^="toc-item-"]')].find(
-    (li) =>
-      li.querySelector('[data-testid="toc-title"]')?.textContent === label,
-  ) as HTMLElement | undefined;
-  if (!row) throw new Error(`no TOC row for "${label}"`);
-  return row;
-}
-
+/** Start a new sub-division from the [+] on `label`'s Contents row. */
 function addUnder(label: string) {
-  const row = tocRow(label);
-  fireEvent.click(within(row).getByTitle("More options"));
-  fireEvent.click(screen.getByText("Add new division"));
+  fireEvent.click(within(tocRow(label)).getByTestId("toc-add-child"));
 }
 
-/** The draft row, and the fields/buttons inside it. */
-const draftRow = () => screen.getByTestId("toc-new-division");
+/** The draft's properties form (in the editor pane), and the fields/buttons inside it. */
+const draftRow = () => screen.getByTestId("new-item-pane");
 const titleField = () =>
   within(draftRow()).getByText("Title").parentElement!
     .querySelector("input") as HTMLInputElement;
@@ -110,6 +100,7 @@ describe("a new division is a draft until it is saved", () => {
 
     // The draft is on screen, under the parent it will be placed in…
     expect(draftRow()).toBeInTheDocument();
+    expect(screen.getByTestId("toc-new-division")).toBeInTheDocument();
     // …but nothing has been created, placed or persisted.
     expect(added).toEqual([]);
     expect(changes).toEqual([]);
@@ -136,7 +127,7 @@ describe("a new division is a draft until it is saved", () => {
     fireEvent.change(titleField(), { target: { value: "My New Bit" } });
     expect(idField().value).toBe("sec-my-new-bit");
 
-    fireEvent.click(within(draftRow()).getByText("Save"));
+    fireEvent.click(within(draftRow()).getByText("Create"));
 
     expect(added).toHaveLength(1);
     expect(added[0].xmlId).toBe("sec-my-new-bit");
@@ -155,7 +146,7 @@ describe("a new division is a draft until it is saved", () => {
       const { added, changes } = renderEditors();
       addUnder("Main");
       fireEvent.change(idField(), { target: { value: "one" } });
-      fireEvent.click(within(draftRow()).getByText("Save"));
+      fireEvent.click(within(draftRow()).getByText("Create"));
 
       expect(alert).toHaveBeenCalledOnce();
       expect(draftRow()).toBeInTheDocument();
@@ -170,7 +161,7 @@ describe("a new division is a draft until it is saved", () => {
     const { added, sourceOf } = renderEditors();
     addUnder("One");
     fireEvent.change(titleField(), { target: { value: "Deeper" } });
-    fireEvent.click(within(draftRow()).getByText("Save"));
+    fireEvent.click(within(draftRow()).getByText("Create"));
 
     expect(added[0].type).toBe("subsection");
     expect(sourceOf("one")).toContain(

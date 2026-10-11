@@ -107,4 +107,40 @@ markDeleted(projected, "division", "55555555-5555-4555-8555-555555555555");
 markDeleted(projected, "asset", "66666666-6666-4666-8666-666666666666");
 writeFileSync(OUT + "projection_state.bin", Y.encodeStateAsUpdate(projected));
 
+// Snippets and assets as ProjectDocProjection reads them: each record's source
+// is shared text (a nested Y.Text), like a division's. One asset the project
+// knows, one it doesn't (an asset row is created by its upload, never by a
+// projection), and a snippet removed during the session.
+const records = new Y.Doc();
+seedDocFromState(records, {
+  title: "Records",
+  docinfo: "<docinfo/>",
+  divisions: [],
+  snippets: [
+    {
+      id: "77777777-7777-4777-8777-777777777777",
+      ref: "projected-note",
+      sourceFormat: "latex",
+      source: "A \\emph{projected} note.",
+    },
+  ],
+  assets: [
+    {
+      id: "88888888-8888-4888-8888-888888888888",
+      ref: "projected-plot",
+      title: "Projected Plot",
+      shortDescription: "A plot of the projection",
+      source: "<latex-image>p</latex-image>",
+    },
+    {
+      id: "99999999-9999-4999-8999-999999999999",
+      ref: "unknown-plot",
+      title: "Unknown Plot",
+      source: "<latex-image>u</latex-image>",
+    },
+  ],
+});
+markDeleted(records, "snippet", "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa");
+writeFileSync(OUT + "projection_records_state.bin", Y.encodeStateAsUpdate(records));
+
 console.log(`wrote collab fixtures to ${OUT}`);
