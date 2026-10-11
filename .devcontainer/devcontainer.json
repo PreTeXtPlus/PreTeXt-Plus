@@ -51,6 +51,21 @@
           "5173": { "label": "Vite (web-editor demo)", "onAutoForward": "silent" }
         }
       }
+    },
+    // The @pretextbook packages this app consumes are developed in
+    // pretext-tools, which is checked out alongside it. Without this, the
+    // Codespace's token reaches only this repository, so work there can be
+    // committed but not pushed. GitHub asks for approval when a Codespace is
+    // created.
+    "codespaces": {
+      "repositories": {
+        "PreTeXtBook/pretext-tools": {
+          "permissions": {
+            "contents": "write",
+            "pull_requests": "write"
+          }
+        }
+      }
     }
   },
 
