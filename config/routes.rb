@@ -78,6 +78,7 @@ Rails.application.routes.draw do
         post :publish
       end
     end
+    resources :workshops, except: :show
   end
 
   devise_for :users, skip: [ :registrations ], controllers: {
@@ -168,6 +169,9 @@ Rails.application.routes.draw do
       # wizard. On the collection, not a member: no project exists yet.
       post "pandoc" => "projects#pandoc", as: "pandoc"
       post "feedback" => "projects#feedback", as: "feedback"
+      # The editor's Import dialog mails us a pandoc conversion here when the
+      # author opts in to sharing it.
+      post "import_share" => "projects#import_share", as: "import_share"
       get "lunr-pretext-search-index.js", to: redirect("/ptx-search.js")
       get "*_/lunr-pretext-search-index.js", to: redirect("/ptx-search.js")
       get ":id/*_.html", to: redirect("/projects/%{id}/share")
@@ -180,6 +184,7 @@ Rails.application.routes.draw do
       # sync protocol.
       post "doc/seed" => "project_docs#seed", as: "seed_doc"
       post "doc/flush" => "project_docs#flush", as: "flush_doc"
+      get "doc/version" => "project_docs#version", as: "doc_version"
       get "share" => "projects#share", as: "share"
       get "source" => "projects#source", as: "share_source"
       get "share/source" => "projects#source", to: redirect("/projects/%{id}/source")

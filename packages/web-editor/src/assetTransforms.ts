@@ -34,17 +34,47 @@ function transformImageAsset(asset: Asset, ref: string): string {
   if (asset.isFile && !asset.fileRef && !asset.url) {
     return `<!-- image asset "${ref}" is marked as file-based but has no fileRef or url -->`;
   }
-  const sourceAttr = asset.isFile
-    ? ` source="${escapeAttribute(asset.fileRef || ref)}"`
-    : "";
-  const shortDescription = asset.shortDescription?.trim();
-  const shortDescriptionTag = shortDescription
-    ? `<shortdescription>${escapeText(shortDescription)}</shortdescription>`
-    : "";
-  const inner = [ shortDescriptionTag, asset.source?.trim() ].filter(Boolean).join("\n");
+  const sourceAttr = imageSourceAttr(asset, ref);
+  const inner = [ shortDescriptionTag(asset), asset.source?.trim() ]
+    .filter(Boolean)
+    .join("\n");
   return inner
     ? `<image${sourceAttr}>\n${inner}\n</image>`
     : `<image${sourceAttr}/>`;
+}
+
+/** The `<image>` element's ` source="..."` attribute, or `""` for a non-file asset. */
+function imageSourceAttr(asset: Asset, ref: string): string {
+  return asset.isFile
+    ? ` source="${escapeAttribute(asset.fileRef || ref)}"`
+    : "";
+}
+
+/** The auto-generated `<shortdescription>` child, or `""` when there's no alt text. */
+function shortDescriptionTag(asset: Asset): string {
+  const shortDescription = asset.shortDescription?.trim();
+  return shortDescription
+    ? `<shortdescription>${escapeText(shortDescription)}</shortdescription>`
+    : "";
+}
+
+/**
+ * The generated markup that surrounds an asset's authored `source` — the
+ * `<image>` opening tag (plus its `<shortdescription>` child, when there's alt
+ * text) and the closing `</image>` — as the lines the code editor shows, locked,
+ * around the source while the asset is open. Built from the same pieces as
+ * {@link transformImageAsset}, so what the author sees is what gets assembled.
+ */
+export function assetWrapperLines(asset: Asset): {
+  before: string[];
+  after: string[];
+} {
+  const opening = `<image${imageSourceAttr(asset, asset.ref ?? "")}>`;
+  const shortDescription = shortDescriptionTag(asset);
+  return {
+    before: shortDescription ? [opening, shortDescription] : [opening],
+    after: ["</image>"],
+  };
 }
 
 /**

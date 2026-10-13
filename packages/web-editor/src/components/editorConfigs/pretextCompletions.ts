@@ -43,36 +43,6 @@ const isInsideOpenTag = (text: string, lineNumber: number, column: number) => {
   return lastOpen > lastClose;
 };
 
-const maybeConsumeAutoClosedAngleBracket = (
-  model: any,
-  monaco: any,
-  range: any,
-  insertText: string,
-) => {
-  if (!range || !insertText.includes(">")) return range;
-
-  const maxColumn = model.getLineMaxColumn(range.endLineNumber);
-  if (range.endColumn >= maxColumn) return range;
-
-  const nextChar = model.getValueInRange(
-    new monaco.Range(
-      range.endLineNumber,
-      range.endColumn,
-      range.endLineNumber,
-      range.endColumn + 1,
-    ),
-  );
-
-  if (nextChar !== ">") return range;
-
-  return new monaco.Range(
-    range.startLineNumber,
-    range.startColumn,
-    range.endLineNumber,
-    range.endColumn + 1,
-  );
-};
-
 export const registerCodeEditorCompletions = (monaco: any) => {
   return monaco.languages.registerCompletionItemProvider("xml", {
     triggerCharacters: ["<", "@"],
@@ -102,7 +72,10 @@ export const registerCodeEditorCompletions = (monaco: any) => {
         const editRange = isTextEdit(item.textEdit)
           ? item.textEdit.range
           : item.textEdit?.insert;
-        const baseRange = editRange
+        // `<` isn't auto-closed (see `pretextLanguageConfig.ts`), so a `>`
+        // after the caret belongs to a real start tag, and the completions
+        // edit just that tag's name.
+        const range = editRange
           ? new monaco.Range(
               editRange.start.line + 1,
               editRange.start.character + 1,
@@ -111,12 +84,6 @@ export const registerCodeEditorCompletions = (monaco: any) => {
             )
           : undefined;
         const insertText = item.textEdit?.newText ?? item.insertText ?? label;
-        const range = maybeConsumeAutoClosedAngleBracket(
-          model,
-          monaco,
-          baseRange,
-          insertText,
-        );
 
         return {
           label,

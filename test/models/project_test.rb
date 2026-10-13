@@ -283,9 +283,19 @@ class ProjectTest < ActiveSupport::TestCase
 
   # --- Collaboration ---
 
+  # COLLAB PREVIEW CLEANUP (after Nov 1, 2026): unwrap the travel_to block.
   test "collaborator_limit follows the owner's subscription" do
-    assert_equal 1, projects(:one).collaborator_limit
-    assert_equal 5, Project.new(user: users(:subscribed)).collaborator_limit
+    travel_to Project::COLLABORATION_PREVIEW_ENDS do
+      assert_equal 1, projects(:one).collaborator_limit
+      assert_equal Float::INFINITY, Project.new(user: users(:subscribed)).collaborator_limit
+    end
+  end
+
+  # COLLAB PREVIEW CLEANUP (after Nov 1, 2026): delete this test.
+  test "collaborator_limit is unlimited for everyone during the collaboration preview" do
+    travel_to Project::COLLABORATION_PREVIEW_ENDS - 1.second do
+      assert_equal Float::INFINITY, projects(:one).collaborator_limit
+    end
   end
 
   test "editable_by? covers the owner and accepted collaborators only" do
@@ -368,6 +378,49 @@ class ProjectTest < ActiveSupport::TestCase
     end
 
     assert_not project.divisions.exists?(division.id)
+  end
+
+  test "a new project with no divisions gets a default root" do
+    project = Project.create!(user: users(:one), title: "Bare")
+
+    assert_equal 1, project.divisions.count
+    assert_equal "document", project.root_division.ref
+  end
+
+  test "a new project keeps the root it was given" do
+    project = Project.create!(user: users(:one), title: "Given",
+                              divisions_attributes: [ { ref: "main", is_root: true, source_format: :latex } ])
+
+    assert_equal [ "main" ], project.divisions.pluck(:ref)
+  end
+
+  test "a new project cannot have two roots" do
+    project = Project.new(user: users(:one), title: "Two",
+                          divisions_attributes: [ { ref: "a", is_root: true }, { ref: "b", is_root: true } ])
+
+    assert_not project.save
+    assert_includes project.errors[:divisions], "must include exactly one root division"
+  end
+
+  test "a nested update cannot demote the root division" do
+    project = projects(:one)
+    root = project.root_division
+
+    assert_not project.update(divisions_attributes: [ { id: root.id, is_root: false } ])
+    assert root.reload.is_root?
+  end
+
+  test "a nested _destroy never removes the root division" do
+    project = projects(:one)
+    root = project.root_division
+
+    stub_build_server do
+      project.reload.update!(divisions_attributes: [ { id: root.id, _destroy: true } ])
+      # The index-keyed hash a multipart form produces.
+      project.reload.update!(divisions_attributes: { "0" => { "id" => root.id, "_destroy" => "1" } })
+    end
+
+    assert project.divisions.exists?(root.id)
   end
 
   test "destroying an asset that is already gone is a no-op, not an error" do
@@ -505,9 +558,10 @@ class ProjectTest < ActiveSupport::TestCase
   end
 
   test "transfer_ownership_to! succeeds even when it leaves the new owner over their own collaborator_limit" do
-    # A subscriber's project (cap 5) fully staffed, including one free-tier
-    # collaborator. Transferring to that free-tier user (cap 1) must still
-    # succeed -- the swap doesn't grow the roster, it only changes whose
+    travel_to Project::COLLABORATION_PREVIEW_ENDS # COLLAB PREVIEW CLEANUP (after Nov 1, 2026): delete this line.
+    # A subscriber's project (uncapped) with five collaborators, including one
+    # free-tier collaborator. Transferring to that free-tier user (cap 1) must
+    # still succeed -- the swap doesn't grow the roster, it only changes whose
     # collaboration row is missing from it.
     project = Project.create!(user: users(:subscribed), title: "Team book")
     free_user = users(:one)

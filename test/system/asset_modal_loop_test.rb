@@ -1,7 +1,7 @@
 require "application_system_test_case"
 
 class AssetModalLoopTest < ApplicationSystemTestCase
-  test "asset manager modal opens without looping requests" do
+  test "the new-asset form opens without looping requests" do
     user = User.find_by(email: "one@example.com")
     project = user.projects.first
 
@@ -23,15 +23,14 @@ class AssetModalLoopTest < ApplicationSystemTestCase
     visit edit_project_path(project)
     open_explorer_view(:assets)
 
-    assert_selector "button[data-testid='toc-assets-btn']", text: "Manage", wait: 20
-    find("button[data-testid='toc-assets-btn']", text: "Manage").click
+    find("button[data-testid='toc-new-asset-btn']", wait: 20).click
 
-    assert_selector "[aria-label='Asset manager']", wait: 10
+    assert_selector "[data-testid='new-item-pane']", wait: 10
 
     sleep 6
 
     library_requests = request_log.count { |_, _, path| path.to_s.start_with?("/library") }
-    puts "total requests during modal-open window: #{request_log.size}, library: #{library_requests}"
+    puts "total requests during form-open window: #{request_log.size}, library: #{library_requests}"
     t0 = request_log.first&.first
     request_log.first(20).each { |t, m, p| puts "  +#{(t - t0).round(3)}s #{m} #{p}" }
     puts "  ... (#{request_log.size - 20} more)" if request_log.size > 20

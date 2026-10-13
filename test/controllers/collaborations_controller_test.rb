@@ -4,7 +4,7 @@ class CollaborationsControllerTest < ActionDispatch::IntegrationTest
   include ActiveJob::TestHelper
 
   setup do
-    @project = projects(:team) # subscribed owner (cap 5); has the :pending invite
+    @project = projects(:team) # subscribed owner (uncapped); has the :pending invite
     @owner = users(:subscribed)
   end
 
@@ -69,6 +69,7 @@ class CollaborationsControllerTest < ActionDispatch::IntegrationTest
   end
 
   test "invite over the cap is rejected with an alert" do
+    travel_to Project::COLLABORATION_PREVIEW_ENDS # COLLAB PREVIEW CLEANUP (after Nov 1, 2026): delete this line.
     sign_in users(:one) # free owner; fixture :accepted fills the cap on project one
 
     assert_no_difference("Collaboration.count") do

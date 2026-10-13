@@ -425,6 +425,19 @@ class ProjectsControllerTest < ActionDispatch::IntegrationTest
     assert_not Division.exists?(division.id)
   end
 
+  # Nested attributes bypass CanCan, so the controller enforces the Ability's
+  # rule itself -- by dropping the _destroy, not failing the save.
+  test "update ignores a _destroy for the root division" do
+    root = @project.root_division
+    assert_no_difference("@project.divisions.count") do
+      patch project_url(@project),
+        params: { project: { divisions_attributes: [ { id: root.id, _destroy: true } ] } },
+        as: :json
+    end
+    assert_response :success
+    assert Division.exists?(root.id)
+  end
+
   # The collaborative editor mints its own uuids and sends the division under
   # one, so a create no longer waits on this request to learn an id.
   test "update creates a division under a client-minted id" do
@@ -568,6 +581,12 @@ class ProjectsControllerTest < ActionDispatch::IntegrationTest
     end
 
     assert_redirected_to projects_url
+  end
+
+  test "destroying a project takes its root division with it" do
+    root = @project.root_division
+    delete project_url(@project)
+    assert_not Division.exists?(root.id)
   end
 
   test "non-owner cannot view project" do
@@ -1208,6 +1227,96 @@ class ProjectsControllerTest < ActionDispatch::IntegrationTest
     sign_out :user
     Net::HTTP.stub(:start, ->(*_args, **_kw) { flunk "should not reach the build server" }) do
       post pandoc_projects_url, params: { file: pandoc_upload }
+    end
+
+    assert_redirected_to new_user_session_path
+  end
+
+  # ── #import_share: a pandoc conversion the author shared from the editor ───
+
+  test "import_share mails the file and what it converted to" do
+    perform_enqueued_jobs do
+      post import_share_projects_url, params: {
+        file: pandoc_upload,
+        engine: "Pandoc",
+        context: "Editor import dialog",
+        pretext: "<pretext><article><p>Hi</p></article></pretext>",
+        project_url: "https://pretext.plus/projects/1"
+      }
+    end
+
+    assert_response :accepted
+    mail = ActionMailer::Base.deliveries.last
+    assert_equal [ "feedback@pretext.plus" ], mail.to
+    assert_equal "PreTeXt.Plus import conversion: import_sample.md", mail.subject
+    original = mail.attachments["import_sample.md"]
+    assert_includes original.decoded, "A Sample Document"
+    assert_equal "<pretext><article><p>Hi</p></article></pretext>",
+                 mail.attachments["import_sample.ptx"].decoded
+    assert_includes mail.text_part.decoded, @user.email
+    assert_includes mail.text_part.decoded, "https://pretext.plus/projects/1"
+    assert_includes mail.text_part.decoded, "Shared from: Editor import dialog"
+  end
+
+  # The wizard shares before any project exists, so there is no link to send.
+  test "import_share mails a share from the new-project wizard without a project link" do
+    perform_enqueued_jobs do
+      post import_share_projects_url, params: {
+        file: pandoc_upload, engine: "Pandoc", context: "New project import", pretext: "<pretext/>"
+      }
+    end
+
+    assert_response :accepted
+    text = ActionMailer::Base.deliveries.last.text_part.decoded
+    assert_includes text, "Shared from: New project import"
+    assert_not_includes text, "Project URL"
+  end
+
+  test "import_share mails a failed conversion with its error" do
+    perform_enqueued_jobs do
+      post import_share_projects_url, params: {
+        file: pandoc_upload, engine: "Pandoc", error: "Pandoc could not read this file."
+      }
+    end
+
+    mail = ActionMailer::Base.deliveries.last
+    assert_equal "PreTeXt.Plus import failure: import_sample.md", mail.subject
+    assert_includes mail.text_part.decoded, "Pandoc could not read this file."
+    assert_includes mail.text_part.decoded, "Converted PreTeXt: none"
+    assert_nil mail.attachments["import_sample.ptx"]
+  end
+
+  test "import_share names a file too large to attach instead of attaching it" do
+    Tempfile.create([ "large", ".docx" ]) do |file|
+      file.write("x" * (ProjectsController::IMPORT_SHARE_MAX_FILE_BYTES + 1))
+      file.flush
+
+      perform_enqueued_jobs do
+        post import_share_projects_url, params: {
+          file: Rack::Test::UploadedFile.new(file.path, "application/octet-stream"),
+          engine: "Pandoc",
+          pretext: "<pretext/>"
+        }
+      end
+    end
+
+    mail = ActionMailer::Base.deliveries.last
+    assert_match(/too large to attach/, mail.text_part.decoded)
+    assert_equal [ ".ptx" ], mail.attachments.reject(&:inline?).map { |a| File.extname(a.filename) }
+  end
+
+  test "import_share rejects a request with no file" do
+    assert_no_enqueued_emails do
+      post import_share_projects_url, params: { engine: "Pandoc", pretext: "<pretext/>" }
+    end
+
+    assert_response :bad_request
+  end
+
+  test "import_share requires authentication" do
+    sign_out :user
+    assert_no_enqueued_emails do
+      post import_share_projects_url, params: { file: pandoc_upload, pretext: "<pretext/>" }
     end
 
     assert_redirected_to new_user_session_path

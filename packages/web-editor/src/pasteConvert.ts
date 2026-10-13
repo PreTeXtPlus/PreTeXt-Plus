@@ -2,12 +2,20 @@
  * Paste LaTeX or Markdown into a PreTeXt division and have it arrive converted.
  *
  * Copying an exercise out of a LaTeX file and converting it afterwards is two
- * moves; this makes it one. The pure half — deciding whether a snippet is
- * convertible, and fitting the converted markup to where it lands — lives in
- * `@pretextbook/import` (`detectSnippetFormat`, `placeConvertedMarkup`) and is
- * shared with the VS Code extension, so both hosts place a paste identically.
- * What is here is the Monaco half: reading the placement context out of a text
- * model, and running the conversion.
+ * moves; this makes it one. The pure half — deciding whether the cursor is
+ * somewhere converted markup belongs, whether a snippet is convertible, and
+ * fitting the converted markup to where it lands — lives in
+ * `@pretextbook/import` (`pasteTargetAt`, `detectSnippetFormat`,
+ * `placeConvertedMarkup`) and is shared with the VS Code extension, so both
+ * hosts place a paste identically. What is here is the Monaco half: reading
+ * the paste target and placement context out of a text model, and running the
+ * conversion.
+ *
+ * Where the paste lands is asked before what it is. TikZ pasted into a
+ * `<latex-image>` is LaTeX by any measure, and exactly what belongs there; so
+ * is LaTeX pasted into an `<m>`, code into a `<program>`, or anything into a
+ * comment or attribute value. `pasteTargetAt` says so, and the paste then goes
+ * in plainly.
  *
  * `detectSnippetFormat`, not this package's own `detectSourceFormat`: the
  * latter asks "is this *file* a LaTeX document?" and keys on document furniture
@@ -31,8 +39,9 @@
  */
 import {
   detectSnippetFormat,
-  isInlineContext,
+  pasteTargetAt,
   placeConvertedMarkup,
+  type PasteTarget,
   type PlacedMarkup,
   type PlacementContext,
 } from "@pretextbook/import";
@@ -56,25 +65,42 @@ export interface PastePosition {
 }
 
 /**
+ * What the insertion point at `position` will take — see `pasteTargetAt`.
+ *
+ * The prefix walked is this division's source only, since that is all the
+ * model holds. Nothing is lost by that: a division is never nested inside math,
+ * verbatim content or a paragraph, so the elements that decide the answer are
+ * all ones the division itself opened.
+ */
+export function pasteTargetIn(
+  model: PasteContextModel,
+  position: PastePosition,
+): PasteTarget {
+  return pasteTargetAt(
+    model.getValueInRange({
+      startLineNumber: 1,
+      startColumn: 1,
+      endLineNumber: position.lineNumber,
+      endColumn: position.column,
+    }),
+  );
+}
+
+/**
  * Read the placement context out of `model` at `position`.
  *
- * The prefix walked for `inline` is this division's source only, since that is
- * all the model holds — which is more accurate than the whole-file walk the
- * VS Code host does, not less: a division's own paragraphs are the only ones
- * that can enclose its cursor.
+ * `inline` comes from `target` rather than a second walk of the prefix, so
+ * whether to convert and how to fit the result cannot disagree. It follows the
+ * schema, so a paste into a `<title>` or `<caption>` is placed inline rather
+ * than wrapped in a `<p>`.
  */
 export function placementContextAt(
   model: PasteContextModel,
   position: PastePosition,
+  target: PasteTarget,
 ): PlacementContext {
-  const prefix = model.getValueInRange({
-    startLineNumber: 1,
-    startColumn: 1,
-    endLineNumber: position.lineNumber,
-    endColumn: position.column,
-  });
   return {
-    inline: isInlineContext(prefix),
+    inline: target.inline,
     baseIndent:
       model.getLineContent(position.lineNumber).match(/^(\s*)/)?.[1] ?? "",
     // Monaco columns are 1-based, so column 1 is the start of the line. The
@@ -87,8 +113,10 @@ export function placementContextAt(
  * The PreTeXt to insert in place of `text`, or `undefined` to paste it plainly.
  *
  * `undefined` is the common answer and never an error: ordinary prose scores as
- * neither language, and a conversion that throws leaves the author's text
- * untouched rather than half-rewritten.
+ * neither language, a snippet already carrying XML markup is left as it is, a
+ * cursor inside math, verbatim content or a comment takes the text literally,
+ * and a conversion that throws leaves the author's text untouched rather than
+ * half-rewritten.
  *
  * A returned `warning` means the markup was inserted somewhere it is not valid
  * — a division landing inside a `<p>`. It is not repaired here, because it
@@ -102,6 +130,9 @@ export function convertPastedSnippet(
   model: PasteContextModel,
   position: PastePosition,
 ): PlacedMarkup | undefined {
+  const target = pasteTargetIn(model, position);
+  if (target.literal) return undefined;
+
   const format = detectSnippetFormat(text);
   if (!format) return undefined;
 
@@ -110,7 +141,7 @@ export function convertPastedSnippet(
 
   return placeConvertedMarkup(
     pretextSource,
-    placementContextAt(model, position),
+    placementContextAt(model, position, target),
   );
 }
 

@@ -21,7 +21,11 @@
 
 <h2 class="mt-8 font-mono text-xs font-semibold uppercase tracking-widest text-gray-500">
   Collaborators
-  (<%= collaborations.count %>/<%= project.collaborator_limit %>)
+  <% if project.collaborator_limit.finite? %>
+    (<%= collaborations.count %>/<%= project.collaborator_limit %>)
+  <% else %>
+    (<%= collaborations.count %>)
+  <% end %>
 </h2>
 
 <div class="mt-3">
@@ -87,6 +91,12 @@
       <% end %>
       <p class="mt-2 text-xs text-gray-500">
         Collaborators can write, build, and publish this project — everything except deleting it.
+        <%# COLLAB PREVIEW CLEANUP (after Nov 1, 2026): delete this if/end block
+            (it already renders nothing once the preview is over). %>
+        <% if Project.collaboration_preview? && !project.user.has_subscriber_benefits? %>
+          Unlimited collaborators is a subscriber feature, open to everyone as a preview through October 31.
+          Collaborators you add keep their access afterward.
+        <% end %>
       </p>
     <% else %>
       <p class="mt-3 text-sm text-gray-500">

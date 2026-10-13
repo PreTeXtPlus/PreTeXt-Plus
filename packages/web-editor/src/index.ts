@@ -17,10 +17,15 @@ export type {
   Asset,
   EditorContentChange,
   EditorContentState,
+  EditorDivisionContentChange,
+  EditorRecordSourceChange,
+  RecordKind,
   FeedbackSubmission,
   Snippet,
   SourceFormat,
 } from "./types/editor";
+// The same payload the import wizard hands its host, so one handler serves both.
+export type { ConversionShare } from "@pretextbook/import/react";
 export type {
   Division,
   DivisionType,
@@ -51,6 +56,8 @@ export {
   getOrphanRoots,
   buildDivisionTree,
   wrapDivisionForPreview,
+  assembleSnippetPreviewSource,
+  SNIPPET_PREVIEW_TITLE,
   // Division content utilities
   // TODO: update these to work for generic divisions, not just sections
   updateDivisionTitle,
@@ -93,6 +100,7 @@ export type { SnippetRow, SnippetStatus } from "./snippetView";
 // and the session types the `collaboration` prop expects. The host owns the
 // transport (creating, seeding, and syncing the Y.Doc with its server).
 export {
+  COLLAB_SCHEMA_VERSION,
   seedDocFromState,
   docToState,
   clearDeletions,
@@ -102,6 +110,8 @@ export {
   getMetaMap,
   getDeletedMap,
   getDivisionText,
+  getSnippetText,
+  getAssetText,
 } from "./collab/schema";
 export type {
   CollabAssetSnapshot,

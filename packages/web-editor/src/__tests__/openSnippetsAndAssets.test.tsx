@@ -1,0 +1,385 @@
+/**
+ * Snippets and assets open in the same code editor as divisions: clicking one
+ * in the explorer puts its source in the editor, the title bar names it, and
+ * its settings live in the drawer that bar drops down. These drive `Editors`
+ * end to end with the code editor and the preview stood in for.
+ *
+ * @vitest-environment jsdom
+ */
+import { afterEach, beforeEach, describe, it, expect, vi } from "vitest";
+import { forwardRef, useImperativeHandle } from "react";
+import { act, fireEvent, render, screen, within } from "@testing-library/react";
+import Editors from "../components/Editors";
+import type { Division } from "../types/sections";
+import type { Asset, EditorContentChange, Snippet } from "../types/editor";
+
+// Monaco loads itself from a CDN; a textarea reporting every change at once
+// stands in for it. `lockStructure` is surfaced so the buffer kind is visible.
+vi.mock("../components/CodeEditor", () => {
+  const Mock = forwardRef(
+    (
+      props: {
+        content: string;
+        sourceFormat: string;
+        lockStructure?: boolean;
+        onChange: (value: string | undefined) => void;
+      },
+      ref,
+    ) => {
+      useImperativeHandle(ref, () => ({
+        focus: () => {},
+        flushPendingChange: () => {},
+      }));
+      return (
+        <textarea
+          data-testid="code-editor"
+          data-format={props.sourceFormat}
+          data-locked={String(props.lockStructure ?? true)}
+          value={props.content}
+          onChange={(e) => props.onChange(e.target.value)}
+        />
+      );
+    },
+  );
+  return { __esModule: true, default: Mock };
+});
+
+vi.mock("../components/LivePreview", () => {
+  const Mock = forwardRef((props: { content: string; title?: string }) => (
+    <div
+      data-testid="live-preview"
+      data-content={props.content}
+      data-title={props.title}
+    />
+  ));
+  return { __esModule: true, default: Mock };
+});
+
+class ResizeObserverStub {
+  observe() {}
+  unobserve() {}
+  disconnect() {}
+}
+globalThis.ResizeObserver =
+  globalThis.ResizeObserver ?? (ResizeObserverStub as never);
+
+const divisions: Division[] = [
+  {
+    id: "1",
+    xmlId: "doc",
+    title: "Main",
+    type: "article",
+    sourceFormat: "pretext",
+    source:
+      '<article xml:id="doc">\n<title>Main</title>\n<p><plus:snippet ref="greeting"/></p>\n<plus:image ref="fig"/>\n</article>',
+  },
+];
+const snippet: Snippet = {
+  id: "s1",
+  ref: "greeting",
+  source: "<p>Hello</p>",
+  sourceFormat: "pretext",
+};
+const asset: Asset = {
+  id: "a1",
+  ref: "fig",
+  title: "A figure",
+  source: "<latex-image>x</latex-image>",
+};
+
+function renderEditors(overrides: Partial<Parameters<typeof Editors>[0]> = {}) {
+  const changes: EditorContentChange[] = [];
+  const snippetUpdates: Snippet[] = [];
+  const assetUpdates: Asset[] = [];
+  render(
+    <Editors
+      divisions={divisions}
+      rootDivisionId="doc"
+      projectType="article"
+      title="Doc"
+      topBar={{}}
+      projectSnippets={[snippet]}
+      projectAssets={[asset]}
+      onContentChange={(c) => changes.push(c)}
+      onSnippetUpdate={async (s) => {
+        snippetUpdates.push(s);
+      }}
+      onAssetUpdate={async (a) => {
+        assetUpdates.push(a);
+      }}
+      onPreviewRebuild={async () => ""}
+      {...overrides}
+    />,
+  );
+  return { changes, snippetUpdates, assetUpdates };
+}
+
+const editor = () => screen.getByTestId("code-editor") as HTMLTextAreaElement;
+const barTitle = () => screen.getByTestId("editor-target-title");
+
+function openSnippetRow(ref: string) {
+  fireEvent.click(screen.getByTestId("explorer-tab-snippets"));
+  fireEvent.click(within(screen.getByTestId(`snippet-row-${ref}`)).getByRole("button"));
+}
+
+function openAssetRow(ref: string) {
+  fireEvent.click(screen.getByTestId("explorer-tab-assets"));
+  fireEvent.click(within(screen.getByTestId(`asset-row-${ref}`)).getByRole("button"));
+}
+
+beforeEach(() => {
+  vi.useFakeTimers({ shouldAdvanceTime: true });
+});
+afterEach(() => {
+  vi.useRealTimers();
+});
+
+describe("opening a snippet", () => {
+  it("shows its source in the code editor, unlocked, under a bar naming it", () => {
+    renderEditors();
+    expect(barTitle()).toHaveTextContent("Main");
+    expect(editor().dataset.locked).toBe("true");
+
+    openSnippetRow("greeting");
+
+    expect(barTitle()).toHaveTextContent("greeting");
+    expect(editor().value).toBe("<p>Hello</p>");
+    expect(editor().dataset.locked).toBe("false");
+  });
+
+  it("previews the snippet inside a plain article titled \"snippet preview\"", () => {
+    renderEditors();
+    openSnippetRow("greeting");
+    const preview = screen.getByTestId("live-preview");
+    expect(preview.dataset.title).toBe("snippet preview");
+    expect(preview.dataset.content).toContain(
+      "<title>snippet preview</title>\n<p>Hello</p>\n</article>",
+    );
+  });
+
+  it("reports source edits as the snippet's content, not any division's", () => {
+    const { changes, snippetUpdates } = renderEditors();
+    openSnippetRow("greeting");
+
+    fireEvent.change(editor(), { target: { value: "<p>Hello there</p>" } });
+    fireEvent.change(editor(), { target: { value: "<p>Hello there!</p>" } });
+    expect(editor().value).toBe("<p>Hello there!</p>");
+    // Typing is content, for the host to save with the rest of its working
+    // copy; the metadata callback isn't involved.
+    expect(changes[changes.length - 1]).toEqual({
+      kind: "snippet",
+      id: snippet.id,
+      ref: "greeting",
+      source: "<p>Hello there!</p>",
+    });
+    expect(changes.every((c) => c.kind === "snippet")).toBe(true);
+    expect(snippetUpdates).toEqual([]);
+  });
+
+  it("flags a snippet the document doesn't use as not placed", () => {
+    const spare: Snippet = { id: "s2", ref: "spare", source: "", sourceFormat: "pretext" };
+    renderEditors({ projectSnippets: [snippet, spare] });
+    openSnippetRow("greeting");
+    expect(screen.getByTestId("editor-target-bar")).not.toHaveTextContent("not placed");
+    fireEvent.click(within(screen.getByTestId("snippet-row-spare")).getByRole("button"));
+    expect(screen.getByTestId("editor-target-bar")).toHaveTextContent("not placed");
+  });
+
+  it("keeps the open snippet's typing when the host resets the pool", () => {
+    // The Rails host answers a metadata write by re-fetching the project,
+    // which hands the editor a new `projectSnippets` — a reset — built from
+    // what it has heard. Text the open buffer holds must survive it, while
+    // the record's other fields are taken from the reset.
+    const props = {
+      divisions,
+      rootDivisionId: "doc",
+      projectType: "article" as const,
+      title: "Doc",
+      topBar: {},
+      projectAssets: [asset],
+      onContentChange: () => {},
+    };
+    const { rerender } = render(
+      <Editors {...props} projectSnippets={[snippet]} />,
+    );
+    openSnippetRow("greeting");
+    fireEvent.change(editor(), { target: { value: "<p>Typed.</p>" } });
+
+    rerender(
+      <Editors
+        {...props}
+        projectSnippets={[{ ...snippet, sourceFormat: "latex" }]}
+      />,
+    );
+    expect(editor().value).toBe("<p>Typed.</p>");
+    expect(
+      (screen.getByLabelText("Source format") as HTMLSelectElement).value,
+    ).toBe("latex");
+  });
+
+  it("renames its id from the drawer, rewriting every embed of it", async () => {
+    const { changes, snippetUpdates } = renderEditors();
+    openSnippetRow("greeting");
+
+    const idField = screen.getByLabelText("Id") as HTMLInputElement;
+    fireEvent.change(idField, { target: { value: "salutation" } });
+    await act(async () => {
+      fireEvent.keyDown(idField, { key: "Enter" });
+    });
+
+    // Persisted to the host first, then the placeholder follows.
+    expect(snippetUpdates[0]).toMatchObject({ ref: "salutation" });
+    const docChanges = changes.filter((c) => "xmlId" in c && c.xmlId === "doc");
+    const docSource = docChanges[docChanges.length - 1]?.source;
+    expect(docSource).toContain('<plus:snippet ref="salutation"/>');
+    // Still open, under its new name.
+    expect(barTitle()).toHaveTextContent("salutation");
+    expect(within(screen.getByTestId("settings-drawer")).getByTestId("settings-embed-code"))
+      .toHaveTextContent('<plus:snippet ref="salutation"/>');
+  });
+
+  it("returns to a division, and its preview, when one is selected", () => {
+    renderEditors();
+    openSnippetRow("greeting");
+    fireEvent.click(screen.getByTestId("explorer-tab-toc"));
+    fireEvent.click(screen.getByText("Main", { selector: '[data-testid="toc-title"]' }));
+    expect(barTitle()).toHaveTextContent("Main");
+    expect(editor().value).toContain('<article xml:id="doc">');
+    expect(screen.getByTestId("live-preview").dataset.content).not.toContain(
+      "snippet preview",
+    );
+  });
+});
+
+describe("opening an asset", () => {
+  it("shows its PreTeXt source and flags a missing short description", async () => {
+    const { assetUpdates } = renderEditors();
+    openAssetRow("fig");
+    expect(barTitle()).toHaveTextContent("A figure");
+    expect(editor().value).toBe("<latex-image>x</latex-image>");
+    expect(editor().dataset.format).toBe("pretext");
+    expect(screen.getByText("missing short description")).toBeInTheDocument();
+
+    const alt = screen.getByLabelText("Short description") as HTMLInputElement;
+    fireEvent.change(alt, { target: { value: "A plot" } });
+    await act(async () => {
+      fireEvent.blur(alt);
+    });
+    expect(assetUpdates[assetUpdates.length - 1]).toMatchObject({ ref: "fig", shortDescription: "A plot" });
+    expect(screen.queryByText("missing short description")).toBeNull();
+  });
+
+  it("reports source edits as the asset's content", () => {
+    const { changes, assetUpdates } = renderEditors();
+    openAssetRow("fig");
+    fireEvent.change(editor(), { target: { value: "<description>A plot</description>" } });
+    expect(changes[changes.length - 1]).toEqual({
+      kind: "asset",
+      id: asset.id,
+      ref: "fig",
+      source: "<description>A plot</description>",
+    });
+    expect(assetUpdates).toEqual([]);
+  });
+
+  it("shows an uploaded image and its file type in the preview panel, not the drawer", () => {
+    const photo: Asset = {
+      id: "a2",
+      ref: "photo",
+      title: "A photo",
+      isFile: true,
+      url: "https://example.com/photo.png",
+      fileRef: "photo.png",
+      contentType: "image/png",
+      shortDescription: "A photo",
+    };
+    renderEditors({ projectAssets: [asset, photo] });
+    openAssetRow("photo");
+
+    const preview = screen.getByTestId("asset-preview");
+    expect(within(preview).getByRole("img")).toHaveAttribute(
+      "src",
+      "https://example.com/photo.png",
+    );
+    expect(screen.getByTestId("asset-preview-type")).toHaveTextContent("image/png");
+    expect(screen.getByTestId("asset-preview-type")).toHaveTextContent("photo.png");
+
+    expect(within(screen.getByTestId("settings-drawer")).queryByRole("img")).toBeNull();
+  });
+
+  it("still shows the next asset's image after one fails to load", () => {
+    const image = (ref: string): Asset => ({
+      id: ref,
+      ref,
+      title: ref,
+      isFile: true,
+      url: `https://example.com/${ref}.png`,
+    });
+    renderEditors({ projectAssets: [image("broken"), image("fine")] });
+    openAssetRow("broken");
+    fireEvent.error(within(screen.getByTestId("asset-preview")).getByRole("img"));
+    expect(screen.getByTestId("asset-preview")).toHaveTextContent("couldn't be loaded");
+
+    // The Assets view is already showing; just pick the next row.
+    fireEvent.click(within(screen.getByTestId("asset-row-fine")).getByRole("button"));
+    expect(within(screen.getByTestId("asset-preview")).getByRole("img")).toBeVisible();
+  });
+
+  it("shows a placeholder for an authored asset, which has no image", () => {
+    renderEditors();
+    openAssetRow("fig");
+    expect(screen.getByTestId("asset-preview")).toHaveTextContent(
+      "Preview coming soon for authored assets.",
+    );
+    expect(screen.queryByTestId("live-preview")).toBeNull();
+  });
+});
+
+describe("the settings drawer", () => {
+  it("toggles from the bar and closes on Escape", () => {
+    renderEditors();
+    expect(screen.queryByTestId("settings-drawer")).toBeNull();
+    fireEvent.click(screen.getByTestId("settings-drawer-toggle"));
+    // A division's drawer is its properties form.
+    expect(
+      within(screen.getByTestId("settings-drawer")).getByDisplayValue("Main"),
+    ).toBeInTheDocument();
+    fireEvent.keyDown(window, { key: "Escape" });
+    expect(screen.queryByTestId("settings-drawer")).toBeNull();
+  });
+
+  it("closes when another item opens", () => {
+    renderEditors();
+    fireEvent.click(screen.getByTestId("settings-drawer-toggle"));
+    openSnippetRow("greeting");
+    expect(screen.queryByDisplayValue("Main")).toBeNull();
+  });
+
+  it("opens by default for a snippet or asset, and toggles", () => {
+    renderEditors();
+    openSnippetRow("greeting");
+    expect(screen.getByTestId("settings-drawer")).toBeInTheDocument();
+    fireEvent.click(screen.getByTestId("settings-drawer-toggle"));
+    expect(screen.queryByTestId("settings-drawer")).toBeNull();
+    fireEvent.click(screen.getByTestId("settings-drawer-toggle"));
+    fireEvent.keyDown(window, { key: "Escape" });
+    expect(screen.queryByTestId("settings-drawer")).toBeNull();
+
+    // Another record starts open again.
+    openAssetRow("fig");
+    expect(screen.getByTestId("settings-drawer")).toBeInTheDocument();
+  });
+
+  it("falls back to the root when the open snippet is removed", () => {
+    const confirm = vi.spyOn(window, "confirm").mockReturnValue(true);
+    try {
+      renderEditors({ onSnippetRemove: () => {} });
+      openSnippetRow("greeting");
+      fireEvent.click(screen.getByText("Remove from project"));
+      expect(barTitle()).toHaveTextContent("Main");
+      expect(editor().value).not.toContain("plus:snippet");
+    } finally {
+      confirm.mockRestore();
+    }
+  });
+});

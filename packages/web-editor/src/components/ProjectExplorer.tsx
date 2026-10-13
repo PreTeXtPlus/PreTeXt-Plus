@@ -29,12 +29,12 @@ const EXPLORER_VIEWS: {
 ];
 
 export interface ProjectExplorerProps {
-  /** When provided, shows the Manage/Add affordances in the Assets view. */
-  onOpenAssetPicker?: (initialTab?: "add") => void;
+  /** Offer "New asset" in the Assets view (the host keeps a project-asset pool). */
+  canCreateAssets?: boolean;
   /** If true, hides the Assets view entirely. */
   hideAssets?: boolean;
-  /** When provided, shows the Manage/Add affordances in the Snippets view. */
-  onOpenSnippetPicker?: (initialTab?: "add") => void;
+  /** Offer "New snippet" in the Snippets view (the host keeps a snippet pool). */
+  canCreateSnippets?: boolean;
   /** If true, hides the Snippets view entirely. */
   hideSnippets?: boolean;
   /** If true, hides every structural action (add/remove/edit/place a division). */
@@ -50,9 +50,9 @@ export interface ProjectExplorerProps {
  * their data from the editor store.
  */
 const ProjectExplorer = ({
-  onOpenAssetPicker,
+  canCreateAssets,
   hideAssets,
-  onOpenSnippetPicker,
+  canCreateSnippets,
   hideSnippets,
   readOnly,
   onJumpToMatch,
@@ -64,6 +64,7 @@ const ProjectExplorer = ({
   const divisions = useEditorStore((s) => s.divisions);
   const projectAssets = useEditorStore((s) => s.projectAssets) ?? [];
   const projectSnippets = useEditorStore((s) => s.projectSnippets) ?? [];
+  const startCreate = useEditorStore((s) => s.startCreate);
 
   const isHidden = (view: ExplorerView) =>
     (view === "snippets" && hideSnippets) || (view === "assets" && hideAssets);
@@ -88,6 +89,17 @@ const ProjectExplorer = ({
       : activeView === "assets"
         ? buildProjectAssetView(divisions, projectAssets).length
         : 0;
+
+  // The view's "new item" [+] button, right of its label — a project that
+  // keeps no pool for a kind has nothing to create one in.
+  const canCreateSnippet = !readOnly && !!canCreateSnippets;
+  const canCreateAsset = !readOnly && !!canCreateAssets;
+  const newItemKind =
+    activeView === "snippets" && canCreateSnippet
+      ? ("snippet" as const)
+      : activeView === "assets" && canCreateAsset
+        ? ("asset" as const)
+        : null;
 
   return (
     <div className="flex flex-row h-full shrink-0">
@@ -137,13 +149,36 @@ const ProjectExplorer = ({
                 {count}
               </span>
             )}
+            {newItemKind && (
+              <button
+                type="button"
+                data-testid={`toc-new-${newItemKind}-btn`}
+                className="ml-auto flex items-center justify-center w-6 h-6 p-0 border-none rounded-[3px] bg-transparent text-slate-600 cursor-pointer hover:bg-slate-200 hover:text-slate-800"
+                onClick={() => startCreate({ kind: newItemKind })}
+                aria-label={`New ${newItemKind}`}
+                title={`New ${newItemKind}`}
+              >
+                <svg
+                  width="16"
+                  height="16"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  aria-hidden="true"
+                >
+                  <path d="M12 5v14M5 12h14" />
+                </svg>
+              </button>
+            )}
           </div>
           {activeView === "toc" && <ArticleToc readOnly={readOnly} />}
           {activeView === "snippets" && (
-            <SnippetList onOpenSnippetPicker={onOpenSnippetPicker} />
+            <SnippetList canCreate={canCreateSnippet} />
           )}
           {activeView === "assets" && (
-            <AssetList onOpenAssetPicker={onOpenAssetPicker} />
+            <AssetList canCreate={canCreateAsset} />
           )}
           {activeView === "find" && (
             <FindReplacePanel

@@ -58,7 +58,7 @@ interface CodeEditorMenuProps {
   /** Called with the formatted content after a successful format operation. */
   onContentChange: (newContent: string) => void;
   /** Opens the Import dialog (outside material converted to PreTeXt). */
-  onOpenImport: () => void;
+  onOpenImport?: () => void;
   /**
    * Whether pasted LaTeX/Markdown is converted on the way in. Omitted for
    * formats where the question doesn't arise, which hides the menu item.
@@ -96,9 +96,9 @@ interface CodeEditorMenuProps {
    * Should be `false` when conversion has failed.
    */
   canConvertToPretext?: boolean;
-  /** If provided, an "Assets…" item is shown (PreTeXt mode only). */
+  /** If provided, a "New Asset…" item is shown (PreTeXt mode only). */
   onOpenAssets?: () => void;
-  /** If provided, a "Snippets…" item is shown (PreTeXt mode only). */
+  /** If provided, a "New Snippet…" item is shown (PreTeXt mode only). */
   onOpenSnippets?: () => void;
   /** Opens the assembled-source modal. */
   onShowFullSource: () => void;
@@ -281,6 +281,20 @@ const CodeEditorMenu: React.FC<CodeEditorMenuProps> = ({
         ]
       : [];
 
+  // The same as typing `<` over the selection: the element's name goes into
+  // both tags at once, with the completions open. PreTeXt only, since the
+  // action is registered with the PreTeXt typing shortcuts.
+  const wrapSelectionEntry: MenuEntry[] =
+    sourceFormat === "pretext"
+      ? [
+          separator("wrap"),
+          commandEntry(MONACO_COMMANDS.wrapSelection, run, {
+            title: "Wrap the selection in an element, typing its name into both tags at once",
+            disabled: !hasSelection,
+          }),
+        ]
+      : [];
+
   const findInProjectEntry: MenuEntry[] = onOpenFindInProject
     ? [
         {
@@ -332,6 +346,7 @@ const CodeEditorMenu: React.FC<CodeEditorMenuProps> = ({
         ),
         ...convertPasteEntry,
         selectAllEntry,
+        ...wrapSelectionEntry,
         separator("find"),
         commandEntry(MONACO_COMMANDS.find, run),
         commandEntry(MONACO_COMMANDS.replace, run),

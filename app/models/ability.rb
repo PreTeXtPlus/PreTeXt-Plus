@@ -20,6 +20,7 @@ class Ability
       end
     end
     can :unsubscribe, Announcement
+    can :read, Workshop
 
     can [ :source ], Project do |project|
       !project.private_visibility?

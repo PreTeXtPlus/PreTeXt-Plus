@@ -122,8 +122,8 @@ class BuildsControllerTest < ActionDispatch::IntegrationTest
     end
   end
 
-  # Same 5-vs-1 split as Project#collaborator_limit, proven end to end through the real
-  # build-starting path rather than just against User#max_concurrent_builds directly.
+  # User#max_concurrent_builds' 5-vs-1 split, proven end to end through the real
+  # build-starting path rather than just against the method directly.
   test "a subscriber may run more than one build at once" do
     sign_in users(:subscribed)
     project = projects(:public_project)

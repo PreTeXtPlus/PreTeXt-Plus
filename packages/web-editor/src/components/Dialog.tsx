@@ -8,8 +8,7 @@ import type {
   LabelHTMLAttributes,
 } from "react";
 
-// Shared chrome reused across the editor's modal dialogs (asset manager,
-// docinfo, full-source, convert-to-PreTeXt, feedback, LaTeX import). Each
+// Shared chrome reused across the editor's modal dialogs (docinfo, full-source, convert-to-PreTeXt, feedback, LaTeX import). Each
 // component here is a 1:1 translation of a class previously defined in
 // dialog.css; the wrapper accepts a `className` prop (merged via clsx) so
 // call sites can still layer on component-specific styling.

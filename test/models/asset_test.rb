@@ -30,7 +30,7 @@ class AssetTest < ActiveSupport::TestCase
     asset = assets(:image_one)
     # Mirrors a pasted clipboard image: the web-editor renames the file to a
     # bare, extensionless placeholder before it ever reaches the server (see
-    # AssetManagerModal's namePastedImageFile), so the filename can't be
+    # NewAssetForm's namePastedImageFile), so the filename can't be
     # trusted -- only the real content type can.
     asset.file.attach(
       io: File.open(Rails.root.join("test/fixtures/files/test_image.png")),

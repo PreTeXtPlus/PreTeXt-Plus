@@ -118,7 +118,7 @@ describe("ProjectExplorer", () => {
       nested,
       (store) => {
         store.getState().setIsTocCollapsed(false);
-        store.getState().setActiveDivisionId("sub");
+        store.getState().openDivision("sub");
       },
     );
     // Opened on load to show the active subsection; the author then shuts

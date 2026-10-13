@@ -69,6 +69,15 @@ export const MONACO_COMMANDS = {
   },
   foldAll: { id: "editor.foldAll", label: "Fold All" },
   unfoldAll: { id: "editor.unfoldAll", label: "Unfold All" },
+  // PreTeXt only: the action comes from `@pretextbook/typing-shortcuts`, and
+  // `editorConfigs/pretextConfig.ts` binds the shortcut to it. Alt+Shift+W is
+  // Sublime Text's "Wrap Selection With Tag"; Ctrl+W and Ctrl+Shift+W are out,
+  // since the browser closes the tab or window on them.
+  wrapSelection: {
+    id: "pretext.typingShortcuts.wrapSelection",
+    label: "Wrap Selection in Element…",
+    shortcut: "Alt+Shift+W",
+  },
 } as const satisfies Record<string, MonacoCommand>;
 
 /** True on macOS, where menu shortcuts read `⌘` rather than `Ctrl`. */

@@ -6,6 +6,7 @@ import {
   serializeProjectToPlusPayload,
 } from "@pretextbook/import";
 import { buildImportEngines } from "./importEngines";
+import { buildImportShare } from "./importShare";
 import "@pretextbook/import/react.css";
 
 /** @typedef {import("@pretextbook/import").ImportedProjectSuccess} ImportedProjectSuccess */
@@ -39,6 +40,21 @@ function ImportApp({ config }) {
   // land on a depth shallower than `importEngines.js` would pick. The engines
   // set the default they arrive at, which is the one that matters.
   const engines = useMemo(() => buildImportEngines(config), [config]);
+
+  // A "Share conversion" button beside a pandoc result or failure — the
+  // engine's `experimentalNotice` decides which conversions qualify. Unlike the
+  // editor's checkbox it comes after the fact, so the author decides having
+  // seen what came out. There is no project yet, so no project link.
+  const shareConversion = useMemo(
+    () => ({
+      label: "Share conversion",
+      description:
+        "Share this file and its conversion privately with pretext.plus " +
+        "developers to improve the service.",
+      onShare: buildImportShare({ context: "New project import", csrfToken }),
+    }),
+    [csrfToken],
+  );
 
   // `defaultImportMode` opens the review step on "Keep as LaTeX" (or Markdown)
   // rather than the wizard's own "Convert to PreTeXt" default: plus edits those
@@ -102,6 +118,7 @@ function ImportApp({ config }) {
       onConfirm={onConfirm}
       defaultImportMode="native"
       engines={engines}
+      shareConversion={shareConversion}
     />
   );
 }
