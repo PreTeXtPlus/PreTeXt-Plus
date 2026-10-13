@@ -36,16 +36,10 @@ class ProjectBackup
     return false unless @project.user&.has_subscriber_benefits?
 
     latest = backups_by_tier[:recent]
-    latest.nil? || last_edited_at > latest.backed_up_at
+    latest.nil? || @project.last_edited_at > latest.backed_up_at
   end
 
   private
-
-    # updated_at as well as source_updated_at: a title change is an edit an
-    # author would want back, even though it does not make a build stale.
-    def last_edited_at
-      [ @project.source_updated_at, @project.updated_at ].compact.max
-    end
 
     def backups_by_tier
       @backups_by_tier ||= @project.backups.index_by { |backup| backup.backup_tier.to_sym }

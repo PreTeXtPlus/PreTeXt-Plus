@@ -346,6 +346,18 @@ class TargetTest < ActiveSupport::TestCase
     assert target.stale?
   end
 
+  # The title goes to the builder, so renaming is an edit the build has not seen.
+  test "state is stale when the project was renamed after the successful build" do
+    target = targets(:one_print)
+    projects(:one).update_column(:source_updated_at, 2.days.ago)
+    build = target.builds.create!(created_at: 1.hour.ago)
+    build.mark!(:success)
+
+    projects(:one).update!(title: "A New Title")
+
+    assert_equal :stale, target.reload.state
+  end
+
   # Output the build server produced from a build it called a failure. It imports, but it
   # is not what readers see: that is the author's call, and until they make it the target
   # says so.

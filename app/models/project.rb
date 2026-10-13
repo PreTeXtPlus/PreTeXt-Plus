@@ -104,9 +104,9 @@ class Project < ApplicationRecord
   enum :backup_tier, BACKUP_TIERS.keys.each_with_index.to_h, prefix: :backup
 
   # Attributes a build actually consumes. Changing any of them makes every built target
-  # stale; changing `title` does not. Divisions and assets bump the same timestamp from
-  # their own `belongs_to ... touch:`.
-  SOURCE_ATTRIBUTES = %w[ docinfo use_common_docinfo document_type ].freeze
+  # stale; changing `visibility` or `description` does not. Divisions and assets bump the
+  # same timestamp from their own `belongs_to ... touch:`.
+  SOURCE_ATTRIBUTES = %w[ title language docinfo use_common_docinfo document_type publication_settings ].freeze
 
   # Slug omitted deliberately: Target derives "website" from this name like it does for
   # every other output, so there is one rule rather than one rule and an exception.
@@ -412,6 +412,13 @@ class Project < ApplicationRecord
     project.divisions.build(ref: "tryit-xml", source_format: :pretext, source: TRYIT_PRETEXT_SOURCE)
     project.divisions.build(ref: "tryit-markdown", source_format: :markdown, source: TRYIT_MARKDOWN_SOURCE)
     project
+  end
+
+  # The author's most recent edit of any kind. updated_at as well as source_updated_at:
+  # a description or visibility change is an edit an author would want back, even
+  # though it does not make a build stale.
+  def last_edited_at
+    [ source_updated_at, updated_at ].compact.max
   end
 
   private
