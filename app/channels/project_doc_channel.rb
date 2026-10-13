@@ -41,9 +41,7 @@ class ProjectDocChannel < ApplicationCable::Channel
 
   def subscribed
     project = Project.find_by(id: params[:project_id])
-    ability = Ability.new(current_user)
-    if project.nil? || ability.cannot?(:update, project) ||
-       !ProjectDoc.compatible?(params[:schema_version])
+    if project.nil? || !ProjectDoc.compatible?(params[:schema_version])
       reject
       return
     end
@@ -56,6 +54,12 @@ class ProjectDocChannel < ApplicationCable::Channel
   end
 
   private
+
+  # yrby-rails calls this from sync_subscribed and rejects the subscription
+  # unless it returns true; without it every subscription is refused.
+  def authorized?(_key)
+    Ability.new(current_user).can?(:update, @project)
+  end
 
   # Identify the connection in yrby's dropped-frame logs, which otherwise say
   # only that a frame was too big or unparseable.
