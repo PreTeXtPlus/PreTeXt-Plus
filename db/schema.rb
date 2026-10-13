@@ -233,6 +233,10 @@ ActiveRecord::Schema[8.1].define(version: 2026_10_13_120000) do
     t.uuid "user_id", null: false
     t.integer "visibility", default: 0, null: false
     t.string "root_element"
+    t.uuid "backup_of_id"
+    t.integer "backup_tier"
+    t.datetime "backed_up_at"
+    t.index ["backup_of_id", "backup_tier"], name: "index_projects_on_backup_of_id_and_backup_tier", unique: true
     t.index ["is_template"], name: "index_projects_on_is_template"
     t.index ["user_id", "visibility"], name: "index_projects_on_user_id_and_visibility"
     t.index ["user_id"], name: "index_projects_on_user_id"
@@ -371,6 +375,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_10_13_120000) do
   add_foreign_key "pay_charges", "pay_subscriptions", column: "subscription_id"
   add_foreign_key "pay_payment_methods", "pay_customers", column: "customer_id"
   add_foreign_key "pay_subscriptions", "pay_customers", column: "customer_id"
+  add_foreign_key "projects", "projects", column: "backup_of_id"
   add_foreign_key "projects", "users"
   add_foreign_key "snippets", "projects"
   add_foreign_key "subscription_seats", "pay_subscriptions"

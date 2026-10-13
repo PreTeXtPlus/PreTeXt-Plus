@@ -15,7 +15,9 @@ class Asset < ApplicationRecord
   # limit (subscription lapsed) keeps its existing assets rather than being
   # forced to delete them (see Collaboration#within_collaborator_limit for the
   # identical grandfathering rule).
-  validate :within_asset_quota, on: :create, if: -> { project.present? }
+  # Never for a backup's assets: taking a backup re-attaches blobs the account
+  # already holds, and must not fail -- or count -- against the cap.
+  validate :within_asset_quota, on: :create, if: -> { project.present? && !project.backup? }
 
   # Rails forces SVGs to download rather than display inline by default,
   # since an SVG can carry a <script> (a stored-XSS precaution). This asset's

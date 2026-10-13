@@ -176,14 +176,33 @@ class ProjectTest < ActiveSupport::TestCase
     assert_operator project.reload.source_updated_at, :>, 1.minute.ago
   end
 
-  # The reason this is a separate column rather than a fix to updated_at: renaming must
-  # not mark every built target stale.
-  test "renaming a project does not bump source_updated_at" do
+  # The title goes to the builder, so renaming is an edit a build has not seen.
+  test "renaming a project bumps source_updated_at" do
+    project = projects(:one)
+    project.update_column(:source_updated_at, 3.days.ago)
+
+    project.update!(title: "A New Title")
+
+    assert_operator project.reload.source_updated_at, :>, 1.minute.ago
+  end
+
+  test "changing a project's publication settings bumps source_updated_at" do
+    project = projects(:one)
+    project.update_column(:source_updated_at, 3.days.ago)
+
+    project.update!(publication_settings: { "theme" => "salem" })
+
+    assert_operator project.reload.source_updated_at, :>, 1.minute.ago
+  end
+
+  # The reason this is a separate column rather than a fix to updated_at: a description
+  # change must not mark every built target stale.
+  test "changing a project's description does not bump source_updated_at" do
     project = projects(:one)
     was = 3.days.ago.change(usec: 0)
     project.update_column(:source_updated_at, was)
 
-    project.update!(title: "A New Title")
+    project.update!(description: "A new description")
 
     assert_equal was, project.reload.source_updated_at
   end
@@ -531,6 +550,16 @@ class ProjectTest < ActiveSupport::TestCase
     demoted = project.collaborations.find_by!(user: users(:one))
     assert demoted.accepted?
     assert_equal users(:one).email, demoted.invited_email
+  end
+
+  test "transfer_ownership_to! moves the project's backups to the new owner" do
+    project = projects(:one)
+    users(:one).update!(admin: true)
+    backup = ProjectBackup.new(project).rotate!
+
+    assert project.transfer_ownership_to!(users(:two))
+
+    assert_equal users(:two), backup.reload.user
   end
 
   test "transfer_ownership_to! is a no-op when handing the project to its current owner" do
