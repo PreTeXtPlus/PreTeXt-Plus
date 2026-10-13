@@ -45,13 +45,13 @@ class PagesControllerTest < ActionDispatch::IntegrationTest
 
   test "home banner labels a free workshop as free" do
     get root_path
-    assert_select "#homepage-workshop span", text: "Free"
+    assert_select "#homepage-workshop span", text: "free"
   end
 
   test "home banner does not label a paid workshop as free" do
     workshops(:upcoming).update!(free: false)
     get root_path
-    assert_select "#homepage-workshop span", text: "Free", count: 0
+    assert_select "#homepage-workshop span", text: "free", count: 0
   end
 
   test "home has no workshop banner when only past workshops exist" do
