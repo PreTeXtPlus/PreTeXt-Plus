@@ -162,4 +162,16 @@ class AbilityTest < ActiveSupport::TestCase
     assert ability.can?(:copy, project)
     assert ability.can?(:source, project)
   end
+
+  test "anyone can read workshops but only admins manage them" do
+    workshop = workshops(:upcoming)
+    assert Ability.new(nil).can?(:read, workshop)
+    assert Ability.new(users(:one)).can?(:read, workshop)
+    assert_not Ability.new(users(:one)).can?(:create, Workshop)
+    assert_not Ability.new(users(:one)).can?(:update, workshop)
+    assert_not Ability.new(users(:one)).can?(:destroy, workshop)
+
+    users(:one).update!(admin: true)
+    assert Ability.new(users(:one)).can?(:manage, workshop)
+  end
 end

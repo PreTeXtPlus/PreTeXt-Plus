@@ -1,0 +1,14 @@
+upcoming:
+  title: "Getting Started with PreTeXt"
+  start_time: <%= 3.days.from_now %>
+  link: "https://example.com/workshops/getting-started"
+
+later:
+  title: "Advanced PreTeXt Publishing"
+  start_time: <%= 10.days.from_now %>
+  link: "https://example.com/workshops/advanced"
+
+past:
+  title: "Past PreTeXt Workshop"
+  start_time: <%= 2.days.ago %>
+  link: "https://example.com/workshops/past"

@@ -78,6 +78,7 @@ Rails.application.routes.draw do
         post :publish
       end
     end
+    resources :workshops, except: :show
   end
 
   devise_for :users, skip: [ :registrations ], controllers: {

@@ -33,4 +33,35 @@ class PagesControllerTest < ActionDispatch::IntegrationTest
     assert_response :success
     assert_select "#homepage-announcement", false
   end
+
+  test "home banners the next upcoming workshop and links to its sign-up page" do
+    get root_path
+    assert_select "#homepage-workshop" do
+      assert_select "p", text: /#{Regexp.escape(workshops(:upcoming).title)}/
+      assert_select "a[href=?]", workshops(:upcoming).link, text: /Sign up/
+    end
+    assert_not_includes response.body, workshops(:later).title
+  end
+
+  test "home has no workshop banner when only past workshops exist" do
+    Workshop.upcoming.destroy_all
+    get root_path
+    assert_select "#homepage-workshop", false
+    assert_not_includes response.body, workshops(:past).title
+  end
+
+  test "home shows announcement and workshop banners together" do
+    get root_path
+    assert_select "#homepage-banners" do
+      assert_select "#homepage-announcement"
+      assert_select "#homepage-workshop"
+    end
+  end
+
+  test "home has no banner wrapper when there is nothing to banner" do
+    Announcement.update_all(show_on_homepage: false)
+    Workshop.upcoming.destroy_all
+    get root_path
+    assert_select "#homepage-banners", false
+  end
 end
