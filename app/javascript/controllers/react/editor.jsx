@@ -14,6 +14,7 @@ import {
   DEFAULT_LANGUAGE,
 } from "@pretextbook/web-editor";
 import { buildImportEngines } from "./importEngines";
+import { buildImportShare } from "./importShare";
 import { CollabOutdatedError, YCableProvider } from "./collab/yCableProvider";
 import { reportCollabIncident } from "./collab/reportIncident";
 import {
@@ -1467,6 +1468,19 @@ function EditorApp({ config }) {
     [feedbackUrl, csrfToken],
   );
 
+  // A pandoc conversion from Tools → Import… that the author ticked "Share
+  // conversion privately…" for. The dialog does not wait on it and only logs a
+  // failure; the wizard shares through the same function (see importShare.js).
+  const onImportShare = useMemo(
+    () =>
+      buildImportShare({
+        context: "Editor import dialog",
+        csrfToken,
+        projectUrl: feedbackProjectUrl,
+      }),
+    [csrfToken, feedbackProjectUrl],
+  );
+
   // The `projectAssets` prop seeds the editor's pool on mount and acts as an
   // external reset channel thereafter: a new array *identity* is treated as
   // authoritative and overwrites the editor's working pool.  So we memoize on
@@ -1627,6 +1641,7 @@ function EditorApp({ config }) {
         }}
         onContentChange={onContentChange}
         importEngines={importEngines}
+        onImportShare={onImportShare}
         onDivisionAdd={onDivisionAdd}
         onDivisionRemove={onDivisionRemove}
         onDivisionUpdate={onDivisionUpdate}
