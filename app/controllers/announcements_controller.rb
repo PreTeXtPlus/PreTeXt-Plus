@@ -5,7 +5,7 @@ class AnnouncementsController < ApplicationController
   def index
     @announcements = Announcement.published
     @announcements = @announcements.where(paid_subscribers_only: false) unless current_user&.subscribed? || current_user&.admin?
-    @upcoming_workshops = Workshop.upcoming
+    @upcoming_workshops = Workshop.upcoming.limit(3)
   end
 
   def show

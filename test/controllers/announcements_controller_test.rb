@@ -43,6 +43,14 @@ class AnnouncementsControllerTest < ActionDispatch::IntegrationTest
     assert_includes response.body, workshops(:later).title
   end
 
+  test "index lists only the next three upcoming workshops" do
+    Workshop.create!(title: "Third Workshop", start_time: 20.days.from_now, link: "https://example.com/3")
+    Workshop.create!(title: "Fourth Workshop", start_time: 30.days.from_now, link: "https://example.com/4")
+    get announcements_path
+    assert_includes response.body, "Third Workshop"
+    assert_not_includes response.body, "Fourth Workshop"
+  end
+
   test "index does not list past workshops" do
     get announcements_path
     assert_not_includes response.body, workshops(:past).title
