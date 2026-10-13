@@ -35,6 +35,6 @@ class Admin::WorkshopsController < Admin::BaseController
   private
 
   def workshop_params
-    params.require(:workshop).permit(:title, :start_time, :link)
+    params.require(:workshop).permit(:title, :start_time, :link, :free)
   end
 end

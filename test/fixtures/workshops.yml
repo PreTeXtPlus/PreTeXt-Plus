@@ -2,6 +2,7 @@ upcoming:
   title: "Getting Started with PreTeXt"
   start_time: <%= 3.days.from_now %>
   link: "https://example.com/workshops/getting-started"
+  free: true
 
 later:
   title: "Advanced PreTeXt Publishing"

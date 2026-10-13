@@ -332,6 +332,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_10_13_120000) do
     t.string "title", null: false
     t.datetime "start_time", null: false
     t.string "link", null: false
+    t.boolean "free", default: false, null: false
     t.datetime "created_at", null: false
     t.datetime "updated_at", null: false
     t.index ["start_time"], name: "index_workshops_on_start_time"

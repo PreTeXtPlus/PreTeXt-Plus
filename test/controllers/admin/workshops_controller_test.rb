@@ -68,6 +68,13 @@ class Admin::WorkshopsControllerTest < ActionDispatch::IntegrationTest
     assert_equal "Updated", workshops(:upcoming).reload.title
   end
 
+  test "update can mark a workshop as free" do
+    sign_in @admin
+    patch admin_workshop_path(workshops(:later)), params: { workshop: { free: "1" } }
+    assert_redirected_to admin_workshops_path
+    assert workshops(:later).reload.free?
+  end
+
   test "update with invalid params re-renders edit" do
     sign_in @admin
     patch admin_workshop_path(workshops(:upcoming)), params: { workshop: { link: "" } }
