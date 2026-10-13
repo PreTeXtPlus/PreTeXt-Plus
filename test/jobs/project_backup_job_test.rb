@@ -15,7 +15,7 @@ class ProjectBackupJobTest < ActiveJob::TestCase
 
   test "skips projects not edited lately" do
     project = projects(:team)
-    project.update_columns(updated_at: 1.hour.ago, source_updated_at: 1.hour.ago)
+    project.update_column(:source_updated_at, 1.hour.ago)
 
     ProjectBackupJob.perform_now
 
@@ -24,7 +24,7 @@ class ProjectBackupJobTest < ActiveJob::TestCase
 
   test "does not back up again until the project changes" do
     project = projects(:team)
-    project.touch
+    project.touch(:source_updated_at)
     ProjectBackupJob.perform_now
     travel 10.minutes
 

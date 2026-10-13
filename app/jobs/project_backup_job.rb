@@ -14,7 +14,7 @@ class ProjectBackupJob < ApplicationJob
   LOOKBACK = 15.minutes
 
   def perform
-    Project.unscope(:order).where(updated_at: LOOKBACK.ago..).includes(:user).find_each do |project|
+    Project.unscope(:order).where(source_updated_at: LOOKBACK.ago..).includes(:user).find_each do |project|
       ProjectBackup.new(project).rotate!
     rescue StandardError => e
       # One project that will not back up must not stop the rest.

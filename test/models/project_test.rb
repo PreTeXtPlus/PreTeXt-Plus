@@ -196,17 +196,15 @@ class ProjectTest < ActiveSupport::TestCase
   end
 
   # The reason this is a separate column rather than a fix to updated_at: a description
-  # change must not mark every built target stale -- but it is still an edit, so it
-  # moves last_edited_at, which backups read.
-  test "changing a project's description bumps last_edited_at but not source_updated_at" do
+  # change must not mark every built target stale.
+  test "changing a project's description does not bump source_updated_at" do
     project = projects(:one)
     was = 3.days.ago.change(usec: 0)
-    project.update_columns(source_updated_at: was, updated_at: was)
+    project.update_column(:source_updated_at, was)
 
     project.update!(description: "A new description")
 
     assert_equal was, project.reload.source_updated_at
-    assert_operator project.last_edited_at, :>, 1.minute.ago
   end
 
   # ---- default target ----

@@ -36,7 +36,7 @@ class ProjectBackup
     return false unless @project.user&.has_subscriber_benefits?
 
     latest = backups_by_tier[:recent]
-    latest.nil? || @project.last_edited_at > latest.backed_up_at
+    latest.nil? || @project.source_updated_at > latest.backed_up_at
   end
 
   private

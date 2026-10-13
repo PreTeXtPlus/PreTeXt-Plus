@@ -414,13 +414,6 @@ class Project < ApplicationRecord
     project
   end
 
-  # The author's most recent edit of any kind. updated_at as well as source_updated_at:
-  # a description or visibility change is an edit an author would want back, even
-  # though it does not make a build stale.
-  def last_edited_at
-    [ source_updated_at, updated_at ].compact.max
-  end
-
   private
 
     # Rails' nested attributes assume every id it is handed came from the
