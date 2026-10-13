@@ -7,6 +7,7 @@ class PagesController < ApplicationController
     end
     @subscription_types = SubscriptionType.order(:order)
     @homepage_announcement = Announcement.homepage_banner
+    @next_workshop = Workshop.next_upcoming
     render layout: false
   end
 end

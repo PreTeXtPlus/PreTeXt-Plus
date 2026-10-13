@@ -75,11 +75,26 @@
 
     <!-- Start block -->
     <%# The clearance under the fixed nav sits on the section, not on the grid below, so
-        it applies to whatever comes first inside -- the announcement banner when an admin
-        has flagged one, the hero otherwise. %>
+        it applies to whatever comes first inside -- the banners when there is an announcement
+        flagged or a workshop coming up, the hero otherwise. %>
     <section id="home" class="bg-gray-50 dark:bg-gray-900 pt-20 lg:pt-28">
-        <% if @homepage_announcement.present? %>
-            <%= render "pages/announcement_banner", announcement: @homepage_announcement %>
+        <%# Side by side from lg up when both are present; a lone banner fills the row. %>
+        <% if @homepage_announcement.present? || @next_workshop.present? %>
+            <div id="homepage-banners" class="flex flex-col max-w-screen-xl gap-4 px-4 pb-6 mx-auto lg:flex-row">
+                <% if @homepage_announcement.present? %>
+                    <%= render "pages/announcement_banner", announcement: @homepage_announcement %>
+                <% end %>
+                <% if @next_workshop.present? %>
+                    <%= render "pages/workshop_banner", workshop: @next_workshop %>
+                <% end %>
+            </div>
+            <script>
+                function dismissHomepageBanner(button) {
+                    const banners = document.getElementById("homepage-banners");
+                    button.closest("[role=status]").remove();
+                    if (!banners.querySelector("[role=status]")) banners.remove();
+                }
+            </script>
         <% end %>
         <div class="grid max-w-screen-xl px-4 pb-8 mx-auto lg:gap-8 xl:gap-0 lg:pb-16 lg:grid-cols-12">
             <div class="mr-auto place-self-center lg:col-span-7">

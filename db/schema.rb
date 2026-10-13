@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_10_02_120000) do
+ActiveRecord::Schema[8.1].define(version: 2026_10_13_120000) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
   enable_extension "pgcrypto"
@@ -326,6 +326,16 @@ ActiveRecord::Schema[8.1].define(version: 2026_10_02_120000) do
     t.index ["privacy_id"], name: "index_users_on_privacy_id"
     t.index ["reset_password_token"], name: "index_users_on_reset_password_token", unique: true
     t.index ["tos_id"], name: "index_users_on_tos_id"
+  end
+
+  create_table "workshops", id: :uuid, default: -> { "gen_random_uuid()" }, force: :cascade do |t|
+    t.string "title", null: false
+    t.datetime "start_time", null: false
+    t.string "link", null: false
+    t.boolean "free", default: false, null: false
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["start_time"], name: "index_workshops_on_start_time"
   end
 
   create_table "y_document_updates", force: :cascade do |t|
