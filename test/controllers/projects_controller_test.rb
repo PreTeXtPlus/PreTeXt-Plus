@@ -1379,7 +1379,7 @@ class ProjectsControllerTest < ActionDispatch::IntegrationTest
   test "dashboard offers backups to an unsubscribed owner" do
     get project_url(@project)
     assert_response :success
-    assert_match "Subscribers' projects are backed up automatically", response.body
+    assert_select "p", text: /Subscribe\s+to turn them on\./
   end
 
   private
