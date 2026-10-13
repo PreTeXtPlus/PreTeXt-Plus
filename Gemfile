@@ -5,7 +5,7 @@ gem "rails", "~> 8.1.1"
 # The modern asset pipeline for Rails [https://github.com/rails/propshaft]
 gem "propshaft"
 # Use postgres as the database for Active Record
-gem "pg", "~> 1.6"
+gem "pg", "~> 1.7"
 # Use the Puma web server [https://github.com/puma/puma]
 gem "puma", ">= 8.0.2"
 # Use JavaScript with ESM import maps [https://github.com/rails/importmap-rails]
@@ -32,8 +32,8 @@ gem "solid_cable"
 # behind ProjectDocChannel. Pinned tightly because both are pre-1.0, and what
 # they carry -- the CRDT every collaborative session's text lives in -- is not
 # something to let a minor bump change under us.
-gem "yrby", "~> 0.7.1"
-gem "yrby-rails", "~> 0.6.1"
+gem "yrby", "~> 0.8.1"
+gem "yrby-rails", "~> 0.7.0"
 
 # Reduces boot times through caching; required in config/boot.rb
 gem "bootsnap", require: false
@@ -45,7 +45,7 @@ gem "kamal", require: false
 gem "thruster", require: false
 
 # Use Active Storage variants [https://guides.rubyonrails.org/active_storage_overview.html#transforming-images]
-gem "image_processing", "~> 2.1"
+gem "image_processing", "~> 2.2"
 gem "ruby-vips", "~> 2.2"
 
 # Guards against SSRF when fetching user-supplied URLs server-side [https://github.com/arkadiyt/ssrf_filter]
@@ -81,15 +81,15 @@ gem "tailwindcss-rails", "~> 4.4"
 
 gem "jsbundling-rails", "~> 1.3"
 
-gem "stripe", "~> 19.6"
+gem "stripe", "~> 20.0"
 
 gem "postmark-rails", "~> 0.22"
 
-gem "pay", "~> 12.1"
+gem "pay", "~> 12.2"
 
 gem "commonmarker", "~> 2.8"
 
-gem "aws-sdk-s3", "~> 1.225"
+gem "aws-sdk-s3", "~> 1.233"
 
 gem "cancancan", "~> 3.6"
 
