@@ -1335,7 +1335,7 @@ class ProjectsControllerTest < ActionDispatch::IntegrationTest
     assert_redirected_to project_url(restored)
     assert restored.private_visibility?
     assert_not restored.backup?
-    assert_equal project.divisions.pluck(:ref).sort, restored.divisions.pluck(:ref).sort
+    assert_equal backup.divisions.pluck(:ref).sort, restored.divisions.pluck(:ref).sort
   end
 
   test "restore_backup still works after the owner's subscription lapses" do
