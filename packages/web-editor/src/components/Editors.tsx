@@ -939,9 +939,14 @@ const EditorsInner = (props: EditorsInnerProps) => {
     );
   }, [activeDivision?.xmlId, divisionActiveSource]);
 
-  // Per-division line maps for the document currently on screen. Built lazily
-  // — only a click needs them, and only a cross-division click needs more than
-  // one — and discarded whenever the previewed document changes.
+  // Per-division line maps for the text currently rendered. Built lazily —
+  // only a click needs them, and only a cross-division click needs more than
+  // one — and discarded whenever the rendered text changes. Keyed on and built
+  // against `previewSource`, the text the renderer was handed, because that is
+  // what the source map's lines count from: for a division in context that is
+  // the bare fragment, not the wrapped document, and building against the
+  // wrapper put every click as many lines out as the `<pretext>`, docinfo and
+  // `<article>` lines in front of it.
   const divisionMapCacheRef = useRef<{
     key: string;
     maps: Map<string, PreviewLineMap>;
@@ -2357,7 +2362,7 @@ const EditorsInner = (props: EditorsInnerProps) => {
     assembledLine: number;
     elementId: string;
   }) => {
-    if (!previewContent) return;
+    if (!previewSource) return;
 
     const owner = divisionForElementId(elementId, (xmlId) =>
       divisions.some((d) => d.xmlId === xmlId),
@@ -2367,13 +2372,13 @@ const EditorsInner = (props: EditorsInnerProps) => {
     const targetId = owner ?? activeDivision?.xmlId;
     if (!targetId) return;
 
-    if (divisionMapCacheRef.current.key !== previewContent) {
-      divisionMapCacheRef.current = { key: previewContent, maps: new Map() };
+    if (divisionMapCacheRef.current.key !== previewSource) {
+      divisionMapCacheRef.current = { key: previewSource, maps: new Map() };
     }
     let map = divisionMapCacheRef.current.maps.get(targetId);
     if (!map) {
       const source = divisions.find((d) => d.xmlId === targetId)?.source ?? "";
-      map = buildPreviewLineMap(source, previewContent);
+      map = buildPreviewLineMap(source, previewSource);
       divisionMapCacheRef.current.maps.set(targetId, map);
     }
     // A converted division (LaTeX, Markdown) shares no lines with its rendered

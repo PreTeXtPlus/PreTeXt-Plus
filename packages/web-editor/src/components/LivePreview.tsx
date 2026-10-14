@@ -329,6 +329,32 @@ function defaultPreviewToLight(): void {
   }
 }
 
+/**
+ * Where the author's last choice of layout for a printout — on paper, or the
+ * web view — is remembered. An author who opens worksheets to lay them out
+ * wants paper every time; one who is writing the questions wants the page
+ * that updates as they type, and should not have to leave print preview on
+ * every worksheet they open.
+ */
+const PRINT_LAYOUT_KEY = "pretext-plus:preview-print-layout";
+
+/** Whether to open a printout division on paper: the remembered choice, else not. */
+function prefersPrintLayout(): boolean {
+  try {
+    return localStorage.getItem(PRINT_LAYOUT_KEY) === "print";
+  } catch {
+    return false;
+  }
+}
+
+function rememberPrintLayout(onPaper: boolean): void {
+  try {
+    localStorage.setItem(PRINT_LAYOUT_KEY, onPaper ? "print" : "web");
+  } catch {
+    // Storage blocked — the choice just doesn't outlive this session.
+  }
+}
+
 /** Zoom steps for a slideshow, coarse enough that a click is visible. */
 const REVEAL_ZOOM_STEP = 0.25;
 const REVEAL_ZOOM_MIN = 0.25;
@@ -513,12 +539,15 @@ const LivePreview = forwardRef<LivePreviewHandle, LivePreviewProps>(
             setRenderTarget(target);
             setPrintouts(printouts);
             if (renderedDivision.current !== divisionId) {
-              // A division the author has just switched to. Open it on paper
-              // when the division *is* a printout — editing `worksheet-3.ptx`,
-              // where the paper layout is the whole point — and on screen when
-              // it merely contains some.
+              // A division the author has just switched to. A division that
+              // *is* a printout — `worksheet-3.ptx` itself, not a chapter
+              // that holds some — opens on paper only if that is how the
+              // author last chose to see one (see PRINT_LAYOUT_KEY); the web
+              // view, which follows their typing, is the default.
               renderedDivision.current = divisionId;
-              setPrintoutId(rootPrintout ?? null);
+              setPrintoutId(
+                rootPrintout && prefersPrintLayout() ? rootPrintout : null,
+              );
             } else {
               // Same division, edited: the printout being shown may have just
               // been renamed or deleted out from under the selection.
@@ -862,9 +891,11 @@ const LivePreview = forwardRef<LivePreviewHandle, LivePreviewProps>(
                 aria-label="Preview layout"
                 title="Lay a worksheet or handout out for print, with each workspace at the height the author asked for"
                 value={printoutId ?? ""}
-                onChange={(event) =>
-                  setPrintoutId(event.target.value || null)
-                }
+                onChange={(event) => {
+                  const chosen = event.target.value || null;
+                  setPrintoutId(chosen);
+                  rememberPrintLayout(chosen !== null);
+                }}
               >
                 <option value="">Web view</option>
                 <optgroup label="Print preview">

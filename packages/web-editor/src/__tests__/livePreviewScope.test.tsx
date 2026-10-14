@@ -51,6 +51,43 @@ const subtreeOfCall = (index: number) =>
 /** Let the render promise settle and React commit what it set. */
 const settle = () => act(async () => {});
 
+const worksheet = (): PreviewRender => ({
+  ...rendered(undefined),
+  printouts: [{ id: "ws-1", type: "Worksheet", number: "1.1", title: "Practice", label: "Worksheet 1.1 Practice" }],
+  rootPrintout: "ws-1",
+});
+
+describe("LivePreview print layout", () => {
+  beforeEach(() => {
+    localStorage.clear();
+    mockedRender.mockReset();
+    mockedRender.mockResolvedValue(worksheet());
+  });
+
+  const layout = () => screen.getByRole("combobox", { name: "Preview layout" }) as HTMLSelectElement;
+
+  it("opens a worksheet in the web view by default", async () => {
+    render(<LivePreview content="<worksheet/>" divisionId="ws-1" fragment />);
+    await settle();
+    expect(layout().value).toBe("");
+  });
+
+  it("remembers paper once chosen, and the web view once chosen back", async () => {
+    const { unmount } = render(<LivePreview content="<worksheet/>" divisionId="ws-1" fragment />);
+    await settle();
+    fireEvent.change(layout(), { target: { value: "ws-1" } });
+    expect(layout().value).toBe("ws-1");
+    unmount();
+
+    // Another worksheet, later: on paper without being asked.
+    render(<LivePreview content="<worksheet/>" divisionId="ws-2" fragment />);
+    await settle();
+    expect(layout().value).toBe("ws-1");
+    fireEvent.change(layout(), { target: { value: "" } });
+    expect(localStorage.getItem("pretext-plus:preview-print-layout")).toBe("web");
+  });
+});
+
 describe("LivePreview scope", () => {
   beforeEach(() => {
     vi.useFakeTimers();
