@@ -66,6 +66,14 @@ export interface PreviewLineMap {
   /** Assembled (rendered) line for a 1-based editor line, if it has one. */
   toAssembled(editorLine: number): number | undefined;
   /**
+   * Assembled line for a 1-based editor line, falling back to the nearest
+   * mapped editor line *above* it. For a cursor on a line assembly rewrote (a
+   * `<plus:* ref/>` placeholder, a blank line) this still names a spot in the
+   * rendered document — the enclosing element's — where {@link toAssembled}
+   * would give up. Undefined only when nothing at or above the line mapped.
+   */
+  toAssembledNearest(editorLine: number): number | undefined;
+  /**
    * Editor line for a 1-based assembled line. Falls back outward to the
    * nearest mapped line *above* it, so clicking a paragraph whose exact start
    * line was not matched still lands on the enclosing element.
@@ -119,15 +127,16 @@ export function buildPreviewLineMap(
     cursor = probe + 1;
   }
 
-  // Ascending, for the fall-outward lookup below.
+  // Ascending, for the fall-outward lookups below.
   const mappedAssembledLines = [...assembledToEditor.keys()].sort(
     (a, b) => a - b,
   );
+  const mappedEditorLines = [...editorToAssembled.keys()].sort((a, b) => a - b);
 
-  function nearestAt(assembledLine: number): number | undefined {
+  function nearestAt(mapped: number[], line: number): number | undefined {
     let best: number | undefined;
-    for (const candidate of mappedAssembledLines) {
-      if (candidate > assembledLine) break;
+    for (const candidate of mapped) {
+      if (candidate > line) break;
       best = candidate;
     }
     return best;
@@ -140,11 +149,16 @@ export function buildPreviewLineMap(
       return editorToAssembled.get(editorLine);
     },
 
+    toAssembledNearest(editorLine) {
+      const nearest = nearestAt(mappedEditorLines, editorLine);
+      return nearest === undefined ? undefined : editorToAssembled.get(nearest);
+    },
+
     toEditor(assembledLine) {
       const exact = assembledToEditor.get(assembledLine);
       if (exact !== undefined) return exact;
       // Nearest mapped line at or above — the enclosing element's start.
-      const nearest = nearestAt(assembledLine);
+      const nearest = nearestAt(mappedAssembledLines, assembledLine);
       return nearest === undefined ? undefined : assembledToEditor.get(nearest);
     },
   };

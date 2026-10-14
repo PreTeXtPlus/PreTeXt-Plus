@@ -20,6 +20,7 @@ export default class extends Controller {
     settingsPath: String,
     subscriptionsPath: String,
     signOutPath: String,
+    previewWorkerUrl: String,
   }
 
   /** Load the React bundle as soon as the controller initializes.
@@ -61,6 +62,7 @@ export default class extends Controller {
       settingsPath: this.settingsPathValue,
       subscriptionsPath: this.subscriptionsPathValue,
       signOutPath: this.signOutPathValue,
+      previewWorkerUrl: this.previewWorkerUrlValue,
     })
 
     this.notifyLayoutChange()

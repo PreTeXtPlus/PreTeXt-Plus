@@ -31,11 +31,19 @@ export default defineConfig(() => ({
   resolve: { alias: nodeShimAliases },
   build: {
     lib: {
-      entry: path.resolve(__dirname, 'src/index.ts'),
+      // Two entries: the editor, and the preview render worker a host bundles
+      // as a Web Worker (see src/previewWorker.ts). ES and CommonJS only —
+      // UMD cannot take a second entry, and no consumer loads this as a
+      // script tag.
+      entry: {
+        index: path.resolve(__dirname, 'src/index.ts'),
+        'preview-worker': path.resolve(__dirname, 'src/previewWorker.ts'),
+      },
       name: 'PretextWebEditor',
-      fileName: (format) => {
-        if (format === 'es') return 'index.es.js'
-        return 'index.js'
+      formats: ['es', 'cjs'],
+      fileName: (format, entryName) => {
+        if (entryName === 'index') return format === 'es' ? 'index.es.js' : 'index.js'
+        return format === 'es' ? `${entryName}.es.js` : `${entryName}.js`
       }
     },
     rollupOptions: {

@@ -20,6 +20,7 @@ import CodeEditor, {
 } from "./CodeEditor";
 //import { VisualEditor } from "@pretextbook/visual-editor";
 import LivePreview, { type LivePreviewHandle } from "./LivePreview";
+import { previewRendererFor } from "./previewRenderer";
 import { isLocalPreviewAvailable, type PreviewTheme } from "./wasmPreview";
 import {
   buildPreviewLineMap,
@@ -240,6 +241,14 @@ export interface editorProps {
    * that it is not a real build. Pass an empty string to suppress it.
    */
   previewBannerMessage?: string;
+  /**
+   * URL of the preview render worker, for rendering previews off the main
+   * thread so a long division never freezes the editor while it renders.
+   * The host bundles this package's `preview-worker` export as an ES-module
+   * Web Worker and passes the URL it is served from; see the README. Omit to
+   * render on the main thread.
+   */
+  previewWorkerUrl?: string;
   /**
    * The tag name of this project's root element: `"article"` (default),
    * `"book"` or `"slideshow"`. When `"book"`, the TOC shows a chapter list that
@@ -682,6 +691,8 @@ const EditorsInner = (props: EditorsInnerProps) => {
 
   // ── Store reads (UI state owned by the store) ───────────────────────────
   const showLivePreview = useEditorStore((s) => s.showLivePreview);
+  const previewScope = useEditorStore((s) => s.previewScope);
+  const setPreviewScope = useEditorStore((s) => s.setPreviewScope);
   const isNarrowScreen = useEditorStore((s) => s.isNarrowScreen);
   const setIsNarrowScreen = useEditorStore((s) => s.setIsNarrowScreen);
   const activeTab = useEditorStore((s) => s.activeTab);
@@ -878,6 +889,24 @@ const EditorsInner = (props: EditorsInnerProps) => {
   // render. Park the target and apply it once the switch has landed.
   const pendingRevealRef = useRef<{ xmlId: string; line: number } | null>(null);
 
+  // The cursor's line in the open division, for the preview to follow (see
+  // LivePreview's `cursorLine`). Reported by the code editor on every move —
+  // except the moves *we* make with `revealLine`, which it keeps quiet about
+  // so the preview is not scrolled back to where it was just clicked; those
+  // are recorded here by hand. Tagged with its division so a stale line is
+  // simply not read after a switch, rather than reset by an effect.
+  const [cursorReport, setCursorReport] = useState<{
+    xmlId: string;
+    line: number;
+  }>();
+  const setPreviewCursorLine = (line: number) => {
+    if (activeDivision) setCursorReport({ xmlId: activeDivision.xmlId, line });
+  };
+  const previewCursorLine =
+    cursorReport && cursorReport.xmlId === activeDivision?.xmlId
+      ? cursorReport.line
+      : undefined;
+
   useEffect(() => {
     const pending = pendingRevealRef.current;
     if (!pending || activeDivision?.xmlId !== pending.xmlId) return;
@@ -885,6 +914,7 @@ const EditorsInner = (props: EditorsInnerProps) => {
     // before their parent's), so its model holds this division's source.
     pendingRevealRef.current = null;
     codeEditorRef.current?.revealLine(pending.line);
+    setCursorReport({ xmlId: pending.xmlId, line: pending.line });
   }, [activeDivision?.xmlId, divisionActiveSource]);
 
   // ── Cross-division find-result jump ──────────────────────────────────────
@@ -2297,11 +2327,23 @@ const EditorsInner = (props: EditorsInnerProps) => {
   // or anything in a non-PreTeXt buffer whose assembled form is a conversion)
   // simply do not scroll.
   const handleCursorLineChange = (editorLine: number) => {
+    setPreviewCursorLine(editorLine);
     const assembledLine = previewLineMap?.toAssembled(editorLine);
     if (assembledLine !== undefined) {
       livePreviewRef.current?.scrollToAssembledLine(assembledLine);
     }
   };
+
+  // The cursor in the rendered text's own lines, for a cursor-scoped preview
+  // to pick its division by. Nearest mapped line rather than exact: a cursor
+  // on a `<plus:* ref/>` placeholder is still *in* the enclosing division.
+  // Undefined before the first report (the preview then starts from the top
+  // of the text) and for a converted buffer, whose lines map nowhere — the
+  // preview then shows the open division whole, as the other scope would.
+  const previewCursorAssembledLine =
+    previewCursorLine === undefined
+      ? undefined
+      : previewLineMap?.toAssembledNearest(previewCursorLine);
 
   // Preview → source. Previewing a parent renders its children inline, so the
   // click may belong to a different division record entirely. Which one is
@@ -2339,7 +2381,10 @@ const EditorsInner = (props: EditorsInnerProps) => {
     const line = map.toEditor(assembledLine);
 
     if (targetId === activeDivision?.xmlId) {
-      if (line !== undefined) codeEditorRef.current?.revealLine(line);
+      if (line !== undefined) {
+        codeEditorRef.current?.revealLine(line);
+        setPreviewCursorLine(line);
+      }
       return;
     }
     pendingRevealRef.current =
@@ -2570,6 +2615,9 @@ const EditorsInner = (props: EditorsInnerProps) => {
           previewLineMap: null,
           fragment: false,
           contextSource: undefined,
+          scope: "editor" as const,
+          cursorLine: undefined,
+          onScopeChange: undefined,
         }
       : {
           content: previewSource || "",
@@ -2582,12 +2630,16 @@ const EditorsInner = (props: EditorsInnerProps) => {
           previewLineMap,
           fragment: !previewingWholeDocument,
           contextSource: previewContextSource,
+          scope: previewScope,
+          cursorLine: previewCursorAssembledLine,
+          onScopeChange: setPreviewScope,
         };
     preview = (
       <LivePreview
         ref={livePreviewRef}
         {...target}
         onRebuild={props.onPreviewRebuild}
+        renderer={previewRendererFor(props.previewWorkerUrl)}
         docinfo={effectiveDocinfo}
         theme={props.previewTheme}
         bannerMessage={

@@ -14,7 +14,8 @@
   "module": "./src/index.ts",
   "types": "./src/index.ts",
   "exports": {
-    ".": "./src/index.ts"
+    ".": "./src/index.ts",
+    "./preview-worker": "./src/previewWorker.ts"
   },
   "peerDependencies": {
     "react": "^18.0.0 || ^19.0.0",
@@ -40,7 +41,7 @@
     "@pretextbook/latex-pretext": "^0.4.0",
     "@pretextbook/latex-style-pretext": "^0.5.2",
     "@pretextbook/markdown-style-pretext": "^0.1.4",
-    "@pretextbook/pretext-html": "^0.16.1",
+    "@pretextbook/pretext-html": "^0.17.0",
     "@pretextbook/remark-pretext": "^0.2.0",
     "@pretextbook/schema": "^0.7.2",
     "@pretextbook/typing-shortcuts": "^0.4.0",

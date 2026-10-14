@@ -180,6 +180,48 @@ const writeStoredTocTree = (projectUrl: string, tree: StoredTocTree): void => {
  */
 const PASTE_AUTO_CONVERT_KEY = "pretext-plus:paste-auto-convert";
 
+/**
+ * How much of the open division the live preview renders. `"cursor"` is the
+ * division around the cursor — a section of the open chapter, say — numbered
+ * and cross-referenced as the built book would, with a division that holds
+ * divisions shown as a summary page; what makes a large document previewable
+ * as you type. `"editor"` is everything in the editor: the open division
+ * whole, every division inside it included.
+ */
+export type PreviewScope = "cursor" | "editor";
+
+/**
+ * Where the preview scope is remembered across sessions. An author who finds
+ * the division-at-cursor preview too narrow for their short article wants
+ * the whole thing every time, not once per visit.
+ */
+const PREVIEW_SCOPE_KEY = "pretext-plus:preview-scope";
+
+/** The stored preference, or `null` if never set / unrecognised / storage unavailable. */
+const readStoredPreviewScope = (): PreviewScope | null => {
+  try {
+    const stored = localStorage.getItem(PREVIEW_SCOPE_KEY);
+    return stored === "cursor" || stored === "editor" ? stored : null;
+  } catch {
+    return null;
+  }
+};
+
+const writeStoredPreviewScope = (scope: PreviewScope): void => {
+  try {
+    localStorage.setItem(PREVIEW_SCOPE_KEY, scope);
+  } catch {
+    // Storage blocked — the choice just doesn't outlive this session.
+  }
+};
+
+/**
+ * The remembered scope, else the division at the cursor: the fast choice, and
+ * for a short document no narrower than the whole (see WHOLE_DOCUMENT_UP_TO).
+ */
+export const defaultPreviewScope = (): PreviewScope =>
+  readStoredPreviewScope() ?? "cursor";
+
 /** The stored preference, or `null` if never set / storage unavailable. */
 const readStoredPasteAutoConvert = (): boolean | null => {
   try {
@@ -406,6 +448,8 @@ export interface EditorStoreState {
   /** Convert LaTeX/Markdown pasted into a PreTeXt division — see {@link PASTE_AUTO_CONVERT_KEY}. */
   pasteAutoConvert: boolean;
   showLivePreview: boolean;
+  /** How much of the open division the live preview renders — see {@link PreviewScope}. */
+  previewScope: PreviewScope;
   isNarrowScreen: boolean;
   activeTab: "editor" | "preview";
   isImportDialogOpen: boolean;
@@ -501,6 +545,8 @@ export interface EditorStoreState {
 
   // UI
   setShowLivePreview: (show: boolean) => void;
+  /** Choose how much the live preview renders; remembered across sessions. */
+  setPreviewScope: (scope: PreviewScope) => void;
   setActiveTab: (tab: "editor" | "preview") => void;
   setIsNarrowScreen: (narrow: boolean) => void;
   /** Set the TOC's collapsed state programmatically (not a saved preference). */
@@ -800,6 +846,7 @@ export function createEditorStore(init: EditorStoreInit): EditorStoreHandle {
     explorerView: "toc",
     pasteAutoConvert: defaultPasteAutoConvert(),
     showLivePreview: true,
+    previewScope: defaultPreviewScope(),
     isNarrowScreen: isNarrowViewport(),
     activeTab: "editor",
     isImportDialogOpen: false,
@@ -914,6 +961,10 @@ export function createEditorStore(init: EditorStoreInit): EditorStoreHandle {
       set({ docinfo, commonDocinfo, useCommonDocinfo }),
 
     setShowLivePreview: (showLivePreview) => set({ showLivePreview }),
+    setPreviewScope: (previewScope) => {
+      writeStoredPreviewScope(previewScope);
+      set({ previewScope });
+    },
     setActiveTab: (activeTab) => set({ activeTab }),
     setIsNarrowScreen: (isNarrowScreen) => set({ isNarrowScreen }),
     setIsTocCollapsed: (value) =>

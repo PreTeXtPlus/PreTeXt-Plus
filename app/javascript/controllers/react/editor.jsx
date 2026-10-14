@@ -358,6 +358,9 @@ function editorStateToCollabSeed(state) {
  * @property {string} apiBase - The editor-state endpoint URL (`editorStateUrl`).
  * @property {string} [pandocUrl] - POST target that proxies pandoc conversions (projects#pandoc).
  * @property {string} [csrfToken]
+ * @property {string} [previewWorkerUrl] - Where the preview render worker bundle
+ *   (app/javascript/preview_worker.js) is served from; previews render off the
+ *   main thread when set.
  */
 
 /**
@@ -377,6 +380,7 @@ function EditorApp({ config }) {
     settingsPath,
     subscriptionsPath,
     signOutPath,
+    previewWorkerUrl,
   } = config;
 
   // Rails routes the React side needs.  Kept here (rather than in many data
@@ -1663,6 +1667,7 @@ function EditorApp({ config }) {
         onSaveAndClose={openProjectPage}
         saveAndCloseLabel="Manage Project"
         onPreviewRebuild={onPreviewRebuild}
+        previewWorkerUrl={previewWorkerUrl}
         onCreatePretextProjectCopy={onCreatePretextProjectCopy}
         onFeedbackSubmit={onFeedbackSubmit}
       />
