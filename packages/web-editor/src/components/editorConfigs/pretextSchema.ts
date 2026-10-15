@@ -7,11 +7,12 @@
  *    which is dead weight for anyone editing LaTeX or Markdown, or reading a
  *    document without typing in it. Loading it on the first lint keeps it off
  *    the page-load path.
- *  - **The grammar is fetched, not bundled.** `@pretextbook/schema` ships
- *    `assets/pretext.json` (~425KB) but does not list it in `exports`, so no
- *    bundler can reach it — see the second half of upstream issue #256. Until
- *    that lands, it comes from the CDN, pinned to the same minor this package
- *    depends on; {@link setPretextSchemaUrl} lets a host self-host instead.
+ *  - **The grammar is fetched, not bundled.** `@pretextbook/schema` ships its
+ *    grammars in `assets/` (~520KB for ours) but does not list them in
+ *    `exports`, so no bundler can reach them — see the second half of upstream
+ *    issue #256. Until that lands, ours comes from the CDN, pinned to the same
+ *    minor this package depends on; {@link setPretextSchemaUrl} lets a host
+ *    self-host instead.
  *  - **`path`/`url`/`fs` are aliased at bundle time** — the package has no
  *    browser build. See `src/nodeShims/README.md`.
  *
@@ -25,13 +26,22 @@ import type { Diagnostic } from "@pretextbook/schema";
 export type { Diagnostic };
 
 /**
- * Where the compiled grammar comes from. Pinned to `0.5`, matching this
- * package's `^0.5.0` dependency on `@pretextbook/schema` — a caret range on a
+ * Which of `@pretextbook/schema`'s grammars the editor lints against: the
+ * development grammar, not the stable `pretext.json`. Only the development
+ * grammar knows Runestone's interactive exercises — true/false, multiple
+ * choice, matching, card sort, Parsons, clickable areas, fill-in blanks, short
+ * answer — which the preview renders and the Insert menu offers; the stable
+ * one marks every one of them an error.
+ */
+export const PRETEXT_GRAMMAR_FILE = "pretext-dev.json";
+
+/**
+ * Where the compiled grammar comes from. Pinned to `0.7`, matching this
+ * package's `^0.7.2` dependency on `@pretextbook/schema` — a caret range on a
  * `0.x` version allows only that same minor, so the two move together. **Bump
  * both at once.**
  */
-const DEFAULT_SCHEMA_URL =
-  "https://cdn.jsdelivr.net/npm/@pretextbook/schema@0.5/assets/pretext.json";
+const DEFAULT_SCHEMA_URL = `https://cdn.jsdelivr.net/npm/@pretextbook/schema@0.7/assets/${PRETEXT_GRAMMAR_FILE}`;
 
 let schemaUrl = DEFAULT_SCHEMA_URL;
 

@@ -149,7 +149,11 @@ export { default as CodeEditor } from "./components/CodeEditor";
 // exported so a host can build menus (e.g. Help/Account) that are pixel- and
 // keyboard-identical to the editor's own File/Edit/Insert/Tools menus.
 export { default as MenuDropdown } from "./components/MenuDropdown";
-export type { MenuDropdownProps, MenuEntry } from "./components/MenuDropdown";
+export type {
+  MenuDropdownProps,
+  MenuEntry,
+  MenuLeafEntry,
+} from "./components/MenuDropdown";
 // The editor's shared icon set, for host-built controls in the top bar.
 export { DashboardIcon, UserIcon } from "./components/icons";
 export type { TopBarPrimaryAction } from "./components/TopBar";

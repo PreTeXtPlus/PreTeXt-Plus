@@ -17,8 +17,10 @@
  * grammar has never heard of, and would say nothing about what actually
  * reaches a build.
  *
- * The grammar is read from the installed package with `fetch` stubbed to serve
- * it, exactly as `pretextSchema.test.ts` does, so the suite stays offline.
+ * The grammar is the one the editor lints with (`PRETEXT_GRAMMAR_FILE`, the
+ * development grammar — the stable one has no interactive exercises), read
+ * from the installed package with `fetch` stubbed to serve it, exactly as
+ * `pretextSchema.test.ts` does, so the suite stays offline.
  */
 /// <reference types="node" />
 import { describe, it, expect, beforeAll, afterAll, vi } from "vitest";
@@ -34,6 +36,7 @@ import {
   type EditorSnippet,
 } from "../components/editorConfigs/snippets";
 import {
+  PRETEXT_GRAMMAR_FILE,
   setPretextSchemaUrl,
   validatePretextDocument,
 } from "../components/editorConfigs/pretextSchema";
@@ -42,7 +45,7 @@ import type { Asset, SourceFormat } from "../types/editor";
 import type { Division, RootDivisionType } from "../types/sections";
 
 const require = createRequire(import.meta.url);
-const GRAMMAR_URL = "https://test.invalid/pretext.json";
+const GRAMMAR_URL = `https://test.invalid/${PRETEXT_GRAMMAR_FILE}`;
 
 let realFetch: typeof globalThis.fetch;
 
@@ -51,7 +54,7 @@ beforeAll(() => {
     path.join(
       path.dirname(require.resolve("@pretextbook/schema")),
       "assets",
-      "pretext.json",
+      PRETEXT_GRAMMAR_FILE,
     ),
     "utf8",
   );
@@ -69,11 +72,10 @@ afterAll(() => {
 
 /**
  * A snippet as an author would leave it after tabbing through: placeholders
- * accepted as-is, empty tab stops filled with a word, so the check is about
- * the structure rather than about empty elements.
+ * and choices accepted as-is, empty tab stops filled with a word, so the check
+ * is about the structure rather than about empty elements.
  */
-const filled = (body: string): string =>
-  snippetPlainText(body.replace(/(?<!\\)\$\{?\d+\}?(?!:)/g, "Text"));
+const filled = (body: string): string => snippetPlainText(body, "Text");
 
 /** Every snippet of a format, flattened out of its groups. */
 const snippetsOf = (
@@ -95,6 +97,33 @@ const deckOnlySnippets = (format: SourceFormat): EditorSnippet[] => {
 };
 
 /**
+ * PreTeXt's families of blocks, each construct keyed by its element's name —
+ * written out here rather than read from the catalog, so the catalog can't
+ * quietly lose one.
+ */
+const BLOCK_FAMILIES = {
+  definitions: ["definition"],
+  theorems: ["theorem", "lemma", "corollary", "proposition", "claim", "fact", "identity", "algorithm"],
+  axioms: ["axiom", "conjecture", "principle", "heuristic", "hypothesis", "assumption"],
+  examples: ["example", "problem", "question"],
+  remarks: ["remark", "note", "observation", "warning", "insight", "convention"],
+  projects: ["activity", "exploration", "investigation", "project"],
+};
+
+/** The interactive exercises, and the child that makes each one what it is. */
+const INTERACTIVE: Record<string, RegExp> = {
+  "true-false": /<statement correct="(yes|no)">/,
+  "multiple-choice": /<choices[ >]/,
+  "multiple-select": /<choices [^>]*multiple-correct="yes"/,
+  cardsort: /<cardsort[ >]/,
+  matching: /<matching[ >]/,
+  parsons: /<blocks[ >]/,
+  "clickable-area": /<areas[ >]/,
+  "fill-in": /<fillin answer=/,
+  "short-answer": /<response\/>/,
+};
+
+/**
  * What each construct has to become, whichever format it was written in —
  * "Theorem" means `<theorem>` in all three or the menus are lying.
  */
@@ -105,11 +134,13 @@ const EXPECTED_ELEMENT: Record<string, RegExp> = {
   "code-inline": /<c[ >]/,
   xref: /<xref[ /]/,
   link: /<url[ >]/,
-  theorem: /<theorem[ >]/,
-  definition: /<definition[ >]/,
-  example: /<example[ >]/,
-  remark: /<remark[ >]/,
+  ...Object.fromEntries(
+    Object.values(BLOCK_FAMILIES)
+      .flat()
+      .map((element) => [element, new RegExp(`<${element}[ >]`)]),
+  ),
   exercise: /<exercise[ >]/,
+  ...INTERACTIVE,
   "list-bulleted": /<ul[ >]/,
   "list-numbered": /<ol[ >]/,
   "list-description": /<dl[ >]/,
@@ -137,15 +168,73 @@ describe("the shared catalog", () => {
   });
 
   it("offers each format the groups it has snippets for, in one order", () => {
+    const order = [
+      "text",
+      "lists",
+      "math",
+      ...Object.keys(BLOCK_FAMILIES),
+      "exercises",
+      "interactive",
+      "figures",
+    ];
     for (const format of ["pretext", "latex", "markdown"] as const) {
       const groups = snippetGroupsFor(format).map((group) => group.key);
-      expect(groups).toEqual(
-        ["text", "blocks", "lists", "math", "figures"].filter((key) =>
-          groups.includes(key),
-        ),
-      );
+      expect(groups).toEqual(order.filter((key) => groups.includes(key)));
       expect(groups.length).toBeGreaterThan(0);
     }
+  });
+
+  // PreTeXt is what the other two formats convert *into*, so a construct it
+  // has no body for is one that silently fell out of the catalog.
+  it("offers every construct in PreTeXt", () => {
+    expect(snippetsOf("pretext", "slideshow").map((s) => s.key).sort()).toEqual(
+      Object.keys(EXPECTED_ELEMENT).sort(),
+    );
+  });
+
+  it("files each block under its PreTeXt family, in every format", () => {
+    for (const format of ["pretext", "latex", "markdown"] as const) {
+      const groups = new Map(
+        snippetGroupsFor(format).map((g) => [g.key, g.snippets.map((s) => s.key)]),
+      );
+      for (const [family, members] of Object.entries(BLOCK_FAMILIES)) {
+        const offered = groups.get(family) ?? [];
+        // In family order, minus whatever the format's converter lacks.
+        expect(offered).toEqual(members.filter((key) => offered.includes(key)));
+      }
+      expect(groups.get("theorems")).toEqual(
+        expect.arrayContaining(["theorem", "lemma", "corollary", "proposition"]),
+      );
+    }
+  });
+
+  it("offers the interactive exercises in PreTeXt, and only there", () => {
+    const interactive = snippetGroupsFor("pretext").find(
+      (g) => g.key === "interactive",
+    );
+    expect(interactive?.snippets.map((s) => s.key)).toEqual(Object.keys(INTERACTIVE));
+    // Neither converter has a spelling for any of them.
+    for (const format of ["latex", "markdown"] as const) {
+      expect(snippetGroupsFor(format).map((g) => g.key)).not.toContain("interactive");
+    }
+  });
+
+  it("starts a new section only between unrelated groups", () => {
+    const sections = snippetGroupsFor("pretext", "slideshow").map((g) => [
+      g.key,
+      g.section,
+    ]);
+    const sectionOf = Object.fromEntries(sections);
+    expect(sectionOf.text).toBe(sectionOf.math);
+    expect(sectionOf.theorems).toBe(sectionOf.remarks);
+    expect(sectionOf.exercises).toBe(sectionOf.interactive);
+    expect(sectionOf.theorems).not.toBe(sectionOf.exercises);
+    // Each section is one contiguous run, so the rules between them fall
+    // where they should.
+    const runs = sections.map(([, section]) => section).filter(
+      (section, i, all) => i === 0 || section !== all[i - 1],
+    );
+    expect(new Set(runs).size).toBe(runs.length);
   });
 
   it("has no empty group and no duplicate key", () => {
@@ -212,6 +301,25 @@ describe("snippetPlainText", () => {
 
   it("unescapes a LaTeX row break", () => {
     expect(snippetPlainText("a & b \\\\\\\\")).toBe("a & b \\\\");
+  });
+
+  it("writes a choice as its first option", () => {
+    expect(snippetPlainText('<statement correct="${2|yes,no|}">')).toBe(
+      '<statement correct="yes">',
+    );
+  });
+
+  it("writes a mirrored stop as the text of the stop it mirrors", () => {
+    // The matching exercise: a premise's `@ref` is the id its response carries.
+    expect(
+      snippetPlainText('<premise ref="${3:match-a}"/><response xml:id="$3"/>'),
+    ).toBe('<premise ref="match-a"/><response xml:id="match-a"/>');
+  });
+
+  it("fills only the stops that have no text of their own", () => {
+    expect(snippetPlainText("\\emph{$0} \\label{${1:x}} ${2}", "Text")).toBe(
+      "\\emph{Text} \\label{x} Text",
+    );
   });
 });
 
@@ -403,8 +511,30 @@ describe("Markdown snippets", () => {
 
   it("omits the constructs the Markdown converter cannot handle yet", () => {
     const markdown = byKey("markdown");
-    for (const key of ["table", "figure", "link", "xref"]) {
+    for (const key of [
+      "table",
+      "figure",
+      "link",
+      "xref",
+      // Blocks with no directive yet.
+      "identity",
+      "heuristic",
+      "assumption",
+      "convention",
+    ]) {
       expect(markdown.has(key)).toBe(false);
     }
   });
+
+  // The other side of that list: a block omitted above that has *gained* a
+  // directive should be offered again. This is the check that notices.
+  it.each(["identity", "heuristic", "assumption", "convention"])(
+    "%s still has no Markdown directive",
+    (element) => {
+      const converted = markdownToPretext(`:::${element}[Title]\nText\n:::`, {
+        topLevelDivision: "section",
+      });
+      expect(converted).not.toMatch(new RegExp(`<${element}[ >]`));
+    },
+  );
 });

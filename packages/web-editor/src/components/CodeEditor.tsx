@@ -246,6 +246,12 @@ const baseOptions = {
   acceptSuggestionOnCommitCharacter: false,
   quickSuggestions: false,
   wordWrap: "on" as const,
+  // Always two spaces, the indent Format PreTeXt writes. Monaco would
+  // otherwise guess the indent from the buffer — once, from whichever division
+  // was open when the model was created, since later divisions arrive by
+  // `setValue`, which doesn't re-guess — so one 4-space division made every
+  // snippet, Tab and auto-indent 4 spaces for the rest of the session.
+  detectIndentation: false,
   insertSpaces: true,
   tabSize: 2,
   padding: { top: 10, bottom: 10 },
