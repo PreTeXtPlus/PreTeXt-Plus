@@ -3,8 +3,8 @@ class ApplicationController < ActionController::Base
   before_action :authenticate_user!
   around_action :set_time_zone
   # Every authenticated page shows account-specific content, so opt it out of the
-  # browser's back/forward cache (bfcache) -- otherwise switching accounts (sign out,
-  # sign in as someone else) can show a stale bfcache-restored page from the previous
+  # browser's back/forward cache (bfcache) -- otherwise switching accounts (log out,
+  # log in as someone else) can show a stale bfcache-restored page from the previous
   # session without ever hitting the network. Chrome only excludes a page from bfcache
   # when it sees "no-store"; "private, must-revalidate" alone (Rails' default here)
   # isn't enough.

@@ -4,8 +4,8 @@
 <%= form_with model: @user do |form| %>
   <%= render "fields_for", form: form %>
   <div class="col-span-6 sm:flex sm:items-center sm:gap-4">
-    <%= form.submit "Register and sign in", class: "#{button_classes(color: "green")} w-full sm:w-auto text-center px-3.5 py-2.5 inline-block" %>
-    <%= link_to "Sign into existing account", new_user_session_path, class: "text-sm text-blue-700 underline hover:no-underline" %>
+    <%= form.submit "Register and log in", class: "#{button_classes(color: "green")} w-full sm:w-auto text-center px-3.5 py-2.5 inline-block" %>
+    <%= link_to "Log into existing account", new_user_session_path, class: "text-sm text-blue-700 underline hover:no-underline" %>
   </div>
 <% end %>
 

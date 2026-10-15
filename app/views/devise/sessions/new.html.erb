@@ -1,5 +1,5 @@
-<% content_for(:title, 'Sign in') %>
-<% content_for(:heading, 'Sign in') %>
+<% content_for(:title, 'Log in') %>
+<% content_for(:heading, 'Log in') %>
 
 <%= form_with(model: resource, as: resource_name, url: session_path(resource_name), class: "contents", data: { turbo: false }) do |form| %>
   <div class="my-5">
@@ -12,7 +12,7 @@
 
   <div class="col-span-6 sm:flex sm:items-center sm:gap-4">
     <div class="inline">
-      <%= form.submit "Sign in", class: "#{button_classes(color: "blue")} w-full sm:w-auto text-center px-3.5 py-2.5 inline-block" %>
+      <%= form.submit "Log in", class: "#{button_classes(color: "blue")} w-full sm:w-auto text-center px-3.5 py-2.5 inline-block" %>
     </div>
 
     <div class="mt-4 text-sm sm:mt-0">
@@ -29,7 +29,7 @@
   </div>
 
   <div class="my-4 text-sm text-gray-700">
-    By signing in, you agree to our updated
+    By logging in, you agree to our updated
     <%= link_to "Terms of Service", tos_path, class: "text-gray-900 hover:text-black hover:underline" %>
     and
     <%= link_to "Privacy Policy", privacy_path, class: "text-gray-900 hover:text-black hover:underline" %>.

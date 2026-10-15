@@ -138,11 +138,11 @@ class LeavingTheEditorTest < ApplicationSystemTestCase
       visit new_user_session_path
       fill_in "user_email", with: as.email
       fill_in "user_password", with: "password123"
-      click_button "Sign in"
+      click_button "Log in"
       # Wait for the post-login navigation to land: `visit` doesn't queue behind
       # an in-flight one, so without this the editor page can be replaced by the
       # redirect that was already on its way.
-      assert_text "Signed in successfully.", wait: 10
+      assert_text "Logged in successfully.", wait: 10
 
       visit edit_project_path(project)
       assert_selector ".monaco-editor", wait: 30

@@ -1,7 +1,7 @@
 require "test_helper"
 
 class SubscriptionRemindersControllerTest < ActionDispatch::IntegrationTest
-  test "redirects unauthenticated requests to sign in" do
+  test "redirects unauthenticated requests to log in" do
     patch subscription_reminders_path
     assert_redirected_to new_user_session_path
   end

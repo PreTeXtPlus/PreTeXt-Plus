@@ -1,7 +1,7 @@
 require "test_helper"
 
 class SubscriptionTypesControllerTest < ActionDispatch::IntegrationTest
-  test "redirects unauthenticated requests to sign in" do
+  test "redirects unauthenticated requests to log in" do
     post invoice_subscription_type_path(subscription_types(:three)), params: { quantity: 1 }
 
     assert_redirected_to new_user_session_path
@@ -149,7 +149,7 @@ class SubscriptionTypesControllerTest < ActionDispatch::IntegrationTest
   end
 
   private
-    # Unconfirmed users may sign in for a grace period, counted from when the
+    # Unconfirmed users may log in for a grace period, counted from when the
     # confirmation email was sent.
     def sign_in_unconfirmed
       user = users(:unconfirmed)

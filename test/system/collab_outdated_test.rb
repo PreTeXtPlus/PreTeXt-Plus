@@ -8,7 +8,7 @@ class CollabOutdatedTest < ApplicationSystemTestCase
   test "an out-of-date tab asks for a reload, and reloading works once current" do
     project = projects(:one)
     assert project.collaborative?, "fixture project should have a collaborator"
-    sign_in_through_form(users(:one))
+    log_in_through_form(users(:one))
 
     ProjectDoc.stub(:compatible?, false) do
       visit edit_project_path(project)
@@ -26,11 +26,11 @@ class CollabOutdatedTest < ApplicationSystemTestCase
   end
 
   private
-    def sign_in_through_form(user)
+    def log_in_through_form(user)
       visit new_user_session_path
       fill_in "user_email", with: user.email
       fill_in "user_password", with: "password123"
-      click_button "Sign in"
-      assert_text "Signed in successfully.", wait: 10
+      click_button "Log in"
+      assert_text "Logged in successfully.", wait: 10
     end
 end
