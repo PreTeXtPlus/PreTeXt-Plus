@@ -4,22 +4,22 @@ import { buildAccountEntries } from "./accountEntries";
 
 /**
  * The Account menu for the unified editor top bar, matching the equivalent
- * menu in `app/views/layouts/application.html.erb` — same signed-in/signed-out
+ * menu in `app/views/layouts/application.html.erb` — same logged-in/logged-out
  * contents — built from the same `MenuDropdown` primitive the
  * File/Edit/Insert/Tools menus use, so all of them share one look and one set
  * of keyboard behaviors.
  *
  * @param {Object} props
- * @param {boolean} [props.signedIn] - Whether Account shows the signed-in entries.
+ * @param {boolean} [props.signedIn] - Whether Account shows the logged-in entries.
  * @param {string} [props.userEmail]
- * @param {string} [props.projectsPath] - Signed-in only.
+ * @param {string} [props.projectsPath] - Logged-in only.
  * @param {boolean} [props.hasProfilePage]
  * @param {string} [props.profilePath]
  * @param {string} [props.settingsPath]
  * @param {string} [props.subscriptionsPath]
- * @param {() => void} [props.onSignOut] - Called when "Sign out" is selected.
- * @param {string} [props.newUserPath] - Signed-out only.
- * @param {string} [props.newSessionPath] - Signed-out only.
+ * @param {() => void} [props.onSignOut] - Called when "Log out" is selected.
+ * @param {string} [props.newUserPath] - Logged-out only.
+ * @param {string} [props.newSessionPath] - Logged-out only.
  * @param {(path: string) => void} [props.navigate] - See `buildAccountEntries`.
  * @returns {JSX.Element}
  */

@@ -5,7 +5,7 @@ class PreviewAssetTest < ApplicationSystemTestCase
     @user = users(:one)
     @project = projects(:one)
     @asset = assets(:image_one) # ref: "diagram", file pre-attached via fixtures
-    sign_in_through_form
+    log_in_through_form
   end
 
   test "an image asset referenced by a relative external/:ref link loads inside the live-preview iframe" do
@@ -45,15 +45,15 @@ class PreviewAssetTest < ApplicationSystemTestCase
   end
 
   private
-    def sign_in_through_form
+    def log_in_through_form
       visit new_user_session_path
       fill_in "user_email", with: @user.email
       fill_in "user_password", with: "password123"
-      click_button "Sign in"
+      click_button "Log in"
       # Wait for the post-login navigation to land: `visit` doesn't queue behind
       # an in-flight one, so without this the editor page can be replaced by the
       # redirect that was already on its way.
-      assert_text "Signed in successfully.", wait: 10
+      assert_text "Logged in successfully.", wait: 10
     end
 
     # Delivers a page the same way LivePreview does -- by setting `srcdoc` --

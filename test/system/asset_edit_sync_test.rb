@@ -18,7 +18,7 @@ class AssetEditSyncTest < ApplicationSystemTestCase
     @user = users(:one)
     @project = projects(:one)
     @asset = assets(:image_one)
-    sign_in_through_form
+    log_in_through_form
   end
 
   test "editing an asset's title and id persists them to the database" do
@@ -113,15 +113,15 @@ class AssetEditSyncTest < ApplicationSystemTestCase
   end
 
   private
-    def sign_in_through_form
+    def log_in_through_form
       visit new_user_session_path
       fill_in "user_email", with: @user.email
       fill_in "user_password", with: "password123"
-      click_button "Sign in"
+      click_button "Log in"
       # Wait for the post-login navigation to land: `visit` doesn't queue behind
       # an in-flight one, so without this the editor page can be replaced by the
       # redirect that was already on its way.
-      assert_text "Signed in successfully.", wait: 10
+      assert_text "Logged in successfully.", wait: 10
     end
 
     # Open the asset in the code editor from the explorer's Assets view.

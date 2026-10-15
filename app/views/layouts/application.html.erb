@@ -6,8 +6,8 @@
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="application-name" content="Pretext Plus">
     <meta name="mobile-web-app-capable" content="yes">
-    <%# Almost every page requires sign-in and shows account-specific content -- disable
-        Turbo's client-side snapshot cache so switching accounts (sign out, sign in as
+    <%# Almost every page requires log-in and shows account-specific content -- disable
+        Turbo's client-side snapshot cache so switching accounts (log out, log in as
         someone else) can't show a cached page from the previous session. %>
     <% if user_signed_in? %>
       <meta name="turbo-cache-control" content="no-cache">
@@ -102,7 +102,7 @@
                       Manage Subscriptions
                     <% end %>
                     <%= link_to destroy_user_session_path, data: { turbo_method: :delete }, class: "block px-4 py-2 text-red-700 hover:bg-red-50 hover:text-red-800" do %>
-                      Sign out
+                      Log out
                     <% end %>
                   <% end %>
                 <% else %>
@@ -111,7 +111,7 @@
                       Create account
                     <% end %>
                     <%= link_to new_user_session_path, class: "block px-4 py-2 text-gray-800 hover:bg-blue-50 hover:text-blue-500" do %>
-                      Sign in
+                      Log in
                     <% end %>
                   <% end %>
                   <%= link_to tryit_path, class: "my-1 text-gray-800 hover:text-blue-500 lg:mx-4 lg:my-0", data: { turbo: false } do %>

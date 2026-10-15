@@ -62,8 +62,8 @@ export function buildAccountEntries({
         },
         {
           kind: "item",
-          key: "sign-out",
-          label: "Sign out",
+          key: "log-out",
+          label: "Log out",
           onSelect: () => onSignOut?.(),
         },
       ]
@@ -76,8 +76,8 @@ export function buildAccountEntries({
         },
         {
           kind: "item",
-          key: "sign-in",
-          label: "Sign in",
+          key: "log-in",
+          label: "Log in",
           onSelect: () => navigate(newSessionPath),
         },
       ];

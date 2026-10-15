@@ -1359,7 +1359,7 @@ function EditorApp({ config }) {
     if (await save(true)) window.location.href = projectUrl;
   }, [save, projectUrl]);
 
-  // Submitted from the Account menu's "Sign out" entry (see signOutFormRef
+  // Submitted from the Account menu's "Log out" entry (see signOutFormRef
   // below). A real form POST with `_method=delete` mirrors what Rails'
   // `button_to method: :delete` generates, rather than relying on Turbo's
   // click interception — which the editor's mount root opts out of via

@@ -14,8 +14,8 @@ class SnippetEditSyncTest < ApplicationSystemTestCase
     visit new_user_session_path
     fill_in "user_email", with: @user.email
     fill_in "user_password", with: "password123"
-    click_button "Sign in"
-    assert_text "Signed in successfully.", wait: 10
+    click_button "Log in"
+    assert_text "Logged in successfully.", wait: 10
   end
 
   test "typing into an open snippet persists its source" do

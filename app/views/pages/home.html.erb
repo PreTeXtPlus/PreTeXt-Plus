@@ -34,6 +34,13 @@
                     <span class="self-center text-xl font-semibold whitespace-nowrap dark:text-white">PreTeXt.Plus</span>
                 <% end %>
                 <div class="flex items-center lg:order-2">
+                    <% unless current_user.present? %>
+                        <div class="flex items-center mr-2 font-medium text-sm whitespace-nowrap">
+                            <%= link_to "Sign up", new_user_path, class: "hidden sm:inline text-purple-700 hover:text-purple-500 dark:text-purple-300 dark:hover:text-white pl-2 lg:pl-4 pr-1 py-2 lg:py-2.5" %>
+                            <span class="hidden sm:inline text-gray-400 dark:text-gray-500" aria-hidden="true">/</span>
+                            <%= link_to "Log in", new_user_session_path, class: "text-gray-700 hover:text-purple-700 dark:text-gray-300 dark:hover:text-white pl-1 pr-2 lg:pr-4 py-2 lg:py-2.5" %>
+                        </div>
+                    <% end %>
                     <a href="mailto:info@pretext.plus" class="text-purple-700 dark:text-white border border-purple-700 hover:bg-purple-50 focus:ring-4 focus:ring-purple-300 font-medium rounded-lg text-sm px-4 lg:px-5 py-2 lg:py-2.5 mr-2 dark:border-purple-400 dark:hover:bg-gray-800 focus:outline-none dark:focus:ring-purple-800">
                         Contact <span class="hidden sm:inline">Us</span>
                     </a>
@@ -131,40 +138,6 @@
             </div>
             <div class="m-2 justify-center lg:mt-0 lg:col-span-5 lg:flex">
                 <%= image_tag "logo.svg", alt: "PreTeXt.Plus logo", class: "mx-auto my-2 lg:my-0" %>
-            </div>
-        </div>
-    </section>
-    <!-- End block -->
-    <!-- Start block -->
-    <section id="asseen" class="bg-gray-50 dark:bg-gray-900">
-        <div class="max-w-screen-xl px-4 pb-8 mx-auto lg:pb-16">
-            <p class="font-light mb-2 text-gray-600 lg:mb-8 md:text-md lg:text-lg dark:text-gray-400">
-                The free and open-source PreTeXt project is used or sponsored by these organizations:
-            </p>
-            <div class="grid grid-cols-2 gap-8 text-gray-600 sm:gap-12 sm:grid-cols-3 lg:grid-cols-6 dark:text-gray-400">
-                <a href="https://aimath.org" class="flex items-center lg:justify-center">
-                    <%= image_tag "aim-logo-white.svg", class: "hidden dark:inline-block", alt: "American Institute of Mathematics logo" %>
-                    <%= image_tag "aim-logo-black.svg", class: "dark:hidden", alt: "American Institute of Mathematics logo" %>
-                </a>
-                <a href="https://tbil.org" class="flex items-center lg:justify-center">
-                    <%= image_tag "tbil-logo-white.svg", class: "hidden dark:inline-block", alt: "Team Based Inquiry Learning logo" %>
-                    <%= image_tag "tbil-logo-black.svg", class: "dark:hidden", alt: "Team Based Inquiry Learning logo" %>
-                </a>
-                <a href="https://discrete.openmathbooks.org/dmoi4.html" class="flex items-center lg:justify-center">
-                    <%= image_tag "dmoi-logo-white.svg", class: "hidden dark:inline-block", alt: "Discrete Mathematics Open Intro logo" %>
-                    <%= image_tag "dmoi-logo-black.svg", class: "dark:hidden", alt: "Discrete Mathematics Open Intro logo" %>
-                </a>
-                <a href="https://simiode.qubeshub.org/" class="flex items-center lg:justify-center">
-                    <%= image_tag "simiode-logo-white.svg", class: "hidden dark:inline-block", alt: "SIMIODE logo" %>
-                    <%= image_tag "simiode-logo-black.svg", class: "dark:hidden", alt: "SIMIODE logo" %>
-                </a>
-                <a href="https://landing.runestone.academy/" class="flex items-center lg:justify-center">
-                    <%= image_tag "runestone-logo-white.svg", class: "hidden dark:inline-block", alt: "Runestone Academy logo" %>
-                    <%= image_tag "runestone-logo-black.svg", class: "dark:hidden", alt: "Runestone Academy logo" %>
-                </a>
-                <a href="https://www.nsf.gov" class="flex items-center lg:justify-center">
-                    <%= image_tag "nsf-logo.svg", alt: "National Science Foundation logo" %>
-                </a>
             </div>
         </div>
     </section>
@@ -412,6 +385,40 @@
                     <svg width="24px" height="24px" viewBox="0 0 24 24" stroke-width="1.5" fill="none" xmlns="http://www.w3.org/2000/svg" class="inline-block mr-2"><path d="M14.3632 5.65156L15.8431 4.17157C16.6242 3.39052 17.8905 3.39052 18.6716 4.17157L20.0858 5.58579C20.8668 6.36683 20.8668 7.63316 20.0858 8.41421L18.6058 9.8942M14.3632 5.65156L4.74749 15.2672C4.41542 15.5993 4.21079 16.0376 4.16947 16.5054L3.92738 19.2459C3.87261 19.8659 4.39148 20.3848 5.0115 20.33L7.75191 20.0879C8.21972 20.0466 8.65806 19.8419 8.99013 19.5099L18.6058 9.8942M14.3632 5.65156L18.6058 9.8942" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"></path></svg>
                     Start Writing
                 <% end %>
+            </div>
+        </div>
+    </section>
+    <!-- End block -->
+    <!-- Start block -->
+    <section id="asseen" class="bg-gray-50 dark:bg-gray-900 pt-8 lg:pt-16">
+        <div class="max-w-screen-xl px-4 pb-8 mx-auto lg:pb-16">
+            <p class="font-light mb-2 text-gray-600 lg:mb-8 md:text-md lg:text-lg dark:text-gray-400">
+                The free and open-source PreTeXt project is used or sponsored by these organizations:
+            </p>
+            <div class="grid grid-cols-2 gap-8 text-gray-600 sm:gap-12 sm:grid-cols-3 lg:grid-cols-6 dark:text-gray-400">
+                <a href="https://aimath.org" class="flex items-center lg:justify-center">
+                    <%= image_tag "aim-logo-white.svg", class: "hidden dark:inline-block", alt: "American Institute of Mathematics logo" %>
+                    <%= image_tag "aim-logo-black.svg", class: "dark:hidden", alt: "American Institute of Mathematics logo" %>
+                </a>
+                <a href="https://tbil.org" class="flex items-center lg:justify-center">
+                    <%= image_tag "tbil-logo-white.svg", class: "hidden dark:inline-block", alt: "Team Based Inquiry Learning logo" %>
+                    <%= image_tag "tbil-logo-black.svg", class: "dark:hidden", alt: "Team Based Inquiry Learning logo" %>
+                </a>
+                <a href="https://discrete.openmathbooks.org/dmoi4.html" class="flex items-center lg:justify-center">
+                    <%= image_tag "dmoi-logo-white.svg", class: "hidden dark:inline-block", alt: "Discrete Mathematics Open Intro logo" %>
+                    <%= image_tag "dmoi-logo-black.svg", class: "dark:hidden", alt: "Discrete Mathematics Open Intro logo" %>
+                </a>
+                <a href="https://simiode.qubeshub.org/" class="flex items-center lg:justify-center">
+                    <%= image_tag "simiode-logo-white.svg", class: "hidden dark:inline-block", alt: "SIMIODE logo" %>
+                    <%= image_tag "simiode-logo-black.svg", class: "dark:hidden", alt: "SIMIODE logo" %>
+                </a>
+                <a href="https://landing.runestone.academy/" class="flex items-center lg:justify-center">
+                    <%= image_tag "runestone-logo-white.svg", class: "hidden dark:inline-block", alt: "Runestone Academy logo" %>
+                    <%= image_tag "runestone-logo-black.svg", class: "dark:hidden", alt: "Runestone Academy logo" %>
+                </a>
+                <a href="https://www.nsf.gov" class="flex items-center lg:justify-center">
+                    <%= image_tag "nsf-logo.svg", alt: "National Science Foundation logo" %>
+                </a>
             </div>
         </div>
     </section>

@@ -33,7 +33,7 @@
       <% end %>
     <% elsif current_user.blank? %>
       This is a read-only view of the source code for this project.
-      You can <%= link_to "sign in", new_user_session_path, class: "text-blue-500 hover:font-semibold" %>
+      You can <%= link_to "log in", new_user_session_path, class: "text-blue-500 hover:font-semibold" %>
       to copy this project to your own account and edit it.
     <% else %>
       This is a read-only view of the source code for this project.

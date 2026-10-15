@@ -1,0 +1,19 @@
+# Overrides of Devise's built-in English messages (devise/config/locales/en.yml in the
+# gem), for the vocabulary the app uses: "log in" / "log out", kept distinct from
+# "sign up". Only the keys reachable with the modules User enables are listed; the
+# rest fall through to the gem's defaults.
+
+en:
+  devise:
+    failure:
+      already_authenticated: "You are already logged in."
+      unauthenticated: "You need to log in or sign up before continuing."
+    passwords:
+      updated: "Your password has been changed successfully. You are now logged in."
+    sessions:
+      signed_in: "Logged in successfully."
+      signed_out: "Logged out successfully."
+      already_signed_out: "Logged out successfully."
+  errors:
+    messages:
+      already_confirmed: "was already confirmed, please try logging in"

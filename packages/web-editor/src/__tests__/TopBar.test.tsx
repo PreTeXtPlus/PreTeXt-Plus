@@ -287,7 +287,7 @@ describe("TopBar", () => {
 
     await user.click(screen.getByRole("button", { name: "File" }));
     expect(
-      screen.queryByRole("menuitem", { name: "Sign out" }),
+      screen.queryByRole("menuitem", { name: "Log out" }),
     ).not.toBeInTheDocument();
   });
 });

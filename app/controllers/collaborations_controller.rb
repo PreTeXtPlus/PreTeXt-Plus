@@ -15,9 +15,9 @@ class CollaborationsController < ApplicationController
 
     # Registration, not confirmation, is the bar. An unconfirmed account is a
     # working account everywhere else in the app -- Devise is configured with
-    # allow_unconfirmed_access_for, so its owner can sign in and edit their own
+    # allow_unconfirmed_access_for, so its owner can log in and edit their own
     # projects -- and treating it as nonexistent here produced the worst of both
-    # worlds: a pending invite plus a message telling a signed-in user to go make
+    # worlds: a pending invite plus a message telling a logged-in user to go make
     # the account they already had.
     invitee = User.find_by(email: collaboration.invited_email)
     if invitee
