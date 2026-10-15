@@ -114,8 +114,9 @@ const BLOCK_FAMILIES = {
 const INTERACTIVE: Record<string, RegExp> = {
   "true-false": /<statement correct="(yes|no)">/,
   "multiple-choice": /<choices[ >]/,
-  matching: /<matching[ >]/,
+  "multiple-select": /<choices [^>]*multiple-correct="yes"/,
   cardsort: /<cardsort[ >]/,
+  matching: /<matching[ >]/,
   parsons: /<blocks[ >]/,
   "clickable-area": /<areas[ >]/,
   "fill-in": /<fillin answer=/,
