@@ -275,6 +275,41 @@ export default defineConfig({
 The renderer itself is loaded with a dynamic `import()` only when a preview is
 first opened, so apps that never show one pay nothing for it.
 
+### Rendering off the main thread (recommended)
+
+A render is a WebAssembly transform that does not yield, so on the main thread
+it freezes the editor for as long as it takes — fine for a section, not for a
+long chapter. Bundle this package's `preview-worker` entry as an ES-module Web
+Worker and tell the editor where it is served from:
+
+```js
+// A second bundler entry point, e.g. preview-worker.js:
+import "@pretextbook/web-editor/preview-worker";
+```
+
+```jsx
+<Editors previewWorkerUrl="/assets/preview-worker.js" {...props} />
+```
+
+The worker finds the WASM binary next to its own script, exactly as the main
+bundle does (see the bundler note above), and fetches the stylesheets itself.
+Without `previewWorkerUrl` — or if the worker cannot start — previews render on
+the main thread as before.
+
+### How much is rendered
+
+The preview's toolbar offers two scopes, remembered across sessions:
+
+- **At cursor** (default): only the division around the cursor, numbered and
+  cross-referenced as the whole document numbers it. A division that contains
+  divisions is shown as a summary page — its own content, then links to the
+  divisions inside it. Clicking any link to a division not on the page — a
+  summary row, the preview's own table of contents, Prev/Up/Next — opens that
+  division in the editor. A short document
+  (at most 1500 elements) is rendered whole regardless. This is what keeps a
+  large book previewable as you type.
+- **Everything**: the open division whole, every division inside it included.
+
 ### Fallback for browsers without JSPI
 
 Local rendering needs WebAssembly JSPI (stack switching), which Chromium-based

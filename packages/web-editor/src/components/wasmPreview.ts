@@ -24,8 +24,8 @@
  */
 
 // Type-only, so this is erased at compile time and does not drag the WASM
-// entry (and its top-level await) onto the load path. The matching runtime
-// helper is reached through loadRenderer() instead — see findEntryForLine.
+// entry (and its top-level await) onto the load path. The runtime module is
+// reached through loadRenderer() instead, and only by renderPreviewHtml.
 import type {
   PtxSourceMap,
   RenderTarget,
@@ -110,7 +110,41 @@ export interface LocalRenderOptions {
    * `<pretext>` document. Required for context mode.
    */
   fragment?: boolean;
+  /**
+   * Render one division of `source` rather than all of it: the innermost
+   * division around `line` (a 1-based line of `source` itself), or the one
+   * carrying `id`. The rest of the document is pruned to a skeleton, so the
+   * division is numbered and cross-referenced as the whole document would
+   * number it, and the render costs what the division costs rather than what
+   * the document does. A division that contains divisions renders as a
+   * summary page — its own content, then links to the divisions inside it —
+   * so only leaf divisions render in full.
+   *
+   * `wholeDocumentUpTo` renders the whole document instead when it has no
+   * more than that many elements. It counts the *context* document in context
+   * mode and makes the renderer emit all of it, which is why callers only pass
+   * it for a whole-document render (see {@link WHOLE_DOCUMENT_UP_TO}).
+   *
+   * Ignored when no division can be selected; the result then carries no
+   * `subtree`.
+   */
+  subtree?: PreviewSubtreeOptions;
 }
+
+/** How a render narrows to one division — see {@link LocalRenderOptions.subtree}. */
+export interface PreviewSubtreeOptions {
+  line?: number;
+  id?: string;
+  wholeDocumentUpTo?: number;
+}
+
+/**
+ * Documents with at most this many elements preview whole even when the
+ * author asked for the division at the cursor: a short article renders about
+ * as fast as any one section of it, and all of it is the better preview. A
+ * long chapter is a few thousand elements, a small article a few hundred.
+ */
+export const WHOLE_DOCUMENT_UP_TO = 1500;
 
 /*
  * Deliberately no `revealView`/`revealZoom` here, though the renderer accepts
@@ -152,6 +186,22 @@ export interface PreviewRender {
    * as the chapter).
    */
   rootPrintout?: string;
+  /**
+   * Present when one division was emitted rather than everything asked for
+   * (see {@link LocalRenderOptions.subtree}): its `xml:id` — also its HTML id
+   * and its id in `sourceMap` — and, when it was rendered as a summary page
+   * (`collapsed`), the ids of the divisions that page lists in place of their
+   * content. A cursor entering one of those needs a re-render.
+   */
+  subtree?: RenderedSubtree;
+}
+
+/** Which division a render emitted, as the renderer reports it. */
+export interface RenderedSubtree {
+  id: string;
+  level: number;
+  collapsed: boolean;
+  children: string[];
 }
 
 type PretextHtmlModule = typeof import("@pretextbook/pretext-html");
@@ -207,7 +257,7 @@ export async function renderPreviewHtml(
   options: LocalRenderOptions = {},
 ): Promise<PreviewRender> {
   const { renderHtml } = await loadRenderer();
-  const { html, sourceMap, target, printouts, rootPrintout } = await renderHtml({
+  const { html, sourceMap, target, printouts, rootPrintout, subtree } = await renderHtml({
     cssTheme: "default-modern",
     sourcePath: PREVIEW_SOURCE_PATH,
     projectDir: "/source",
@@ -227,6 +277,22 @@ export async function renderPreviewHtml(
     ...(options.bannerMessage
       ? { previewBanner: { message: options.bannerMessage } }
       : {}),
+    // A cursor line is in `source`'s own coordinates, which is the file
+    // being rendered either way: in context mode the renderer selects within
+    // the placed fragment, whose lines are still the buffer's.
+    ...(options.subtree
+      ? {
+          subtree: {
+            ...(options.subtree.id !== undefined ? { id: options.subtree.id } : {}),
+            ...(options.subtree.line !== undefined
+              ? { line: options.subtree.line, file: PREVIEW_SOURCE_PATH }
+              : {}),
+            ...(options.subtree.wholeDocumentUpTo !== undefined
+              ? { wholeDocumentUpTo: options.subtree.wholeDocumentUpTo }
+              : {}),
+          },
+        }
+      : {}),
   });
   return {
     html,
@@ -234,7 +300,71 @@ export async function renderPreviewHtml(
     target,
     printouts,
     rootPrintout,
+    ...(subtree ? { subtree } : {}),
   };
+}
+
+/**
+ * Where a rendered division sits in the source, in the lines of the text that
+ * was rendered: the division's own span, and — for a summary page — the span
+ * of each division it lists instead of showing. What
+ * {@link cursorOutsideSubtree} compares a cursor against.
+ */
+export interface SubtreeExtent {
+  id: string;
+  line: number;
+  endLine: number;
+  children: { id: string; line: number; endLine: number }[];
+}
+
+/**
+ * The extent of the division a render emitted, read off its source map.
+ *
+ * The map describes the whole assembled document, not just the emitted page,
+ * so the division's entry is in it whether or not any of its elements made it
+ * to the page. Undefined when the render emitted everything (no `subtree`), or
+ * when the map does not know the division — a render that fell back to a
+ * standalone wrapper — in which case nothing is narrowed and a cursor can
+ * never be outside it.
+ *
+ * A listed child the map does not know is simply dropped: entering it cannot
+ * be detected, and the author still has the summary link to click.
+ */
+export function subtreeExtent(
+  sourceMap: PtxSourceMap,
+  subtree: RenderedSubtree | undefined,
+): SubtreeExtent | undefined {
+  if (!subtree) return undefined;
+  const own = findEntryById(sourceMap, subtree.id);
+  if (!own) return undefined;
+  const children: SubtreeExtent["children"] = [];
+  for (const id of subtree.children) {
+    const entry = findEntryById(sourceMap, id);
+    if (entry) children.push({ id, line: entry.line, endLine: entry.endLine });
+  }
+  return { id: subtree.id, line: own.line, endLine: own.endLine, children };
+}
+
+/**
+ * Whether a cursor at `line` is somewhere the rendered division does not show:
+ * before or after it, or inside one of the divisions a summary page lists but
+ * does not render. Each means the preview following the cursor needs a
+ * re-render; anywhere else, the page on screen already covers the cursor.
+ *
+ * Not quite "the renderer would choose differently": a cursor outside every
+ * division (in the prolog, or `<docinfo>`) is rendered as the nearest one, so
+ * moving about there re-renders to the page already shown. That costs a
+ * render the patcher then finds nothing to change in, and nothing worse.
+ */
+export function cursorOutsideSubtree(
+  extent: SubtreeExtent | undefined,
+  line: number,
+): boolean {
+  if (!extent) return false;
+  if (line < extent.line || line > extent.endLine) return true;
+  return extent.children.some(
+    (child) => line >= child.line && line <= child.endLine,
+  );
 }
 
 /**
@@ -361,21 +491,26 @@ export function patchPreviewPage(
 }
 
 /**
- * The element to sync to for a cursor sitting on `assembledLine`: the nearest
- * element starting at or above it.
+ * The element to sync to for a cursor sitting on `assembledLine`: the last
+ * element starting at or before it — the deepest, nearest element above the
+ * cursor — or the first entry for a cursor in the prolog.
  *
- * Async only because the helper lives in the renderer entry, which is loaded
- * dynamically to keep its top-level await off the page-load path. By the time
- * anything can sync there is a rendered preview on screen, so the module is
- * already cached and this resolves immediately.
+ * The same rule as the renderer's own `findSourceMapEntry`, kept here rather
+ * than imported: that helper lives in the renderer entry, whose top-level
+ * await instantiates the WASM module, and a page that renders in a worker
+ * (see previewRenderer.ts) must never load that entry on the main thread.
+ * Assumes one file's entries in document order, which {@link subtreeSourceMap}
+ * guarantees for the previewed division.
  */
-export async function findEntryForLine(
+export function findEntryForLine(
   sourceMap: PtxSourceMap,
   assembledLine: number,
-): Promise<SourceMapEntry | undefined> {
-  if (sourceMap.length === 0) return undefined;
-  const { findSourceMapEntry } = await loadRenderer();
-  return findSourceMapEntry(sourceMap, assembledLine);
+): SourceMapEntry | undefined {
+  let found: SourceMapEntry | undefined;
+  for (const entry of sourceMap) {
+    if (entry.line <= assembledLine) found = entry;
+  }
+  return found ?? sourceMap[0];
 }
 
 /**

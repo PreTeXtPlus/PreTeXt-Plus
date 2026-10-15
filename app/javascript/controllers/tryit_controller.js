@@ -12,6 +12,7 @@ export default class extends Controller {
     rootPath: String,
     newUserPath: String,
     newSessionPath: String,
+    previewWorkerUrl: String,
   }
 
   /** Load the React bundle as soon as the controller initializes.
@@ -47,6 +48,7 @@ export default class extends Controller {
       rootPath: this.rootPathValue,
       newUserPath: this.newUserPathValue,
       newSessionPath: this.newSessionPathValue,
+      previewWorkerUrl: this.previewWorkerUrlValue,
     })
 
     this.notifyLayoutChange()

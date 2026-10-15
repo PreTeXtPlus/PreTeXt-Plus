@@ -57,6 +57,7 @@ function railsDivisionToEditor(d) {
  * @property {string} [rootPath]
  * @property {string} [newUserPath]
  * @property {string} [newSessionPath]
+ * @property {string} [previewWorkerUrl] - See EditorConfig in ./editor.jsx.
  */
 
 /**
@@ -124,6 +125,7 @@ function TryItApp({ config }) {
       onCommonDocinfoChange={noop}
       onSave={noop}
       onPreviewRebuild={onPreviewRebuild}
+      previewWorkerUrl={config.previewWorkerUrl}
       onCreatePretextProjectCopy={noopAsync}
       onFeedbackSubmit={noopAsync}
       hideAssets={true}

@@ -4,10 +4,13 @@
 import { describe, it, expect } from 'vitest'
 import {
   applyPrintPreview,
+  cursorOutsideSubtree,
   describePreviewError,
+  findEntryForLine,
   findWellformednessErrorLine,
   parsePreviewPage,
   patchPreviewPage,
+  subtreeExtent,
   subtreeSourceMap,
 } from '../components/wasmPreview'
 import type { PtxSourceMap } from '@pretextbook/pretext-html'
@@ -221,5 +224,114 @@ describe('patchPreviewPage', () => {
 
     expect(ok).toBe(false)
     expect(document.documentElement.outerHTML).toBe(before)
+  })
+})
+
+describe('subtreeExtent', () => {
+  it('reads the rendered division and its listed children off the map', () => {
+    const extent = subtreeExtent(CONTEXT_MAP, {
+      id: 'bk',
+      level: 0,
+      collapsed: true,
+      children: ['ch1', 'ch2', 'ch3'],
+    })
+    expect(extent).toEqual({
+      id: 'bk',
+      line: 2,
+      endLine: 15,
+      children: [
+        { id: 'ch1', line: 3, endLine: 7 },
+        { id: 'ch2', line: 8, endLine: 14 },
+        { id: 'ch3', line: 16, endLine: 40 },
+      ],
+    })
+  })
+
+  it('has no children for a division shown whole', () => {
+    const extent = subtreeExtent(CONTEXT_MAP, {
+      id: 's22',
+      level: 2,
+      collapsed: false,
+      children: [],
+    })
+    expect(extent).toEqual({ id: 's22', line: 1, endLine: 10, children: [] })
+  })
+
+  it('drops a listed child the map does not know', () => {
+    const extent = subtreeExtent(CONTEXT_MAP, {
+      id: 'bk',
+      level: 0,
+      collapsed: true,
+      children: ['ch1', 'not-here'],
+    })
+    expect(extent?.children.map((child) => child.id)).toEqual(['ch1'])
+  })
+
+  it('is undefined when everything was rendered', () => {
+    expect(subtreeExtent(CONTEXT_MAP, undefined)).toBeUndefined()
+  })
+
+  it('is undefined when the map does not know the division', () => {
+    expect(
+      subtreeExtent(CONTEXT_MAP, { id: 'ghost', level: 1, collapsed: false, children: [] }),
+    ).toBeUndefined()
+  })
+})
+
+describe('cursorOutsideSubtree', () => {
+  const summary = subtreeExtent(CONTEXT_MAP, {
+    id: 'ch2',
+    level: 1,
+    collapsed: true,
+    children: ['s22'],
+  })
+  const whole = subtreeExtent(CONTEXT_MAP, {
+    id: 'thm-b',
+    level: 3,
+    collapsed: false,
+    children: [],
+  })
+
+  it('is false inside a division shown whole', () => {
+    expect(cursorOutsideSubtree(whole, 6)).toBe(false)
+    expect(cursorOutsideSubtree(whole, 9)).toBe(false)
+  })
+
+  it('is true before and after it', () => {
+    expect(cursorOutsideSubtree(whole, 5)).toBe(true)
+    expect(cursorOutsideSubtree(whole, 10)).toBe(true)
+  })
+
+  it("is true inside a division a summary page lists but does not show", () => {
+    // s22 spans 1-10 in the buffer's coordinates, ch2 8-14 in the context's;
+    // the overlap is the fixture's, not a real page's, and does not matter
+    // here: a cursor in a listed child is outside whatever the parent spans.
+    expect(cursorOutsideSubtree(summary, 9)).toBe(true)
+  })
+
+  it("is false in the summary page's own content", () => {
+    expect(cursorOutsideSubtree(summary, 12)).toBe(false)
+  })
+
+  it('is never outside when nothing was narrowed', () => {
+    expect(cursorOutsideSubtree(undefined, 999)).toBe(false)
+  })
+})
+
+describe('findEntryForLine', () => {
+  const entries = subtreeSourceMap(CONTEXT_MAP, 's22')
+
+  it('picks the deepest element starting at or before the line', () => {
+    expect(findEntryForLine(entries, 8)?.id).toBe('thm-b-2')
+    expect(findEntryForLine(entries, 7)?.id).toBe('thm-b')
+    expect(findEntryForLine(entries, 3)?.id).toBe('s22-1')
+  })
+
+  it('falls back to the first entry for a line above them all', () => {
+    expect(findEntryForLine(entries, 0)?.id).toBe('s22')
+  })
+
+  it('is undefined for an empty map', () => {
+    expect(findEntryForLine([], 5)).toBeUndefined()
   })
 })

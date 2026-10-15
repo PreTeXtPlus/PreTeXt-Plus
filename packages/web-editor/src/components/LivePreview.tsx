@@ -12,6 +12,7 @@ import { postToIframe } from "./postToIframe";
 import {
   applyPrintPreview,
   applyRevealView,
+  cursorOutsideSubtree,
   describePreviewError,
   findEntryById,
   findEntryForLine,
@@ -20,12 +21,16 @@ import {
   parsePreviewPage,
   patchPreviewPage,
   previewThemeMessage,
-  renderPreviewHtml,
+  subtreeExtent,
+  WHOLE_DOCUMENT_UP_TO,
   type PreviewTheme,
   type PrintoutInfo,
   type RevealView,
+  type SubtreeExtent,
 } from "./wasmPreview";
 import type { PreviewLineMap } from "./previewSync";
+import type { PreviewScope } from "../store/editorStore";
+import { inlinePreviewRenderer, type PreviewRenderer } from "./previewRenderer";
 import type { PtxSourceMap, SourceMapEntry } from "@pretextbook/pretext-html";
 
 interface LivePreviewProps {
@@ -138,6 +143,32 @@ interface LivePreviewProps {
    * that it is not a real build. Pass an empty string for no banner.
    */
   bannerMessage?: string;
+  /**
+   * How much of `content` to render: the division around {@link cursorLine}
+   * (`"cursor"`), or all of it (`"editor"`, the default). Only the local
+   * renderer can narrow a render; the server path always builds `serverContent`
+   * whole. A slideshow (`documentTarget` "slides") is always rendered whole
+   * too — a deck's sections are not pages in their own right.
+   */
+  scope?: PreviewScope;
+  /**
+   * The author's cursor, as a 1-based line of `content` — the rendered text,
+   * not the editor buffer; the caller translates (see previewSync.ts). Which
+   * division a `"cursor"`-scoped render shows, and what makes it follow the
+   * author: a cursor leaving the rendered division re-renders. Changing it
+   * never rebuilds in any other scope.
+   */
+  cursorLine?: number;
+  /**
+   * Offer the scope choice in the preview's own toolbar. Omit to hide the
+   * control, for a preview with no cursor to follow (a snippet's).
+   */
+  onScopeChange?: (scope: PreviewScope) => void;
+  /**
+   * What performs a local render: in a worker, when the host serves one (see
+   * previewRenderer.ts), else on this thread. Defaults to this thread.
+   */
+  renderer?: PreviewRenderer;
 }
 
 export interface LivePreviewHandle {
@@ -208,6 +239,38 @@ function entryForClick(
 }
 
 /**
+ * The division a click on a link to another page asks for, or `undefined` for
+ * a click anywhere else.
+ *
+ * On a one-page preview every link to a division that is not on the page —
+ * the rows of a summary page, the page's own table of contents, Prev/Up/Next
+ * — goes nowhere, and the renderer marks each with `data-ptx-division`: the
+ * division's `xml:id`, which is also its id in the source map. The line is
+ * the division's when the map knows it, and the top otherwise: the map is
+ * trimmed to the open division, so a link out of it (to a sibling, or the
+ * root) still names where to go, just not where in it. Same realm caveat as
+ * {@link entryForClick}: walk by hand rather than trusting `instanceof`.
+ */
+function linkedDivisionForClick(
+  target: EventTarget | null,
+  sourceMap: PtxSourceMap,
+): { id: string; line: number } | undefined {
+  const node = target as Node | null;
+  let element: Element | null =
+    node == null
+      ? null
+      : node.nodeType === 1
+      ? (node as Element)
+      : node.parentElement;
+  while (element) {
+    const id = element.getAttribute("data-ptx-division");
+    if (id) return { id, line: findEntryById(sourceMap, id)?.line ?? 1 };
+    element = element.parentElement;
+  }
+  return undefined;
+}
+
+/**
  * The page in the iframe, as much as patching the next render into it needs.
  */
 interface ShownPage {
@@ -266,6 +329,32 @@ function defaultPreviewToLight(): void {
   }
 }
 
+/**
+ * Where the author's last choice of layout for a printout — on paper, or the
+ * web view — is remembered. An author who opens worksheets to lay them out
+ * wants paper every time; one who is writing the questions wants the page
+ * that updates as they type, and should not have to leave print preview on
+ * every worksheet they open.
+ */
+const PRINT_LAYOUT_KEY = "pretext-plus:preview-print-layout";
+
+/** Whether to open a printout division on paper: the remembered choice, else not. */
+function prefersPrintLayout(): boolean {
+  try {
+    return localStorage.getItem(PRINT_LAYOUT_KEY) === "print";
+  } catch {
+    return false;
+  }
+}
+
+function rememberPrintLayout(onPaper: boolean): void {
+  try {
+    localStorage.setItem(PRINT_LAYOUT_KEY, onPaper ? "print" : "web");
+  } catch {
+    // Storage blocked — the choice just doesn't outlive this session.
+  }
+}
+
 /** Zoom steps for a slideshow, coarse enough that a click is visible. */
 const REVEAL_ZOOM_STEP = 0.25;
 const REVEAL_ZOOM_MIN = 0.25;
@@ -298,6 +387,10 @@ const LivePreview = forwardRef<LivePreviewHandle, LivePreviewProps>(
       docinfo,
       theme,
       bannerMessage,
+      scope = "editor",
+      cursorLine,
+      onScopeChange,
+      renderer = inlinePreviewRenderer,
     },
     ref,
   ) => {
@@ -334,6 +427,23 @@ const LivePreview = forwardRef<LivePreviewHandle, LivePreviewProps>(
     // Source map for whatever is currently displayed. A ref, not state: it is
     // only ever read inside callbacks, and re-rendering on it would be waste.
     const sourceMapRef = useRef<PtxSourceMap>([]);
+    // The cursor as of now, for a render to read when it starts — the content
+    // debounce fires a `preview` closed over an older cursor, and a render
+    // must follow the author, not the keystroke.
+    const cursorLineRef = useRef(cursorLine);
+    useEffect(() => {
+      cursorLineRef.current = cursorLine;
+    }, [cursorLine]);
+    // Which division the latest render emitted, and where it sits in the
+    // source; null when it emitted everything. The extent is what the cursor
+    // is compared against, and the id is part of the page's identity: a
+    // different division is a different page, loaded fresh rather than
+    // patched over the one on screen.
+    const renderedSubtree = useRef<SubtreeExtent | null>(null);
+    // A line to scroll to once a freshly loaded page is on screen — set when
+    // the page changed *because* the cursor moved there, so the author lands
+    // on what they went to rather than at the top of it.
+    const pendingCursorScroll = useRef<number | null>(null);
     // Kept current so the iframe's click listener — attached once per loaded
     // document — always calls the latest prop.
     const onSyncToSourceRef = useRef(onSyncToSource);
@@ -351,9 +461,16 @@ const LivePreview = forwardRef<LivePreviewHandle, LivePreviewProps>(
 
     const showBrowserTip = !renderLocally;
 
+    // The text the latest render was asked for, so the content debounce can
+    // tell a keystroke from a render some other trigger already started for
+    // the same text — the mount, in particular, which used to cost a second
+    // full render a second after the first.
+    const lastRequestedContent = useRef<string | null>(null);
+
     const preview = useCallback(() => {
       const source = content;
       const previewTitle = title || "Document Title";
+      lastRequestedContent.current = source;
 
       // Save scroll position before rebuilding so the author keeps their place
       // should the new page have to be loaded from scratch; a page patched in
@@ -375,28 +492,62 @@ const LivePreview = forwardRef<LivePreviewHandle, LivePreviewProps>(
 
       if (renderLocally) {
         const token = ++renderToken.current;
-        renderPreviewHtml(source, {
+        // Follow the cursor: the innermost division around it, with no
+        // chunk level — every division is a page of its own, and one that
+        // holds divisions is a summary page. Before the first cursor report
+        // the top of the text stands in, which selects the open division
+        // itself. The whole-document threshold is only for a complete
+        // document: in context mode it would count the whole book and emit
+        // all of it (see wasmPreview.ts).
+        const followCursor = scope === "cursor" && documentTarget !== "slides";
+        const subtree = followCursor
+          ? {
+              line: cursorLineRef.current ?? 1,
+              ...(fragment ? {} : { wholeDocumentUpTo: WHOLE_DOCUMENT_UP_TO }),
+            }
+          : undefined;
+        renderer
+          .render(source, {
           divisionId,
           fragment,
           contextSource,
           docinfo,
           theme,
           bannerMessage,
-        })
-          .then(({ html, sourceMap, target, printouts, rootPrintout }) => {
+          subtree,
+          })
+          .then(({ html, sourceMap, target, printouts, rootPrintout, subtree }) => {
             if (token !== renderToken.current) {
               return;
             }
             sourceMapRef.current = sourceMap;
+            const extent = subtreeExtent(sourceMap, subtree) ?? null;
+            if (
+              renderedDivision.current === divisionId &&
+              (extent?.id ?? null) !== (renderedSubtree.current?.id ?? null)
+            ) {
+              // Same division, different page of it: the cursor went
+              // somewhere the page on screen did not show (or the scope
+              // changed). The saved scroll position belongs to the old page;
+              // land on the cursor instead.
+              savedScrollPosition.current = null;
+              pendingCursorScroll.current = followCursor
+                ? (cursorLineRef.current ?? null)
+                : null;
+            }
+            renderedSubtree.current = extent;
             setRenderTarget(target);
             setPrintouts(printouts);
             if (renderedDivision.current !== divisionId) {
-              // A division the author has just switched to. Open it on paper
-              // when the division *is* a printout — editing `worksheet-3.ptx`,
-              // where the paper layout is the whole point — and on screen when
-              // it merely contains some.
+              // A division the author has just switched to. A division that
+              // *is* a printout — `worksheet-3.ptx` itself, not a chapter
+              // that holds some — opens on paper only if that is how the
+              // author last chose to see one (see PRINT_LAYOUT_KEY); the web
+              // view, which follows their typing, is the default.
               renderedDivision.current = divisionId;
-              setPrintoutId(rootPrintout ?? null);
+              setPrintoutId(
+                rootPrintout && prefersPrintLayout() ? rootPrintout : null,
+              );
             } else {
               // Same division, edited: the printout being shown may have just
               // been renamed or deleted out from under the selection.
@@ -450,9 +601,13 @@ const LivePreview = forwardRef<LivePreviewHandle, LivePreviewProps>(
       docinfo,
       theme,
       bannerMessage,
+      scope,
+      renderer,
       // Note: not revealView/revealZoom. A deck's presentation is applied to
       // the rendered page (see pageHtml), never baked into the render, so
-      // changing it must not invalidate this callback.
+      // changing it must not invalidate this callback. Nor cursorLine: it is
+      // read through a ref, and a render is only ever *started* for it by the
+      // effect below, when it has left the rendered division.
     ]);
 
     // The page as it should currently appear. Switching a deck's view or zoom,
@@ -490,7 +645,8 @@ const LivePreview = forwardRef<LivePreviewHandle, LivePreviewProps>(
       if (shown?.html === pageHtml) return;
       const patchKey =
         renderTarget === "html" && printoutId === null
-          ? `division:${renderedDivision.current ?? ""}`
+          ? `division:${renderedDivision.current ?? ""}` +
+            `/subtree:${renderedSubtree.current?.id ?? ""}`
           : null;
       const win = iframe.contentWindow;
       if (patchKey !== null && shown?.loaded && shown.patchKey === patchKey && win) {
@@ -507,6 +663,16 @@ const LivePreview = forwardRef<LivePreviewHandle, LivePreviewProps>(
       iframe.srcdoc = pageHtml;
     }, [pageHtml, renderTarget, printoutId, renderLocally]);
 
+    /** Scroll the page to whatever was rendered from `assembledLine`, if anything. */
+    const scrollToAssembledLine = useCallback(async (assembledLine: number) => {
+      const sourceMap = sourceMapRef.current;
+      const entry = findEntryForLine(sourceMap, assembledLine);
+      const doc = iframeRef.current?.contentDocument;
+      if (!entry || !doc) return;
+      const element = elementForEntry(doc, sourceMap, entry);
+      element?.scrollIntoView({ block: "center", behavior: "smooth" });
+    }, []);
+
     /**
      * Wire up a document that has just appeared in the iframe: preview → source
      * sync, and the scroll position saved before the rebuild.
@@ -521,6 +687,21 @@ const LivePreview = forwardRef<LivePreviewHandle, LivePreviewProps>(
       const doc = iframeRef.current?.contentDocument;
       if (!doc) return;
       doc.addEventListener("click", (event) => {
+        // A link to a division not on this page goes nowhere here (see
+        // linkedDivisionForClick). Treat a click on one as "take me there":
+        // syncing the editor to the division opens it, or moves the cursor
+        // into it, and a cursor-scoped preview then follows. Checked before
+        // the ordinary walk, which would find the link's enclosing element —
+        // a summary list, the page's table of contents — instead.
+        const linked = linkedDivisionForClick(event.target, sourceMapRef.current);
+        if (linked) {
+          event.preventDefault();
+          onSyncToSourceRef.current?.({
+            assembledLine: linked.line,
+            elementId: linked.id,
+          });
+          return;
+        }
         const entry = entryForClick(event.target, sourceMapRef.current);
         if (entry) {
           onSyncToSourceRef.current?.({
@@ -529,6 +710,13 @@ const LivePreview = forwardRef<LivePreviewHandle, LivePreviewProps>(
           });
         }
       });
+      if (pendingCursorScroll.current !== null) {
+        const line = pendingCursorScroll.current;
+        pendingCursorScroll.current = null;
+        savedScrollPosition.current = null;
+        void scrollToAssembledLine(line);
+        return;
+      }
       if (savedScrollPosition.current) {
         try {
           iframeRef.current?.contentWindow?.scrollTo(
@@ -540,7 +728,7 @@ const LivePreview = forwardRef<LivePreviewHandle, LivePreviewProps>(
         }
         savedScrollPosition.current = null;
       }
-    }, []);
+    }, [scrollToAssembledLine]);
 
     // Follow the host's theme without re-rendering. Only meaningful when the
     // host drives the theme at all — otherwise no bridge was injected and the
@@ -567,8 +755,28 @@ const LivePreview = forwardRef<LivePreviewHandle, LivePreviewProps>(
       // theme. Not needed when the host drives it: the injected bridge does.
       if (!theme) defaultPreviewToLight();
       preview();
+      // Also on a scope change: the page on screen is the wrong amount of the
+      // division either way.
       // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [divisionId]);
+    }, [divisionId, scope]);
+
+    // Follow the cursor out of the rendered division. Only when it has
+    // actually left — moving about inside the page on screen costs nothing —
+    // and on a short debounce, so holding an arrow key through a chapter's
+    // table of contents does not render a page per section it passes.
+    useEffect(() => {
+      if (!renderLocally || scope !== "cursor" || cursorLine === undefined) {
+        return;
+      }
+      if (!cursorOutsideSubtree(renderedSubtree.current ?? undefined, cursorLine)) {
+        return;
+      }
+      const timer = setTimeout(() => {
+        preview();
+      }, 300);
+      return () => clearTimeout(timer);
+      // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [cursorLine, scope, renderLocally]);
 
     // Local renders are cheap enough (~90ms warm) to keep the preview live
     // while typing. Debounced 1s past the last keystroke rather than firing
@@ -576,7 +784,7 @@ const LivePreview = forwardRef<LivePreviewHandle, LivePreviewProps>(
     // character. Server builds stay manual-only (see effect above) — a
     // network round trip on every pause would be both slow and wasteful.
     useEffect(() => {
-      if (!renderLocally) return;
+      if (!renderLocally || lastRequestedContent.current === content) return;
       const timer = setTimeout(() => {
         preview();
       }, 1000);
@@ -589,17 +797,10 @@ const LivePreview = forwardRef<LivePreviewHandle, LivePreviewProps>(
       () => ({
         rebuild: preview,
         scrollToAssembledLine: (assembledLine: number) => {
-          void (async () => {
-            const sourceMap = sourceMapRef.current;
-            const entry = await findEntryForLine(sourceMap, assembledLine);
-            const doc = iframeRef.current?.contentDocument;
-            if (!entry || !doc) return;
-            const element = elementForEntry(doc, sourceMap, entry);
-            element?.scrollIntoView({ block: "center", behavior: "smooth" });
-          })();
+          void scrollToAssembledLine(assembledLine);
         },
       }),
-      [preview],
+      [preview, scrollToAssembledLine],
     );
 
     const handleIframeLoad = () => {
@@ -637,6 +838,40 @@ const LivePreview = forwardRef<LivePreviewHandle, LivePreviewProps>(
           </p>
           <div className="absolute right-2 flex items-center gap-1.5">
             {/*
+              How much to render. Offered only where there is a cursor to
+              follow, and never for a deck, which is always rendered whole.
+            */}
+            {onScopeChange && renderLocally && documentTarget !== "slides" && (
+              <span
+                className="inline-flex items-center"
+                role="group"
+                aria-label="Preview scope"
+              >
+                <button
+                  className={clsx(
+                    PREVIEW_BUTTON_CLASSES,
+                    PREVIEW_BUTTON_SEGMENTED_CLASSES,
+                  )}
+                  aria-pressed={scope === "cursor"}
+                  onClick={() => onScopeChange("cursor")}
+                  title="Preview the division around the cursor, numbered as in the whole document. Much faster on a long document; a division that holds divisions is shown as a summary page."
+                >
+                  At cursor
+                </button>
+                <button
+                  className={clsx(
+                    PREVIEW_BUTTON_CLASSES,
+                    PREVIEW_BUTTON_SEGMENTED_CLASSES,
+                  )}
+                  aria-pressed={scope === "editor"}
+                  onClick={() => onScopeChange("editor")}
+                  title="Preview everything in the editor: the open division whole, every division inside it included."
+                >
+                  Everything
+                </button>
+              </span>
+            )}
+            {/*
               PreTeXt's own printer icon on each printout is deliberately inert
               in a preview render — the URL it would reload does not exist — so
               the paper layout is offered from here instead. Absent for a page
@@ -656,9 +891,11 @@ const LivePreview = forwardRef<LivePreviewHandle, LivePreviewProps>(
                 aria-label="Preview layout"
                 title="Lay a worksheet or handout out for print, with each workspace at the height the author asked for"
                 value={printoutId ?? ""}
-                onChange={(event) =>
-                  setPrintoutId(event.target.value || null)
-                }
+                onChange={(event) => {
+                  const chosen = event.target.value || null;
+                  setPrintoutId(chosen);
+                  rememberPrintLayout(chosen !== null);
+                }}
               >
                 <option value="">Web view</option>
                 <optgroup label="Print preview">
