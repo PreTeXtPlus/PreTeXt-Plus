@@ -17,6 +17,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { createRequire } from "node:module";
 import {
+  PRETEXT_GRAMMAR_FILE,
   setPretextSchemaUrl,
   validatePretextDocument,
 } from "../components/editorConfigs/pretextSchema";
@@ -25,7 +26,7 @@ import { assembleFullProjectSource } from "../sectionUtils";
 import type { Division } from "../types/sections";
 
 const require = createRequire(import.meta.url);
-const GRAMMAR_URL = "https://test.invalid/pretext.json";
+const GRAMMAR_URL = `https://test.invalid/${PRETEXT_GRAMMAR_FILE}`;
 
 const monaco = {
   MarkerSeverity: { Hint: 1, Info: 2, Warning: 4, Error: 8 },
@@ -40,7 +41,7 @@ beforeAll(() => {
     path.join(
       path.dirname(require.resolve("@pretextbook/schema")),
       "assets",
-      "pretext.json",
+      PRETEXT_GRAMMAR_FILE,
     ),
     "utf8",
   );

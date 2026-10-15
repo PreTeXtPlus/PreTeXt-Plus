@@ -2,7 +2,7 @@ import React, { useEffect, useState } from "react";
 import clsx from "clsx";
 import type { SourceFormat } from "../types/editor";
 import type { RootDivisionType } from "../types/sections";
-import MenuDropdown, { type MenuEntry } from "./MenuDropdown";
+import MenuDropdown, { type MenuEntry, type MenuLeafEntry } from "./MenuDropdown";
 import {
   MONACO_COMMANDS,
   formatShortcut,
@@ -162,7 +162,7 @@ const separator = (key: string): MenuEntry => ({ kind: "separator", key });
  * format (Format PreTeXt, Import, Clean up LaTeX) sit together at the
  * top of Tools, above the editor commands that are the same everywhere; the
  * Insert menu offers the same catalog of constructs written in whichever
- * format is open (see `editorConfigs/snippets.ts`).
+ * format is open (see `editorConfigs/snippets.ts`), a submenu per category.
  *
  * "Convert to PreTeXt" is the one action here that changes what the project
  * *is*, and it is the call to action for an author working in an imported
@@ -354,18 +354,31 @@ const CodeEditorMenu: React.FC<CodeEditorMenuProps> = ({
       ];
 
   // ── Insert ────────────────────────────────────────────────────────────────
+  const snippetEntry = (snippet: EditorSnippet): MenuLeafEntry => ({
+    kind: "item",
+    key: snippet.key,
+    label: snippet.label,
+    title: snippet.detail,
+    onSelect: () => actions.insertSnippet(snippet),
+  });
+
+  // One submenu per category, with a rule wherever the catalog's section
+  // changes. A category the format leaves with a single construct (Definition,
+  // Exercise, a slideshow's Slide) is offered as that construct: a submenu of
+  // one is a detour, not a category.
   const insertEntries: MenuEntry[] = snippetGroupsFor(sourceFormat, rootType).flatMap(
-    (group) => [
-      { kind: "heading" as const, key: `heading-${group.key}`, label: group.label },
-      ...group.snippets.map(
-        (snippet): MenuEntry => ({
-          kind: "item",
-          key: snippet.key,
-          label: snippet.label,
-          title: snippet.detail,
-          onSelect: () => actions.insertSnippet(snippet),
-        }),
-      ),
+    (group, index, groups): MenuEntry[] => [
+      ...(index > 0 && group.section !== groups[index - 1].section
+        ? [separator(`section-${group.key}`)]
+        : []),
+      group.snippets.length === 1
+        ? snippetEntry(group.snippets[0])
+        : {
+            kind: "submenu",
+            key: `group-${group.key}`,
+            label: group.label,
+            entries: group.snippets.map(snippetEntry),
+          },
     ],
   );
 

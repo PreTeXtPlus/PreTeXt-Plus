@@ -2,7 +2,7 @@
  * @vitest-environment jsdom
  */
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import CodeEditorMenu, {
   type EditorMenuActions,
@@ -168,34 +168,107 @@ describe("CodeEditorMenu", () => {
   });
 
   describe("Insert", () => {
+    /** Open Insert and one of its category submenus. */
+    async function openCategory(name: string) {
+      const user = await openMenu("Insert");
+      await user.click(menuItem(name));
+      return user;
+    }
+
+    const insertedBody = (): string =>
+      (actions.insertSnippet as any).mock.calls[0][0].body;
+
     it("inserts the snippet written in the active format", async () => {
       const { unmount } = render(
         <CodeEditorMenu {...baseProps()} sourceFormat="pretext" />,
       );
-      let user = await openMenu("Insert");
+      let user = await openCategory("Theorem-like");
       await user.click(menuItem("Theorem"));
-      expect((actions.insertSnippet as any).mock.calls[0][0].body).toContain(
-        "<theorem",
-      );
+      expect(insertedBody()).toContain("<theorem");
       unmount();
 
       actions = makeActions();
       render(<CodeEditorMenu {...baseProps()} sourceFormat="latex" />);
-      user = await openMenu("Insert");
-      await user.click(menuItem("Theorem"));
-      expect((actions.insertSnippet as any).mock.calls[0][0].body).toContain(
-        "\\begin{theorem}",
-      );
+      user = await openCategory("Theorem-like");
+      await user.click(menuItem("Lemma"));
+      expect(insertedBody()).toContain("\\begin{lemma}");
     });
+
+    it("lists categories, each opening a submenu of its constructs", async () => {
+      render(<CodeEditorMenu {...baseProps()} sourceFormat="pretext" />);
+      const user = await openMenu("Insert");
+
+      const insert = within(screen.getByRole("menu", { name: "Insert" }));
+      expect(
+        insert
+          .getAllByRole("menuitem")
+          .filter((row) => row.getAttribute("aria-haspopup") === "menu")
+          .map((row) => row.textContent?.replace("›", "")),
+      ).toEqual([
+        "Text",
+        "Lists",
+        "Math",
+        "Theorem-like",
+        "Axiom-like",
+        "Example-like",
+        "Remark-like",
+        "Project-like",
+        "Interactive Exercises",
+        "Figures & Code",
+      ]);
+      // A rule between each run of related categories.
+      expect(insert.getAllByRole("separator")).toHaveLength(3);
+      expect(queryMenuItem("Lemma")).not.toBeInTheDocument();
+
+      await user.click(menuItem("Theorem-like"));
+      expect(
+        within(screen.getByRole("menu", { name: "Theorem-like" }))
+          .getAllByRole("menuitem")
+          .map((row) => row.textContent),
+      ).toEqual(expect.arrayContaining(["Theorem", "Lemma", "Corollary", "Proposition"]));
+    });
+
+    it("offers a category of one as the construct itself", async () => {
+      render(<CodeEditorMenu {...baseProps()} sourceFormat="pretext" />);
+      const user = await openMenu("Insert");
+
+      expect(queryMenuItem(/^Definition-like/)).not.toBeInTheDocument();
+      expect(menuItem("Definition")).not.toHaveAttribute("aria-haspopup");
+      await user.click(menuItem("Exercise"));
+      expect(insertedBody()).toContain("<exercise");
+    });
+
+    it("offers the interactive exercises in PreTeXt", async () => {
+      render(<CodeEditorMenu {...baseProps()} sourceFormat="pretext" />);
+      const user = await openCategory("Interactive Exercises");
+
+      for (const name of ["True/false", "Multiple choice", "Matching", "Drag and drop"]) {
+        expect(menuItem(name)).toBeInTheDocument();
+      }
+      await user.click(menuItem("Drag and drop"));
+      expect(insertedBody()).toContain("<cardsort>");
+    });
+
+    it.each<SourceFormat>(["latex", "markdown"])(
+      "offers no interactive exercises in %s, which cannot spell them",
+      async (sourceFormat) => {
+        render(<CodeEditorMenu {...baseProps()} sourceFormat={sourceFormat} />);
+        await openMenu("Insert");
+        expect(queryMenuItem(/^Interactive Exercises/)).not.toBeInTheDocument();
+      },
+    );
 
     it("hides constructs the format's converter does not support", async () => {
       render(<CodeEditorMenu {...baseProps()} sourceFormat="markdown" />);
-      await openMenu("Insert");
+      await openCategory("Text");
 
-      expect(menuItem("Theorem")).toBeInTheDocument();
-      // Markdown converts tables and links to `<TODO>` placeholders today.
-      expect(queryMenuItem("Table")).not.toBeInTheDocument();
+      expect(menuItem("Emphasis")).toBeInTheDocument();
+      // Markdown converts links and tables to `<TODO>` placeholders today …
       expect(queryMenuItem("Link")).not.toBeInTheDocument();
+      // … which leaves Figures & Code a code listing alone, offered directly.
+      expect(queryMenuItem(/^Figures & Code/)).not.toBeInTheDocument();
+      expect(menuItem("Code listing")).toBeInTheDocument();
+      expect(queryMenuItem("Table")).not.toBeInTheDocument();
     });
   });
 
