@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import type { Asset, Snippet, SourceFormat } from "../../types/editor";
+import type { Asset, GeneratorId, Snippet, SourceFormat } from "../../types/editor";
 import { useEditorStore } from "../../store/hooks";
 import type { CreateRequest } from "../../store/editorStore";
 import { KindIcon } from "../EditorTargetBar";
@@ -16,6 +16,7 @@ export interface NewItemPaneProps {
   onUploadAsset?: (file: File, title?: string) => Promise<Asset>;
   onFetchAssetUrl?: (url: string) => Promise<File>;
   onCreateAuthoredAsset?: (title: string) => Promise<Asset>;
+  onCreateGeneratedAsset?: (generator: GeneratorId, title: string) => Promise<Asset>;
   /**
    * A snippet or asset the host has created for `request`: add it to the
    * project, bind or replace whatever the request names, and open it.
@@ -51,6 +52,7 @@ const NewItemPane = ({
   onUploadAsset,
   onFetchAssetUrl,
   onCreateAuthoredAsset,
+  onCreateGeneratedAsset,
   onSnippetCreated,
   onAssetCreated,
 }: NewItemPaneProps) => {
@@ -179,6 +181,7 @@ const NewItemPane = ({
           onUpload={onUploadAsset}
           onFetchUrl={onFetchAssetUrl}
           onCreateAuthored={onCreateAuthoredAsset}
+          onCreateGenerated={onCreateGeneratedAsset}
           onCreated={(asset) => onAssetCreated(asset, creating)}
           onCancel={cancelCreate}
           onBusyChange={setIsBusy}

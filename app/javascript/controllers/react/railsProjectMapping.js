@@ -26,7 +26,13 @@ import { assembleFullProjectSource, DEFAULT_LANGUAGE } from "@pretextbook/web-ed
  * @typedef {Object} RailsAsset
  * @property {string} id
  * @property {string} [ref]
- * @property {"file"|"authored"} kind
+ * @property {"file"|"authored"|"generated"} kind
+ * @property {string} [generator] - For a generated asset, the tool that renders its
+ *   `source` ("prefigure"). Decides the element the assembled `<image>` wraps it in.
+ * @property {string} [output_source_digest] - For a generated asset, the sha256 of the
+ *   render input its attached outputs were built from (see Asset#render_input).
+ * @property {{filename: string, path: string}[]} [renditions] - For a generated asset
+ *   with an output, every file it contributes to a build's generated directory.
  * @property {string} [title]
  * @property {string} [source]
  * @property {string} [short_description] - Plain-text image alt description; rendered as
@@ -170,6 +176,9 @@ export function railsAssetToEditor(a) {
     contentType: a.content_type ?? undefined,
     isFile: a.kind === "file",
     fileRef: fileRefFor(a, a.ref),
+    generator: a.generator ?? undefined,
+    outputSourceDigest: a.output_source_digest ?? undefined,
+    renditions: a.renditions ?? undefined,
   };
 }
 
@@ -196,6 +205,9 @@ export function toEditorAsset(rec) {
     // Already correctly set by railsAssetToEditor upstream (from Rails' real
     // `kind` column) for every asset that reaches this function.
     isFile: rec.isFile,
+    generator: rec.generator,
+    outputSourceDigest: rec.outputSourceDigest,
+    renditions: rec.renditions,
   };
 }
 

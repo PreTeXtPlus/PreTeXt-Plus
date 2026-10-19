@@ -126,6 +126,10 @@ class SourceAssembler
         short_description: asset.short_description,
         title: asset.title
       }
+      # A generated asset is assembled in its source form, which needs the generator
+      # (to pick the wrapper element) and nothing else: the outputs ship alongside the
+      # archive and are not referenced from the document.
+      json[:generator] = asset.generator if asset.generated_kind?
       return json unless asset.file.attached?
 
       extension = asset.file_extension

@@ -41,6 +41,7 @@ import {
   validatePretextDocument,
 } from "../components/editorConfigs/pretextSchema";
 import { assembleFullProjectSource } from "../sectionUtils";
+import { generatorIds, generators } from "../generators";
 import type { Asset, SourceFormat } from "../types/editor";
 import type { Division, RootDivisionType } from "../types/sections";
 
@@ -338,6 +339,17 @@ describe("PreTeXt snippets", () => {
       fileRef: "image-ref.png",
       shortDescription: "A picture.",
     },
+    // One generated asset per generator, holding its starter source: what a new
+    // PreFigure (etc.) asset is created with, in the form the document carries.
+    ...generatorIds.map(
+      (id): Asset => ({
+        title: `A ${id} diagram`,
+        ref: `gen-${id}`,
+        generator: id,
+        source: generators[id].starterSource,
+        shortDescription: "A diagram.",
+      }),
+    ),
   ];
 
   /** A division of PreTeXt source, as the divisions pool holds one. */
@@ -395,6 +407,16 @@ describe("PreTeXt snippets", () => {
       expect(text).toMatch(EXPECTED_ELEMENT[key]);
     },
   );
+
+  // A generated asset's starter source, wrapped as the assembler wraps it, has
+  // to be something the schema accepts (it includes PreFigure's grammar) -- a
+  // bad starter would otherwise fail in a build, not here.
+  it.each(generatorIds)("a new %s asset validates against the PreTeXt schema", async (id) => {
+    const body = `<figure xml:id="fig-${id}"><caption>Caption</caption><plus:image ref="gen-${id}"/></figure>`;
+    const document = wrap(body);
+    expect(document).toContain(`label="gen-${id}"`);
+    expect(await validatePretextDocument(document)).toEqual([]);
+  });
 
   // The other half of the gate: outside a paragraph the same body is wrapped in
   // one, and that wrapping has to be valid too — this is what the menu writes

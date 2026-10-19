@@ -1,0 +1,205 @@
+import { useEffect, useRef, useState } from "react";
+import type { Asset } from "../types/editor";
+import {
+  generatorFor,
+  renderInputFor,
+  sha256Hex,
+  type GeneratorOutput,
+  type GeneratorRuntime,
+  type GeneratorRuntimeStatus,
+} from "../generators";
+
+/** A finished browser render, handed to the host to store with the asset. */
+export interface GeneratedAssetOutput {
+  outputs: GeneratorOutput[];
+  /** sha256 of the render input the outputs were built from. */
+  outputSourceDigest: string;
+}
+
+export interface GeneratedAssetPreviewProps {
+  asset: Asset;
+  /** The docinfo in force, whose macros are part of the render input. */
+  docinfo: string;
+  /** The generator's browser engine, or undefined when the host configured none. */
+  runtime: GeneratorRuntime | undefined;
+  /** A render whose digest matches the source it rendered; the host persists it. */
+  onOutput?: (asset: Asset, output: GeneratedAssetOutput) => void;
+  readOnly?: boolean;
+  /** How long typing must settle before a render; tests shorten it. */
+  debounceMs?: number;
+}
+
+/** Typing settles for this long before the engine is asked to render. */
+export const RENDER_DEBOUNCE_MS = 1000;
+
+const useRuntimeStatus = (runtime: GeneratorRuntime | undefined) => {
+  const [, bump] = useState(0);
+  useEffect(() => runtime?.subscribe(() => bump((n) => n + 1)), [runtime]);
+  return {
+    status: (runtime?.status ?? "idle") as GeneratorRuntimeStatus,
+    progress: runtime?.progress,
+    error: runtime?.error,
+  };
+};
+
+/**
+ * The preview panel while a generated asset is open. Three states:
+ *
+ * 1. **Engine not loaded.** The stored output (as the host serves it) with a
+ *    line saying whether it matches the current source, and a button to load
+ *    the engine — never automatic, since PreFigure's is ~100 MB cold.
+ * 2. **Rendering.** The engine is asked to render a second after typing stops;
+ *    the previous picture stays up, and an engine error shows beneath it.
+ * 3. **Rendered.** The fresh SVG. Its files go to the host through `onOutput`
+ *    with the digest of exactly the source rendered, so a keystroke that lands
+ *    mid-render leaves the stored output honestly stale rather than wrongly
+ *    current.
+ */
+const GeneratedAssetPreview = ({
+  asset,
+  docinfo,
+  runtime,
+  onOutput,
+  readOnly,
+  debounceMs = RENDER_DEBOUNCE_MS,
+}: GeneratedAssetPreviewProps) => {
+  const generator = generatorFor(asset.generator);
+  const { status, progress, error: loadError } = useRuntimeStatus(runtime);
+  const source = asset.source ?? "";
+
+  // The digest of what the buffer holds now, for the "current / out of date" line.
+  const [currentDigest, setCurrentDigest] = useState<string | null>(null);
+  useEffect(() => {
+    if (!generator) return;
+    let live = true;
+    void sha256Hex(renderInputFor(generator, source, docinfo)).then((hex) => {
+      if (live) setCurrentDigest(hex);
+    });
+    return () => {
+      live = false;
+    };
+  }, [generator, source, docinfo]);
+
+  const [rendered, setRendered] = useState<{ url: string; digest: string } | null>(null);
+  const [isRendering, setIsRendering] = useState(false);
+  const [renderError, setRenderError] = useState<string | null>(null);
+  const [failedUrl, setFailedUrl] = useState<string | null>(null);
+  // What the host has been handed this session, so the same render is not sent twice.
+  const sentDigests = useRef(new Set<string>());
+
+  useEffect(() => () => void (rendered && URL.revokeObjectURL(rendered.url)), [rendered]);
+
+  // Render on a debounce whenever the source (or macros) change while the engine is up.
+  useEffect(() => {
+    if (!runtime || status !== "ready" || !generator || !asset.ref || readOnly) return;
+    const ref = asset.ref;
+    const timer = setTimeout(async () => {
+      setIsRendering(true);
+      try {
+        const result = await runtime.render(source, ref);
+        const digest = await sha256Hex(renderInputFor(generator, result.source, docinfo));
+        setRenderError(null);
+        setRendered((previous) => {
+          if (previous) URL.revokeObjectURL(previous.url);
+          return { url: URL.createObjectURL(result.outputs[0].blob), digest };
+        });
+        // Hand the host only a render of the source as it is *now*; one that
+        // typing has overtaken is shown but not stored.
+        const liveDigest = await sha256Hex(renderInputFor(generator, source, docinfo));
+        if (digest === liveDigest && digest !== asset.outputSourceDigest && !sentDigests.current.has(digest)) {
+          sentDigests.current.add(digest);
+          onOutput?.(asset, { outputs: result.outputs, outputSourceDigest: digest });
+        }
+      } catch (cause) {
+        setRenderError(cause instanceof Error ? cause.message : String(cause));
+      } finally {
+        setIsRendering(false);
+      }
+    }, debounceMs);
+    return () => clearTimeout(timer);
+    // `asset` itself changes on every pool write; the fields that matter are listed.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [runtime, status, generator, asset.ref, asset.outputSourceDigest, source, docinfo, readOnly, debounceMs]);
+
+  if (!generator) {
+    return (
+      <div data-testid="asset-preview" className="flex flex-1 h-full items-center justify-center p-6 bg-[#fafafa] text-[0.9rem] text-slate-500">
+        Unknown generator “{asset.generator}”.
+      </div>
+    );
+  }
+
+  const storedIsCurrent = !!asset.url && !!currentDigest && asset.outputSourceDigest === currentDigest;
+  const showingFresh = rendered && rendered.digest === currentDigest;
+  const imageUrl = rendered?.url ?? asset.url;
+
+  let statusLine: string;
+  if (showingFresh) statusLine = isRendering ? "Rendering…" : "Rendered from the current source.";
+  else if (isRendering) statusLine = "Rendering…";
+  else if (rendered) statusLine = "Source changed since this was rendered.";
+  else if (!asset.url) statusLine = "Not rendered yet.";
+  else if (storedIsCurrent) statusLine = "Stored picture matches the current source.";
+  else statusLine = "Source changed since the stored picture was rendered.";
+
+  return (
+    <div
+      data-testid="asset-preview"
+      className="flex flex-1 h-full min-h-0 flex-col items-center justify-center gap-3 p-6 bg-[#fafafa]"
+    >
+      {imageUrl && failedUrl !== imageUrl ? (
+        <img
+          src={imageUrl}
+          alt={asset.shortDescription || asset.title}
+          className="max-w-full min-h-0 flex-shrink object-contain border border-slate-200 rounded bg-white"
+          onError={() => setFailedUrl(imageUrl)}
+        />
+      ) : imageUrl ? (
+        <div className="text-[0.9rem] text-slate-500">The picture couldn't be loaded.</div>
+      ) : (
+        <div className="text-[0.9rem] text-slate-500">No picture yet.</div>
+      )}
+      <div data-testid="generated-asset-status" className="text-[0.8rem] text-slate-500 text-center">
+        {statusLine}
+      </div>
+      {renderError && (
+        <pre
+          data-testid="generated-asset-error"
+          className="max-w-full overflow-x-auto whitespace-pre-wrap rounded border border-red-200 bg-red-50 px-3 py-2 text-[0.75rem] text-red-800"
+        >
+          {renderError}
+        </pre>
+      )}
+      {runtime ? (
+        status === "ready" ? null : status === "loading" ? (
+          <div data-testid="generated-asset-loading" className="text-[0.8rem] text-slate-500 text-center">
+            {progress ?? "Loading the engine…"}
+          </div>
+        ) : (
+          <div className="flex flex-col items-center gap-1">
+            <button
+              type="button"
+              data-testid="load-generator-engine"
+              className="rounded border border-slate-300 bg-white px-3 py-1 text-[0.8rem] text-slate-800 hover:bg-slate-100"
+              onClick={() => void runtime.load().catch(() => {})}
+              disabled={readOnly}
+            >
+              Load {generator.label} engine (~100 MB, first time only)
+            </button>
+            {status === "failed" && loadError && (
+              <div className="text-[0.75rem] text-red-700 text-center">{loadError}</div>
+            )}
+            <div className="text-[0.72rem] text-slate-400 text-center">
+              Renders the diagram here as you type and stores the picture with the project.
+            </div>
+          </div>
+        )
+      ) : (
+        <div className="text-[0.75rem] text-slate-400 text-center">
+          Live rendering isn't available here; builds generate this diagram.
+        </div>
+      )}
+    </div>
+  );
+};
+
+export default GeneratedAssetPreview;

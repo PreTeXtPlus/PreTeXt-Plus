@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_10_13_120000) do
+ActiveRecord::Schema[8.1].define(version: 2026_10_19_120000) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
   enable_extension "pgcrypto"
@@ -64,6 +64,8 @@ ActiveRecord::Schema[8.1].define(version: 2026_10_13_120000) do
     t.text "source"
     t.string "title"
     t.datetime "updated_at", null: false
+    t.string "generator"
+    t.string "output_source_digest"
     t.index ["project_id"], name: "index_assets_on_project_id"
   end
 
@@ -269,8 +271,8 @@ ActiveRecord::Schema[8.1].define(version: 2026_10_13_120000) do
     t.string "name"
     t.integer "order"
     t.string "stripe_price_id"
-    t.integer "trial_days", default: 0, null: false
     t.datetime "updated_at", null: false
+    t.integer "trial_days", default: 0, null: false
   end
 
   create_table "targets", id: :uuid, default: -> { "gen_random_uuid()" }, force: :cascade do |t|
@@ -319,11 +321,11 @@ ActiveRecord::Schema[8.1].define(version: 2026_10_13_120000) do
     t.datetime "reset_password_sent_at"
     t.string "reset_password_token"
     t.integer "sign_in_count", default: 0, null: false
-    t.boolean "subscription_reminders"
     t.uuid "tos_id"
     t.string "unconfirmed_email"
     t.datetime "updated_at", null: false
     t.string "username"
+    t.boolean "subscription_reminders"
     t.index "lower((username)::text)", name: "index_users_on_lower_username", unique: true
     t.index ["confirmation_token"], name: "index_users_on_confirmation_token", unique: true
     t.index ["email"], name: "index_users_on_email", unique: true

@@ -15,6 +15,8 @@ export {
 } from "./contentConversion";
 export type {
   Asset,
+  AssetRendition,
+  GeneratorId,
   EditorContentChange,
   EditorContentState,
   EditorDivisionContentChange,
@@ -123,6 +125,19 @@ export type {
   CollabDocState,
 } from "./collab/schema";
 export type { CollabSession, CollabUser } from "./collab/types";
+// Generated assets: the generator registry a host may inspect, the runtime
+// configuration it passes as `generatorRuntimes`, and the output it receives
+// through `onAssetOutput`. The PreFigure worker a host bundles is the
+// `./prefigure-worker` export.
+export { generators, generatorIds } from "./generators";
+export type {
+  AssetGenerator,
+  GeneratorOutput,
+  GeneratorRuntimeConfigs,
+  GeneratorRuntimeOptions,
+} from "./generators";
+export type { GeneratedAssetOutput } from "./components/GeneratedAssetPreview";
+
 // Record ids are minted client-side (see `onDivisionAdd`); exported so a host
 // can mint one for a record it creates outside the editor's own flows.
 export { newRecordId } from "./recordId";

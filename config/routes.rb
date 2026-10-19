@@ -193,6 +193,12 @@ Rails.application.routes.draw do
       post "backups/:backup_id/restore" => "projects#restore_backup", as: "restore_backup"
       get "(*_)/external/:ref" => "assets#share", as: "share_asset"
       get "(*_)/external/:ref/thumbnail" => "assets#share_thumbnail", as: "share_asset_thumbnail"
+      # A generated asset's outputs under the names a build gives them
+      # (`generated/prefigure/<ref>.svg`, `<ref>-annotations.xml`, ...), so a preview that
+      # reads the generated directory relative to the project finds them. `format: false`
+      # because the filename's own extension must stay part of `:filename`.
+      get "(*_)/generated/:generator/:filename" => "assets#generated_file", as: "generated_file",
+          format: false, constraints: { filename: /[^\/]+/ }
       post "preview" => "projects#preview", as: "preview"
       get "*/lunr-pretext-search-index.js", to: redirect("/ptx-search.js")
     end

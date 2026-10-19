@@ -100,4 +100,38 @@ class AssetsControllerTest < ActionDispatch::IntegrationTest
 
     assert_response :unauthorized
   end
+
+  # --- Generated outputs ---
+
+  def generated_asset_with_outputs
+    asset = @project.assets.create!(kind: :generated, generator: "prefigure", ref: "my-graph", title: "Graph", source: "<diagram/>")
+    asset.file.attach(io: File.open(Rails.root.join("test/fixtures/files/test_diagram.svg")),
+                      filename: "graph.svg", content_type: "image/svg+xml")
+    asset.renditions.attach(io: StringIO.new("<diagram/>"), filename: "-annotations.xml", content_type: "application/xml")
+    asset.save!
+    asset
+  end
+
+  test "generated_file redirects to an output by the name a build gives it, signed out too" do
+    generated_asset_with_outputs
+    sign_out @user
+
+    get generated_file_project_path(@project, generator: "prefigure", filename: "my-graph-annotations.xml")
+    assert_response :redirect
+    assert_match %r{/rails/active_storage/}, response.location
+
+    get generated_file_project_path(@project, generator: "prefigure", filename: "my-graph.svg")
+    assert_response :redirect
+  end
+
+  test "generated_file is 404 for a name no generated asset produces" do
+    generated_asset_with_outputs
+
+    get generated_file_project_path(@project, generator: "prefigure", filename: "my-graph.pdf")
+    assert_response :not_found
+    get generated_file_project_path(@project, generator: "prefigure", filename: "other.svg")
+    assert_response :not_found
+    get generated_file_project_path(@project, generator: "latex-image", filename: "my-graph.svg")
+    assert_response :not_found
+  end
 end

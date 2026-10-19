@@ -121,7 +121,7 @@ const commands = {
     await page.fill('input[name="user[password]"]', password);
     await Promise.all([
       page.waitForURL((u) => !u.pathname.startsWith("/users/sign_in")),
-      page.click('input[type="submit"][value="Sign in"]'),
+      page.click('input[type="submit"][value="Sign in"], input[type="submit"][value="Log in"], button:has-text("Log in")'),
     ]);
     console.log(`signed in as ${email} -> ${page.url()}`);
   },

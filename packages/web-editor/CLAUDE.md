@@ -231,6 +231,39 @@ a peer removing the open item does not (`openItemState`'s `byAuthor`).
   Snippets/Assets panel header, File → New Asset… / New Snippet…, unlinked
   rows, Replace image….
 
+### Generated assets (`src/generators/`)
+
+A *generated* asset (`asset.generator`, the host's `kind === "generated"`) is
+authored source that a generator turns into a picture — PreFigure first. The
+registry (`generators/index.ts`) is the one place generators are named: each
+entry says how its source is wrapped into PreTeXt (`wrapSource`: the
+`<prefigure label="ref">` the document always carries — a generated asset is
+never emitted as `<image source>`), what a new asset opens with, which docinfo
+elements its render depends on (`renderInput.ts`; Rails' `Asset#render_input`
+digests the identical string, pinned by a shared fixture hex in both test
+suites), which files it produces (named as `pretext generate` names them), and
+an optional browser runtime.
+
+- `prefigure/runtime.ts` is the main-thread side of the engine: a Web Worker
+  (`src/prefigureWorker.ts`, bundled by the host like the preview worker) that
+  loads Pyodide from jsDelivr and the `prefig` wheel from the host's
+  `generatorRuntimes.prefigure.assetBaseUrl`, with MathJax 4 answering
+  PreFigure's `prefigBrowserApi` for TeX labels (`worker/compat-api.ts`, ported
+  from the PreFigure playground — see the NOTICE there). SVG only: no
+  tactile/braille. One runtime per generator per page (`runtimeFor`), loaded
+  only by the author's click, disposed after ten idle minutes; renders are
+  latest-wins.
+- `GeneratedAssetPreview.tsx` replaces `AssetPreview` for a generated asset:
+  the stored picture and whether it matches the current source, the "Load
+  engine" button, live renders a second after typing stops, and `onAssetOutput`
+  to the host with the files and the digest of exactly the source rendered.
+  Companions (`-annotations.xml`, `-diagcess.svg`) only for authored
+  `<annotations>`: PreFigure invents annotations in the browser, a build does not.
+- `NewAssetForm` grows one tab per registry entry → `onCreateGenerated`.
+  `VERBATIM_SOURCES` and the spell checker's `latexImage` scope both list
+  `prefigure`. The collab doc carries `generator` and `outputSourceDigest`;
+  bytes stay with the host.
+
 ### Collaboration (`src/collab/`)
 
 Optional real-time co-editing via Yjs, activated by passing a `collaboration` prop (`{ doc, awareness, user }`) to `Editors`. The **host owns the transport** — it creates, seeds (`seedDocFromState`), and syncs the `Y.Doc` with its server; the editor only binds to it. `yjs` and `y-protocols` are **peer dependencies** so host and editor share one instance.
