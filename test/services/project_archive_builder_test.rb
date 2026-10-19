@@ -235,4 +235,48 @@ class ProjectArchiveBuilderTest < ActiveSupport::TestCase
     assert_equal File.binread(Rails.root.join("public", "icon.svg")),
                  contents["source/external/pretext-plus/icon.svg"]
   end
+
+  # --- Generated assets ---
+
+  def generated_asset(project, current:)
+    asset = project.assets.create!(kind: :generated, generator: "prefigure", ref: "graph", title: "Graph",
+                                   source: '<diagram dimensions="(300,300)"/>')
+    asset.file.attach(io: File.open(Rails.root.join("test/fixtures/files/test_diagram.svg")),
+                      filename: "graph.svg", content_type: "image/svg+xml")
+    asset.renditions.attach(io: StringIO.new("<diagram/>"), filename: "-annotations.xml", content_type: "application/xml")
+    asset.update!(output_source_digest: current ? Digest::SHA256.hexdigest(asset.render_input) : "0" * 64)
+    asset
+  end
+
+  # The outputs land where `pretext generate` would have put them, under the names it
+  # would have used, so a build told to keep them finds them; the document itself still
+  # carries the source (that is the assembler's business, stubbed here).
+  test "a current generated asset's outputs ship under source/generated/<generator>/ and its generator is kept" do
+    project = projects(:one)
+    generated_asset(project, current: true)
+    builder = ProjectArchiveBuilder.new(project)
+
+    contents = stub_source_assembler { entries(builder.build) }
+
+    assert_equal File.read(Rails.root.join("test/fixtures/files/test_diagram.svg")), contents["source/generated/prefigure/graph.svg"]
+    assert_equal "<diagram/>", contents["source/generated/prefigure/graph-annotations.xml"]
+    assert_nil contents["source/external/graph.svg"], "a generated asset is not an external image"
+    assert_equal [ "prefigure" ], builder.kept_generators
+  end
+
+  # A stale output is worse than none: the build regenerates from source instead.
+  test "a stale generated asset ships nothing and keeps no generator" do
+    project = projects(:one)
+    generated_asset(project, current: false)
+    builder = ProjectArchiveBuilder.new(project)
+
+    contents = stub_source_assembler { entries(builder.build) }
+
+    assert_empty contents.keys.grep(%r{source/generated/})
+    assert_empty builder.kept_generators
+  end
+
+  test "kept_generators is empty before a build" do
+    assert_empty ProjectArchiveBuilder.new(projects(:one)).kept_generators
+  end
 end

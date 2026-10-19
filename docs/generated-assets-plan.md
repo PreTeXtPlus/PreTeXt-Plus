@@ -5,10 +5,32 @@ Plan of record for assets whose picture is *computed from source* — PreFigure 
 have generated, ships them with the project, and the build server keeps them instead of
 regenerating.
 
-**Status:** decided 2026-10-19, nothing implemented. Supersedes the 2026-10-13 draft,
+**Status:** decided 2026-10-19; Parts 1–5.1 implemented the same day (see *What exists*
+below). Supersedes the 2026-10-13 draft,
 which routed the output through `<image source="ref.svg">` (the "external form"). That
 route had no way to carry an annotated PreFigure diagram and needed a per-target branch
 in the assembler; both problems go away below.
+
+## What exists (2026-10-19)
+
+Implemented on the `generated-assets-plan` branch, verified in a headless Chromium
+against the dev server: a PreFigure asset is created from its tab, the engine loads
+from jsDelivr on request, the diagram renders with MathJax labels as the author types,
+the SVG is stored with the asset, Ruby and the browser agree on the digest, and the
+archive ships `source/generated/prefigure/<ref>.svg`.
+
+| Part | State |
+| --- | --- |
+| 0 CLI `--keep-generated` | **Not started** (pretext-cli). Builds regenerate; the `keep_generated` field is already sent and ignored. |
+| 1 Rails model / archive / JSON | Done. `kind: generated`, `generator`, `output_source_digest`, `renditions` (suffix-named), `render_input`, `output_current?`, `generated_files`; archive writes current outputs and reports `kept_generators`; `FullBuildJob` sends `keep_generated`; `generated/:generator/:filename` route. |
+| 1b full server `{flags}` | **Not started** (pretext-plus-build-full). |
+| 2 registry + assembly | Done. `packages/web-editor/src/generators/`; generated assets always assemble to the source form; `prefigure` is verbatim for ref scanning and code for spell check. |
+| 3 create/edit UI | Done. PreFigure tab, generator shown in settings, Replace/Duplicate hidden, Download SVG. No title-bar chip; the preview pane carries the status line. |
+| 4 browser engine + pane | Done for SVG. Pyodide 0.26.4 from jsDelivr, wheels from `vendor/prefigure` via `public/assets/prefigure`, MathJax 4 in the worker. **No tactile/braille** (speech-rule-engine and liblouis not carried), **no diagcess iframe** (the pane shows the SVG as an image), **docinfo macros are not applied** by the browser render though they are part of the digest. |
+| 4.3 preview route / document preview | Route done. The document preview does **not** yet inline the stored SVG: pretext-html reads `generated/` through its mount reader, which the preview worker has not been given. Follow-up. |
+| 5.1 browser-rendered save | Done, as a dedicated multipart PATCH per render (`onAssetOutput`), not the bulk save: collaborative sessions have no bulk save. Companions are stored only for authored `<annotations>`; a render without them clears the old ones. |
+| 5.2 server render job | **Not started** (needs PR #12 adjusted to return `generated/`). |
+| 6 PDF/PNG, 7 latex-image | Not started. |
 
 ## Context
 

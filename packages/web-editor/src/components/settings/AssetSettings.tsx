@@ -2,6 +2,7 @@ import { useState } from "react";
 import type { Asset, SourceFormat } from "../../types/editor";
 import { assetEmbedCode, sanitizeXmlId } from "../../sectionUtils";
 import { buildProjectAssetView } from "../../assetView";
+import { generatorFor } from "../../generators";
 import { useEditorStore } from "../../store/hooks";
 import {
   CommitField,
@@ -51,6 +52,7 @@ const AssetSettings = ({
   const [error, setError] = useState<string | null>(null);
 
   const ref = asset.ref ?? "";
+  const generator = generatorFor(asset.generator);
   const row = buildProjectAssetView(divisions, projectAssets).find(
     (r) => r.ref === ref,
   );
@@ -112,7 +114,9 @@ const AssetSettings = ({
   const actions: SettingsAction[] = readOnly
     ? []
     : [
-      ...(onReplace && asset.url
+      // A generated asset's picture is its source, so replacing or duplicating the
+      // bytes means nothing for it: edit the diagram instead.
+      ...(onReplace && asset.url && !generator
         ? [
           {
             label: "Replace image…",
@@ -123,7 +127,7 @@ const AssetSettings = ({
         : []),
       // Duplicate re-fetches the file's bytes and re-uploads them, so it means
       // nothing for an authored asset with no file behind it.
-      ...(hasAssetDuplicate && asset.url
+      ...(hasAssetDuplicate && asset.url && !generator
         ? [
           {
             label: isDuplicating ? "Duplicating…" : "Duplicate",
@@ -187,8 +191,29 @@ const AssetSettings = ({
         codeFor={(format) => assetEmbedCode(ref, format)}
         defaultFormat={embedFormat}
       />
+      {generator && (
+        <SettingsField label="Generator">
+          <div data-testid="asset-settings-generator" className="text-[0.85rem] text-slate-700">
+            {generator.label}
+            {asset.url && (
+              <>
+                {" · "}
+                <a href={asset.url} download className="underline text-slate-600 hover:text-slate-900">
+                  Download SVG
+                </a>
+              </>
+            )}
+          </div>
+        </SettingsField>
+      )}
       <SettingsNote>
-        {asset.isFile ? (
+        {generator ? (
+          <>
+            The editor holds the {generator.label} source of this diagram; the
+            document carries it inside <code>{"<image>"}</code>, and the rendered
+            picture is stored with the project so builds need not regenerate it.
+          </>
+        ) : asset.isFile ? (
           <>
             The editor holds additional PreTeXt source, inserted verbatim inside
             the generated <code>{"<image>"}</code> element — e.g.{" "}

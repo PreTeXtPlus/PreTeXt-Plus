@@ -995,6 +995,8 @@ const VERBATIM_SOURCES: Record<SourceFormat, string[]> = {
     "latex-image",
     "sageplot",
     "asymptote",
+    // A PreFigure diagram is code too; a `<label>` in one can say anything.
+    "prefigure",
   ].map((tag) => `<${tag}(?:\\s[^>]*)?>[\\s\\S]*?</${tag}>`),
   markdown: [
     "```[\\s\\S]*?```", // fenced code block (backticks)

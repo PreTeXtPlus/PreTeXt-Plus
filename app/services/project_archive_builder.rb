@@ -20,6 +20,14 @@ require "stringio"
 #                                   than read from a column something else wrote
 #   source/external/<ref>.<ext>  -- each project asset, matching the bare
 #                                   `<image source="<ref>.<ext>">` the editor emits
+#   source/generated/<generator>/<file>
+#                                -- the outputs of every generated asset whose outputs
+#                                   match its current source (Asset#output_current?),
+#                                   named as `pretext generate` would name them. The
+#                                   document still carries the asset's source, so a
+#                                   build that regenerates gets the same picture; a
+#                                   build told to keep these (`--keep-generated`, see
+#                                   FullBuildJob) skips the generator for them.
 #
 # NOTE: the external-directory placement (source/external) follows PreTeXt's
 # default publication resolution (external dir relative to the main source file).
@@ -31,7 +39,13 @@ class ProjectArchiveBuilder
 
   def initialize(project)
     @project = project
+    @kept_generators = []
   end
+
+  # The generators whose outputs the last #build shipped under source/generated/, as
+  # their ids ("prefigure"). FullBuildJob asks the build server to keep exactly these.
+  # Empty until #build has run, and empty when nothing current was shipped.
+  attr_reader :kept_generators
 
   # The manifest, listing every target the project has. One archive therefore serves any
   # build request -- the server is told which target to build -- and the same zip is what
@@ -78,8 +92,22 @@ class ProjectArchiveBuilder
       zip.put_next_entry("source/main.ptx")
       zip.write(source)
 
+      @kept_generators = []
       @project.assets.each do |asset|
         next unless asset.file_attached?
+
+        if asset.generated_kind?
+          # A stale output is not written at all: the build then generates the asset
+          # from its source like any other, which is slower but never wrong.
+          next unless asset.output_current?
+
+          asset.generated_files.each do |filename, blob|
+            zip.put_next_entry("source/generated/#{asset.generator}/#{filename}")
+            zip.write(blob.download)
+          end
+          @kept_generators |= [ asset.generator ]
+          next
+        end
 
         zip.put_next_entry("source/external/#{asset.external_filename}")
         zip.write(asset.file.download)

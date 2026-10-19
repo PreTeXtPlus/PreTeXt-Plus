@@ -1,6 +1,7 @@
 import { useEffect, useId, useRef, useState } from "react";
 import clsx from "clsx";
-import type { Asset } from "../../types/editor";
+import type { Asset, GeneratorId } from "../../types/editor";
+import { generatorIds, generators } from "../../generators";
 import { DialogFileInput, DialogTab, DialogTabBar } from "../Dialog";
 import {
   FIELD_CONTROL_CLASSES,
@@ -29,13 +30,19 @@ export interface NewAssetFormProps {
   onFetchUrl?: (url: string) => Promise<File>;
   /** Create an authored asset (no file; the host derives its ref from `title`). */
   onCreateAuthored?: (title: string) => Promise<Asset>;
+  /**
+   * Create a generated asset for `generator` — one tab per registry entry
+   * (PreFigure, …). The host derives the ref from `title` and persists the
+   * generator's starter source; the diagram is written in the editor next.
+   */
+  onCreateGenerated?: (generator: GeneratorId, title: string) => Promise<Asset>;
   /** The asset now exists — see `NewItemPane`. */
   onCreated: (asset: Asset) => void;
   onCancel: () => void;  /** Told when a request to the host starts and settles. */
   onBusyChange?: (busy: boolean) => void;
 }
 
-type SourceTab = "upload" | "url" | "authored";
+type SourceTab = "upload" | "url" | "authored" | GeneratorId;
 
 /**
  * A throwaway client-side id for an asset created with no host to mint one
@@ -69,14 +76,17 @@ const NewAssetForm = ({
   onUpload,
   onFetchUrl,
   onCreateAuthored,
+  onCreateGenerated,
   onCreated,
   onCancel,
   onBusyChange,
 }: NewAssetFormProps) => {
   const canAuthor = !!onCreateAuthored && !isReplace;
+  const generatorTabs = onCreateGenerated && !isReplace ? generatorIds : [];
   const [tab, setTab] = useState<SourceTab>(
     onUpload ? "upload" : canAuthor ? "authored" : "url",
   );
+  const generatorTab = generatorTabs.find((id) => id === tab);
   const [title, setTitle] = useState(initialTitle);
   const [error, setError] = useState<string | null>(null);
   const [isBusy, setIsBusy] = useState(false);
@@ -149,6 +159,7 @@ const NewAssetForm = ({
       : tab === "url"
         ? !!trimmedUrl
         : !!trimmedTitle);
+  const isSourceTab = tab === "authored" || !!generatorTab;
 
   const handleSubmit = () => {
     if (!canSubmit) return;
@@ -172,6 +183,8 @@ const NewAssetForm = ({
       // Only offered when the host can create one (`canAuthor`), since only
       // the host derives an authored asset's ref.
       void run(() => onCreateAuthored(trimmedTitle), "Failed to create asset.");
+    } else if (generatorTab && onCreateGenerated) {
+      void run(() => onCreateGenerated(generatorTab, trimmedTitle), "Failed to create asset.");
     }
   };
 
@@ -199,6 +212,11 @@ const NewAssetForm = ({
             Custom
           </DialogTab>
         )}
+        {generatorTabs.map((id) => (
+          <DialogTab key={id} active={tab === id} onClick={() => setTab(id)}>
+            {generators[id].label}
+          </DialogTab>
+        ))}
       </DialogTabBar>
 
       {tab === "upload" && onUpload && (
@@ -282,16 +300,22 @@ const NewAssetForm = ({
           type="text"
           className={FIELD_CONTROL_CLASSES}
           placeholder={
-            tab === "authored" ? "My Diagram" : file?.name ?? "My image"
+            isSourceTab ? "My Diagram" : file?.name ?? "My image"
           }
           value={title}
           onChange={(e) => setTitle(e.target.value)}
           onKeyDown={(e) => { if (e.key === "Enter") handleSubmit(); }}
           disabled={isBusy}
-          autoFocus={tab === "authored"}
+          autoFocus={isSourceTab}
         />
         <SettingsNote>
-          {tab === "authored" ? (
+          {generatorTab ? (
+            <>
+              A reference id is generated from the title. You'll write the{" "}
+              {generators[generatorTab].label} diagram in the editor next, and
+              its picture is rendered and stored as you work.
+            </>
+          ) : tab === "authored" ? (
             <>
               A reference id is generated from the title. You'll write the
               asset's PreTeXt content (e.g. <code>{"<latex-image>"}</code>) in

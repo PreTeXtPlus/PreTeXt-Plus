@@ -1628,4 +1628,62 @@ class ProjectsControllerTest < ActionDispatch::IntegrationTest
       assert_response :success
       wire.string
     end
+
+  # --- Generated assets ---
+
+  test "update creates a generated asset via a JSON assets_attributes entry" do
+    assert_difference("@project.assets.count", 1) do
+      patch project_url(@project, format: :json),
+        params: { project: { assets_attributes: [ { ref: "graph", kind: "generated", generator: "prefigure",
+                                                     title: "Graph", source: "<diagram/>" } ] } },
+        as: :json
+    end
+    assert_response :success
+
+    asset = @project.assets.find_by!(ref: "graph")
+    assert asset.generated_kind?
+    assert_equal "prefigure", asset.generator
+    json = response.parsed_body["assets"].find { |a| a["ref"] == "graph" }
+    assert_equal "prefigure", json["generator"]
+    assert_equal false, json["output_current"]
+    assert_equal [], json["renditions"]
+  end
+
+  # The editor renders in the browser and hands the result back with the digest of
+  # what it rendered: the SVG as `file`, the companions as `renditions`.
+  test "update attaches a generated asset's rendered outputs and reports them current" do
+    asset = @project.assets.create!(kind: :generated, generator: "prefigure", ref: "graph", title: "Graph", source: "<diagram/>")
+    digest = Digest::SHA256.hexdigest(asset.render_input)
+
+    patch project_url(@project, format: :json), params: {
+      project: { assets_attributes: [ {
+        id: asset.id,
+        output_source_digest: digest,
+        file: fixture_file_upload("test_diagram.svg", "image/svg+xml"),
+        renditions: [ Rack::Test::UploadedFile.new(StringIO.new("<diagram/>"), "application/xml", original_filename: "-annotations.xml") ]
+      } ] }
+    }
+    assert_response :success
+
+    asset.reload
+    assert asset.output_current?
+    assert_equal %w[ graph.svg graph-annotations.xml ], asset.generated_files.keys
+    json = response.parsed_body["assets"].find { |a| a["ref"] == "graph" }
+    assert_equal true, json["output_current"]
+    assert_equal %w[ graph.svg graph-annotations.xml ], json["renditions"].map { |r| r["filename"] }
+    assert_equal "/projects/#{@project.id}/generated/prefigure/graph-annotations.xml", json["renditions"].last["path"]
+
+    # A later render with no companions says so with a blank entry, and the old
+    # companions go: the stored set is always the set of the latest render.
+    patch project_url(@project, format: :json), params: {
+      project: { assets_attributes: [ {
+        id: asset.id,
+        output_source_digest: digest,
+        file: fixture_file_upload("test_diagram.svg", "image/svg+xml"),
+        renditions: [ "" ]
+      } ] }
+    }
+    assert_response :success
+    assert_equal %w[ graph.svg ], asset.reload.generated_files.keys
+  end
 end
