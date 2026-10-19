@@ -34,3 +34,15 @@ copy(
 const dictionary = path.dirname(require.resolve("dictionary-en"));
 copy(path.join(dictionary, "index.aff"), "public/assets/dictionaries/en.aff");
 copy(path.join(dictionary, "index.dic"), "public/assets/dictionaries/en.dic");
+
+// PreFigure's Python wheels, loaded into Pyodide by the PreFigure engine worker
+// (packages/web-editor/src/generators/prefigure/worker). Vendored rather than
+// fetched at build time -- PyPI is not something a deploy should depend on --
+// and served from public/assets/prefigure, which the editor is told about as
+// `prefigureAssetsUrl` (projects/_form). The filenames are pinned in the
+// worker's protocol.ts; copying the whole directory keeps the two in step
+// without naming versions twice.
+const wheels = path.join(__dirname, "..", "vendor", "prefigure");
+for (const name of fs.readdirSync(wheels).filter((f) => f.endsWith(".whl"))) {
+  copy(path.join(wheels, name), path.join("public/assets/prefigure", name));
+}

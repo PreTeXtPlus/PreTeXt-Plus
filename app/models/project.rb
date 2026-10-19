@@ -391,6 +391,9 @@ class Project < ApplicationRecord
       # is created once `duplicate` saves.
       new_asset = duplicate.assets.build(asset.dup.attributes)
       new_asset.file.attach(asset.file.blob) if asset.file.attached?
+      # A generated asset's companion outputs share blobs the same way; their filenames
+      # are suffixes, so they serve the copy under its own ref (see Asset#renditions).
+      asset.renditions.each { |rendition| new_asset.renditions.attach(rendition.blob) }
     end
     duplicate
   end

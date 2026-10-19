@@ -4,12 +4,43 @@ class Asset < ApplicationRecord
 
   # See Division: a build consumes assets too, so changing one makes built targets stale.
   belongs_to :project, touch: :source_updated_at
+  # For a `file` asset, the upload. For a `generated` asset, the primary output: the
+  # SVG the editor (or a server render) produced from `source`.
   has_one_attached :file
+  # The other files PreTeXt's generated directory holds for a generated asset --
+  # `-annotations.xml`, `-diagcess.svg`, later `.pdf`/`.png`. Each blob's filename is
+  # the *suffix* alone ("-annotations.xml"), never the ref: the full name is derived in
+  # #generated_files, so a renamed asset renames its outputs for free and a blob shared
+  # by Project#full_dup serves both copies under their own refs.
+  has_many_attached :renditions
 
+  # `generated` (docs/generated-assets-plan.md): authored source in `source` for a
+  # `generator`, plus the files that generator would produce, attached as `file` and
+  # `renditions`. Additive -- integer enums are never renumbered.
   enum :kind, {
     file: 0,
-    authored: 1
+    authored: 1,
+    generated: 2
   }, suffix: true
+
+  GENERATORS = %w[ prefigure ].freeze
+  validates :generator, inclusion: { in: GENERATORS }, if: :generated_kind?
+  validates :generator, absence: true, unless: :generated_kind?
+  validate :generated_outputs_are_well_formed, if: :generated_kind?
+
+  # The docinfo elements each generator's render depends on, besides the asset's own
+  # source. Core writes these into the generator's publication file for a real build
+  # (extract-prefigure.xsl), so a change to them is a change to the picture.
+  #
+  # Mirrored in packages/web-editor/src/generators/renderInput.ts; the two must digest
+  # byte-identical strings, which test/models/asset_test.rb and the web-editor's
+  # generators test both pin to one fixture hex.
+  DOCINFO_INPUT_ELEMENTS = { "prefigure" => %w[ macros prefigure-preamble ] }.freeze
+  RENDER_INPUT_SEPARATOR = "\n\u0000\n".freeze
+
+  # A rendition's filename is a suffix: an optional `-word` then an extension.
+  RENDITION_SUFFIX = /\A(?:-[a-z0-9]+)?\.[a-z0-9]+\z/
+  GENERATED_CONTENT_TYPES = %w[ image/svg+xml application/xml text/xml application/pdf image/png ].freeze
 
   # The cap applies only when adding a new asset: an account already over its
   # limit (subscription lapsed) keeps its existing assets rather than being
@@ -93,6 +124,48 @@ class Asset < ApplicationRecord
 
   THUMBNAIL_SIZE = [ 200, 200 ].freeze
 
+  # The exact string whose sha256 is `output_source_digest`: the source, then the inner
+  # text of each docinfo element the generator reads, joined by a separator no author
+  # would type. Read with a regex rather than parsed, so the browser (which has only the
+  # docinfo string) can produce the same bytes without agreeing with Nokogiri about
+  # serialization.
+  def render_input(docinfo = project&.effective_docinfo)
+    parts = [ source.to_s ]
+    DOCINFO_INPUT_ELEMENTS.fetch(generator.to_s, []).each do |element|
+      parts << self.class.docinfo_element_inner(docinfo.to_s, element)
+    end
+    parts.join(RENDER_INPUT_SEPARATOR)
+  end
+
+  def self.docinfo_element_inner(docinfo, element)
+    name = Regexp.escape(element)
+    match = docinfo.match(/<#{name}(?:\s[^>]*)?>([\s\S]*?)<\/#{name}>/)
+    match ? match[1] : ""
+  end
+
+  # Whether the attached outputs were built from the source (and docinfo) as they are
+  # now. `output_source_digest` is a claim the client made; this is the check every
+  # consumer of an output must make, never a boolean read off the row.
+  def output_current?
+    generated_kind? && file.attached? && output_source_digest.present? &&
+      output_source_digest == Digest::SHA256.hexdigest(render_input)
+  end
+
+  # Every file this asset contributes to PreTeXt's generated directory, as
+  # `filename => blob`, named exactly as a `pretext generate` run would name them:
+  # `<ref>.svg` and `<ref><suffix>` for each rendition. Empty for anything but a generated
+  # asset with an output.
+  def generated_files
+    return {} unless generated_kind? && file.attached?
+
+    files = { "#{ref}.svg" => file.blob }
+    # Sorted so the archive and the JSON list them in one stable order.
+    renditions.sort_by { |rendition| rendition.filename.to_s }.each do |rendition|
+      files["#{ref}#{rendition.filename}"] = rendition.blob
+    end
+    files
+  end
+
   # Whether `thumbnail_url` has anything to show: no file, or a file type
   # ActiveStorage can't raster a variant of, means no preview -- callers fall
   # back to a generic file icon. Cheap (no processing), so it's safe to call
@@ -123,6 +196,22 @@ class Asset < ApplicationRecord
   end
 
   private
+
+  # A generated asset's outputs are whatever a generator writes, so the only guard is
+  # that they are the kinds of file one writes: an SVG primary, and renditions named by a
+  # suffix (#renditions) in a type PreTeXt's generated directory can hold.
+  def generated_outputs_are_well_formed
+    if file.attached? && file.blob&.content_type != "image/svg+xml"
+      errors.add(:file, "of a generated asset must be an SVG")
+    end
+    renditions.each do |rendition|
+      name = rendition.filename.to_s
+      errors.add(:renditions, "#{name} is not an output suffix like -annotations.xml") unless name.match?(RENDITION_SUFFIX)
+      unless GENERATED_CONTENT_TYPES.include?(rendition.blob&.content_type)
+        errors.add(:renditions, "#{name} has an unsupported content type")
+      end
+    end
+  end
 
   # Keyed to the project OWNER, not whoever is actually uploading -- an
   # asset's storage cost belongs to whoever's account it lives in, exactly

@@ -1,0 +1,5 @@
+The worker in this directory is derived from the PreFigure playground
+(https://github.com/davidaustinm/prefigure, packages/playground/src/worker),
+copyright Jason Siefken and David Austin, licensed under the GNU General Public
+License v3.0. PreFigure itself (the `prefig` wheel the worker loads) is GPL-3.0.
+This editor is AGPL-3.0, which GPLv3 section 13 permits combining with.

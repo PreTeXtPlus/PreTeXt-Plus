@@ -30,21 +30,25 @@ class FullBuildJob < ApplicationJob
     # and leaves its rows alone, which are then the only truth there is.
     ProjectDocProjection.new(build.project).apply!
 
-    archive = ProjectArchiveBuilder.new(build.project.reload).build
+    builder = ProjectArchiveBuilder.new(build.project.reload)
+    archive = builder.build
 
     uri = URI.parse("https://#{Rails.application.credentials.dig(:full_build, :host)}/builds")
     request = Net::HTTP::Post.new(uri)
     request["Authorization"] = "Bearer #{Rails.application.credentials.dig(:full_build, :token)}"
     resolved_callback_url = callback_url(build)
     Rails.logger.info("FullBuildJob submitting build #{build.id} with callback_url=#{resolved_callback_url}")
-    request.set_form(
-      [
-        [ "archive", archive, { filename: "project.zip", content_type: "application/zip" } ],
-        [ "target", build.target.slug ],
-        [ "callback_url", resolved_callback_url ]
-      ],
-      "multipart/form-data"
-    )
+    fields = [
+      [ "archive", archive, { filename: "project.zip", content_type: "application/zip" } ],
+      [ "target", build.target.slug ],
+      [ "callback_url", resolved_callback_url ]
+    ]
+    # The generators whose outputs the archive carries under source/generated/. The
+    # server passes them to `pretext build --keep-generated`, which leaves an existing
+    # output file alone instead of regenerating it. A server (or CLI) without that
+    # option ignores the field and regenerates: the same picture, more slowly.
+    fields << [ "keep_generated", builder.kept_generators.join(",") ] if builder.kept_generators.any?
+    request.set_form(fields, "multipart/form-data")
 
     response = Net::HTTP.start(uri.host, uri.port, use_ssl: uri.scheme == "https") do |http|
       http.request(request)

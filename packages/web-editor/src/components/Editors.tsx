@@ -36,6 +36,8 @@ import FullSourceModal from "./FullSourceModal";
 import NewItemPane from "./create/NewItemPane";
 import EditorTargetBar from "./EditorTargetBar";
 import AssetPreview from "./AssetPreview";
+import GeneratedAssetPreview, { type GeneratedAssetOutput } from "./GeneratedAssetPreview";
+import { runtimeFor, type GeneratorRuntimeConfigs } from "../generators";
 import {
   editorTargetKey,
   resolveEditorTarget,
@@ -58,6 +60,7 @@ import type {
   EditorContentChange,
   EditorDivisionContentChange,
   Asset,
+  GeneratorId,
   FeedbackSubmission,
   RecordKind,
   Snippet,
@@ -395,6 +398,29 @@ export interface editorProps {
    * code editor.
    */
   onCreateAuthored?: (title: string) => Promise<Asset>;
+  /**
+   * Called when the user creates a new generated asset (a PreFigure diagram, …)
+   * from the "New asset" form's tab for that generator. The host derives the ref
+   * from `title` as it does for `onCreateAuthored`, persists the asset with
+   * `kind: "generated"`, the `generator`, and `source` set to the generator's
+   * starter source (`generators[generator].starterSource`), and returns it.
+   */
+  onCreateGenerated?: (generator: GeneratorId, title: string) => Promise<Asset>;
+  /**
+   * Per-generator browser engines: where the host serves each generator's
+   * worker and runtime files. Without an entry for a generator, its assets show
+   * their stored picture and no "Load engine" button — builds still generate
+   * them. See `GeneratorRuntimeConfigs`.
+   */
+  generatorRuntimes?: GeneratorRuntimeConfigs;
+  /**
+   * A generated asset was rendered in the browser from its current source: the
+   * host stores `output.outputs` (the primary SVG first, companions after, each
+   * named as a build names them) together with `output.outputSourceDigest`, and
+   * may return the asset as persisted (its new `url`), which replaces the pool
+   * entry. Fires at most once per distinct digest per session.
+   */
+  onAssetOutput?: (asset: Asset, output: GeneratedAssetOutput) => Promise<Asset | void> | void;
   /**
    * Called when the user removes an asset from the project. Return a promise
    * if the removal is persisted asynchronously: the Replace flow awaits it
@@ -873,6 +899,7 @@ const EditorsInner = (props: EditorsInnerProps) => {
       editedAsset?.isFile,
       editedAsset?.fileRef,
       editedAsset?.shortDescription,
+      editedAsset?.generator,
     ],
   );
   const editorFormat: SourceFormat =
@@ -1470,6 +1497,26 @@ const EditorsInner = (props: EditorsInnerProps) => {
     // by the time this runs the host has already stored the file and handed
     // back a URL, so the entry carries everything a peer needs.
     bridge?.localAssetAdd(asset);
+  };
+
+  /**
+   * A browser render of a generated asset's current source. The host stores the
+   * files; the pool records the digest at once so the status line reads
+   * "current" without waiting, and takes the host's record (its new `url`) when
+   * it answers. Peers learn the digest through the doc, the bytes through the host.
+   */
+  const handleAssetOutput = (asset: Asset, output: GeneratedAssetOutput) => {
+    const withDigest: Asset = { ...asset, outputSourceDigest: output.outputSourceDigest };
+    updateAssetInPool(withDigest);
+    bridge?.localAssetUpdate(withDigest);
+    void Promise.resolve(props.onAssetOutput?.(asset, output)).then((persisted) => {
+      if (!persisted) return;
+      // Keep the live source: the host's copy may predate the latest keystroke.
+      const current = storeApi.getState().projectAssets?.find((a) => a.id === asset.id);
+      const merged: Asset = { ...persisted, source: current?.source ?? persisted.source };
+      updateAssetInPool(merged);
+      bridge?.localAssetUpdate(merged);
+    });
   };
 
   const handleAssetRemove = (asset: Asset) => {
@@ -2579,6 +2626,7 @@ const EditorsInner = (props: EditorsInnerProps) => {
           onUploadAsset={props.onAssetUpload}
           onFetchAssetUrl={props.onAssetFetchUrl}
           onCreateAuthoredAsset={props.onCreateAuthored}
+          onCreateGeneratedAsset={props.onCreateGenerated}
           onSnippetCreated={handleSnippetCreated}
           onAssetCreated={(asset, request) => void handleAssetCreated(asset, request)}
         />
@@ -2601,7 +2649,18 @@ const EditorsInner = (props: EditorsInnerProps) => {
 
   // ── Preview panel ─────────────────────────────────────────────────────────
   let preview: ReactNode;
-  if (showLivePreview && editorTarget?.kind === "asset") {
+  if (showLivePreview && editorTarget?.kind === "asset" && editorTarget.asset.generator) {
+    // A generated asset renders in its own engine, not the document renderer.
+    preview = (
+      <GeneratedAssetPreview
+        asset={editorTarget.asset}
+        docinfo={effectiveDocinfo ?? ""}
+        runtime={runtimeFor(editorTarget.asset.generator, props.generatorRuntimes)}
+        onOutput={handleAssetOutput}
+        readOnly={props.readOnly}
+      />
+    );
+  } else if (showLivePreview && editorTarget?.kind === "asset") {
     // A stored image needs no renderer, so this doesn't wait on `canPreview`.
     preview = <AssetPreview asset={editorTarget.asset} />;
   } else if (showLivePreview && canPreview) {
