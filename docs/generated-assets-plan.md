@@ -1,10 +1,14 @@
 # Generated assets
 
 Plan of record for assets whose picture is *computed from source* — PreFigure first,
-`latex-image` and the rest after — where the editor itself produces the output and the
-build server never has to.
+`latex-image` and the rest after — where the editor produces the files PreTeXt would
+have generated, ships them with the project, and the build server keeps them instead of
+regenerating.
 
-**Status:** draft, nothing started. Written 2026-10-13 against `main` at `2672227`.
+**Status:** decided 2026-10-19, nothing implemented. Supersedes the 2026-10-13 draft,
+which routed the output through `<image source="ref.svg">` (the "external form"). That
+route had no way to carry an annotated PreFigure diagram and needed a per-target branch
+in the assembler; both problems go away below.
 
 ## Context
 
@@ -12,7 +16,7 @@ An `Asset` today is one of two things ([asset.rb:9](../app/models/asset.rb#L9)):
 
 | kind | what it is | how it is assembled |
 | --- | --- | --- |
-| `file` | uploaded bytes (ActiveStorage) | `<image source="ref.ext">` and the bytes land in `source/external/ref.ext` |
+| `file` | uploaded bytes (ActiveStorage) | `<image source="ref.ext">`; the bytes land in `source/external/ref.ext` |
 | `authored` | raw PreTeXt in `source`, meant to be a hand-written `<latex-image>` or `<asymptote>` | `<image>` + the source, verbatim |
 
 The transform is `transformImageAsset` in
@@ -20,138 +24,199 @@ The transform is `transformImageAsset` in
 entry is written at
 [project_archive_builder.rb:84](../app/services/project_archive_builder.rb#L84). Nothing
 in the repo generates anything. An `authored` asset shows "Preview coming soon" in the
-preview pane ([AssetPreview.tsx:24](../packages/web-editor/src/components/AssetPreview.tsx#L24)),
-and the live preview banner tells authors that `latex-image`/`sageplot` need a real build.
+preview pane ([AssetPreview.tsx:24](../packages/web-editor/src/components/AssetPreview.tsx#L24)).
 
-A **generated asset** is the missing third thing: authored source that the editor turns
-into a file. The author writes PreFigure XML, watches the diagram render live, and when
-they save, the SVG is stored with the asset exactly as if they had uploaded it. From then
-on the document embeds it as an **external** image. The full build server
-(`pretext-plus-build-full`) does not run `prefig` for it, the preview shows it without a
-build, and a PDF target gets a PDF without TeX ever seeing the diagram source.
+A **generated asset** is the missing third thing: authored source plus the files PreTeXt
+would generate from it. The author writes PreFigure XML and watches the diagram render.
+When they save, the SVG (and its companions) are stored with the asset. The document
+still says `<image><prefigure label="ref">…</prefigure></image>` — true PreTeXt, buildable
+anywhere — but the archive we send to the build server also contains
+`source/generated/prefigure/ref.svg` and friends, and the build runs with a CLI flag
+that says *keep what is already there*. The build server never runs `prefig` for a
+current diagram; a downloaded project builds with a plain `pretext build` and simply
+regenerates.
 
-### What PreFigure gives us (researched 2026-10-13)
+### What PreFigure gives us (researched 2026-10-13, extended 2026-10-19)
 
-- **Repo:** <https://github.com/davidaustinm/prefigure> is now a monorepo. The playground
-  is `packages/playground/`, deployed to <https://davidaustinm.github.io/prefigure/>.
-  PyPI package `prefig` 0.7.9 (pure Python wheel, 182 KB).
+- **Repo:** <https://github.com/davidaustinm/prefigure>, a monorepo. The playground is
+  `packages/playground/`, deployed to <https://davidaustinm.github.io/prefigure/>. PyPI
+  package `prefig` 0.7.9 (pure Python wheel, 182 KB); the engine is `packages/prefig/engine.py`.
 - **The playground runs the real Python package in Pyodide 0.26.4 inside a Web Worker**
-  (`src/worker/compiler.ts`). The pieces PreFigure normally shells out for are replaced by
-  JS callbacks registered as a Python module (`src/worker/compat-api.ts`): math labels
-  through MathJax 4 TeX→SVG, braille through speech-rule-engine (Nemeth) and a liblouis
-  JS build, text metrics through `OffscreenCanvas.measureText`. No node, no pycairo, no
-  system fonts.
-- **Engine entry point** (`packages/prefig/engine.py`):
-  `build_from_string(format, input_string, environment="pyodide")` → `(svg, annotations)`.
-  Builds only the first `<diagram>`; raises on malformed XML. The playground's class is
-  `PreFigureCompiler.compile(mode: "svg" | "tactile", source) → { svg, annotations }`.
-- **Cost:** ≈95–100 MB cold (scipy alone is 47 MB; Pyodide core ≈14 MB), **15–20 s on a
-  cold cache**, a few hundred MB of worker memory. The Rust/WASM port exists precisely to
-  fix this but is incomplete (no tactile, no `<network>` layout, no `<read>`, no
-  histogram/scatter) and not published to npm.
-- **Pyodide-mode differences from the CLI:** the SVG id prefix is a random hash rather
-  than deterministic, and annotations are auto-generated when the author wrote none.
-  The CLI also writes `<label>-11.svg`, `<label>-diagcess.svg`, `.pdf`, `.png`; the
-  browser engine produces SVG 2 and the annotations XML, nothing else.
-- **Published alternative:** `@doenet/prefigure` (npm, AGPL-3.0, pins prefig 0.7.6,
-  145 MB unpacked) is a straight extraction of the playground worker with a
-  `compilePrefigure(xml, { mode })` API.
-- **Licenses:** PreFigure is GPL-3.0; this app is AGPL-3.0, so vendoring playground
-  code is compatible (GPLv3 §13). `diagcess` — the keyboard-exploration script PreTeXt
-  itself ships for annotated diagrams — is `UNLICENSED` on npm. We can load the copy
-  PreTeXt's HTML already carries, but should not redistribute it as our own package
-  without asking Volker Sorge.
+  (`src/worker/compiler.ts`), with the pieces PreFigure shells out for replaced by JS
+  callbacks (`src/worker/compat-api.ts`): MathJax 4 for TeX labels, speech-rule-engine +
+  a liblouis build for braille, `OffscreenCanvas.measureText` for text metrics.
+- **String entry point:** `engine.build_from_string(format, input_string, environment)`
+  returns a **tuple** `(svg_string, annotations_xml_or_None)`. It takes no publication
+  file, so docinfo `<macros>` and `<prefigure-preamble>` are not applied — core writes
+  both into `pf_publication.xml` for a real build (`extract-prefigure.xsl`). Adding a
+  `publication=` parameter is a small upstream PreFigure change; `mk_diagram` already
+  accepts one.
+- **Files a build writes** (`environment="pretext"`, `diagram.end_figure`): `<label>.svg`,
+  `<label>-11.svg` (SVG 1.1, read only by the XSL-FO route: braille, `method="fo"` PDF),
+  and when the author wrote `<annotations>`: `<label>-diagcess.svg` and
+  `<label>-annotations.xml`. The diagcess file is the SVG with `width`/`height` removed
+  and `style="aspect-ratio: W / H;"` added — derivable from the SVG in a few lines. The
+  annotations file is `<diagram><annotations>…</annotations></diagram>`, exactly what the
+  tuple's second item holds. PDF is `rsvg-convert` at 100 dpi over the SVG; PNG likewise.
+- **The caption core injects is used only for tactile output.** `extract-prefigure.xsl`
+  inserts a `pf:caption` ("Figure 2.3 (5)") into every extracted diagram; PreFigure uses it
+  solely as the braille title. SVG, PDF and PNG from a pre-render without it are the same
+  picture. Tactile stays with the build.
+- **Pyodide-mode differences:** random SVG id prefix instead of `figure`, and annotations
+  auto-generated when the author wrote none. Neither affects HTML or PDF output in a way a
+  reader sees; `environment="pretext"` is what a server render should pass.
+- **Cost of the browser engine:** ≈95–100 MB cold (scipy 47 MB, Pyodide core 14 MB),
+  15–20 s on a cold cache, a few hundred MB of worker memory.
+- **Licenses:** PreFigure is GPL-3.0; this app is AGPL-3.0, so vendoring playground code
+  is compatible. `diagcess` is `UNLICENSED` on npm; load the copy PreTeXt's HTML already
+  ships rather than redistributing it.
 
-### How PreTeXt consumes it
+### How PreTeXt and the CLI consume it (pretext-cli 2.55.1, core 2026-10)
 
-- Authored form: `<image><prefigure xmlns="https://prefigure.org" label="…"><diagram>…</diagram></prefigure></image>`.
-  The `@label` is the output basename; without one core warns about unreliable filenames.
-- `pretext generate prefigure` writes `generated/prefigure/<label>.svg` (+ `-annotations.xml`,
-  `-diagcess.svg` when annotated, `.pdf`/`.png` via rsvg-convert). Per target the CLI
-  needs (`pretext-cli/pretext/constants.py` `ASSET_FORMATS`): html family → `svg`,
-  pdf/latex → `pdf`, kindle → `png`.
-- An **annotated** diagram in HTML is not an `<img>`: core emits
+- Authored form: `<image><prefigure xmlns="https://prefigure.org" label="ref"><diagram>…</diagram></prefigure></image>`.
+  `@label` is the output basename (`pretext-common.xsl`, `image-source-basename`); core
+  warns without one. Our `REF_REGEX` (`[A-Za-z_][A-Za-z0-9_-]*`) is a valid label, so
+  **the asset's ref is the label is the filename**.
+- Per target the CLI needs (`constants.ASSET_FORMATS`): html/revealjs/epub → `svg`,
+  pdf/latex/beamer → `pdf`, kindle → `png`, braille → `all`.
+- Annotated diagrams in HTML are not an `<img>`: core emits
   `<div class="ChemAccess-element" data-src="…-diagcess.svg" data-cml="…-annotations.xml">`
-  plus `diagcess.js`. **There is no way to get that markup from `<image source>`.**
-- An external `<image source="ref">` with no extension means "the author supplies
-  `ref.svg` *and* `ref.pdf`"; HTML picks the first, LaTeX the second.
-- The CLI's "only regenerate what changed" cache is one SHA-256 per asset *type* over the
-  assembled source, stored in `generated/.<target>_assets.json`
-  (`pretext-cli/pretext/project/__init__.py:731`). Pre-seeding `generated/` from the
-  browser so the CLI skips `prefig` would mean reproducing core's assembly serialization
-  bit-for-bit. **Rejected** — the external route is the robust one, and the full build
-  server already has `prefig` installed for whatever still falls through.
+  (`pretext-html.xsl` ≈6579) plus `diagcess.js`. **This is why the external form was
+  abandoned**: nothing in `<image source>` can produce that markup.
+- **The CLI's per-asset cache cannot be pre-seeded for PreFigure.** `generate.individual_prefigure`
+  looks in `<project>/.cache/prefigure/<md5>.svg`, where the md5 is of the *extracted*
+  diagram file — which carries the injected caption (enclosing block's number and a
+  document-wide serial), two comments and copied indentation. Move a figure and the key
+  changes. (For `latex-image` the extracted file is preamble + macros + body, so its key
+  *is* position-independent — the seeding scheme in #471 is sound for that type.)
+- **The hook is `ext_converter`.** `core.prefigure_conversion(…, ext_converter=…)` calls
+  the CLI's `individual_prefigure(pfdiagram, outformat, tmp_dir)` per diagram, which
+  checks the cache, else runs `prefig`, then core copies `tmp/output/` onto
+  `generated/prefigure/`. A "keep what exists" check belongs in that function, next to
+  the cache check. Same shape for `individual_latex_image`, `_asymptote`, `_sage`.
+- `pretext build -q/--no-generate` skips `generate_assets` wholesale and never checks
+  that `generated/` holds anything. Everything in `ASSET_TO_XPATH` is skipped — datafiles,
+  QR codes, dynamic substitutions, CSL references, codelens, mermaid — not only images.
+  Usable only when the document has nothing else to generate; **not** the mechanism here.
+- CLI cache gap worth fixing alongside: the prefigure cache stores only `.svg` and
+  `-annotations.xml`, so a cache hit on a fresh checkout lacks `-diagcess.svg` and `-11.svg`.
+
+### Related work
+
+- **PreTeXtPlus/PreTeXt-Plus#471** and **pretext-plus-build-full PR #12 (`/generate`, open).**
+  The full server gains `POST /generate`: same archive as `/builds`, runs
+  `pretext generate <types> -t <target>` on its own queue (1 CPU, 120 s), returns the
+  project's `.cache/` as `<type>/<md5>.<ext>`. #471 plans to store those md5-keyed files
+  and seed `.cache/` in full builds. That works for `latex-image`; for PreFigure the key
+  does not survive a change of position, and `.cache` lacks the diagcess file. **With the
+  `--keep-generated` flag below, the same endpoint serves every type with one mechanism**:
+  have it return `source/generated/` (label-named, every companion present) instead of
+  `.cache/`, store those files, ship them back. #471 should be revised to this; its
+  Rails plumbing (job, HMAC callback, status) is still what Part 6 and Part 7 use.
+- **The lite build server already has `POST /prefigure/`** (`PreTeXt-Plus-build/app.py`):
+  `prefig.engine.build_from_string('svg', source, environment="pretext")`, with
+  `prefig[pycairo]` installed. It hands the result tuple to `make_response`, so it works
+  for unannotated diagrams by accident and fails for annotated ones. Fixed to return JSON
+  `{svg, annotations}`, it is a second, synchronous producer with ~1 s latency.
+- **Unrelated, found while reading:** `BUILD_COMMAND` on the full server seeds journal
+  packages into `generated-assets/latex-packages/`; our publication file puts generated
+  assets at `source/generated/`. Verify the seeding ever lands (tracked in #476's notes).
 
 ---
 
 ## Decisions
 
-1. **A generated asset is a `file` asset with provenance.** New enum value
-   `kind: generated (2)`, plus `assets.generator` (string: `"prefigure"`, later
-   `"latex-image"`, …). Its `source` column holds the *generator's input* (for PreFigure,
-   the `<diagram>` element; never the `<image>`/`<prefigure>` wrapper). Its output is the
-   existing `has_one_attached :file`. Everything that already understands a file — `url`,
-   `thumbnail_url`, `external_filename`, the archive's `external/` entry, the asset list
-   thumbnail, the `/external/:ref` route, `Project#full_dup` — works unchanged.
+1. **A generated asset is a `file` asset with provenance and companions.** New enum value
+   `kind: generated (2)` plus `assets.generator` (`"prefigure"`, later `"latex-image"`, …).
+   `source` holds the generator's input (for PreFigure the `<diagram>` element, never the
+   `<image>`/`<prefigure>` wrapper). The primary output stays `has_one_attached :file`
+   (the SVG), so `url`, `thumbnail_url`, the asset list and `Project#full_dup` work
+   unchanged. Companions — `ref-annotations.xml`, `ref-diagcess.svg`, later `ref.pdf`,
+   `ref.png`, `ref-11.svg` — are `has_many_attached :renditions`, each blob's `filename`
+   being exactly the name PreTeXt's generated directory uses. One digest,
+   `assets.output_source_digest`, covers the set.
 
-2. **Assembly emits the external form only when the output is trustworthy, and falls
-   back to the generator's own PreTeXt otherwise.** `assets.output_source_digest` records
-   the SHA-256 of the source the output was built from. If it matches the current
-   source, `transformImageAsset` writes `<image source="ref.svg">`. If it does not (never
-   rendered, render failed, source edited by a peer who never loaded the engine), it
-   writes `<image><prefigure xmlns=… label="ref">source</prefigure></image>` and the build
-   server generates it. **A stale picture is never shipped**; the document is always
-   buildable. This is also what makes collaboration safe: the output is bytes the host
-   holds, like an upload, and a peer who edits the source without an engine just
-   invalidates it.
+2. **The document always carries the source form.** `transformImageAsset` emits
+   `<image>` + `<shortdescription/>` + `wrapSource(source, ref)` for every generated asset,
+   for every target, for the preview. No external form, no per-target branch in the
+   assembler, no `assetNeeds`. What is shipped alongside is decided in Ruby at archive
+   time (decision 3). A downloaded project is ordinary PreTeXt.
 
-3. **Annotated PreFigure diagrams keep the source form in builds.** Decision 2's fallback
-   is also used when the diagram has `<annotations>`, because the external form has no
-   way to carry diagcess. The preview pane still shows the browser-rendered SVG *with*
-   diagcess, and the output is still stored (it is what the preview and the thumbnail
-   show). *Alternative if accessibility-in-builds matters less than build time:* always
-   emit external. One flag in the generator definition; not a design change. **Needs the
-   user's call.**
+3. **The archive ships current outputs into `source/generated/<type>/`, and the build is
+   told to keep them.** For each generated asset whose `output_current?` holds (digest ==
+   sha256 of the current render input), `ProjectArchiveBuilder` writes `file` and every
+   rendition under `source/generated/prefigure/<filename>`. If it wrote any, `FullBuildJob`
+   asks the server for `pretext build <target> --keep-generated prefigure`. The flag is
+   per *file*: a diagram shipped as `.svg` only still gets its `.pdf` generated for a PDF
+   target; a stale asset is simply not shipped and is generated like today. **A stale
+   picture is never shipped; the document is always buildable.** This is also what makes
+   collaboration safe: a peer who edits the source without an engine just invalidates
+   the output.
 
-4. **Which form a target gets is decided at assembly, per target.** The assembler takes
-   `assetNeeds: "svg" | "pdf" | "png"` derived from `Target::Catalog` (mirroring the
-   CLI's `ASSET_FORMATS`). An asset whose stored outputs cover the need is external;
-   otherwise it falls back to source. In phase 1 only SVG exists, so HTML-family builds
-   and the preview skip `prefig`, and PDF builds still run it — the common case is
-   covered first. Phase 6 adds PDF/PNG renditions and the extensionless
-   `<image source="ref">` form, after which no target generates.
+4. **`--keep-generated` is an upstream pretext-cli feature, not a server hack** (Part 0).
+   It is useful to anyone who commits a `generated/` directory, and it is the one piece
+   this whole plan depends on. Until it is released, the full server can run the same
+   builds without the flag (correct, just slower) — nothing here is blocked on it except
+   the speedup itself.
 
-5. **The engine runs in a Web Worker we own, built from the playground's worker code,
-   not from `@doenet/prefigure`.** The Doenet package pins an older prefig, vendors
-   145 MB into our bundle, and its blob-URL worker trick exists for a cross-origin case we
-   do not have. Our worker is ~3 files (`compiler.ts`, `compat-api.ts`, the liblouis
-   build) with attribution, loads Pyodide from jsDelivr (CORS-enabled, immutable URLs,
-   shared browser cache with every other Pyodide site) and the `prefig` + `segno` wheels
-   from `public/` (copied by `script/copy-static-assets.js`, like `libxslt.wasm` and the
-   Hunspell dictionaries). Esbuild has no code splitting here, so the worker is a
-   separate esbuild entry and everything heavy is fetched at runtime by URL — the same
-   rule the spell checker's dictionary already follows.
+5. **Outputs may come from any producer; the store does not care.** Phase 1 uses the full
+   server's `/generate` (PR #12) returning label-named files, because it is the real
+   pipeline — every companion, every format, docinfo macros applied — and the Rails
+   plumbing for it is already designed (#471). Part 4 adds the browser engine for live
+   rendering while typing, which can also produce the stored SVG for HTML targets. PDF and
+   PNG always come from a server. The digest rule is the same whoever rendered.
 
-6. **Loading the engine is explicit, once per page.** 100 MB is not something to start
-   because an author clicked a row in the asset list. The preview pane shows what is
-   stored and a **Load PreFigure engine (~100 MB, first time only)** button; after that
-   the engine stays warm for the session and every PreFigure asset renders live. The
-   same `GeneratorRuntime` object is shared across assets; it is terminated after a
-   long idle (memory) and recreated on demand.
+6. **The browser engine runs in a Web Worker we own, built from the playground's worker
+   code, loaded explicitly, once per page.** Unchanged from the draft: Pyodide from
+   jsDelivr, `prefig`/`segno` wheels from `public/`, a separate esbuild entry, a **Load
+   PreFigure engine (~100 MB, first time only)** button, one shared runtime disposed after
+   a long idle. Never auto-loaded.
 
-7. **The generator abstraction is a registry, like `editorConfigs`.** One
-   `AssetGenerator` definition per generator (id, label, Monaco language, starter
-   source, `wrapSource` for the fallback form, `needsFallback(source)` for decision 3,
-   `createRuntime()`), looked up by `asset.generator`. Adding `latex-image` is a new
-   entry whose runtime calls a server instead of a worker (Part 7). Nothing outside the
-   registry names a specific generator; tests iterate the registry.
+7. **The generator abstraction is a registry, like `editorConfigs`.** One `AssetGenerator`
+   per generator: id, label, Monaco language, starter source, `wrapSource`, the list of
+   output filenames it owns, `renderInput(source, docinfo)` (what gets digested), and an
+   optional browser `createRuntime`. Nothing outside the registry names a generator.
 
-8. **Output upload rides the existing save pipeline, not a new endpoint.** The host
-   already multipart-PATCHes `project[assets_attributes][0][file]`
-   (`patchProjectAssetUpload`, [editor.jsx:797](../app/javascript/controllers/react/editor.jsx#L797)).
-   A render result becomes part of the editor's working copy for that asset and is sent
-   with the next save alongside `source` and `output_source_digest`. One transaction,
-   one place that knows how to persist an asset.
+8. **Output upload rides the existing save pipeline.** The host already multipart-PATCHes
+   `project[assets_attributes][0][file]` (`patchProjectAssetUpload`,
+   [editor.jsx:797](../app/javascript/controllers/react/editor.jsx#L797)); renditions and
+   the digest travel in the same `assets_attributes[i]`. For server-produced outputs the
+   job attaches them directly.
+
+---
+
+## Part 0 — pretext-cli: `--keep-generated`
+
+In PreTeXtBook/pretext-cli. Small, self-contained, and the first thing to do because the
+rest can be verified against it with a hand-placed file and no Rails code.
+
+- **Option.** `pretext build` and `pretext generate` gain `--keep-generated TEXT`
+  (repeatable; asset type names from `constants.ASSETS`, or `all`). Help text: *"Do not
+  regenerate an asset of this type whose output file(s) already exist in the generated
+  directory. For projects that commit or pre-populate `generated/`."*
+- **Plumbing.** `Target.build(keep_generated=…)` → `generate_assets(keep_generated=…)` →
+  each `partial(generate.individual_<type>, …)` gets `generated_dir=self.generated_dir_abspath() / "<type>"`
+  and `keep_generated: bool`.
+- **Behaviour**, in each `individual_*` before the cache check, per requested format:
+  if `keep_generated` and `generated_dir / output_file.name` exists (for prefigure
+  tactile: `generated_dir / "tactile" / …`), log `Keeping existing <file>` and `continue`.
+  Nothing is copied — the file is already where core will copy `tmp/output` onto. For
+  `latex-image` with `outformat="all"`, keep only if every format exists (mirrors its
+  cache rule).
+- **Companions.** For prefigure `svg`, keep only when `<stem>.svg` exists; the caller is
+  responsible for `-annotations.xml`/`-diagcess.svg`. While there, make the cache copy
+  `-diagcess.svg` and `-11.svg` too (the gap noted above).
+- **Hash table.** `.<target>_assets.json` is untouched: extraction still runs (cheap XSLT),
+  the per-type hash is still saved. `--keep-generated` and `-g` together: `-g` wins, warn.
+- **Tests.** `tests/`: a project with one prefigure diagram and a pre-placed
+  `generated/prefigure/<label>.svg`; `pretext build web --keep-generated prefigure` runs
+  no `prefig` (assert the log) and the SVG in `output/` is the pre-placed one; without the
+  flag it is regenerated; a PDF target with only `.svg` present generates `.pdf`.
+
+Full build server (pretext-plus-build-full), after the CLI release reaches the warm image:
+`POST /builds` gains `keep_generated` (comma/space list, validated against the same
+shell-safe asset-name check PR #12 added); `BUILD_COMMAND` gains a `{flags}` slot;
+`run_build` fills it with `--keep-generated <names>` or nothing. Unknown names → 422.
 
 ---
 
@@ -161,46 +226,67 @@ build, and a PDF target gets a PDF without TeX ever seeing the diagram source.
 
 ```ruby
 add_column :assets, :generator, :string              # nil for file/authored
-add_column :assets, :output_source_digest, :string   # sha256 of `source` the file was built from
+add_column :assets, :output_source_digest, :string   # sha256 of the render input the outputs were built from
 ```
 
 `kind` gains `generated: 2` — additive, integer enums are never renumbered
-(`docs/build-targets.md`, Traps). No backfill: no row is generated yet.
+(`docs/build-targets.md`, Traps). `has_many_attached :renditions`. No backfill.
 
 ### 1.2 `Asset`
 
-- `GENERATORS = %w[ prefigure ].freeze`; validate `generator` present and in the list
-  iff `generated_kind?`, absent otherwise.
-- `output_current?` → `file.attached? && output_source_digest == Digest::SHA256.hexdigest(source.to_s)`.
-  This is the single predicate decision 2 hangs on; the assembler reads it through JSON,
-  the archive builder reads it directly.
-- `CONTENT_TYPE_EXTENSIONS` already has `image/svg+xml → svg`, so `external_filename`
-  is `ref.svg` for free. Phase 6 adds `application/pdf → pdf` for renditions.
-- The quota (`within_asset_quota`) counts rows, not bytes; a generated asset is one row.
-  Fine for now; worth remembering if outputs grow (a PreFigure SVG with MathJax labels is
-  tens of KB, not MB).
+- `GENERATORS = %w[ prefigure ].freeze`; validate `generator` present and in the list iff
+  `generated_kind?`, absent otherwise.
+- `render_input` → the string the digest is over. For prefigure:
+  `[source, docinfo_macros, docinfo_prefigure_preamble].join("\n\u0000\n")`, with the two
+  docinfo pieces read from `project.effective_docinfo` by Nokogiri. The editor computes
+  the identical string (Part 2); **one definition per generator, spelled identically in
+  Ruby and TypeScript, with a fixture test that pins both to the same hex.**
+- `output_current?` → `file.attached? && output_source_digest == Digest::SHA256.hexdigest(render_input)`.
+  The single predicate decision 3 hangs on. A docinfo edit therefore invalidates every
+  PreFigure output, which is correct: macros are an input.
+- `generated_files` → `[[filename, blob], …]`: `["#{ref}.svg", file.blob]` plus each
+  rendition `[rendition.filename.to_s, rendition.blob]`. Rendition filenames are
+  validated to start with `"#{ref}."` or `"#{ref}-"` — a rename of the asset renames
+  them (`ref` is the label is the basename).
+- `CONTENT_TYPE_EXTENSIONS` already maps `image/svg+xml → svg`, so `external_filename`
+  is `ref.svg`. Not used for generated assets' archive path, but the asset list and `url`
+  keep working.
+- Guard: a generated asset's `file` must be `image/svg+xml`; renditions must be
+  `image/svg+xml`, `application/xml`/`text/xml`, `application/pdf` or `image/png`.
+- Quota counts rows, not bytes; a generated asset is one row. Fine for now.
 
-### 1.3 Params, JSON, archive
+### 1.3 Archive and build submission
 
-- `projects_controller.rb:443` permits `generator` and `output_source_digest` on
-  `assets_attributes`. The digest is **client-supplied** — it is a statement about which
-  source the bytes match, and only the client that rendered knows. The server verifies
-  nothing beyond the format; `output_current?` is what consumes it.
-- `_asset.json.jbuilder` adds `generator`, `output_source_digest`, `output_current`.
-  `railsAssetToEditor` maps them to `generator`, `outputSourceDigest`; the editor computes
-  currency itself (it has the live source, the server does not).
-- `ProjectArchiveBuilder` keeps writing every attached file to `source/external/`. It
-  **also** writes a stale output (harmless, unreferenced) rather than growing a branch —
-  the assembler decides what the document references, and that is the only place the
-  decision lives.
-- `ProjectDocProjection` (Yjs → rows) and `Project#full_dup` need the two new columns
-  carried; `full_dup` already shares blobs.
+- `ProjectArchiveBuilder#build`: after the `external/` loop,
+  `@project.assets.generated_kind.select(&:output_current?)` → for each
+  `generated_files` entry write `source/generated/#{asset.generator}/#{filename}`.
+  Record `kept_generators` (the set of generator ids that shipped anything) on the
+  builder. The `generated` directory is already declared in `PublicationFileBuilder::BASE`.
+- `FullBuildJob`: add form field `keep_generated` = `kept_generators.join(",")` when
+  non-empty. Until the server/CLI support it, the field is ignored and the build
+  regenerates — still correct.
+- `projects#download` hands authors the same archive: a downloaded project carries its
+  generated files and builds with or without the flag.
+- `ProjectDocProjection` (Yjs → rows) and `Project#full_dup` carry the two columns and
+  copy renditions (blobs shared, as `file` already is).
 
-### 1.4 Tests
+### 1.4 Params and JSON
 
-`asset_test.rb`: enum/validation matrix, `output_current?` flips on a source edit.
-`project_archive_builder_test.rb`: a generated asset lands in `external/ref.svg`.
-Controller: `generator`/digest round-trip through `assets_attributes`.
+- `projects_controller.rb:443` permits `generator`, `output_source_digest`, `file`, and
+  `renditions: []` on `assets_attributes`. The digest is client-supplied when the browser
+  rendered — a statement about which input the bytes match; `output_current?` is what
+  consumes it, never a boolean off the row.
+- `_asset.json.jbuilder` adds `generator`, `outputSourceDigest`, `renditions` (filename +
+  url). `railsAssetToEditor` maps them; the editor computes currency itself.
+
+### 1.5 Tests
+
+`asset_test.rb`: enum/validation matrix; `output_current?` flips on a source edit and on
+a docinfo macros edit; rendition filename rule. `project_archive_builder_test.rb`: a
+current generated asset lands at `source/generated/prefigure/ref.svg` + companions and
+`kept_generators == ["prefigure"]`; a stale one ships nothing and the set is empty.
+`full_build_job_test.rb`: `keep_generated` field present iff the set is non-empty.
+Digest fixture shared with the web-editor test (2.4).
 
 ---
 
@@ -210,86 +296,50 @@ Controller: `generator`/digest round-trip through `assets_attributes`.
 
 ```ts
 export interface AssetGenerator {
-  id: GeneratorId;                      // "prefigure" | "latex-image"
-  label: string;                        // tab + title bar: "PreFigure"
-  language: "xml" | "latex";            // Monaco language for the source buffer
-  starterSource: string;                // what a new asset opens with
-  /** The PreTeXt child of <image> for this source — the fallback (build-side) form. */
+  id: GeneratorId;                       // "prefigure" | "latex-image"
+  label: string;                         // "PreFigure"
+  language: "xml" | "latex";             // Monaco language for the source buffer
+  starterSource: string;
+  /** The PreTeXt child of <image> for this source. The only form the document ever carries. */
   wrapSource(source: string, ref: string): string;
-  /** Decision 3: this source must be generated by the build even if an output exists. */
-  requiresBuildGeneration?(source: string): boolean;
-  /** Formats the browser runtime can produce. Phase 1: ["svg"]. */
-  produces: OutputFormat[];
-  createRuntime(opts: GeneratorRuntimeOptions): GeneratorRuntime;
+  /** The exact string whose sha256 is output_source_digest. Must match Asset#render_input. */
+  renderInput(source: string, docinfo: string): string;
+  /** Output filenames this generator owns, for a given ref. */
+  outputFilenames(ref: string, opts: { annotated: boolean }): string[];
+  /** Optional browser runtime (Part 4). Absent → server-rendered only. */
+  createRuntime?(opts: GeneratorRuntimeOptions): GeneratorRuntime;
 }
-
-export interface GeneratorRuntime {
-  readonly status: "idle" | "loading" | "ready" | "failed";
-  load(onProgress?: (p: LoadProgress) => void): Promise<void>;
-  render(source: string, opts: { format: OutputFormat }): Promise<RenderResult>;
-  dispose(): void;
-}
-
-export interface RenderResult {
-  /** The external file(s): name is the bare extension ("svg"); bytes go to the host. */
-  outputs: { format: OutputFormat; blob: Blob }[];
-  /** What the preview pane shows; may be richer than the stored output (diagcess). */
-  previewHtml: string;
-  diagnostics: { severity: "error" | "warning"; message: string }[];
-  sourceDigest: string;                 // sha256 of the exact source rendered
-}
-
-export const generators: Record<GeneratorId, AssetGenerator> = { prefigure };
 ```
 
-`prefigure.wrapSource` emits
-`<prefigure xmlns="https://prefigure.org" label="${ref}">${source}</prefigure>` (the
-label is the ref so a build-generated file has the same basename as our output would).
-`requiresBuildGeneration` is `source` contains `<annotations` (decision 3).
-`starterSource` is a small axes-and-graph diagram with one TeX label, so the engine's
-MathJax path is exercised on the very first render.
+`prefigure.wrapSource` → `<prefigure xmlns="https://prefigure.org" label="${ref}">${source}</prefigure>`.
+`starterSource` is a small axes-and-graph diagram with one TeX label.
 
 ### 2.2 `Asset` type and `transformImageAsset`
 
-[editor.ts:5](../packages/web-editor/src/types/editor.ts#L5) gains
-`generator?: GeneratorId` and `outputSourceDigest?: string`. `isFile` stays what it is
-(mirrors `kind === "file"`); a generated asset is `isFile: false, generator: "prefigure"`.
-
-`transformImageAsset(asset, ref, needs)`:
+[editor.ts:5](../packages/web-editor/src/types/editor.ts#L5) gains `generator?`,
+`outputSourceDigest?`, `renditions?`. `isFile` stays `kind === "file"`; a generated asset
+is `isFile: false, generator: "prefigure"`.
 
 ```
-generated + output current + covers `needs` + !requiresBuildGeneration  →  <image source="ref.svg">…</image>
-generated otherwise                                                      →  <image>\n<shortdescription/>\n{wrapSource(source, ref)}\n</image>
-file / authored                                                          →  unchanged
+generated       →  <image>\n<shortdescription/>\n{wrapSource(source, ref)}\n</image>
+file / authored →  unchanged
 ```
 
-"Output current" is `sha256(asset.source) === asset.outputSourceDigest`, computed in the
-editor (a tiny sync SHA-256 or the Web Crypto async one hoisted out of the render path;
-`assembleFullProjectSource` is synchronous, so cache the digest on the pool entry when
-the source or digest changes rather than hashing during assembly).
-
-`needs` defaults to `"svg"` (the preview). `assembleFullProjectSource` and
-`assembleProjectJson` thread it through; `script/assemble-source.mjs` reads it from the
-project JSON `SourceAssembler` sends, which `ProjectArchiveBuilder` sets from
-`Target::Catalog` (`website`/`scorm`/`revealjs`/`epub` → svg, `pdf`/`latex`/`beamer` → pdf,
-`kindle` → png, `braille` → svg).
+That is the whole change to assembly. `assetWrapperLines` draws the same wrapper as the
+locked virtual lines around the buffer, so what the author sees is what is assembled.
 
 ### 2.3 Verbatim and spell-check scopes
 
 `VERBATIM_SOURCES` ([sectionUtils.ts:1773](../packages/web-editor/src/sectionUtils.ts#L1773))
-gains `prefigure` so a `<plus:…>`-looking string inside a diagram is never scanned; the
-spell checker's `xmlRegions` treats `prefigure` like `latex-image` (code, not prose).
+gains `prefigure`; the spell checker's `xmlRegions` treats it like `latex-image`.
 
 ### 2.4 Tests
 
-- `assetTransforms.test.ts`: the three-way branch above, for every generator in the
-  registry, every `needs`, with and without annotations, with a matching and a
-  mismatched digest.
-- `snippets.test.ts`-style: each generator's `starterSource` wrapped by `wrapSource`
-  inside `<image>` validates against the real PreTeXt schema (the schema already
-  includes `pf-adapter.rnc`, so a bad starter fails here, not in a build).
-- `assembleFullProjectSource` end-to-end: one generated asset embedded twice, placeholder
-  `@width` copied onto both `<image>`s in both forms.
+- `assetTransforms.test.ts`: generated → source form, for every registry entry, with the
+  placeholder's `@width` copied onto the `<image>`.
+- Each `starterSource` wrapped by `wrapSource` inside `<image>` validates against the real
+  PreTeXt schema (it already includes `pf-adapter.rnc`).
+- `renderInput` digest fixture: same source + docinfo → the hex `asset_test.rb` pins.
 
 ---
 
@@ -297,224 +347,156 @@ spell checker's `xmlRegions` treats `prefigure` like `latex-image` (code, not pr
 
 ### 3.1 The creation tab
 
-`NewAssetForm` grows one tab per registry entry after **Custom**: **PreFigure** (and
-later **LaTeX image**). It is the "add a tab for prefigure" the feature asks for, built
-so the next generator is a registry entry, not a form edit. The tab asks only for a
-title (ref derived, as Custom does) and calls `onCreateGenerated(generator, title)`.
-
-Host: `onCreateGenerated` in `editor.jsx`, a sibling of `onCreateAuthored`
+`NewAssetForm` grows one tab per registry entry after **Custom**: **PreFigure**. It asks
+for a title (ref derived, as Custom does) and calls `onCreateGenerated(generator, title)`.
+Host: `onCreateGenerated` in `editor.jsx`, sibling of `onCreateAuthored`
 ([editor.jsx:1021](../app/javascript/controllers/react/editor.jsx#L1021)), sends
-`{ ref, kind: "generated", generator, title, source: generators[generator].starterSource }`.
-The starter source is *persisted* on create (not synthesized on open), so a peer or a
-reload sees the same thing and `output_source_digest` has something to be stale against.
-
-`handleAssetCreated` is unchanged: pool + doc, embed code to clipboard, `openAsset`.
+`{ ref, kind: "generated", generator, title, source: starterSource }`. The starter is
+persisted on create so a peer or a reload sees the same thing.
 
 ### 3.2 The buffer
 
 `resolveEditorTarget` already hands the code editor `asset.source` with
-`lockStructure={false}`. Two additions:
-
-- The Monaco language comes from `generators[asset.generator].language` rather than
-  always PreTeXt XML. (PreFigure is XML; the win is `latex-image` later. CodeMirror from
-  the playground is *not* brought over — Monaco is the editor here, and the playground's
-  LSP only checks well-formedness, which Monaco's XML mode flags already.)
-- `assetWrapperLines` draws the locked virtual wrapper as
-  `<image>` / `<prefigure xmlns="https://prefigure.org" label="ref">` … `</prefigure>` /
-  `</image>` — the fallback form, because that is literally what the source *is* in
-  PreTeXt terms; the external form is an optimization the author should not have to
-  think about. The title bar chip says **PreFigure** and, from Part 5, whether the stored
-  output is current.
+`lockStructure={false}`. The Monaco language comes from the registry; the locked wrapper
+is `<image>` / `<prefigure … label="ref">` … `</prefigure>` / `</image>`. The title-bar
+chip says **PreFigure** and, from Part 5, whether the stored output is current.
 
 ### 3.3 Settings drawer
 
-`AssetSettings` shows the generator as read-only text and, for a generated asset, hides
-**Replace image…** (replacing the picture of a generated asset is editing its source).
-**Duplicate** copies source + generator, no file (the copy renders on open). A new
-**Download SVG** action is just the existing `url`.
+Generator shown read-only; **Replace image…** hidden (replacing a generated picture is
+editing its source); **Duplicate** copies source + generator, no files; **Download SVG**
+is the existing `url`; a **Render now** action enqueues the server render (Part 5.2).
 
 ---
 
-## Part 4 — The PreFigure runtime and the preview pane
+## Part 4 — The browser engine and the preview pane
 
 ### 4.1 The worker
 
-`packages/web-editor/src/generators/prefigure/worker/` — ported from
-`packages/playground/src/worker/{compiler,compat-api,index}.ts` and `liblouis/`, with a
-NOTICE crediting the playground (Jason Siefken / David Austin, GPL-3.0). Comlink stays
-(it is tiny and the playground's shape is proven). Changes from the playground:
+`packages/web-editor/src/generators/prefigure/worker/`, ported from the playground's
+`compiler.ts`, `compat-api.ts`, `index.ts` and `liblouis/`, with a NOTICE (Jason Siefken /
+David Austin, GPL-3.0). Comlink stays. Changes from the playground: Pyodide `indexURL`
+from jsDelivr by default, overridable; wheel URLs from the host
+(`/assets/prefigure/prefig-0.7.9-py3-none-any.whl`, copied by `script/copy-static-assets.js`,
+version pinned in one constant with a test); `loadPackage` not `micropip`; progress
+events forwarded. Own esbuild entry (`app/javascript/prefigure-worker.js`), created with
+`new Worker(url, { type: "module" })`; the web-editor gets the URL through a
+`generatorRuntimes` prop; without it the engine button is absent and the pane is
+server-rendered only.
 
-- `indexURL` for Pyodide is `https://cdn.jsdelivr.net/pyodide/v0.26.4/full/` by default,
-  overridable by the host; the `prefig` and `segno` wheel URLs come from the host
-  (`/assets/prefigure/prefig-0.7.9-py3-none-any.whl`). The prefig version is pinned in
-  one constant next to the wheel copied by `script/copy-static-assets.js`, with a test
-  that the two agree.
-- `loadPackage([...])` not `micropip` (the playground is right: no dependency
-  resolution, no PyPI, and `lxml>=6` is unsatisfiable on Pyodide 0.26). Moving to
-  Pyodide 0.28 is a one-line bump once prefig's deps are checked against its lock file.
-- Progress events from `loadPackage` are forwarded so the pane can show "Loading
-  scipy… (47 MB)" instead of a spinner for twenty seconds.
-- The worker is its own esbuild entry (`app/javascript/prefigure-worker.js` → built file
-  under `/assets`), created with `new Worker(url, { type: "module" })`. The web-editor
-  receives the URL through a `generatorRuntimes` prop
-  (`{ prefigure: { workerUrl, wheelBaseUrl, pyodideIndexUrl? } }`); with no entry the
-  PreFigure tab is hidden, exactly as `hideAssets` hides the panel for `tryit`.
+`render()` returns the SVG and annotations from `build_from_string` plus the derived
+diagcess SVG, as `{ filename, blob }[]` named by `outputFilenames`. Until PreFigure's
+`build_from_string` accepts a publication, the worker prepends docinfo macros itself the
+way `pf_publication.xml` does (or the browser output is marked not-current when the
+docinfo has macros — decide once the upstream parameter is in or out).
 
 ### 4.2 `GeneratedAssetPreview`
 
-`AssetPreview` branches on `asset.generator`. The generated pane has three states:
+`AssetPreview` branches on `asset.generator`. States:
 
-1. **Engine not loaded.** Shows the stored output if `url` is set (an `<img>`, as today),
-   a "last rendered from the current source" / "source changed since this was rendered"
-   line, and the **Load PreFigure engine** button (decision 6). Memory of "the author
-   already loaded it this session" lives on the shared runtime, so re-opening an asset
-   never asks twice.
-2. **Rendering.** Debounced 1 s after typing (the `LivePreview` cadence), using the
-   buffer's live source (the pool, via `settledDivisions`-style flush, not the saved
-   record). In flight, the previous render stays visible; a diagnostics strip shows the
-   Python error text (PreFigure's messages are decent: `ValueError: PreFigure source is
-   not well-formed XML: …`, element-specific errors) with a line number when the message
-   has one.
-3. **Rendered.** `previewHtml` in a `<iframe srcdoc sandbox="allow-scripts">`. Sandboxed,
-   unlike `LivePreview` — this iframe never needs same-origin DOM access, and diagcess is
-   third-party script we did not write, so there is no reason to grant it. The srcdoc is
-   the playground's wrapper (`<div class="ChemAccess-element"><div class="svg">…</div><div class="cml">…</div></div>` + `diagcess.Base.init(true)`),
-   with `diagcess.js` served from the copy PreTeXt core already carries, and the Braille29
-   font for tactile. A **SVG / Tactile** toggle maps to `mode`; tactile is preview-only in
-   phase 1 (its output is a PDF the browser cannot make).
+1. **Stored output.** The SVG at `url` (annotated: an iframe with diagcess, below), a
+   "rendered from the current source" / "source changed since this was rendered" line,
+   **Render on server** (Part 5.2) and **Load PreFigure engine (~100 MB)**.
+2. **Rendering** (engine loaded). Debounced 1 s, latest-wins queue, previous render stays
+   visible, diagnostics strip with PreFigure's error text.
+3. **Rendered.** `<iframe srcdoc sandbox="allow-scripts">` with the playground's wrapper
+   (`ChemAccess-element` + `diagcess.Base.init(true)`), `diagcess.js` from the copy
+   PreTeXt core ships, Braille29 font for tactile. **SVG / Tactile** toggle; tactile is
+   preview-only.
 
-Theme: the pane follows the editor theme by background only; the SVG is the author's.
+### 4.3 Preview resolution for the document preview
 
-### 4.3 Resource hygiene
+The live preview's HTML now references `generated/prefigure/ref.svg` (and the diagcess
+pair) relative to the project, as a build's does. Add
+`get "(*_)/generated/:generator/:filename" => "assets#generated_file"` beside the
+`external/:ref` route ([routes.rb:194](../config/routes.rb#L194)), resolving `filename`
+through `Asset#generated_files` and redirecting to the blob. Pending (unsaved) browser
+renders are answered from memory by a `rewriteAssetUrls` resolver in the preview
+(pretext-html already exports it), exactly as the draft planned for `external/`.
 
-- One runtime per page, lazily created, `dispose()`d after ~10 min without a render
-  (several hundred MB of WASM heap is not something to leave in a tab all afternoon).
-  Disposal is invisible: the next render shows the loading state again.
-- Renders are serialized with a "latest wins" queue; a stale render's result is dropped
-  rather than flashed.
-- `renderPreviewHtml` in `wasmPreview.ts` needs JSPI; Pyodide does not, so Firefox and
-  Safari users — who already fall back to the server preview — still get live PreFigure.
-  Worth a system test on the Playwright Chromium and a manual check elsewhere.
+### 4.4 Resource hygiene
+
+One runtime per page, disposed after ~10 min idle; serialized renders; Pyodide needs no
+JSPI so Firefox/Safari get it too.
 
 ---
 
-## Part 5 — Saving the output
+## Part 5 — Producing and saving outputs
 
-The author never clicks "save SVG". Saving the project saves the picture.
+### 5.1 Browser-rendered
 
-### 5.1 Editor side
+`EditorContentChange` for an asset gains an optional `outputs: { filename, blob }[]` and
+`outputSourceDigest`, attached **only when the digest equals `sha256(renderInput)` of the
+source being reported**. The host's working copy keeps `pendingAssetOutputs`, latest
+wins; the bulk save becomes the multipart form `patchProjectAssetUpload` already builds
+when any are pending — `file` = `ref.svg`, `renditions[]` = the rest, plus `source` and
+`output_source_digest`, one `assets_attributes[i]`. Autosave uploads at most one set per
+asset per 10 s.
 
-`EditorContentChange` for an asset ([editor.ts](../packages/web-editor/src/types/editor.ts))
-gains an optional `output`:
+### 5.2 Server-rendered (`GenerateAssetJob`)
 
-```ts
-{ kind: "asset", id, ref, source, output?: { format: "svg", blob: Blob, sourceDigest: string } }
-```
+The job #471 designs, pointed at label-named output:
 
-`GeneratedAssetPreview` reports a successful render to `Editors` → `applyRecordSourceChange`
-path → `onContentChange` with `output` attached **only when `sourceDigest` equals the
-digest of the source being reported**. The pool entry's `outputSourceDigest` is updated
-optimistically so the assembler (preview) switches to the external form immediately,
-*but* the preview's `<img src="external/ref.svg">` would 404 until the save lands — so
-the preview resolver (Part 5.3) serves the blob directly.
+- Build a one-figure archive with the project's real docinfo and publication
+  (`ProjectArchiveBuilder#generate_archive(asset)`, same class as `#build` so layout
+  cannot drift), containing the asset in source form.
+- `POST /generate` with `assets=prefigure`, `target=web` (or `print` for `.pdf`,
+  `kindle` for `.png`), `callback_url`. The server returns `source/generated/prefigure/`
+  (PR #12 to be adjusted: output subdir selectable, `generated` alongside `.cache`).
+- On success, attach `ref.svg` as `file`, the rest as `renditions`, set
+  `output_source_digest = sha256(render_input)` **computed at enqueue time** so a source
+  edit during the render leaves the result stale rather than wrongly current.
+- Triggered by: **Render now**, asset create (so a new asset has a picture before anyone
+  loads an engine), and a `source_updated_at`-debounced job on save when no browser
+  output arrived. Idempotent on `(asset_id, digest)`.
 
-Decision 2 keeps this honest under collaboration: the output's bytes go only to the
-host, the digest goes into the Y.Map as LWW metadata like `url` does (schema.ts), and a
-peer whose source edit arrives after the render simply produces a mismatch.
+### 5.3 Server side
 
-### 5.2 Host side
-
-`editor.jsx`'s working copy keeps `pendingAssetOutputs: Map<id, {blob, sourceDigest}>`,
-latest wins. The bulk save (`editorStateToRailsPayload` / `changedRecordSources`,
-[editor.jsx:170](../app/javascript/controllers/react/editor.jsx#L170)) is JSON today;
-when any pending output exists it becomes the multipart form `patchProjectAssetUpload`
-already builds, with `file`, `source` and `output_source_digest` in the same
-`assets_attributes[i]`. One request, atomic per asset. Autosave (10 s) therefore uploads
-at most one SVG per asset per 10 s regardless of typing speed. The flush before a
-navigation/unload that already exists for typed text covers the output too.
-
-On the response, `railsAssetToEditor` carries the new `path`/`extension`, and the pool's
-`url` updates — which is what the asset list thumbnail and the engine-not-loaded state
-show.
-
-### 5.3 Preview resolution
-
-The live preview's `<img src="external/ref.svg">` resolves through
-`/projects/:id/external/:ref` today, which redirects to the stored blob — stale until the
-save lands, or 404 before the first save. Switch the preview to pretext-html's
-`rewriteAssetUrls` (unused so far; `node_modules/@pretextbook/pretext-html/dist/assets.d.ts`)
-with a resolver that answers `external/ref.svg` from the in-memory output blob
-(`URL.createObjectURL`) when one is pending and falls back to the route otherwise. This
-is a small, contained change that also fixes a latent issue: the preview currently shows
-the *saved* version of an uploaded replacement until the save completes.
-
-### 5.4 Server side
-
-Nothing new: nested attributes, ActiveStorage, `touch: :source_updated_at` marks targets
-stale. One guard in `Asset`: a `generated` asset's `file` must be `image/svg+xml` (or a
-phase-6 rendition type) — an authored upload of a PNG as "the output" is a bug, not a
-feature.
+Nested attributes + ActiveStorage; `touch: :source_updated_at` already marks targets
+stale. Nothing new beyond the renditions attachment and the guard in 1.2.
 
 ---
 
-## Part 6 — PDF and PNG renditions (later)
+## Part 6 — PDF and PNG
 
-Phase 1 leaves PDF/LaTeX/kindle builds generating PreFigure on the server. Closing that:
-
-- `has_many_attached :renditions` on `Asset`, each named `ref.<ext>` by content type;
-  the archive writes all of them to `external/`; `transformImageAsset` emits the
-  extensionless `<image source="ref">` when both `svg` and `pdf` exist, else the current
-  per-`needs` logic.
-- **Where the PDF comes from.** The browser cannot run rsvg-convert, and SVG→PDF in JS
-  (svg2pdf.js) is good enough for MathJax path output but not proven for PreFigure's
-  gradients/clip paths. Recommended: a `POST /convert` endpoint on the lite build server
-  (`rsvg-convert`, which the image already has for `prefig`), called from a Rails job
-  (`AssetRenditionJob`) after a generated asset's SVG is saved with a current digest,
-  through the same proxy pattern `ProjectsController#preview` uses. Renditions are
-  derived data; the job is idempotent on `(asset_id, output_source_digest)`.
-- A rendition is only trusted when its own digest matches, same rule as the primary.
+`GenerateAssetJob` with `target=print` yields `ref.pdf` (and `kindle` → `ref.png`) as
+renditions, each covered by the same digest. The archive ships them; `--keep-generated
+prefigure` keeps them; a PDF build runs no `prefig` and no `rsvg-convert`. Browser renders
+never produce these, so an asset rendered only in the browser still gets its PDF
+generated at build time until the job has run — correct either way.
 
 ---
 
 ## Part 7 — The second generator: `latex-image`
 
-The proof that Part 2 is general. `latex-image` cannot run in the browser (TikZ needs a
-TeX engine; TikZJax exists but covers a fraction of what authors use, and the output
-drifts from a real build). So its `createRuntime` is a **server runtime**: `render()`
-POSTs the source plus the project's `<latex-image-preamble>` and `docinfo/macros` to a
-lite-build-server endpoint that runs `pretext`'s own latex-image pipeline for one image
-and returns the SVG. Same `RenderResult`, same preview pane, same save path, same
-assembly rule. The only differences are: `language: "latex"`, no engine-load step
-(`load()` resolves immediately), a longer debounce (2–3 s; a TeX run is seconds, not
-milliseconds), and rate limiting on the server.
-
-`wrapSource` is `<latex-image>${source}</latex-image>`; the preamble is *not* part of the
-asset — it is docinfo, and the runtime reads it from the project at render time, so
-changing the preamble invalidates nothing in storage but does make the next render differ.
-Worth hashing the preamble into `sourceDigest` so a preamble change marks every
-`latex-image` output stale; the digest is the editor's to define per generator.
-
-Existing `authored` assets that are a bare `<latex-image>` could be migrated to
-`generated/latex-image` by unwrapping; a one-off rake task, not part of this plan.
+`latex-image` cannot run in the browser, so it has no `createRuntime`; Part 5.2 is its
+only producer, with `assets=latex-image` and the project's `<latex-image-preamble>` +
+`<macros>` in `renderInput`. `wrapSource` is `<latex-image>${source}</latex-image>`;
+`outputFilenames` is `[ref.svg]` for HTML (a PDF target compiles it inline, `ASSET_FORMATS`
+needs nothing). The archive ships `source/generated/latex-image/ref.svg` and the build
+runs `--keep-generated prefigure,latex-image`. **#471's `.cache` seeding is not needed**:
+one mechanism, one flag, for both. Existing `authored` assets that are a bare
+`<latex-image>` can be migrated by unwrapping; a rake task, not part of this plan.
 
 ---
 
-## Sequencing
+## Sequencing and the proof of concept
 
-| Part | Depends on | Ships value on its own? |
-| --- | --- | --- |
-| 1 Rails model | — | No visible change |
-| 2 Registry + assembly | 1 | Yes: a generated asset created by hand in the console builds correctly in both forms |
-| 3 Create/edit UI | 2 | Yes: authors can write PreFigure with the fallback form (server generates) — already better than `authored` |
-| 4 Runtime + preview | 3 | Yes: live PreFigure preview |
-| 5 Save output | 4 | **The feature:** HTML builds and previews skip `prefig` |
-| 6 Renditions | 5 | PDF builds skip `prefig` |
-| 7 latex-image | 2, 5 | Second generator |
+| Step | Where | Depends on | Proves |
+| --- | --- | --- | --- |
+| 0 | pretext-cli `--keep-generated` | — | the CLI keeps a hand-placed `generated/prefigure/x.svg` and runs no `prefig` |
+| 1 | Rails model + archive + `keep_generated` field | — | an asset created in the console with a hand-rendered SVG builds with no `prefig` in the log |
+| 1b | full server `{flags}` passthrough | 0 released | same, against the deployed server |
+| 2 | registry + source-form assembly + create tab + buffer | 1 | authors can write PreFigure; builds generate it (already better than `authored`) |
+| 3 | preview route + `GenerateAssetJob` via `/generate` (PR #12 adjusted) | 2 | **the feature**: picture stored on save, HTML and PDF builds skip `prefig` |
+| 4 | browser engine + live pane + browser-rendered save | 2 | live rendering while typing |
+| 5 | `latex-image` | 3 | second generator |
 
-Parts 1–3 are one PR with no heavy dependencies and are worth landing early so the data
-model is settled before the worker work (which is where the surprises will be). Part 4
-is the risky one: budget time for the Pyodide load path across browsers and for the
-MathJax/liblouis port.
+Steps 0 and 1 are independent and together are the proof of concept: no editor work,
+one console-created asset, one website build, one log line missing. Step 0 is a day in
+pretext-cli; step 1 is a day here. Step 3 before step 4 on purpose — the server producer
+is the real pipeline and ships value with far less risk; the Pyodide port is the long
+pole and is pure UX once 3 exists.
 
 ---
 
@@ -522,35 +504,32 @@ MathJax/liblouis port.
 
 | Question | Blocks | Suggested answer |
 | --- | --- | --- |
-| Annotated diagrams: source form in builds (accessible) or external (fast)? | Part 2 | Source form (decision 3). Flip per generator later if build time wins. |
-| Pyodide from jsDelivr or self-hosted? | Part 4 | jsDelivr: CORS-ready, shared cache, immutable. Self-host only if an institution's network blocks it, in which case `pyodideIndexUrl` is already a prop. |
-| Is `diagcess` redistribution acceptable? | Part 4 | Load PreTeXt's shipped copy; ask Volker Sorge before vendoring. Preview works without it (static SVG) if the answer is no. |
-| Does a generated asset's output count against anything? | Part 5 | Not now. Row quota applies; outputs are small. Revisit with renditions. |
-| Should `tryit` get PreFigure? | Part 4 | No — `projectAssets={[]}`, `hideAssets`. Nothing to save to. |
+| `build_from_string(publication=…)` upstream in PreFigure? | Part 4 | Propose it; until then the worker applies macros itself or marks output not-current when docinfo has macros. |
+| PR #12: return `generated/` instead of (or as well as) `.cache/`? | Part 5.2 | As well as, selected by a form field; `.cache` stays for #471's latex-image use if anyone still wants it. |
+| Should a docinfo edit re-render every PreFigure asset automatically? | Part 5.2 | Yes, debounced, one job per stale asset; cheap on the generate queue. |
+| Pyodide from jsDelivr or self-hosted? | Part 4 | jsDelivr; `pyodideIndexUrl` is a prop if a network blocks it. |
+| Is `diagcess` redistribution acceptable? | Part 4 | Load PreTeXt's shipped copy; ask Volker Sorge before vendoring. |
+| Should `tryit` get PreFigure? | Part 4 | No — nothing to save to. |
 
 ## Traps
 
-- **`output_source_digest` is a claim, not a fact.** The server stores what the client
-  says. Anything that *trusts* an output (assembler, archive, future renditions job) must
-  compare it to `sha256(source)` at that moment, never read a boolean off the row.
-- **Digest the exact string that was rendered.** Trim nothing, normalize nothing in one
-  place that the other does not; a whitespace-only difference between what Monaco holds
-  and what the worker received makes every output permanently stale.
-- **Assembly is synchronous.** Do not call Web Crypto inside `transformImageAsset`; keep
-  the digest on the pool entry.
-- **Never auto-load the engine** on open, on hover, or on project load. 100 MB and a
-  hundreds-of-MB heap are the author's to opt into.
-- **Esbuild has no code splitting here.** Anything Pyodide-, MathJax- or liblouis-sized
-  must be a separate entry or a runtime fetch, or it welds itself into the editor bundle.
-- **`VERBATIM_SOURCES` must include `prefigure`** or a diagram containing `<plus:` text
-  (unlikely, but a `<label>` can say anything) will be mis-parsed as a placeholder.
-- **The preview iframe for generated output is sandboxed; `LivePreview` is not.** Do not
-  "unify" them — the live preview needs same-origin for click-to-source sync, the
-  generated preview runs third-party script.
-- **The external form loses `@label` continuity.** A build that falls back to source
-  names the generated file `ref.svg` under `generated/prefigure/`; the external form puts
-  `ref.svg` under `external/`. Same basename, different directories — nothing collides,
-  but a reader of the build output should not expect one directory to hold all diagrams.
-- **`image/svg+xml` served inline** is already an override in `Asset#url`; a generated
-  SVG from the engine contains `<script>`-free markup, but the asset list renders it as
-  `<img>` only, same as uploads. Keep it that way.
+- **`output_source_digest` is a claim, not a fact.** Compare to `sha256(render_input)` at
+  the moment of use; never read a boolean off the row.
+- **`render_input` is defined twice, in Ruby and TypeScript.** Pin both to one fixture hex.
+  Trim nothing, normalize nothing in one place that the other does not.
+- **Macros are an input.** A render that ignored docinfo macros must not be marked current
+  for a document that has them.
+- **Never pass `-q`.** It skips datafiles, QR codes, substitutions and references too.
+- **Ref is label is basename.** Renaming an asset renames every rendition filename; the
+  validation in 1.2 enforces it. Embedding one asset twice puts the same `@label` in the
+  document twice — verify in step 2 that core tolerates this (it extracts to one file).
+- **Assembly is synchronous.** Keep the digest on the pool entry, never hash inside
+  `transformImageAsset`.
+- **Never auto-load the engine** on open, hover or project load.
+- **Esbuild has no code splitting here.** Pyodide-, MathJax- or liblouis-sized code is a
+  separate entry or a runtime fetch.
+- **`VERBATIM_SOURCES` must include `prefigure`** or a `<plus:` string in a label is
+  mis-parsed as a placeholder.
+- **The generated-output iframe is sandboxed; `LivePreview` is not.** Do not unify them.
+- **`-11.svg` is not derivable from the string API.** Braille targets of an annotated
+  diagram still run `prefig` until the server producer has rendered; that is fine.
