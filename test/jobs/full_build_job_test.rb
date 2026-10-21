@@ -18,11 +18,26 @@ class FullBuildJobTest < ActiveJob::TestCase
 
   # A successful submit, so the job runs to the end rather than stopping at the
   # first thing it cannot reach.
-  def stub_submit(&block)
+  #
+  # Given a `wire`, the request is also written into it as it would go out on the
+  # socket. `set_form` in multipart mode encodes its fields only while writing, so
+  # there is no body to read off the request object itself.
+  def stub_submit(wire: nil, &block)
     response = Net::HTTPOK.new("1.1", "200", "")
     response.instance_variable_set(:@read, true)
     response.define_singleton_method(:body) { { status_url: "https://build.example.com/s/1" }.to_json }
-    Net::HTTP.stub(:start, ->(*_args, **_kw) { response }, &block)
+    http = Object.new
+    http.define_singleton_method(:request) do |req|
+      req.exec(wire, "1.1", req.path) if wire
+      response
+    end
+    Net::HTTP.stub(:start, proc { |*_args, **_kw, &http_block| http_block.call(http) }, &block)
+  end
+
+  # The multipart value of one field in a request written by stub_submit. Read as
+  # bytes, because the archive part of the same body is a zip.
+  def form_field(wire, name)
+    wire.string.b[/name="#{Regexp.escape(name)}"\r\n\r\n(.*?)\r\n/n, 1]&.force_encoding(Encoding::UTF_8)
   end
 
   # Hand back a project-shaped double that records which project it was built
@@ -67,6 +82,21 @@ class FullBuildJobTest < ActiveJob::TestCase
     end
 
     assert_equal title, seen[:title]
+    assert_equal "sent_to_server", @build.reload.status
+  end
+
+  # The build server keeps a cache of generated assets for each project_id it is
+  # sent. Without the field every build regenerates every figure; with the wrong
+  # id a build would read and write another project's cache.
+  test "the submission names the project whose asset cache the server should use" do
+    wire = StringIO.new
+
+    stub_submit(wire: wire) do
+      SourceAssembler.stub(:new, capturing_assembler({})) { FullBuildJob.perform_now(@build) }
+    end
+
+    assert_equal @project.id, form_field(wire, "project_id")
+    assert_equal @build.target.slug, form_field(wire, "target")
     assert_equal "sent_to_server", @build.reload.status
   end
 

@@ -41,7 +41,12 @@ class FullBuildJob < ApplicationJob
       [
         [ "archive", archive, { filename: "project.zip", content_type: "application/zip" } ],
         [ "target", build.target.slug ],
-        [ "callback_url", resolved_callback_url ]
+        [ "callback_url", resolved_callback_url ],
+        # Names this project's persistent cache of generated assets on the server, so
+        # a rebuild copies the figures earlier builds made instead of compiling them
+        # again. The cache is per project because the build sandbox runs user code with
+        # it writable: a shared one would let one book plant images in another.
+        [ "project_id", build.project_id ]
       ],
       "multipart/form-data"
     )
