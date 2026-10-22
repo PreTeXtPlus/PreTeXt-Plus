@@ -69,6 +69,8 @@ export interface TopBarProps {
   helpMenu?: (
     helpers: TopBarAccountAreaHelpers,
   ) => { label: string; entries: MenuEntry[] };
+  /** Host entries appended to the end of the Tools menu. */
+  toolsEntries?: MenuEntry[];
   /**
    * Renders in place of the editable title control when set — e.g. a host
    * with nothing to persist a title edit to.
@@ -248,6 +250,7 @@ const TopBar = (props: TopBarProps) => {
           leadingMenus={[{ key: "file", label: "File", entries: fileEntries }]}
           trailingMenus={trailingMenus}
           showDocumentActionsInTools={false}
+          extraToolsEntries={props.toolsEntries}
         />
         <div className="flex items-center gap-3 pl-2 pr-2 shrink-0">
           <StoreFeedbackLink
