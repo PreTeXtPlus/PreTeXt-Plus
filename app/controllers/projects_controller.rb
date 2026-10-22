@@ -508,7 +508,7 @@ class ProjectsController < ApplicationController
         divisions_attributes: [ [ :id, :source, :source_format, :is_root, :ref, :title, :division_type, :label,
                                   { attrs: {} }, :_destroy ] ],
         assets_attributes: [ [ :id, :ref, :kind, :file, :source, :short_description, :description, :title, :_destroy ] ],
-        snippets_attributes: [ [ :id, :source, :source_format, :ref, :_destroy ] ]
+        snippets_attributes: [ [ :id, :source, :source_format, :ref, :title, :_destroy ] ]
       ]
       permitted << :document_type if action_name == "create"
       params.expect(project: permitted)
@@ -529,7 +529,7 @@ class ProjectsController < ApplicationController
                                   { attrs: {} } ] ],
         assets_attributes: [ [ :ref, :kind, :title, :short_description,
                                { file: [ :filename, :content_type, :data ] } ] ],
-        snippets_attributes: [ [ :ref, :source, :source_format ] ]
+        snippets_attributes: [ [ :ref, :source, :source_format, :title ] ]
       ]).to_h.deep_symbolize_keys
 
       if attrs[:assets_attributes].present?

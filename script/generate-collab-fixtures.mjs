@@ -123,6 +123,7 @@ seedDocFromState(records, {
     {
       id: "77777777-7777-4777-8777-777777777777",
       ref: "projected-note",
+      title: "A Projected Note",
       sourceFormat: "latex",
       source: "A \\emph{projected} note.",
     },

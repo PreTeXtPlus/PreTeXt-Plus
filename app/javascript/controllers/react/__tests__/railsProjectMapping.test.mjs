@@ -5,6 +5,8 @@ import {
   assembleProjectJson,
   editorDivisionToRails,
   splitImportedDivisions,
+  railsSnippetToEditor,
+  toEditorSnippet,
 } from "../railsProjectMapping.js";
 
 /**
@@ -281,5 +283,15 @@ describe("splitImportedDivisions", () => {
 
   it("leaves a payload without divisions alone", () => {
     expect(splitImportedDivisions({ title: "x" })).toEqual({ title: "x" });
+  });
+});
+
+describe("railsSnippetToEditor", () => {
+  it("carries a snippet's title, defaulting to none", () => {
+    const titled = railsSnippetToEditor({ id: 1, ref: "s", title: "A note", source: "x", source_format: "latex" });
+    expect(titled).toEqual({ id: "1", ref: "s", title: "A note", source: "x", sourceFormat: "latex" });
+    expect(toEditorSnippet(titled).title).toBe("A note");
+
+    expect(railsSnippetToEditor({ id: 2, ref: "t" }).title).toBe("");
   });
 });

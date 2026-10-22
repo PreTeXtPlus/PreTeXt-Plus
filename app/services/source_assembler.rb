@@ -131,6 +131,7 @@ class SourceAssembler
       {
         id: snippet.id,
         ref: snippet.ref,
+        title: snippet.title,
         source: snippet.source,
         source_format: snippet.source_format
       }

@@ -20,7 +20,7 @@ import type {
 } from "./types/sections";
 import { derivePretextContent } from "./contentConversion";
 import { resolveAssetRef } from "./assetTransforms";
-import { escapeAttribute, unescapeAttribute } from "./xmlUtils";
+import { escapeAttribute, escapeText, unescapeAttribute } from "./xmlUtils";
 
 // ---------------------------------------------------------------------------
 // Internal helpers
@@ -2940,15 +2940,20 @@ export function wrapDivisionForPreview(
   );
 }
 
-/** The `<title>` of the article a snippet is previewed inside of. */
+/** The `<title>` of the article an untitled snippet is previewed inside of. */
 export const SNIPPET_PREVIEW_TITLE = "snippet preview";
+
+/** The title a snippet's preview article carries: its own, or the default. */
+export function snippetPreviewTitle(snippet: Pick<Snippet, "title"> | undefined): string {
+  return snippet?.title?.trim() || SNIPPET_PREVIEW_TITLE;
+}
 
 /**
  * A complete PreTeXt document for previewing one snippet on its own: the
  * snippet resolved exactly as an embed of it would be (converted from
  * LaTeX/Markdown, its own `<plus:* ref/>` placeholders expanded — see
- * {@link resolveSnippetRef}), injected into a plain `<article>` titled
- * {@link SNIPPET_PREVIEW_TITLE}, and wrapped in `<pretext>` with `docinfo`,
+ * {@link resolveSnippetRef}), injected into a plain `<article>` titled after
+ * the snippet ({@link snippetPreviewTitle}), and wrapped in `<pretext>` with `docinfo`,
  * like a division preview.
  */
 export function assembleSnippetPreviewSource(
@@ -2960,8 +2965,10 @@ export function assembleSnippetPreviewSource(
   lang?: string,
 ): string {
   const body = resolveSnippetRef(snippetRef, snippets, divisions, assets, new Set());
+  // A snippet's title is plain text, so it is escaped into the element.
+  const title = escapeText(snippetPreviewTitle(snippets.find((s) => s.ref === snippetRef)));
   return wrapInPretextDocument(
-    `<article>\n<title>${SNIPPET_PREVIEW_TITLE}</title>\n${body}\n</article>`,
+    `<article>\n<title>${title}</title>\n${body}\n</article>`,
     docinfo,
     lang,
   );

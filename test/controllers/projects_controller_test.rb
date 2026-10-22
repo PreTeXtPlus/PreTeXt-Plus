@@ -472,6 +472,25 @@ class ProjectsControllerTest < ActionDispatch::IntegrationTest
     assert_response :not_found
   end
 
+  # ---- snippets ----
+
+  test "update creates and retitles a snippet, and the JSON carries its title" do
+    patch project_url(@project),
+      params: { project: { snippets_attributes: [ { ref: "greeting", title: "A greeting", source: "<p>Hi</p>" } ] } },
+      as: :json
+
+    assert_response :success
+    snippet = @project.snippets.find_by!(ref: "greeting")
+    assert_equal "A greeting", snippet.title
+    assert_equal "A greeting", response.parsed_body["snippets"].find { |s| s["ref"] == "greeting" }["title"]
+
+    patch project_url(@project),
+      params: { project: { snippets_attributes: [ { id: snippet.id, title: "" } ] } },
+      as: :json
+
+    assert_equal "", snippet.reload.title.to_s
+  end
+
   # --- Visibility ---
 
   test "update changes project visibility via a plain HTML form post" do

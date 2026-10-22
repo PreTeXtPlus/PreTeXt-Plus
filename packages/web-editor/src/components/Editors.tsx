@@ -71,7 +71,7 @@ import {
   insertDivisionRef,
   wrapDivisionForPreview,
   assembleSnippetPreviewSource,
-  SNIPPET_PREVIEW_TITLE,
+  snippetPreviewTitle,
   assembleProjectSource,
   assembleFullProjectSource,
   divisionToPretext,
@@ -419,12 +419,16 @@ export interface editorProps {
   /**
    * Called when the user creates a new snippet from the "New snippet" form.
    * Host derives the record from `ref` (which the user typed directly, unlike
-   * an asset's derived-from-title ref) and the chosen `sourceFormat` (omitted
-   * by callers predating it — treat as `"pretext"`), and returns the created
-   * snippet — its `source` is empty until the user fills it in via the code
-   * editor.
+   * an asset's derived-from-title ref), the chosen `sourceFormat` (omitted
+   * by callers predating it — treat as `"pretext"`) and an optional display
+   * `title` (`""` for none), and returns the created snippet — its `source` is
+   * empty until the user fills it in via the code editor.
    */
-  onCreateSnippet?: (ref: string, sourceFormat?: SourceFormat) => Promise<Snippet>;
+  onCreateSnippet?: (
+    ref: string,
+    sourceFormat?: SourceFormat,
+    title?: string,
+  ) => Promise<Snippet>;
   /**
    * Called when the user removes a snippet from the project.
    */
@@ -1472,7 +1476,7 @@ const EditorsInner = (props: EditorsInnerProps) => {
 
   /**
    * Duplicate a snippet under a fresh, non-colliding ref: create a bare record
-   * under the new ref, then give it the original's source/format. Unlike an
+   * under the new ref, then give it the original's title/source/format. Unlike an
    * asset there are no bytes to re-fetch, so this is a plain create + update.
    */
   const handleSnippetDuplicate = async (snippet: Snippet) => {
@@ -1481,10 +1485,11 @@ const EditorsInner = (props: EditorsInnerProps) => {
       buildProjectSnippetView(divisions, projectSnippets).map((r) => r.ref),
     );
     const newRef = makeUniqueSnippetRef(snippet.ref, taken);
-    const created = await props.onCreateSnippet(newRef, snippet.sourceFormat);
+    const created = await props.onCreateSnippet(newRef, snippet.sourceFormat, snippet.title ?? "");
     const copy: Snippet = {
       ...created,
       ref: newRef,
+      title: snippet.title,
       source: snippet.source,
       sourceFormat: snippet.sourceFormat,
     };
@@ -2420,7 +2425,7 @@ const EditorsInner = (props: EditorsInnerProps) => {
       ? {
           content: snippetPreviewContent || "",
           serverContent: snippetPreviewContent || "",
-          title: SNIPPET_PREVIEW_TITLE,
+          title: snippetPreviewTitle(activeSnippet),
           documentTarget: "html" as const,
           onSyncToSource: undefined,
           divisionId: `snippet:${activeSnippet.ref}`,

@@ -101,12 +101,15 @@ class ProjectDocProjection
     present = snippets.filter_map do |id, entry|
       next if deleted[id] == "snippet"
 
-      {
+      attributes = {
         id: id,
         ref: entry["ref"].to_s,
         source: entry["source"].to_s,
         source_format: entry["sourceFormat"].presence || "pretext"
       }
+      # Absent from an entry written before snippets had titles; not a blank one.
+      attributes[:title] = entry["title"].to_s if entry.key?("title")
+      attributes
     end
     present + destroy_attributes(deleted, "snippet")
   end

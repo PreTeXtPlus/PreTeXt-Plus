@@ -21,7 +21,7 @@
  *   file and handed back a URL; every other peer learns of the asset from this
  *   map rather than from a re-fetch.
  * - `doc.getMap("snippets")`: key → `Y.Map` entry per project snippet, keyed by
- *   the snippet's record id. `ref` and `sourceFormat` are last-writer-wins; the
+ *   the snippet's record id. `ref`, `title` and `sourceFormat` are last-writer-wins; the
  *   source is a nested `Y.Text` under `"source"`, like a division's.
  * - `doc.getMap("meta")`: document-wide fields — `title`, `docinfo`,
  *   `useCommonDocinfo`, `language` — all last-writer-wins values.
@@ -239,7 +239,7 @@ export const applyAssetFields = (entry: Y.Map<unknown>, asset: Asset): void => {
 };
 
 /** The snippet metadata fields the doc carries; `source` is a `Y.Text`. */
-const SNIPPET_FIELDS = ["ref", "sourceFormat"] as const;
+const SNIPPET_FIELDS = ["ref", "title", "sourceFormat"] as const;
 
 /** Build a snippets-map entry: last-writer-wins metadata + `Y.Text` source. */
 export const makeSnippetEntry = (snippet: Snippet): Y.Map<unknown> => {
@@ -319,6 +319,7 @@ export const snippetEntryToSnapshot = (
 ): CollabSnippetSnapshot => ({
   id,
   ref: String(entry.get("ref") ?? ""),
+  title: entry.get("title") as string | undefined,
   source: getEntryText(entry)?.toString() ?? "",
   sourceFormat: (entry.get("sourceFormat") ?? "pretext") as SourceFormat,
 });

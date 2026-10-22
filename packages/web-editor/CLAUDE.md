@@ -219,9 +219,12 @@ a peer removing the open item does not (`openItemState`'s `byAuthor`).
   notification in one go — under the id the author chose, so a new division is
   never renamed, which is why only *existing* divisions reach
   `syncParentDivisionRef`.
-- **Snippet** (`create/NewSnippetForm.tsx`): ref (checked against every
-  division/asset/snippet ref) and source format → `onCreateSnippet(ref,
-  sourceFormat)`.
+- **Snippet** (`create/NewSnippetForm.tsx`): an optional title, ref (checked
+  against every division/asset/snippet ref) and source format →
+  `onCreateSnippet(ref, sourceFormat, title)`. A snippet's title is a
+  plain-text display name only — it is spliced into its parent with no element
+  of its own — so lists and the title bar fall back to the ref without one, and
+  its preview article is titled after it (`snippetPreviewTitle`).
 - **Asset** (`create/NewAssetForm.tsx`): Upload / External URL / Custom →
   `onAssetUpload` / `onAssetFetchUrl` + `onAssetUpload` / `onCreateAuthored`.
 - A request may carry `resolveRef` (an `unlinked` explorer row: the new record
@@ -238,7 +241,7 @@ a peer removing the open item does not (`openItemState`'s `byAuthor`).
 
 Optional real-time co-editing via Yjs, activated by passing a `collaboration` prop (`{ doc, awareness, user }`) to `Editors`. The **host owns the transport** — it creates, seeds (`seedDocFromState`), and syncs the `Y.Doc` with its server; the editor only binds to it. `yjs` and `y-protocols` are **peer dependencies** so host and editor share one instance.
 
-- `schema.ts` — doc layout (version 3, `COLLAB_SCHEMA_VERSION`): `divisions` map (key = record id → entry with `xmlId`/`sourceFormat`/`title`/`type`/`label`/`attrs` + `Y.Text` body — never the division's element, which is built from those fields), `assets` map (key = record id → LWW metadata + `Y.Text` source — an asset's *bytes* stay with the host, since the doc is replicated to every peer and persisted as an append-only log), `snippets` map (key = record id → LWW `ref`/`sourceFormat` + `Y.Text` source), `meta` map (`title`, `docinfo`, `useCommonDocinfo`, all LWW), and `deleted` map (tombstones, record id → `"division" | "asset"`). Division *order* lives in parent sources as `<plus:* ref/>` placeholders, so it needs no structure. `seedDocFromState`/`docToState`/`clearDeletions` are exported for hosts.
+- `schema.ts` — doc layout (version 3, `COLLAB_SCHEMA_VERSION`): `divisions` map (key = record id → entry with `xmlId`/`sourceFormat`/`title`/`type`/`label`/`attrs` + `Y.Text` body — never the division's element, which is built from those fields), `assets` map (key = record id → LWW metadata + `Y.Text` source — an asset's *bytes* stay with the host, since the doc is replicated to every peer and persisted as an append-only log), `snippets` map (key = record id → LWW `ref`/`title`/`sourceFormat` + `Y.Text` source), `meta` map (`title`, `docinfo`, `useCommonDocinfo`, all LWW), and `deleted` map (tombstones, record id → `"division" | "asset"`). Division *order* lives in parent sources as `<plus:* ref/>` placeholders, so it needs no structure. `seedDocFromState`/`docToState`/`clearDeletions` are exported for hosts.
 - Tombstones exist because removing an entry from a Y.Map leaves nothing a later save can act on: the peer that removed a record persists that immediately, but if the request never lands, a full reload from the host would resurrect the row. The session leader replays each tombstone as a `_destroy` until the host confirms it, then calls `clearDeletions`. This requires the host's delete to be idempotent — as its create must be, since the same record can be sent by both the acting client and the next bulk save.
 - `bridge.ts` — `CollabBridge` keeps doc ↔ Zustand store equal. Local writes flow through the same `EditorsInner` choke points that update the store (`emitContentChange`, `applyDivision*`, the asset add/update/remove handlers, title/docinfo commits); remote transactions are translated into pure store pool actions (which never fire host persistence callbacks). Origin tags distinguish the two — anything not registered as local is remote. The doc keys assets by record id while the store pool keys them by kind+ref, so the bridge maintains its own index between the two and replays a remote `ref` change as a pool *rename*.
 - `bridge.transact(fn)` (via `collabTransact` in `Editors.tsx`) groups writes that belong together into one update — creating a division and inserting the parent `<plus:* ref/>` that points at it, or renaming an xml:id across division, record, and parent — so peers never observe a placeholder referring to a division they don't have.

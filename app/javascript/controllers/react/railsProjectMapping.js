@@ -55,6 +55,7 @@ import {
  * @typedef {Object} RailsSnippet
  * @property {string} id
  * @property {string} [ref]
+ * @property {string} [title]
  * @property {string} [source]
  * @property {string} [source_format]
  */
@@ -249,6 +250,7 @@ export function railsSnippetToEditor(s) {
   return {
     id: String(s.id),
     ref: s.ref ?? "",
+    title: s.title ?? "",
     source: s.source ?? "",
     sourceFormat: s.source_format ?? "pretext",
   };
@@ -264,6 +266,7 @@ export function toEditorSnippet(rec) {
   return {
     id: rec.id,
     ref: rec.ref,
+    title: rec.title,
     source: rec.source,
     sourceFormat: rec.sourceFormat,
   };

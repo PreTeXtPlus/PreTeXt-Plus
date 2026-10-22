@@ -1205,9 +1205,9 @@ function EditorApp({ config }) {
   // The server (Content's ref uniqueness) is still the final authority; a collision
   // surfaces as a normal rejected PATCH.
   const onCreateSnippet = useCallback(
-    async (ref, sourceFormat = "pretext") => {
+    async (ref, sourceFormat = "pretext", title = "") => {
       const json = await patchProjectJson({
-        snippets_attributes: [ { ref, source: "", source_format: sourceFormat } ],
+        snippets_attributes: [ { ref, title, source: "", source_format: sourceFormat } ],
       });
       const created = toEditorSnippet(
         railsSnippetToEditor((json.snippets ?? []).find((s) => s.ref === ref)),
@@ -1219,8 +1219,8 @@ function EditorApp({ config }) {
     [patchProjectJson, invalidateSnippetQueries, recordCreated],
   );
 
-  // Persists an edit to an existing snippet -- its `ref`, `source`, and
-  // `source_format` -- keyed by `id` (stable across renames), mirroring
+  // Persists an edit to an existing snippet -- its `ref`, `title`, `source`,
+  // and `source_format` -- keyed by `id` (stable across renames), mirroring
   // onAssetUpdate. The editor calls this for metadata edits made in its
   // settings, and for a Duplicate's new record. Typed source arrives through
   // onContentChange instead; the refetch this triggers can't undo it, since
@@ -1233,6 +1233,7 @@ function EditorApp({ config }) {
           snippets_attributes: [ {
             id: snippet.id,
             ref: snippet.ref,
+            title: snippet.title ?? "",
             source: snippet.source ?? "",
             source_format: snippet.sourceFormat,
           } ],

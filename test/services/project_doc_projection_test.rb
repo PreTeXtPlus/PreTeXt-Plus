@@ -201,6 +201,7 @@ class ProjectDocProjectionTest < ActiveSupport::TestCase
     snippet = Content.find(SNIPPET_ID)
     assert_equal @project.id, snippet.project_id
     assert_equal "projected-note", snippet.ref
+    assert_equal "A Projected Note", snippet.title
     assert_equal "A \\emph{projected} note.", snippet.source
     assert_equal "latex", snippet.source_format
   end

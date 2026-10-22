@@ -149,6 +149,28 @@ describe("opening a snippet", () => {
     expect(editor().dataset.wrapped).toBe("false");
   });
 
+  it("names a titled snippet by its title, and previews it under that title", () => {
+    renderEditors({ projectSnippets: [{ ...snippet, title: "Hello & welcome" }] });
+    openSnippetRow("greeting");
+
+    expect(barTitle()).toHaveTextContent("Hello & welcome");
+    const preview = screen.getByTestId("live-preview");
+    expect(preview.dataset.title).toBe("Hello & welcome");
+    expect(preview.dataset.content).toContain("<title>Hello &amp; welcome</title>");
+  });
+
+  it("saves a title from the drawer, and clears it when blanked", async () => {
+    const { snippetUpdates } = renderEditors();
+    openSnippetRow("greeting");
+    const title = screen.getByLabelText("Title") as HTMLInputElement;
+
+    fireEvent.change(title, { target: { value: "Greeting" } });
+    await act(async () => {
+      fireEvent.blur(title);
+    });
+    expect(snippetUpdates[snippetUpdates.length - 1]?.title).toBe("Greeting");
+  });
+
   it("previews the snippet inside a plain article titled \"snippet preview\"", () => {
     renderEditors();
     openSnippetRow("greeting");
