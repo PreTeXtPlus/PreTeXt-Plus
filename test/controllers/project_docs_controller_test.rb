@@ -105,7 +105,7 @@ class ProjectDocsControllerTest < ActionDispatch::IntegrationTest
     post flush_doc_project_url(@project), as: :json
     assert_response :no_content
 
-    assert_no_difference("Division.count") { post flush_doc_project_url(@project), as: :json }
+    assert_no_difference("Content.divisions.count") { post flush_doc_project_url(@project), as: :json }
     assert_response :no_content
   end
 

@@ -16,8 +16,9 @@ import { Awareness } from "y-protocols/awareness";
 import type { CollabSession } from "../collab/types";
 import type { Division } from "../types/sections";
 import type { Asset, Snippet } from "../types/editor";
+import { legacyDivisions } from "./legacyDivision";
 
-const DIVISIONS: Division[] = [
+const DIVISIONS: Division[] = legacyDivisions([
   {
     id: "root-id",
     xmlId: "doc-root",
@@ -34,7 +35,7 @@ const DIVISIONS: Division[] = [
     sourceFormat: "pretext",
     source: `<section xml:id="sec-a">\n  <title>Alpha</title>\n  <p>Hello.</p>\n</section>`,
   },
-];
+]);
 
 const seedState = () => ({
   title: "Demo",

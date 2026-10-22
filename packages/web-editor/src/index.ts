@@ -37,7 +37,11 @@ export type {
   /** @deprecated Chapters are now plain `Division` records with type `"chapter"`. */
   DocumentChapter,
 } from "./types/sections";
-export type { DivisionTreeNode } from "./sectionUtils";
+export type {
+  DivisionTreeNode,
+  DivisionSourceSplit,
+  DivisionSplitFallback,
+} from "./sectionUtils";
 export { LANGUAGES, DEFAULT_LANGUAGE } from "./languages";
 export type { LanguageOption } from "./languages";
 export {
@@ -58,29 +62,19 @@ export {
   wrapDivisionForPreview,
   assembleSnippetPreviewSource,
   SNIPPET_PREVIEW_TITLE,
-  // Division content utilities
-  // TODO: update these to work for generic divisions, not just sections
-  updateDivisionTitle,
+  // Division element utilities: a division stores its body only, and its
+  // element (type, xml:id, title, label, attributes) is built from its fields.
+  splitDivisionSource,
+  wrapDivisionSource,
+  divisionHeaderParts,
+  displayTitle,
   createNewSection,
   createIntroduction,
   createConclusion,
-  stripSectionWrapper,
-  rewrapSection,
-  ensureSectionWrapper,
-  mergeTwoSections,
   getSectionAttributes,
-  updateSectionMetadata,
-  extractDivisionMetadata,
   // LaTeX division utilities
-  // TODO: update these to work for generic divisions, not just sections
-  stripLatexSectionWrapper,
-  rewrapLatexSection,
-  ensureLatexSectionWrapper,
-  updateLatexSectionTitle,
-  extractLatexDivisionTitle,
   parseLatexDivisionHeader,
   buildLatexDivisionHeader,
-  normalizeLatexDivisionSource,
   createNewLatexSection,
   createLatexIntroduction,
   createLatexConclusion,

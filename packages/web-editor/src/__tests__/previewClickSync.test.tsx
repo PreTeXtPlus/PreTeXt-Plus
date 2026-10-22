@@ -12,6 +12,7 @@ import { forwardRef, useImperativeHandle } from "react";
 import { render, act } from "@testing-library/react";
 import Editors from "../components/Editors";
 import type { Division } from "../types/sections";
+import { legacyDivisions } from "./legacyDivision";
 
 const revealed: number[] = [];
 vi.mock("../components/CodeEditor", () => {
@@ -53,7 +54,7 @@ const SECTION = [
   "</section>", // 6
 ].join("\n");
 
-const divisions: Division[] = [
+const divisions: Division[] = legacyDivisions([
   {
     id: "1",
     xmlId: "doc",
@@ -63,7 +64,7 @@ const divisions: Division[] = [
     source: '<article xml:id="doc">\n<title>Main</title>\n<plus:section ref="one"/>\n</article>',
   },
   { id: "2", xmlId: "one", title: "One", type: "section", sourceFormat: "pretext", source: SECTION },
-];
+]);
 
 describe("preview → source sync", () => {
   it("lands on the clicked line of a division previewed in context", () => {
@@ -85,8 +86,9 @@ describe("preview → source sync", () => {
     expect(latestPreview?.content).toBe(SECTION);
 
     // The third paragraph, as the renderer's source map reports it: line 5
-    // of the fragment, under an id that names the section as its author.
+    // of the fragment, under an id that names the section as its author. The
+    // buffer holds only the body, below the section's start tag and title.
     act(() => latestPreview?.onSyncToSource?.({ assembledLine: 5, elementId: "one-4" }));
-    expect(revealed).toEqual([5]);
+    expect(revealed).toEqual([3]);
   });
 });

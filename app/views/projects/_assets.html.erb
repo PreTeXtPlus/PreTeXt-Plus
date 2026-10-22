@@ -1,7 +1,7 @@
 <%# Read-only asset gallery for the project dashboard -- editing/uploading
     assets stays in the editor's own asset manager (see AssetManagerModal in
     the web-editor package); this is just a quick-glance inventory. %>
-<% assets = project.assets.order(:ref).includes(file_attachment: :blob) %>
+<% assets = project.assets.order(:ref).with_attached_files %>
 
 <h2 class="mt-8 font-mono text-xs font-semibold uppercase tracking-widest text-gray-500">
   Assets
@@ -24,7 +24,7 @@
         <% end %>
         <%= tag.span class: "w-full truncate text-xs text-gray-700" do %>
           <%= asset.title %><br><span class="font-mono"><%= asset.ref %></span>
-          <% if asset.file.attached? %>
+          <% if asset.file_attached? %>
             <br><span class="font-mono text-gray-400"><%= asset.file_content_type %></span>
           <% end %>
         <% end %>

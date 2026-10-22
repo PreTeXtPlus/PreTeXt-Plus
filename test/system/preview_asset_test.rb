@@ -4,7 +4,7 @@ class PreviewAssetTest < ApplicationSystemTestCase
   setup do
     @user = users(:one)
     @project = projects(:one)
-    @asset = assets(:image_one) # ref: "diagram", file pre-attached via fixtures
+    @asset = contents(:image_one) # ref: "diagram", file pre-attached via fixtures
     log_in_through_form
   end
 

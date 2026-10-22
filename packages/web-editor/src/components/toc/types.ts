@@ -1,11 +1,6 @@
 import type { Division, DivisionType } from "../../types/sections";
 import type { SourceFormat } from "../../types/editor";
-import {
-  extractLatexSectionLabel,
-  extractMarkdownDivisionMetadata,
-  getSectionAttributes,
-  slugifyTitle,
-} from "../../sectionUtils";
+import { displayTitle, slugifyTitle } from "../../sectionUtils";
 
 /** Draft state for the inline division edit form. */
 export interface EditDraft {
@@ -132,14 +127,15 @@ export const TYPE_FULL_LABELS: Record<string, string> = {
 };
 
 /**
- * The name a division is shown under. Introduction/conclusion divisions never
- * carry a `<title>` in source, so they show their type name ("Introduction")
- * rather than reading as untitled. Empty when there is genuinely no title.
+ * The name a division is shown under: its title as plain text (markup
+ * stripped — see `displayTitle`). An untitled introduction/conclusion shows
+ * its type name ("Introduction") rather than reading as untitled. Empty when
+ * there is genuinely no title.
  */
 export const divisionDisplayTitle = (
-  division: Pick<Division, "title" | "type">,
+  division: Pick<Division, "title" | "type"> & Partial<Pick<Division, "sourceFormat">>,
 ): string =>
-  division.title ||
+  displayTitle({ title: division.title ?? "", sourceFormat: division.sourceFormat ?? "pretext" }) ||
   (division.type === "introduction" || division.type === "conclusion"
     ? TYPE_FULL_LABELS[division.type]
     : "");
@@ -346,26 +342,6 @@ export function divisionTypeOptions(
   return SWITCHABLE_ROOT_TYPES.includes(currentType)
     ? SWITCHABLE_ROOT_TYPES
     : [currentType];
-}
-
-/**
- * The xml:id a division's own source gives it. Each format stores it
- * differently: Markdown in YAML frontmatter, LaTeX as the `\label` after
- * `\section`, PreTeXt as the wrapper element's attribute. All three fall back
- * to the record id when their source carries none yet, so the field shows the
- * division's current identity rather than a misleadingly blank one — notably
- * the root division, whose <article>/<book> wrapper is valid PreTeXt with only
- * a `label` and no `xml:id` at all (see ensureRootLabel in sectionUtils.ts).
- */
-export function divisionSourceXmlId(division: Division): string {
-  switch (division.sourceFormat) {
-    case "markdown":
-      return extractMarkdownDivisionMetadata(division.source)?.xmlId || division.xmlId;
-    case "latex":
-      return extractLatexSectionLabel(division.source) || division.xmlId;
-    default:
-      return getSectionAttributes(division.source).xmlId || division.xmlId;
-  }
 }
 
 /** Introduction must be first, conclusion must be last within a parent. */

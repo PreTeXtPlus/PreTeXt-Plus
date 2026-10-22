@@ -12,13 +12,14 @@ import {
   configureSpellCheck,
   DashboardIcon,
   DEFAULT_LANGUAGE,
+  COLLAB_SCHEMA_VERSION,
 } from "@pretextbook/web-editor";
 import { buildImportEngines } from "./importEngines";
 import { buildImportShare } from "./importShare";
 import { CollabOutdatedError, YCableProvider } from "./collab/yCableProvider";
 import { reportCollabIncident } from "./collab/reportIncident";
 import {
-  railsDivisionToEditor,
+  editorDivisionToRails,
   railsAssetToEditor,
   toEditorAsset,
   railsSnippetToEditor,
@@ -174,12 +175,7 @@ function editorStateToRailsPayload(state, deletes = [], baseline = null) {
     use_common_docinfo: state.useCommonDocinfo,
     language: state.language,
     divisions_attributes: [
-      ...state.divisions.map((d) => ({
-        id: d.id,
-        ref: d.xmlId,
-        source: d.source,
-        source_format: d.sourceFormat,
-      })),
+      ...state.divisions.map(editorDivisionToRails),
       ...deletes
         .filter((d) => d.kind === "division")
         .map(({ id }) => ({ id, _destroy: true })),
@@ -194,7 +190,21 @@ function editorStateToRailsPayload(state, deletes = [], baseline = null) {
     ];
     if (entries.length) project[`${kind}s_attributes`] = entries;
   }
-  return { project };
+  return withSchemaVersion({ project });
+}
+
+// Every PATCH that can carry divisions says which layout of a division it
+// speaks. A division's element moved out of its source into fields (collab
+// schema version 3), and a tab loaded before that would send whole wrapped
+// sources the server would then wrap a second time -- so the server refuses
+// division writes that don't name the current version (ProjectsController),
+// and this tab is told to reload instead.
+/**
+ * @param {{project: Object}} body
+ * @returns {{project: Object, schema_version: number}}
+ */
+function withSchemaVersion(body) {
+  return { ...body, schema_version: COLLAB_SCHEMA_VERSION };
 }
 
 // --- Snippet/asset records in the working copy ------------------------------
@@ -289,6 +299,10 @@ function persistableShape(state) {
       xmlId: d.xmlId,
       source: d.source,
       sourceFormat: d.sourceFormat,
+      title: d.title,
+      type: d.type,
+      label: d.label ?? "",
+      attrs: d.attrs ?? {},
     })),
     // Tombstones count as unsaved work: a removal whose own PATCH failed is
     // only ever retried because the next dirty check still sees it here.
@@ -344,6 +358,8 @@ function editorStateToCollabSeed(state) {
       source: d.source,
       title: d.title,
       type: d.type,
+      label: d.label,
+      attrs: d.attrs,
     })),
     assets: (state.projectAssets ?? []).filter((a) => a.id).map(toEditorAsset),
     snippets: (state.projectSnippets ?? []).filter((s) => s.id).map(toEditorSnippet),
@@ -501,9 +517,10 @@ function EditorApp({ config }) {
   // session is joined and fully usable, it just isn't hearing peers in real time
   // (see YCableProvider.startWatchdog), so this warns rather than blocks.
   const [relayStalled, setRelayStalled] = useState(false);
-  // The server holds a newer layout of the shared document than this tab's
-  // editor writes (a deploy changed it), so it refuses to sync with this tab.
-  // Nothing typed here can reach anyone until the page is reloaded.
+  // The server holds a newer layout of the shared document -- or, solo, of a
+  // division record -- than this tab's editor writes (a deploy changed it), so
+  // it refuses this tab's writes. Nothing typed here can be saved until the
+  // page is reloaded.
   const [collabOutdated, setCollabOutdated] = useState(false);
 
   useEffect(() => {
@@ -565,6 +582,7 @@ function EditorApp({ config }) {
         // departing page may cancel -- the unsaved-changes prompt covers that.
         keepalive: keepalive && new Blob([body]).size <= KEEPALIVE_MAX_BYTES,
       });
+      if (res.status === 409) setCollabOutdated(true);
       if (!res.ok) throw new Error(`Save failed: ${res.status}`);
       return state;
     },
@@ -763,6 +781,7 @@ function EditorApp({ config }) {
   // the deferred bulk save.
 
   const handlePatchResponse = useCallback(async (res, fallbackMessage) => {
+    if (res.status === 409) setCollabOutdated(true);
     if (!res.ok) {
       let message = fallbackMessage;
       try {
@@ -787,7 +806,7 @@ function EditorApp({ config }) {
           Accept: "application/json",
           "X-CSRF-Token": csrfToken,
         },
-        body: JSON.stringify({ project }),
+        body: JSON.stringify(withSchemaVersion({ project })),
       });
       return handlePatchResponse(res, `Request failed: ${res.status}`);
     },
@@ -848,23 +867,15 @@ function EditorApp({ config }) {
         xmlId: division.xmlId,
         source: division.source ?? "",
         sourceFormat: division.sourceFormat ?? "pretext",
+        title: division.title ?? "",
+        type: division.type,
+        label: division.label ?? "",
+        attrs: division.attrs ?? {},
       };
       w.divisions.push(record);
       noteEdit();
       try {
-        // division.title/type aren't sent: like the root division, they're
-        // derivable from `source` itself (the wrapping tag + <title>) rather
-        // than stored separately, so there's nothing here that could go stale.
-        await patchProjectJson({
-          divisions_attributes: [
-            {
-              id: record.id,
-              ref: record.xmlId,
-              source_format: record.sourceFormat,
-              source: record.source,
-            },
-          ],
-        });
+        await patchProjectJson({ divisions_attributes: [ editorDivisionToRails(record) ] });
         // Now persisted, so mirror it into the server snapshot too: otherwise
         // it looks unsaved, and removing it before the next bulk save would
         // skip the _destroy (see onDivisionRemove) and orphan the row on the
@@ -925,7 +936,13 @@ function EditorApp({ config }) {
     if (!w) return;
     const division = w.divisions.find((d) => d.xmlId === xmlId);
     if (!division) return;
+    // A division's element is built from these fields, so each is part of
+    // the record the next save sends.
     if (changes.sourceFormat !== undefined) division.sourceFormat = changes.sourceFormat;
+    if (changes.title !== undefined) division.title = changes.title;
+    if (changes.type !== undefined) division.type = changes.type;
+    if (changes.label !== undefined) division.label = changes.label ?? "";
+    if (changes.attrs !== undefined) division.attrs = changes.attrs;
     // An xml:id rename: update the ref, and if this is the root division keep
     // rootDivisionId (used to assemble/preview the doc) pointing at it.
     if (changes.xmlId !== undefined) {
@@ -979,8 +996,8 @@ function EditorApp({ config }) {
   }, [queryClient, projectId]);
 
   // Pick a project-unique ref from a desired slug.  A ref must be unique among
-  // the project's divisions, assets, AND snippets (HasUniqueRef enforces all
-  // three), so we dedupe against all three live pools, suffixing `-2`, `-3`,
+  // the project's divisions, assets, AND snippets (one unique index across all
+  // of a project's contents), so we dedupe against all three live pools, suffixing `-2`, `-3`,
   // ... on collision.  Read from refs at call time, so no deps.
   const uniqueRef = useCallback((desired) => {
     const base = slugifyRef(desired) || "asset";
@@ -1003,7 +1020,7 @@ function EditorApp({ config }) {
     async (file, title) => {
       title = title || "New Asset";
       const ref = uniqueRef(slugifyRef(title.replace(/\.[^.]+$/, "")));
-      const json = await patchProjectAssetUpload({ ref, kind: "file", title, file });
+      const json = await patchProjectAssetUpload({ ref, kind: "file_asset", title, file });
       const created = toEditorAsset(
         railsAssetToEditor((json.assets ?? []).find((a) => a.ref === ref)),
       );
@@ -1026,7 +1043,7 @@ function EditorApp({ config }) {
     async (title) => {
       const ref = uniqueRef(slugifyRef(title));
       const json = await patchProjectJson({
-        assets_attributes: [ { ref, kind: "authored", title, source: "" } ],
+        assets_attributes: [ { ref, kind: "authored_asset", title, source: "" } ],
       });
       const created = toEditorAsset(
         railsAssetToEditor((json.assets ?? []).find((a) => a.ref === ref)),
@@ -1185,7 +1202,7 @@ function EditorApp({ config }) {
   // Unlike an asset (whose ref is derived from a title), a snippet's ref is
   // typed directly by the user in the "New snippet" form -- already sanitized
   // and checked against the live pools there -- along with its source format.
-  // The server (HasUniqueRef) is still the final authority; a collision
+  // The server (Content's ref uniqueness) is still the final authority; a collision
   // surfaces as a normal rejected PATCH.
   const onCreateSnippet = useCallback(
     async (ref, sourceFormat = "pretext") => {

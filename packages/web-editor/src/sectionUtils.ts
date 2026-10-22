@@ -8,7 +8,7 @@
 
 import { fromXml } from "xast-util-from-xml";
 import { toXml } from "xast-util-to-xml";
-import type { Element, ElementContent, Root } from "xast";
+import type { Element, Root } from "xast";
 import type { Asset, Snippet, SourceFormat } from "./types/editor";
 import type {
   Division,
@@ -20,7 +20,7 @@ import type {
 } from "./types/sections";
 import { derivePretextContent } from "./contentConversion";
 import { resolveAssetRef } from "./assetTransforms";
-import { escapeAttribute } from "./xmlUtils";
+import { escapeAttribute, unescapeAttribute } from "./xmlUtils";
 
 // ---------------------------------------------------------------------------
 // Internal helpers
@@ -130,28 +130,6 @@ function trimTrailingWhitespaceNodes(
   return children.slice(0, end);
 }
 
-function trimBoundaryWhitespaceNodes(
-  children: Root["children"],
-): Root["children"] {
-  let start = 0;
-  let end = children.length;
-
-  while (start < end) {
-    const node = children[start];
-    if (node.type !== "text" || /\S/.test(node.value)) break;
-    start += 1;
-  }
-
-  while (end > start) {
-    const node = children[end - 1];
-    if (node.type !== "text" || /\S/.test(node.value)) break;
-    end -= 1;
-  }
-
-  return children.slice(start, end);
-}
-
-
 function trimBoundaryBlankLines(value: string): string {
   return value
     .replace(/^(?:[ \t]*\r?\n)+/, "")
@@ -160,8 +138,7 @@ function trimBoundaryBlankLines(value: string): string {
 
 /**
  * Parse XML defensively.  Returns `null` instead of throwing when the input is
- * not well-formed.  Callers that run during render (e.g. `stripSectionWrapper`)
- * MUST use this rather than `fromXml` directly: the user routinely passes
+ * not well-formed.  Callers that run during render MUST use this rather than `fromXml` directly: the user routinely passes
  * temporarily-invalid XML while typing, and an uncaught parse error there
  * crashes the whole editor.
  */
@@ -173,77 +150,10 @@ function safeFromXml(xml: string): Root | null {
   }
 }
 
-/**
- * Parse `titleText` as the content of a `<title>` element so that PreTeXt
- * inline markup the user types directly into the title field (e.g.
- * `<term>Foo</term>`) is inserted as real XML elements rather than escaped
- * as literal text on serialization. Falls back to a single text node verbatim
- * when `titleText` isn't well-formed XML on its own (e.g. a `<` typed mid-edit
- * before its matching tag is closed).
- */
-function parseTitleChildren(titleText: string): ElementContent[] {
-  const tree = safeFromXml(`<__title__>${titleText}</__title__>`);
-  const wrapper = tree?.children.find((n) => n.type === "element") as
-    | Element
-    | undefined;
-  return wrapper ? wrapper.children : [{ type: "text", value: titleText }];
-}
-
-/**
- * Strip the outer element from `xml` using string matching only — a fallback
- * for when the content cannot be parsed as well-formed XML.  Removes the first
- * opening tag and its matching trailing closing tag; returns the input
- * unchanged when no wrapper is detected.
- */
-function stripWrapperByRegex(xml: string): string {
-  const open = xml.match(/^\s*<([A-Za-z_][\w.:-]*)\b[^>]*?>/);
-  if (!open || open.index === undefined) return xml;
-  const afterOpen = xml.slice(open.index + open[0].length);
-  const closeRe = new RegExp(`\\s*</${escapeRegex(open[1])}\\s*>\\s*$`);
-  // Matches trimBoundaryWhitespaceNodes behavior in the valid-XML path so the
-  // leading "\n" from rewrapSection doesn't appear as a spurious blank line.
-  return trimBoundaryBlankLines(afterOpen.replace(closeRe, ""));
-}
-
 // ---------------------------------------------------------------------------
 // Public API
 // ---------------------------------------------------------------------------
 
-
-/**
- * Replace (or insert) the `<title>` of a section XML string with `newTitle`.
- * Returns the updated XML string.
- */
-export function updateDivisionTitle(
-  divisionXml: string,
-  newTitle: string,
-): string {
-  const tree = safeFromXml(divisionXml);
-  if (!tree) return divisionXml;
-  const rootEl = tree.children.find((n) => n.type === "element") as
-    | Element
-    | undefined;
-  if (!rootEl) return divisionXml;
-
-  const titleIndex = rootEl.children.findIndex(
-    (n) => n.type === "element" && (n as Element).name === "title",
-  );
-
-  const titleNode: Element = {
-    type: "element",
-    name: "title",
-    attributes: {},
-    children: parseTitleChildren(newTitle),
-  };
-
-  if (titleIndex === -1) {
-    rootEl.children.unshift(titleNode);
-  } else {
-    rootEl.children.splice(titleIndex, 1, titleNode);
-  }
-
-  return toXml(tree, XML_SERIALIZE_OPTIONS);
-}
 
 /**
  * Create a new blank division as a `Division` — a `<section>` unless `type`
@@ -255,12 +165,11 @@ export function createNewSection(
   type: DivisionType = "section",
 ): DocumentSection {
   const id = generateId();
-  const source = `<${type} xml:id="${id}">\n\t<title>${title}</title>\n\n\t<p>\n\n\t</p>\n\n</${type}>`;
   return {
     id,
     xmlId: id,
     title,
-    source,
+    source: createDivisionContent("pretext"),
     type,
     sourceFormat: "pretext",
   };
@@ -269,12 +178,11 @@ export function createNewSection(
 /** Create a blank `<introduction>` division. */
 export function createIntroduction(): DocumentSection {
   const id = generateId();
-  const source = `<introduction xml:id="${id}">\n\n\t<p>\n\n\t</p>\n\n</introduction>`;
   return {
     id,
     xmlId: id,
-    title: "Introduction",
-    source,
+    title: "",
+    source: createDivisionContent("pretext"),
     type: "introduction",
     sourceFormat: "pretext",
   };
@@ -283,67 +191,14 @@ export function createIntroduction(): DocumentSection {
 /** Create a blank `<conclusion>` division. */
 export function createConclusion(): DocumentSection {
   const id = generateId();
-  const source = `<conclusion xml:id="${id}">\n\n\t<p>\n\n\t</p>\n\n</conclusion>`;
   return {
     id,
     xmlId: id,
-    title: "Conclusion",
-    source,
+    title: "",
+    source: createDivisionContent("pretext"),
     type: "conclusion",
     sourceFormat: "pretext",
   };
-}
-
-/**
- * Strip the outer wrapper element from a section XML string, returning just the
- * inner XML content (i.e. everything between `<section>` and `</section>`).
- * Used to show only the section body in the code editor so users can't
- * accidentally edit or delete the enclosing element.
- */
-export function stripSectionWrapper(sectionXml: string): string {
-  const tree = safeFromXml(sectionXml);
-  // Malformed XML (common while the user is mid-edit): fall back to a
-  // string-based strip so we still show the body instead of crashing.
-  if (!tree) return stripWrapperByRegex(sectionXml);
-  const rootEl = tree.children.find((n) => n.type === "element") as
-    | Element
-    | undefined;
-  if (!rootEl) return sectionXml;
-  const inner: Root = {
-    type: "root",
-    children: trimBoundaryWhitespaceNodes(rootEl.children),
-  };
-  return toXml(inner, XML_SERIALIZE_OPTIONS);
-}
-
-/**
- * Re-wrap inner XML content (as returned by the code editor) with the correct
- * outer element for the given section type.
- *
- * Because `DocumentSectionType` values are identical to the XML tag names,
- * this is simply `<${type}>inner</${type}>`.
- */
-export function rewrapSection(
-  innerXml: string,
-  type: DocumentSectionType,
-): string {
-  const normalizedInnerXml = trimBoundaryBlankLines(innerXml);
-  return `<${type}>\n${normalizedInnerXml}\n</${type}>`;
-}
-
-/**
- * Ensure the given XML string has the correct outer element for its section
- * type.  If the outer tag is already present it is returned unchanged;
- * otherwise the content is re-wrapped so that accidental deletions in the
- * code editor are recovered gracefully.
- */
-export function ensureSectionWrapper(
-  content: string,
-  type: DocumentSectionType,
-): string {
-  const trimmed = content.trimStart();
-  if (trimmed.startsWith(`<${type}`)) return content;
-  return rewrapSection(content, type);
 }
 
 export function splitDocument(xml: string): DocumentSplitResult {
@@ -461,56 +316,6 @@ export function mergeDocument(
 // Chapter wrapper utilities (book mode)
 // ---------------------------------------------------------------------------
 
-/**
- * Strip the outer `<chapter>` element from a chapter XML string, returning
- * just its inner content (title, sections, etc.).  Behaves exactly like
- * {@link stripSectionWrapper}: the enclosing element is dropped but all
- * children are kept, so the user edits the chapter body without ever seeing
- * or editing the `<chapter>` division tag itself.
- */
-export function stripChapterWrapper(chapterXml: string): string {
-  return stripSectionWrapper(chapterXml);
-}
-
-/**
- * Re-wrap chapter body content (as produced by the code editor) with the
- * original `<chapter>` element, preserving its tag name and all attributes
- * (e.g. `xml:id`, `label`).
- *
- * The attributes are recovered from `originalChapterXml` — the last known
- * full chapter source — so that editing the body never drops them.  String
- * concatenation (rather than re-serialising via xast) keeps this robust to
- * invalid inner XML while the user is mid-edit.
- */
-export function rewrapChapter(
-  innerXml: string,
-  originalChapterXml: string,
-): string {
-  let name = "chapter";
-  const attrs: Record<string, string> = {};
-  try {
-    const tree: Root = fromXml(originalChapterXml);
-    const el = tree.children.find((n) => n.type === "element") as
-      | Element
-      | undefined;
-    if (el) {
-      name = el.name;
-      for (const [key, value] of Object.entries(el.attributes ?? {})) {
-        if (value == null) continue;
-        attrs[key] = String(value);
-      }
-    }
-  } catch {
-    // Fall back to a bare <chapter> wrapper if the original can't be parsed.
-  }
-  const attrStr = Object.entries(attrs)
-    .map(([key, value]) => ` ${key}="${escapeAttribute(value)}"`)
-    .join("");
-  const normalizedInner = trimBoundaryBlankLines(innerXml);
-  return `<${name}${attrStr}>\n${normalizedInner}\n</${name}>`;
-}
-
-
 // ===========================================================================
 // LaTeX-specific section utilities
 // ===========================================================================
@@ -619,89 +424,6 @@ export function mergeLatexDocument(
   const parts = [w.preamble, sectionTexts];
   parts.push(w.closing || "\\end{document}");
   return parts.join("\n\n");
-}
-
-/**
- * Strip the section-level header from a LaTeX section string so the code
- * editor shows only the body content.
- *
- * - For `\section{…}`-style sections: removes the leading `\section{…}` command.
- * - For `\begin{section}…\end{section}`-style: removes the wrapper tags.
- * - For introduction / conclusion (no header): returns as-is.
- */
-export function stripLatexSectionWrapper(
-  content: string,
-  type: DocumentSectionType,
-): string {
-  if (type === "introduction" || type === "conclusion") {
-    return content; // no structural wrapper to strip
-  }
-  const trimmed = content.trimStart();
-  if (trimmed.startsWith("\\begin{section}")) {
-    return trimmed
-      .replace(/^\\begin\{section\}\s*\n?/, "")
-      .replace(/\n?\\end\{section\}\s*$/, "");
-  }
-  // Remove the leading `\section{…}` / `\worksheet{…}` header line, however
-  // malformed — `parseLatexDivisionHeader` reports its full extent.
-  const header = parseLatexDivisionHeader(content);
-  if (!header) return content;
-  return content.slice(header.length).replace(/^\s+/, "");
-}
-
-/**
- * Re-wrap inner LaTeX content (as produced by the code editor) with the
- * correct section header for the given section type and title.
- *
- * - `section` type: prepends `\section{title}`.
- * - `introduction` / `conclusion`: returns inner content unchanged.
- *
- * Pass `originalContent` to detect whether the document uses environment style
- * (`\begin{section}…\end{section}`) so the same style is preserved.
- */
-export function rewrapLatexSection(
-  inner: string,
-  type: DocumentSectionType,
-  title: string,
-  originalContent?: string,
-): string {
-  if (type === "introduction" || type === "conclusion") {
-    return inner;
-  }
-  // Detect environment style from the original content
-  if (originalContent?.trimStart().startsWith("\\begin{section}")) {
-    return `\\begin{section}\n\n${inner}\n\n\\end{section}`;
-  }
-  // The header command is named after the division type, so a `<worksheet>`
-  // gets `\worksheet{…}` back rather than being demoted to a `\section{…}`.
-  const macro = ALL_DIVISION_TYPES.has(type) ? type : "section";
-  return joinLatexHeaderAndBody(
-    buildLatexDivisionHeader({ macro, title }),
-    inner,
-  );
-}
-
-/**
- * Ensure the given LaTeX string has the correct section header/wrapper for its
- * type.  If the header is already present it is returned unchanged; otherwise
- * it is re-wrapped using `rewrapLatexSection` so that accidental deletions in
- * the code editor are recovered gracefully.
- */
-export function ensureLatexSectionWrapper(
-  content: string,
-  type: DocumentSectionType,
-  title: string,
-  originalContent?: string,
-): string {
-  if (type === "introduction" || type === "conclusion") {
-    return content; // no structural wrapper for these
-  }
-  if (content.trimStart().startsWith("\\begin{section}")) return content;
-  // Any recognised division macro counts as an intact header — not just
-  // `\section`, since the header is named after the division's own type.
-  const header = parseLatexDivisionHeader(content);
-  if (header && ALL_DIVISION_TYPES.has(header.macro)) return content;
-  return rewrapLatexSection(content, type, title, originalContent);
 }
 
 /**
@@ -815,20 +537,6 @@ export function parseLatexDivisionHeader(
   };
 }
 
-/**
- * Whether `line` opens a LaTeX division — a header command named after a real
- * division type (`\section{`, `\worksheet{`, `\article{`, …).
- *
- * Stricter than {@link parseLatexDivisionHeader} on purpose: this is what
- * decides whether a line may be locked and rewritten, and a division body that
- * merely happens to start with a macro (`\emph{Once} upon a time.` at the top
- * of an introduction) is prose, not structure.
- */
-export function isLatexDivisionHeaderLine(line: string): boolean {
-  const header = parseLatexDivisionHeader(line);
-  return header !== null && ALL_DIVISION_TYPES.has(header.macro);
-}
-
 /** Render a division header from its parts — the inverse of {@link parseLatexDivisionHeader}. */
 export function buildLatexDivisionHeader(header: {
   macro: string;
@@ -841,173 +549,6 @@ export function buildLatexDivisionHeader(header: {
   return `\\${header.macro}${star}{${header.title}}${label}`;
 }
 
-/**
- * Join a rewritten header to the rest of a division's source, always separated
- * by exactly one blank line.
- *
- * The blank line isn't cosmetic: `@pretextbook/latex-pretext` reads a first
- * paragraph butted straight up against the header as part of the header rather
- * than as a paragraph of its own, so a division saved without it converts
- * wrongly. Every path that writes a header goes through here, and
- * `computeLockedRegion` locks the blank line along with the header so it can't
- * be typed away again.
- */
-function joinLatexHeaderAndBody(header: string, rest: string): string {
-  const body = rest.replace(/^(?:[ \t]*\r?\n)+/, "").replace(/^[ \t]+/, "");
-  return body ? `${header}\n\n${body}` : `${header}\n\n`;
-}
-
-/**
- * Rewrite a LaTeX division's header from what {@link parseLatexDivisionHeader}
- * could recover from it, dropping anything malformed and guaranteeing the blank
- * line below it. Idempotent, and a no-op for anything whose first line isn't a
- * recognised division header — an introduction's prose, or a body that happens
- * to open with some other macro, must be left exactly as the author wrote it.
- */
-export function normalizeLatexDivisionSource(source: string): string {
-  const header = parseLatexDivisionHeader(source);
-  if (!header || !ALL_DIVISION_TYPES.has(header.macro)) return source;
-  return joinLatexHeaderAndBody(
-    buildLatexDivisionHeader(header),
-    source.slice(header.length),
-  );
-}
-
-/**
- * Replace (or insert) the section title in a LaTeX section string.
- *
- * - For command style (`\section{…}`, `\worksheet{…}`, …): rewrites the header.
- * - For `\begin{section}` style: updates the `\title{…}` inside.
- */
-export function updateLatexSectionTitle(
-  content: string,
-  newTitle: string,
-): string {
-  const header = parseLatexDivisionHeader(content);
-  if (header) {
-    return joinLatexHeaderAndBody(
-      buildLatexDivisionHeader({ ...header, title: newTitle }),
-      content.slice(header.length),
-    );
-  }
-  if (content.includes("\\begin{section}")) {
-    if (/\\title\{/.test(content)) {
-      return content.replace(/\\title\{[^}]*\}/, `\\title{${newTitle}}`);
-    }
-    return content.replace(
-      "\\begin{section}",
-      `\\begin{section}\n\n\\title{${newTitle}}\n\n`,
-    );
-  }
-  return content;
-}
-
-/**
- * Derive a LaTeX division's title directly from its header — the code
- * editor's source-of-truth content — mirroring the two header styles
- * {@link updateLatexSectionTitle} writes. Returns `null` when no header is
- * found (introduction/conclusion have none), so callers leave title as-is.
- */
-export function extractLatexDivisionTitle(content: string): string | null {
-  const header = parseLatexDivisionHeader(content);
-  if (header) return header.title;
-  if (content.includes("\\begin{section}")) {
-    const titleMatch = /\\title\{([^}]*)\}/.exec(content);
-    if (titleMatch) return titleMatch[1].trim();
-  }
-  return null;
-}
-
-/**
- * Extract the `\label{…}` belonging to a LaTeX division's header — the LaTeX
- * spelling of a division's `xml:id`, since `@pretextbook/latex-pretext` maps
- * `\label` → `xml:id`.  Only the header's label is read (a `\label` inside the
- * body is ignored).  Returns `""` when no header label is present.
- */
-export function extractLatexSectionLabel(content: string): string {
-  return parseLatexDivisionHeader(content)?.label ?? "";
-}
-
-/**
- * Update a LaTeX division's header type, title, and/or `xml:id`.
- *
- * - `type` renames the header command (`\section{` → `\worksheet{`) so the
- *   source reads as the division it represents.
- * - `title` becomes the header command's argument.
- * - `xmlId` becomes the `\label{…}` after it — inserted when absent, dropped
- *   when `null`/empty.
- *
- * Omit a key (or pass `undefined`) to keep whatever the current header says.
- * The header is rebuilt wholesale from those three values rather than patched
- * field-by-field, so a division that arrived with a malformed one (a `\label`
- * left inside the title argument, a doubled `}`) comes back well-formed — the
- * only repair route there is, since the header line is locked in the code
- * editor. Only the command-style header is handled; `\begin{section}` divisions
- * keep the title-only update. This is the LaTeX analogue of
- * {@link updateSectionMetadata} and {@link updateMarkdownDivisionMetadata} —
- * same `(division, changes) => Division` shape — but LaTeX has no
- * representation for PreTeXt's separate `label` attribute, so `label` is
- * accepted (to keep the same `changes` shape) and ignored.
- */
-export function updateLatexDivisionMetadata(
-  division: Division,
-  changes: {
-    title?: string;
-    type?: DivisionType;
-    xmlId?: string | null;
-    label?: string | null;
-  },
-): Division {
-  const header = parseLatexDivisionHeader(division.source);
-  let source = division.source;
-  if (header) {
-    source = joinLatexHeaderAndBody(
-      buildLatexDivisionHeader({
-        macro: changes.type ?? header.macro,
-        starred: header.starred,
-        title: changes.title ?? header.title,
-        label: changes.xmlId === undefined ? header.label : (changes.xmlId ?? ""),
-      }),
-      division.source.slice(header.length),
-    );
-  } else if (changes.title !== undefined) {
-    source = updateLatexSectionTitle(source, changes.title);
-  }
-  return {
-    ...division,
-    source,
-    title: changes.title ?? division.title,
-    type: changes.type ?? division.type,
-    xmlId: changes.xmlId || division.xmlId,
-  };
-}
-
-/**
- * Convert a LaTeX division's source to PreTeXt by passing the visible LaTeX
- * straight to `@pretextbook/latex-pretext` and using its output as-is.
- *
- * A division's header (`\section{…}\label{…}`, `\worksheet{…}`, … — and, for a
- * root division, `\article{…}`/`\book{…}`/`\slideshow{…}`) converts to its own
- * complete `<type xml:id="…"><title>…>` element, so the conversion is used
- * exactly as produced with no extra wrapper added here — doing so would nest a
- * second `<article>`/`<book>`/`<slideshow>` around the one the converter
- * already emitted from the header. If a header doesn't convert correctly,
- * that surfaces here to be fixed in the converter rather than worked around.
- *
- * Returns `null` when the conversion fails, so callers can disable the convert
- * action / fall back.
- */
-export function latexDivisionToTaggedPretext(
-  division: Pick<Division, "source">,
-): string | null {
-  const { pretextSource, pretextError } = derivePretextContent(
-    division.source,
-    "latex",
-  );
-  if (pretextError || pretextSource === undefined) return null;
-  return pretextSource;
-}
-
 /** Create a new blank LaTeX section as a `Division`. */
 export function createNewLatexSection(title = "New Section"): DocumentSection {
   const id = generateId();
@@ -1015,7 +556,7 @@ export function createNewLatexSection(title = "New Section"): DocumentSection {
     id,
     xmlId: id,
     title,
-    source: `\\section{${title}}\n\n`,
+    source: "",
     type: "section",
     sourceFormat: "latex",
   };
@@ -1027,8 +568,8 @@ export function createLatexIntroduction(): DocumentSection {
   return {
     id,
     xmlId: id,
-    title: "Introduction",
-    source: "% Introduction\n\n",
+    title: "",
+    source: "",
     type: "introduction",
     sourceFormat: "latex",
   };
@@ -1040,8 +581,8 @@ export function createLatexConclusion(): DocumentSection {
   return {
     id,
     xmlId: id,
-    title: "Conclusion",
-    source: "% Conclusion\n\n",
+    title: "",
+    source: "",
     type: "conclusion",
     sourceFormat: "latex",
   };
@@ -1051,59 +592,6 @@ export function createLatexConclusion(): DocumentSection {
 // Wrap-as-section and merge utilities
 // ---------------------------------------------------------------------------
 
-
-/**
- * Merge two adjacent sections into one, keeping the title of the first.
- *
- * - For PreTeXt: parses both sections and concatenates the body children
- *   (skipping the second section's `<title>`).
- * - For LaTeX: strips the second section's header and appends its body.
- *
- * @param a First (absorbing) section.
- * @param b Second section whose content is appended to `a`.
- * @param isLatex Whether the document source is LaTeX.
- */
-export function mergeTwoSections(
-  a: DocumentSection,
-  b: DocumentSection,
-  isLatex: boolean,
-): DocumentSection {
-  if (isLatex) {
-    const bBody = stripLatexSectionWrapper(b.source, b.type);
-    return {
-      ...a,
-      source: a.source.trimEnd() + "\n\n" + bBody.trimStart(),
-    };
-  }
-
-  // PreTeXt: parse and combine xast children
-  const aTree = safeFromXml(a.source);
-  const bTree = safeFromXml(b.source);
-  const aEl = aTree?.children.find((n) => n.type === "element") as
-    | Element
-    | undefined;
-  const bEl = bTree?.children.find((n) => n.type === "element") as
-    | Element
-    | undefined;
-
-  if (!aEl || !bEl) {
-    // Malformed XML in either section: fall back to plain concatenation.
-    return { ...a, source: a.source + "\n\n" + b.source };
-  }
-
-  // Drop the second section's <title> element
-  const bBodyChildren = bEl.children.filter(
-    (c) => !(c.type === "element" && (c as Element).name === "title"),
-  );
-  const merged: Element = {
-    ...aEl,
-    children: [...aEl.children, ...bBodyChildren],
-  };
-  return {
-    ...a,
-    source: toXml({ type: "root", children: [merged] } as Root, XML_SERIALIZE_OPTIONS),
-  };
-}
 
 // ---------------------------------------------------------------------------
 // Section attribute utilities
@@ -1161,200 +649,6 @@ export function slugifyTitle(title: string): string {
     .replace(/[^a-z0-9]+/g, "-")
     .replace(/^-+|-+$/g, "");
   return sanitizeXmlId(slug);
-}
-
-/**
- * Derive a division's title, type, `xml:id`, and `label` directly from its
- * full PreTeXt source — the code editor's content, wrapper tag included.
- * Used to keep the TOC in sync when the user edits these directly in the
- * source rather than through the metadata dropdown form.
- *
- * Returns `null` when `content` isn't well-formed XML or its root element
- * isn't a recognised division tag (both common mid-edit), so callers can
- * skip the update rather than clobbering existing metadata with junk.
- */
-export function extractDivisionMetadata(content: string): {
-  title: string;
-  type: DivisionType;
-  xmlId: string;
-  label: string;
-} | null {
-  const tree = safeFromXml(content);
-  if (!tree) return null;
-  const el = tree.children.find((n) => n.type === "element") as
-    | Element
-    | undefined;
-  if (!el || !ALL_DIVISION_TYPES.has(el.name)) return null;
-  return {
-    title: extractTitle(el),
-    type: el.name as DivisionType,
-    xmlId: (el.attributes?.["xml:id"] as string) ?? "",
-    label: (el.attributes?.["label"] as string) ?? "",
-  };
-}
-
-/**
- * Update the title, tag name (type), `xml:id`, and `label` of a section.
- *
- * Pass `null` for `xmlId` or `label` to remove the attribute entirely.
- * Omit a key (or pass `undefined`) to leave it unchanged.
- *
- * Returns a new `DocumentSection` with updated `source`, `title`, and `type`.
- */
-export function updateSectionMetadata(
-  section: DocumentSection,
-  changes: {
-    title?: string;
-    type?: DocumentSectionType;
-    xmlId?: string | null;
-    label?: string | null;
-  },
-): DocumentSection {
-  const newType = changes.type ?? section.type;
-  const newTitle = changes.title ?? section.title;
-
-  try {
-    const tree: Root = fromXml(section.source);
-    const el = tree.children.find((n) => n.type === "element") as
-      | Element
-      | undefined;
-
-    if (!el) {
-      // Fallback: return section with type/title updated but source unchanged.
-      return { ...section, title: newTitle, type: newType };
-    }
-
-    // Update tag name (type).
-    const newEl: Element = {
-      ...el,
-      name: newType,
-      attributes: { ...el.attributes },
-    };
-
-    // Update xml:id attribute.
-    if (changes.xmlId !== undefined) {
-      if (changes.xmlId === null || changes.xmlId === "") {
-        delete newEl.attributes["xml:id"];
-      } else {
-        newEl.attributes["xml:id"] = changes.xmlId;
-      }
-    }
-
-    // Update label attribute.
-    if (changes.label !== undefined) {
-      if (changes.label === null || changes.label === "") {
-        delete newEl.attributes["label"];
-      } else {
-        newEl.attributes["label"] = changes.label;
-      }
-    }
-
-    // Update <title> child element.
-    const titleIndex = newEl.children.findIndex(
-      (c) => c.type === "element" && (c as Element).name === "title",
-    );
-    const titleNode: Element = {
-      type: "element",
-      name: "title",
-      attributes: {},
-      children: parseTitleChildren(newTitle),
-    };
-    if (titleIndex === -1) {
-      newEl.children = [titleNode, ...newEl.children];
-    } else {
-      newEl.children = [
-        ...newEl.children.slice(0, titleIndex),
-        titleNode,
-        ...newEl.children.slice(titleIndex + 1),
-      ];
-    }
-
-    const newSource = toXml(
-      { type: "root", children: [newEl] } as Root,
-      XML_SERIALIZE_OPTIONS,
-    );
-    const newXmlId =
-      changes.xmlId !== undefined && changes.xmlId !== null && changes.xmlId !== ""
-        ? changes.xmlId
-        : section.xmlId;
-    return {
-      ...section,
-      title: newTitle,
-      type: newType,
-      xmlId: newXmlId,
-      source: newSource,
-    };
-  } catch {
-    return { ...section, title: newTitle, type: newType };
-  }
-}
-
-/**
- * Update the `<title>`, `xml:id`, and `label` of a chapter XML string.
- *
- * Mirrors {@link updateSectionMetadata} but operates on a raw chapter source
- * string and never changes the element's tag name (a chapter is always a
- * chapter).  Pass `null`/empty for `xmlId` or `label` to remove the
- * attribute; omit a key (or pass `undefined`) to leave it unchanged.
- */
-export function updateChapterMetadata(
-  chapterXml: string,
-  changes: {
-    title?: string;
-    xmlId?: string | null;
-    label?: string | null;
-  },
-): string {
-  try {
-    const tree: Root = fromXml(chapterXml);
-    const el = tree.children.find((n) => n.type === "element") as
-      | Element
-      | undefined;
-    if (!el) return chapterXml;
-
-    const newEl: Element = { ...el, attributes: { ...el.attributes } };
-
-    if (changes.xmlId !== undefined) {
-      if (changes.xmlId === null || changes.xmlId === "") {
-        delete newEl.attributes["xml:id"];
-      } else {
-        newEl.attributes["xml:id"] = changes.xmlId;
-      }
-    }
-
-    if (changes.label !== undefined) {
-      if (changes.label === null || changes.label === "") {
-        delete newEl.attributes["label"];
-      } else {
-        newEl.attributes["label"] = changes.label;
-      }
-    }
-
-    if (changes.title !== undefined) {
-      const titleIndex = newEl.children.findIndex(
-        (c) => c.type === "element" && (c as Element).name === "title",
-      );
-      const titleNode: Element = {
-        type: "element",
-        name: "title",
-        attributes: {},
-        children: parseTitleChildren(changes.title),
-      };
-      if (titleIndex === -1) {
-        newEl.children = [titleNode, ...newEl.children];
-      } else {
-        newEl.children = [
-          ...newEl.children.slice(0, titleIndex),
-          titleNode,
-          ...newEl.children.slice(titleIndex + 1),
-        ];
-      }
-    }
-
-    return toXml({ type: "root", children: [newEl] } as Root, XML_SERIALIZE_OPTIONS);
-  } catch {
-    return chapterXml;
-  }
 }
 
 // ---------------------------------------------------------------------------
@@ -1439,95 +733,16 @@ export function buildMarkdownFrontmatter(meta: {
   xmlId: string;
   label: string;
   title?: string;
+  /** Further attributes of the division's element, e.g. `component`. */
+  attrs?: Record<string, string>;
 }): string {
   const lines = [`division: ${meta.type}`, `id: ${meta.xmlId}`];
   if (meta.title) lines.push(`title: ${quoteYamlValue(meta.title)}`);
   if (meta.label) lines.push(`label: ${meta.label}`);
+  for (const [name, value] of Object.entries(meta.attrs ?? {})) {
+    lines.push(`${name}: ${quoteYamlValue(value)}`);
+  }
   return `---\n${lines.join("\n")}\n---`;
-}
-
-/**
- * Extract a markdown division's leading `# heading` text, or `null` if none.
- * Legacy fallback only — titles now live in frontmatter's `title` key; see
- * {@link extractMarkdownDivisionMetadata}. Kept so documents saved before the
- * frontmatter-title migration still show a real title instead of "Untitled".
- */
-export function deriveMarkdownTitle(body: string): string | null {
-  const m = /^[ \t]*#[ \t]+(.*)$/m.exec(body);
-  return m ? m[1].trim() : null;
-}
-
-/**
- * Derive a markdown division's title, type, `xml:id`, and `label` directly from
- * its source — all from the frontmatter block. Markdown analogue of
- * {@link extractDivisionMetadata}; returns `null` when the frontmatter is
- * absent/malformed (both common mid-edit), so callers can skip the update
- * rather than clobber metadata. When the frontmatter carries no `title` (a
- * document predating the migration to a frontmatter title), falls back to the
- * body's leading `# heading`.
- */
-export function extractMarkdownDivisionMetadata(content: string): {
-  title: string;
-  type: DivisionType;
-  xmlId: string;
-  label: string;
-} | null {
-  const parsed = parseMarkdownFrontmatter(content);
-  if (!parsed) return null;
-  return {
-    title: parsed.title || deriveMarkdownTitle(parsed.body) || "",
-    type: parsed.type,
-    xmlId: parsed.xmlId,
-    label: parsed.label,
-  };
-}
-
-/**
- * Update the title, type (`division`), `xml:id`, and `label` of a markdown
- * division — all rewritten in the frontmatter block; the body is left
- * untouched. Markdown analogue of {@link updateSectionMetadata} (which is
- * XML-only and would wrongly inject a `<title>` element). Pass `null`/empty
- * for `label` to clear it; omit a key to leave it unchanged. The `xml:id` is
- * never cleared — it is the division's identity — so an empty value falls
- * back to the record's existing id.
- */
-export function updateMarkdownDivisionMetadata(
-  division: Division,
-  changes: {
-    title?: string;
-    type?: DocumentSectionType;
-    xmlId?: string | null;
-    label?: string | null;
-  },
-): Division {
-  const parsed = parseMarkdownFrontmatter(division.source);
-  const body = parsed ? parsed.body : division.source;
-  const curType = parsed?.type ?? division.type;
-  const curXmlId = parsed?.xmlId ?? division.xmlId;
-  const curLabel = parsed?.label ?? "";
-  const curTitle = parsed?.title || division.title;
-
-  const newType = (changes.type ?? curType) as DivisionType;
-  const effectiveXmlId =
-    (changes.xmlId === undefined ? curXmlId : changes.xmlId ?? "") ||
-    division.xmlId;
-  const newLabel = changes.label === undefined ? curLabel : changes.label ?? "";
-  const newTitle = changes.title ?? curTitle;
-
-  const source = `${buildMarkdownFrontmatter({
-    type: newType,
-    xmlId: effectiveXmlId,
-    label: newLabel,
-    title: newTitle,
-  })}\n${body}`;
-
-  return {
-    ...division,
-    title: newTitle,
-    type: newType,
-    xmlId: effectiveXmlId,
-    source,
-  };
 }
 
 const PRETEXT_HEADER_TAGS: ReadonlySet<string> = new Set(["title", "docinfo"]);
@@ -1671,8 +886,8 @@ const DIVISION_REF_TAG_ALTERNATION = Array.from(DIVISION_REF_TAGS).join("|");
  *   - self-closing:     `<plus:section ref="x"/>`
  *   - expanded-empty:   `<plus:section ref="x"></plus:section>`
  *
- * The expanded form is what an XML round-trip (e.g. through xast in
- * `stripSectionWrapper`/`rewrapSection`) produces, so every consumer must
+ * The expanded form is what an XML round-trip (e.g. through xast) produces,
+ * so every consumer must
  * accept it as well as the canonical self-closing form a user might type.
  */
 function xmlDivisionRefSource(refValue: string | null): string {
@@ -2133,37 +1348,18 @@ export function createDivisionWithId(
 ): Division {
   const tag = type.charAt(0).toUpperCase() + type.slice(1);
   const title = `New ${tag}`;
-  const source = createDivisionContent(type, sourceFormat, title, xmlId);
+  const source = createDivisionContent(sourceFormat);
   return { id: xmlId, xmlId, title, type, sourceFormat, source };
 }
 
 /**
- * Create blank content for a division of the given type and source format.
- * Used when adding a new division — the format is chosen via the TOC's
- * properties form before the division is first saved, so unlike editing an
- * existing division there's no prior source to translate: switching format
- * just starts over from this format's template.
+ * The blank body a new division starts with in `sourceFormat` — its
+ * element (type, title, id) is built from the record, so the body holds only
+ * an empty paragraph to type into for PreTeXt, and nothing at all for LaTeX
+ * and Markdown, where a blank line already is one.
  */
-export function createDivisionContent(
-  type: DivisionType,
-  sourceFormat: SourceFormat,
-  title: string,
-  xmlId: string,
-): string {
-  if (sourceFormat === "latex") {
-    if (type === "introduction" || type === "conclusion") return `% ${title}\n\n`;
-    // Emit the `\label{…}` (LaTeX's spelling of `xml:id`) immediately after the
-    // header, matching updateLatexDivisionMetadata, so a freshly created
-    // division already carries its id rather than only gaining it on first edit.
-    return `${buildLatexDivisionHeader({ macro: type, title, label: xmlId })}\n\n`;
-  }
-  if (sourceFormat === "markdown") {
-    return `${buildMarkdownFrontmatter({ type, xmlId, label: "", title })}\n\n`;
-  }
-  if (type === "introduction" || type === "conclusion") {
-    return `<${type} xml:id="${xmlId}">\n\n\t<p>\n\n\t</p>\n\n</${type}>`;
-  }
-  return `<${type} xml:id="${xmlId}">\n\t<title>${title}</title>\n\n\t<p>\n\n\t</p>\n\n</${type}>`;
+export function createDivisionContent(sourceFormat: SourceFormat): string {
+  return sourceFormat === "pretext" ? "<p>\n\n</p>" : "";
 }
 
 /**
@@ -2563,6 +1759,399 @@ export function getOrphanRoots(
 }
 
 // ---------------------------------------------------------------------------
+// A division's element: split out of source, and wrapped back around it
+// ---------------------------------------------------------------------------
+//
+// A division record stores its *body* only. Its type, `xml:id`, title, label
+// and any other attributes are fields of the record, and everything that needs
+// the division as PreTeXt — assembly, the code editor's read-only wrapper
+// lines, the converters — builds the element from those fields here.
+//
+// `splitDivisionSource` is the inverse, for source that still carries its
+// element: data stored before the fields existed, and anything an importer
+// produces. Both directions live together so they cannot drift apart.
+
+/**
+ * LaTeX division types with no header command: `@pretextbook/latex-pretext`
+ * has no `\introduction{…}`, so their LaTeX source is the body alone and the
+ * element is added around the *converted* body instead.
+ */
+const LATEX_HEADERLESS_TYPES: ReadonlySet<DivisionType> = new Set([
+  "introduction",
+  "conclusion",
+]);
+
+/** The metadata fields of a division — what its element is built from. */
+export type DivisionElementFields = Pick<
+  Division,
+  "type" | "xmlId" | "title" | "sourceFormat" | "label" | "attrs"
+>;
+
+/** A division's source taken apart into its element's fields and its body. */
+export interface DivisionSourceSplit {
+  type: DivisionType;
+  /** Title markup in the source's own format; `""` when there is none. */
+  title: string;
+  label: string;
+  /** The `xml:id` (LaTeX: header `\label`) the source names; `""` if none. */
+  xmlId: string;
+  attrs: Record<string, string>;
+  body: string;
+  /** Whether the source carried an element/header/frontmatter at all. */
+  wrapped: boolean;
+  /** Anything the split had to guess at or move, for a migration to report. */
+  warnings: string[];
+}
+
+/** What to assume for a source that names no type or title of its own. */
+export interface DivisionSplitFallback {
+  type?: DivisionType;
+  title?: string;
+}
+
+/** The closing tag matching an element whose start tag ends at `from`. */
+function matchingCloseTag(xml: string, from: number): StartTag | undefined {
+  let depth = 1;
+  let i = from;
+  for (;;) {
+    const tag = nextTag(xml, i);
+    if (!tag) return undefined;
+    i = tag.close;
+    if (tag.closing) {
+      if (--depth === 0) return tag;
+    } else if (!tag.selfClosing) {
+      depth++;
+    }
+  }
+}
+
+/** Every attribute of `startTag`, unescaped. */
+function readAttributes(startTag: string): Record<string, string> {
+  const out: Record<string, string> = {};
+  for (const m of startTag.matchAll(ATTR_RE)) {
+    if (!(m[1] in out)) out[m[1]] = unescapeAttribute(m[2] ?? m[3] ?? "");
+  }
+  return out;
+}
+
+/**
+ * Remove a leading `<title>` element from `inner`, returning its inner markup
+ * verbatim. A `<title>` that is not the first element stays where it is: it
+ * may be a title of something else (a later `<p>` cannot contain one, but a
+ * comment between may hide anything), and a guess here would move content.
+ */
+function takeLeadingTitle(inner: string): { title: string; body: string } | null {
+  const first = nextTag(inner, 0);
+  if (!first || first.closing || first.name !== "title") return null;
+  const lead = inner.slice(0, first.open);
+  const keepLead = /\S/.test(lead) ? lead : "";
+  if (first.selfClosing) {
+    return { title: "", body: keepLead + inner.slice(first.close) };
+  }
+  const end = matchingCloseTag(inner, first.close);
+  if (!end) return null;
+  return {
+    title: inner.slice(first.close, end.open).trim(),
+    body: keepLead + inner.slice(end.close),
+  };
+}
+
+function splitPretextDivisionSource(source: string): DivisionSourceSplit {
+  const warnings: string[] = [];
+  const start = nextTag(source, 0);
+  if (!start || start.closing || !ALL_DIVISION_TYPES.has(start.name)) {
+    // A bare fragment — the pre-migration root shape — may still lead with
+    // its own <title>.
+    const titled = takeLeadingTitle(source);
+    return {
+      type: "section",
+      title: titled?.title ?? "",
+      label: "",
+      xmlId: "",
+      attrs: {},
+      body: trimBoundaryBlankLines(titled?.body ?? source),
+      wrapped: false,
+      warnings,
+    };
+  }
+
+  const { "xml:id": xmlId = "", label = "", ...attrs } = readAttributes(
+    source.slice(start.open, start.close),
+  );
+
+  let inner: string;
+  let after: string;
+  if (start.selfClosing) {
+    inner = "";
+    after = source.slice(start.close);
+  } else {
+    const end = matchingCloseTag(source, start.close);
+    if (end) {
+      inner = source.slice(start.close, end.open);
+      after = source.slice(end.close);
+    } else {
+      warnings.push(`<${start.name}> is never closed; kept everything after it as body`);
+      inner = source.slice(start.close);
+      after = "";
+    }
+  }
+
+  const titled = takeLeadingTitle(inner);
+  let body = titled ? titled.body : inner;
+
+  // Whatever sat outside the element: comments are kept by moving them into
+  // the body; an XML declaration has no place in a fragment and is dropped.
+  const before = source.slice(0, start.open).replace(/<\?xml[\s\S]*?\?>/, "");
+  if (/\S/.test(before)) {
+    warnings.push("content before the division element was moved into its body");
+    body = `${before.trim()}\n${body}`;
+  }
+  if (/\S/.test(after)) {
+    warnings.push("content after the division element was moved into its body");
+    body = `${body}\n${after.trim()}`;
+  }
+
+  return {
+    type: start.name as DivisionType,
+    title: titled?.title ?? "",
+    label,
+    xmlId,
+    attrs,
+    body: trimBoundaryBlankLines(body),
+    wrapped: true,
+    warnings,
+  };
+}
+
+const LATEX_ENV_HEADER_RE = /^\s*\\begin\{([A-Za-z][A-Za-z-]*)\}/;
+
+function splitLatexDivisionSource(source: string): DivisionSourceSplit {
+  const warnings: string[] = [];
+  const header = parseLatexDivisionHeader(source);
+  if (header && ALL_DIVISION_TYPES.has(header.macro)) {
+    if (header.starred) warnings.push(`dropped the * of \\${header.macro}*`);
+    return {
+      type: header.macro as DivisionType,
+      title: header.title,
+      label: "",
+      xmlId: header.label,
+      attrs: {},
+      body: trimBoundaryBlankLines(source.slice(header.length)),
+      wrapped: true,
+      warnings,
+    };
+  }
+
+  // The environment style: \begin{section} \title{…} … \end{section}.
+  const env = LATEX_ENV_HEADER_RE.exec(source);
+  if (env && ALL_DIVISION_TYPES.has(env[1])) {
+    const endRe = new RegExp(`\\\\end\\{${escapeRegex(env[1])}\\}\\s*$`);
+    const end = endRe.exec(source);
+    if (end) {
+      let inner = source.slice(env[0].length, end.index);
+      let title = "";
+      const titleMatch = /^\s*\\title\{([^}]*)\}/.exec(inner);
+      if (titleMatch) {
+        title = titleMatch[1].trim();
+        inner = inner.slice(titleMatch[0].length);
+      }
+      let xmlId = "";
+      const labelMatch = /^\s*\\label\{([^}]*)\}/.exec(inner);
+      if (labelMatch) {
+        xmlId = labelMatch[1].trim();
+        inner = inner.slice(labelMatch[0].length);
+      }
+      return {
+        type: env[1] as DivisionType,
+        title,
+        label: "",
+        xmlId,
+        attrs: {},
+        body: trimBoundaryBlankLines(inner),
+        wrapped: true,
+        warnings,
+      };
+    }
+  }
+
+  return {
+    type: "section",
+    title: "",
+    label: "",
+    xmlId: "",
+    attrs: {},
+    body: trimBoundaryBlankLines(source),
+    wrapped: false,
+    warnings,
+  };
+}
+
+/** Frontmatter keys that are fields of the record rather than attributes. */
+const MARKDOWN_FIELD_KEYS: ReadonlySet<string> = new Set([
+  "division",
+  "id",
+  "xmlid",
+  "xml:id",
+  "title",
+  "label",
+]);
+
+function splitMarkdownDivisionSource(source: string): DivisionSourceSplit {
+  const parsed = parseMarkdownFrontmatter(source);
+  if (!parsed) {
+    return {
+      type: "section",
+      title: "",
+      label: "",
+      xmlId: "",
+      attrs: {},
+      body: trimBoundaryBlankLines(source),
+      wrapped: false,
+      warnings: [],
+    };
+  }
+  const attrs: Record<string, string> = {};
+  const block = MARKDOWN_FRONTMATTER_RE.exec(source)![1];
+  for (const line of block.split(/\r?\n/)) {
+    const kv = /^[ \t]*([A-Za-z_][\w.:-]*)[ \t]*:[ \t]*(.*)$/.exec(line);
+    if (kv && !MARKDOWN_FIELD_KEYS.has(kv[1])) attrs[kv[1]] = unquoteYamlValue(kv[2]);
+  }
+  return {
+    type: parsed.type,
+    title: parsed.title,
+    label: parsed.label,
+    xmlId: parsed.xmlId,
+    attrs,
+    body: trimBoundaryBlankLines(parsed.body),
+    wrapped: true,
+    warnings: [],
+  };
+}
+
+/**
+ * Take a division's source apart into the fields of its element and its body,
+ * in whichever way its format spells the element: a PreTeXt wrapper element
+ * (`<section xml:id="…" label="…"><title>…</title>…</section>`), a LaTeX
+ * header (`\section{…}\label{…}`, or the `\begin{section}` environment), or
+ * Markdown frontmatter. The inverse of {@link wrapDivisionSource}.
+ *
+ * Source with no element of its own (a LaTeX introduction, a bare fragment)
+ * comes back as all body, with `fallback`'s type and title. The body is kept
+ * byte for byte apart from blank lines at its ends — a PreTeXt wrapper is
+ * located with the same tolerant scanner assembly uses, never parsed and
+ * reserialized, so an author's formatting survives.
+ */
+export function splitDivisionSource(
+  source: string,
+  sourceFormat: SourceFormat,
+  fallback: DivisionSplitFallback = {},
+): DivisionSourceSplit {
+  const split =
+    sourceFormat === "latex"
+      ? splitLatexDivisionSource(source)
+      : sourceFormat === "markdown"
+        ? splitMarkdownDivisionSource(source)
+        : splitPretextDivisionSource(source);
+  if (!split.wrapped) {
+    return {
+      ...split,
+      type: fallback.type ?? split.type,
+      title: split.title || fallback.title || "",
+    };
+  }
+  return split;
+}
+
+/** `xml:id`, `label` and every other attribute, as a start tag writes them. */
+function divisionAttributeString(d: DivisionElementFields): string {
+  const pairs: [string, string][] = [];
+  if (d.xmlId) pairs.push(["xml:id", d.xmlId]);
+  if (d.label) pairs.push(["label", d.label]);
+  for (const [name, value] of Object.entries(d.attrs ?? {})) {
+    if (name !== "xml:id" && name !== "label") pairs.push([name, value]);
+  }
+  return pairs.map(([name, value]) => ` ${name}="${escapeAttribute(value)}"`).join("");
+}
+
+/**
+ * The text a division's element adds around its body, in its own format:
+ * `before` is the PreTeXt start tag and `<title>`, the LaTeX header line, or
+ * the Markdown frontmatter; `after` is the PreTeXt end tag (empty otherwise).
+ * {@link wrapDivisionSource} joins them to the body; the code editor shows
+ * them as read-only lines around it.
+ */
+export function divisionHeaderParts(d: DivisionElementFields): {
+  before: string;
+  after: string;
+} {
+  switch (d.sourceFormat) {
+    case "latex":
+      if (LATEX_HEADERLESS_TYPES.has(d.type)) return { before: "", after: "" };
+      return {
+        before: `${buildLatexDivisionHeader({ macro: d.type, title: d.title, label: d.xmlId })}\n\n`,
+        after: "",
+      };
+    case "markdown":
+      return {
+        before: `${buildMarkdownFrontmatter({
+          type: d.type,
+          xmlId: d.xmlId,
+          label: d.label ?? "",
+          title: d.title,
+          attrs: d.attrs,
+        })}\n\n`,
+        after: "",
+      };
+    default: {
+      const title = d.title ? `<title>${d.title}</title>\n` : "";
+      return {
+        before: `<${d.type}${divisionAttributeString(d)}>\n${title}`,
+        after: `\n</${d.type}>`,
+      };
+    }
+  }
+}
+
+/**
+ * {@link divisionHeaderParts} as the lines the code editor draws, read-only,
+ * around a division's body — without the blank separator lines, which are
+ * the converter's business rather than anything to show.
+ */
+export function divisionWrapperLines(d: DivisionElementFields): {
+  before: string[];
+  after: string[];
+} {
+  const { before, after } = divisionHeaderParts(d);
+  const lines = (text: string) =>
+    text.split("\n").filter((line) => line.trim() !== "");
+  return { before: lines(before), after: lines(after) };
+}
+
+/**
+ * A division's complete source in its own format — its body with the element
+ * built from its fields around it (see {@link divisionHeaderParts}). This is
+ * what the converters are handed: a Markdown division's frontmatter decides
+ * more than its wrapper (a slideshow's `##` means a slide; a title shifts every
+ * heading down a level), so converting the bare body would not be the same
+ * document.
+ */
+export function wrapDivisionSource(d: Division): string {
+  const { before, after } = divisionHeaderParts(d);
+  const body =
+    d.sourceFormat === "pretext" ? d.source : d.source.replace(/^(?:[ \t]*\r?\n)+/, "");
+  return `${before}${body}${after}`;
+}
+
+/**
+ * A division's title as plain text, for the TOC and the title bar: markup
+ * stripped from a PreTeXt title, LaTeX/Markdown titles shown as written.
+ */
+export function displayTitle(d: Pick<Division, "title" | "sourceFormat">): string {
+  if (d.sourceFormat !== "pretext") return d.title.trim();
+  return unescapeAttribute(d.title.replace(/<[^>]*>/g, "")).replace(/\s+/g, " ").trim();
+}
+
+// ---------------------------------------------------------------------------
 // Full project source assembly
 // ---------------------------------------------------------------------------
 
@@ -2772,8 +2361,9 @@ function ensureRootLabel(xml: string): string {
  * Keyed by `xml:id` rather than by source text, so the cache holds one entry
  * per division and is bounded by the size of the project rather than by how
  * long the author has been typing. A stale entry costs a re-conversion, never a
- * wrong answer: the stored source must equal the division's current source for
- * the entry to be used at all.
+ * wrong answer: the stored source — the division *wrapped*, so a title or type
+ * edit counts as a change too — must equal the division's current one for the
+ * entry to be used at all.
  */
 interface ConvertedDivision {
   source: string;
@@ -2790,11 +2380,69 @@ const conversionCache = new Map<string, ConvertedDivision>();
  */
 const CONVERSION_CACHE_LIMIT = 2000;
 
+/** A LaTeX/Markdown fragment converted to PreTeXt, or the failure as a comment. */
+function convertFragment(source: string, sourceFormat: SourceFormat, what: string): string {
+  const { pretextSource, pretextError } = derivePretextContent(source, sourceFormat);
+  return pretextSource ?? `<!-- conversion error: ${what}: ${pretextError} -->`;
+}
+
 /**
- * A division's own PreTeXt XML: its source as-is when it is already PreTeXt,
- * and the converter's output — the division's own element included — when it
- * is LaTeX or Markdown. Conversion failures come back as an XML comment, so
- * one bad division never takes the surrounding document down with it.
+ * A LaTeX title converted to PreTeXt inline markup: the converter makes a
+ * paragraph of anything it is given, so the `<p>` around it is taken off.
+ */
+function convertLatexTitle(title: string): string {
+  const xml = derivePretextContent(title, "latex").pretextSource ?? title;
+  return /^\s*<p>\s*([\s\S]*?)\s*<\/p>\s*$/.exec(xml)?.[1] ?? xml.trim();
+}
+
+/**
+ * `xml` with the division's own attributes set on its first element — the
+ * converters' output carries whatever the synthesized header could say, and
+ * LaTeX can say no `@label` at all (its `\label` is the `xml:id`), so the
+ * record's values are written over it here.
+ */
+function setDivisionAttributes(xml: string, d: DivisionElementFields): string {
+  const tag = nextTag(xml, 0);
+  if (!tag || tag.closing) return xml;
+  const attrs: PlaceholderAttr[] = [];
+  if (d.xmlId) attrs.push({ name: "xml:id", value: escapeAttribute(d.xmlId) });
+  if (d.label) attrs.push({ name: "label", value: escapeAttribute(d.label) });
+  for (const [name, value] of Object.entries(d.attrs ?? {})) {
+    if (name !== "xml:id" && name !== "label") {
+      attrs.push({ name, value: escapeAttribute(value) });
+    }
+  }
+  return (
+    xml.slice(0, tag.open) +
+    setAttributes(xml.slice(tag.open, tag.close), tag.selfClosing, attrs) +
+    xml.slice(tag.close)
+  );
+}
+
+/**
+ * A LaTeX division's PreTeXt. Its header (`\section{…}\label{…}`) is
+ * converted along with the body, exactly as the author's own LaTeX would be,
+ * so the title's math and macros come out as the converter writes them. A
+ * type with no header command (an introduction), or one the converter does not
+ * recognise as a header, instead has its body converted alone and the element
+ * built around that.
+ */
+function latexDivisionToPretext(d: Division): string {
+  if (!LATEX_HEADERLESS_TYPES.has(d.type)) {
+    const xml = convertFragment(wrapDivisionSource(d), "latex", d.xmlId);
+    if (nextTag(xml, 0)?.name === d.type) return setDivisionAttributes(xml, d);
+  }
+  const body = convertFragment(d.source, "latex", d.xmlId);
+  const title = d.title ? `<title>${convertLatexTitle(d.title)}</title>\n` : "";
+  return `<${d.type}${divisionAttributeString(d)}>\n${title}${body}\n</${d.type}>`;
+}
+
+/**
+ * A division's own PreTeXt XML, its element included: built from its fields
+ * around its body when it is PreTeXt, and the converter's output for its
+ * wrapped source when it is LaTeX or Markdown. Conversion failures come back
+ * as an XML comment, so one bad division never takes the surrounding document
+ * down with it.
  *
  * Conversions are cached because assembly walks the *whole* project on every
  * keystroke, while only the division being typed in has actually changed.
@@ -2802,33 +2450,20 @@ const CONVERSION_CACHE_LIMIT = 2000;
  * 870KB LaTeX book; with the cache it is the ~25ms of converting the one that
  * changed.
  */
-function divisionToPretext(division: Division): string {
-  if (division.sourceFormat === "pretext") return division.source;
+export function divisionToPretext(division: Division): string {
+  if (division.sourceFormat === "pretext") return wrapDivisionSource(division);
 
+  const wrapped = wrapDivisionSource(division);
   const cached = conversionCache.get(division.xmlId);
-  if (cached && cached.source === division.source) return cached.xml;
+  if (cached && cached.source === wrapped) return cached.xml;
 
-  let xml: string;
-  if (division.sourceFormat === "markdown") {
-    // A markdown division is a full markdown file (frontmatter + body); the
-    // converter emits the complete `<type xml:id="..." label="...">` element
-    // from the frontmatter, so the source is converted as-is with no wrapper
-    // to strip or re-add here.
-    const { pretextSource, pretextError } = derivePretextContent(
-      division.source,
-      "markdown",
-    );
-    xml = pretextSource ?? `<!-- conversion error: ${pretextError} -->`;
-  } else {
-    // LaTeX: convert the source and tag it with the division's authored type
-    // (the `\label` becomes the `xml:id`) — see latexDivisionToTaggedPretext.
-    xml =
-      latexDivisionToTaggedPretext(division) ??
-      `<!-- conversion error: ${division.xmlId} -->`;
-  }
+  const xml =
+    division.sourceFormat === "markdown"
+      ? setDivisionAttributes(convertFragment(wrapped, "markdown", division.xmlId), division)
+      : latexDivisionToPretext(division);
 
   if (conversionCache.size >= CONVERSION_CACHE_LIMIT) conversionCache.clear();
-  conversionCache.set(division.xmlId, { source: division.source, xml });
+  conversionCache.set(division.xmlId, { source: wrapped, xml });
   return xml;
 }
 
@@ -3337,144 +2972,35 @@ export function assembleSnippetPreviewSource(
 // ---------------------------------------------------------------------------
 
 /**
- * Normalize a division pool right after it arrives from the host, before
- * it's seeded into the store as the editing buffer.
+ * Normalize a division pool right after it arrives from the host, before it's
+ * seeded into the store as the editing buffer.
  *
- * Hosts aren't required to persist a division's `title` separately from its
- * PreTeXt source — it's meant to be read from the `<title>` element inside
- * `source` — so a freshly loaded division's `title` field can be blank even
- * though its source already has a real title. Backfill it here so the TOC
- * doesn't show "Untitled" for content that already has one.
- *
- * The root division additionally needs an `<article>`/`<book>`/`<slideshow>`
- * wrapper element. A host that hands back a brand-new project's root division
- * as a bare body fragment (no wrapper at all) gets one added here, named by
- * `projectType` (defaulting to `"article"`). The wrapper's `<title>` falls back
- * to the host's `projectTitle` when the fragment carries no title of its own,
- * rather than the placeholder `"Untitled"`.
+ * A division's type and title are fields of its record, but a host need not
+ * have stored a type for every division — so one that arrives without gets
+ * the root's `projectType` (an `"article"` if that is unknown too) or, for any
+ * other division, `"section"`. Nothing is read out of, or written into, a
+ * division's source.
  */
-/**
- * Strip a leading `<title>...</title>` element off a bare (unwrapped) PreTeXt
- * fragment, returning its text alongside the remaining body. A fragment with
- * several top-level siblings generally isn't well-formed XML on its own (only
- * one root element is allowed), so this matches by string rather than
- * parsing — mirroring {@link stripWrapperByRegex}'s fallback approach.
- */
-/**
- * Whether `source` already opens with a root division element
- * (`<article>`/`<book>`/`<slideshow>`).
- *
- * Deliberately a string test rather than a parse, because it has to hold for a
- * source that is *not* well-formed — which is the whole case it exists to
- * protect. One unterminated attribute value anywhere in the document (say a
- * `component="teacher` missing its closing quote) is enough to make
- * {@link extractDivisionMetadata} return null; reading that as "this root has
- * no wrapper yet" wraps an already-wrapped document a second time, and since
- * normalization runs on every load it does so again on every load.
- */
-function hasRootDivisionWrapper(source: string): boolean {
-  const name = source.trimStart().match(/^<([A-Za-z_][\w.:-]*)/)?.[1];
-  return name !== undefined && ROOT_DIVISION_TYPES.has(name as DivisionType);
-}
-
-function extractLeadingTitle(content: string): { title: string; body: string } {
-  const trimmed = content.trim();
-  const m = trimmed.match(/^<title\b[^>]*>([\s\S]*?)<\/title>\s*/);
-  if (!m) return { title: "", body: trimmed };
-  return { title: m[1].trim(), body: trimmed.slice(m[0].length) };
-}
-
 export function normalizeDivisionsOnLoad(
   divisions: Division[],
   rootDivisionId: string | undefined,
   projectType: RootDivisionType | undefined,
-  projectTitle?: string,
 ): Division[] {
-  // Checked rather than cast: `projectType` comes from the host, which may be
-  // untyped JavaScript, and this value is written straight into a tag name.
-  const wrapperType: RootDivisionType = isRootDivisionType(projectType)
-    ? projectType
-    : "article";
-
   return divisions.map((division) => {
-    if (division.sourceFormat === "markdown") {
-      // Markdown divisions keep their title (and other structural metadata)
-      // in frontmatter; only backfill a blank title so the TOC doesn't show
-      // "Untitled" for content that already names itself — and the type, which
-      // hosts generally don't store either (see the pretext branch below).
-      const mdMeta = !division.title || !division.type
-        ? extractMarkdownDivisionMetadata(division.source)
-        : null;
-      if (mdMeta) {
-        return {
-          ...division,
-          title: division.title || mdMeta.title,
-          type: division.type || mdMeta.type,
-        };
-      }
-      return division;
-    }
-    if (division.sourceFormat === "latex") {
-      // LaTeX divisions keep their title in the source header (the first-line
-      // `\section{…}` or a `\title{…}` inside `\begin{section}`); backfill a
-      // blank title from there so the TOC doesn't show "Untitled". There is no
-      // type to recover: a LaTeX division's PreTeXt type isn't represented in
-      // its source at all (it's applied when the conversion is tagged).
-      //
-      // The header is also rewritten from what can be read out of it, which is
-      // where a division imported with a malformed one (a `\label` inside the
-      // title argument and so a stray `}` after it) gets repaired: the header
-      // line is locked in the code editor, so an author who never opens the
-      // properties form has no other way to reach it. This also installs the
-      // blank line the converter needs below the header.
-      const source = normalizeLatexDivisionSource(division.source);
-      const title =
-        division.title || extractLatexDivisionTitle(source) || division.title;
-      if (source === division.source && title === division.title) return division;
-      return { ...division, source, title };
-    }
-    if (division.sourceFormat !== "pretext") return division;
-
-    const meta = extractDivisionMetadata(division.source);
-
-    if (
-      division.xmlId === rootDivisionId &&
-      !(meta && ROOT_DIVISION_TYPES.has(meta.type)) &&
-      // A root whose source is malformed parses to no metadata at all, which is
-      // indistinguishable here from a genuinely unwrapped fragment — so ask the
-      // text directly before adding a wrapper it may already have.
-      !hasRootDivisionWrapper(division.source)
-    ) {
-      // The bare fragment may already carry its own leading <title> even
-      // though it was never wrapped in <article>/<book> — use that ahead of
-      // the host's project title (and "Untitled" only as a last resort) so a
-      // real title isn't discarded, and drop it from the body so it isn't
-      // duplicated once it's reinserted as the wrapper's <title>.
-      const { title: embeddedTitle, body } = extractLeadingTitle(division.source);
-      const title =
-        division.title || embeddedTitle || projectTitle || "Untitled";
-      return {
-        ...division,
-        type: wrapperType,
-        title,
-        source: `<${wrapperType} xml:id="${division.xmlId}">\n<title>${title}</title>\n\n${body}\n</${wrapperType}>`,
-      };
-    }
-
-    // A PreTeXt division carries its type in its own source — the wrapper
-    // element's tag name — and hosts that derive it from there (the Rails app
-    // does) only bother for the root, leaving every other division typeless.
-    // Recover it here so the TOC can tell a chapter from a subsection: type
-    // drives the row's label, the `<plus:TYPE ref/>` placeholders written for
-    // it, and which types its children may be.
-    if (meta && ((!division.title && meta.title) || !division.type)) {
-      return {
-        ...division,
-        title: division.title || meta.title,
-        type: division.type || meta.type,
-      };
-    }
-    return division;
+    if (division.type && typeof division.title === "string") return division;
+    const isRoot = division.xmlId === rootDivisionId;
+    // Checked rather than cast: `projectType` comes from the host, which may be
+    // untyped JavaScript, and this value is written straight into a tag name.
+    const fallback: DivisionType = isRoot
+      ? isRootDivisionType(projectType)
+        ? projectType
+        : "article"
+      : "section";
+    return {
+      ...division,
+      type: division.type || fallback,
+      title: division.title ?? "",
+    };
   });
 }
 

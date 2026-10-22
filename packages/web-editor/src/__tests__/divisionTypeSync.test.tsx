@@ -1,10 +1,9 @@
 /**
- * A child division's type is written down twice: in the division's own source
- * header, and in the `<plus:TYPE ref="…"/>` placeholder its parent uses to
- * position it. The assembled document reads only the former — the placeholder's
- * tag is a mirror — so the two have to be kept equal from whichever side the
- * author edits, or the TOC and the source start disagreeing about what a
- * division is.
+ * A child division's type is written down twice: on the division's own record,
+ * and in the `<plus:TYPE ref="…"/>` placeholder its parent uses to position it.
+ * The assembled document reads only the former — the placeholder's tag is a
+ * mirror — so the two have to be kept equal from whichever side the author
+ * edits, or the TOC and the source start disagreeing about what a division is.
  *
  * These exercise both directions end to end, and the malformed case that made
  * the TOC direction land on the wrong line: a stray copy of the include pasted
@@ -19,6 +18,7 @@ import type { Division } from "../types/sections";
 import type { EditorContentChange } from "../types/editor";
 import type { DivisionChanges } from "../store/editorStore";
 import { openSettings } from "./tocTestUtils";
+import { legacyDivisions } from "./legacyDivision";
 
 // Monaco loads itself from a CDN. Standing in a plain textarea keeps the real
 // `onChange` wiring (which is what's under test for the source direction) while
@@ -47,7 +47,7 @@ globalThis.ResizeObserver =
 
 /** An article that includes one handout, both authored in LaTeX. */
 function latexProject(handoutBody = ""): Division[] {
-  return [
+  return legacyDivisions([
     {
       id: "1",
       xmlId: "doc",
@@ -64,7 +64,7 @@ function latexProject(handoutBody = ""): Division[] {
       sourceFormat: "latex",
       source: `\\handout{Day 1}\\label{day-1}\n\nActivities.\n${handoutBody}`,
     },
-  ];
+  ]);
 }
 
 function renderEditors(divisions: Division[]) {
@@ -86,7 +86,12 @@ function renderEditors(divisions: Division[]) {
     const forDivision = changes.filter((c) => "xmlId" in c && c.xmlId === xmlId);
     return forDivision[forDivision.length - 1]?.source;
   };
-  return { changes, updates, sourceOf };
+  /** The last type reported for `xmlId`'s record, if any. */
+  const typeOf = (xmlId: string) => {
+    const typed = updates.filter((u) => u.xmlId === xmlId && u.changes.type);
+    return typed[typed.length - 1]?.changes.type;
+  };
+  return { changes, updates, sourceOf, typeOf };
 }
 
 /** The TOC row whose title is `label`. */
@@ -115,19 +120,18 @@ function typeIntoEditor(source: string) {
 }
 
 describe("retyping a division from the TOC", () => {
-  it("rewrites the child's own header and the parent's include macro", () => {
-    const { sourceOf } = renderEditors(latexProject());
+  it("retypes the child's record and rewrites the parent's include macro", () => {
+    const { sourceOf, typeOf } = renderEditors(latexProject());
     retypeFromToc("Day 1", "worksheet");
 
-    expect(sourceOf("day-1")).toContain("\\worksheet{Day 1}\\label{day-1}");
+    expect(typeOf("day-1")).toBe("worksheet");
     expect(sourceOf("doc")).toContain("\\plus{worksheet}{day-1}");
     expect(sourceOf("doc")).not.toContain("\\plus{handout}{day-1}");
   });
 
   // `\plus{handout}{day-1}` inside day-1's own body is malformed markup, not a
   // placement. It used to be found as day-1's own "parent", so the type change
-  // rewrote *that* line, left the real parent's macro alone, and clobbered the
-  // header rewrite that had just been emitted for the same division.
+  // rewrote *that* line and left the real parent's macro alone.
   //
   // Which one won was decided by pool order — the host lists divisions with no
   // ORDER BY at all — so both orders are checked: with the root first the old
@@ -137,15 +141,15 @@ describe("retyping a division from the TOC", () => {
     ["root first", (d: Division[]) => d],
     ["child first", (d: Division[]) => [...d].reverse()],
   ])("ignores a stray self-referencing include inside the child (%s)", (_, order) => {
-    const { sourceOf } = renderEditors(
+    const { sourceOf, typeOf } = renderEditors(
       order(latexProject("\n\\plus{handout}{day-1}\n")),
     );
     retypeFromToc("Day 1", "worksheet");
 
     expect(sourceOf("doc")).toContain("\\plus{worksheet}{day-1}");
-    expect(sourceOf("day-1")).toContain("\\worksheet{Day 1}\\label{day-1}");
+    expect(typeOf("day-1")).toBe("worksheet");
     // The stray line is left exactly as authored, to be fixed by its author.
-    expect(sourceOf("day-1")).toContain("\\plus{handout}{day-1}");
+    expect(sourceOf("day-1")).toBeUndefined();
   });
 
   it("ignores an include shown as an example in a verbatim block", () => {
@@ -156,8 +160,7 @@ describe("retyping a division from the TOC", () => {
       title: "How to include",
       type: "section",
       sourceFormat: "latex",
-      source:
-        "\\section{How to include}\\label{howto}\n\n\\begin{verbatim}\n\\plus{handout}{day-1}\n\\end{verbatim}\n",
+      source: "\\begin{verbatim}\n\\plus{handout}{day-1}\n\\end{verbatim}\n",
     });
     divisions[0].source = divisions[0].source.replace(
       "\\plus{handout}{day-1}",
@@ -172,13 +175,11 @@ describe("retyping a division from the TOC", () => {
 });
 
 describe("retyping a division from its parent's include macro", () => {
-  it("rewrites the child's own header and record type", () => {
+  it("retypes the child's record", () => {
     const { sourceOf, updates } = renderEditors(latexProject());
-    typeIntoEditor(
-      "\\article{Main}\\label{doc}\n\nSome prose.\n\n\\plus{worksheet}{day-1}\n",
-    );
+    typeIntoEditor("Some prose.\n\n\\plus{worksheet}{day-1}\n");
 
-    expect(sourceOf("day-1")).toContain("\\worksheet{Day 1}\\label{day-1}");
+    expect(sourceOf("day-1")).toBeUndefined();
     expect(
       updates.find((u) => u.xmlId === "day-1")?.changes.type,
     ).toBe("worksheet");
@@ -191,9 +192,7 @@ describe("retyping a division from its parent's include macro", () => {
       "Handout",
     );
 
-    typeIntoEditor(
-      "\\article{Main}\\label{doc}\n\nSome prose.\n\n\\plus{worksheet}{day-1}\n",
-    );
+    typeIntoEditor("Some prose.\n\n\\plus{worksheet}{day-1}\n");
 
     // The TOC labels a row with its division's type, so this is the same fact
     // the properties form would show — read where a user would see it.
@@ -207,7 +206,7 @@ describe("retyping a division from its parent's include macro", () => {
     // `<plus:division ref="…"/>` names no type, so its "section" reading is a
     // default rather than a choice — acting on it would silently demote a
     // worksheet the author picked in the TOC.
-    const divisions: Division[] = [
+    const divisions: Division[] = legacyDivisions([
       {
         id: "1",
         xmlId: "doc",
@@ -225,11 +224,9 @@ describe("retyping a division from its parent's include macro", () => {
         sourceFormat: "pretext",
         source: '<worksheet xml:id="ws"><title>Worksheet</title></worksheet>',
       },
-    ];
+    ]);
     const { sourceOf, updates } = renderEditors(divisions);
-    typeIntoEditor(
-      '<article xml:id="doc"><title>Main</title><plus:division ref="ws"/></article>',
-    );
+    typeIntoEditor('<plus:division ref="ws"/>');
 
     expect(sourceOf("ws")).toBeUndefined();
     expect(updates.some((u) => u.xmlId === "ws")).toBe(false);
@@ -242,11 +239,9 @@ describe("retyping a division from its parent's include macro", () => {
     const { sourceOf, updates } = renderEditors(divisions);
     // Select the handout so its source is what the code editor edits.
     fireEvent.click(screen.getByText("Day 1"));
-    typeIntoEditor(
-      "\\handout{Day 1}\\label{day-1}\n\nActivities.\n\\plus{worksheet}{day-1}\n",
-    );
+    typeIntoEditor("Activities.\n\\plus{worksheet}{day-1}\n");
 
-    expect(sourceOf("day-1")).toContain("\\handout{Day 1}");
+    expect(sourceOf("day-1")).toContain("\\plus{worksheet}{day-1}");
     expect(
       updates.some((u) => u.xmlId === "day-1" && u.changes.type === "worksheet"),
     ).toBe(false);

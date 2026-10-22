@@ -15,6 +15,8 @@ import Editors from "../components/Editors";
 import type { Division } from "../types/sections";
 import type { EditorContentChange } from "../types/editor";
 import { tocRow } from "./tocTestUtils";
+import { legacyDivisions } from "./legacyDivision";
+import { wrapDivisionSource } from "../sectionUtils";
 
 // Monaco loads itself from a CDN; the TOC is what's under test here.
 vi.mock("@monaco-editor/react", () => ({
@@ -30,7 +32,7 @@ class ResizeObserverStub {
 }
 globalThis.ResizeObserver = globalThis.ResizeObserver ?? (ResizeObserverStub as never);
 
-const bookDivisions: Division[] = [
+const bookDivisions: Division[] = legacyDivisions([
   {
     id: "1",
     xmlId: "bk",
@@ -48,7 +50,7 @@ const bookDivisions: Division[] = [
     sourceFormat: "pretext",
     source: '<chapter xml:id="ch">\n<title>Chapter one</title>\n</chapter>',
   },
-];
+]);
 
 function renderEditors(divisions: Division[]) {
   const added: Division[] = [];
@@ -104,7 +106,7 @@ describe("adding a division", () => {
     saveDraft();
     expect(added).toHaveLength(1);
     expect(added[0].type).toBe("chapter");
-    expect(added[0].source).toContain("<chapter ");
+    expect(wrapDivisionSource(added[0])).toContain("<chapter ");
 
     // The placeholder written into the parent names the same type.
     const parentChange = changes.find((c) => "xmlId" in c && c.xmlId === "bk");
@@ -120,25 +122,7 @@ describe("adding a division", () => {
 
     saveDraft();
     expect(added[0].type).toBe("section");
-    expect(added[0].source).toContain("<section ");
-  });
-
-  it("restricts choices for divisions the host sent without a type", () => {
-    // How a real host loads a project: only the root carries a type, because
-    // every other division's type lives in its own source. `Editors` recovers
-    // them on load — without that the TOC can't tell a chapter from a
-    // subsection and offers every type everywhere.
-    const untyped = bookDivisions.map((d, i) =>
-      i === 0 ? d : { ...d, type: undefined as unknown as Division["type"] },
-    );
-    renderEditors(untyped);
-
-    expect(screen.getByText("Chapter one")).toBeInTheDocument();
-    addDivisionUnder("Chapter one");
-    const options = [...openTypeSelect().options].map((o) => o.value);
-    expect(options).toContain("section");
-    expect(options).not.toContain("chapter");
-    expect(options).not.toContain("part");
+    expect(wrapDivisionSource(added[0])).toContain("<section ");
   });
 
   it("creates a section under an article root", () => {
@@ -149,7 +133,7 @@ describe("adding a division", () => {
         title: "Document",
         type: "article",
         sourceFormat: "pretext",
-        source: '<article xml:id="doc">\n<title>Document</title>\n</article>',
+        source: "",
       },
     ]);
     addDivisionUnder("Document");

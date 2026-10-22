@@ -18,6 +18,7 @@ import {
   removeDivisionRef,
   renameDivisionRef,
   findDivisionParent,
+  wrapDivisionSource,
 } from '../sectionUtils'
 import type { Division } from '../types/sections'
 
@@ -244,25 +245,13 @@ describe('canEmbedDivisionRefs', () => {
 })
 
 describe('createDivisionContent / createDivisionWithId', () => {
-  it('emits a titled element carrying the xml:id for pretext', () => {
-    const content = createDivisionContent('section', 'pretext', 'My Title', 's1')
-    expect(content).toContain('<section xml:id="s1">')
-    expect(content).toContain('<title>My Title</title>')
+  it('gives a pretext division an empty paragraph and nothing of its element', () => {
+    expect(createDivisionContent('pretext')).toBe('<p>\n\n</p>')
   })
 
-  it('omits the title for divisions that do not take one', () => {
-    expect(createDivisionContent('introduction', 'pretext', 'Ignored', 'i1')).not.toContain(
-      '<title>',
-    )
-  })
-
-  it('emits a labelled macro for latex and frontmatter for markdown', () => {
-    expect(createDivisionContent('section', 'latex', 'My Title', 's1')).toContain(
-      '\\section{My Title}\\label{s1}',
-    )
-    const markdown = createDivisionContent('section', 'markdown', 'My Title', 's1')
-    expect(markdown).toContain('division: section')
-    expect(markdown).toContain('id: s1')
+  it('gives latex and markdown divisions an empty body', () => {
+    expect(createDivisionContent('latex')).toBe('')
+    expect(createDivisionContent('markdown')).toBe('')
   })
 
   it('builds a division whose id matches the ref it was created for', () => {
@@ -270,7 +259,7 @@ describe('createDivisionContent / createDivisionWithId', () => {
     expect(division.xmlId).toBe('s1')
     expect(division.id).toBe('s1')
     expect(division.type).toBe('section')
-    expect(division.source).toContain('xml:id="s1"')
+    expect(wrapDivisionSource(division)).toContain('<section xml:id="s1">')
   })
 })
 

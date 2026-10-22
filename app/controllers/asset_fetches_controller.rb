@@ -3,7 +3,7 @@ class AssetFetchesController < ApplicationController
   # browser doesn't hit CORS) without persisting anything. The editor commits
   # the returned bytes through the existing multipart-upload path (a PATCH to
   # the project carrying `assets_attributes`), which remains the sole creator
-  # of Asset/ActiveStorage records.
+  # asset (Content) and ActiveStorage records.
   def create
     url = params[:url].presence
     return render_error("URL is required") unless url

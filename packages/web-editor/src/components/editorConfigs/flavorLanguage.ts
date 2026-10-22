@@ -1,5 +1,4 @@
 import type { PretextFlavorLanguage } from "@pretextbook/latex-style-pretext";
-import { isRangeWithin, type LineRange } from "../lockedRegion";
 import type {
   CleanSupport,
   LspCodeAction,
@@ -63,18 +62,9 @@ export interface FlavorRegistrationOptions {
    */
   clean?: CleanSupport;
   /**
-   * The span of the model the user may edit, when the format locks a
-   * structural region (see `lockedRegion.ts`).  A quick fix whose edit falls
-   * outside it is not offered: the constrained-editor plugin would revert it
-   * and the collab guard would drop it, so a lightbulb there is a promise the
-   * editor can't keep.
-   */
-  getEditableRange?: (model: any) => LineRange | null;
-  /**
    * Whole-buffer cleanup, exposed as an editor action (command palette,
    * right-click menu).  Supplied by the format's config rather than run from
-   * here, because applying fixes needs the model's locked geometry — see
-   * `latexClean.ts`.
+   * here — see `latexClean.ts`.
    */
   cleanAll?: { label: string; run: () => void };
 }
@@ -204,14 +194,13 @@ const wireFlavorDiagnostics = (
  * Quick fixes for the cleanup findings under the cursor.
  *
  * The core also returns a whole-file "Clean up LaTeX" source action, which is
- * dropped here: it is one edit spanning the entire document, which the locked
- * structural line rejects and which a collab binding would replay as
- * delete-everything-then-reinsert.  The `cleanAll` action below applies the
+ * dropped here: it is one edit spanning the entire document, which a collab
+ * binding would replay as delete-everything-then-reinsert.  The `cleanAll` action below applies the
  * same fixes incrementally instead.
  */
 const registerCleanCodeActions = (
   monaco: any,
-  { clean, monacoLanguageId, getEditableRange }: FlavorRegistrationOptions,
+  { clean, monacoLanguageId }: FlavorRegistrationOptions,
 ) => {
   if (!clean) return null;
 
@@ -234,11 +223,8 @@ const registerCleanCodeActions = (
         return empty;
       }
 
-      const editable = getEditableRange?.(model) ?? null;
       const actions = lspActions
-        .map((action) =>
-          toMonacoCodeAction(monaco, model, uri, action, editable),
-        )
+        .map((action) => toMonacoCodeAction(monaco, model, uri, action))
         .filter((action) => action !== null);
 
       return { actions, dispose: () => {} };
@@ -364,16 +350,14 @@ const toLspRange = (range: any): LspRange => ({
 
 /**
  * Translates one LSP code action.  Returns null for an action this editor
- * cannot honour: a source-wide action (see `registerCleanCodeActions`), one
- * whose edits don't apply to this model, or one that would write outside the
- * editable region.
+ * cannot honour: a source-wide action (see `registerCleanCodeActions`), or one
+ * whose edits don't apply to this model.
  */
 const toMonacoCodeAction = (
   monaco: any,
   model: any,
   uri: string,
   action: LspCodeAction,
-  editable: LineRange | null,
 ) => {
   if (action.kind?.startsWith("source")) return null;
 
@@ -391,10 +375,6 @@ const toMonacoCodeAction = (
       text: change.newText,
     },
   }));
-
-  if (editable && !edits.every((e) => isRangeWithin(editable, e.textEdit.range))) {
-    return null;
-  }
 
   return {
     title: action.title,

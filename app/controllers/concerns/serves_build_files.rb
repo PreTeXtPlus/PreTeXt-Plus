@@ -8,7 +8,7 @@ module ServesBuildFiles
   extend ActiveSupport::Concern
 
   # Rails forces SVGs to download rather than display inline by default, since an SVG
-  # can carry a <script> (a stored-XSS precaution) -- see Asset::INLINE_OVERRIDE_CONTENT_TYPES
+  # can carry a <script> (a stored-XSS precaution) -- see Content::INLINE_OVERRIDE_CONTENT_TYPES
   # for the same override applied to uploaded assets. Build output already runs
   # unrestricted author JavaScript inline (the html branch below, and the whole point of
   # PublishedController), so an embedded SVG's script is no new capability; without this,
@@ -110,7 +110,7 @@ module ServesBuildFiles
     # Blob -- key/filename/content_type are plain attributes, so #url needs no query
     # beyond the cache read that supplied them.
     #
-    # #url is called directly (as Asset#url does) rather than going through
+    # #url is called directly (as Content::AssetBehavior#url does) rather than going through
     # rails_blob_url, whose redirect route would land on the app's own host -- one hop
     # too many for redirect_to_cdn_url to rewrite to the Spaces CDN subdomain.
     def blob_signed_url(file_data, disposition:)
@@ -118,7 +118,7 @@ module ServesBuildFiles
         content_type: file_data[:content_type])
 
       # Bypasses Blob#url's forced-binary/forced-attachment logic for content types in
-      # INLINE_OVERRIDE_CONTENT_TYPES, the same way Asset#url does for uploaded assets --
+      # INLINE_OVERRIDE_CONTENT_TYPES, the same way Content::AssetBehavior#url does for uploaded assets --
       # but only when inline was actually requested, so an explicit "attachment" for one
       # of these types (still forced attachment by Blob#url below) is unaffected.
       if disposition == "inline" && INLINE_OVERRIDE_CONTENT_TYPES.include?(blob.content_type)

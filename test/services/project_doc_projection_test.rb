@@ -27,8 +27,8 @@ class ProjectDocProjectionTest < ActiveSupport::TestCase
   # the model, so the existing one is deleted outright to make room.
   def make_root(id)
     @project.divisions.where(is_root: true).delete_all
-    @project.divisions.create!(id: id, ref: "placeholder", source: "<book/>",
-                               source_format: "pretext", is_root: true)
+    @project.divisions.create!(id: id, ref: "placeholder", source: "<p/>",
+                               source_format: "pretext", is_root: true, division_type: "book")
     @project.divisions.reload
   end
 
@@ -56,37 +56,59 @@ class ProjectDocProjectionTest < ActiveSupport::TestCase
 
     project!
 
-    root = Division.find(ROOT_ID)
+    root = Content.find(ROOT_ID)
     assert_equal "projected-root", root.ref
-    assert_includes root.source, "<title>Projected Book</title>"
+    assert_equal "<p>The projected book.</p>", root.source
     assert_equal "pretext", root.source_format
 
-    child = Division.find(CHILD_ID)
+    child = Content.find(CHILD_ID)
     assert_equal "projected-ch1", child.ref
     assert_equal "latex", child.source_format
-    assert_includes child.source, "\\chapter{One}"
+    assert_equal "The first chapter.", child.source
+  end
+
+  # A division's element is built from these, never from its source.
+  test "the fields a division's element is built from are written to its columns" do
+    ProjectDoc.seed(@project, fixture("projection_state"))
+
+    project!
+
+    child = Content.find(CHILD_ID)
+    assert_equal "chapter", child.division_type
+    assert_equal "Chapter One", child.title
+    assert_equal "first-chapter", child.label
+    assert_equal({ "component" => "teacher" }, child.attrs)
+  end
+
+  test "an entry with no label clears the division's" do
+    @project.divisions.create!(id: ROOT_ID, ref: "stale", label: "old", source_format: "pretext")
+    ProjectDoc.seed(@project, fixture("projection_state"))
+
+    project!
+
+    assert_nil Content.find(ROOT_ID).label
   end
 
   test "a division the project already has is updated rather than duplicated" do
-    @project.divisions.create!(id: ROOT_ID, ref: "stale", source: "<book/>", source_format: "pretext")
+    @project.divisions.create!(id: ROOT_ID, ref: "stale", source: "<p/>", source_format: "pretext")
     ProjectDoc.seed(@project, fixture("projection_state"))
 
     assert_difference("@project.divisions.count", 1) do # only the child is new
       project!
     end
 
-    assert_equal "projected-root", Division.find(ROOT_ID).ref
+    assert_equal "projected-root", Content.find(ROOT_ID).ref
   end
 
   test "tombstones remove the records they name" do
     @project.divisions.create!(id: GONE_DIVISION_ID, ref: "gone", source: "<section/>", source_format: "pretext")
-    @project.assets.create!(id: GONE_ASSET_ID, ref: "gone-asset", kind: :authored)
+    @project.assets.create!(id: GONE_ASSET_ID, ref: "gone-asset", kind: :authored_asset)
     ProjectDoc.seed(@project, fixture("projection_state"))
 
     project!
 
-    assert_not Division.exists?(GONE_DIVISION_ID)
-    assert_not Asset.exists?(GONE_ASSET_ID)
+    assert_not Content.exists?(GONE_DIVISION_ID)
+    assert_not Content.exists?(GONE_ASSET_ID)
   end
 
   test "a tombstone for something already gone is harmless, and stays harmless" do
@@ -99,7 +121,7 @@ class ProjectDocProjectionTest < ActiveSupport::TestCase
     assert_nothing_raised do
       3.times { project! }
     end
-    assert_not Division.exists?(GONE_DIVISION_ID)
+    assert_not Content.exists?(GONE_DIVISION_ID)
   end
 
   test "projecting twice writes the same thing and does not restale the targets" do
@@ -124,50 +146,33 @@ class ProjectDocProjectionTest < ActiveSupport::TestCase
     project!
 
     assert_equal original_root.id, @project.reload.divisions.find_by(is_root: true).id
-    assert_not Division.find(ROOT_ID).is_root, "a projected division must not claim the root"
+    assert_not Content.find(ROOT_ID).is_root, "a projected division must not claim the root"
   end
 
-  # ---- root_element ----
+  # ---- the root's type ----
   #
-  # What Project#structural_document_type reads, and the one thing that used to
-  # be recovered from the assembled source rather than stored. The editor keeps
-  # it as the root division's `type`; this is where it reaches the row.
+  # What Project#structural_document_type reads: the root division's own type,
+  # which the editor keeps on the root's entry like any other division's.
 
-  test "the root division's type in the document becomes the project's root_element" do
+  test "the root division's type in the document becomes its division_type" do
     make_root ROOT_ID
-    @project.update_column(:root_element, "article")
     ProjectDoc.seed(@project, fixture("projection_state"))
 
     project!
 
-    assert_equal "book", @project.reload.root_element,
+    assert_equal "book", @project.reload.structural_document_type,
       "the document says its root is a <book>, so that is what the project is"
   end
 
-  # The document does not carry `is_root` -- only the project knows which of its
-  # divisions is the root -- so a document whose divisions do not include this
-  # project's root has nothing to say about the root element, and must not be
-  # read as saying "none".
-  test "a root the document says nothing about leaves root_element alone" do
-    @project.update_column(:root_element, "slideshow")
-    ProjectDoc.seed(@project, fixture("projection_state"))
-
-    project!
-
-    assert_equal "slideshow", @project.reload.root_element
-  end
-
-  test "a division type that is not a root element is ignored rather than stored" do
+  test "a type that is not a root element is refused for the root" do
     # The projected *child* is a latex chapter. Pointing the project's root at it
-    # is the shape of a document whose root carries a non-root type -- which is
-    # not an answer to "article or book", and must not be written as one.
+    # is the shape of a document whose root carries a non-root type -- not an
+    # answer to "article or book", and not one the root may be saved with.
     make_root CHILD_ID
-    @project.update_column(:root_element, "article")
     ProjectDoc.seed(@project, fixture("projection_state"))
 
-    project!
-
-    assert_equal "article", @project.reload.root_element
+    assert_raises(ActiveRecord::RecordInvalid) { project! }
+    assert_equal "book", @project.reload.structural_document_type
   end
 
   test "a document missing the newer meta fields leaves the project's own values" do
@@ -193,7 +198,7 @@ class ProjectDocProjectionTest < ActiveSupport::TestCase
 
     project!
 
-    snippet = Snippet.find(SNIPPET_ID)
+    snippet = Content.find(SNIPPET_ID)
     assert_equal @project.id, snippet.project_id
     assert_equal "projected-note", snippet.ref
     assert_equal "A \\emph{projected} note.", snippet.source
@@ -201,12 +206,12 @@ class ProjectDocProjectionTest < ActiveSupport::TestCase
   end
 
   test "an asset the project has takes its text from the document" do
-    @project.assets.create!(id: ASSET_ID, ref: "stale-plot", kind: :authored, title: "Stale", source: "")
+    @project.assets.create!(id: ASSET_ID, ref: "stale-plot", kind: :authored_asset, title: "Stale", source: "")
     ProjectDoc.seed(@project, fixture("projection_records_state"))
 
     project!
 
-    asset = Asset.find(ASSET_ID)
+    asset = Content.find(ASSET_ID)
     assert_equal "projected-plot", asset.ref
     assert_equal "Projected Plot", asset.title
     assert_equal "<latex-image>p</latex-image>", asset.source
@@ -216,8 +221,8 @@ class ProjectDocProjectionTest < ActiveSupport::TestCase
   test "an asset the project lacks is never created by a projection" do
     ProjectDoc.seed(@project, fixture("projection_records_state"))
 
-    assert_no_difference("Asset.count") { project! }
-    assert_not Asset.exists?(UNKNOWN_ASSET_ID),
+    assert_no_difference("Content.assets.count") { project! }
+    assert_not Content.exists?(UNKNOWN_ASSET_ID),
       "an asset row comes from its upload; a projection has no file to give it"
   end
 
@@ -227,6 +232,6 @@ class ProjectDocProjectionTest < ActiveSupport::TestCase
 
     project!
 
-    assert_not Snippet.exists?(GONE_SNIPPET_ID)
+    assert_not Content.exists?(GONE_SNIPPET_ID)
   end
 end

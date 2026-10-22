@@ -2,53 +2,10 @@ import React, { useCallback, useRef } from "react";
 import ReactDOM from "react-dom/client";
 import { Editors } from "@pretextbook/web-editor";
 import AccountArea from "./AccountArea";
+import { railsDivisionToEditor } from "./railsProjectMapping";
 import { buildHelpMenu } from "./helpEntries";
 
-/**
- * @typedef {Object} RailsDivision
- * @property {string|number} [id]
- * @property {string} [ref]
- * @property {string} [source]
- * @property {string} [source_format]
- * @property {boolean} [is_root]
- */
-
-/**
- * @typedef {Object} EditorDivision
- * @property {string} id
- * @property {string} xmlId
- * @property {string} source
- * @property {string} sourceFormat
- * @property {string} [type]
- */
-
-const PRETEXT_ROOT_TAG = /^\s*<(article|book|slideshow)[\s>]/;
-
-/**
- * @param {string|undefined} source
- * @returns {string|undefined} The root element tag name ("article"|"book"|"slideshow"), or undefined.
- */
-function pretextRootType(source) {
-  const match = PRETEXT_ROOT_TAG.exec(source ?? "");
-  return match ? match[1] : undefined;
-}
-
-/**
- * @param {RailsDivision} d
- * @returns {EditorDivision}
- */
-function railsDivisionToEditor(d) {
-  const base = {
-    id: String(d.id ?? d.ref),
-    xmlId: d.ref ?? "",
-    source: d.source ?? "",
-    sourceFormat: d.source_format ?? "pretext",
-  };
-  if (!d.is_root) return base;
-  if (d.source_format !== "pretext") return { ...base, type: "article" };
-  const type = pretextRootType(base.source);
-  return type ? { ...base, type } : base;
-}
+/** @typedef {import("./railsProjectMapping").RailsDivision} RailsDivision */
 
 /**
  * @typedef {Object} TryItConfig
@@ -67,7 +24,11 @@ function railsDivisionToEditor(d) {
 function TryItApp({ config }) {
   const { project, csrfToken, rootPath, newUserPath, newSessionPath } = config;
 
-  const editorDivisions = (project.divisions ?? []).map(railsDivisionToEditor);
+  const editorDivisions = (project.divisions ?? []).map((d) => ({
+    ...railsDivisionToEditor(d),
+    // Try-it divisions are never saved, so they have no record id of their own.
+    id: String(d.id ?? d.ref),
+  }));
   const rootRef = (project.divisions ?? []).find((d) => d.is_root)?.ref ?? editorDivisions[0]?.xmlId ?? "";
 
   const initial = useRef({

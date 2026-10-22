@@ -4,7 +4,7 @@ class AssetsController < ApplicationController
   # GET /projects/:id/(*)/external/:ref
   #
   # Public: used both by the editor's own full-size asset previews and by
-  # published/shared builds' <image source> resolution. Every Asset always
+  # published/shared builds' <image source> resolution. Every asset always
   # has a project_id + ref now, so this single project+ref-scoped lookup
   # covers every live use.
   def share
@@ -35,7 +35,7 @@ class AssetsController < ApplicationController
   # working. Owner-only, id-scoped -- see `share` above for the current,
   # project+ref-scoped mechanism used everywhere else.
   def file
-    @asset = Asset.find(params[:id])
+    @asset = Content.assets.find(params[:id])
     authorize! :read, @asset
     redirect_to_cdn_url @asset.url
   end

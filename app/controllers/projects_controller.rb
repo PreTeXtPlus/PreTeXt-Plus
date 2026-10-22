@@ -158,6 +158,16 @@ class ProjectsController < ApplicationController
     # before @project.user is ever assigned.
     params[:project]&.delete(:visibility) if cannot?(:update_visibility, @project)
 
+    # A division's element is built from its record's fields (collab schema
+    # version 3), so a tab loaded before that -- which still writes the element
+    # into each division's source -- would have every division assembled
+    # wrapped twice. Its division writes are refused, and it is told to reload.
+    if params.dig(:project, :divisions_attributes).present? && !ProjectDoc.compatible?(params[:schema_version])
+      return render json: { error: "This editor is out of date. Reload the page to keep editing.",
+                            schema_version: ProjectDoc::SCHEMA_VERSION },
+                    status: :conflict
+    end
+
     respond_to do |format|
       if @project.update(project_params)
         format.json { render :show, status: :ok, location: @project }
@@ -458,7 +468,8 @@ class ProjectsController < ApplicationController
     def project_params
       permitted = [
         :title, :docinfo, :use_common_docinfo, :visibility, :language, :description,
-        divisions_attributes: [ [ :id, :source, :source_format, :is_root, :ref, :_destroy ] ],
+        divisions_attributes: [ [ :id, :source, :source_format, :is_root, :ref, :title, :division_type, :label,
+                                  { attrs: {} }, :_destroy ] ],
         assets_attributes: [ [ :id, :ref, :kind, :file, :source, :short_description, :description, :title, :_destroy ] ],
         snippets_attributes: [ [ :id, :source, :source_format, :ref, :_destroy ] ]
       ]
@@ -477,7 +488,8 @@ class ProjectsController < ApplicationController
     def import_params
       attrs = params.expect(project: [
         :title, :docinfo, :document_type,
-        divisions_attributes: [ [ :ref, :source, :source_format, :is_root ] ],
+        divisions_attributes: [ [ :ref, :source, :source_format, :is_root, :title, :division_type, :label,
+                                  { attrs: {} } ] ],
         assets_attributes: [ [ :ref, :kind, :title, :short_description,
                                { file: [ :filename, :content_type, :data ] } ] ],
         snippets_attributes: [ [ :ref, :source, :source_format ] ]

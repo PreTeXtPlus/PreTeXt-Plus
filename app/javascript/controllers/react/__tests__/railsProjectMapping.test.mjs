@@ -3,6 +3,8 @@ import {
   railsToEditorState,
   effectiveDocinfo,
   assembleProjectJson,
+  editorDivisionToRails,
+  splitImportedDivisions,
 } from "../railsProjectMapping.js";
 
 /**
@@ -30,14 +32,18 @@ const project = (overrides = {}) => ({
       ref: "root",
       source_format: "pretext",
       is_root: true,
-      source: '<book xml:id="root"><title>A Book</title><plus:chapter ref="ch1"/></book>',
+      division_type: "book",
+      title: "A Book",
+      source: '<plus:chapter ref="ch1"/>',
     },
     {
       id: "d-ch1",
       ref: "ch1",
       source_format: "pretext",
       is_root: false,
-      source: '<chapter xml:id="ch1"><title>One</title><p>Hello.</p></chapter>',
+      division_type: "chapter",
+      title: "One",
+      source: "<p>Hello.</p>",
     },
   ],
   assets: [],
@@ -55,51 +61,45 @@ describe("railsToEditorState", () => {
     expect(state.rootDivisionUuid).toBe("d-root");
   });
 
-  it("reads a pretext root's type out of its own source, not out of document_type", () => {
-    // The TOC lets an author switch article <-> book by rewriting the root's
-    // source; `document_type` never hears about it. Whichever of the two this
-    // trusts is the one that decides the assembled document's root element.
+  it("reads a division's type, title, label and attributes off its record", () => {
+    // The TOC lets an author switch article <-> book on the root's own record;
+    // `document_type` never hears about it. Whichever of the two this trusts is
+    // the one that decides the assembled document's root element.
     const json = project({ document_type: "article" });
-    const root = railsToEditorState(json).divisions.find((d) => d.id === "d-root");
+    json.divisions[1] = { ...json.divisions[1], label: "L", attrs: { component: "x" } };
+    const [root, chapter] = railsToEditorState(json).divisions;
 
     expect(root.type).toBe("book");
+    expect(chapter).toMatchObject({
+      type: "chapter",
+      title: "One",
+      label: "L",
+      attrs: { component: "x" },
+      source: "<p>Hello.</p>",
+    });
   });
 
-  it("falls back to document_type for a latex root, which carries no tag to read", () => {
-    const json = project({
-      document_type: "book",
-      divisions: [
-        {
-          id: "d-root",
-          ref: "root",
-          source_format: "latex",
-          is_root: true,
-          source: "\\book{A Book}\\label{root}",
-        },
-      ],
-    });
-    const root = railsToEditorState(json).divisions.find((d) => d.id === "d-root");
+  it("gives a division without a type the one its place implies", () => {
+    const json = project();
+    json.divisions = json.divisions.map(({ division_type, ...d }) => d);
+    const [root, chapter] = railsToEditorState(json).divisions;
 
     expect(root.type).toBe("book");
+    expect(chapter.type).toBe("section");
   });
 
-  it("attaches no type to a pretext root still holding a bare section", () => {
-    // Pre-migration data. Guessing "article" here would make the editor rewrap
-    // that section, so the absence is deliberate.
-    const json = project({
-      divisions: [
-        {
-          id: "d-root",
-          ref: "root",
-          source_format: "pretext",
-          is_root: true,
-          source: '<section xml:id="root"><title>Orphan</title></section>',
-        },
-      ],
-    });
-    const root = railsToEditorState(json).divisions.find((d) => d.id === "d-root");
+  it("maps a division back to the attributes Rails accepts, never moving the root", () => {
+    const [root] = railsToEditorState(project()).divisions;
+    const attributes = editorDivisionToRails(root);
 
-    expect(root.type).toBeUndefined();
+    expect(attributes).toMatchObject({
+      id: "d-root",
+      ref: "root",
+      division_type: "book",
+      title: "A Book",
+      source: '<plus:chapter ref="ch1"/>',
+    });
+    expect(attributes).not.toHaveProperty("is_root");
   });
 
   it("treats an unrecognised document_type as an article rather than as a tag", () => {
@@ -150,7 +150,8 @@ describe("assembleProjectJson", () => {
     const xml = assembleProjectJson(project());
 
     expect(xml).toMatch(/^<pretext/);
-    expect(xml).toContain("<title>One</title>");
+    expect(xml).toContain('<book xml:id="root" label="root">');
+    expect(xml).toContain('<chapter xml:id="ch1">\n<title>One</title>');
     expect(xml).toContain("Hello.");
     expect(xml).not.toContain("plus:chapter");
   });
@@ -184,14 +185,16 @@ describe("assembleProjectJson", () => {
             ref: "root",
             source_format: "pretext",
             is_root: true,
-            source: '<book xml:id="root"><title>A Book</title><p><plus:image ref="fig"/></p></book>',
+            division_type: "book",
+            title: "A Book",
+            source: '<p><plus:image ref="fig"/></p>',
           },
         ],
         assets: [
           {
             id: "a1",
             ref: "fig",
-            kind: "file",
+            kind: "file_asset",
             title: "A Figure",
             short_description: "A figure",
             extension: "png",
@@ -216,7 +219,9 @@ describe("assembleProjectJson", () => {
             ref: "root",
             source_format: "pretext",
             is_root: true,
-            source: '<book xml:id="root"><title>A Book</title><plus:chapter ref="gone"/></book>',
+            division_type: "book",
+            title: "A Book",
+            source: '<plus:chapter ref="gone"/>',
           },
         ],
       }),
@@ -229,5 +234,52 @@ describe("assembleProjectJson", () => {
   // project in this state, and SourceAssembler passes it through as a success.
   it("assembles a project with no root division to nothing", () => {
     expect(assembleProjectJson(project({ divisions: [] }))).toBe("");
+  });
+});
+
+describe("splitImportedDivisions", () => {
+  // What @pretextbook/import emits: each division's whole source, element and all.
+  const payload = {
+    title: "Imported",
+    document_type: "book",
+    divisions_attributes: [
+      {
+        ref: "root",
+        is_root: true,
+        source_format: "pretext",
+        source: '<book xml:id="root"><title>A Book</title>\n<plus:chapter ref="ch1"/>\n</book>',
+      },
+      {
+        ref: "ch1",
+        source_format: "latex",
+        source: "\\chapter{One $x$}\\label{ch1}\n\nHello.",
+      },
+      {
+        ref: "md",
+        source_format: "markdown",
+        source: '---\ndivision: section\nid: md\ntitle: "Hi"\ncomponent: teacher\n---\n\nBody.',
+      },
+    ],
+  };
+
+  it("takes each division's element apart into the columns it is built from", () => {
+    const [root, chapter, md] = splitImportedDivisions(payload).divisions_attributes;
+
+    expect(root).toMatchObject({ division_type: "book", title: "A Book", source: '<plus:chapter ref="ch1"/>' });
+    expect(chapter).toMatchObject({ division_type: "chapter", title: "One $x$", source: "Hello." });
+    expect(md).toMatchObject({ division_type: "section", title: "Hi", attrs: { component: "teacher" }, source: "Body." });
+  });
+
+  it("gives a root with no element of its own the project's type and title", () => {
+    const [root] = splitImportedDivisions({
+      ...payload,
+      divisions_attributes: [{ ref: "root", is_root: true, source_format: "latex", source: "Just prose." }],
+    }).divisions_attributes;
+
+    expect(root).toMatchObject({ division_type: "book", title: "Imported", source: "Just prose." });
+  });
+
+  it("leaves a payload without divisions alone", () => {
+    expect(splitImportedDivisions({ title: "x" })).toEqual({ title: "x" });
   });
 });

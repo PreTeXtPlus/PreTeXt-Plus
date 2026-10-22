@@ -14,14 +14,15 @@ import type { Division } from "../types/sections";
 import type { Asset, EditorContentChange, Snippet } from "../types/editor";
 
 // Monaco loads itself from a CDN; a textarea reporting every change at once
-// stands in for it. `lockStructure` is surfaced so the buffer kind is visible.
+// stands in for it. Whether a `virtualWrapper` is drawn is surfaced, so the
+// buffer kind is visible.
 vi.mock("../components/CodeEditor", () => {
   const Mock = forwardRef(
     (
       props: {
         content: string;
         sourceFormat: string;
-        lockStructure?: boolean;
+        virtualWrapper?: unknown;
         onChange: (value: string | undefined) => void;
       },
       ref,
@@ -34,7 +35,7 @@ vi.mock("../components/CodeEditor", () => {
         <textarea
           data-testid="code-editor"
           data-format={props.sourceFormat}
-          data-locked={String(props.lockStructure ?? true)}
+          data-wrapped={String(Boolean(props.virtualWrapper))}
           value={props.content}
           onChange={(e) => props.onChange(e.target.value)}
         />
@@ -135,16 +136,17 @@ afterEach(() => {
 });
 
 describe("opening a snippet", () => {
-  it("shows its source in the code editor, unlocked, under a bar naming it", () => {
+  it("shows its source in the code editor, unwrapped, under a bar naming it", () => {
     renderEditors();
     expect(barTitle()).toHaveTextContent("Main");
-    expect(editor().dataset.locked).toBe("true");
+    // A division's element is drawn around its body; a snippet has none.
+    expect(editor().dataset.wrapped).toBe("true");
 
     openSnippetRow("greeting");
 
     expect(barTitle()).toHaveTextContent("greeting");
     expect(editor().value).toBe("<p>Hello</p>");
-    expect(editor().dataset.locked).toBe("false");
+    expect(editor().dataset.wrapped).toBe("false");
   });
 
   it("previews the snippet inside a plain article titled \"snippet preview\"", () => {

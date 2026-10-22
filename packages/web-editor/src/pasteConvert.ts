@@ -290,10 +290,7 @@ export function installPasteConvertListener({
     event.preventDefault();
     event.stopPropagation();
     // Deliberately not flagged as a programmatic edit: this is the author's,
-    // and must reach the host as a content change like any other. Going
-    // through `executeEdits` also routes it via `pushEditOperations`, so a
-    // paste aimed at a locked structural line is dropped by the same guard
-    // that stops an ordinary one (see `collab/editGuard.ts`).
+    // and must reach the host as a content change like any other.
     editor.executeEdits("paste-convert", [
       { range: selection, text: converted.markup, forceMoveMarkers: true },
     ]);

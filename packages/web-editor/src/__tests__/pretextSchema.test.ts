@@ -195,12 +195,12 @@ describe("assembled placeholder attributes", () => {
         division(
           "art-a",
           "article",
-          `<article xml:id="art-a">\n<title>Doc</title>\n<plus:section ref="sec-a" component="teacher"/>\n</article>`,
+          `<plus:section ref="sec-a" component="teacher"/>`,
         ),
         division(
           "sec-a",
           "section",
-          `<section xml:id="sec-a">\n<title>One</title>\n<p>Hi</p>\n</section>`,
+          `<p>Hi</p>`,
         ),
       ],
       "art-a",

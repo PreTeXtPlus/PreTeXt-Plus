@@ -1,5 +1,5 @@
 json.extract! asset, :id, :project_id, :ref, :kind, :source, :description, :short_description, :title, :created_at, :updated_at
-if asset.file.attached?
+if asset.file_attached?
   extension = asset.file_extension
   # `file`: the public, project+ref-scoped redirect to the asset's current
   # file location -- a real, directly fetchable URL, used both as the
@@ -16,7 +16,7 @@ if asset.file.attached?
   # `thumbnail_path`: a small resized preview redirect, distinct from `path`
   # above -- used for the asset list's `<img src>` (editor's asset manager,
   # project dashboard) rather than the full file. Only set when a preview is
-  # actually possible; see Asset#thumbnail_url.
+  # actually possible; see Content::AssetBehavior#thumbnail_url.
   if asset.thumbnailable?
     json.thumbnail_path share_asset_thumbnail_project_path(asset.project, ref: asset.ref, format: extension)
   end

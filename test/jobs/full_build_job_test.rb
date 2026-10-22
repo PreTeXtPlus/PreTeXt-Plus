@@ -54,8 +54,8 @@ class FullBuildJobTest < ActiveJob::TestCase
   test "the collaborative document is projected into the rows before they are read" do
     # Deleted outright: the model refuses to demote or destroy a root.
     @project.divisions.where(is_root: true).delete_all
-    @project.divisions.create!(id: ROOT_ID, ref: "placeholder", source: "<book/>",
-                               source_format: "pretext", is_root: true)
+    @project.divisions.create!(id: ROOT_ID, ref: "placeholder", source: "<p/>",
+                               source_format: "pretext", is_root: true, division_type: "book")
     ProjectDoc.seed(@project, collab_fixture("projection_state"))
 
     seen = {}
@@ -65,7 +65,7 @@ class FullBuildJobTest < ActiveJob::TestCase
 
     assert_equal "Projected Title", seen[:title],
       "the archive was built from the project as it stood before the projection ran"
-    assert_includes seen[:root_source], "<title>Projected Book</title>",
+    assert_equal "<p>The projected book.</p>", seen[:root_source],
       "the source assembled for this build was not the source in the document"
     assert_equal "sent_to_server", @build.reload.status
   end

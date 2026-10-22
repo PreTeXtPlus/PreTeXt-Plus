@@ -52,7 +52,6 @@ import ErrorBoundary from "./ErrorBoundary";
 import { applyReplacements } from "./projectFind";
 import type { ProjectMatch } from "../types/projectScan";
 
-import { derivePretextContent } from "../contentConversion";
 import { DEFAULT_LANGUAGE } from "../languages";
 import type {
   EditorContentChange,
@@ -75,12 +74,9 @@ import {
   SNIPPET_PREVIEW_TITLE,
   assembleProjectSource,
   assembleFullProjectSource,
-  extractDivisionMetadata,
-  extractLatexDivisionTitle,
-  updateLatexDivisionMetadata,
-  latexDivisionToTaggedPretext,
-  extractMarkdownDivisionMetadata,
-  updateMarkdownDivisionMetadata,
+  divisionToPretext,
+  divisionWrapperLines,
+  splitDivisionSource,
   findDivisionParent,
   renameDivisionRef,
   renameAssetRef,
@@ -89,7 +85,6 @@ import {
   removeSnippetRef,
   assetEmbedCode,
   snippetEmbedCode,
-  updateSectionMetadata,
   normalizeDivisionsOnLoad,
   isRootDivisionType,
 } from "../sectionUtils";
@@ -534,32 +529,6 @@ const findRootDivision = (
  * Top-level editor component.  Creates the per-instance Zustand store and
  * wraps the inner component in the store's Context provider.
  */
-/**
- * Rewrite `division`'s own source so its structural metadata matches `changes`,
- * using whichever updater its source format speaks — the PreTeXt wrapper
- * element, the Markdown YAML frontmatter, or the LaTeX `\section`/`\label`
- * commands. Every format carries its metadata in its own source, so this is the
- * one dispatch every metadata edit goes through.
- *
- * For LaTeX, `type` renames the header command (`\section{` → `\worksheet{`)
- * and `title`/`xmlId` are written into the header and its `\label`; LaTeX has no
- * representation for PreTeXt's separate `label` attribute, so that change is
- * tracked on the record only.
- */
-function rewriteDivisionMetadata(
-  division: Division,
-  changes: DivisionChanges,
-): Division {
-  switch (division.sourceFormat) {
-    case "markdown":
-      return updateMarkdownDivisionMetadata(division, changes);
-    case "latex":
-      return updateLatexDivisionMetadata(division, changes);
-    default:
-      return updateSectionMetadata(division, changes);
-  }
-}
-
 /** What a host can ask of a mounted `Editors` through its `ref`. */
 export interface EditorsHandle {
   /**
@@ -599,15 +568,12 @@ const Editors = forwardRef(function Editors(
       props.divisions,
       props.rootDivisionId,
     );
-    // Hosts aren't required to persist a division's title or root wrapper
-    // separately from its PreTeXt source, so the very first pool of
-    // divisions a host hands over may be missing both — back-derive them
-    // from each division's own content before seeding the store.
+    // A host need not have stored every division's type; fill in defaults
+    // before seeding the store.
     const normalizedDivisions = normalizeDivisionsOnLoad(
       props.divisions,
       initRootDivision?.xmlId,
       props.projectType,
-      props.title,
     );
     const normalizedRoot =
       normalizedDivisions.find((d) => d.xmlId === initRootDivision?.xmlId) ??
@@ -875,6 +841,28 @@ const EditorsInner = (props: EditorsInnerProps) => {
       editedAsset?.shortDescription,
     ],
   );
+  // A division's element — its type, id, title and label — is likewise drawn
+  // around its body from its record (see `divisionWrapperLines`).
+  const divisionWrapper: VirtualWrapper | undefined = useMemo(
+    () =>
+      editorTarget?.kind === "division" && activeDivision
+        ? {
+            ...divisionWrapperLines(activeDivision),
+            hoverMessage:
+              "This markup is generated from the division — edit it from Division settings.",
+          }
+        : undefined,
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [
+      editorTarget?.kind,
+      activeDivision?.type,
+      activeDivision?.xmlId,
+      activeDivision?.title,
+      activeDivision?.label,
+      activeDivision?.attrs,
+      activeDivision?.sourceFormat,
+    ],
+  );
   const editorFormat: SourceFormat =
     editorTarget?.kind === "snippet"
       ? editorTarget.snippet.sourceFormat
@@ -1020,83 +1008,54 @@ const EditorsInner = (props: EditorsInnerProps) => {
     emitContentChange(parent.xmlId, newParentContent, parent.sourceFormat);
   };
 
-  // Metadata edits from the TOC "Edit properties" form. Unlike code-editor
-  // edits — where the source is authoritative and already carries the new
-  // attributes — here the form fields are authoritative, so we must rewrite the
-  // division's own source wrapper *and* keep the parent's
-  // `<plus:* ref="..."/>` placeholder in sync. This is the single validated,
-  // atomic place an `xml:id` rename happens (the code editor can't change it).
+  // Metadata edits from the settings drawer (and a new division's form). A
+  // division's type, title, `xml:id` and label are fields of its record, never
+  // part of its source, so an edit is a record patch — plus, for an id or type
+  // change, keeping the parent's `<plus:* ref="..."/>` placeholder in sync.
+  // This is the single validated, atomic place an `xml:id` rename happens.
   const applyDivisionMetadataEdit = (
     xmlId: string,
     changes: DivisionChanges,
   ) => {
-    // Both this division's own source and its parent's are about to be
-    // rewritten from what the pool holds, so the author's un-delivered
-    // keystrokes have to be in the pool first — otherwise the rewrite is
-    // computed from stale text and the debounce reinstates it a moment later,
-    // leaving the parent pointing at the pre-rename xml:id.
+    // The parent's source is about to be rewritten from what the pool holds,
+    // so the author's un-delivered keystrokes have to be in the pool first —
+    // otherwise the rewrite is computed from stale text and the debounce
+    // reinstates it a moment later, leaving the parent pointing at the
+    // pre-rename xml:id.
     const pool = settledDivisions();
     const division = pool.find((d) => d.xmlId === xmlId);
-    // Every source format now carries its structural metadata in its own source
-    // — the PreTeXt wrapper element, the Markdown YAML frontmatter, or the LaTeX
-    // `\section`/`\label` commands — so they all share the rewrite/parent-sync
-    // path below. Only a missing division falls back to a bare record patch.
     if (!division) {
       applyDivisionUpdate(xmlId, changes);
       return;
     }
 
-    // Compute the division's rewritten source, so its metadata matches.
-    let updated: Division;
-    if (
+    const newXmlId = changes.xmlId || division.xmlId;
+    const newType = changes.type ?? division.type;
+    // Switching format is only offered for a brand-new, not-yet-saved division
+    // (see SectionEditForm's `isNew`), so there's no existing body to
+    // translate — start over from that format's blank template.
+    const newSource =
       changes.sourceFormat !== undefined &&
       changes.sourceFormat !== division.sourceFormat
-    ) {
-      // Switching format is only offered for a brand-new, not-yet-saved
-      // division (see SectionEditForm's `isNew`), so there's no existing
-      // source to translate — start over from that format's blank template.
-      const type = changes.type ?? division.type;
-      const title = changes.title ?? division.title;
-      const newXmlId = changes.xmlId || division.xmlId;
-      updated = {
-        ...division,
-        sourceFormat: changes.sourceFormat,
-        type,
-        title,
-        xmlId: newXmlId,
-        source: createDivisionContent(
-          type,
-          changes.sourceFormat,
-          title,
-          newXmlId,
-        ),
-      };
-    } else {
-      updated = rewriteDivisionMetadata(division, changes);
-    }
-    const newXmlId = updated.xmlId;
-    // Steps 1–3 are one edit as far as the document is concerned: the division's
-    // own source, its record fields, and the parent's ref placeholder all name
-    // the same xml:id, and a peer that observed only some of them would see a
-    // placeholder pointing at neither the old id nor the new one.
+        ? createDivisionContent(changes.sourceFormat)
+        : undefined;
+
+    // One edit as far as the document is concerned: the record and the
+    // parent's ref placeholder name the same xml:id, and a peer that observed
+    // only one of them would see a placeholder pointing at neither the old id
+    // nor the new one.
     collabTransact(() => {
-      // 1. Rewrite this division's own source so its metadata matches.
-      if (updated.source !== division.source) {
-        // Emit keyed on the OLD id — before the record is renamed in step 2.
-        emitContentChange(division.xmlId, updated.source, updated.sourceFormat);
+      if (newSource !== undefined) {
+        // Emit keyed on the OLD id — before the record is renamed below.
+        emitContentChange(division.xmlId, newSource, changes.sourceFormat!);
       }
-
-      // 2. Patch the record fields (this renames the pool key to newXmlId).
       applyDivisionUpdate(xmlId, { ...changes, xmlId: newXmlId });
-
-      // 3. Keep the parent's ref placeholder in sync with an id or type change
-      //    so the division stays placed in the tree.
-      if (newXmlId !== division.xmlId || updated.type !== division.type) {
-        syncParentDivisionRef(division.xmlId, newXmlId, updated.type, pool);
+      if (newXmlId !== division.xmlId || newType !== division.type) {
+        syncParentDivisionRef(division.xmlId, newXmlId, newType, pool);
       }
     });
 
-    // 4. Follow an id rename so the user stays on the same division.
+    // Follow an id rename so the user stays on the same division.
     if (newXmlId !== division.xmlId) {
       applyDivisionSelect(newXmlId);
     }
@@ -1126,22 +1085,13 @@ const EditorsInner = (props: EditorsInnerProps) => {
   };
 
   // Push a type named by a parent's `<plus:TYPE ref="..."/>` placeholder onto
-  // the division it points at: the child's own source header is rewritten to
-  // match (`\handout{…}` → `\worksheet{…}`) and its record follows. The mirror
-  // of `syncParentDivisionRef`, for when the author edited the placeholder
-  // rather than the child. No recursion is possible between the two: this only
-  // ever writes to a division other than the one being edited, and the child→
-  // parent sync runs only for the division whose editor produced the change.
+  // the division it points at. The mirror of `syncParentDivisionRef`, for when
+  // the author edited the placeholder rather than the child. No recursion is
+  // possible between the two: this only ever writes to a division other than
+  // the one being edited, and the child→parent sync runs only for the division
+  // whose editor produced the change.
   const applyDivisionRetype = (division: Division, type: DivisionType) => {
-    const updated = rewriteDivisionMetadata(division, { type });
-    // One edit: the child's header and its record type must reach peers
-    // together, or the TOC and the source disagree about what it is.
-    collabTransact(() => {
-      if (updated.source !== division.source) {
-        emitContentChange(division.xmlId, updated.source, division.sourceFormat);
-      }
-      applyDivisionUpdate(division.xmlId, { type });
-    });
+    applyDivisionUpdate(division.xmlId, { type });
   };
 
   const applyDivisionSelect = (xmlId: string) => {
@@ -1208,122 +1158,27 @@ const EditorsInner = (props: EditorsInnerProps) => {
 
   const handleOpenFindPanel = () => showExplorerView("find");
 
-  // The active division's source converted to a complete, correctly-typed
-  // PreTeXt element. Markdown's frontmatter already yields a full element; LaTeX
-  // is converted and tagged with its authored type (latexDivisionToTaggedPretext).
-  // `undefined` when the division is PreTeXt (no conversion) or conversion fails
-  // (so the convert action is disabled and the preview falls back).
+  // The active division converted to a complete, correctly-typed PreTeXt
+  // element (see `divisionToPretext`). `undefined` when the division is PreTeXt
+  // (no conversion) or conversion fails (so the convert action is disabled and
+  // the preview falls back).
   const divisionConvertedPretext = useMemo(() => {
     if (!activeDivision || activeDivisionFormat === "pretext") return undefined;
-    if (activeDivisionFormat === "latex") {
-      return latexDivisionToTaggedPretext(activeDivision) ?? undefined;
-    }
-    const result = derivePretextContent(
-      divisionActiveSource,
-      activeDivisionFormat,
-    );
-    return result.pretextError ? undefined : result.pretextSource;
+    const xml = divisionToPretext({
+      ...activeDivision,
+      source: divisionActiveSource,
+    });
+    return /^<!-- conversion error/.test(xml.trim()) ? undefined : xml;
   }, [activeDivision, activeDivisionFormat, divisionActiveSource]);
 
   const handleDivisionContentChange = (newContent: string | undefined) => {
     if (!activeDivision) return;
-    // The user now edits the division's full source (wrapper tag included),
-    // so it's stored as-is.
-    let wrapped = newContent || "";
-
-    // `xml:id` is structural identity and is NOT editable from the code editor:
-    // it's renamed only via the TOC (validated + atomic). If the user edited or
-    // removed the wrapper's xml:id, re-assert the canonical id back into the
-    // stored source so the division's identity can never be broken from here.
-    if (activeDivisionFormat === "pretext") {
-      const meta = extractDivisionMetadata(wrapped);
-      if (meta && meta.xmlId !== activeDivision.xmlId) {
-        // Rewrite only the xml:id back to canonical; pass the content's own
-        // title/type/label (via `meta`) so a simultaneous title or type edit in
-        // the same change isn't clobbered by stale record values.
-        wrapped = updateSectionMetadata(
-          {
-            ...activeDivision,
-            source: wrapped,
-            title: meta.title,
-            type: meta.type,
-          },
-          { xmlId: activeDivision.xmlId, label: meta.label || null },
-        ).source;
-      }
-    } else if (activeDivisionFormat === "markdown") {
-      // The frontmatter is locked in the code editor, but re-assert the
-      // canonical xml:id back into it anyway so the division's identity can
-      // never be broken from here (e.g. by a paste over the locked region).
-      const meta = extractMarkdownDivisionMetadata(wrapped);
-      if (meta && meta.xmlId !== activeDivision.xmlId) {
-        wrapped = updateMarkdownDivisionMetadata(
-          { ...activeDivision, source: wrapped },
-          { xmlId: activeDivision.xmlId },
-        ).source;
-      }
-    }
-
-    if (wrapped === activeDivision.source) return;
-    emitContentChange(activeDivision.xmlId, wrapped, activeDivisionFormat);
-
-    // The source is the source of truth for title/type/label: re-derive them
-    // from the edited content so the TOC stays in sync even when the dropdown
-    // form is never used. (xml:id is excluded — see the re-assertion above.)
-    // These flow through the apply* wrappers so the store reflects them whether
-    // or not the host wired the callbacks.
-    if (activeDivisionFormat === "pretext") {
-      const meta = extractDivisionMetadata(wrapped);
-      if (meta) {
-        applyDivisionUpdate(activeDivision.xmlId, {
-          title: meta.title,
-          type: meta.type,
-          label: meta.label || null,
-        });
-
-        // A type change is still allowed from source; keep the parent's
-        // `<plus:TYPE ref="..."/>` placeholder tag in sync. The id never
-        // changes here, so the ref target stays stable.
-        if (meta.type !== activeDivision.type) {
-          syncParentDivisionRef(
-            activeDivision.xmlId,
-            activeDivision.xmlId,
-            meta.type,
-          );
-        }
-      }
-    } else if (activeDivisionFormat === "markdown") {
-      // Markdown's structural metadata — including its title — lives in its
-      // frontmatter; re-derive it so the TOC stays in sync. The frontmatter is
-      // normally locked in the code editor (see `computeLockedRegion`), so this
-      // is mostly defensive, but a type change is kept in sync with the parent
-      // ref regardless.
-      const meta = extractMarkdownDivisionMetadata(wrapped);
-      if (meta) {
-        applyDivisionUpdate(activeDivision.xmlId, {
-          title: meta.title,
-          type: meta.type,
-          label: meta.label || null,
-        });
-
-        if (meta.type !== activeDivision.type) {
-          syncParentDivisionRef(
-            activeDivision.xmlId,
-            activeDivision.xmlId,
-            meta.type,
-          );
-        }
-      }
-    } else if (activeDivisionFormat === "latex") {
-      // The `\section` header (and thus the title) is locked in the code editor,
-      // so this normally only re-asserts the existing title; `\begin{section}`
-      // env-style divisions aren't locked, so it keeps their title in sync.
-      // Returns null for headerless intro/conclusion bodies, leaving title as-is.
-      const latexTitle = extractLatexDivisionTitle(wrapped);
-      if (latexTitle !== null) {
-        applyDivisionUpdate(activeDivision.xmlId, { title: latexTitle });
-      }
-    }
+    // The buffer is the division's body: its element — type, title, xml:id —
+    // is drawn around it read-only and edited from the settings drawer, so
+    // nothing typed here can rename or retype the division.
+    const body = newContent || "";
+    if (body === activeDivision.source) return;
+    emitContentChange(activeDivision.xmlId, body, activeDivisionFormat);
 
     // Reconcile this division's child placeholders against the pool: a
     // `<plus:TYPE ref="id"/>` naming a division that doesn't exist yet creates
@@ -1333,7 +1188,7 @@ const EditorsInner = (props: EditorsInnerProps) => {
     // must be kept equal from whichever side the author edited.
     const pool = new Map(divisions.map((d) => [d.xmlId, d]));
     for (const { xmlId, type, generic } of parseDivisionRefsWithTypes(
-      wrapped,
+      body,
       activeDivisionFormat,
     )) {
       const child = pool.get(xmlId);
@@ -1413,12 +1268,8 @@ const EditorsInner = (props: EditorsInnerProps) => {
       title: draft.title,
       type: draft.type,
       sourceFormat: draft.sourceFormat,
-      source: createDivisionContent(
-        draft.type,
-        draft.sourceFormat,
-        draft.title,
-        draft.xmlId,
-      ),
+      label: draft.label,
+      source: createDivisionContent(draft.sourceFormat),
     };
     // One transaction: the division's entry and the parent's `<plus:* ref/>`
     // placeholder pointing at it must reach peers together, or they briefly
@@ -1982,7 +1833,6 @@ const EditorsInner = (props: EditorsInnerProps) => {
         props.divisions,
         newRoot?.xmlId,
         props.projectType,
-        props.title,
       );
       update.divisions = normalizedDivisions;
       const normalizedRoot =
@@ -2051,41 +1901,6 @@ const EditorsInner = (props: EditorsInnerProps) => {
       language: props.language,
       activeDivisionId: props.activeDivisionId,
     };
-  });
-
-  // ── Push load-time normalization back to the host ─────────────────────────
-  // `normalizeDivisionsOnLoad` may rewrite a division's content on load — most
-  // notably wrapping a legacy root fragment that lacks its <article>/<book>
-  // element (with a <title>) around it. That rewrite is seeded straight into
-  // the store's buffer, so the host never learns of it through the normal edit
-  // path and the structural fix would be lost on the next reload. Emit it back
-  // as a content change so the host persists it (and its own change handler
-  // fires). Keyed on the raw `props.divisions` identity so a host that ignores
-  // the callback isn't re-notified on every render; the rewrite is a no-op once
-  // the host echoes the wrapped content back, so this never loops.
-  const normalizationEmittedRef = useRef<Division[] | null>(null);
-  useEffect(() => {
-    if (normalizationEmittedRef.current === props.divisions) return;
-    normalizationEmittedRef.current = props.divisions;
-
-    const newRoot = findRootDivision(props.divisions, props.rootDivisionId);
-    const normalized = normalizeDivisionsOnLoad(
-      props.divisions,
-      newRoot?.xmlId,
-      props.projectType,
-      props.title,
-    );
-    for (const division of normalized) {
-      if (division.sourceFormat !== "pretext") continue;
-      const original = props.divisions.find((d) => d.xmlId === division.xmlId);
-      if (!original || division.source === original.source) continue;
-      props.onContentChange({
-        xmlId: division.xmlId,
-        source: division.source,
-        sourceFormat: "pretext",
-        pretextSource: division.source,
-      });
-    }
   });
 
   // ── Preview content ──────────────────────────────────────────────────────
@@ -2416,35 +2231,28 @@ const EditorsInner = (props: EditorsInnerProps) => {
 
   const handleConvertToPretext = () => {
     if (!activeDivision || !divisionConvertedPretext) return;
-    const base = createNewSection();
     // Orphan a copy of the original (still in its own source format) under a
     // fresh xml:id so it doesn't collide with the division being converted.
-    // `updateSectionMetadata` only understands PreTeXt's XML wrapper, so the
-    // copy's embedded id has to be rewritten with the format-specific helper
-    // (the same ones `applyDivisionMetadataEdit` uses).
-    const orphanSeed: Division = {
-      id: base.xmlId,
-      xmlId: activeDivision.xmlId,
-      title: activeDivision.title,
-      type: activeDivision.type,
-      sourceFormat: activeDivisionFormat,
-      source: activeDivision.source,
-    };
-    const newDiv: Division =
-      activeDivisionFormat === "markdown"
-        ? updateMarkdownDivisionMetadata(orphanSeed, { xmlId: base.xmlId })
-        : updateLatexDivisionMetadata(orphanSeed, { xmlId: base.xmlId });
-    applyDivisionAdd(newDiv);
+    const { xmlId: copyId } = createNewSection();
+    applyDivisionAdd({ ...activeDivision, id: copyId, xmlId: copyId });
 
-    // Replace the current division's own source with the converted PreTeXt,
-    // keeping its xml:id but flipping its format so the rest of the UI (code
-    // editor language, visual editor, TOC) treats it as PreTeXt going forward.
-    emitContentChange(
-      activeDivision.xmlId,
-      divisionConvertedPretext,
-      "pretext",
-    );
-    applyDivisionUpdate(activeDivision.xmlId, { sourceFormat: "pretext" });
+    // Replace the current division's body with the converted PreTeXt one, and
+    // its fields with what the conversion made of them — a LaTeX `$x$` title
+    // is `<m>x</m>` now — keeping its xml:id but flipping its format so the
+    // rest of the UI (code editor language, visual editor, TOC) treats it as
+    // PreTeXt going forward.
+    const converted = splitDivisionSource(divisionConvertedPretext, "pretext", {
+      type: activeDivision.type,
+    });
+    collabTransact(() => {
+      emitContentChange(activeDivision.xmlId, converted.body, "pretext");
+      applyDivisionUpdate(activeDivision.xmlId, {
+        sourceFormat: "pretext",
+        title: converted.title,
+        label: converted.label || null,
+        attrs: converted.attrs,
+      });
+    });
   };
 
   // Which buffer each collaborator is looking at (drives presence detail): a
@@ -2515,8 +2323,7 @@ const EditorsInner = (props: EditorsInnerProps) => {
       // Only a division's buffer can be schema-checked: the linter validates
       // the assembled document, which a snippet or asset fragment isn't.
       pretextValidation={isDivisionOpen ? pretextValidation : undefined}
-      lockStructure={isDivisionOpen}
-      virtualWrapper={assetWrapper}
+      virtualWrapper={assetWrapper ?? divisionWrapper}
       collab={
         props.collaboration && bridge && activeCollabText && editorKey
           ? {

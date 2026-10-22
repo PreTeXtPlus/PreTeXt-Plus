@@ -4,20 +4,30 @@
 // read-only share view) so they can't silently drift on how the same JSON
 // is interpreted.
 
-import { assembleFullProjectSource, DEFAULT_LANGUAGE } from "@pretextbook/web-editor";
+import {
+  assembleFullProjectSource,
+  DEFAULT_LANGUAGE,
+  splitDivisionSource,
+} from "@pretextbook/web-editor";
 
 /** @typedef {import("@pretextbook/web-editor").Asset} Asset */
 /** @typedef {import("@pretextbook/web-editor").Division} Division */
 /** @typedef {import("@pretextbook/web-editor").Snippet} Snippet */
 
 /**
- * A division record as returned by the Rails `divisions` JSON array.
+ * A division record as returned by the Rails `divisions` JSON array
+ * (`divisions/_division.json.jbuilder`). `source` is the division's body; its
+ * element is built from the rest.
  * @typedef {Object} RailsDivision
  * @property {string|number} id
  * @property {string} [ref]
  * @property {string} [source]
  * @property {string} [source_format]
  * @property {boolean} [is_root]
+ * @property {string} [title]
+ * @property {string} [division_type]
+ * @property {string} [label]
+ * @property {Object<string, string>} [attrs]
  */
 
 /**
@@ -26,7 +36,7 @@ import { assembleFullProjectSource, DEFAULT_LANGUAGE } from "@pretextbook/web-ed
  * @typedef {Object} RailsAsset
  * @property {string} id
  * @property {string} [ref]
- * @property {"file"|"authored"} kind
+ * @property {"file_asset"|"authored_asset"} kind
  * @property {string} [title]
  * @property {string} [source]
  * @property {string} [short_description] - Plain-text image alt description; rendered as
@@ -50,64 +60,93 @@ import { assembleFullProjectSource, DEFAULT_LANGUAGE } from "@pretextbook/web-ed
  */
 
 /**
- * The editor's own working representation of a division: a subset of
- * {@link Division}, missing `title`/`type` until derivable (see
- * railsDivisionToEditor).
+ * The editor's own working representation of a division -- a {@link Division}
+ * with its record id.
  * @typedef {Object} EditorDivision
  * @property {string} id
  * @property {string} xmlId
  * @property {string} source
  * @property {string} sourceFormat
- * @property {string} [title]
- * @property {string} [type]
+ * @property {string} title
+ * @property {string} type
+ * @property {string} [label]
+ * @property {Object<string, string>} [attrs]
  */
 
-// The root element tags a pretext document can open with.  A well-formed
-// pretext root division's source *is* one of these; a malformed pre-migration
-// one still holds a bare <section>.
-const PRETEXT_ROOT_TAG = /^\s*<(article|book|slideshow)[\s>]/;
-
-// The `type` of a pretext root, read from its own XML (the root element's tag
-// name) -- undefined when the source isn't a root element yet.
-/**
- * @param {string|undefined} source
- * @returns {string|undefined} "article" | "book" | "slideshow" | undefined
- */
-export function pretextRootType(source) {
-  const match = PRETEXT_ROOT_TAG.exec(source ?? "");
-  return match ? match[1] : undefined;
-}
-
-// Map one Rails division record to the web-editor's Division shape.
-//
-// A latex/markdown ROOT needs `type`/`title` passed in explicitly (rootMeta):
-// there's no PreTeXt XML there for the web-editor to read a document type or
-// title out of, so the assembler would otherwise render literal "undefined".
-//
-// A pretext division instead carries its type *in its own XML* -- the root
-// element's tag name -- so we derive `type` from the source rather than from
-// Rails metadata.  We only attach it once the source is actually a root
-// element (<article>/<book>/<slideshow>): a malformed pretext root still
-// holding a bare <section> (pre-migration data) gets no `type`, matching the
-// old behavior, so the live editor won't try to rewrap that <section> into an
-// <article>.  Once migrated to a real root element, it picks up the right type
-// automatically and preview/TOC wrapping work without further changes here.
+// Map one Rails division record to the web-editor's Division shape. A
+// division's type, title, label and attributes are its own columns, read
+// straight across; only a record without a type (one the server has not yet
+// given one) gets the default its place implies -- the project's type for the
+// root, a section otherwise.
 /**
  * @param {RailsDivision} d
- * @param {{type: "article"|"book", title: string}} rootMeta
+ * @param {"article"|"book"|"slideshow"} projectType
  * @returns {EditorDivision}
  */
-export function railsDivisionToEditor(d, rootMeta) {
-  const base = {
+export function railsDivisionToEditor(d, projectType = "article") {
+  return {
     id: String(d.id),
     xmlId: d.ref ?? "",
     source: d.source ?? "",
     sourceFormat: d.source_format ?? "pretext",
+    title: d.title ?? "",
+    type: d.division_type || (d.is_root ? projectType : "section"),
+    label: d.label ?? "",
+    attrs: d.attrs ?? {},
   };
-  if (!d.is_root) return base;
-  if (d.source_format !== "pretext") return { ...base, ...rootMeta };
-  const type = pretextRootType(base.source);
-  return type ? { ...base, type } : base;
+}
+
+// The inverse, as a `divisions_attributes` entry. `is_root` is deliberately
+// absent: nothing the editor sends may move which division is the root.
+/**
+ * @param {EditorDivision} d
+ * @returns {Object}
+ */
+export function editorDivisionToRails(d) {
+  return {
+    id: d.id,
+    ref: d.xmlId,
+    source: d.source,
+    source_format: d.sourceFormat,
+    title: d.title ?? "",
+    division_type: d.type,
+    label: d.label ?? "",
+    attrs: d.attrs ?? {},
+  };
+}
+
+// An import payload's divisions in the shape Rails stores them. The importer
+// (@pretextbook/import's serializeProjectToPlusPayload) writes each division's
+// whole source, element and all -- a PreTeXt wrapper, a LaTeX header, Markdown
+// frontmatter -- so each is taken apart here into its body and the columns its
+// element is built from. A source naming no type of its own gets its place's:
+// the project's document type for the root, a section otherwise.
+/**
+ * @param {{document_type?: string, title?: string, divisions_attributes?: Object[]}} payload
+ * @returns {Object} `payload` with its divisions split
+ */
+export function splitImportedDivisions(payload) {
+  if (!payload.divisions_attributes) return payload;
+  const rootType = ROOT_ELEMENT_TYPES.includes(payload.document_type)
+    ? payload.document_type
+    : "article";
+  return {
+    ...payload,
+    divisions_attributes: payload.divisions_attributes.map((d) => {
+      const split = splitDivisionSource(d.source ?? "", d.source_format ?? "pretext", {
+        type: d.is_root ? rootType : "section",
+        title: d.is_root ? payload.title : undefined,
+      });
+      return {
+        ...d,
+        source: split.body,
+        title: split.title,
+        division_type: split.type,
+        label: split.label,
+        attrs: split.attrs,
+      };
+    }),
+  };
 }
 
 // Since Rails collapsed LibraryAsset/ProjectAsset into a single per-project
@@ -168,7 +207,7 @@ export function railsAssetToEditor(a) {
     thumbnailUrl: a.thumbnail_path ?? undefined,
     extension: a.extension ?? undefined,
     contentType: a.content_type ?? undefined,
-    isFile: a.kind === "file",
+    isFile: a.kind === "file_asset",
     fileRef: fileRefFor(a, a.ref),
   };
 }
@@ -292,13 +331,12 @@ export function railsToEditorState(json) {
   const title = json.title ?? "";
   // `document_type` and the editor's `projectType` are the same vocabulary --
   // root element tag names -- so this is an identity map with a fallback, not a
-  // translation. That is deliberate: the editor synthesizes a wrapper element
-  // from this value, so it has to be a real tag name. Anything unrecognised
-  // becomes an article, since a wrong tag is worse than a default one.
+  // translation. That is deliberate: it is the type a root with none of its own
+  // is given, so it has to be a real tag name. Anything unrecognised becomes an
+  // article, since a wrong tag is worse than a default one.
   const projectType = ROOT_ELEMENT_TYPES.includes(json.document_type)
     ? json.document_type
     : "article";
-  const rootMeta = { type: projectType, title };
   return {
     title,
     docinfo: json.docinfo ?? "",
@@ -306,7 +344,7 @@ export function railsToEditorState(json) {
     useCommonDocinfo: json.use_common_docinfo ?? false,
     language: json.language ?? DEFAULT_LANGUAGE,
     projectType,
-    divisions: (json.divisions ?? []).map((d) => railsDivisionToEditor(d, rootMeta)),
+    divisions: (json.divisions ?? []).map((d) => railsDivisionToEditor(d, projectType)),
     projectAssets: (json.assets ?? []).map(railsAssetToEditor),
     projectSnippets: (json.snippets ?? []).map(railsSnippetToEditor),
     // rootDivisionId is the root division's *xmlId* (its ref), which is how the
