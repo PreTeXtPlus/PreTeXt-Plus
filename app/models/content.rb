@@ -16,8 +16,10 @@
 # markup styles.
 #
 # Kind-specific rules live in Content::DivisionBehavior and
-# Content::AssetBehavior, each applying only to its own kinds.
+# Content::AssetBehavior, each applying only to its own kinds; serving attached
+# files is Content::AttachedFiles, for every kind.
 class Content < ApplicationRecord
+  include Content::AttachedFiles
   include Content::DivisionBehavior
   include Content::AssetBehavior
 
@@ -27,8 +29,8 @@ class Content < ApplicationRecord
   # timestamp to trust.
   belongs_to :project, touch: :source_updated_at
 
-  # Any content may carry attachments; only a file asset uses them so far, and
-  # only one (see Content::AssetBehavior).
+  # Any content may carry attachments, served by Content::AttachedFiles; only a
+  # file asset uses them so far, and only one (see Content::AssetBehavior).
   has_many_attached :files
 
   # The file/authored distinction an asset used to keep in a column of its own

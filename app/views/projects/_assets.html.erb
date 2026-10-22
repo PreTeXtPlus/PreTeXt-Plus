@@ -14,7 +14,7 @@
       <li class="flex flex-col items-center gap-1 overflow-hidden rounded-lg border border-gray-200 p-2 text-center">
         <%= link_to asset.url, class: "hover:ring hover:ring-slate-500 hover:rounded-sm", target: "_blank" do %>
           <% if asset.thumbnailable? %>
-            <%= image_tag share_asset_thumbnail_project_path(project, ref: asset.ref, format: asset.file_extension),
+            <%= image_tag content_thumbnail_project_path(project, ref: asset.ref, format: asset.file_extension),
                   alt: asset.title.presence || asset.ref,
                   loading: "lazy",
                   class: "h-16 w-16 rounded object-cover bg-gray-50" %>

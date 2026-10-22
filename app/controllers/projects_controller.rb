@@ -1,8 +1,8 @@
 class ProjectsController < ApplicationController
-  allow_unauthenticated_access only: %i[ share preview source ]
+  allow_unauthenticated_access only: %i[ share preview source content_file content_thumbnail ]
   require_unauthenticated_access only: %i[ tryit ]
-  load_and_authorize_resource except: %i[ index owned shared new tryit preview pandoc feedback import_share create_from_template create_from_import ]
-  skip_authorize_resource only: %i[ share ]
+  load_and_authorize_resource except: %i[ index owned shared new tryit preview pandoc feedback import_share create_from_template create_from_import legacy_content_file ]
+  skip_authorize_resource only: %i[ share content_file content_thumbnail ]
   after_action :allow_iframe, only: :share
   rate_limit to: 25, within: 10.minutes, only: :preview,
              with: -> { render plain: "Preview limit reached. Please wait a few minutes and try again, or create an account to continue writing and save your work!", status: :too_many_requests },
@@ -195,6 +195,43 @@ class ProjectsController < ApplicationController
     respond_to do |format|
       format.html { redirect_to projects_path, notice: "Project was successfully destroyed.", status: :see_other }
     end
+  end
+
+  # GET /projects/:id/(*)/external/:ref
+  #
+  # Public: a content's file, by the ref a `<plus:* ref="..."/>` placeholder
+  # names it with -- used both by the editor's own full-size previews and by
+  # published/shared builds' <image source> resolution, which is why any path
+  # may precede `external/`. Looked up across every kind of content, not only
+  # assets; one without a file redirects to the not-found image.
+  def content_file
+    redirect_to_cdn_url @project.contents.find_by!(ref: params[:ref]).url
+  end
+
+  # GET /projects/:id/(*)/external/:ref/thumbnail
+  #
+  # Same lookup as `content_file`, but redirects to a small resized preview
+  # instead of the full file -- used by the editor's asset list and the project
+  # dashboard's. 404s when there's nothing to preview (no file, or a file type
+  # ActiveStorage can't raster a variant of); callers fall back to a generic
+  # file icon in that case.
+  def content_thumbnail
+    url = @project.contents.find_by!(ref: params[:ref]).thumbnail_url
+    return head :not_found unless url
+
+    redirect_to_cdn_url url
+  end
+
+  # GET /share_assets/external/:id
+  #
+  # Deprecated legacy link (used by old builds to serve up assets), kept
+  # working. Owner/collaborator-only and id-scoped -- see `content_file` for the
+  # current, project+ref-scoped mechanism used everywhere else. `:id` is the
+  # content's, not a project's, so the project resource isn't loaded for it.
+  def legacy_content_file
+    content = Content.find(params[:id])
+    authorize! :read, content
+    redirect_to_cdn_url content.url
   end
 
   # Legacy share link. These URLs are already in the world -- handed to students,

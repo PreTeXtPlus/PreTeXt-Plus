@@ -17,8 +17,8 @@ class PreviewAssetTest < ApplicationSystemTestCase
     # image-inclusion mode): a path relative to the preview document's own base
     # URL. The preview is delivered as `srcdoc`, so that base is the editor
     # page's -- /projects/:id/edit -- and the link has to reach
-    # AssetsController#share from there, which is what the `(*_)` prefix on its
-    # member route is for.
+    # ProjectsController#content_file from there, which is what the `(*_)` prefix
+    # on its member route is for.
     preview_html = <<~HTML
       <!doctype html><html><body><img src="external/#{@asset.ref}.png" alt="preview diagram"></body></html>
     HTML

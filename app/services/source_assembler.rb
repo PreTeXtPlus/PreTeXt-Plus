@@ -119,7 +119,7 @@ class SourceAssembler
 
       extension = asset.file_extension
       json.merge(
-        path: Rails.application.routes.url_helpers.share_asset_project_path(
+        path: Rails.application.routes.url_helpers.content_file_project_path(
           asset.project, ref: asset.ref, format: extension
         ),
         extension: extension,

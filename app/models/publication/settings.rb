@@ -277,7 +277,7 @@ module Publication
     private
 
       # The project's uploaded images, as [filename, title] -- the filename being the
-      # asset's own name in the external directory (Content::AssetBehavior#external_filename), which is
+      # asset's own name in the external directory (Content::AttachedFiles#external_filename), which is
       # what PreTeXt resolves an EPUB cover against, and what ProjectArchiveBuilder writes
       # it as.
       #

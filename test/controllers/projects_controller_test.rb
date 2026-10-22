@@ -336,11 +336,140 @@ class ProjectsControllerTest < ActionDispatch::IntegrationTest
     body = response.parsed_body
     asset_json = body["assets"].find { |a| a["ref"] == "diagram-two" }
     assert_equal asset.id, asset_json["id"]
-    assert_equal share_asset_project_path(@project, ref: "diagram-two", format: "png"), asset_json["path"]
+    assert_equal content_file_project_path(@project, ref: "diagram-two", format: "png"), asset_json["path"]
     assert_equal "png", asset_json["extension"]
     assert_equal "image/png", asset_json["content_type"]
-    assert_equal share_asset_thumbnail_project_path(@project, ref: "diagram-two", format: "png"),
+    assert_equal content_thumbnail_project_path(@project, ref: "diagram-two", format: "png"),
       asset_json["thumbnail_path"]
+  end
+
+  # ---- content files (external/:ref) ----
+  #
+  # A content's file and thumbnail, by ref. Public, because published builds'
+  # <image source> and the editor's previews both resolve through them.
+
+  test "content_file redirects to the asset's current file URL when signed in as the owner" do
+    asset = contents(:image_one)
+
+    get content_file_project_path(@project, ref: asset.ref, format: "png")
+
+    assert_response :redirect
+    assert_match %r{/rails/active_storage/}, response.location
+  end
+
+  test "content_file redirects to the asset's current file URL when signed out entirely" do
+    asset = contents(:image_one)
+
+    sign_out users(:one)
+
+    get content_file_project_path(@project, ref: asset.ref, format: "png")
+
+    assert_response :redirect
+    assert_match %r{/rails/active_storage/}, response.location
+  end
+
+  test "content_file redirects to the asset's current file URL for a signed-in non-owner" do
+    asset = contents(:image_one)
+
+    sign_out users(:one)
+    sign_in users(:two)
+
+    get content_file_project_path(@project, ref: asset.ref, format: "png")
+
+    assert_response :redirect
+    assert_match %r{/rails/active_storage/}, response.location
+  end
+
+  test "content_thumbnail redirects to a resized variant URL for the owner" do
+    asset = contents(:image_one)
+
+    get content_thumbnail_project_path(@project, ref: asset.ref, format: "png")
+
+    assert_response :redirect
+    assert_match %r{/rails/active_storage/}, response.location
+  end
+
+  test "content_thumbnail redirects when signed out entirely" do
+    asset = contents(:image_one)
+
+    sign_out users(:one)
+
+    get content_thumbnail_project_path(@project, ref: asset.ref, format: "png")
+
+    assert_response :redirect
+    assert_match %r{/rails/active_storage/}, response.location
+  end
+
+  test "content_thumbnail 404s for an asset with no thumbnailable file" do
+    asset = contents(:authored_one)
+
+    get content_thumbnail_project_path(@project, ref: asset.ref)
+
+    assert_response :not_found
+  end
+
+  test "legacy_content_file redirects to the asset's current file URL for the owner" do
+    asset = contents(:image_one)
+
+    get legacy_content_file_path(asset, format: "png")
+
+    assert_response :redirect
+    assert_match %r{/rails/active_storage/}, response.location
+  end
+
+  test "legacy_content_file denies access to another user's asset" do
+    asset = contents(:image_one)
+
+    sign_out users(:one)
+    # The subscribed user neither owns nor collaborates on this asset's
+    # project (user two is now a collaborator via fixtures).
+    sign_in users(:subscribed)
+
+    get legacy_content_file_path(asset, format: "png")
+
+    # CanCan::AccessDenied is rescued globally (application_controller.rb) into
+    # a redirect for non-JSON requests, rather than propagating as an exception.
+    assert_redirected_to projects_path
+  end
+
+  test "legacy_content_file requires authentication when signed out entirely" do
+    asset = contents(:image_one)
+
+    sign_out users(:one)
+
+    get legacy_content_file_path(asset, format: "png")
+
+    assert_response :unauthorized
+  end
+
+  # Looked up across every kind of content, not just assets.
+  test "content_file and content_thumbnail find a non-asset by its ref" do
+    division = contents(:one)
+
+    get content_file_project_path(@project, ref: division.ref)
+    assert_redirected_to "/image-not-found.svg"
+
+    get content_thumbnail_project_path(@project, ref: division.ref)
+    assert_response :not_found
+  end
+
+  test "content_thumbnail serves a non-asset that carries a file" do
+    division = contents(:one)
+    # Validation keeps attachments to file assets today; serving does not care.
+    division.files.attach(io: File.open(Rails.root.join("test/fixtures/files/test_image.png")),
+                          filename: "cover.png", content_type: "image/png")
+    division.save!(validate: false)
+
+    get content_thumbnail_project_path(@project, ref: division.ref, format: "png")
+
+    assert_response :redirect
+    assert_match %r{/rails/active_storage/}, response.location
+  end
+
+  test "content_file 404s for a ref the project does not have" do
+    get content_file_project_path(@project, ref: "nothing-here")
+
+    assert_response :not_found
   end
 
   # --- Visibility ---

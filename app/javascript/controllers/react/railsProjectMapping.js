@@ -156,12 +156,12 @@ export function splitImportedDivisions(payload) {
 // An asset still carries three distinct file references, and they must not be
 // confused:
 //
-//  * `url` -- `path`, Rails' `share_asset_project_path` redirect. A real,
+//  * `url` -- `path`, Rails' `content_file_project_path` redirect. A real,
 //    fetchable URL to the full file. Used ONLY for the editor's own UI: the
 //    "Manage asset" dialog's live preview, and as a fallback thumbnail when
 //    `thumbnailUrl` is unavailable.
 //
-//  * `thumbnailUrl` -- `thumbnail_path`, Rails' `share_asset_thumbnail_project_path`
+//  * `thumbnailUrl` -- `thumbnail_path`, Rails' `content_thumbnail_project_path`
 //    redirect to a small resized variant. A real, fetchable URL, present only
 //    when the file is thumbnailable (see Asset#thumbnailable?). Used for the
 //    asset list's `<img src>` in the Asset Manager.
