@@ -76,17 +76,7 @@ class ProjectDocProjectionTest < ActiveSupport::TestCase
     child = Content.find(CHILD_ID)
     assert_equal "chapter", child.division_type
     assert_equal "Chapter One", child.title
-    assert_equal "first-chapter", child.label
     assert_equal({ "component" => "teacher" }, child.attrs)
-  end
-
-  test "an entry with no label clears the division's" do
-    @project.divisions.create!(id: ROOT_ID, ref: "stale", label: "old", source_format: "pretext")
-    ProjectDoc.seed(@project, fixture("projection_state"))
-
-    project!
-
-    assert_nil Content.find(ROOT_ID).label
   end
 
   test "a division the project already has is updated rather than duplicated" do

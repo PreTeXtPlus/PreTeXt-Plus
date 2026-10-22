@@ -14,8 +14,8 @@
 # is what lets both carry on unchanged; the attachment only needs its
 # record_type (and, for the rename to a has_many_attached, its name) moved.
 #
-# The metadata columns a division now has -- title, division_type, label,
-# attrs -- arrive empty here, and are filled from each division's own source by
+# The metadata columns a division now has -- title, division_type, attrs --
+# arrive empty here, and are filled from each division's own source by
 # SplitDivisionMetadataOutOfSources once the collaborative documents have been
 # flushed into these rows (ProjectAndResetDocsForContentFields).
 #
@@ -42,7 +42,6 @@ class CreateContents < ActiveRecord::Migration[8.1]
       # Text, not string: a title is markup in its division's own format.
       t.text :title
       t.string :division_type
-      t.string :label
       t.jsonb :attrs, default: {}, null: false
       t.string :short_description
       t.text :description

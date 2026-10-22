@@ -5,7 +5,7 @@
  *
  * - `doc.getMap("divisions")`: key → `Y.Map` entry per division, where the key
  *   is the division's record id. Each entry holds the division's record fields
- *   (`xmlId`, `sourceFormat`, `title`, `type`, `label`, and `attrs` — the
+ *   (`xmlId`, `sourceFormat`, `title`, `type`, and `attrs` — the
  *   element's other attributes, as one last-writer-wins object) plus its *body*
  *   as a nested `Y.Text` under `"source"` — the CRDT that makes concurrent
  *   character edits merge. The division's element is never in that text: it
@@ -72,7 +72,6 @@ export interface CollabDivisionSnapshot {
   source: string;
   title?: string;
   type?: DivisionType;
-  label?: string;
   attrs?: Record<string, string>;
 }
 
@@ -175,7 +174,6 @@ export const makeDivisionEntry = (
   entry.set("sourceFormat", snapshot.sourceFormat);
   if (snapshot.title !== undefined) entry.set("title", snapshot.title);
   if (snapshot.type !== undefined) entry.set("type", snapshot.type);
-  if (snapshot.label) entry.set("label", snapshot.label);
   if (snapshot.attrs && Object.keys(snapshot.attrs).length > 0) {
     entry.set("attrs", snapshot.attrs);
   }
@@ -289,7 +287,6 @@ export const entryToSnapshot = (
     source: source instanceof Y.Text ? source.toString() : "",
     title: entry.get("title") as string | undefined,
     type: entry.get("type") as DivisionType | undefined,
-    label: entry.get("label") as string | undefined,
     attrs: entry.get("attrs") as Record<string, string> | undefined,
   };
 };

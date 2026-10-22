@@ -63,19 +63,18 @@ describe("railsToEditorState", () => {
     expect(state.rootDivisionUuid).toBe("d-root");
   });
 
-  it("reads a division's type, title, label and attributes off its record", () => {
+  it("reads a division's type, title and attributes off its record", () => {
     // The TOC lets an author switch article <-> book on the root's own record;
     // `document_type` never hears about it. Whichever of the two this trusts is
     // the one that decides the assembled document's root element.
     const json = project({ document_type: "article" });
-    json.divisions[1] = { ...json.divisions[1], label: "L", attrs: { component: "x" } };
+    json.divisions[1] = { ...json.divisions[1], attrs: { component: "x" } };
     const [root, chapter] = railsToEditorState(json).divisions;
 
     expect(root.type).toBe("book");
     expect(chapter).toMatchObject({
       type: "chapter",
       title: "One",
-      label: "L",
       attrs: { component: "x" },
       source: "<p>Hello.</p>",
     });
@@ -153,7 +152,7 @@ describe("assembleProjectJson", () => {
 
     expect(xml).toMatch(/^<pretext/);
     expect(xml).toContain('<book xml:id="root" label="root">');
-    expect(xml).toContain('<chapter xml:id="ch1">\n<title>One</title>');
+    expect(xml).toContain('<chapter xml:id="ch1" label="ch1">\n<title>One</title>');
     expect(xml).toContain("Hello.");
     expect(xml).not.toContain("plus:chapter");
   });

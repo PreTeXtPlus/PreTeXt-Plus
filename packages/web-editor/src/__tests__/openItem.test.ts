@@ -66,7 +66,6 @@ describe("the open item", () => {
       title: "New",
       type: "subsection",
       xmlId: "new",
-      label: "",
       sourceFormat: "pretext",
     });
     expect(store.getState().creating).toEqual({
@@ -167,7 +166,6 @@ describe("the open item", () => {
       title: "New",
       type: "subsection",
       xmlId: "new",
-      label: "",
       sourceFormat: "pretext",
     });
     store.getState().cancelSectionEdit();

@@ -7,7 +7,6 @@ export interface EditDraft {
   title: string;
   type: DivisionType;
   xmlId: string;
-  label: string;
   sourceFormat: SourceFormat;
 }
 

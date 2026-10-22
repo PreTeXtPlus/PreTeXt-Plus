@@ -207,7 +207,7 @@ describe("assembled placeholder attributes", () => {
       "",
     );
 
-    expect(xml).toContain('<section xml:id="sec-a" component="teacher">');
+    expect(xml).toContain('<section xml:id="sec-a" label="sec-a" component="teacher">');
     expect(await validatePretextDocument(xml)).toEqual([]);
   });
 });

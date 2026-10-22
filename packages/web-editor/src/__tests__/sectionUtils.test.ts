@@ -126,7 +126,7 @@ describe('division factories', () => {
     // The element is the record's: the body holds none of it.
     expect(section.source).not.toContain('<section')
     const wrapped = wrapDivisionSource(section)
-    expect(wrapped).toContain(`<section xml:id="${section.xmlId}">`)
+    expect(wrapped).toContain(`<section xml:id="${section.xmlId}" label="${section.xmlId}">`)
     expect(wrapped).toContain('<title>My Title</title>')
     expectWellFormed(wrapped)
   })
@@ -225,13 +225,14 @@ describe('splitDivisionSource', () => {
     expect(split).toMatchObject({
       type: 'section',
       xmlId: 's1',
-      label: 'L',
       title: 'Hi <m>x</m>',
       attrs: { component: 'a&b' },
       body,
       wrapped: true,
-      warnings: [],
     })
+    // A division's label is its ref; the source's own is dropped, and said so.
+    expect(split.attrs).not.toHaveProperty('label')
+    expect(split.warnings).toEqual(['dropped label "L"; a division\'s label is its ref'])
   })
 
   it('leaves a <title> that is not the first element in the body', () => {
@@ -285,9 +286,9 @@ describe('splitDivisionSource', () => {
       type: 'worksheet',
       xmlId: 'w',
       title: 'Hi',
-      label: 'L',
       attrs: { component: 'teacher' },
       body: '# Sub',
+      warnings: ['dropped label "L"; a division\'s label is its ref'],
     })
   })
 })
@@ -308,15 +309,14 @@ describe('wrapDivisionSource / divisionToPretext', () => {
   })
 
   it.each([
-    ['pretext', '<section xml:id="s1" label="L">\n<title>Hi <m>x</m></title>\n<p>Body</p>\n</section>'],
+    ['pretext', '<section xml:id="s1" label="s1">\n<title>Hi <m>x</m></title>\n<p>Body</p>\n</section>'],
     ['latex', '\\section{Hello $x$}\\label{s1}\n\nBody.'],
-    ['markdown', '---\ndivision: section\nid: s1\ntitle: "Hi"\nlabel: L\ncomponent: "teacher"\n---\n\nBody.'],
+    ['markdown', '---\ndivision: section\nid: s1\ntitle: "Hi"\ncomponent: "teacher"\n---\n\nBody.'],
   ] as const)('round-trips %s source through split and wrap', (format, source) => {
     const split = splitDivisionSource(source, format)
     const division = record(format, split.body, {
       type: split.type,
       title: split.title,
-      label: split.label,
       attrs: split.attrs,
     })
     expect(wrapDivisionSource(division)).toBe(source)
@@ -324,30 +324,32 @@ describe('wrapDivisionSource / divisionToPretext', () => {
 
   it("builds a PreTeXt division's element from its fields", () => {
     expect(
-      divisionToPretext(record('pretext', '<p>Body</p>', { label: 'L', attrs: { component: 'x' } })),
-    ).toBe('<section xml:id="s1" label="L" component="x">\n<title>Hello</title>\n<p>Body</p>\n</section>')
+      divisionToPretext(record('pretext', '<p>Body</p>', { attrs: { component: 'x', label: 'ignored' } })),
+    ).toBe('<section xml:id="s1" label="s1" component="x">\n<title>Hello</title>\n<p>Body</p>\n</section>')
   })
 
   it('converts a LaTeX division exactly as its header and body together', () => {
     const xml = divisionToPretext(
       record('latex', 'Some text.\n\n\\subsection{Sub}\n\nMore.', { title: 'Hello $x$' }),
     )
-    expect(xml).toMatch(/^<section xml:id="s1">/)
+    expect(xml).toMatch(/^<section xml:id="s1" label="s1">/)
     expect(xml).toContain('<title>Hello <m>x</m></title>')
     expect(xml).toContain('<subsection>')
   })
 
-  it('writes a LaTeX division\'s @label, which LaTeX itself cannot spell', () => {
-    expect(divisionToPretext(record('latex', 'Text.', { label: 'L' }))).toMatch(
-      /^<section xml:id="s1" label="L">/,
-    )
+  it('labels every division by its ref, in every format', () => {
+    for (const format of ['pretext', 'latex', 'markdown'] as const) {
+      expect(divisionToPretext(record(format, format === 'pretext' ? '<p>Text.</p>' : 'Text.'))).toMatch(
+        /^<section xml:id="s1" label="s1"[ >]/,
+      )
+    }
   })
 
   it('wraps a LaTeX introduction around its converted body', () => {
     const xml = divisionToPretext(
       record('latex', 'Some text.', { xmlId: 'i1', type: 'introduction', title: '' }),
     )
-    expect(xml).toMatch(/^<introduction xml:id="i1">/)
+    expect(xml).toMatch(/^<introduction xml:id="i1" label="i1">/)
     expect(xml).toContain('Some text.')
     expectWellFormed(xml)
   })
@@ -356,7 +358,8 @@ describe('wrapDivisionSource / divisionToPretext', () => {
     const xml = divisionToPretext(
       record('markdown', 'Text\n\n# Sub\n\nMore', { attrs: { component: 'teacher' } }),
     )
-    expect(xml).toMatch(/^<section xml:id="s1" component="teacher">/)
+    expect(xml).toMatch(/^<section xml:id="s1"[^>]* component="teacher"/)
+    expect(xml).toMatch(/^<section [^>]*label="s1"/)
     expect(xml).toContain('<subsection>')
   })
 
@@ -364,7 +367,7 @@ describe('wrapDivisionSource / divisionToPretext', () => {
     const xml = divisionToPretext(
       record('markdown', '# Sec\n\n## Slide\n\nhi', { xmlId: 'deck', type: 'slideshow', title: 'Deck' }),
     )
-    expect(xml).toMatch(/^<slideshow xml:id="deck">/)
+    expect(xml).toMatch(/^<slideshow xml:id="deck" label="deck">/)
     expect(xml).toContain('<slide>')
   })
 })
@@ -570,14 +573,15 @@ describe('root @label on an assembled document', () => {
     expect(rootTagOf(xml)).toContain('label="a1"')
   })
 
-  it('leaves an existing @label alone', () => {
+  // A division's label is its ref, so one written into its source gives way.
+  it('labels the root by its ref, whatever its source said', () => {
     const source = ARTICLE.replace(
       '<article xml:id="a1">',
       '<article xml:id="a1" label="chosen">',
     )
     const xml = assembleFullProjectSource([div(source)], 'a1', '')
-    expect(rootTagOf(xml)).toContain('label="chosen"')
-    expect(rootTagOf(xml)).not.toContain('label="a1"')
+    expect(rootTagOf(xml)).toContain('label="a1"')
+    expect(rootTagOf(xml)).not.toContain('label="chosen"')
   })
 
   it('changes nothing but the root start tag', () => {
@@ -627,7 +631,7 @@ describe('root @label on an assembled document', () => {
       '<article xml:id="a1" data-note="a > b">',
     )
     const xml = assembleFullProjectSource([div(source)], 'a1', '')
-    expect(xml).toContain('<article xml:id="a1" data-note="a > b" label="a1">')
+    expect(xml).toContain('<article xml:id="a1" label="a1" data-note="a > b">')
     expectWellFormed(xml)
   })
 
@@ -905,7 +909,7 @@ describe('placeholder attribute pass-through', () => {
       [article('<plus:section ref="s1" component="teacher"/>'), section('s1')],
       'a1',
     )
-    expect(xml).toContain('<section xml:id="s1" component="teacher">')
+    expect(xml).toContain('<section xml:id="s1" label="s1" component="teacher">')
     expectWellFormed(xml)
   })
 
@@ -959,7 +963,7 @@ describe('placeholder attribute pass-through', () => {
       ],
       'a1',
     )
-    expect(xml).toContain('<section xml:id="s1" component="teacher">')
+    expect(xml).toContain('<section xml:id="s1" label="s1" component="teacher">')
     expect(xml).not.toContain('<p component=')
   })
 
@@ -974,8 +978,8 @@ describe('placeholder attribute pass-through', () => {
       ],
       'a1',
     )
-    expect(xml).toContain('<section xml:id="s1" component="teacher">')
-    expect(xml).toContain('<subsection xml:id="s2" component="student">')
+    expect(xml).toContain('<section xml:id="s1" label="s1" component="teacher">')
+    expect(xml).toContain('<subsection xml:id="s2" label="s2" component="student">')
   })
 
   // The placeholder is the more local statement, and a duplicate attribute is

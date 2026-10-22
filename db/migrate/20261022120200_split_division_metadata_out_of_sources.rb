@@ -2,7 +2,7 @@
 
 # Move every division's element out of its source and into columns.
 #
-# A division's type, title, xml:id, label and attributes used to be written in
+# A division's type, title, xml:id and attributes used to be written in
 # its source, in its own markup style -- a PreTeXt wrapper element, a LaTeX
 # `\section{...}\label{...}` header, Markdown frontmatter -- and the editor
 # rewrote that source for every metadata edit. They are columns now, and the
@@ -52,7 +52,6 @@ class SplitDivisionMetadataOutOfSources < ActiveRecord::Migration[8.1]
               source: result.body,
               division_type: result.type,
               title: result.title,
-              label: result.label.presence,
               attrs: result.attrs
             )
             split += 1

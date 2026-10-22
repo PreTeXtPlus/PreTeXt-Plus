@@ -100,7 +100,6 @@ seedDocFromState(projected, {
       sourceFormat: "latex",
       type: "chapter",
       title: "Chapter One",
-      label: "first-chapter",
       attrs: { component: "teacher" },
       source: "The first chapter.",
     },

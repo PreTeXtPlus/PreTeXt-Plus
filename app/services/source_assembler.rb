@@ -97,7 +97,6 @@ class SourceAssembler
         is_root: division.is_root,
         title: division.title,
         division_type: division.division_type,
-        label: division.label,
         attrs: division.attrs
       }
     end

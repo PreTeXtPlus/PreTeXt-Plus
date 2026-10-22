@@ -10,8 +10,8 @@
 # all of them.
 #
 # A record's metadata lives in columns, never in its source. In particular a
-# division's `source` is its *body*: its element -- type, title, xml:id (its
-# ref), label and any other attributes -- is built from the columns when the
+# division's `source` is its *body*: its element -- type, title, xml:id and
+# label (both its ref) and any other attributes -- is built from the columns when the
 # project is assembled (see the web-editor's `wrapDivisionSource`), in all three
 # markup styles.
 #

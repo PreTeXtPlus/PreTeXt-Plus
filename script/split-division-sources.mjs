@@ -4,7 +4,7 @@
 // `DivisionSourceSplitter` spawns `node lib/assembler/split-divisions.mjs`
 // (this file, bundled -- see `npm run build:assembler`), writes a JSON array of
 // divisions to stdin, and reads the results back off stdout. Its one caller is
-// the migration that moved every division's type, title, label and attributes
+// the migration that moved every division's type, title and attributes
 // out of its source and into columns (SplitDivisionMetadataOutOfSources).
 //
 // It is the web-editor's own `splitDivisionSource`, rather than a Ruby reading
@@ -17,7 +17,7 @@
 //
 //   stdin   a JSON array of { id, source, source_format, fallback_type, fallback_title }
 //   stdout  a JSON array, in the same order, of
-//           { id, type, title, label, xml_id, attrs, body, wrapped, warnings }
+//           { id, type, title, xml_id, attrs, body, wrapped, warnings }
 //   stderr  diagnostics
 //   exit 0  stdout is the array
 //   exit 1  stdout is meaningless; stderr says why
@@ -50,7 +50,6 @@ async function main() {
       id: division.id,
       type: split.type,
       title: split.title,
-      label: split.label,
       xml_id: split.xmlId,
       attrs: split.attrs,
       body: split.body,

@@ -28,7 +28,7 @@ export interface DivisionSettingsProps {
 }
 
 /**
- * A division's settings: its title, type, id and label — each saved on its own, on
+ * A division's settings: its title, type and id — each saved on its own, on
  * Enter or blur (a select on change), like a snippet's or asset's fields — its
  * embed code, and the structural actions its place in the document allows.
  * (A new sub-division is started from the division's Contents row [+].)
@@ -114,7 +114,7 @@ const DivisionSettings = ({ division, embedFormat }: DivisionSettingsProps) => {
         </select>
       </SettingsField>
       {/* xml:id applies to every format — for LaTeX it's written as the
-          header's `\label`. */}
+          header's `\label` — and is the division's PreTeXt @label too. */}
       <SettingsField label="Id" htmlFor="division-settings-id">
         <CommitField
           id="division-settings-id"
@@ -129,22 +129,6 @@ const DivisionSettings = ({ division, embedFormat }: DivisionSettingsProps) => {
             division already in your document.
           </SettingsNote>
         )}
-      </SettingsField>
-      {/* PreTeXt's @label: a stable name for the division that survives an
-          id change, distinct from the xml:id above. */}
-      <SettingsField label="Label" htmlFor="division-settings-label">
-        <CommitField
-          id="division-settings-label"
-          value={division.label ?? ""}
-          onCommit={(next) => {
-            const label = next.trim();
-            if (label !== (division.label ?? "")) {
-              return updateDivisionProperties(division.xmlId, { label: label || null });
-            }
-          }}
-          placeholder="optional"
-          mono
-        />
       </SettingsField>
       {placement.kind !== "root" && (
         <EmbedCode

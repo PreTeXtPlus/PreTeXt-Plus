@@ -73,8 +73,7 @@ class ProjectDocProjection
   #
   # The fields a division's element is built from are projected only when the
   # entry carries them -- an entry written before one of them existed has
-  # nothing to say about it, and must not blank the column -- and `label` is
-  # the exception that proves it: the editor deletes the key to clear one.
+  # nothing to say about it, and must not blank the column.
   def division_attributes(divisions, deleted)
     present = divisions.filter_map do |id, entry|
       next if deleted[id] == "division" # removed in the same session that wrote it
@@ -83,8 +82,7 @@ class ProjectDocProjection
         id: id,
         ref: entry["xmlId"].to_s,
         source: entry["source"].to_s,
-        source_format: entry["sourceFormat"].presence || "pretext",
-        label: entry["label"].presence
+        source_format: entry["sourceFormat"].presence || "pretext"
       }
       attributes[:title] = entry["title"].to_s if entry.key?("title")
       attributes[:division_type] = entry["type"] if entry["type"].present?

@@ -344,7 +344,7 @@ class Project < ApplicationRecord
       divisions: self.divisions.map { |d|
         {
           id: d.id || d.ref, ref: d.ref, is_root: d.is_root, source: d.source, source_format: d.source_format,
-          title: d.title, division_type: d.division_type, label: d.label, attrs: d.attrs
+          title: d.title, division_type: d.division_type, attrs: d.attrs
         }
       }
     }.to_json

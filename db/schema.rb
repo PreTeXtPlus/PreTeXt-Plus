@@ -99,7 +99,6 @@ ActiveRecord::Schema[8.1].define(version: 2026_10_22_120200) do
     t.boolean "is_root", default: false, null: false
     t.text "title"
     t.string "division_type"
-    t.string "label"
     t.jsonb "attrs", default: {}, null: false
     t.string "short_description"
     t.text "description"

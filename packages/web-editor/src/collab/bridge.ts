@@ -64,7 +64,6 @@ const snapshotToRecord = (snapshot: CollabDivisionSnapshot): Division => ({
   // defaults the store's load-time normalization gives a host record.
   title: snapshot.title ?? "",
   type: snapshot.type ?? "section",
-  ...(snapshot.label && { label: snapshot.label }),
   ...(snapshot.attrs && { attrs: snapshot.attrs }),
 });
 
@@ -219,7 +218,6 @@ export class CollabBridge {
           source: division.source,
           title: division.title,
           type: division.type,
-          label: division.label,
           attrs: division.attrs,
         }),
       );
@@ -259,10 +257,6 @@ export class CollabBridge {
       }
       if (changes.title !== undefined) entry.set("title", changes.title);
       if (changes.type !== undefined) entry.set("type", changes.type);
-      if (changes.label !== undefined) {
-        if (changes.label) entry.set("label", changes.label);
-        else entry.delete("label");
-      }
       if (changes.attrs !== undefined) entry.set("attrs", changes.attrs);
     }, this.localOrigin);
     if (changes.xmlId != null && changes.xmlId !== xmlId) {
@@ -630,7 +624,6 @@ export class CollabBridge {
           if (field === "type" && snapshot.type !== undefined) {
             changes.type = snapshot.type;
           }
-          if (field === "label") changes.label = snapshot.label ?? null;
           if (field === "attrs") changes.attrs = snapshot.attrs ?? {};
         });
         if (Object.keys(changes).length === 0) continue;

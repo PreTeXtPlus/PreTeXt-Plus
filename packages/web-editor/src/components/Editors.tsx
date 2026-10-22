@@ -862,7 +862,6 @@ const EditorsInner = (props: EditorsInnerProps) => {
       activeDivision?.type,
       activeDivision?.xmlId,
       activeDivision?.title,
-      activeDivision?.label,
       activeDivision?.attrs,
       activeDivision?.sourceFormat,
     ],
@@ -1246,7 +1245,6 @@ const EditorsInner = (props: EditorsInnerProps) => {
       title,
       type,
       xmlId: deriveXmlId(type, title),
-      label: "",
       sourceFormat: "pretext",
     });
   };
@@ -1272,7 +1270,6 @@ const EditorsInner = (props: EditorsInnerProps) => {
       title: draft.title,
       type: draft.type,
       sourceFormat: draft.sourceFormat,
-      label: draft.label,
       source: createDivisionContent(draft.sourceFormat),
     };
     // One transaction: the division's entry and the parent's `<plus:* ref/>`
@@ -2243,7 +2240,8 @@ const EditorsInner = (props: EditorsInnerProps) => {
 
     // Replace the current division's body with the converted PreTeXt one, and
     // its fields with what the conversion made of them — a LaTeX `$x$` title
-    // is `<m>x</m>` now — keeping its xml:id but flipping its format so the
+    // is `<m>x</m>` now; the `@label` it carries is the ref again, and is
+    // dropped — keeping its xml:id but flipping its format so the
     // rest of the UI (code editor language, visual editor, TOC) treats it as
     // PreTeXt going forward.
     const converted = splitDivisionSource(divisionConvertedPretext, "pretext", {
@@ -2254,7 +2252,6 @@ const EditorsInner = (props: EditorsInnerProps) => {
       applyDivisionUpdate(activeDivision.xmlId, {
         sourceFormat: "pretext",
         title: converted.title,
-        label: converted.label || null,
         attrs: converted.attrs,
       });
     });

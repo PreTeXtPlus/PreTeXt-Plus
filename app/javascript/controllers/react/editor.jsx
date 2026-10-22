@@ -301,7 +301,6 @@ function persistableShape(state) {
       sourceFormat: d.sourceFormat,
       title: d.title,
       type: d.type,
-      label: d.label ?? "",
       attrs: d.attrs ?? {},
     })),
     // Tombstones count as unsaved work: a removal whose own PATCH failed is
@@ -358,7 +357,6 @@ function editorStateToCollabSeed(state) {
       source: d.source,
       title: d.title,
       type: d.type,
-      label: d.label,
       attrs: d.attrs,
     })),
     assets: (state.projectAssets ?? []).filter((a) => a.id).map(toEditorAsset),
@@ -869,7 +867,6 @@ function EditorApp({ config }) {
         sourceFormat: division.sourceFormat ?? "pretext",
         title: division.title ?? "",
         type: division.type,
-        label: division.label ?? "",
         attrs: division.attrs ?? {},
       };
       w.divisions.push(record);
@@ -941,7 +938,6 @@ function EditorApp({ config }) {
     if (changes.sourceFormat !== undefined) division.sourceFormat = changes.sourceFormat;
     if (changes.title !== undefined) division.title = changes.title;
     if (changes.type !== undefined) division.type = changes.type;
-    if (changes.label !== undefined) division.label = changes.label ?? "";
     if (changes.attrs !== undefined) division.attrs = changes.attrs;
     // An xml:id rename: update the ref, and if this is the root division keep
     // rootDivisionId (used to assemble/preview the doc) pointing at it.

@@ -505,7 +505,7 @@ class ProjectsController < ApplicationController
     def project_params
       permitted = [
         :title, :docinfo, :use_common_docinfo, :visibility, :language, :description,
-        divisions_attributes: [ [ :id, :source, :source_format, :is_root, :ref, :title, :division_type, :label,
+        divisions_attributes: [ [ :id, :source, :source_format, :is_root, :ref, :title, :division_type,
                                   { attrs: {} }, :_destroy ] ],
         assets_attributes: [ [ :id, :ref, :kind, :file, :source, :short_description, :description, :title, :_destroy ] ],
         snippets_attributes: [ [ :id, :source, :source_format, :ref, :title, :_destroy ] ]
@@ -525,7 +525,7 @@ class ProjectsController < ApplicationController
     def import_params
       attrs = params.expect(project: [
         :title, :docinfo, :document_type,
-        divisions_attributes: [ [ :ref, :source, :source_format, :is_root, :title, :division_type, :label,
+        divisions_attributes: [ [ :ref, :source, :source_format, :is_root, :title, :division_type,
                                   { attrs: {} } ] ],
         assets_attributes: [ [ :ref, :kind, :title, :short_description,
                                { file: [ :filename, :content_type, :data ] } ] ],

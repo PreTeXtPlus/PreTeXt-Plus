@@ -22,7 +22,6 @@ export function legacyDivision(division: Division): Division {
     xmlId: division.xmlId || split.xmlId,
     type: split.type,
     title: split.title,
-    ...(split.label && { label: split.label }),
     ...(Object.keys(split.attrs).length > 0 && { attrs: split.attrs }),
     source: split.body,
   };

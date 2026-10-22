@@ -83,7 +83,10 @@ describe("preview → source sync", () => {
         onPreviewRebuild={() => {}}
       />,
     );
-    expect(latestPreview?.content).toBe(SECTION);
+    // The element is built from the record, its ref doubling as its label.
+    expect(latestPreview?.content).toBe(
+      SECTION.replace('<section xml:id="one">', '<section xml:id="one" label="one">'),
+    );
 
     // The third paragraph, as the renderer's source map reports it: line 5
     // of the fragment, under an id that names the section as its author. The

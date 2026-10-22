@@ -101,14 +101,9 @@ export interface Division {
   /** The PreTeXt element type of this division. Stored on the record. */
   type: DivisionType;
   /**
-   * PreTeXt's `@label` for the division's element (distinct from its
-   * `xml:id`, which is {@link xmlId}). Empty or absent means none.
-   */
-  label?: string;
-  /**
    * Any other attributes of the division's element (`component`, `xml:lang`,
-   * …), as unescaped name → value pairs. Never `xml:id` or `label`, which
-   * have fields of their own.
+   * …), as unescaped name → value pairs. Never `xml:id` or `label`: assembly
+   * writes both from {@link xmlId}.
    */
   attrs?: Record<string, string>;
   /**

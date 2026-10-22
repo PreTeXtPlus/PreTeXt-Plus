@@ -1,7 +1,7 @@
 # frozen_string_literal: true
 
 # Take divisions' sources apart into the fields of their elements -- type,
-# title, label, other attributes -- and their bodies, by running the web-editor's
+# title, other attributes -- and their bodies, by running the web-editor's
 # own `splitDivisionSource` under Node (script/split-division-sources.mjs).
 #
 # A division's element used to be written in its source: a PreTeXt wrapper, a
@@ -18,7 +18,7 @@ class DivisionSourceSplitter
 
   # One division's source, taken apart. `xml_id` is the id the source itself
   # names, which may disagree with the record's ref; the ref wins.
-  Result = Data.define(:id, :type, :title, :label, :xml_id, :attrs, :body, :wrapped, :warnings)
+  Result = Data.define(:id, :type, :title, :xml_id, :attrs, :body, :wrapped, :warnings)
 
   # @param divisions [Enumerable<#id, #source, #source_format, #is_root>]
   # @param root_type [String] the type to give a root whose source names none

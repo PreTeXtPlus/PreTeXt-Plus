@@ -19,8 +19,10 @@ class DivisionSourceSplitterTest < ActiveSupport::TestCase
                    source: "---\ndivision: worksheet\nid: w\ntitle: \"Practice\"\n---\n\n# Part\n")
     ])
 
-    assert_equal [ "a", "section", "Hi <m>x</m>", "L", "s", { "component" => "teacher" }, "<p>Body</p>", true ],
-                 pretext.to_h.values_at(:id, :type, :title, :label, :xml_id, :attrs, :body, :wrapped)
+    assert_equal [ "a", "section", "Hi <m>x</m>", "s", { "component" => "teacher" }, "<p>Body</p>", true ],
+                 pretext.to_h.values_at(:id, :type, :title, :xml_id, :attrs, :body, :wrapped)
+    # A division's label is its ref: the source's own is dropped, and reported.
+    assert_equal [ "dropped label \"L\"; a division's label is its ref" ], pretext.warnings
     assert_equal [ "chapter", "One", "c", "Text." ], latex.to_h.values_at(:type, :title, :xml_id, :body)
     assert_equal [ "worksheet", "Practice", "w", "# Part" ], markdown.to_h.values_at(:type, :title, :xml_id, :body)
   end

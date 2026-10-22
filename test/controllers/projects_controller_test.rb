@@ -545,14 +545,14 @@ class ProjectsControllerTest < ActionDispatch::IntegrationTest
     patch project_url(@project),
       params: { schema_version: ProjectDoc::SCHEMA_VERSION, project: { divisions_attributes: [
         { ref: "fielded", source_format: "pretext", source: "<p>Body</p>", title: "Hi <m>x</m>",
-          division_type: "worksheet", label: "ws", attrs: { component: "teacher" } }
+          division_type: "worksheet", attrs: { component: "teacher" } }
       ] } },
       as: :json
 
     assert_response :success
     division = @project.divisions.find_by!(ref: "fielded")
-    assert_equal [ "worksheet", "Hi <m>x</m>", "ws", { "component" => "teacher" } ],
-                 [ division.division_type, division.title, division.label, division.attrs ]
+    assert_equal [ "worksheet", "Hi <m>x</m>", { "component" => "teacher" } ],
+                 [ division.division_type, division.title, division.attrs ]
     division_json = response.parsed_body["divisions"].find { |d| d["ref"] == "fielded" }
     assert_equal "worksheet", division_json["division_type"]
   end

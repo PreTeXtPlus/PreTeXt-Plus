@@ -26,7 +26,6 @@ import {
  * @property {boolean} [is_root]
  * @property {string} [title]
  * @property {string} [division_type]
- * @property {string} [label]
  * @property {Object<string, string>} [attrs]
  */
 
@@ -70,12 +69,11 @@ import {
  * @property {string} sourceFormat
  * @property {string} title
  * @property {string} type
- * @property {string} [label]
  * @property {Object<string, string>} [attrs]
  */
 
 // Map one Rails division record to the web-editor's Division shape. A
-// division's type, title, label and attributes are its own columns, read
+// division's type, title and attributes are its own columns, read
 // straight across; only a record without a type (one the server has not yet
 // given one) gets the default its place implies -- the project's type for the
 // root, a section otherwise.
@@ -92,7 +90,6 @@ export function railsDivisionToEditor(d, projectType = "article") {
     sourceFormat: d.source_format ?? "pretext",
     title: d.title ?? "",
     type: d.division_type || (d.is_root ? projectType : "section"),
-    label: d.label ?? "",
     attrs: d.attrs ?? {},
   };
 }
@@ -111,7 +108,6 @@ export function editorDivisionToRails(d) {
     source_format: d.sourceFormat,
     title: d.title ?? "",
     division_type: d.type,
-    label: d.label ?? "",
     attrs: d.attrs ?? {},
   };
 }
@@ -143,7 +139,6 @@ export function splitImportedDivisions(payload) {
         source: split.body,
         title: split.title,
         division_type: split.type,
-        label: split.label,
         attrs: split.attrs,
       };
     }),

@@ -259,7 +259,7 @@ describe('createDivisionContent / createDivisionWithId', () => {
     expect(division.xmlId).toBe('s1')
     expect(division.id).toBe('s1')
     expect(division.type).toBe('section')
-    expect(wrapDivisionSource(division)).toContain('<section xml:id="s1">')
+    expect(wrapDivisionSource(division)).toContain('<section xml:id="s1" label="s1">')
   })
 })
 

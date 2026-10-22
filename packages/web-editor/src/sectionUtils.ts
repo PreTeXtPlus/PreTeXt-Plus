@@ -731,7 +731,7 @@ export function parseMarkdownFrontmatter(content: string): {
 export function buildMarkdownFrontmatter(meta: {
   type: DivisionType;
   xmlId: string;
-  label: string;
+  label?: string;
   title?: string;
   /** Further attributes of the division's element, e.g. `component`. */
   attrs?: Record<string, string>;
@@ -1762,8 +1762,9 @@ export function getOrphanRoots(
 // A division's element: split out of source, and wrapped back around it
 // ---------------------------------------------------------------------------
 //
-// A division record stores its *body* only. Its type, `xml:id`, title, label
-// and any other attributes are fields of the record, and everything that needs
+// A division record stores its *body* only. Its type, `xml:id` (its ref, which
+// is also its `@label`), title and any other attributes are fields of the
+// record, and everything that needs
 // the division as PreTeXt — assembly, the code editor's read-only wrapper
 // lines, the converters — builds the element from those fields here.
 //
@@ -1784,7 +1785,7 @@ const LATEX_HEADERLESS_TYPES: ReadonlySet<DivisionType> = new Set([
 /** The metadata fields of a division — what its element is built from. */
 export type DivisionElementFields = Pick<
   Division,
-  "type" | "xmlId" | "title" | "sourceFormat" | "label" | "attrs"
+  "type" | "xmlId" | "title" | "sourceFormat" | "attrs"
 >;
 
 /** A division's source taken apart into its element's fields and its body. */
@@ -1792,7 +1793,6 @@ export interface DivisionSourceSplit {
   type: DivisionType;
   /** Title markup in the source's own format; `""` when there is none. */
   title: string;
-  label: string;
   /** The `xml:id` (LaTeX: header `\label`) the source names; `""` if none. */
   xmlId: string;
   attrs: Record<string, string>;
@@ -1866,7 +1866,6 @@ function splitPretextDivisionSource(source: string): DivisionSourceSplit {
     return {
       type: "section",
       title: titled?.title ?? "",
-      label: "",
       xmlId: "",
       attrs: {},
       body: trimBoundaryBlankLines(titled?.body ?? source),
@@ -1875,9 +1874,10 @@ function splitPretextDivisionSource(source: string): DivisionSourceSplit {
     };
   }
 
-  const { "xml:id": xmlId = "", label = "", ...attrs } = readAttributes(
+  const { "xml:id": xmlId = "", label, ...attrs } = readAttributes(
     source.slice(start.open, start.close),
   );
+  if (label !== undefined) warnings.push(droppedLabelWarning(label));
 
   let inner: string;
   let after: string;
@@ -1914,7 +1914,6 @@ function splitPretextDivisionSource(source: string): DivisionSourceSplit {
   return {
     type: start.name as DivisionType,
     title: titled?.title ?? "",
-    label,
     xmlId,
     attrs,
     body: trimBoundaryBlankLines(body),
@@ -1933,7 +1932,6 @@ function splitLatexDivisionSource(source: string): DivisionSourceSplit {
     return {
       type: header.macro as DivisionType,
       title: header.title,
-      label: "",
       xmlId: header.label,
       attrs: {},
       body: trimBoundaryBlankLines(source.slice(header.length)),
@@ -1964,7 +1962,6 @@ function splitLatexDivisionSource(source: string): DivisionSourceSplit {
       return {
         type: env[1] as DivisionType,
         title,
-        label: "",
         xmlId,
         attrs: {},
         body: trimBoundaryBlankLines(inner),
@@ -1977,7 +1974,6 @@ function splitLatexDivisionSource(source: string): DivisionSourceSplit {
   return {
     type: "section",
     title: "",
-    label: "",
     xmlId: "",
     attrs: {},
     body: trimBoundaryBlankLines(source),
@@ -1986,7 +1982,18 @@ function splitLatexDivisionSource(source: string): DivisionSourceSplit {
   };
 }
 
-/** Frontmatter keys that are fields of the record rather than attributes. */
+/**
+ * A source's own `@label` has nowhere to go: a division's label is its ref,
+ * written by assembly, so one named in source is dropped -- and said so.
+ */
+function droppedLabelWarning(label: string): string {
+  return `dropped label ${JSON.stringify(label)}; a division's label is its ref`;
+}
+
+/**
+ * Frontmatter keys that are fields of the record rather than attributes --
+ * `label` among them, so that it is dropped rather than kept as one.
+ */
 const MARKDOWN_FIELD_KEYS: ReadonlySet<string> = new Set([
   "division",
   "id",
@@ -2002,7 +2009,6 @@ function splitMarkdownDivisionSource(source: string): DivisionSourceSplit {
     return {
       type: "section",
       title: "",
-      label: "",
       xmlId: "",
       attrs: {},
       body: trimBoundaryBlankLines(source),
@@ -2019,12 +2025,11 @@ function splitMarkdownDivisionSource(source: string): DivisionSourceSplit {
   return {
     type: parsed.type,
     title: parsed.title,
-    label: parsed.label,
     xmlId: parsed.xmlId,
     attrs,
     body: trimBoundaryBlankLines(parsed.body),
     wrapped: true,
-    warnings: [],
+    warnings: parsed.label ? [droppedLabelWarning(parsed.label)] : [],
   };
 }
 
@@ -2062,11 +2067,15 @@ export function splitDivisionSource(
   return split;
 }
 
-/** `xml:id`, `label` and every other attribute, as a start tag writes them. */
+/**
+ * `xml:id`, `label` and every other attribute, as a start tag writes them.
+ * Both of the first two are the division's ref: it is the one name a division
+ * has, so its `@label` (PreTeXt's stable name for it across builds) is the
+ * same.
+ */
 function divisionAttributeString(d: DivisionElementFields): string {
   const pairs: [string, string][] = [];
-  if (d.xmlId) pairs.push(["xml:id", d.xmlId]);
-  if (d.label) pairs.push(["label", d.label]);
+  if (d.xmlId) pairs.push(["xml:id", d.xmlId], ["label", d.xmlId]);
   for (const [name, value] of Object.entries(d.attrs ?? {})) {
     if (name !== "xml:id" && name !== "label") pairs.push([name, value]);
   }
@@ -2096,7 +2105,6 @@ export function divisionHeaderParts(d: DivisionElementFields): {
         before: `${buildMarkdownFrontmatter({
           type: d.type,
           xmlId: d.xmlId,
-          label: d.label ?? "",
           title: d.title,
           attrs: d.attrs,
         })}\n\n`,
@@ -2398,15 +2406,19 @@ function convertLatexTitle(title: string): string {
 /**
  * `xml` with the division's own attributes set on its first element — the
  * converters' output carries whatever the synthesized header could say, and
- * LaTeX can say no `@label` at all (its `\label` is the `xml:id`), so the
- * record's values are written over it here.
+ * neither header spells the `@label` (LaTeX's `\label` is the `xml:id`), so
+ * the record's values -- its ref as both -- are written over it here.
  */
 function setDivisionAttributes(xml: string, d: DivisionElementFields): string {
   const tag = nextTag(xml, 0);
   if (!tag || tag.closing) return xml;
   const attrs: PlaceholderAttr[] = [];
-  if (d.xmlId) attrs.push({ name: "xml:id", value: escapeAttribute(d.xmlId) });
-  if (d.label) attrs.push({ name: "label", value: escapeAttribute(d.label) });
+  if (d.xmlId) {
+    attrs.push(
+      { name: "xml:id", value: escapeAttribute(d.xmlId) },
+      { name: "label", value: escapeAttribute(d.xmlId) },
+    );
+  }
   for (const [name, value] of Object.entries(d.attrs ?? {})) {
     if (name !== "xml:id" && name !== "label") {
       attrs.push({ name, value: escapeAttribute(value) });
