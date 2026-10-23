@@ -91,7 +91,7 @@ gem "commonmarker", "~> 2.10"
 
 gem "aws-sdk-s3", "~> 1.233"
 
-gem "cancancan", "~> 3.6"
+gem "cancancan", "~> 3.7"
 
 gem "kaminari", "~> 1.2"
 
