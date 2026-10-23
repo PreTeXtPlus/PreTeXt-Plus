@@ -87,7 +87,7 @@ gem "postmark-rails", "~> 0.22"
 
 gem "pay", "~> 12.2"
 
-gem "commonmarker", "~> 2.8"
+gem "commonmarker", "~> 2.10"
 
 gem "aws-sdk-s3", "~> 1.233"
 
