@@ -93,7 +93,7 @@ gem "aws-sdk-s3", "~> 1.234"
 
 gem "cancancan", "~> 3.7"
 
-gem "kaminari", "~> 1.2"
+gem "kaminari", "~> 1.3"
 
 gem "rubyzip", "~> 3.6"
 
