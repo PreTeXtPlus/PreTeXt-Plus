@@ -2,8 +2,9 @@ import { describe, it, expect } from "vitest";
 import { createEditorStore, selectOpenDivisionId } from "../store/editorStore";
 import type { Division } from "../types/sections";
 import type { Asset, Snippet } from "../types/editor";
+import { legacyDivisions } from "./legacyDivision";
 
-const divisions: Division[] = [
+const divisions: Division[] = legacyDivisions([
   {
     id: "1",
     xmlId: "doc",
@@ -20,7 +21,7 @@ const divisions: Division[] = [
     sourceFormat: "pretext",
     source: '<section xml:id="sec"><title>Sec</title></section>',
   },
-];
+]);
 const snippet: Snippet = { id: "s1", ref: "greeting", source: "<p>Hi</p>", sourceFormat: "pretext" };
 const asset: Asset = { id: "a1", ref: "fig", title: "Figure" };
 
@@ -65,7 +66,6 @@ describe("the open item", () => {
       title: "New",
       type: "subsection",
       xmlId: "new",
-      label: "",
       sourceFormat: "pretext",
     });
     expect(store.getState().creating).toEqual({
@@ -166,7 +166,6 @@ describe("the open item", () => {
       title: "New",
       type: "subsection",
       xmlId: "new",
-      label: "",
       sourceFormat: "pretext",
     });
     store.getState().cancelSectionEdit();

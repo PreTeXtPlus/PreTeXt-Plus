@@ -344,8 +344,9 @@ describe("PreTeXt snippets", () => {
   const division = (
     xmlId: string,
     type: Division["type"],
+    title: string,
     source: string,
-  ): Division => ({ xmlId, title: xmlId, type, sourceFormat: "pretext", source });
+  ): Division => ({ xmlId, title, type, sourceFormat: "pretext", source });
 
   /**
    * `body` in the document it would really be built into: a section of an
@@ -356,16 +357,8 @@ describe("PreTeXt snippets", () => {
   const wrap = (body: string) =>
     assembleFullProjectSource(
       [
-        division(
-          "art-a",
-          "article",
-          `<article xml:id="art-a">\n<title>Doc</title>\n<plus:section ref="sec-a"/>\n</article>`,
-        ),
-        division(
-          "sec-a",
-          "section",
-          `<section xml:id="sec-a">\n<title>One</title>\n${body}\n</section>`,
-        ),
+        division("art-a", "article", "Doc", `<plus:section ref="sec-a"/>`),
+        division("sec-a", "section", "One", body),
       ],
       "art-a",
       "",
@@ -413,16 +406,8 @@ describe("PreTeXt snippets", () => {
   const wrapDeck = (body: string) =>
     assembleFullProjectSource(
       [
-        division(
-          "deck-a",
-          "slideshow",
-          `<slideshow xml:id="deck-a">\n<title>Deck</title>\n<plus:section ref="sec-a"/>\n</slideshow>`,
-        ),
-        division(
-          "sec-a",
-          "section",
-          `<section xml:id="sec-a">\n<title>One</title>\n${body}\n</section>`,
-        ),
+        division("deck-a", "slideshow", "Deck", `<plus:section ref="sec-a"/>`),
+        division("sec-a", "section", "One", body),
       ],
       "deck-a",
       "",

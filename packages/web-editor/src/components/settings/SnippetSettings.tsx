@@ -20,7 +20,7 @@ export interface SnippetSettingsProps {
   /** Default format for the embed-code picker — the root division's. */
   embedFormat: SourceFormat;
   /**
-   * Persist a metadata edit (ref or source format). `prevRef` is the ref before
+   * Persist a metadata edit (title, ref or source format). `prevRef` is the ref before
    * the edit, so the caller can rewrite placeholders when it changed. Rejects
    * with the host's error, which the field shows.
    */
@@ -29,7 +29,8 @@ export interface SnippetSettingsProps {
 }
 
 /**
- * A snippet's settings: its id (the ref every embed names), its source format,
+ * A snippet's settings: its title (a display name, optional), its id (the ref
+ * every embed names), its source format,
  * the embed code, and the project-level actions. Its source is the code editor
  * itself, so there is no content field here.
  */
@@ -54,6 +55,13 @@ const SnippetSettings = ({
     (r) => r.ref === snippet.ref,
   );
   const inDocument = row?.inDocument ?? false;
+
+  // Optional: a blank title is a cleared one, and the ref is shown instead.
+  const commitTitle = async (next: string): Promise<void> => {
+    const title = next.trim();
+    if (title === (snippet.title ?? "")) return;
+    await onSave({ ...snippet, title }, snippet.ref);
+  };
 
   const commitRef = async (next: string): Promise<string | void> => {
     const ref = sanitizeXmlId(next);
@@ -121,6 +129,15 @@ const SnippetSettings = ({
 
   return (
     <div className="flex flex-col gap-2.5">
+      <SettingsField label="Title" htmlFor="snippet-settings-title">
+        <CommitField
+          id="snippet-settings-title"
+          value={snippet.title ?? ""}
+          onCommit={commitTitle}
+          disabled={readOnly}
+          placeholder="optional"
+        />
+      </SettingsField>
       <SettingsField label="Id" htmlFor="snippet-settings-ref">
         <CommitField
           id="snippet-settings-ref"

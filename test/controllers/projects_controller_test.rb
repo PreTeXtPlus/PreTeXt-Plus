@@ -329,18 +329,166 @@ class ProjectsControllerTest < ActionDispatch::IntegrationTest
 
     assert_response :success
     asset = @project.assets.find_by!(ref: "diagram-two")
-    assert asset.file_kind?
-    assert asset.file.attached?
+    assert asset.file_asset?
+    assert asset.file_attached?
     assert_equal "test_image.png", asset.file.filename.to_s
 
     body = response.parsed_body
     asset_json = body["assets"].find { |a| a["ref"] == "diagram-two" }
     assert_equal asset.id, asset_json["id"]
-    assert_equal share_asset_project_path(@project, ref: "diagram-two", format: "png"), asset_json["path"]
+    assert_equal content_file_project_path(@project, ref: "diagram-two", format: "png"), asset_json["path"]
     assert_equal "png", asset_json["extension"]
     assert_equal "image/png", asset_json["content_type"]
-    assert_equal share_asset_thumbnail_project_path(@project, ref: "diagram-two", format: "png"),
+    assert_equal content_thumbnail_project_path(@project, ref: "diagram-two", format: "png"),
       asset_json["thumbnail_path"]
+  end
+
+  # ---- content files (external/:ref) ----
+  #
+  # A content's file and thumbnail, by ref. Public, because published builds'
+  # <image source> and the editor's previews both resolve through them.
+
+  test "content_file redirects to the asset's current file URL when signed in as the owner" do
+    asset = contents(:image_one)
+
+    get content_file_project_path(@project, ref: asset.ref, format: "png")
+
+    assert_response :redirect
+    assert_match %r{/rails/active_storage/}, response.location
+  end
+
+  test "content_file redirects to the asset's current file URL when signed out entirely" do
+    asset = contents(:image_one)
+
+    sign_out users(:one)
+
+    get content_file_project_path(@project, ref: asset.ref, format: "png")
+
+    assert_response :redirect
+    assert_match %r{/rails/active_storage/}, response.location
+  end
+
+  test "content_file redirects to the asset's current file URL for a signed-in non-owner" do
+    asset = contents(:image_one)
+
+    sign_out users(:one)
+    sign_in users(:two)
+
+    get content_file_project_path(@project, ref: asset.ref, format: "png")
+
+    assert_response :redirect
+    assert_match %r{/rails/active_storage/}, response.location
+  end
+
+  test "content_thumbnail redirects to a resized variant URL for the owner" do
+    asset = contents(:image_one)
+
+    get content_thumbnail_project_path(@project, ref: asset.ref, format: "png")
+
+    assert_response :redirect
+    assert_match %r{/rails/active_storage/}, response.location
+  end
+
+  test "content_thumbnail redirects when signed out entirely" do
+    asset = contents(:image_one)
+
+    sign_out users(:one)
+
+    get content_thumbnail_project_path(@project, ref: asset.ref, format: "png")
+
+    assert_response :redirect
+    assert_match %r{/rails/active_storage/}, response.location
+  end
+
+  test "content_thumbnail 404s for an asset with no thumbnailable file" do
+    asset = contents(:authored_one)
+
+    get content_thumbnail_project_path(@project, ref: asset.ref)
+
+    assert_response :not_found
+  end
+
+  test "legacy_content_file redirects to the asset's current file URL for the owner" do
+    asset = contents(:image_one)
+
+    get legacy_content_file_path(asset, format: "png")
+
+    assert_response :redirect
+    assert_match %r{/rails/active_storage/}, response.location
+  end
+
+  test "legacy_content_file denies access to another user's asset" do
+    asset = contents(:image_one)
+
+    sign_out users(:one)
+    # The subscribed user neither owns nor collaborates on this asset's
+    # project (user two is now a collaborator via fixtures).
+    sign_in users(:subscribed)
+
+    get legacy_content_file_path(asset, format: "png")
+
+    # CanCan::AccessDenied is rescued globally (application_controller.rb) into
+    # a redirect for non-JSON requests, rather than propagating as an exception.
+    assert_redirected_to projects_path
+  end
+
+  test "legacy_content_file requires authentication when signed out entirely" do
+    asset = contents(:image_one)
+
+    sign_out users(:one)
+
+    get legacy_content_file_path(asset, format: "png")
+
+    assert_response :unauthorized
+  end
+
+  # Looked up across every kind of content, not just assets.
+  test "content_file and content_thumbnail find a non-asset by its ref" do
+    division = contents(:one)
+
+    get content_file_project_path(@project, ref: division.ref)
+    assert_redirected_to "/image-not-found.svg"
+
+    get content_thumbnail_project_path(@project, ref: division.ref)
+    assert_response :not_found
+  end
+
+  test "content_thumbnail serves a non-asset that carries a file" do
+    division = contents(:one)
+    # Validation keeps attachments to file assets today; serving does not care.
+    division.files.attach(io: File.open(Rails.root.join("test/fixtures/files/test_image.png")),
+                          filename: "cover.png", content_type: "image/png")
+    division.save!(validate: false)
+
+    get content_thumbnail_project_path(@project, ref: division.ref, format: "png")
+
+    assert_response :redirect
+    assert_match %r{/rails/active_storage/}, response.location
+  end
+
+  test "content_file 404s for a ref the project does not have" do
+    get content_file_project_path(@project, ref: "nothing-here")
+
+    assert_response :not_found
+  end
+
+  # ---- snippets ----
+
+  test "update creates and retitles a snippet, and the JSON carries its title" do
+    patch project_url(@project),
+      params: { project: { snippets_attributes: [ { ref: "greeting", title: "A greeting", source: "<p>Hi</p>" } ] } },
+      as: :json
+
+    assert_response :success
+    snippet = @project.snippets.find_by!(ref: "greeting")
+    assert_equal "A greeting", snippet.title
+    assert_equal "A greeting", response.parsed_body["snippets"].find { |s| s["ref"] == "greeting" }["title"]
+
+    patch project_url(@project),
+      params: { project: { snippets_attributes: [ { id: snippet.id, title: "" } ] } },
+      as: :json
+
+    assert_equal "", snippet.reload.title.to_s
   end
 
   # --- Visibility ---
@@ -377,7 +525,7 @@ class ProjectsControllerTest < ActionDispatch::IntegrationTest
   test "update creates a non-root division via an id-less divisions_attributes entry" do
     assert_difference("@project.divisions.count", 1) do
       patch project_url(@project),
-        params: { project: { divisions_attributes: [ { ref: "newly-added", source_format: "pretext", source: "<section><title>New</title></section>" } ] } },
+        params: { schema_version: ProjectDoc::SCHEMA_VERSION, project: { divisions_attributes: [ { ref: "newly-added", source_format: "pretext", source: "<section><title>New</title></section>" } ] } },
         as: :json
     end
 
@@ -393,10 +541,48 @@ class ProjectsControllerTest < ActionDispatch::IntegrationTest
     assert_equal division.id, division_json["id"]
   end
 
+  test "update writes a division's element fields to its columns" do
+    patch project_url(@project),
+      params: { schema_version: ProjectDoc::SCHEMA_VERSION, project: { divisions_attributes: [
+        { ref: "fielded", source_format: "pretext", source: "<p>Body</p>", title: "Hi <m>x</m>",
+          division_type: "worksheet", attrs: { component: "teacher" } }
+      ] } },
+      as: :json
+
+    assert_response :success
+    division = @project.divisions.find_by!(ref: "fielded")
+    assert_equal [ "worksheet", "Hi <m>x</m>", { "component" => "teacher" } ],
+                 [ division.division_type, division.title, division.attrs ]
+    division_json = response.parsed_body["divisions"].find { |d| d["ref"] == "fielded" }
+    assert_equal "worksheet", division_json["division_type"]
+  end
+
+  # A tab loaded before division elements moved into columns writes each
+  # division's element into its source, which assembly would then wrap again.
+  test "update refuses division writes from an editor of another schema version" do
+    [ {}, { schema_version: ProjectDoc::SCHEMA_VERSION - 1 } ].each do |version|
+      assert_no_difference("@project.divisions.count") do
+        patch project_url(@project),
+          params: version.merge(project: { divisions_attributes: [ { ref: "stale-tab", source: "<section/>" } ] }),
+          as: :json
+      end
+
+      assert_response :conflict
+      assert_equal ProjectDoc::SCHEMA_VERSION, response.parsed_body["schema_version"]
+    end
+  end
+
+  test "update without divisions needs no schema version" do
+    patch project_url(@project), params: { project: { title: "Renamed" } }, as: :json
+
+    assert_response :success
+    assert_equal "Renamed", @project.reload.title
+  end
+
   test "creating a division leaves the existing root untouched" do
     root = @project.root_division
     patch project_url(@project),
-      params: { project: { divisions_attributes: [ { ref: "sibling", source_format: "pretext", source: "<section/>" } ] } },
+      params: { schema_version: ProjectDoc::SCHEMA_VERSION, project: { divisions_attributes: [ { ref: "sibling", source_format: "pretext", source: "<section/>" } ] } },
       as: :json
     assert_response :success
     assert_equal root.id, @project.reload.root_division.id
@@ -404,10 +590,10 @@ class ProjectsControllerTest < ActionDispatch::IntegrationTest
   end
 
   test "update edits an existing division via its id without creating a row" do
-    division = divisions(:one)
+    division = contents(:one)
     assert_no_difference("@project.divisions.count") do
       patch project_url(@project),
-        params: { project: { divisions_attributes: [ { id: division.id, source: "<section><title>Edited</title></section>" } ] } },
+        params: { schema_version: ProjectDoc::SCHEMA_VERSION, project: { divisions_attributes: [ { id: division.id, source: "<section><title>Edited</title></section>" } ] } },
         as: :json
     end
     assert_response :success
@@ -418,11 +604,11 @@ class ProjectsControllerTest < ActionDispatch::IntegrationTest
     division = @project.divisions.create!(ref: "to-remove", source_format: "pretext", source: "<section/>")
     assert_difference("@project.divisions.count", -1) do
       patch project_url(@project),
-        params: { project: { divisions_attributes: [ { id: division.id, _destroy: true } ] } },
+        params: { schema_version: ProjectDoc::SCHEMA_VERSION, project: { divisions_attributes: [ { id: division.id, _destroy: true } ] } },
         as: :json
     end
     assert_response :success
-    assert_not Division.exists?(division.id)
+    assert_not Content.exists?(division.id)
   end
 
   # Nested attributes bypass CanCan, so the controller enforces the Ability's
@@ -431,11 +617,11 @@ class ProjectsControllerTest < ActionDispatch::IntegrationTest
     root = @project.root_division
     assert_no_difference("@project.divisions.count") do
       patch project_url(@project),
-        params: { project: { divisions_attributes: [ { id: root.id, _destroy: true } ] } },
+        params: { schema_version: ProjectDoc::SCHEMA_VERSION, project: { divisions_attributes: [ { id: root.id, _destroy: true } ] } },
         as: :json
     end
     assert_response :success
-    assert Division.exists?(root.id)
+    assert Content.exists?(root.id)
   end
 
   # The collaborative editor mints its own uuids and sends the division under
@@ -444,7 +630,7 @@ class ProjectsControllerTest < ActionDispatch::IntegrationTest
     id = SecureRandom.uuid
     assert_difference("@project.divisions.count", 1) do
       patch project_url(@project),
-        params: { project: { divisions_attributes: [ { id: id, ref: "minted", source_format: "pretext", source: "<section/>" } ] } },
+        params: { schema_version: ProjectDoc::SCHEMA_VERSION, project: { divisions_attributes: [ { id: id, ref: "minted", source_format: "pretext", source: "<section/>" } ] } },
         as: :json
     end
     assert_response :success
@@ -457,21 +643,21 @@ class ProjectsControllerTest < ActionDispatch::IntegrationTest
     division = @project.divisions.create!(ref: "twice-removed", source_format: "pretext", source: "<section/>")
     2.times do
       patch project_url(@project),
-        params: { project: { divisions_attributes: [ { id: division.id, _destroy: true } ] } },
+        params: { schema_version: ProjectDoc::SCHEMA_VERSION, project: { divisions_attributes: [ { id: division.id, _destroy: true } ] } },
         as: :json
       assert_response :success
     end
-    assert_not Division.exists?(division.id)
+    assert_not Content.exists?(division.id)
   end
 
   # Tolerating unknown ids means an id belonging to *another* project reaches
   # the database as a primary-key conflict. It cannot touch that row, but it
   # must not surface as a 500 either.
   test "update refuses a nested id that belongs to another project" do
-    foreign = divisions(:two)
+    foreign = contents(:two)
     assert_no_difference("@project.divisions.count") do
       patch project_url(@project),
-        params: { project: { divisions_attributes: [ { id: foreign.id, ref: "stolen", source_format: "pretext", source: "<section/>" } ] } },
+        params: { schema_version: ProjectDoc::SCHEMA_VERSION, project: { divisions_attributes: [ { id: foreign.id, ref: "stolen", source_format: "pretext", source: "<section/>" } ] } },
         as: :json
     end
     assert_response :unprocessable_entity
@@ -479,10 +665,10 @@ class ProjectsControllerTest < ActionDispatch::IntegrationTest
   end
 
   test "update rejects a division whose ref collides with an asset" do
-    asset_ref = assets(:authored_one).ref
+    asset_ref = contents(:authored_one).ref
     assert_no_difference("@project.divisions.count") do
       patch project_url(@project),
-        params: { project: { divisions_attributes: [ { ref: asset_ref, source_format: "pretext", source: "<section/>" } ] } },
+        params: { schema_version: ProjectDoc::SCHEMA_VERSION, project: { divisions_attributes: [ { ref: asset_ref, source_format: "pretext", source: "<section/>" } ] } },
         as: :json
     end
     assert_response :unprocessable_entity
@@ -492,7 +678,7 @@ class ProjectsControllerTest < ActionDispatch::IntegrationTest
     other_project = projects(:two)
     assert_no_difference("other_project.divisions.count") do
       patch project_url(other_project),
-        params: { project: { divisions_attributes: [ { ref: "sneaky", source_format: "pretext", source: "<section/>" } ] } },
+        params: { schema_version: ProjectDoc::SCHEMA_VERSION, project: { divisions_attributes: [ { ref: "sneaky", source_format: "pretext", source: "<section/>" } ] } },
         as: :json
     end
     assert_response 403
@@ -507,9 +693,9 @@ class ProjectsControllerTest < ActionDispatch::IntegrationTest
 
     assert_response :success
     asset = @project.assets.find_by!(ref: "new-activity")
-    assert asset.authored_kind?
+    assert asset.authored_asset?
     assert_equal "<p>hi</p>", asset.source
-    assert_not asset.file.attached?
+    assert_not asset.file_attached?
 
     asset_json = response.parsed_body["assets"].find { |a| a["ref"] == "new-activity" }
     assert_equal asset.id, asset_json["id"]
@@ -517,7 +703,7 @@ class ProjectsControllerTest < ActionDispatch::IntegrationTest
   end
 
   test "update edits an existing asset's source via its id" do
-    asset = assets(:authored_one)
+    asset = contents(:authored_one)
     patch project_url(@project),
       params: { project: { assets_attributes: [ { id: asset.id, source: "<p>edited</p>" } ] } },
       as: :json
@@ -529,7 +715,7 @@ class ProjectsControllerTest < ActionDispatch::IntegrationTest
   end
 
   test "update destroys an asset via _destroy" do
-    asset = assets(:authored_one)
+    asset = contents(:authored_one)
     assert_difference("@project.assets.count", -1) do
       patch project_url(@project),
         params: { project: { assets_attributes: [ { id: asset.id, _destroy: true } ] } },
@@ -537,7 +723,7 @@ class ProjectsControllerTest < ActionDispatch::IntegrationTest
     end
 
     assert_response :success
-    assert_not Asset.exists?(asset.id)
+    assert_not Content.exists?(asset.id)
   end
 
   test "update rejects an asset whose ref collides with a division" do
@@ -568,8 +754,8 @@ class ProjectsControllerTest < ActionDispatch::IntegrationTest
     assert_kind_of Array, assets_json
 
     authored = assets_json.find { |a| a["ref"] == "my-activity" }
-    assert_equal assets(:authored_one).id, authored["id"]
-    assert_equal "authored", authored["kind"]
+    assert_equal contents(:authored_one).id, authored["id"]
+    assert_equal "authored_asset", authored["kind"]
     # A source-only asset carries no file redirect/extension.
     assert_nil authored["path"]
     assert_nil authored["extension"]
@@ -586,7 +772,7 @@ class ProjectsControllerTest < ActionDispatch::IntegrationTest
   test "destroying a project takes its root division with it" do
     root = @project.root_division
     delete project_url(@project)
-    assert_not Division.exists?(root.id)
+    assert_not Content.exists?(root.id)
   end
 
   test "non-owner cannot view project" do
@@ -766,7 +952,7 @@ class ProjectsControllerTest < ActionDispatch::IntegrationTest
     requester = users(:two)
     own_project = projects(:two) # requester's own project, padded up to their quota
     remaining = requester.asset_quota - requester.assets.count
-    remaining.times { |n| own_project.assets.create!(ref: "pad-#{n}", kind: :authored, title: "Pad #{n}") }
+    remaining.times { |n| own_project.assets.create!(ref: "pad-#{n}", kind: :authored_asset, title: "Pad #{n}") }
     @project.update!(visibility: :public) # copy now requires the source to be non-private
 
     sign_out :user
@@ -1025,7 +1211,7 @@ class ProjectsControllerTest < ActionDispatch::IntegrationTest
     assert_equal "<docinfo/>", project.docinfo
 
     asset = project.assets.sole
-    assert asset.file.attached?
+    assert asset.file_attached?
     assert_equal "fig.png", asset.file.filename.to_s
     assert_equal "image/png", asset.file.content_type
     # The base64 round-trip must reproduce the original bytes exactly.

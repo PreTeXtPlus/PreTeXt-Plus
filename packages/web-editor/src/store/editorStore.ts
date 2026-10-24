@@ -253,7 +253,8 @@ export type DivisionChanges = {
   type?: DivisionType;
   xmlId?: string | null;
   sourceFormat?: SourceFormat;
-  label?: string | null;
+  /** Replaces the element's other attributes wholesale. */
+  attrs?: Record<string, string>;
 };
 
 /**
@@ -913,6 +914,7 @@ export function createEditorStore(init: EditorStoreInit): EditorStoreHandle {
               ...(changes.sourceFormat !== undefined && {
                 sourceFormat: changes.sourceFormat,
               }),
+              ...(changes.attrs !== undefined && { attrs: changes.attrs }),
             }
             : d,
         );

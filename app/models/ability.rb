@@ -63,17 +63,10 @@ class Ability
       project.editable_by?(user) && project.user.subscribed?
     end
 
-    # Assets belonging to own projects (hash condition enables accessible_by scoping)
-    can :manage, Asset, project: { user_id: user.id }
-    can :manage, Asset, project: { collaborations: { user_id: user.id } }
-
-    # Divisions belonging to own projects
-    can :manage, Division, project: { user_id: user.id }
-    can :manage, Division, project: { collaborations: { user_id: user.id } }
-
-    # Snippets belonging to own projects
-    can :manage, Snippet, project: { user_id: user.id }
-    can :manage, Snippet, project: { collaborations: { user_id: user.id } }
+    # Divisions, snippets and assets belonging to own projects (hash condition
+    # enables accessible_by scoping)
+    can :manage, Content, project: { user_id: user.id }
+    can :manage, Content, project: { collaborations: { user_id: user.id } }
 
     # Only the owner manages who collaborates, including handing ownership to
     # one of them; a collaborator may remove (only) their own row to leave

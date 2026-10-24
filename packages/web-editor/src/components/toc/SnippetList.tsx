@@ -84,11 +84,28 @@ const SnippetList = ({ canCreate }: SnippetListProps) => {
                         : "Open snippet"
                     }
                   >
+                    {/* A titled snippet reads like an asset row: its title,
+                        with the ref beneath. Untitled, the ref is all there is. */}
+                    {row.snippet?.title && (
+                      <span
+                        className={clsx(
+                          "text-[0.78rem] text-slate-700 overflow-hidden text-ellipsis whitespace-nowrap",
+                          isOpen && "font-semibold",
+                        )}
+                      >
+                        {row.snippet.title}
+                      </span>
+                    )}
                     <span
                       className={clsx(
-                        "text-[0.78rem] font-mono overflow-hidden text-ellipsis whitespace-nowrap",
-                        isUnlinked ? "text-amber-700" : "text-slate-700",
-                        isOpen && "font-semibold",
+                        "font-mono overflow-hidden text-ellipsis whitespace-nowrap",
+                        row.snippet?.title ? "text-[0.68rem]" : "text-[0.78rem]",
+                        isUnlinked
+                          ? "text-amber-700"
+                          : row.snippet?.title
+                            ? "text-slate-400"
+                            : "text-slate-700",
+                        isOpen && !row.snippet?.title && "font-semibold",
                       )}
                     >
                       {isUnlinked

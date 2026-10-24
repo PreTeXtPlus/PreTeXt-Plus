@@ -180,7 +180,7 @@ class ProjectArchiveBuilderTest < ActiveSupport::TestCase
 
   test "packs each asset with a file under source/external using its ref" do
     project = projects(:one)
-    asset = assets(:image_one)
+    asset = contents(:image_one)
 
     contents = entries(ProjectArchiveBuilder.new(project).build)
 
@@ -196,12 +196,13 @@ class ProjectArchiveBuilderTest < ActiveSupport::TestCase
   # <image source="ref.ext"> was built with (see assetTransforms.ts).
   test "packs an asset with an extensionless upload under source/external using its content type" do
     project = projects(:one)
-    asset = assets(:image_one)
-    asset.file.attach(
+    asset = contents(:image_one)
+    asset.attach_file(
       io: File.open(Rails.root.join("test/fixtures/files/test_image.png")),
       filename: "pasted-image-1234567890",
       content_type: "image/png"
     )
+    asset.save!
 
     contents = entries(ProjectArchiveBuilder.new(project).build)
 
@@ -221,11 +222,12 @@ class ProjectArchiveBuilderTest < ActiveSupport::TestCase
 
   test "an asset called icon is packed like any other and leaves the default logo alone" do
     project = projects(:one)
-    icon = project.assets.create!(ref: "icon", kind: :file, title: "My Icon")
-    icon.file.attach(
+    icon = project.assets.create!(ref: "icon", kind: :file_asset, title: "My Icon")
+    icon.attach_file(
       io: File.open(Rails.root.join("test/fixtures/files/test_image.png")),
       filename: "test_image.png", content_type: "image/png"
     )
+    icon.save!
 
     contents = entries(ProjectArchiveBuilder.new(project).build)
 

@@ -5,9 +5,11 @@
  *
  * - `doc.getMap("divisions")`: key → `Y.Map` entry per division, where the key
  *   is the division's record id. Each entry holds the division's record fields
- *   (`xmlId`, `sourceFormat`, `title`, `type`) plus its content as a nested
- *   `Y.Text` under `"source"` — the CRDT that makes concurrent character edits
- *   merge.
+ *   (`xmlId`, `sourceFormat`, `title`, `type`, and `attrs` — the
+ *   element's other attributes, as one last-writer-wins object) plus its *body*
+ *   as a nested `Y.Text` under `"source"` — the CRDT that makes concurrent
+ *   character edits merge. The division's element is never in that text: it
+ *   is built from the fields.
  * - `doc.getMap("assets")`: key → `Y.Map` entry per project asset, keyed by the
  *   asset's record id. Its PreTeXt source is a nested `Y.Text` under
  *   `"source"`, exactly like a division's, since it is edited in the same code
@@ -19,7 +21,7 @@
  *   file and handed back a URL; every other peer learns of the asset from this
  *   map rather than from a re-fetch.
  * - `doc.getMap("snippets")`: key → `Y.Map` entry per project snippet, keyed by
- *   the snippet's record id. `ref` and `sourceFormat` are last-writer-wins; the
+ *   the snippet's record id. `ref`, `title` and `sourceFormat` are last-writer-wins; the
  *   source is a nested `Y.Text` under `"source"`, like a division's.
  * - `doc.getMap("meta")`: document-wide fields — `title`, `docinfo`,
  *   `useCommonDocinfo`, `language` — all last-writer-wins values.
@@ -50,13 +52,16 @@ import type { Asset, Snippet, SourceFormat } from "../types/editor";
 /**
  * The version of the layout above. Bump it whenever a change means a client
  * of one version would misread a doc written by another — as when snippet and
- * asset sources moved from plain strings to nested `Y.Text` (version 2). The
+ * asset sources moved from plain strings to nested `Y.Text` (version 2), and
+ * when a division's element moved out of its source text into its fields
+ * (version 3: a version-2 client would write wrapped source that assembly
+ * then wraps a second time). The
  * host's transport must refuse a client speaking any other version, or a tab
  * left open across the change keeps writing the old shape into the doc that
  * replaced it. The PreTeXt-Plus server checks it as
  * `ProjectDoc::SCHEMA_VERSION`; keep the two equal.
  */
-export const COLLAB_SCHEMA_VERSION = 2;
+export const COLLAB_SCHEMA_VERSION = 3;
 
 /** One division as it crosses the doc boundary (seed input / serialize output). */
 export interface CollabDivisionSnapshot {
@@ -67,6 +72,7 @@ export interface CollabDivisionSnapshot {
   source: string;
   title?: string;
   type?: DivisionType;
+  attrs?: Record<string, string>;
 }
 
 /**
@@ -168,6 +174,9 @@ export const makeDivisionEntry = (
   entry.set("sourceFormat", snapshot.sourceFormat);
   if (snapshot.title !== undefined) entry.set("title", snapshot.title);
   if (snapshot.type !== undefined) entry.set("type", snapshot.type);
+  if (snapshot.attrs && Object.keys(snapshot.attrs).length > 0) {
+    entry.set("attrs", snapshot.attrs);
+  }
   const text = new Y.Text();
   if (snapshot.source) text.insert(0, snapshot.source);
   entry.set("source", text);
@@ -228,7 +237,7 @@ export const applyAssetFields = (entry: Y.Map<unknown>, asset: Asset): void => {
 };
 
 /** The snippet metadata fields the doc carries; `source` is a `Y.Text`. */
-const SNIPPET_FIELDS = ["ref", "sourceFormat"] as const;
+const SNIPPET_FIELDS = ["ref", "title", "sourceFormat"] as const;
 
 /** Build a snippets-map entry: last-writer-wins metadata + `Y.Text` source. */
 export const makeSnippetEntry = (snippet: Snippet): Y.Map<unknown> => {
@@ -278,6 +287,7 @@ export const entryToSnapshot = (
     source: source instanceof Y.Text ? source.toString() : "",
     title: entry.get("title") as string | undefined,
     type: entry.get("type") as DivisionType | undefined,
+    attrs: entry.get("attrs") as Record<string, string> | undefined,
   };
 };
 
@@ -306,6 +316,7 @@ export const snippetEntryToSnapshot = (
 ): CollabSnippetSnapshot => ({
   id,
   ref: String(entry.get("ref") ?? ""),
+  title: entry.get("title") as string | undefined,
   source: getEntryText(entry)?.toString() ?? "",
   sourceFormat: (entry.get("sourceFormat") ?? "pretext") as SourceFormat,
 });

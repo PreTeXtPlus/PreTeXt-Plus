@@ -59,8 +59,6 @@ class ProjectDocProjection
     # and must not reset the project's own value.
     attributes[:use_common_docinfo] = meta["useCommonDocinfo"] unless meta["useCommonDocinfo"].nil?
     attributes[:language] = meta["language"] unless meta["language"].nil?
-    root = root_element(divisions)
-    attributes[:root_element] = root unless root.nil?
 
     rows = asset_attributes(assets, deleted)
     attributes[:assets_attributes] = rows if rows.any?
@@ -72,16 +70,24 @@ class ProjectDocProjection
 
   # `is_root` is deliberately absent, as it is from the editor's own payload: a
   # projection must never move which division is the root.
+  #
+  # The fields a division's element is built from are projected only when the
+  # entry carries them -- an entry written before one of them existed has
+  # nothing to say about it, and must not blank the column.
   def division_attributes(divisions, deleted)
     present = divisions.filter_map do |id, entry|
       next if deleted[id] == "division" # removed in the same session that wrote it
 
-      {
+      attributes = {
         id: id,
         ref: entry["xmlId"].to_s,
         source: entry["source"].to_s,
         source_format: entry["sourceFormat"].presence || "pretext"
       }
+      attributes[:title] = entry["title"].to_s if entry.key?("title")
+      attributes[:division_type] = entry["type"] if entry["type"].present?
+      attributes[:attrs] = entry["attrs"] if entry["attrs"].is_a?(Hash)
+      attributes
     end
     present + destroy_attributes(deleted, "division")
   end
@@ -93,12 +99,15 @@ class ProjectDocProjection
     present = snippets.filter_map do |id, entry|
       next if deleted[id] == "snippet"
 
-      {
+      attributes = {
         id: id,
         ref: entry["ref"].to_s,
         source: entry["source"].to_s,
         source_format: entry["sourceFormat"].presence || "pretext"
       }
+      # Absent from an entry written before snippets had titles; not a blank one.
+      attributes[:title] = entry["title"].to_s if entry.key?("title")
+      attributes
     end
     present + destroy_attributes(deleted, "snippet")
   end
@@ -129,28 +138,6 @@ class ProjectDocProjection
   # lets a tombstone stay in the document forever without costing anything.
   def destroy_attributes(deleted, kind)
     deleted.filter_map { |id, k| { id: id, _destroy: true } if k == kind }
-  end
-
-  # The document's root element -- what tells an article from a book, and what
-  # Project#structural_document_type reads. The editor keeps it as the root
-  # division's `type`, having derived it from that division's own source (its
-  # PreTeXt tag, or the project type for a latex/markdown root that has no tag to
-  # read). Taking it from there rather than re-deriving it is what keeps this
-  # agreeing with what the author is looking at.
-  #
-  # The root is found by id rather than by looking for a root-shaped type,
-  # because only this project knows which division is its root -- the document
-  # does not carry `is_root` (see division_attributes).
-  #
-  # nil for anything unrecognised, and the caller leaves the column alone: a
-  # pretext root still holding a bare <section> (pre-migration data) carries no
-  # type at all, and that is not a reason to forget the answer already stored.
-  def root_element(divisions)
-    root_id = @project.root_division&.id
-    return nil if root_id.nil?
-
-    type = divisions.dig(root_id, "type")
-    type if Project::ROOT_ELEMENT_TYPES.include?(type)
   end
 
   # A root map that has never been written does not exist in the document, and

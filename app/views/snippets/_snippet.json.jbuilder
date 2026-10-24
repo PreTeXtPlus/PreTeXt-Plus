@@ -1,1 +1,1 @@
-json.extract! snippet, :id, :ref, :source, :source_format
+json.extract! snippet, :id, :ref, :title, :source, :source_format

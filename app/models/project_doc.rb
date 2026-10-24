@@ -14,9 +14,14 @@ module ProjectDoc
   # speaking any other is refused, on the channel and at the seed: a tab
   # opened before a change to the layout would otherwise keep syncing the old
   # shape into the document that replaced it (see
-  # ResetProjectDocsForTextSources), and every up-to-date client would read
-  # that shape as empty text. Keep it equal to the editor's; a test checks.
-  SCHEMA_VERSION = 2
+  # ResetProjectDocsForTextSources and ProjectAndResetDocsForContentFields), and
+  # every up-to-date client would misread that shape. Keep it equal to the
+  # editor's; a test checks.
+  #
+  # ProjectsController holds a solo save that carries divisions to the same
+  # version, for the same reason: a tab from before version 3 sends division
+  # sources with their elements still in them.
+  SCHEMA_VERSION = 3
 
   # Whether a client's declared layout is the one this server holds. A client
   # from before the version existed declares nothing, and is refused.

@@ -452,7 +452,7 @@ class Publication::SettingsTest < ActiveSupport::TestCase
   # upload (real png bytes, a filename with no extension) without a second
   # binary fixture.
   def attach_image(asset, source: "test_image.png", filename: source)
-    asset.file.attach(io: File.open(Rails.root.join("test/fixtures/files/#{source}")),
+    asset.attach_file(io: File.open(Rails.root.join("test/fixtures/files/#{source}")),
                       filename:, content_type: "image/png")
     asset
   end
@@ -461,7 +461,7 @@ class Publication::SettingsTest < ActiveSupport::TestCase
   # ProjectArchiveBuilder writes assets as "<ref><ext>" -- so the value an author picks is
   # an asset's own filename there, and the two have to agree.
   test "the cover offers the project's images by the name the archive writes them under" do
-    asset = assets(:image_one)
+    asset = contents(:image_one)
     settings = Publication::Settings.new(@project)
     option = Publication::Catalog.find("epub_cover")
 
@@ -474,7 +474,7 @@ class Publication::SettingsTest < ActiveSupport::TestCase
   # come from the content type, matching what ProjectArchiveBuilder writes
   # the file as -- not from the upload's own (missing) extension.
   test "the cover offers an extensionless upload by its content-type-derived name" do
-    asset = attach_image(assets(:image_one), filename: "pasted-image-1234567890")
+    asset = attach_image(contents(:image_one), filename: "pasted-image-1234567890")
     settings = Publication::Settings.new(@project)
     option = Publication::Catalog.find("epub_cover")
 
@@ -661,13 +661,13 @@ class Publication::SettingsTest < ActiveSupport::TestCase
   # Regression test for a confirmed bug: the numbering options are supposed to differ for
   # articles vs books, but Publication::Settings#document_type was reading the stored
   # Project#document_type column, which the TOC's article<->book switch never updates (it
-  # rewrites the document's source instead). A project switched to "book" kept being
+  # retypes the root division instead). A project switched to "book" kept being
   # offered article-shaped choices.
   test "choices follow a document switched to a book after creation, not the stale column" do
     project = projects(:one)
     assert_equal "article", project.document_type
 
-    project.update_column(:root_element, "book")
+    project.root_division.update_column(:division_type, "book")
 
     settings = Publication::Settings.new(project.reload)
     assert_equal "book", settings.document_type

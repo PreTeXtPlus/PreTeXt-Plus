@@ -13,6 +13,7 @@
 import { describe, it, expect, vi } from "vitest";
 import { render, screen, within, fireEvent } from "@testing-library/react";
 import Editors from "../components/Editors";
+import { wrapDivisionSource } from "../sectionUtils";
 import type { Division } from "../types/sections";
 import type { EditorContentChange } from "../types/editor";
 import type { DivisionChanges } from "../store/editorStore";
@@ -132,7 +133,7 @@ describe("a new division is a draft until it is saved", () => {
     expect(added).toHaveLength(1);
     expect(added[0].xmlId).toBe("sec-my-new-bit");
     expect(added[0].title).toBe("My New Bit");
-    expect(added[0].source).toContain('<section xml:id="sec-my-new-bit">');
+    expect(wrapDivisionSource(added[0])).toContain('<section xml:id="sec-my-new-bit" label="sec-my-new-bit">');
     // Placed once, already naming the right id.
     expect(sourceOf("doc")).toContain('<plus:section ref="sec-my-new-bit"/>');
     // The host is never told to rename anything: the old flow created the

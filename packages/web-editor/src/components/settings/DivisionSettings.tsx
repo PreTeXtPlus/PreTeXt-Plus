@@ -4,7 +4,6 @@ import type { SourceFormat } from "../../types/editor";
 import { divisionRefTag } from "../../sectionUtils";
 import { useEditorStore } from "../../store/hooks";
 import {
-  divisionSourceXmlId,
   divisionTypeOptions,
   TYPE_FULL_LABELS,
 } from "../toc/types";
@@ -88,9 +87,8 @@ const DivisionSettings = ({ division, embedFormat }: DivisionSettingsProps) => {
           autoSelect
         />
       </SettingsField>
-      {/* Type applies to every format: a LaTeX `\section` can still be
-          authored as any division type — the type is applied when its
-          conversion is tagged, not stored in the LaTeX source. For the root,
+      {/* Type applies to every format: it is a field of the record, from
+          which the division's element (or LaTeX header) is built. For the root,
           this switches the document's own wrapper element (e.g. <article> to
           <book>); it doesn't touch any existing children, so their types may
           need a follow-up edit to stay valid under the new root. */}
@@ -116,11 +114,11 @@ const DivisionSettings = ({ division, embedFormat }: DivisionSettingsProps) => {
         </select>
       </SettingsField>
       {/* xml:id applies to every format — for LaTeX it's written as the
-          `\section`'s `\label`. */}
+          header's `\label` — and is the division's PreTeXt @label too. */}
       <SettingsField label="Id" htmlFor="division-settings-id">
         <CommitField
           id="division-settings-id"
-          value={divisionSourceXmlId(division)}
+          value={division.xmlId}
           onCommit={(next) => updateDivisionProperties(division.xmlId, { xmlId: next })}
           placeholder="unique identifier"
           mono

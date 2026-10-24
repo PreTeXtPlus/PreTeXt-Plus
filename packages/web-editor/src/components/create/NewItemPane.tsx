@@ -12,7 +12,7 @@ import NewAssetForm from "./NewAssetForm";
 
 export interface NewItemPaneProps {
   /** Persist a new snippet — see `NewSnippetForm`. */
-  onCreateSnippet?: (ref: string, sourceFormat: SourceFormat) => Promise<Snippet>;
+  onCreateSnippet?: (ref: string, sourceFormat: SourceFormat, title: string) => Promise<Snippet>;
   onUploadAsset?: (file: File, title?: string) => Promise<Asset>;
   onFetchAssetUrl?: (url: string) => Promise<File>;
   onCreateAuthoredAsset?: (title: string) => Promise<Asset>;

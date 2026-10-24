@@ -1,0 +1,91 @@
+# Read about fixtures at https://api.rubyonrails.org/classes/ActiveRecord/FixtureSet.html
+#
+# Every project's divisions, snippets and assets (see Content). A division's
+# source is its body; its element is built from division_type, title and ref.
+
+# ---- divisions ---------------------------------------------------------------
+
+one:
+  kind: division
+  is_root: true
+  ref: document
+  division_type: article
+  title: Hello
+  source: |
+    <p>
+      World
+    </p>
+  source_format: 0
+  project: one
+
+two:
+  kind: division
+  is_root: true
+  ref: document
+  division_type: article
+  title: Welcome to PreTeXt.Plus!
+  source: |
+    Hello world
+  source_format: 1
+  project: two
+
+template:
+  kind: division
+  is_root: true
+  ref: document
+  division_type: article
+  title: Template
+  source: |
+    <plus:section ref="subdivision"/>
+  source_format: 0
+  project: template
+
+template_subdivision:
+  kind: division
+  is_root: false
+  ref: subdivision
+  division_type: section
+  title: Section
+  source: |
+    <p>
+      Starter content
+    </p>
+  source_format: 0
+  project: template
+
+# ---- assets ------------------------------------------------------------------
+
+# An authored asset in project one -- deliberately file-less, unlike image_one
+# below: several tests (test/models/content_test.rb, test/models/project_test.rb)
+# use this specifically to exercise the "no file attached" case.
+authored_one:
+  project: one
+  kind: authored_asset
+  ref: my-activity
+  title: My Activity
+  short_description: My Activity
+  source: ""
+
+# A file-backed asset already in project one under ref "diagram", with its
+# file pre-attached via ActiveStorage fixtures (test/fixtures/active_storage/*.yml)
+# using test/fixtures/files/test_image.png -- used to test removing/renaming
+# an existing asset and the asset-file redirect. Tests that need different
+# bytes, content type, or filename (e.g. an extensionless "pasted image", a
+# non-image content type, or an SVG) still attach their own override on top
+# of this.
+image_one:
+  project: one
+  kind: file_asset
+  ref: diagram
+  title: A Diagram
+  short_description: A Diagram
+  source: ""
+
+# In project two (owned by user two), used for cross-user authorization checks.
+other_user_asset:
+  project: two
+  kind: authored_asset
+  ref: someone-elses-activity
+  title: Someone Else's Activity
+  short_description: Someone Else's Activity
+  source: ""

@@ -211,7 +211,7 @@ module Publication
     # have no such thing, which Catalog.for reads as "do not filter".
     # Memoized because every option asks: offers? checks it, and so do
     # choices_for and label_for, which is dozens of times per panel. The answer
-    # is read out of the project's assembled source (Project#root_element_type),
+    # is the root division's type (Project#structural_document_type), a query,
     # so it is worth reading once per modal rather than once per select.
     def document_type
       return @document_type if defined?(@document_type)
@@ -277,7 +277,7 @@ module Publication
     private
 
       # The project's uploaded images, as [filename, title] -- the filename being the
-      # asset's own name in the external directory (Asset#external_filename), which is
+      # asset's own name in the external directory (Content::AttachedFiles#external_filename), which is
       # what PreTeXt resolves an EPUB cover against, and what ProjectArchiveBuilder writes
       # it as.
       #
@@ -286,8 +286,8 @@ module Publication
       def project_image_choices
         return [] if project.nil?
 
-        project.assets.with_attached_file.filter_map do |asset|
-          next unless asset.file.attached? && asset.file.content_type.to_s.start_with?("image/")
+        project.assets.with_attached_files.filter_map do |asset|
+          next unless asset.file_attached? && asset.file.content_type.to_s.start_with?("image/")
 
           [ asset.external_filename, asset.title.presence || asset.ref ]
         end

@@ -1,7 +1,5 @@
 # frozen_string_literal: true
 
-require "open3"
-
 # Assemble a project's standalone PreTeXt document -- the `<pretext>` element,
 # docinfo and body, with every `<plus:* ref="..."/>` placeholder resolved and
 # every latex/markdown division converted -- by running the web-editor's own
@@ -38,12 +36,6 @@ class SourceAssembler
   # (lib/tasks/assembler.rake).
   BUNDLE = Rails.root.join("lib", "assembler", "assemble.mjs").freeze
 
-  # The Node to run it under. Overridable because a deploy that installs Node
-  # per-version (Hatchbox reads .node-version, as does mise/asdf locally) can
-  # leave the binary off a background worker's PATH even though it is on the
-  # deploying shell's.
-  NODE = ENV.fetch("NODE_BINARY", "node").freeze
-
   # Generous against measured cost (~0.2s for a book) because the only thing
   # this protects against is a pathological document wedging the process: the
   # assembler is CPU-bound and makes no network calls, so a run that has taken
@@ -59,16 +51,9 @@ class SourceAssembler
   #   what the column held.
   # @raise [AssemblyError]
   def call
-    raise AssemblyError, "assembler bundle missing at #{BUNDLE} (run `npm run build:assembler`)" unless BUNDLE.exist?
-
-    out, err, status = run(JSON.generate(payload))
-    raise AssemblyError, "assembler exited #{status.exitstatus}: #{err.strip.truncate(2000)}" unless status.success?
-
-    out
-  rescue Errno::ENOENT => e
-    # No `node` on this process's PATH -- a deploy problem, not a document one,
-    # and worth saying so rather than letting a bare ENOENT surface.
-    raise AssemblyError, "could not run #{NODE}: #{e.message} (set NODE_BINARY if it is not on PATH)"
+    NodeScript.new(BUNDLE, timeout: TIMEOUT).call(JSON.generate(payload))
+  rescue NodeScript::Error => e
+    raise AssemblyError, "assembler: #{e.message}"
   end
 
   # The project as the assembler reads it: the same shape and the same values
@@ -109,7 +94,10 @@ class SourceAssembler
         ref: division.ref,
         source: division.source,
         source_format: division.source_format,
-        is_root: division.is_root
+        is_root: division.is_root,
+        title: division.title,
+        division_type: division.division_type,
+        attrs: division.attrs
       }
     end
 
@@ -126,11 +114,11 @@ class SourceAssembler
         short_description: asset.short_description,
         title: asset.title
       }
-      return json unless asset.file.attached?
+      return json unless asset.file_attached?
 
       extension = asset.file_extension
       json.merge(
-        path: Rails.application.routes.url_helpers.share_asset_project_path(
+        path: Rails.application.routes.url_helpers.content_file_project_path(
           asset.project, ref: asset.ref, format: extension
         ),
         extension: extension,
@@ -142,41 +130,9 @@ class SourceAssembler
       {
         id: snippet.id,
         ref: snippet.ref,
+        title: snippet.title,
         source: snippet.source,
         source_format: snippet.source_format
       }
-    end
-
-    # Open3.capture3 would do all of this in one line but cannot be given a
-    # deadline, and a wedged Node process holds the job's worker for as long as
-    # it runs. So: threads to keep the pipes draining (a document larger than
-    # the pipe buffer deadlocks otherwise), and a hard kill when the deadline
-    # passes.
-    def run(input)
-      Open3.popen3(NODE, BUNDLE.to_s) do |stdin, stdout, stderr, wait|
-        # EPIPE, from either the write or the close of a pipe whose reader has
-        # already gone, means the child died before taking its input. Swallowed
-        # because the exit status says what happened and says it better: raising
-        # here would replace "assembler exited 1: <the real error>" with a broken
-        # pipe.
-        writer = Thread.new do
-          stdin.write(input)
-          stdin.close
-        rescue Errno::EPIPE
-          nil
-        end
-        out = Thread.new { stdout.read }
-        err = Thread.new { stderr.read }
-
-        unless wait.join(TIMEOUT)
-          Process.kill("KILL", wait.pid)
-          wait.join
-          [ writer, out, err ].each(&:kill)
-          raise AssemblyError, "assembler timed out after #{TIMEOUT}s"
-        end
-
-        writer.join
-        [ out.value, err.value, wait.value ]
-      end
     end
 end

@@ -90,10 +90,22 @@ export interface Division {
    * Must be unique within the project.
    */
   xmlId: string;
-  /** Plain-text display title (extracted from `<title>`). */
+  /**
+   * The division's title, as markup in its own `sourceFormat` — the inner XML
+   * of `<title>` for PreTeXt (`Euler's <m>e</m>`), LaTeX for a LaTeX division
+   * (`Euler's $e$`), Markdown for a Markdown one. Stored on the record, never
+   * in `source`; assembly writes it into the division's element. Empty means
+   * untitled. For a plain-text rendering (TOC, title bar) use `displayTitle`.
+   */
   title: string;
-  /** The PreTeXt element type of this division. */
+  /** The PreTeXt element type of this division. Stored on the record. */
   type: DivisionType;
+  /**
+   * Any other attributes of the division's element (`component`, `xml:lang`,
+   * …), as unescaped name → value pairs. Never `xml:id` or `label`: assembly
+   * writes both from {@link xmlId}.
+   */
+  attrs?: Record<string, string>;
   /**
    * The source format of this division's content.
    * Replaces the project-level `sourceFormat` prop; individual divisions
@@ -101,16 +113,15 @@ export interface Division {
    */
   sourceFormat: SourceFormat;
   /**
-   * The full source string for this division.
+   * The division's *body*, in `sourceFormat` — everything inside its element,
+   * and nothing of the element itself. The type, `xml:id`, title, label and
+   * other attributes are fields of the record; assembly builds the element
+   * (a PreTeXt wrapper, a LaTeX `\section{…}\label{…}` header, Markdown
+   * frontmatter) from them (see `wrapDivisionSource`).
    *
-   * For PreTeXt divisions this is the complete XML including the outer
-   * wrapper element, e.g. `<section xml:id="..."><title>…</title>…</section>`.
-   * Parent divisions may include `<plus:division ref="child-id"/>` placeholders
-   * where child divisions should be rendered.
-   *
-   * For LaTeX / Markdown divisions this is raw source. Markdown may embed
-   * child refs as `::section{ref="child-id"}` leaf directives, and LaTeX as
-   * `\plus{section}{child-id}` macros.
+   * Parent divisions include children with placeholders: `<plus:section
+   * ref="child-id"/>` in PreTeXt, `::section{ref="child-id"}` leaf directives
+   * in Markdown, `\plus{section}{child-id}` macros in LaTeX.
    */
   source: string;
 }

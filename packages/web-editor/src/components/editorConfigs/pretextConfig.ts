@@ -1,6 +1,5 @@
 import { registerMonacoTypingShortcuts } from "@pretextbook/typing-shortcuts";
 import { MONACO_COMMANDS } from "../editorCommands";
-import { computeLockedRegion, isRangeWithin } from "../lockedRegion";
 import { registerCodeEditorCompletions } from "./pretextCompletions";
 import { registerPretextLanguageConfiguration } from "./pretextLanguageConfig";
 import { registerConfiguredSpellCheck } from "./spellcheck";
@@ -33,13 +32,6 @@ export const pretextConfig: FormatEditorConfig = {
       // A peer's edit is converted on the peer's side; converting it here too
       // would send the conversion twice.
       isRemoteChange: context.isRemoteChange,
-      // An edit reaching into the locked wrapper lines would be reverted by
-      // the constrained-editor plugin (or refused by the collab edit guard).
-      canEdit: (range) => {
-        const model = editor.getModel();
-        const region = model ? computeLockedRegion(model, "pretext") : null;
-        return !region || isRangeWithin(region.editableRange, range);
-      },
     });
     // The package registers "Wrap Selection in Element" without a key, so the
     // shortcut the Edit menu shows is bound here. Monaco registers an editor

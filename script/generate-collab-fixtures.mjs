@@ -33,7 +33,7 @@ seedDocFromState(doc, {
       sourceFormat: "pretext",
       type: "book",
       title: "Fixture Book",
-      source: '<book xml:id="root"><title>Fixture Book</title></book>',
+      source: "<p>Fixture Book</p>",
     },
   ],
 });
@@ -41,7 +41,7 @@ writeFileSync(OUT + "seed_state.bin", Y.encodeStateAsUpdate(doc));
 
 // One incremental update on top of that seed -- the shape of a keystroke.
 const before = Y.encodeStateVector(doc);
-doc.getMap("divisions").get(ROOT_ID).get("source").insert(5, ' xmlns:plus="https://pretext.plus"');
+doc.getMap("divisions").get(ROOT_ID).get("source").insert(2, ' xmlns:plus="https://pretext.plus"');
 writeFileSync(OUT + "one_update.bin", Y.encodeStateAsUpdate(doc, before));
 
 // A second, independent seed: the content that would be duplicated if the
@@ -57,7 +57,7 @@ seedDocFromState(rival, {
       sourceFormat: "pretext",
       type: "book",
       title: "Rival Book",
-      source: "<book/>",
+      source: "<p>Rival</p>",
     },
   ],
 });
@@ -76,8 +76,9 @@ writeFileSync(OUT + "awareness_frame.bin", encoding.toUint8Array(encoder));
 awareness.destroy();
 
 // A document with everything ProjectDocProjection reads: every meta field, two
-// divisions in different source formats, and tombstones for a division and an
-// asset removed during the session.
+// divisions in different source formats -- their bodies, and the fields their
+// elements are built from -- and tombstones for a division and an asset removed
+// during the session.
 const projected = new Y.Doc();
 seedDocFromState(projected, {
   title: "Projected Title",
@@ -91,7 +92,7 @@ seedDocFromState(projected, {
       sourceFormat: "pretext",
       type: "book",
       title: "Projected Book",
-      source: '<book xml:id="projected-root"><title>Projected Book</title></book>',
+      source: "<p>The projected book.</p>",
     },
     {
       id: "44444444-4444-4444-8444-444444444444",
@@ -99,7 +100,8 @@ seedDocFromState(projected, {
       sourceFormat: "latex",
       type: "chapter",
       title: "Chapter One",
-      source: "\\chapter{One}\\label{projected-ch1}",
+      attrs: { component: "teacher" },
+      source: "The first chapter.",
     },
   ],
 });
@@ -120,6 +122,7 @@ seedDocFromState(records, {
     {
       id: "77777777-7777-4777-8777-777777777777",
       ref: "projected-note",
+      title: "A Projected Note",
       sourceFormat: "latex",
       source: "A \\emph{projected} note.",
     },

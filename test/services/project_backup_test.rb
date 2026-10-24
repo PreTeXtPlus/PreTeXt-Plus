@@ -108,12 +108,12 @@ class ProjectBackupTest < ActiveSupport::TestCase
 
   test "destroying a backup leaves the project's asset files in place" do
     backup = ProjectBackup.new(@project).rotate!
-    blob = assets(:image_one).file.blob
+    blob = contents(:image_one).file.blob
 
     perform_enqueued_jobs { backup.destroy! }
 
     assert ActiveStorage::Blob.exists?(blob.id)
-    assert assets(:image_one).reload.file.attached?
+    assert contents(:image_one).reload.file_attached?
   end
 
   test "destroying the project destroys its backups" do

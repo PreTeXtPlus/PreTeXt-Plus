@@ -57,7 +57,7 @@ class ProjectDocProjectionJobTest < ActiveJob::TestCase
     settled = @project.reload.source_updated_at
 
     travel 1.minute do
-      assert_no_difference("Division.count") { ProjectDocProjectionJob.perform_now }
+      assert_no_difference("Content.divisions.count") { ProjectDocProjectionJob.perform_now }
     end
 
     assert_equal settled, @project.reload.source_updated_at,

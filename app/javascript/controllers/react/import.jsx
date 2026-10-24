@@ -6,6 +6,7 @@ import {
   serializeProjectToPlusPayload,
 } from "@pretextbook/import";
 import { buildImportEngines } from "./importEngines";
+import { splitImportedDivisions } from "./railsProjectMapping";
 import { buildImportShare } from "./importShare";
 import "@pretextbook/import/react.css";
 
@@ -71,11 +72,11 @@ function ImportApp({ config }) {
   // format, the converted PreTeXt pool otherwise (and for PreTeXt input, which
   // has no native projection).
   //
-  // serializeProjectToPlusPayload then emits the Rails shape directly --
-  // snake_case keys matching ProjectsController's permitted
-  // `divisions_attributes` / `assets_attributes`, with asset bytes
-  // base64-encoded -- so the payload goes straight over the same JSON API the
-  // editor uses, with nothing to map here.
+  // serializeProjectToPlusPayload then emits the Rails shape -- snake_case keys
+  // matching ProjectsController's permitted `divisions_attributes` /
+  // `assets_attributes`, with asset bytes base64-encoded -- except that it
+  // writes each division's element into its source, which Rails keeps in
+  // columns instead; splitImportedDivisions takes them apart.
   const onConfirm = useCallback(
     /**
      * @param {ImportedProjectSuccess} result
@@ -83,7 +84,9 @@ function ImportApp({ config }) {
      */
     async (result, mode) => {
       try {
-        const payload = serializeProjectToPlusPayload(projectForImportMode(result, mode));
+        const payload = splitImportedDivisions(
+          serializeProjectToPlusPayload(projectForImportMode(result, mode)),
+        );
         const res = await fetch(createUrl, {
           method: "POST",
           headers: {

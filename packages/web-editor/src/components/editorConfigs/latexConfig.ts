@@ -7,7 +7,7 @@ import {
 } from "@pretextbook/latex-style-pretext";
 import { registerLatexSyntax } from "./latexSyntax";
 import { registerFlavorLanguage } from "./flavorLanguage";
-import { applyCleanFixes, editableRangeFor } from "./latexClean";
+import { applyCleanFixes } from "./latexClean";
 import type { CleanSupport, FormatEditorConfig } from "./types";
 import { registerConfiguredSpellCheck } from "./spellcheck";
 
@@ -53,15 +53,10 @@ export const latexConfig: FormatEditorConfig = {
       // \hyperref target.
       triggerCharacters: ["\\", "{", "["],
       clean: latexCleanSupport,
-      // A LaTeX division's `\section{…}\label{…}` header line is structural and
-      // locked; fixes and quick fixes stay below it.
-      getEditableRange: (model) => editableRangeFor(model, "latex"),
       cleanAll: {
         label: "Clean up LaTeX",
         run: () =>
-          applyCleanFixes(monaco, editor, latexCleanSupport, {
-            sourceFormat: "latex",
-          }),
+          applyCleanFixes(monaco, editor, latexCleanSupport),
       },
     });
     // Spelling reads the same scopes the PreTeXt editor does; what changes is

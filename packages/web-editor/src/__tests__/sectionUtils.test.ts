@@ -4,29 +4,15 @@ import type { Element } from 'xast'
 import {
   splitDocument,
   mergeDocument,
-  stripSectionWrapper,
-  rewrapSection,
-  ensureSectionWrapper,
   createNewSection,
   createIntroduction,
   createConclusion,
-  updateSectionMetadata,
-  updateDivisionTitle,
-  extractDivisionMetadata,
   getSectionAttributes,
   sanitizeXmlId,
   slugifyTitle,
   parseMarkdownFrontmatter,
   buildMarkdownFrontmatter,
-  extractMarkdownDivisionMetadata,
-  updateMarkdownDivisionMetadata,
-  extractLatexDivisionTitle,
-  extractLatexSectionLabel,
-  updateLatexDivisionMetadata,
   parseLatexDivisionHeader,
-  normalizeLatexDivisionSource,
-  ensureLatexSectionWrapper,
-  stripLatexSectionWrapper,
   splitLatexDocument,
   mergeLatexDocument,
   normalizeDivisionsOnLoad,
@@ -34,7 +20,11 @@ import {
   assembleFullProjectSource,
   wrapDivisionForPreview,
   DEFAULT_LATEX_IMAGE_PREAMBLE,
+  wrapDivisionSource,
+  splitDivisionSource,
+  divisionToPretext,
 } from '../sectionUtils'
+import { legacyDivision } from './legacyDivision'
 import type { Division } from '../types/sections'
 import type { Asset, Snippet } from '../types/editor'
 
@@ -127,63 +117,25 @@ describe('mergeDocument', () => {
   })
 })
 
-describe('stripSectionWrapper / rewrapSection / ensureSectionWrapper', () => {
-  it('strips the outer element but keeps every child', () => {
-    const inner = stripSectionWrapper(
-      '<section xml:id="s1">\n\t<title>T</title>\n\t<p>hi</p>\n</section>',
-    )
-    expect(inner).not.toContain('<section')
-    expect(inner).toContain('<title>T</title>')
-    expect(inner).toContain('<p>hi</p>')
-  })
-
-  it('round-trips content through strip and rewrap', () => {
-    const original = '<section>\n<title>T</title>\n<p>hi</p>\n</section>'
-    expect(rewrapSection(stripSectionWrapper(original), 'section')).toBe(original)
-  })
-
-  // Malformed XML is routine while the user is mid-keystroke; a throw here
-  // takes down the whole editor, so the regex fallback must hold.
-  it('falls back to a string strip on malformed XML instead of throwing', () => {
-    const malformed = '<section xml:id="s1">\n\t<title>T</title>\n\t<p>hi'
-    expect(() => stripSectionWrapper(malformed)).not.toThrow()
-    const inner = stripSectionWrapper(malformed)
-    expect(inner).not.toContain('<section')
-    expect(inner).toContain('<title>T</title>')
-  })
-
-  it('wraps with the requested division type', () => {
-    expect(rewrapSection('<p>x</p>', 'introduction')).toBe(
-      '<introduction>\n<p>x</p>\n</introduction>',
-    )
-  })
-
-  it('only adds a wrapper when one is missing', () => {
-    const wrapped = '<section><p>x</p></section>'
-    expect(ensureSectionWrapper(wrapped, 'section')).toBe(wrapped)
-    expect(ensureSectionWrapper('  <section><p>x</p></section>', 'section')).toBe(
-      '  <section><p>x</p></section>',
-    )
-    expect(ensureSectionWrapper('<p>x</p>', 'section')).toBe('<section>\n<p>x</p>\n</section>')
-  })
-})
-
 describe('division factories', () => {
   it('creates a section carrying its own xml:id and title', () => {
     const section = createNewSection('My Title')
     expect(section.type).toBe('section')
     expect(section.sourceFormat).toBe('pretext')
     expect(section.title).toBe('My Title')
-    expect(section.source).toContain(`xml:id="${section.xmlId}"`)
-    expect(section.source).toContain('<title>My Title</title>')
-    expectWellFormed(section.source)
+    // The element is the record's: the body holds none of it.
+    expect(section.source).not.toContain('<section')
+    const wrapped = wrapDivisionSource(section)
+    expect(wrapped).toContain(`<section xml:id="${section.xmlId}" label="${section.xmlId}">`)
+    expect(wrapped).toContain('<title>My Title</title>')
+    expectWellFormed(wrapped)
   })
 
   it('creates introductions and conclusions of the right type', () => {
     expect(createIntroduction().type).toBe('introduction')
     expect(createConclusion().type).toBe('conclusion')
-    expectWellFormed(createIntroduction().source)
-    expectWellFormed(createConclusion().source)
+    expectWellFormed(wrapDivisionSource(createIntroduction()))
+    expectWellFormed(wrapDivisionSource(createConclusion()))
   })
 
   it('gives each new division a distinct id', () => {
@@ -191,92 +143,7 @@ describe('division factories', () => {
   })
 })
 
-describe('updateSectionMetadata', () => {
-  const section: Division = {
-    id: '1',
-    xmlId: 's1',
-    title: 'Old',
-    type: 'section',
-    sourceFormat: 'pretext',
-    source: '<section xml:id="s1" label="old-label"><title>Old</title><p>body</p></section>',
-  }
-
-  it('rewrites the tag name, attributes and title together', () => {
-    const updated = updateSectionMetadata(section, {
-      title: 'New',
-      type: 'exercises',
-      xmlId: 'e1',
-      label: 'new-label',
-    })
-
-    expect(updated.type).toBe('exercises')
-    expect(updated.title).toBe('New')
-    expect(updated.xmlId).toBe('e1')
-    expect(updated.source).toBe(
-      '<exercises xml:id="e1" label="new-label"><title>New</title><p>body</p></exercises>',
-    )
-  })
-
-  it('leaves omitted fields alone', () => {
-    const updated = updateSectionMetadata(section, { title: 'Renamed' })
-    expect(updated.source).toContain('xml:id="s1"')
-    expect(updated.source).toContain('label="old-label"')
-    expect(updated.source).toContain('<section')
-  })
-
-  it('removes an attribute when passed null', () => {
-    const updated = updateSectionMetadata(section, { label: null })
-    expect(updated.source).not.toContain('label=')
-    expect(updated.source).toContain('xml:id="s1"')
-  })
-
-  it('preserves the body when the title is changed', () => {
-    expect(updateSectionMetadata(section, { title: 'New' }).source).toContain('<p>body</p>')
-  })
-
-  it('parses inline markup typed into a title rather than escaping it', () => {
-    const updated = updateSectionMetadata(section, { title: 'A <term>term</term>' })
-    expect(updated.source).toContain('<title>A <term>term</term></title>')
-  })
-
-  it('does not throw on malformed source', () => {
-    const broken = { ...section, source: '<section><title>Old</title><p>body' }
-    expect(() => updateSectionMetadata(broken, { title: 'New' })).not.toThrow()
-    expect(updateSectionMetadata(broken, { title: 'New' }).title).toBe('New')
-  })
-})
-
-describe('updateDivisionTitle', () => {
-  it('replaces an existing title', () => {
-    expect(
-      updateDivisionTitle('<section><title>Old</title><p>b</p></section>', 'New'),
-    ).toBe('<section><title>New</title><p>b</p></section>')
-  })
-
-  it('inserts a title when the division has none', () => {
-    expect(updateDivisionTitle('<section><p>b</p></section>', 'New')).toBe(
-      '<section><title>New</title><p>b</p></section>',
-    )
-  })
-
-  it('returns the input unchanged on malformed XML', () => {
-    const malformed = '<section><title>Old</title><p>b'
-    expect(updateDivisionTitle(malformed, 'New')).toBe(malformed)
-  })
-})
-
-describe('extractDivisionMetadata / getSectionAttributes', () => {
-  it('reads title, type and attributes off a division', () => {
-    expect(
-      extractDivisionMetadata('<section xml:id="s1" label="L"><title>T</title></section>'),
-    ).toEqual({ title: 'T', type: 'section', xmlId: 's1', label: 'L' })
-  })
-
-  it('returns null for malformed XML or a non-division root', () => {
-    expect(extractDivisionMetadata('<section><title>broken')).toBeNull()
-    expect(extractDivisionMetadata('<paragraph>not a division</paragraph>')).toBeNull()
-  })
-
+describe('getSectionAttributes', () => {
   it('reports empty strings for absent attributes', () => {
     expect(getSectionAttributes('<section><title>T</title></section>')).toEqual({
       xmlId: '',
@@ -346,99 +213,162 @@ describe('markdown frontmatter', () => {
     expect(parseMarkdownFrontmatter('---\ndivision: section\n')).toBeNull()
   })
 
-  it('falls back to a leading heading when frontmatter carries no title', () => {
-    expect(
-      extractMarkdownDivisionMetadata('---\ndivision: section\nid: s1\n---\n# From Heading\n'),
-    ).toEqual({ title: 'From Heading', type: 'section', xmlId: 's1', label: '' })
-  })
+})
 
-  it('rewrites frontmatter without touching the body', () => {
-    const division = {
-      id: '1',
+describe('splitDivisionSource', () => {
+  it('takes a PreTeXt wrapper apart, keeping the body byte for byte', () => {
+    const body = '\t<p>\n\t\tOne.\n\t</p>\n\n\t<plus:section ref="child"/>'
+    const split = splitDivisionSource(
+      `<section xml:id="s1" label="L" component="a&amp;b">\n\t<title>Hi <m>x</m></title>\n\n${body}\n\n</section>`,
+      'pretext',
+    )
+    expect(split).toMatchObject({
+      type: 'section',
       xmlId: 's1',
-      title: 'Old',
-      type: 'section' as const,
-      sourceFormat: 'markdown' as const,
-      source: '---\ndivision: section\nid: s1\ntitle: "Old"\n---\nbody text\n',
-    }
-    const updated = updateMarkdownDivisionMetadata(division, {
-      title: 'New',
-      type: 'worksheet',
+      title: 'Hi <m>x</m>',
+      attrs: { component: 'a&b' },
+      body,
+      wrapped: true,
     })
-
-    expect(updated.title).toBe('New')
-    expect(updated.type).toBe('worksheet')
-    expect(updated.source).toContain('division: worksheet')
-    expect(updated.source).toContain('body text')
-    expect(updated.source).not.toContain('<title>')
+    // A division's label is its ref; the source's own is dropped, and said so.
+    expect(split.attrs).not.toHaveProperty('label')
+    expect(split.warnings).toEqual(['dropped label "L"; a division\'s label is its ref'])
   })
 
-  it('keeps the existing xml:id rather than clearing it', () => {
-    const division = {
-      id: '1',
+  it('leaves a <title> that is not the first element in the body', () => {
+    const split = splitDivisionSource('<section xml:id="s"><p>x</p><title>T</title></section>', 'pretext')
+    expect(split.title).toBe('')
+    expect(split.body).toBe('<p>x</p><title>T</title>')
+  })
+
+  it('moves a comment outside the element into the body, with a warning', () => {
+    const split = splitDivisionSource('<!-- note -->\n<section xml:id="s"><p>x</p></section>', 'pretext')
+    expect(split.body).toContain('<!-- note -->')
+    expect(split.warnings).toHaveLength(1)
+  })
+
+  it("reads a bare fragment's leading title, with the fallback type", () => {
+    const split = splitDivisionSource('<title>Doc</title>\n<p>Body</p>', 'pretext', { type: 'article' })
+    expect(split).toMatchObject({ type: 'article', title: 'Doc', body: '<p>Body</p>', wrapped: false })
+  })
+
+  it('takes a LaTeX header apart, malformed or not', () => {
+    expect(splitDivisionSource('\\section{Hello $x$}\\label{s1}\n\nbody', 'latex')).toMatchObject({
+      type: 'section',
+      title: 'Hello $x$',
       xmlId: 's1',
-      title: 'T',
-      type: 'section' as const,
-      sourceFormat: 'markdown' as const,
-      source: '---\ndivision: section\nid: s1\n---\nbody\n',
-    }
-    expect(updateMarkdownDivisionMetadata(division, { xmlId: '' }).xmlId).toBe('s1')
+      body: 'body',
+    })
+    expect(
+      splitDivisionSource('\\section{Hello\\label{sec:hi}}\\label{s1}\nbody', 'latex'),
+    ).toMatchObject({ title: 'Hello', xmlId: 's1', body: 'body' })
+  })
+
+  it('takes the LaTeX environment style apart', () => {
+    expect(
+      splitDivisionSource('\\begin{worksheet}\n\\title{Env}\n\\label{w}\nbody\n\\end{worksheet}', 'latex'),
+    ).toMatchObject({ type: 'worksheet', title: 'Env', xmlId: 'w', body: 'body' })
+  })
+
+  it('treats a headerless LaTeX source as all body', () => {
+    expect(
+      splitDivisionSource('\\emph{Once} upon a time.', 'latex', { type: 'introduction' }),
+    ).toMatchObject({ type: 'introduction', body: '\\emph{Once} upon a time.', wrapped: false })
+  })
+
+  it('takes Markdown frontmatter apart, keeping unknown keys as attributes', () => {
+    expect(
+      splitDivisionSource(
+        '---\ndivision: worksheet\nid: w\ntitle: "Hi"\nlabel: L\ncomponent: teacher\n---\n\n# Sub\n',
+        'markdown',
+      ),
+    ).toMatchObject({
+      type: 'worksheet',
+      xmlId: 'w',
+      title: 'Hi',
+      attrs: { component: 'teacher' },
+      body: '# Sub',
+      warnings: ['dropped label "L"; a division\'s label is its ref'],
+    })
   })
 })
 
-describe('latex divisions', () => {
-  const division = {
-    id: '1',
+describe('wrapDivisionSource / divisionToPretext', () => {
+  const record = (
+    sourceFormat: Division['sourceFormat'],
+    source: string,
+    fields: Partial<Division> = {},
+  ): Division => ({
+    id: 's1',
     xmlId: 's1',
     title: 'Hello',
-    type: 'section' as const,
-    sourceFormat: 'latex' as const,
-    source: '\\section{Hello}\\label{s1}\n\nbody',
-  }
-
-  it('reads the title and label off the header', () => {
-    expect(extractLatexDivisionTitle(division.source)).toBe('Hello')
-    expect(extractLatexSectionLabel(division.source)).toBe('s1')
+    type: 'section',
+    sourceFormat,
+    source,
+    ...fields,
   })
 
-  it('reads a title out of the environment style', () => {
-    expect(extractLatexDivisionTitle('\\begin{section}\n\\title{Env}\n\\end{section}')).toBe('Env')
-  })
-
-  it('returns null when there is no header to read', () => {
-    expect(extractLatexDivisionTitle('% Introduction\n\nbody')).toBeNull()
-  })
-
-  it('rewrites the macro name, title and label together', () => {
-    const updated = updateLatexDivisionMetadata(division, {
-      title: 'Bye',
-      type: 'worksheet',
-      xmlId: 'w1',
+  it.each([
+    ['pretext', '<section xml:id="s1" label="s1">\n<title>Hi <m>x</m></title>\n<p>Body</p>\n</section>'],
+    ['latex', '\\section{Hello $x$}\\label{s1}\n\nBody.'],
+    ['markdown', '---\ndivision: section\nid: s1\ntitle: "Hi"\ncomponent: "teacher"\n---\n\nBody.'],
+  ] as const)('round-trips %s source through split and wrap', (format, source) => {
+    const split = splitDivisionSource(source, format)
+    const division = record(format, split.body, {
+      type: split.type,
+      title: split.title,
+      attrs: split.attrs,
     })
-    expect(updated.source).toBe('\\worksheet{Bye}\\label{w1}\n\nbody')
-    expect(updated.title).toBe('Bye')
-    expect(updated.type).toBe('worksheet')
-    expect(updated.xmlId).toBe('w1')
+    expect(wrapDivisionSource(division)).toBe(source)
   })
 
-  it('drops the label when the xml:id is cleared', () => {
-    expect(updateLatexDivisionMetadata(division, { xmlId: null }).source).toBe(
-      '\\section{Hello}\n\nbody',
-    )
-  })
-
-  it('always leaves a blank line between the header and the body', () => {
-    const tight = { ...division, source: '\\section{Hello}\\label{s1}\nbody' }
-    expect(updateLatexDivisionMetadata(tight, { title: 'Bye' }).source).toBe(
-      '\\section{Bye}\\label{s1}\n\nbody',
-    )
-    expect(normalizeLatexDivisionSource(tight.source)).toBe(
-      '\\section{Hello}\\label{s1}\n\nbody',
-    )
-    // …and never piles up more than one.
+  it("builds a PreTeXt division's element from its fields", () => {
     expect(
-      normalizeLatexDivisionSource('\\section{Hello}\n\n\n\n  body'),
-    ).toBe('\\section{Hello}\n\nbody')
+      divisionToPretext(record('pretext', '<p>Body</p>', { attrs: { component: 'x', label: 'ignored' } })),
+    ).toBe('<section xml:id="s1" label="s1" component="x">\n<title>Hello</title>\n<p>Body</p>\n</section>')
+  })
+
+  it('converts a LaTeX division exactly as its header and body together', () => {
+    const xml = divisionToPretext(
+      record('latex', 'Some text.\n\n\\subsection{Sub}\n\nMore.', { title: 'Hello $x$' }),
+    )
+    expect(xml).toMatch(/^<section xml:id="s1" label="s1">/)
+    expect(xml).toContain('<title>Hello <m>x</m></title>')
+    expect(xml).toContain('<subsection>')
+  })
+
+  it('labels every division by its ref, in every format', () => {
+    for (const format of ['pretext', 'latex', 'markdown'] as const) {
+      expect(divisionToPretext(record(format, format === 'pretext' ? '<p>Text.</p>' : 'Text.'))).toMatch(
+        /^<section xml:id="s1" label="s1"[ >]/,
+      )
+    }
+  })
+
+  it('wraps a LaTeX introduction around its converted body', () => {
+    const xml = divisionToPretext(
+      record('latex', 'Some text.', { xmlId: 'i1', type: 'introduction', title: '' }),
+    )
+    expect(xml).toMatch(/^<introduction xml:id="i1" label="i1">/)
+    expect(xml).toContain('Some text.')
+    expectWellFormed(xml)
+  })
+
+  it('converts a Markdown division with its frontmatter, so headings keep their depth', () => {
+    const xml = divisionToPretext(
+      record('markdown', 'Text\n\n# Sub\n\nMore', { attrs: { component: 'teacher' } }),
+    )
+    expect(xml).toMatch(/^<section xml:id="s1"[^>]* component="teacher"/)
+    expect(xml).toMatch(/^<section [^>]*label="s1"/)
+    expect(xml).toContain('<subsection>')
+  })
+
+  it('reads a Markdown slideshow root\'s ## as slides', () => {
+    const xml = divisionToPretext(
+      record('markdown', '# Sec\n\n## Slide\n\nhi', { xmlId: 'deck', type: 'slideshow', title: 'Deck' }),
+    )
+    expect(xml).toMatch(/^<slideshow xml:id="deck" label="deck">/)
+    expect(xml).toContain('<slide>')
   })
 })
 
@@ -490,66 +420,6 @@ describe('parseLatexDivisionHeader', () => {
   })
 })
 
-describe('normalizeLatexDivisionSource', () => {
-  it('rebuilds a mangled header into a well-formed one', () => {
-    expect(
-      normalizeLatexDivisionSource('\\section{Hello\\label{sec:hi}}\\label{s1}\nbody'),
-    ).toBe('\\section{Hello}\\label{s1}\n\nbody')
-  })
-
-  it('is idempotent', () => {
-    const clean = '\\worksheet{W}\\label{w1}\n\nbody'
-    expect(normalizeLatexDivisionSource(clean)).toBe(clean)
-  })
-
-  it('leaves a body that merely opens with some other macro alone', () => {
-    // `\emph` is not a division type, so this is prose, not a broken header.
-    const prose = '\\emph{Once} upon a time.\nMore prose.'
-    expect(normalizeLatexDivisionSource(prose)).toBe(prose)
-  })
-
-  it('repairs a division as it is loaded, without an author touching it', () => {
-    const [division] = normalizeDivisionsOnLoad(
-      [
-        {
-          id: '1',
-          xmlId: 's1',
-          title: '',
-          type: 'section',
-          sourceFormat: 'latex',
-          source: '\\section{Hello\\label{sec:hi}}\\label{s1}\nbody',
-        } as Division,
-      ],
-      undefined,
-      'article',
-    )
-    expect(division.source).toBe('\\section{Hello}\\label{s1}\n\nbody')
-    expect(division.title).toBe('Hello')
-  })
-})
-
-describe('latex section wrappers', () => {
-  it('recognises any division macro as an intact header', () => {
-    const worksheet = '\\worksheet{W}\\label{w1}\n\nbody'
-    expect(ensureLatexSectionWrapper(worksheet, 'worksheet', 'W')).toBe(worksheet)
-  })
-
-  it('restores a header named after the division type', () => {
-    expect(ensureLatexSectionWrapper('body', 'worksheet', 'W')).toBe(
-      '\\worksheet{W}\n\nbody',
-    )
-  })
-
-  it('strips a malformed header along with its wreckage', () => {
-    expect(
-      stripLatexSectionWrapper(
-        '\\section{Hello\\label{sec:hi}}\\label{s1}\n\nbody',
-        'section',
-      ),
-    ).toBe('body')
-  })
-})
-
 describe('latex documents', () => {
   it('splits a document at \\section commands and keeps the preamble', () => {
     const latex =
@@ -570,88 +440,29 @@ describe('latex documents', () => {
   })
 })
 
-// A division's type isn't a stored field — it's the wrapper element's tag
-// name — so hosts hand the editor records without one. Recovering it on load
-// is what lets the TOC label a row and restrict what its children may be.
+// A division's type is a field of its record, but a host need not have stored
+// one for every division; the editor fills in a default rather than leaving
+// the TOC unable to label a row or restrict what its children may be.
 describe('normalizeDivisionsOnLoad type backfill', () => {
-  const root: Division = {
-    id: '1',
-    xmlId: 'bk',
-    title: 'Book',
-    type: 'book',
-    sourceFormat: 'pretext',
-    source: '<book xml:id="bk"><title>Book</title></book>',
-  }
+  /** A division as a host may send it: source and ids, no type. */
+  const untyped = (xmlId: string) =>
+    ({ id: xmlId, xmlId, title: '', source: '<p>x</p>', sourceFormat: 'pretext' }) as Division
 
-  /** A division as a host sends it: source and ids, no type. */
-  const untyped = (
-    xmlId: string,
-    source: string,
-    sourceFormat: Division['sourceFormat'] = 'pretext',
-  ) =>
-    ({ id: xmlId, xmlId, title: '', source, sourceFormat }) as Division
-
-  it('reads a pretext division type from its wrapper element', () => {
-    const [, chapter, sub] = normalizeDivisionsOnLoad(
-      [
-        root,
-        untyped('ch', '<chapter xml:id="ch"><title>One</title></chapter>'),
-        untyped(
-          'sub',
-          '<subsection xml:id="sub"><title>Deep</title></subsection>',
-        ),
-      ],
-      'bk',
-      'book',
-    )
-
-    expect(chapter.type).toBe('chapter')
-    expect(chapter.title).toBe('One')
-    expect(sub.type).toBe('subsection')
+  it('gives an untyped root the project type, and anything else a section', () => {
+    const [root, child] = normalizeDivisionsOnLoad([untyped('bk'), untyped('ch')], 'bk', 'book')
+    expect(root.type).toBe('book')
+    expect(child.type).toBe('section')
   })
 
-  it('reads a markdown division type from its frontmatter', () => {
-    const [, md] = normalizeDivisionsOnLoad(
-      [
-        root,
-        untyped(
-          'ws',
-          '---\ndivision: worksheet\nxml:id: ws\n---\n\n# Practice\n',
-          'markdown',
-        ),
-      ],
-      'bk',
-      'book',
-    )
-
-    expect(md.type).toBe('worksheet')
+  it('falls back to an article for an unknown project type', () => {
+    const [root] = normalizeDivisionsOnLoad([untyped('r')], 'r', undefined)
+    expect(root.type).toBe('article')
   })
 
-  it('never overrides a type the host did supply', () => {
-    const [, chapter] = normalizeDivisionsOnLoad(
-      [
-        root,
-        {
-          ...untyped('ch', '<section xml:id="ch"><title>One</title></section>'),
-          type: 'chapter',
-        },
-      ],
-      'bk',
-      'book',
-    )
-
-    expect(chapter.type).toBe('chapter')
-  })
-
-  it('leaves a latex division typeless — its source carries no type', () => {
-    const [, tex] = normalizeDivisionsOnLoad(
-      [root, untyped('tex', '\\section{Hello}\n\nbody', 'latex')],
-      'bk',
-      'book',
-    )
-
-    expect(tex.type).toBeUndefined()
-    expect(tex.title).toBe('Hello')
+  it('never overrides a type the host did supply, nor touches the source', () => {
+    const typed = { ...untyped('ch'), type: 'chapter' } as Division
+    const [chapter] = normalizeDivisionsOnLoad([typed], 'bk', 'book')
+    expect(chapter).toBe(typed)
   })
 })
 
@@ -744,14 +555,15 @@ describe('wrapDivisionForPreview — the project root type', () => {
 // all of it to reach one attribute dominated every preview rebuild. These pin
 // down the constructs that scan has to survive.
 describe('root @label on an assembled document', () => {
-  const div = (source: string, type: Division['type'] = 'article'): Division => ({
-    id: '1',
-    xmlId: 'a1',
-    title: 'My Article',
-    type,
-    sourceFormat: 'pretext',
-    source,
-  })
+  const div = (source: string, type: Division['type'] = 'article'): Division =>
+    legacyDivision({
+      id: '1',
+      xmlId: '',
+      title: 'My Article',
+      type,
+      sourceFormat: 'pretext',
+      source,
+    })
 
   const rootTagOf = (xml: string) =>
     /<(?:book|article|slideshow)\b[^>]*>/.exec(xml)?.[0] ?? ''
@@ -761,32 +573,34 @@ describe('root @label on an assembled document', () => {
     expect(rootTagOf(xml)).toContain('label="a1"')
   })
 
-  it('leaves an existing @label alone', () => {
+  // A division's label is its ref, so one written into its source gives way.
+  it('labels the root by its ref, whatever its source said', () => {
     const source = ARTICLE.replace(
       '<article xml:id="a1">',
       '<article xml:id="a1" label="chosen">',
     )
     const xml = assembleFullProjectSource([div(source)], 'a1', '')
-    expect(rootTagOf(xml)).toContain('label="chosen"')
-    expect(rootTagOf(xml)).not.toContain('label="a1"')
+    expect(rootTagOf(xml)).toContain('label="a1"')
+    expect(rootTagOf(xml)).not.toContain('label="chosen"')
   })
 
   it('changes nothing but the root start tag', () => {
-    const xml = assembleFullProjectSource([div(ARTICLE)], 'a1', '')
-    // Everything after the root's own `>` is byte-for-byte what went in, which
-    // is what keeps preview line numbers aligned with the editor buffer.
-    expect(xml).toContain(ARTICLE.slice(ARTICLE.indexOf('>') + 1))
+    const root = div(ARTICLE)
+    const xml = assembleFullProjectSource([root], 'a1', '')
+    // The body is byte-for-byte what went in, which is what keeps preview
+    // line numbers aligned with the editor buffer.
+    expect(xml).toContain(root.source)
     expectWellFormed(xml)
   })
 
   it('falls back to "main" when the root has no @xml:id, avoiding collisions', () => {
     const noId = ARTICLE.replace('<article xml:id="a1">', '<article>')
-    expect(rootTagOf(assembleFullProjectSource([div(noId)], 'a1', ''))).toContain(
+    expect(rootTagOf(assembleFullProjectSource([div(noId)], '', ''))).toContain(
       'label="main"',
     )
 
     const taken = noId.replace('<section xml:id="s1">', '<section label="main">')
-    expect(rootTagOf(assembleFullProjectSource([div(taken)], 'a1', ''))).toContain(
+    expect(rootTagOf(assembleFullProjectSource([div(taken)], '', ''))).toContain(
       'label="main-1"',
     )
   })
@@ -817,13 +631,13 @@ describe('root @label on an assembled document', () => {
       '<article xml:id="a1" data-note="a > b">',
     )
     const xml = assembleFullProjectSource([div(source)], 'a1', '')
-    expect(xml).toContain('<article xml:id="a1" data-note="a > b" label="a1">')
+    expect(xml).toContain('<article xml:id="a1" label="a1" data-note="a > b">')
     expectWellFormed(xml)
   })
 
-  it('leaves a bare division fragment untouched', () => {
-    const section = '<section xml:id="s1"><title>First</title><p>Body</p></section>'
-    expect(assembleProjectSource([div(section, 'section')], 'a1')).toBe(section)
+  it('leaves a non-root division untouched', () => {
+    const section = div('<section xml:id="s1"><title>First</title><p>Body</p></section>', 'section')
+    expect(assembleProjectSource([section], 's1')).toBe(wrapDivisionSource(section))
   })
 })
 
@@ -940,13 +754,13 @@ describe('per-division conversion caching', () => {
 
   it('reflects an edit to a division it has already converted', () => {
     const first = assembleProjectSource(
-      [latexDivision('\\section{A Section}\\label{sec-1}\n\nBefore the edit.')],
+      [latexDivision('Before the edit.')],
       'sec-1',
     )
     expect(first).toContain('Before the edit.')
 
     const second = assembleProjectSource(
-      [latexDivision('\\section{A Section}\\label{sec-1}\n\nAfter the edit.')],
+      [latexDivision('After the edit.')],
       'sec-1',
     )
     expect(second).toContain('After the edit.')
@@ -954,19 +768,26 @@ describe('per-division conversion caching', () => {
   })
 
   it('returns the same conversion for unchanged source', () => {
-    const division = latexDivision('\\section{A Section}\\label{sec-1}\n\nStable.')
+    const division = latexDivision('Stable.')
     expect(assembleProjectSource([division], 'sec-1')).toBe(
       assembleProjectSource([division], 'sec-1'),
     )
   })
 
+  it('reflects a title edit, though the body is unchanged', () => {
+    const before = assembleProjectSource([latexDivision('Body.')], 'sec-1')
+    const after = assembleProjectSource([{ ...latexDivision('Body.'), title: 'Renamed' }], 'sec-1')
+    expect(before).toContain('<title>A Section</title>')
+    expect(after).toContain('<title>Renamed</title>')
+  })
+
   it('does not confuse two divisions that share an xml:id across projects', () => {
     const projectA = assembleProjectSource(
-      [latexDivision('\\section{A Section}\\label{sec-1}\n\nProject A.')],
+      [latexDivision('Project A.')],
       'sec-1',
     )
     const projectB = assembleProjectSource(
-      [latexDivision('\\section{A Section}\\label{sec-1}\n\nProject B.')],
+      [latexDivision('Project B.')],
       'sec-1',
     )
     expect(projectA).toContain('Project A.')
@@ -1069,7 +890,7 @@ describe('placeholder attribute pass-through', () => {
     title: 'My Article',
     type: 'article',
     sourceFormat: 'pretext',
-    source: `<article xml:id="a1"><title>My Article</title>${body}</article>`,
+    source: body,
   })
 
   const section = (xmlId: string, body = '<p>Body</p>'): Division => ({
@@ -1078,7 +899,7 @@ describe('placeholder attribute pass-through', () => {
     title: 'A Section',
     type: 'section',
     sourceFormat: 'pretext',
-    source: `<section xml:id="${xmlId}"><title>A Section</title>${body}</section>`,
+    source: body,
   })
 
   const photo: Asset = { id: 'i', ref: 'photo', title: 'Photo', isFile: true, fileRef: 'photo.png' }
@@ -1088,7 +909,7 @@ describe('placeholder attribute pass-through', () => {
       [article('<plus:section ref="s1" component="teacher"/>'), section('s1')],
       'a1',
     )
-    expect(xml).toContain('<section xml:id="s1" component="teacher">')
+    expect(xml).toContain('<section xml:id="s1" label="s1" component="teacher">')
     expectWellFormed(xml)
   })
 
@@ -1142,7 +963,7 @@ describe('placeholder attribute pass-through', () => {
       ],
       'a1',
     )
-    expect(xml).toContain('<section xml:id="s1" component="teacher">')
+    expect(xml).toContain('<section xml:id="s1" label="s1" component="teacher">')
     expect(xml).not.toContain('<p component=')
   })
 
@@ -1157,8 +978,8 @@ describe('placeholder attribute pass-through', () => {
       ],
       'a1',
     )
-    expect(xml).toContain('<section xml:id="s1" component="teacher">')
-    expect(xml).toContain('<section xml:id="s2" component="student">')
+    expect(xml).toContain('<section xml:id="s1" label="s1" component="teacher">')
+    expect(xml).toContain('<subsection xml:id="s2" label="s2" component="student">')
   })
 
   // The placeholder is the more local statement, and a duplicate attribute is
@@ -1167,10 +988,7 @@ describe('placeholder attribute pass-through', () => {
     const xml = assembleProjectSource(
       [
         article('<plus:section ref="s1" component="teacher"/>'),
-        {
-          ...section('s1'),
-          source: '<section xml:id="s1" component="student"><title>A</title></section>',
-        },
+        { ...section('s1'), attrs: { component: 'student' } },
       ],
       'a1',
     )
@@ -1272,57 +1090,5 @@ describe('placeholder attribute pass-through', () => {
     expect(assembleProjectSource([latexHolder, section('s1')], 'a1')).toContain(
       'component="teacher"',
     )
-  })
-})
-
-// A root division is wrapped on load only when it actually lacks a wrapper.
-// Deciding that from parsed metadata alone is what made a single typo compound:
-// normalization runs on every load, so an unparseable root gained another
-// wrapper each time, and the locked header lines the author is meant to edit
-// from the TOC were suddenly duplicated in the middle of their own document.
-describe('normalizeDivisionsOnLoad root wrapping', () => {
-  const root = (source: string): Division => ({
-    id: 'r',
-    xmlId: 'pandoc-article',
-    title: 'Imported Project',
-    type: 'article',
-    sourceFormat: 'pretext',
-    source,
-  })
-
-  const load = (source: string) =>
-    normalizeDivisionsOnLoad([root(source)], 'pandoc-article', 'article', 'Imported Project')[0]
-      .source
-
-  // The exact shape that produced the report: a `component` attribute written
-  // on an include with its closing quote missing.
-  it('does not re-wrap a wrapped root whose source is malformed', () => {
-    const source = [
-      '<article xml:id="pandoc-article">',
-      '<title>Imported Project</title>',
-      '<plus:section ref="sec-a" component="test/>',
-      '</article>',
-    ].join('\n')
-
-    expect(load(source)).toBe(source)
-  })
-
-  it('is idempotent over repeated loads of a malformed root', () => {
-    const source = '<article xml:id="pandoc-article">\n<title>T</title>\n<p attr="oops/>\n</article>'
-    expect(load(load(load(source)))).toBe(source)
-  })
-
-  it('still wraps a root that really is a bare fragment', () => {
-    const wrapped = load('<title>Imported Project</title>\n<p>Body</p>')
-    expect(wrapped).toContain('<article xml:id="pandoc-article">')
-    expect(wrapped).toContain('<p>Body</p>')
-    // The fragment's own title is lifted into the wrapper, not left behind.
-    expect(wrapped.match(/<title>/g)).toHaveLength(1)
-  })
-
-  it('leaves a well-formed wrapped root untouched', () => {
-    const source =
-      '<article xml:id="pandoc-article">\n<title>Imported Project</title>\n<p>Body</p>\n</article>'
-    expect(load(source)).toBe(source)
   })
 })
