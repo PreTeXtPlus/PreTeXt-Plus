@@ -20,7 +20,12 @@
 # A root with no element of its own (a bare fragment, or a LaTeX/Markdown root
 # with no header) takes its type from the project's root element -- the type
 # the editor last saw it as -- or failing that its document type, and its title
-# from the project's.
+# from the project's. Any other division with none -- a LaTeX introduction or
+# conclusion, whose markup has no header command, so its source never named its
+# type -- takes the type of the placeholder that places it, which is the one
+# durable record of what it is; one nothing places is a section. That is why a
+# project's divisions go to the splitter together rather than in batches: the
+# placeholder is in the parent's source.
 class SplitDivisionMetadataOutOfSources < ActiveRecord::Migration[8.1]
   class MigrationContent < ActiveRecord::Base
     self.table_name = "contents"
@@ -34,7 +39,6 @@ class SplitDivisionMetadataOutOfSources < ActiveRecord::Migration[8.1]
 
   DIVISION = 0
   DOCUMENT_TYPES = %w[ article book slideshow ].freeze
-  BATCH = 500
 
   def up
     split = wrapped = 0
@@ -45,22 +49,20 @@ class SplitDivisionMetadataOutOfSources < ActiveRecord::Migration[8.1]
         divisions = MigrationContent.where(project_id: project.id, kind: DIVISION).to_a
         root_type = project.root_element.presence_in(DOCUMENT_TYPES) || DOCUMENT_TYPES.fetch(project.document_type.to_i, "article")
 
-        divisions.each_slice(BATCH) do |batch|
-          results = DivisionSourceSplitter.call(batch, root_type: root_type, root_title: project.title)
-          batch.zip(results).each do |division, result|
-            division.update_columns(
-              source: result.body,
-              division_type: result.type,
-              title: result.title,
-              attrs: result.attrs
-            )
-            split += 1
-            wrapped += 1 if result.wrapped
-            if result.xml_id.present? && result.xml_id != division.ref
-              warnings << "#{division.id}: source named xml:id #{result.xml_id.inspect}, kept ref #{division.ref.inspect}"
-            end
-            warnings.concat(result.warnings.map { |warning| "#{division.id}: #{warning}" })
+        results = DivisionSourceSplitter.call(divisions, root_type: root_type, root_title: project.title)
+        divisions.zip(results).each do |division, result|
+          division.update_columns(
+            source: result.body,
+            division_type: result.type,
+            title: result.title,
+            attrs: result.attrs
+          )
+          split += 1
+          wrapped += 1 if result.wrapped
+          if result.xml_id.present? && result.xml_id != division.ref
+            warnings << "#{division.id}: source named xml:id #{result.xml_id.inspect}, kept ref #{division.ref.inspect}"
           end
+          warnings.concat(result.warnings.map { |warning| "#{division.id}: #{warning}" })
         end
       end
       split

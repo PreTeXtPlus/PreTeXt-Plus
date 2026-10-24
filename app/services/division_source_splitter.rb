@@ -8,6 +8,11 @@
 # LaTeX `\section{...}\label{...}` header, Markdown frontmatter. It is built from
 # columns now (see Content), and this is how source written the old way is read
 # into them -- by the code that builds it back, so the two cannot disagree.
+#
+# A source that names no element of its own -- a LaTeX introduction or
+# conclusion, whose markup has no header command -- is typed by the placeholder
+# that places it (`\plus{introduction}{id}` in its parent), so `divisions`
+# should be a whole project, parents included, rather than any subset of one.
 class DivisionSourceSplitter
   # Built by `npm run build:assembler`, beside SourceAssembler's bundle.
   BUNDLE = Rails.root.join("lib", "assembler", "split-divisions.mjs").freeze
@@ -20,15 +25,19 @@ class DivisionSourceSplitter
   # names, which may disagree with the record's ref; the ref wins.
   Result = Data.define(:id, :type, :title, :xml_id, :attrs, :body, :wrapped, :warnings)
 
-  # @param divisions [Enumerable<#id, #source, #source_format, #is_root>]
+  # @param divisions [Enumerable<#id, #ref, #source, #source_format, #is_root>]
   # @param root_type [String] the type to give a root whose source names none
   # @param root_title [String] likewise its title
+  #   (a non-root whose source names none, and that no placeholder places, is a
+  #   section with no title)
   # @return [Array<Result>] in the order given
   # @raise [NodeScript::Error]
   def self.call(divisions, root_type: "article", root_title: nil)
     input = divisions.map do |division|
       {
         id: division.id,
+        ref: division.ref,
+        is_root: division.is_root,
         source: division.source.to_s,
         source_format: division.source_format.to_s,
         fallback_type: division.is_root ? root_type : "section",
