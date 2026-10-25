@@ -51,7 +51,7 @@ Then use either method:
 
 ## 3. Restore it into a separate database
 
-In the container terminal (the devcontainer's Postgres is at host `postgres`, with user and
+In the devcontainer terminal (the devcontainer's Postgres is at host `postgres`, with user and
 password both `postgres`):
 
 ```bash
