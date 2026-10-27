@@ -23,7 +23,7 @@
 //
 //   stdin   a JSON array of { id, ref, is_root, source, source_format, fallback_type, fallback_title }
 //   stdout  a JSON array, in the same order, of
-//           { id, type, title, xml_id, attrs, body, wrapped, warnings }
+//           { id, type, title, xml_id, attrs, body, wrapped, lossless, warnings }
 //   stderr  diagnostics
 //   exit 0  stdout is the array
 //   exit 1  stdout is meaningless; stderr says why
@@ -77,6 +77,8 @@ async function main() {
     const split = splitDivisionSource(division.source ?? "", division.source_format ?? "pretext", {
       type: placed ?? division.fallback_type ?? undefined,
       title: division.fallback_title ?? undefined,
+      root: division.is_root === true,
+      ref: division.ref ?? undefined,
     });
     const warnings = [...split.warnings];
     if (!split.wrapped && placed !== undefined && conflicts.has(division.ref)) {
@@ -90,6 +92,7 @@ async function main() {
       attrs: split.attrs,
       body: split.body,
       wrapped: split.wrapped,
+      lossless: split.lossless,
       warnings,
     };
   });

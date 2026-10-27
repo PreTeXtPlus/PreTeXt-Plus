@@ -247,6 +247,63 @@ describe('splitDivisionSource', () => {
     expect(split.warnings).toHaveLength(1)
   })
 
+  it('reads past a stray < in prose to the element\'s own close tag', () => {
+    const split = splitDivisionSource('<section xml:id="s"><p>x < y</p></section>', 'pretext', { ref: 's' })
+    expect(split).toMatchObject({ type: 'section', body: '<p>x < y</p>', wrapped: true, lossless: true })
+    expect(split.warnings).toEqual([])
+  })
+
+  it("reports a division's own element it could not split around as lossy, rather than body", () => {
+    // Not well formed: a second close tag after the element. The old reading
+    // (a parse) failed on this too; wrapping the element in another copy of
+    // itself would not be a reading of it either.
+    const stray = splitDivisionSource('<chapter xml:id="c"><title>T</title><p>x</p></chapter>\n</chapter>', 'pretext', {
+      ref: 'c',
+    })
+    expect(stray.wrapped).toBe(false)
+    expect(stray.lossless).toBe(false)
+    expect(stray.warnings).toContain("source opens with the division's own element (c) but was not split around it")
+
+    const latex = splitDivisionSource('\\begin{section}\\title{T}\\label{c}\nx\\end{section}\n\\section{Loose}\\label{d}', 'latex', {
+      ref: 'c',
+    })
+    expect(latex.wrapped).toBe(false)
+    expect(latex.lossless).toBe(false)
+
+    // The same element under another id is just the first of several things
+    // in the body, as before.
+    const other = splitDivisionSource('<chapter xml:id="d"><p>x</p></chapter>\n</chapter>', 'pretext', { ref: 'c' })
+    expect(other).toMatchObject({ wrapped: false, lossless: true })
+  })
+
+  it('closes an element that is not well formed inside at its last own close tag', () => {
+    // An unclosed <p>, a bare <br>, a stray </p>: each throws a depth count off.
+    for (const body of ['<p>unclosed', '<p>a<br>b</p>', '<p>x</p></p>']) {
+      const split = splitDivisionSource(`<section xml:id="s">\n<title>T</title>\n${body}\n</section>\n`, 'pretext', {
+        ref: 's',
+      })
+      expect(split).toMatchObject({ type: 'section', title: 'T', body, wrapped: true, lossless: true })
+      expect(split.warnings).toEqual(['<section> is not well formed inside; closed it at its last </section>'])
+    }
+    // Sibling elements are still a fragment: the last close tag is the second
+    // section's, with the first's content before it.
+    const pair = splitDivisionSource('<section xml:id="a"><p>x</p></section>\n<section xml:id="b"><p>y</p></section>', 'pretext')
+    expect(pair).toMatchObject({ wrapped: false, lossless: true })
+    // A trailing comment is not content after the close.
+    const commented = splitDivisionSource('<section xml:id="s"><p>x</section>\n<!-- end -->', 'pretext', { ref: 's' })
+    expect(commented).toMatchObject({ wrapped: true, lossless: true })
+    expect(commented.body).toContain('<!-- end -->')
+  })
+
+  it("does not take a root's leading <section> for its own element, whatever its id", () => {
+    const split = splitDivisionSource('<section xml:id="r"><p>x</p></section>', 'pretext', {
+      ref: 'r',
+      root: true,
+      type: 'article',
+    })
+    expect(split).toMatchObject({ type: 'article', wrapped: false, lossless: true })
+  })
+
   it("reads a bare fragment's leading title, with the fallback type", () => {
     const split = splitDivisionSource('<title>Doc</title>\n<p>Body</p>', 'pretext', { type: 'article' })
     expect(split).toMatchObject({ type: 'article', title: 'Doc', body: '<p>Body</p>', wrapped: false })
@@ -289,6 +346,107 @@ describe('splitDivisionSource', () => {
       attrs: { component: 'teacher' },
       body: '# Sub',
       warnings: ['dropped label "L"; a division\'s label is its ref'],
+    })
+  })
+
+  // The pre-migration root shape: a root's source was the body of its document,
+  // and the editor wrapped it in <article> on load. A <section> at its head is
+  // its first child, not its own element -- reading it as the element would
+  // turn the document into a section.
+  it("keeps a root's leading <section> as body, since a root's element is a root element", () => {
+    const source = '<section xml:id="s1">\n<title>One</title>\n<p>x</p>\n</section>\n<section xml:id="s2"/>'
+    const split = splitDivisionSource(source, 'pretext', { root: true, type: 'article', title: 'Notes' })
+    expect(split).toMatchObject({ type: 'article', title: 'Notes', xmlId: '', body: source, wrapped: false, lossless: true })
+    expect(split.warnings).toEqual(["a root's element is a root element; its leading <section> is body"])
+    // The same source is a section when it is not the root's.
+    expect(splitDivisionSource(source, 'pretext', { root: false }).type).toBe('section')
+  })
+
+  it("keeps a root's <article> as its element, and a non-root's as its element too", () => {
+    const source = '<article xml:id="doc">\n<title>Doc</title>\n<p>x</p>\n</article>'
+    expect(splitDivisionSource(source, 'pretext', { root: true })).toMatchObject({ type: 'article', title: 'Doc', wrapped: true })
+    expect(splitDivisionSource(source, 'pretext')).toMatchObject({ type: 'article', wrapped: true })
+  })
+
+  it('keeps a LaTeX root whose header is \\section as body, typed by the fallback', () => {
+    const source = '\\section{One}\\label{s1}\n\nText.'
+    const split = splitDivisionSource(source, 'latex', { root: true, type: 'book', title: 'B' })
+    expect(split).toMatchObject({ type: 'book', title: 'B', body: source, wrapped: false, lossless: true })
+    expect(split.warnings).toEqual(["a root's element is a root element; its leading \\section is body"])
+    expect(
+      splitDivisionSource('\\begin{section}\n\\title{T}\nText.\n\\end{section}', 'latex', { root: true }),
+    ).toMatchObject({ wrapped: false, lossless: true })
+  })
+
+  it("corrects a Markdown root's frontmatter type, which can only be the root's own metadata", () => {
+    const split = splitDivisionSource('---\ndivision: section\nid: r\ntitle: "T"\n---\n\nBody.', 'markdown', {
+      root: true,
+      type: 'slideshow',
+    })
+    expect(split).toMatchObject({ type: 'slideshow', title: 'T', xmlId: 'r', body: 'Body.', wrapped: true, lossless: true })
+    expect(split.warnings).toEqual(['frontmatter names section, which cannot be a root; typed it slideshow'])
+  })
+
+  it('reads a source with content beside its first element as a fragment, not as that element', () => {
+    for (const source of [
+      '<section xml:id="a"><p>A</p></section>\n<section xml:id="b"><p>B</p></section>',
+      'Loose text\n<section xml:id="a"><p>A</p></section>',
+      '<section xml:id="a"><p>A</p></section>\n<p>after</p>',
+    ]) {
+      const split = splitDivisionSource(source, 'pretext', { type: 'chapter' })
+      expect(split).toMatchObject({ type: 'chapter', title: '', body: source, wrapped: false, lossless: true })
+      expect(split.warnings).toEqual(['<section> is not the whole source; kept all of it as body'])
+    }
+    // Comments beside the element are not content: they move into the body.
+    const split = splitDivisionSource('<?xml version="1.0"?>\n<!-- a -->\n<section xml:id="s"><p>x</p></section>\n<!-- b -->', 'pretext')
+    expect(split).toMatchObject({ type: 'section', xmlId: 's', body: '<!-- a -->\n<p>x</p>\n<!-- b -->', wrapped: true, lossless: true })
+    expect(split.warnings).toHaveLength(2)
+  })
+
+  it("keeps a whole <pretext> document in a root's source as body", () => {
+    const source = '<pretext>\n<docinfo/>\n<article xml:id="doc"><title>T</title></article>\n</pretext>'
+    expect(splitDivisionSource(source, 'pretext', { root: true, type: 'article' })).toMatchObject({
+      type: 'article',
+      body: source,
+      wrapped: false,
+      lossless: true,
+    })
+  })
+
+  it('types a frontmatter division type that is no division at all by the fallback, as a loss', () => {
+    const split = splitDivisionSource('---\ndivision: sectoin\nid: s\n---\n\nBody.', 'markdown')
+    expect(split).toMatchObject({ type: 'section', lossless: false })
+    expect(split.warnings).toEqual(['"sectoin" is not a division type; typed it section'])
+  })
+
+  describe('lossless', () => {
+    it.each([
+      ['pretext', "<section component='a&amp;b' label=\"L\"\n   xml:id='s'>\n\n<title>\n  T <m>x</m>\n</title><p>x</p></section>"],
+      ['pretext', '<section xml:id="s"><title/><p>x</p></section>'],
+      ['pretext', '<introduction>\n<p>No title, no id.</p>\n</introduction>'],
+      ['pretext', '<title>Lead</title>\n<p>bare fragment</p>'],
+      ['pretext', '<!-- lead -->\n<title>Lead</title>\n<p>bare fragment</p>'],
+      ['latex', '\\section{Hello $x$}\\label{s1}\nbody'],
+      ['latex', '\\begin{worksheet}\n\\title{Env}\n\\label{w}\nbody\n\\end{worksheet}'],
+      ['latex', '\\begin{worksheet}\nbody\n\\end{worksheet}'],
+      ['latex', '\\emph{Once} upon a time.'],
+      ['markdown', '---\ntitle: Hi\nxmlid: w\n\ndivision: worksheet\ncomponent: teacher\nlabel: L\n---\n# Sub\n'],
+      ['markdown', 'No frontmatter.\n'],
+    ] as const)('holds for every shape the split is defined to read: %s %j', (format, source) => {
+      expect(splitDivisionSource(source, format).lossless).toBe(true)
+    })
+
+    it.each([
+      // The star has nowhere to go.
+      ['latex', '\\section*{Starred}\n\nbody'],
+      // A \label inside the title argument is header wreckage the split repairs.
+      ['latex', '\\section{Hello\\label{sec:hi}}\\label{s1}\nbody'],
+      // The title element's own attribute is not carried.
+      ['pretext', '<section xml:id="s"><title xml:id="t">T</title><p>x</p></section>'],
+      // A frontmatter line that is not `key: value` is not kept.
+      ['markdown', '---\ndivision: section\nid: s\n# a note\n---\n\nBody.'],
+    ] as const)('fails when something in the source has no field to go to: %s %j', (format, source) => {
+      expect(splitDivisionSource(source, format).lossless).toBe(false)
     })
   })
 })

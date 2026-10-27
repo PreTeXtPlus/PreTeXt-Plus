@@ -36,6 +36,44 @@ class DivisionSourceSplitterTest < ActiveSupport::TestCase
     assert_equal [ "book", "My Book", "Just prose.", false ], result.to_h.values_at(:type, :title, :body, :wrapped)
   end
 
+  # The pre-migration root shape: a root's source was its document's body, which
+  # the editor wrapped in <article> on load, so a <section> at its head is its
+  # first child -- not, as it would be for any other division, its own element.
+  test "a root whose source opens with a <section> is the project's root type, with that section as body" do
+    source = %(<section xml:id="s1">\n<title>One</title>\n<p>x</p>\n</section>)
+    result, = DivisionSourceSplitter.call(
+      [ Division.new(id: "r", ref: "r", source_format: "pretext", is_root: true, source: source) ],
+      root_type: "article", root_title: "Notes"
+    )
+
+    assert_equal [ "article", "Notes", source, false, true ], result.to_h.values_at(:type, :title, :body, :wrapped, :lossless)
+    assert_equal [ "a root's element is a root element; its leading <section> is body" ], result.warnings
+  end
+
+  test "reports a split that does not account for its whole source" do
+    starred, plain = DivisionSourceSplitter.call([
+      Division.new(id: "a", ref: "a", source_format: "latex", is_root: false, source: "\\section*{Starred}\n\nbody"),
+      Division.new(id: "b", ref: "b", source_format: "latex", is_root: false, source: "\\section{Plain}\n\nbody")
+    ])
+
+    assert_not starred.lossless
+    assert plain.lossless
+  end
+
+  # Not well formed: the element's close tag comes twice. Taking the element
+  # for the body would have assembly wrap it in a second copy of itself, so the
+  # split is reported instead -- and the migration refuses it.
+  test "a division's own element that cannot be split around is reported, not kept as body" do
+    result, = DivisionSourceSplitter.call([
+      Division.new(id: "c", ref: "c", source_format: "pretext", is_root: false,
+                   source: %(<chapter xml:id="c">\n<title>T</title>\n<p>x</p>\n</chapter>\n</chapter>))
+    ])
+
+    assert_not result.wrapped
+    assert_not result.lossless
+    assert_includes result.warnings, "source opens with the division's own element (c) but was not split around it"
+  end
+
   test "a non-root with no element is a section" do
     result, = DivisionSourceSplitter.call(
       [ Division.new(id: "n", ref: "n", source_format: "pretext", is_root: false, source: "<p>Loose</p>") ],

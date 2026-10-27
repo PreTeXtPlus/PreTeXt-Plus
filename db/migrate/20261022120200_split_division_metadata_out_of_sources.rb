@@ -11,7 +11,10 @@
 # The splitting is done by the web-editor's own `splitDivisionSource`, through
 # DivisionSourceSplitter, so it reads these sources exactly as the code that
 # writes the element back would. The body comes back byte for byte apart from
-# blank lines at its ends.
+# blank lines at its ends. A PreTeXt source need not be well formed inside its
+# element: when the depth count fails, the element is closed at the last
+# `</type>` in the source, so that close tag is not left in the body for
+# assembly to write a second one after.
 #
 # Columns are overwritten, not filled in: until this runs, a division's source
 # was its truth, and anything already in them came from a collaborative
@@ -20,7 +23,10 @@
 # A root with no element of its own (a bare fragment, or a LaTeX/Markdown root
 # with no header) takes its type from the project's root element -- the type
 # the editor last saw it as -- or failing that its document type, and its title
-# from the project's. Any other division with none -- a LaTeX introduction or
+# from the project's. A root's element can only be a root element, so a root
+# whose source opens with a <section> is one of these, with that section as the
+# first thing in its body: that is the shape a "Try it" project starts in, and
+# how the editor always read it. Any other division with none -- a LaTeX introduction or
 # conclusion, whose markup has no header command, so its source never named its
 # type -- takes the type of the placeholder that places it, which is the one
 # durable record of what it is; one nothing places is a section. That is why a
@@ -43,6 +49,7 @@ class SplitDivisionMetadataOutOfSources < ActiveRecord::Migration[8.1]
   def up
     split = wrapped = 0
     warnings = []
+    lossy = []
 
     say_with_time "splitting division metadata out of sources" do
       MigrationProject.unscoped.select(:id, :title, :document_type, :root_element).find_each do |project|
@@ -59,6 +66,7 @@ class SplitDivisionMetadataOutOfSources < ActiveRecord::Migration[8.1]
           )
           split += 1
           wrapped += 1 if result.wrapped
+          lossy << division.id unless result.lossless
           if result.xml_id.present? && result.xml_id != division.ref
             warnings << "#{division.id}: source named xml:id #{result.xml_id.inspect}, kept ref #{division.ref.inspect}"
           end
@@ -70,6 +78,7 @@ class SplitDivisionMetadataOutOfSources < ActiveRecord::Migration[8.1]
 
     say "#{split} divisions split, #{wrapped} of them carrying their own element", true
     warnings.each { |warning| say warning, true }
+    report_lossy_splits(lossy)
 
     add_check_constraint :contents, "kind <> #{DIVISION} OR division_type IS NOT NULL", name: "contents_division_has_a_type"
   end
@@ -80,4 +89,21 @@ class SplitDivisionMetadataOutOfSources < ActiveRecord::Migration[8.1]
   def down
     raise ActiveRecord::IrreversibleMigration
   end
+
+  private
+
+    # The splitter checks its own work: the element built back from a
+    # division's new fields around its new body must read as the old source
+    # did, apart from what the split is defined to change (see
+    # `DivisionSourceSplit.lossless`). A division that fails that check has
+    # something in its source with no field to go to -- a `\section*` star, a
+    # `\label` inside a title argument, an attribute on a `<title>` -- and its
+    # warnings above say what. The old source is kept in legacy_divisions, so
+    # they can be compared after the fact: `select l.source, c.source from
+    # contents c join legacy_divisions l using (id) where c.id in (...)`.
+    def report_lossy_splits(ids)
+      return if ids.empty?
+
+      say "#{ids.size} divisions did not split losslessly (see their warnings above): #{ids.join(', ')}", true
+    end
 end

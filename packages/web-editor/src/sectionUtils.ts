@@ -1799,6 +1799,14 @@ export interface DivisionSourceSplit {
   body: string;
   /** Whether the source carried an element/header/frontmatter at all. */
   wrapped: boolean;
+  /**
+   * Whether the fields and body together account for the whole source: the
+   * element built back from them (see {@link wrapDivisionSource}) reads the
+   * same as the source apart from what a split is defined to change — blank
+   * lines at the seams, a `label`, a header's `*`. False means a migration
+   * should hold the source up for review rather than overwrite it.
+   */
+  lossless: boolean;
   /** Anything the split had to guess at or move, for a migration to report. */
   warnings: string[];
 }
@@ -1807,7 +1815,27 @@ export interface DivisionSourceSplit {
 export interface DivisionSplitFallback {
   type?: DivisionType;
   title?: string;
+  /**
+   * Whether the source is the project's root division's. A root's own element
+   * can only be a root element (`article`/`book`/`slideshow`): a `<section>` or
+   * `\section` at the head of a root's source is the first thing in its body,
+   * which is how the editor always read it (the pre-migration root shape was a
+   * bare fragment that the editor wrapped on load).
+   */
+  root?: boolean;
+  /**
+   * The ref the division is known by. A source that opens with an element of
+   * the division's own -- a wrapper its standing allows, carrying this id --
+   * and that still comes back unsplit is reported as not lossless: the element
+   * is the division's, and whatever kept it from being taken apart (content
+   * after its close, a close tag that never comes) wants looking at, since
+   * assembly would otherwise wrap the element in a second copy of itself.
+   */
+  ref?: string;
 }
+
+/** Everything but the `lossless` verdict, which {@link splitDivisionSource} adds. */
+type RawSplit = Omit<DivisionSourceSplit, "lossless">;
 
 /** The closing tag matching an element whose start tag ends at `from`. */
 function matchingCloseTag(xml: string, from: number): StartTag | undefined {
@@ -1856,12 +1884,26 @@ function takeLeadingTitle(inner: string): { title: string; body: string } | null
   };
 }
 
-function splitPretextDivisionSource(source: string): DivisionSourceSplit {
+const XML_COMMENT_RE = /<!--[\s\S]*?-->/g;
+const XML_DECLARATION_RE = /<\?xml[\s\S]*?\?>/;
+
+/** Whether `xml` holds anything besides comments, an XML declaration and whitespace. */
+function hasContentOutsideMarkup(xml: string): boolean {
+  return /\S/.test(xml.replace(XML_COMMENT_RE, "").replace(XML_DECLARATION_RE, ""));
+}
+
+/** The element names that may be a division's own wrapper, by whether it is the root. */
+function wrapperTypesFor(root: boolean): ReadonlySet<string> {
+  return root ? (ROOT_DIVISION_TYPES as ReadonlySet<string>) : ALL_DIVISION_TYPES;
+}
+
+function splitPretextDivisionSource(source: string, root: boolean): RawSplit {
   const warnings: string[] = [];
   const start = nextTag(source, 0);
-  if (!start || start.closing || !ALL_DIVISION_TYPES.has(start.name)) {
-    // A bare fragment — the pre-migration root shape — may still lead with
-    // its own <title>.
+
+  // The whole source is body — the pre-migration root shape — though it may
+  // still lead with its own <title>.
+  const fragment = (): RawSplit => {
     const titled = takeLeadingTitle(source);
     return {
       type: "section",
@@ -1872,12 +1914,14 @@ function splitPretextDivisionSource(source: string): DivisionSourceSplit {
       wrapped: false,
       warnings,
     };
-  }
+  };
 
-  const { "xml:id": xmlId = "", label, ...attrs } = readAttributes(
-    source.slice(start.open, start.close),
-  );
-  if (label !== undefined) warnings.push(droppedLabelWarning(label));
+  if (!start || start.closing || !wrapperTypesFor(root).has(start.name)) {
+    if (start && !start.closing && ALL_DIVISION_TYPES.has(start.name)) {
+      warnings.push(`a root's element is a root element; its leading <${start.name}> is body`);
+    }
+    return fragment();
+  }
 
   let inner: string;
   let after: string;
@@ -1885,7 +1929,20 @@ function splitPretextDivisionSource(source: string): DivisionSourceSplit {
     inner = "";
     after = source.slice(start.close);
   } else {
-    const end = matchingCloseTag(source, start.close);
+    // A source that is not well formed inside -- an unclosed <p>, a bare <br>,
+    // a stray </p> -- throws the depth count off, so the scan ends on another
+    // element's close tag or none. The element's own close is then the last
+    // </name> in the source, with nothing but whitespace and comments after it;
+    // taking everything to the end as body instead would leave that close tag
+    // in the body, and assembly would write a second one after it.
+    let end = matchingCloseTag(source, start.close);
+    if (!end || end.name !== start.name) {
+      const last = trailingCloseTag(source, start);
+      if (last) {
+        warnings.push(`<${start.name}> is not well formed inside; closed it at its last </${start.name}>`);
+        end = last;
+      }
+    }
     if (end) {
       inner = source.slice(start.close, end.open);
       after = source.slice(end.close);
@@ -1896,18 +1953,33 @@ function splitPretextDivisionSource(source: string): DivisionSourceSplit {
     }
   }
 
+  // An element with content beside it — a second <section>, loose text — is
+  // not the division's wrapper but the first of several things in its body:
+  // that is how the old reading (a parse, which such a source fails) saw it,
+  // and moving the rest inside the element would change what contains what.
+  const before = source.slice(0, start.open);
+  if (hasContentOutsideMarkup(before) || hasContentOutsideMarkup(after)) {
+    warnings.push(`<${start.name}> is not the whole source; kept all of it as body`);
+    return fragment();
+  }
+
+  const { "xml:id": xmlId = "", label, ...attrs } = readAttributes(
+    source.slice(start.open, start.close),
+  );
+  if (label !== undefined) warnings.push(droppedLabelWarning(label));
+
   const titled = takeLeadingTitle(inner);
   let body = titled ? titled.body : inner;
 
-  // Whatever sat outside the element: comments are kept by moving them into
-  // the body; an XML declaration has no place in a fragment and is dropped.
-  const before = source.slice(0, start.open).replace(/<\?xml[\s\S]*?\?>/, "");
-  if (/\S/.test(before)) {
-    warnings.push("content before the division element was moved into its body");
-    body = `${before.trim()}\n${body}`;
+  // Comments outside the element are kept by moving them into the body; an
+  // XML declaration has no place in a fragment and is dropped.
+  const beforeComments = before.replace(XML_DECLARATION_RE, "");
+  if (/\S/.test(beforeComments)) {
+    warnings.push("a comment before the division element was moved into its body");
+    body = `${beforeComments.trim()}\n${body}`;
   }
   if (/\S/.test(after)) {
-    warnings.push("content after the division element was moved into its body");
+    warnings.push("a comment after the division element was moved into its body");
     body = `${body}\n${after.trim()}`;
   }
 
@@ -1922,12 +1994,46 @@ function splitPretextDivisionSource(source: string): DivisionSourceSplit {
   };
 }
 
+/**
+ * The last `</name>` in `xml` after `start`, provided nothing but whitespace
+ * and comments follow it -- the close tag of an element that fills the source
+ * but is not well formed inside. Undefined when there is none, or when content
+ * follows the last one (the element is then one of several things in the
+ * source, not its wrapper).
+ */
+function trailingCloseTag(xml: string, start: StartTag): StartTag | undefined {
+  let last: RegExpExecArray | undefined;
+  for (const m of xml.matchAll(new RegExp(`</${escapeRegex(start.name)}\\s*>`, "g"))) {
+    if (m.index >= start.close) last = m;
+  }
+  if (!last) return undefined;
+  const close = last.index + last[0].length;
+  if (hasContentOutsideMarkup(xml.slice(close))) return undefined;
+  return { name: start.name, open: last.index, close, selfClosing: false, closing: true };
+}
+
 const LATEX_ENV_HEADER_RE = /^\s*\\begin\{([A-Za-z][A-Za-z-]*)\}/;
 
-function splitLatexDivisionSource(source: string): DivisionSourceSplit {
+function splitLatexDivisionSource(source: string, root: boolean): RawSplit {
   const warnings: string[] = [];
+  const wrapperTypes = wrapperTypesFor(root);
+  const fragment = (): RawSplit => ({
+    type: "section",
+    title: "",
+    xmlId: "",
+    attrs: {},
+    body: trimBoundaryBlankLines(source),
+    wrapped: false,
+    warnings,
+  });
+  const notARoot = (macro: string): RawSplit => {
+    warnings.push(`a root's element is a root element; its leading \\${macro} is body`);
+    return fragment();
+  };
+
   const header = parseLatexDivisionHeader(source);
   if (header && ALL_DIVISION_TYPES.has(header.macro)) {
+    if (!wrapperTypes.has(header.macro)) return notARoot(header.macro);
     if (header.starred) warnings.push(`dropped the * of \\${header.macro}*`);
     return {
       type: header.macro as DivisionType,
@@ -1943,6 +2049,7 @@ function splitLatexDivisionSource(source: string): DivisionSourceSplit {
   // The environment style: \begin{section} \title{…} … \end{section}.
   const env = LATEX_ENV_HEADER_RE.exec(source);
   if (env && ALL_DIVISION_TYPES.has(env[1])) {
+    if (!wrapperTypes.has(env[1])) return notARoot(`begin{${env[1]}}`);
     const endRe = new RegExp(`\\\\end\\{${escapeRegex(env[1])}\\}\\s*$`);
     const end = endRe.exec(source);
     if (end) {
@@ -1971,15 +2078,7 @@ function splitLatexDivisionSource(source: string): DivisionSourceSplit {
     }
   }
 
-  return {
-    type: "section",
-    title: "",
-    xmlId: "",
-    attrs: {},
-    body: trimBoundaryBlankLines(source),
-    wrapped: false,
-    warnings,
-  };
+  return fragment();
 }
 
 /**
@@ -2003,7 +2102,10 @@ const MARKDOWN_FIELD_KEYS: ReadonlySet<string> = new Set([
   "label",
 ]);
 
-function splitMarkdownDivisionSource(source: string): DivisionSourceSplit {
+/** A frontmatter line's key and raw value; comments and blank lines are not one. */
+const FRONTMATTER_KEY_VALUE_RE = /^[ \t]*([A-Za-z_][\w.:-]*)[ \t]*:[ \t]*(.*)$/;
+
+function splitMarkdownDivisionSource(source: string): RawSplit {
   const parsed = parseMarkdownFrontmatter(source);
   if (!parsed) {
     return {
@@ -2019,7 +2121,7 @@ function splitMarkdownDivisionSource(source: string): DivisionSourceSplit {
   const attrs: Record<string, string> = {};
   const block = MARKDOWN_FRONTMATTER_RE.exec(source)![1];
   for (const line of block.split(/\r?\n/)) {
-    const kv = /^[ \t]*([A-Za-z_][\w.:-]*)[ \t]*:[ \t]*(.*)$/.exec(line);
+    const kv = FRONTMATTER_KEY_VALUE_RE.exec(line);
     if (kv && !MARKDOWN_FIELD_KEYS.has(kv[1])) attrs[kv[1]] = unquoteYamlValue(kv[2]);
   }
   return {
@@ -2041,22 +2143,37 @@ function splitMarkdownDivisionSource(source: string): DivisionSourceSplit {
  * Markdown frontmatter. The inverse of {@link wrapDivisionSource}.
  *
  * Source with no element of its own (a LaTeX introduction, a bare fragment)
- * comes back as all body, with `fallback`'s type and title. The body is kept
- * byte for byte apart from blank lines at its ends — a PreTeXt wrapper is
- * located with the same tolerant scanner assembly uses, never parsed and
- * reserialized, so an author's formatting survives.
+ * comes back as all body, with `fallback`'s type and title. A root's element
+ * can only be a root element (`fallback.root`): anything else at the head of
+ * its source is body too, except Markdown frontmatter, which can only ever be
+ * the division's own metadata and so has its type corrected instead. The body
+ * is kept byte for byte apart from blank lines at its ends — a PreTeXt wrapper
+ * is located with the same tolerant scanner assembly uses, never parsed and
+ * reserialized, so an author's formatting survives — and `lossless` says
+ * whether the whole source is accounted for.
  */
 export function splitDivisionSource(
   source: string,
   sourceFormat: SourceFormat,
   fallback: DivisionSplitFallback = {},
 ): DivisionSourceSplit {
-  const split =
+  const root = fallback.root ?? false;
+  const raw =
     sourceFormat === "latex"
-      ? splitLatexDivisionSource(source)
+      ? splitLatexDivisionSource(source, root)
       : sourceFormat === "markdown"
         ? splitMarkdownDivisionSource(source)
-        : splitPretextDivisionSource(source);
+        : splitPretextDivisionSource(source, root);
+  // Judged on what the source itself says, before anything is assumed for it.
+  let lossless = splitAccountsForSource(source, sourceFormat, raw);
+  if (!raw.wrapped && fallback.ref && opensWithOwnElement(source, sourceFormat, fallback.ref, root)) {
+    raw.warnings.push(
+      `source opens with the division's own element (${fallback.ref}) but was not split around it`,
+    );
+    lossless = false;
+  }
+  const split: DivisionSourceSplit = { ...raw, lossless };
+
   if (!split.wrapped) {
     return {
       ...split,
@@ -2064,9 +2181,156 @@ export function splitDivisionSource(
       title: split.title || fallback.title || "",
     };
   }
-  return split;
+  if (!ALL_DIVISION_TYPES.has(split.type)) {
+    // Only frontmatter can name a type that is no division at all; a PreTeXt
+    // or LaTeX element that is not one is never taken for the wrapper.
+    const type = fallback.type ?? "section";
+    split.warnings.push(`${JSON.stringify(split.type)} is not a division type; typed it ${type}`);
+    split.type = type;
+    lossless = false;
+  } else if (root && !(ROOT_DIVISION_TYPES as ReadonlySet<string>).has(split.type)) {
+    const type = fallback.type ?? "article";
+    split.warnings.push(`frontmatter names ${split.type}, which cannot be a root; typed it ${type}`);
+    split.type = type;
+  }
+  return { ...split, lossless };
 }
 
+/**
+ * Whether `source` opens with an element that is the division's own: one of
+ * the wrappers a division of its standing may have (`root`, see
+ * {@link wrapperTypesFor}), carrying `ref` as its id -- `xml:id` on a PreTeXt
+ * start tag, `\\label` after a LaTeX header or inside its environment.
+ * Markdown frontmatter is always split, so never asked about.
+ */
+function opensWithOwnElement(
+  source: string,
+  sourceFormat: SourceFormat,
+  ref: string,
+  root: boolean,
+): boolean {
+  const types = wrapperTypesFor(root);
+  if (sourceFormat === "pretext") {
+    const start = nextTag(source, 0);
+    if (!start || start.closing || !types.has(start.name)) return false;
+    return readAttributes(source.slice(start.open, start.close))["xml:id"] === ref;
+  }
+  if (sourceFormat === "latex") {
+    const header = parseLatexDivisionHeader(source);
+    if (header) return types.has(header.macro) && header.label === ref;
+    const env = LATEX_ENV_HEADER_RE.exec(source);
+    if (!env || !types.has(env[1])) return false;
+    const opening = source.slice(env[0].length, env[0].length + 512);
+    return /^\s*(?:\\title\{[^}]*\}\s*)?\\label\{([^}]*)\}/.exec(opening)?.[1]?.trim() === ref;
+  }
+  return false;
+}
+
+/**
+ * Whether `split` accounts for all of `source`: the element built back from
+ * its fields around its body ({@link wrapDivisionSource}) reads the same as the
+ * source once both are put in the canonical form of
+ * {@link canonicalDivisionSource}, and no comment went missing between them.
+ * For a source with no element, the body (and a PreTeXt fragment's leading
+ * `<title>`) must read as the source.
+ */
+function splitAccountsForSource(
+  source: string,
+  sourceFormat: SourceFormat,
+  split: RawSplit,
+): boolean {
+  let rebuilt: string;
+  if (split.wrapped) {
+    rebuilt = wrapDivisionSource({
+      xmlId: split.xmlId,
+      type: split.type,
+      title: split.title,
+      attrs: split.attrs,
+      sourceFormat,
+      source: split.body,
+    });
+  } else if (sourceFormat === "pretext" && split.title) {
+    rebuilt = `<title>${split.title}</title>\n${split.body}`;
+  } else {
+    rebuilt = split.body;
+  }
+  if (canonicalDivisionSource(rebuilt, sourceFormat) !== canonicalDivisionSource(source, sourceFormat)) {
+    return false;
+  }
+  if (sourceFormat !== "pretext") return true;
+  // Comments are compared apart because a split may move one (from outside the
+  // element to inside it) but must never lose one.
+  const comments = (xml: string) => (xml.match(XML_COMMENT_RE) ?? []).map((c) => c.trim()).sort();
+  const before = comments(source);
+  const after = comments(rebuilt);
+  return before.length === after.length && before.every((c, i) => c === after[i]);
+}
+
+/**
+ * A PreTeXt start tag with its attributes read and written back in a fixed
+ * order and quoting, less any `label`. Attribute values may not hold `>`, so a
+ * tag is the run from `<` to the next `>`.
+ */
+const START_TAG_RE = /<([A-Za-z_][\w.:-]*)([^<>]*?)(\/?)>/g;
+
+/** A LaTeX division written as an environment, to rewrite in the header style. */
+const LATEX_ENV_DIVISION_RE =
+  /^\s*\\begin\{([A-Za-z][A-Za-z-]*)\}\s*(?:\\title\{([^}]*)\}\s*)?(?:\\label\{([^}]*)\}\s*)?([\s\S]*?)\\end\{\1\}\s*$/;
+
+/**
+ * `text` with everything a split is allowed to change taken out, so that a
+ * source and the element rebuilt from its split can be compared for anything
+ * else: whitespace runs (and whitespace against markup) collapse; a PreTeXt
+ * start tag has its attributes sorted and requoted and its `label` dropped,
+ * and comments, an XML declaration and empty `<title>`s go; a LaTeX division
+ * environment is written as its header; Markdown frontmatter is reduced to its
+ * sorted `key: value` lines, unquoted, with `label` and empty values dropped.
+ */
+function canonicalDivisionSource(text: string, sourceFormat: SourceFormat): string {
+  let s = text;
+  if (sourceFormat === "pretext") {
+    s = s
+      .replace(XML_COMMENT_RE, "")
+      .replace(XML_DECLARATION_RE, "")
+      .replace(/<title\s*\/>|<title>\s*<\/title>/g, "")
+      .replace(START_TAG_RE, (whole, name: string, attrText: string, slash: string) => {
+        if (name.startsWith("/") || name.startsWith("?") || name.startsWith("!")) return whole;
+        const pairs = [...attrText.matchAll(ATTR_RE)]
+          .filter((m) => m[1] !== "label")
+          .map((m): [string, string] => [m[1], unescapeAttribute(m[2] ?? m[3] ?? "")])
+          .sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0));
+        const attrs = pairs.map(([n, v]) => ` ${n}="${escapeAttribute(v)}"`).join("");
+        return `<${name}${attrs}${slash}>`;
+      });
+  } else if (sourceFormat === "latex") {
+    s = s.replace(
+      LATEX_ENV_DIVISION_RE,
+      (_whole, env: string, title = "", label: string | undefined, body: string) =>
+        `\\${env}{${title}}${label ? `\\label{${label}}` : ""}\n${body}`,
+    );
+  } else {
+    const m = MARKDOWN_FRONTMATTER_RE.exec(s);
+    if (m) {
+      const lines = m[1]
+        .split(/\r?\n/)
+        .filter((line) => /\S/.test(line))
+        .map((line) => {
+          const kv = FRONTMATTER_KEY_VALUE_RE.exec(line);
+          if (!kv) return line.trim();
+          const key = kv[1] === "xmlid" || kv[1] === "xml:id" ? "id" : kv[1];
+          const value = unquoteYamlValue(kv[2]);
+          return key === "label" || value === "" ? "" : `${key}: ${value}`;
+        })
+        .filter((line) => line !== "")
+        .sort();
+      s = `---\n${lines.join("\n")}\n---\n${s.slice(m[0].length)}`;
+    }
+  }
+  return s
+    .replace(/\s+/g, " ")
+    .replace(/\s*([<>])\s*/g, "$1")
+    .trim();
+}
 /**
  * `xml:id`, `label` and every other attribute, as a start tag writes them.
  * Both of the first two are the division's ref: it is the one name a division
@@ -2247,8 +2511,14 @@ function nextTag(xml: string, from: number): StartTag | undefined {
       continue;
     }
     const name = TAG_NAME_RE.exec(xml.slice(open, open + 128))?.[1];
+    if (!name) {
+      // A `<` that opens no tag -- `x < y` in prose -- is text, not the end of
+      // the markup.
+      i = open + 1;
+      continue;
+    }
     const close = tagEnd(xml, open);
-    if (!name || close === -1) return undefined;
+    if (close === -1) return undefined;
     return {
       name,
       open,

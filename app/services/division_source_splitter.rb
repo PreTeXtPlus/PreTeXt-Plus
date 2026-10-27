@@ -22,8 +22,11 @@ class DivisionSourceSplitter
   TIMEOUT = 120
 
   # One division's source, taken apart. `xml_id` is the id the source itself
-  # names, which may disagree with the record's ref; the ref wins.
-  Result = Data.define(:id, :type, :title, :xml_id, :attrs, :body, :wrapped, :warnings)
+  # names, which may disagree with the record's ref; the ref wins. `lossless`
+  # is the splitter's own check that the fields and body account for the whole
+  # source (the element built back from them reads the same as the source); the
+  # migration lists every split that is not.
+  Result = Data.define(:id, :type, :title, :xml_id, :attrs, :body, :wrapped, :lossless, :warnings)
 
   # @param divisions [Enumerable<#id, #ref, #source, #source_format, #is_root>]
   # @param root_type [String] the type to give a root whose source names none

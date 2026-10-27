@@ -112,9 +112,39 @@ What to watch for:
   `could not project <key> before resetting it` mean a collaborative document whose unsaved
   edits would be lost in production.
 - **`20261022120200` SplitDivisionMetadataOutOfSources:** it prints
-  `N divisions split, M of them carrying their own element`, followed by warnings.
-  Mismatched `xml:id` warnings and splitter warnings are what's most worth reviewing. A
-  `NodeScript::Error` or timeout means the bundle failed on some real source.
+  `N divisions split, M of them carrying their own element`, followed by one line per
+  division the split had to decide something about, then
+  `K divisions did not split losslessly: <id>, …` if any did not. A
+  `NodeScript::Error` or timeout means the bundle failed on some real source. The
+  per-division lines worth a second look:
+
+  - `source named xml:id "…", kept ref "…"` -- the division's `xml:id` changes to its ref
+    in the assembled document.
+  - `a root's element is a root element; its leading <section> is body` -- a root whose
+    source was a bare fragment beginning with a `<section>` (the shape a "Try it" project
+    starts in). It is typed by the project and that section is its first child, exactly
+    as the editor showed it.
+  - `<section> is not the whole source; kept all of it as body` -- a division holding
+    several top-level elements. It keeps them all, but under one element where the old
+    assembly spliced them in as siblings.
+  - `<section> is not well formed inside; closed it at its last </section>` -- an unclosed
+    `<p>`, a bare `<br>`, a stray `</p>` in the body threw the tag count off, so the
+    element was closed at the last `</section>` in the source. The body is kept as
+    written. (`<section> is never closed` is the case with no such close tag at all: the
+    whole rest is body.)
+  - `source opens with the division's own element (…) but was not split around it` --
+    the first element carries the division's ref but has content after its close; the
+    division is kept whole as body, so assembly wraps that element in a second copy of
+    itself. Worth fixing by hand afterwards.
+  - `dropped label "…"` and `dropped the * of \section*` are the split's design.
+
+  The lossless check compares the element rebuilt from a division's new fields around its
+  new body with the old source, blind only to what the split is defined to change (blank
+  lines at the seams, a `label`, attribute order). A division listed as not lossless has
+  something in its source with no field to go to -- a `\section*` star, a `\label` inside
+  a title argument, an attribute on a `<title>`, a frontmatter line that isn't
+  `key: value` -- or is one of the two whole-as-body cases above. The old source stays in
+  `legacy_divisions` (step 6), so each can be compared afterwards.
 
 ## 6. Check the results
 
