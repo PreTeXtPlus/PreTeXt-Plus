@@ -425,6 +425,13 @@ export interface EditorStoreState {
    * snippet or asset is open.
    */
   openItem: OpenItem;
+  /**
+   * The editor's tabs, in strip order — see {@link openTabsAfterOpening}.
+   * `openItem` is always one of them: the active tab. A tab is only a name;
+   * the code editor and preview are shared by all of them and show the
+   * active one, so a tab costs nothing but its entry here.
+   */
+  openTabs: OpenItem[];
 
   // Computed flags (re-derived each sync)
   canConvertToPretext: boolean;
@@ -533,6 +540,11 @@ export interface EditorStoreState {
   openSnippet: (ref: string) => void;
   /** Open a project asset's source in the code editor. */
   openAsset: (ref: string) => void;
+  /**
+   * Close `item`'s tab. Closing the active tab moves to the tab before it (or
+   * the one after, from the first); closing the last tab opens the root.
+   */
+  closeTab: (item: OpenItem) => void;
   /** Optimistically set the document title. */
   setTitle: (title: string) => void;
   /** Optimistically set the document language. */
@@ -741,8 +753,41 @@ export interface EditorStoreHandle {
   bindCallbacks: (cbs: EditorCallbacks) => void;
 }
 
-const sameOpenItem = (a: OpenItem, b: OpenItem): boolean =>
+export const sameOpenItem = (a: OpenItem, b: OpenItem): boolean =>
   a.kind === b.kind && a.ref === b.ref;
+
+/**
+ * The tab strip after `item` is opened while `active` is the active tab. An
+ * item that already has a tab keeps it (the tab is activated). Opening a
+ * division while a division is active replaces that tab in place, so walking
+ * the table of contents never accumulates tabs — that is what opening a
+ * division always did. Anything else — a snippet or asset, or a division
+ * opened from a snippet's or asset's tab — gets a tab of its own right after
+ * the active one: the author stepped aside from what they were writing and
+ * the tab is their way back.
+ */
+export const openTabsAfterOpening = (
+  tabs: OpenItem[],
+  active: OpenItem,
+  item: OpenItem,
+): OpenItem[] => {
+  if (tabs.some((t) => sameOpenItem(t, item))) return tabs;
+  const at = tabs.findIndex((t) => sameOpenItem(t, active));
+  if (at === -1) return [...tabs, item];
+  const replace = item.kind === "division" && active.kind === "division";
+  return replace
+    ? [...tabs.slice(0, at), item, ...tabs.slice(at + 1)]
+    : [...tabs.slice(0, at + 1), item, ...tabs.slice(at + 1)];
+};
+
+/** `tabs` with the tab for `kind`/`oldRef` renamed to `newRef`. */
+const renameTab = (
+  tabs: OpenItem[],
+  kind: OpenItem["kind"],
+  oldRef: string,
+  newRef: string,
+): OpenItem[] =>
+  tabs.map((t) => (t.kind === kind && t.ref === oldRef ? { kind, ref: newRef } : t));
 
 /** The state change that abandons the creation form, if one is open. */
 const noCreation = {
@@ -766,7 +811,7 @@ const drawerOpenByDefault = (item: OpenItem) => item.kind !== "division";
  * being removed), the form is the author's and stays.
  */
 const openItemState = (
-  s: Pick<EditorStoreState, "openItem" | "creating">,
+  s: Pick<EditorStoreState, "openItem" | "openTabs" | "creating">,
   item: OpenItem,
   byAuthor = true,
 ): Partial<EditorStoreState> => {
@@ -774,8 +819,34 @@ const openItemState = (
   if (sameOpenItem(s.openItem, item)) return leaveCreation;
   return {
     openItem: item,
+    openTabs: openTabsAfterOpening(s.openTabs, s.openItem, item),
     isSettingsDrawerOpen: drawerOpenByDefault(item),
     ...leaveCreation,
+  };
+};
+
+/**
+ * The state change that closes `item`'s tab — by the author, or because the
+ * item is gone (`byAuthor` false, which keeps a creation form, as
+ * `openItemState` does). Closing the active tab lands on its left neighbour
+ * (its right one, from the first tab); closing the only tab opens the root.
+ */
+const closeTabState = (
+  s: Pick<
+    EditorStoreState,
+    "openItem" | "openTabs" | "creating" | "rootDivisionId" | "divisions"
+  >,
+  item: OpenItem,
+  byAuthor = true,
+): Partial<EditorStoreState> => {
+  const at = s.openTabs.findIndex((t) => sameOpenItem(t, item));
+  if (at === -1) return {};
+  const openTabs = s.openTabs.filter((_, i) => i !== at);
+  if (!sameOpenItem(s.openItem, item)) return { openTabs };
+  const next = openTabs[Math.max(0, at - 1)] ?? rootItem(s);
+  return {
+    ...openItemState({ ...s, openTabs }, next, byAuthor),
+    openTabs: openTabs.length ? openTabs : [next],
   };
 };
 
@@ -836,6 +907,7 @@ export function createEditorStore(init: EditorStoreInit): EditorStoreHandle {
     divisions: init.divisions,
     rootDivisionId: undefined,
     openItem: { kind: "division", ref: init.activeDivisionId ?? "" },
+    openTabs: [{ kind: "division", ref: init.activeDivisionId ?? "" }],
     canConvertToPretext: true,
     activeEditorSource: init.source,
     hasFeedback: false,
@@ -904,6 +976,10 @@ export function createEditorStore(init: EditorStoreInit): EditorStoreHandle {
           s.openItem.ref === xmlId
             ? { kind: "division" as const, ref: changes.xmlId }
             : s.openItem;
+        const openTabs =
+          changes.xmlId != null
+            ? renameTab(s.openTabs, "division", xmlId, changes.xmlId)
+            : s.openTabs;
         const divisions = s.divisions.map((d) =>
           d.xmlId === xmlId
             ? {
@@ -922,11 +998,12 @@ export function createEditorStore(init: EditorStoreInit): EditorStoreHandle {
         // it across rather than snapping an open branch shut.
         const renamed =
           changes.xmlId != null && changes.xmlId !== xmlId ? changes.xmlId : null;
-        if (!renamed) return { divisions, openItem };
+        if (!renamed) return { divisions, openItem, openTabs };
         const { [xmlId]: expanded, ...tocExpansion } = s.tocExpansion;
         return {
           divisions,
           openItem,
+          openTabs,
           tocExpansion:
             expanded === undefined
               ? s.tocExpansion
@@ -946,9 +1023,7 @@ export function createEditorStore(init: EditorStoreInit): EditorStoreHandle {
         const divisions = (s.divisions ?? []).filter((d) => d.xmlId !== xmlId);
         return {
           divisions,
-          ...(s.openItem.kind === "division" && s.openItem.ref === xmlId
-            ? openItemState(s, rootItem({ ...s, divisions }), false)
-            : {}),
+          ...closeTabState({ ...s, divisions }, { kind: "division", ref: xmlId }, false),
         };
       }),
     setOpenItem: (item) => set((s) => openItemState(s, item)),
@@ -957,6 +1032,7 @@ export function createEditorStore(init: EditorStoreInit): EditorStoreHandle {
     openSnippet: (ref) =>
       set((s) => openItemState(s, { kind: "snippet", ref })),
     openAsset: (ref) => set((s) => openItemState(s, { kind: "asset", ref })),
+    closeTab: (item) => set((s) => closeTabState(s, item)),
     setTitle: (title) => set({ title }),
     setLanguage: (language) => set({ language }),
     setDocinfo: ({ docinfo, commonDocinfo, useCommonDocinfo }) =>
@@ -1113,8 +1189,13 @@ export function createEditorStore(init: EditorStoreInit): EditorStoreHandle {
         const isOpen = s.openItem.kind === "asset" && s.openItem.ref === oldRef;
         return {
           projectAssets: [...filtered, newAsset],
-          ...(isOpen && newAsset.ref
-            ? { openItem: { kind: "asset" as const, ref: newAsset.ref } }
+          ...(newAsset.ref
+            ? {
+                openTabs: renameTab(s.openTabs, "asset", oldRef, newAsset.ref),
+                ...(isOpen
+                  ? { openItem: { kind: "asset" as const, ref: newAsset.ref } }
+                  : {}),
+              }
             : {}),
         };
       }),
@@ -1123,8 +1204,8 @@ export function createEditorStore(init: EditorStoreInit): EditorStoreHandle {
         projectAssets: (s.projectAssets ?? []).filter(
           (a) => !sameAssetRef(a, asset),
         ),
-        ...(s.openItem.kind === "asset" && s.openItem.ref === asset.ref
-          ? openItemState(s, rootItem(s), false)
+        ...(asset.ref
+          ? closeTabState(s, { kind: "asset", ref: asset.ref }, false)
           : {}),
       })),
 
@@ -1156,6 +1237,7 @@ export function createEditorStore(init: EditorStoreInit): EditorStoreHandle {
         const isOpen = s.openItem.kind === "snippet" && s.openItem.ref === oldRef;
         return {
           projectSnippets: [...filtered, newSnippet],
+          openTabs: renameTab(s.openTabs, "snippet", oldRef, newSnippet.ref),
           ...(isOpen
             ? { openItem: { kind: "snippet" as const, ref: newSnippet.ref } }
             : {}),
@@ -1166,9 +1248,7 @@ export function createEditorStore(init: EditorStoreInit): EditorStoreHandle {
         projectSnippets: (s.projectSnippets ?? []).filter(
           (a) => !sameSnippetRef(a, snippet),
         ),
-        ...(s.openItem.kind === "snippet" && s.openItem.ref === snippet.ref
-          ? openItemState(s, rootItem(s), false)
-          : {}),
+        ...closeTabState(s, { kind: "snippet", ref: snippet.ref }, false),
       })),
 
     updateTitle: (title) => bag.cbs.updateTitle(title),

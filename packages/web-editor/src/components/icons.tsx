@@ -101,6 +101,13 @@ export const GearIcon = () => (
   </SvgIcon>
 );
 
+/** The × on an editor tab. */
+export const CloseIcon = () => (
+  <SvgIcon size={14} strokeWidth={1.5} viewBox="0 0 16 16">
+    <path d="M4 4L12 12M12 4L4 12" />
+  </SvgIcon>
+);
+
 // ── Tree rows ────────────────────────────────────────────────────────────────
 
 /**

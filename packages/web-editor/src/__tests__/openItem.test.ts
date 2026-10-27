@@ -138,17 +138,19 @@ describe("the open item", () => {
     expect(store.getState().openItem).toEqual({ kind: "division", ref: "sec-renamed" });
   });
 
-  it("falls back to the root when the open item is removed", () => {
+  it("falls back to the tab it was opened beside when the open item is removed, else the root", () => {
     const store = makeStore();
+    // A snippet or asset opened from a division has a tab of its own beside
+    // the division's, so losing it lands back on the division.
     store.getState().openSnippet("greeting");
     store.getState().removeSnippetFromPool(snippet);
-    expect(store.getState().openItem).toEqual({ kind: "division", ref: "doc" });
+    expect(store.getState().openItem).toEqual({ kind: "division", ref: "sec" });
 
     store.getState().openAsset("fig");
     store.getState().removeAssetFromPool(asset);
-    expect(store.getState().openItem).toEqual({ kind: "division", ref: "doc" });
+    expect(store.getState().openItem).toEqual({ kind: "division", ref: "sec" });
 
-    store.getState().openDivision("sec");
+    // The only tab: nothing to go back to but the root.
     store.getState().removeDivisionFromPool("sec");
     expect(store.getState().openItem).toEqual({ kind: "division", ref: "doc" });
   });
