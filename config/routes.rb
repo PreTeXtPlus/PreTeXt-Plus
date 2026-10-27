@@ -79,6 +79,7 @@ Rails.application.routes.draw do
       end
     end
     resources :workshops, except: :show
+    resources :maintenance_windows, except: :show
   end
 
   devise_for :users, skip: [ :registrations ], controllers: {

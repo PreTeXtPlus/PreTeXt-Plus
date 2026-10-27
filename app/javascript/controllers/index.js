@@ -16,6 +16,9 @@ application.register("editor", EditorController)
 import ImportController from "./import_controller"
 application.register("import", ImportController)
 
+import MaintenanceBannerController from "./maintenance_banner_controller"
+application.register("maintenance-banner", MaintenanceBannerController)
+
 import ModalController from "./modal_controller"
 application.register("modal", ModalController)
 
