@@ -104,6 +104,8 @@ ActiveRecord::Schema[8.1].define(version: 2026_10_27_120000) do
     t.text "description"
     t.datetime "created_at", null: false
     t.datetime "updated_at", null: false
+    t.string "generator"
+    t.string "output_source_digest"
     t.index ["project_id", "kind"], name: "index_contents_on_project_id_and_kind"
     t.index ["project_id", "ref"], name: "index_contents_on_project_id_and_ref", unique: true
     t.index ["project_id"], name: "index_contents_on_project_id_unique_root", unique: true, where: "is_root"

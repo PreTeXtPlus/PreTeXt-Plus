@@ -1,17 +1,22 @@
 /**
- * The main-thread side of the PreFigure engine: a Web Worker running `prefig`
- * under Pyodide, started on demand and shared by every PreFigure asset on the
- * page (see `runtimeFor` in `../index.ts`).
+ * The main-thread side of the PreFigure engine: a Web Worker running the wasm
+ * build of PreFigure, started on demand and shared by every PreFigure asset on
+ * the page (see `runtimeFor` in `../index.ts`).
  *
  * Renders are serialized — one in flight, the newest waiting request wins, the
- * rest resolve to it — because an author typing produces far more requests than
- * a Python engine can answer, and only the last one matters.
+ * rest resolve to it — because an author typing produces more requests than
+ * the engine answers, and only the last one matters.
  */
-import type { GeneratorRuntime, GeneratorRuntimeOptions, GeneratorRuntimeStatus, RenderResult } from "../types";
-import { diagcessSvg, hasAnnotations } from "./outputs";
+import type {
+  GeneratorRuntime,
+  GeneratorRuntimeOptions,
+  GeneratorRuntimeStatus,
+  RenderOptions,
+  RenderResult,
+} from "../types";
 import {
-  DEFAULT_PYODIDE_INDEX_URL,
-  PREFIGURE_WHEELS,
+  PREFIG_WASM_BINARY,
+  PREFIG_WASM_GLUE,
   type PrefigureWorkerRequest,
   type PrefigureWorkerResponse,
 } from "./worker/protocol";
@@ -28,9 +33,6 @@ export interface PrefigureRuntimeDeps {
   createWorker?: () => PrefigureWorkerLike;
 }
 
-/** Idle this long after the last render and the engine is torn down (memory). */
-export const IDLE_DISPOSE_MS = 10 * 60 * 1000;
-
 /** `Omit<…, "token">` over each member of the request union, not over the union. */
 type WithoutToken<T> = T extends { token: number } ? Omit<T, "token"> : never;
 
@@ -39,6 +41,8 @@ type Pending = {
   reject: (error: Error) => void;
   onProgress?: (message: string) => void;
 };
+
+type Settle = { resolve: (value: RenderResult) => void; reject: (error: Error) => void };
 
 export function createPrefigureRuntime(
   options: GeneratorRuntimeOptions,
@@ -56,7 +60,6 @@ export function createPrefigureRuntime(
   let nextToken = 1;
   const pending = new Map<number, Pending>();
   const listeners = new Set<() => void>();
-  let idleTimer: ReturnType<typeof setTimeout> | undefined;
 
   const notify = () => listeners.forEach((listener) => listener());
   const setStatus = (next: GeneratorRuntimeStatus, message?: string) => {
@@ -98,17 +101,11 @@ export function createPrefigureRuntime(
   };
 
   const dispose = () => {
-    clearTimeout(idleTimer);
     worker?.terminate();
     worker = null;
     loadPromise = null;
     failAll("The PreFigure engine was shut down");
     setStatus("idle");
-  };
-
-  const touchIdle = () => {
-    clearTimeout(idleTimer);
-    idleTimer = setTimeout(dispose, IDLE_DISPOSE_MS);
   };
 
   const load = (): Promise<void> => {
@@ -130,15 +127,15 @@ export function createPrefigureRuntime(
     // The host may give a path ("/assets/prefigure/"); the worker needs absolute
     // URLs, since its own location is wherever the bundle was served from.
     const base = new URL(options.assetBaseUrl, globalThis.location?.href);
-    const wheelUrls = PREFIGURE_WHEELS.map((name) => new URL(name, base).toString());
     loadPromise = send(
-      { type: "load", pyodideIndexUrl: options.pyodideIndexUrl ?? DEFAULT_PYODIDE_INDEX_URL, wheelUrls },
+      {
+        type: "load",
+        glueUrl: new URL(PREFIG_WASM_GLUE, base).toString(),
+        wasmUrl: new URL(PREFIG_WASM_BINARY, base).toString(),
+      },
       (message) => setStatus("loading", message),
     ).then(
-      () => {
-        setStatus("ready");
-        touchIdle();
-      },
+      () => setStatus("ready"),
       (cause: Error) => {
         setStatus("failed", cause.message);
         loadPromise = null;
@@ -149,23 +146,13 @@ export function createPrefigureRuntime(
   };
 
   // Latest-wins queue: at most one render on the worker, at most one waiting.
-  let inFlight: Promise<unknown> | null = null;
-  let waiting: { source: string; ref: string; settle: Pending[] } | null = null;
+  let inFlight: Promise<void> | null = null;
+  let waiting: { source: string; macros: string; settle: Settle[] } | null = null;
 
-  const renderNow = async (source: string, ref: string): Promise<RenderResult> => {
-    const response = await send({ type: "render", source });
+  const renderNow = async (source: string, macros: string): Promise<RenderResult> => {
+    const response = await send({ type: "render", source, macros });
     if (response.type !== "rendered") throw new Error("Unexpected worker response");
-    const outputs = [{ filename: `${ref}.svg`, blob: new Blob([response.svg], { type: "image/svg+xml" }) }];
-    // In the browser PreFigure invents annotations for a diagram that has none;
-    // a build writes the companion files only for authored ones, so only those
-    // are stored -- the stored set must be the set a build would have made.
-    if (response.annotations && hasAnnotations(source)) {
-      outputs.push(
-        { filename: `${ref}-annotations.xml`, blob: new Blob([response.annotations], { type: "application/xml" }) },
-        { filename: `${ref}-diagcess.svg`, blob: new Blob([diagcessSvg(response.svg)], { type: "image/svg+xml" }) },
-      );
-    }
-    return { outputs, svg: response.svg, source };
+    return { svg: response.svg, annotations: response.annotations, source };
   };
 
   const drain = async () => {
@@ -173,8 +160,8 @@ export function createPrefigureRuntime(
       const job = waiting;
       waiting = null;
       try {
-        const result = await renderNow(job.source, job.ref);
-        job.settle.forEach((p) => p.resolve(result as unknown as PrefigureWorkerResponse));
+        const result = await renderNow(job.source, job.macros);
+        job.settle.forEach((p) => p.resolve(result));
       } catch (cause) {
         job.settle.forEach((p) => p.reject(cause instanceof Error ? cause : new Error(String(cause))));
       }
@@ -182,23 +169,17 @@ export function createPrefigureRuntime(
     inFlight = null;
   };
 
-  const render = async (source: string, ref: string): Promise<RenderResult> => {
+  const render = async (source: string, renderOptions: RenderOptions = {}): Promise<RenderResult> => {
     await load();
-    touchIdle();
-    const result = new Promise<RenderResult>((resolve, reject) => {
-      const settle = {
-        resolve: resolve as unknown as Pending["resolve"],
-        reject,
-      };
-      if (waiting) {
-        // A newer request supersedes the one waiting; both get the newer result.
-        waiting = { source, ref, settle: [...waiting.settle, settle] };
-      } else {
-        waiting = { source, ref, settle: [settle] };
-      }
+    const macros = renderOptions.macros ?? "";
+    return new Promise<RenderResult>((resolve, reject) => {
+      const settle = { resolve, reject };
+      // A newer request supersedes the one waiting; both get the newer result.
+      waiting = waiting
+        ? { source, macros, settle: [...waiting.settle, settle] }
+        : { source, macros, settle: [settle] };
       inFlight ??= drain();
     });
-    return result;
   };
 
   return {

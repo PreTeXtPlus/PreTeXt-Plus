@@ -3,31 +3,24 @@
  * worker (`./handler.ts`). Plain data only.
  */
 
-/** Pyodide release the worker loads. Bump together with the wheel set below. */
-export const PYODIDE_VERSION = "0.26.4";
-export const DEFAULT_PYODIDE_INDEX_URL = `https://cdn.jsdelivr.net/pyodide/v${PYODIDE_VERSION}/full/`;
+/**
+ * The PreFigure release the vendored engine was built from (`vendor/prefigure`
+ * in the Rails app, which `script/build-prefig-wasm.sh` produces). The worker
+ * checks the loaded engine reports it, so a stale vendored build is noticed.
+ */
+export const PREFIG_WASM_VERSION = "0.7.9";
 
 /**
- * The wheels the host serves under `assetBaseUrl` (copied from `vendor/prefigure`
- * by the Rails app's `script/copy-static-assets.js`). `prefig`'s version is the
- * one place it is pinned on the browser side.
+ * The engine's files under `assetBaseUrl`: wasm-pack's `--target web` output
+ * for the prefigure repo's `packages/prefig-wasm` crate — the JS glue, which
+ * loads the binary and exposes `build_from_string`, and the binary itself.
  */
-export const PREFIG_VERSION = "0.7.9";
-export const PREFIGURE_WHEELS = [
-  `prefig-${PREFIG_VERSION}-py3-none-any.whl`,
-  "segno-1.6.6-py3-none-any.whl",
-] as const;
-
-/**
- * Pyodide-distributed packages `prefig` imports. Loaded with `loadPackage`, not
- * micropip: no dependency resolution, no PyPI, and `prefig`'s `lxml>=6` pin is
- * unsatisfiable from PyPI on this Pyodide while its bundled lxml works fine.
- */
-export const PYODIDE_PACKAGES = ["lxml", "numpy", "scipy", "shapely", "click", "networkx"] as const;
+export const PREFIG_WASM_GLUE = "prefig_wasm.js";
+export const PREFIG_WASM_BINARY = "prefig_wasm_bg.wasm";
 
 export type PrefigureWorkerRequest =
-  | { type: "load"; token: number; pyodideIndexUrl: string; wheelUrls: string[] }
-  | { type: "render"; token: number; source: string };
+  | { type: "load"; token: number; glueUrl: string; wasmUrl: string }
+  | { type: "render"; token: number; source: string; macros: string };
 
 export type PrefigureWorkerResponse =
   | { type: "progress"; token: number; message: string }

@@ -1,12 +1,9 @@
 /**
- * PreFigure (https://prefigure.org): diagrams authored as XML, rendered by the
- * `prefig` Python package. The registry entry — the parts that need no engine.
+ * PreFigure (https://prefigure.org): diagrams authored as XML. The registry
+ * entry — the parts that need no engine.
  */
 import type { AssetGenerator } from "../types";
 import { createPrefigureRuntime } from "./runtime";
-import { prefigureOutputFilenames } from "./outputs";
-
-export { diagcessSvg, hasAnnotations } from "./outputs";
 
 export const PREFIGURE_NAMESPACE = "https://prefigure.org";
 
@@ -29,8 +26,7 @@ export const prefigure: AssetGenerator = {
   starterSource: PREFIGURE_STARTER_SOURCE,
   wrapSource: (source, ref) =>
     `<prefigure xmlns="${PREFIGURE_NAMESPACE}" label="${ref}">\n${source}\n</prefigure>`,
-  // Mirrors Asset::DOCINFO_INPUT_ELEMENTS["prefigure"] in app/models/asset.rb.
+  // Mirrors Content::GeneratedAssetBehavior::DOCINFO_INPUT_ELEMENTS["prefigure"].
   docinfoInputElements: ["macros", "prefigure-preamble"],
-  outputFilenames: prefigureOutputFilenames,
   createRuntime: createPrefigureRuntime,
 };

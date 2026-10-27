@@ -211,7 +211,6 @@ export function railsAssetToEditor(a) {
     fileRef: fileRefFor(a, a.ref),
     generator: a.generator ?? undefined,
     outputSourceDigest: a.output_source_digest ?? undefined,
-    renditions: a.renditions ?? undefined,
   };
 }
 
@@ -240,7 +239,6 @@ export function toEditorAsset(rec) {
     isFile: rec.isFile,
     generator: rec.generator,
     outputSourceDigest: rec.outputSourceDigest,
-    renditions: rec.renditions,
   };
 }
 

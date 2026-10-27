@@ -1,18 +1,19 @@
 import { useEffect, useRef, useState } from "react";
 import type { Asset } from "../types/editor";
 import {
+  docinfoElementInner,
   generatorFor,
   renderInputFor,
   sha256Hex,
-  type GeneratorOutput,
   type GeneratorRuntime,
   type GeneratorRuntimeStatus,
 } from "../generators";
 
 /** A finished browser render, handed to the host to store with the asset. */
 export interface GeneratedAssetOutput {
-  outputs: GeneratorOutput[];
-  /** sha256 of the render input the outputs were built from. */
+  /** The picture, as SVG markup. */
+  svg: string;
+  /** sha256 of the render input the picture was built from. */
   outputSourceDigest: string;
 }
 
@@ -43,17 +44,14 @@ const useRuntimeStatus = (runtime: GeneratorRuntime | undefined) => {
 };
 
 /**
- * The preview panel while a generated asset is open. Three states:
- *
- * 1. **Engine not loaded.** The stored output (as the host serves it) with a
- *    line saying whether it matches the current source, and a button to load
- *    the engine — never automatic, since PreFigure's is ~100 MB cold.
- * 2. **Rendering.** The engine is asked to render a second after typing stops;
- *    the previous picture stays up, and an engine error shows beneath it.
- * 3. **Rendered.** The fresh SVG. Its files go to the host through `onOutput`
- *    with the digest of exactly the source rendered, so a keystroke that lands
- *    mid-render leaves the stored output honestly stale rather than wrongly
- *    current.
+ * The preview panel while a generated asset is open. The engine is started as
+ * soon as the pane mounts with one (it is a few megabytes, fetched once per
+ * page); until it is up, the stored picture shows with a line saying whether it
+ * matches the current source. Then the engine renders a second after typing
+ * stops, the previous picture staying up and an engine error showing beneath
+ * it, and each fresh picture goes to the host through `onOutput` with the digest
+ * of exactly the source rendered — so a keystroke that lands mid-render leaves
+ * the stored picture honestly stale rather than wrongly current.
  */
 const GeneratedAssetPreview = ({
   asset,
@@ -80,6 +78,12 @@ const GeneratedAssetPreview = ({
     };
   }, [generator, source, docinfo]);
 
+  // Start the engine once there is something to render with it. A read-only
+  // view has nothing to re-render: the stored picture is the picture.
+  useEffect(() => {
+    if (runtime && status === "idle" && generator && !readOnly) void runtime.load().catch(() => {});
+  }, [runtime, status, generator, readOnly]);
+
   const [rendered, setRendered] = useState<{ url: string; digest: string } | null>(null);
   const [isRendering, setIsRendering] = useState(false);
   const [renderError, setRenderError] = useState<string | null>(null);
@@ -92,23 +96,22 @@ const GeneratedAssetPreview = ({
   // Render on a debounce whenever the source (or macros) change while the engine is up.
   useEffect(() => {
     if (!runtime || status !== "ready" || !generator || !asset.ref || readOnly) return;
-    const ref = asset.ref;
     const timer = setTimeout(async () => {
       setIsRendering(true);
       try {
-        const result = await runtime.render(source, ref);
+        const result = await runtime.render(source, { macros: docinfoElementInner(docinfo, "macros") });
         const digest = await sha256Hex(renderInputFor(generator, result.source, docinfo));
         setRenderError(null);
         setRendered((previous) => {
           if (previous) URL.revokeObjectURL(previous.url);
-          return { url: URL.createObjectURL(result.outputs[0].blob), digest };
+          return { url: URL.createObjectURL(new Blob([result.svg], { type: "image/svg+xml" })), digest };
         });
         // Hand the host only a render of the source as it is *now*; one that
         // typing has overtaken is shown but not stored.
         const liveDigest = await sha256Hex(renderInputFor(generator, source, docinfo));
         if (digest === liveDigest && digest !== asset.outputSourceDigest && !sentDigests.current.has(digest)) {
           sentDigests.current.add(digest);
-          onOutput?.(asset, { outputs: result.outputs, outputSourceDigest: digest });
+          onOutput?.(asset, { svg: result.svg, outputSourceDigest: digest });
         }
       } catch (cause) {
         setRenderError(cause instanceof Error ? cause.message : String(cause));
@@ -169,35 +172,29 @@ const GeneratedAssetPreview = ({
           {renderError}
         </pre>
       )}
-      {runtime ? (
-        status === "ready" ? null : status === "loading" ? (
-          <div data-testid="generated-asset-loading" className="text-[0.8rem] text-slate-500 text-center">
-            {progress ?? "Loading the engine…"}
-          </div>
-        ) : (
-          <div className="flex flex-col items-center gap-1">
-            <button
-              type="button"
-              data-testid="load-generator-engine"
-              className="rounded border border-slate-300 bg-white px-3 py-1 text-[0.8rem] text-slate-800 hover:bg-slate-100"
-              onClick={() => void runtime.load().catch(() => {})}
-              disabled={readOnly}
-            >
-              Load {generator.label} engine (~100 MB, first time only)
-            </button>
-            {status === "failed" && loadError && (
-              <div className="text-[0.75rem] text-red-700 text-center">{loadError}</div>
-            )}
-            <div className="text-[0.72rem] text-slate-400 text-center">
-              Renders the diagram here as you type and stores the picture with the project.
-            </div>
-          </div>
-        )
-      ) : (
+      {!runtime ? (
         <div className="text-[0.75rem] text-slate-400 text-center">
           Live rendering isn't available here; builds generate this diagram.
         </div>
-      )}
+      ) : status === "loading" ? (
+        <div data-testid="generated-asset-loading" className="text-[0.8rem] text-slate-500 text-center">
+          {progress ?? "Loading the engine…"}
+        </div>
+      ) : status === "failed" ? (
+        <div className="flex flex-col items-center gap-1">
+          <div data-testid="generated-asset-load-error" className="text-[0.75rem] text-red-700 text-center">
+            The {generator.label} engine couldn't be loaded{loadError ? `: ${loadError}` : "."}
+          </div>
+          <button
+            type="button"
+            data-testid="retry-generator-engine"
+            className="rounded border border-slate-300 bg-white px-3 py-1 text-[0.8rem] text-slate-800 hover:bg-slate-100"
+            onClick={() => void runtime.load().catch(() => {})}
+          >
+            Try again
+          </button>
+        </div>
+      ) : null}
     </div>
   );
 };

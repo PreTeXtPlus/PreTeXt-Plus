@@ -399,23 +399,23 @@ export interface editorProps {
    * Called when the user creates a new generated asset (a PreFigure diagram, …)
    * from the "New asset" form's tab for that generator. The host derives the ref
    * from `title` as it does for `onCreateAuthored`, persists the asset with
-   * `kind: "generated"`, the `generator`, and `source` set to the generator's
+   * `kind: "generated_asset"`, the `generator`, and `source` set to the generator's
    * starter source (`generators[generator].starterSource`), and returns it.
    */
   onCreateGenerated?: (generator: GeneratorId, title: string) => Promise<Asset>;
   /**
    * Per-generator browser engines: where the host serves each generator's
    * worker and runtime files. Without an entry for a generator, its assets show
-   * their stored picture and no "Load engine" button — builds still generate
-   * them. See `GeneratorRuntimeConfigs`.
+   * their stored picture and render nothing live — builds still generate them.
+   * See `GeneratorRuntimeConfigs`.
    */
   generatorRuntimes?: GeneratorRuntimeConfigs;
   /**
    * A generated asset was rendered in the browser from its current source: the
-   * host stores `output.outputs` (the primary SVG first, companions after, each
-   * named as a build names them) together with `output.outputSourceDigest`, and
-   * may return the asset as persisted (its new `url`), which replaces the pool
-   * entry. Fires at most once per distinct digest per session.
+   * host stores `output.svg` as the asset's file together with
+   * `output.outputSourceDigest`, and may return the asset as persisted (its new
+   * `url`), which replaces the pool entry. Fires at most once per distinct
+   * digest per session.
    */
   onAssetOutput?: (asset: Asset, output: GeneratedAssetOutput) => Promise<Asset | void> | void;
   /**
@@ -1401,7 +1401,7 @@ const EditorsInner = (props: EditorsInnerProps) => {
 
   /**
    * A browser render of a generated asset's current source. The host stores the
-   * files; the pool records the digest at once so the status line reads
+   * picture; the pool records the digest at once so the status line reads
    * "current" without waiting, and takes the host's record (its new `url`) when
    * it answers. Peers learn the digest through the doc, the bytes through the host.
    */

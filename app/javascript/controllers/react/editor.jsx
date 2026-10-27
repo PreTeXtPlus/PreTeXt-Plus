@@ -376,9 +376,10 @@ function editorStateToCollabSeed(state) {
  * @property {string} [csrfToken]
  * @property {string} [prefigureWorkerUrl] - Where the PreFigure engine worker bundle
  *   (app/javascript/prefigure_worker.js) is served from. Omitted, PreFigure assets
- *   show their stored picture and offer no engine.
- * @property {string} [prefigureAssetsUrl] - Base URL (trailing slash) of the `prefig`
- *   and `segno` wheels, copied to public/assets/prefigure by script/copy-static-assets.js.
+ *   show their stored picture and render nothing live.
+ * @property {string} [prefigureAssetsUrl] - Base URL (trailing slash) of the PreFigure
+ *   wasm engine (vendor/prefigure, copied to public/assets/prefigure by
+ *   script/copy-static-assets.js).
  * @property {string} [previewWorkerUrl] - Where the preview render worker bundle
  *   (app/javascript/preview_worker.js) is served from; previews render off the
  *   main thread when set.
@@ -1076,7 +1077,7 @@ function EditorApp({ config }) {
       const ref = uniqueRef(slugifyRef(title));
       const json = await patchProjectJson({
         assets_attributes: [ {
-          ref, kind: "generated", generator, title,
+          ref, kind: "generated_asset", generator, title,
           source: generators[generator]?.starterSource ?? "",
         } ],
       });
@@ -1090,47 +1091,28 @@ function EditorApp({ config }) {
     [uniqueRef, patchProjectJson, invalidateAssetQueries, recordCreated],
   );
 
-  // The editor rendered a generated asset in the browser: store the files with the
-  // asset -- the primary SVG as `file`, the companions as `renditions` -- together
-  // with the digest of the source they were rendered from. Multipart, like an
-  // upload, and keyed by `id`. Not folded into the bulk save: in a collaborative
-  // session there is no bulk save, and the picture has to reach the host either
-  // way. The response's record (its new `url`) goes back to the editor; the
-  // working copy keeps its own source, which may be newer than the row's.
+  // The editor rendered a generated asset in the browser: store the picture as
+  // the asset's file, together with the digest of the source it was rendered
+  // from -- the same multipart entry an upload uses, keyed by `id`. Not folded
+  // into the bulk save: in a collaborative session there is no bulk save, and
+  // the picture has to reach the host either way. The response's record (its
+  // new `url`) goes back to the editor; the working copy keeps its own source,
+  // which may be newer than the row's.
   const onAssetOutput = useCallback(
     async (asset, output) => {
       if (!asset.id) return;
-      const form = new FormData();
-      const key = (name) => `project[assets_attributes][0][${name}]`;
-      form.append(key("id"), asset.id);
-      form.append(key("output_source_digest"), output.outputSourceDigest);
-      const [primary, ...renditions] = output.outputs;
-      form.append(key("file"), primary.blob, primary.filename);
-      for (const rendition of renditions) {
-        // A rendition is stored under its suffix alone (see Asset#renditions).
-        const suffix = rendition.filename.slice(asset.ref.length);
-        form.append(`${key("renditions")}[]`, rendition.blob, suffix);
-      }
-      // No companions this time: say so, or the previous render's would stay
-      // attached beside a picture they no longer belong to. A blank entry is
-      // how a multiple-file field says "none", and Rails detaches them all.
-      if (renditions.length === 0) form.append(`${key("renditions")}[]`, "");
-      const res = await fetch(apiBase, {
-        method: "PATCH",
-        headers: { Accept: "application/json", "X-CSRF-Token": csrfToken },
-        body: form,
-      });
-      const json = await handlePatchResponse(res, `Saving the rendered picture failed: ${res.status}`);
+      const file = new File([output.svg], `${asset.ref}.svg`, { type: "image/svg+xml" });
+      const json = await patchProjectAssetUpload({ id: asset.id, output_source_digest: output.outputSourceDigest, file });
       const saved = (json.assets ?? []).find((a) => String(a.id) === String(asset.id));
       if (!saved) return undefined;
       const record = toEditorAsset(railsAssetToEditor(saved));
       const working = workingRecord("asset", asset.id);
       if (working) Object.assign(working, { url: record.url, thumbnailUrl: record.thumbnailUrl,
-        outputSourceDigest: record.outputSourceDigest, renditions: record.renditions,
+        outputSourceDigest: record.outputSourceDigest,
         extension: record.extension, contentType: record.contentType, fileRef: record.fileRef });
       return { ...record, source: working?.source ?? record.source };
     },
-    [apiBase, csrfToken, handlePatchResponse, workingRecord],
+    [patchProjectAssetUpload, workingRecord],
   );
 
   // Fetches the image bytes server-side and hands back a File -- it does not

@@ -208,7 +208,7 @@ class ContentTest < ActiveSupport::TestCase
     snippet.attach_file(io: StringIO.new("x"), filename: "x.txt", content_type: "text/plain")
 
     assert_not snippet.valid?
-    assert_includes snippet.errors[:files], "can be attached only to a file asset"
+    assert_includes snippet.errors[:files], "can be attached only to a file or generated asset"
   end
 
   test "url returns the attached file's url, named after the asset's ref rather than the upload" do
@@ -392,5 +392,84 @@ class ContentTest < ActiveSupport::TestCase
 
     assert_not_nil url
     assert_not_equal asset.url, url
+  end
+
+  # --- Generated assets (docs/generated-assets-plan.md) ---
+
+  def generated_asset(source: '<diagram dimensions="(300,300)"/>', **attrs)
+    projects(:one).assets.build({ kind: :generated_asset, generator: "prefigure", ref: "graph", title: "Graph",
+                                  source: source }.merge(attrs))
+  end
+
+  def attach_svg(asset)
+    asset.file = { io: File.open(Rails.root.join("test/fixtures/files/test_diagram.svg")),
+                   filename: "graph.svg", content_type: "image/svg+xml" }
+  end
+
+  test "a generated asset needs a known generator, and other kinds must not name one" do
+    assert generated_asset.valid?
+    assert_not generated_asset(generator: nil).valid?
+    assert_not generated_asset(generator: "tikz").valid?
+
+    authored = contents(:authored_one)
+    authored.generator = "prefigure"
+    assert_not authored.valid?
+  end
+
+  test "the legacy kind spelling 'generated' is accepted on the way in" do
+    assert generated_asset(kind: "generated").generated_asset?
+  end
+
+  # The same input, byte for byte, is digested by the web-editor (see its generators
+  # test): the hex here is the one both sides must agree on.
+  test "render_input is the source and the docinfo elements the generator reads, and digests to the shared fixture" do
+    asset = generated_asset
+    docinfo = "<docinfo>\n  <macros>\\newcommand{\\R}{\\mathbb{R}}</macros>\n</docinfo>"
+
+    assert_equal [ '<diagram dimensions="(300,300)"/>', "\\newcommand{\\R}{\\mathbb{R}}", "" ].join("\n\u0000\n"),
+                 asset.render_input(docinfo)
+    assert_equal "65ad0eda2b54873333e717242fe79d69243c7ac4f4f1ce5a37fe8641f0d2e9c3",
+                 Digest::SHA256.hexdigest(asset.render_input(docinfo))
+  end
+
+  test "docinfo_element_inner reads the raw inner text, tolerating attributes, and is empty when absent" do
+    assert_equal " a &amp; b ", Content.docinfo_element_inner('<docinfo><macros xml:space="preserve"> a &amp; b </macros></docinfo>', "macros")
+    assert_equal "", Content.docinfo_element_inner("<docinfo/>", "prefigure-preamble")
+  end
+
+  test "output_current? holds only while the digest matches the source and docinfo" do
+    asset = generated_asset
+    attach_svg(asset)
+    asset.output_source_digest = Digest::SHA256.hexdigest(asset.render_input)
+    assert asset.output_current?
+
+    asset.source = "<diagram/>"
+    assert_not asset.output_current?, "editing the source must invalidate the picture"
+
+    asset.source = '<diagram dimensions="(300,300)"/>'
+    assert asset.output_current?
+    asset.project.docinfo = "<docinfo><macros>\\newcommand{\\N}{x}</macros></docinfo>"
+    assert_not asset.output_current?, "macros are an input to the render"
+  end
+
+  test "output_current? is false with no picture or no digest" do
+    assert_not generated_asset.output_current?
+    asset = generated_asset
+    attach_svg(asset)
+    assert_not asset.output_current?
+  end
+
+  test "a generated asset's picture must be an SVG, and it serves as the asset's file" do
+    asset = generated_asset
+    asset.file = { io: File.open(Rails.root.join("test/fixtures/files/test_image.png")),
+                   filename: "graph.png", content_type: "image/png" }
+    assert_not asset.valid?
+    assert_match(/SVG/, asset.errors.full_messages.join)
+
+    asset = generated_asset
+    attach_svg(asset)
+    assert asset.save, asset.errors.full_messages.inspect
+    assert_equal "graph.svg", asset.external_filename
+    assert asset.thumbnailable?
   end
 end

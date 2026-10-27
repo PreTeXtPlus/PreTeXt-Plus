@@ -1,13 +1,14 @@
 # What makes a Content an asset: an image an author embeds with
-# `<plus:image ref="..."/>`, either backed by an uploaded file (`file_asset`) or
-# defined purely by its authored source (`authored_asset`).
+# `<plus:image ref="..."/>`, either backed by an uploaded file (`file_asset`),
+# defined purely by its authored source (`authored_asset`), or rendered from its
+# source by a generator (`generated_asset`, see Content::GeneratedAssetBehavior).
 module Content::AssetBehavior
   extend ActiveSupport::Concern
 
   # The kind values an asset arrives as from callers that predate them being
   # part of Content's own `kind` -- the external @pretextbook/import package
   # still writes these -- mapped to the kinds they now are.
-  LEGACY_ASSET_KINDS = { "file" => "file_asset", "authored" => "authored_asset" }.freeze
+  LEGACY_ASSET_KINDS = { "file" => "file_asset", "authored" => "authored_asset", "generated" => "generated_asset" }.freeze
 
   included do
     # The cap applies only when adding a new asset: an account already over its
@@ -19,8 +20,9 @@ module Content::AssetBehavior
     validate :within_asset_quota, on: :create, if: -> { asset? && project.present? && !project.backup? }
 
     # Content can hold any number of attachments (see Content::AttachedFiles),
-    # but the one thing that uses them so far is a file asset's single image.
-    # This is the one place to relax when something needs more.
+    # but what uses them so far is a single image: a file asset's upload, or a
+    # generated asset's rendered picture. This is the one place to relax when
+    # something needs more.
     validate :attachments_fit_kind
   end
 
@@ -45,8 +47,8 @@ module Content::AssetBehavior
     count = files.attachments.reject(&:marked_for_destruction?).size
     if count > 1
       errors.add(:files, "can hold only one file")
-    elsif count == 1 && !file_asset?
-      errors.add(:files, "can be attached only to a file asset")
+    elsif count == 1 && !(file_asset? || generated_asset?)
+      errors.add(:files, "can be attached only to a file or generated asset")
     end
   end
 end

@@ -1,9 +1,8 @@
 /**
- * What PreFigure's Python asks the browser for when it runs in Pyodide
- * (`prefig/core/label_tools.py`, the `Pyodide*` classes): TeX labels typeset
- * to SVG, text measured, and — for tactile output — braille. Registered with
- * Pyodide as the `prefigBrowserApi` module, so Python's `import prefigBrowserApi`
- * finds it.
+ * What PreFigure's wasm engine asks the browser for (the prefigure repo's
+ * `packages/prefig-wasm/src/host.rs`): TeX labels typeset to SVG, text measured,
+ * and — for tactile output — braille. Handed to the engine once through
+ * `set_host_api`.
  *
  * Ported from the PreFigure playground's `src/worker/compat-api.ts` (Jason
  * Siefken, David Austin; GPL-3.0 — see NOTICE in this directory), minus braille:
@@ -11,6 +10,7 @@
  * that tactile output needs are not carried. The two braille entry points say so
  * rather than silently returning the text.
  */
+import type { PrefigHostApi } from "./handler";
 import { mathjax } from "@mathjax/src/mjs/mathjax.js";
 import { TeX } from "@mathjax/src/mjs/input/tex.js";
 import { SVG } from "@mathjax/src/mjs/output/svg.js";
@@ -32,10 +32,8 @@ const TEX_PACKAGES = ["base", "ams", "newcommand", "noundefined", "boldsymbol", 
 const TACTILE_UNSUPPORTED =
   "Tactile (braille) output is not available in the editor; build the project for it.";
 
-export class PrefigBrowserApi {
-  readonly mjVersion: string = mathjax.version;
-  // Reported to Python for its logs; there is no speech-rule-engine here.
-  readonly sreVersion = "none";
+export class PrefigBrowserApi implements PrefigHostApi {
+  private macros = "";
   private canvas: OffscreenCanvas | null = null;
   private ctx: OffscreenCanvasRenderingContext2D | null = null;
   private readonly adaptor = liteAdaptor();
@@ -69,9 +67,21 @@ export class PrefigBrowserApi {
     throw new Error(TACTILE_UNSUPPORTED);
   }
 
+  /**
+   * The document's `<macros>` (docinfo), put in scope for every label: a build
+   * writes them into PreFigure's publication file, so the preview must honour
+   * them too or a label using one renders differently here than there. Prepended
+   * to each expression rather than defined once, since MathJax's `\newcommand`
+   * redefines silently and the macros may change between renders.
+   */
+  setMacros(macros: string): void {
+    this.macros = macros.trim();
+  }
+
   /** TeX → standalone SVG markup, inline style. */
   processMath(expression: string): string {
-    const node = this.svgDocument.convert(expression, { display: false }) as LiteElement;
+    const tex = this.macros ? `${this.macros}\n${expression}` : expression;
+    const node = this.svgDocument.convert(tex, { display: false }) as LiteElement;
     return this.adaptor.outerHTML(node);
   }
 }

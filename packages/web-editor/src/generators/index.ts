@@ -16,9 +16,8 @@ export const generatorFor = (id: GeneratorId | undefined): AssetGenerator | unde
 
 /**
  * One runtime per generator per page, created on first request from the host's
- * configuration for it and kept for the life of the page (the engine is far too
- * expensive to start twice). `undefined` when the host configured no runtime
- * for that generator or the generator has none.
+ * configuration for it and kept for the life of the page. `undefined` when the
+ * host configured no runtime for that generator or the generator has none.
  */
 const runtimes = new Map<GeneratorId, GeneratorRuntime>();
 

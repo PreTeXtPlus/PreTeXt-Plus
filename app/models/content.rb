@@ -15,13 +15,14 @@
 # project is assembled (see the web-editor's `wrapDivisionSource`), in all three
 # markup styles.
 #
-# Kind-specific rules live in Content::DivisionBehavior and
-# Content::AssetBehavior, each applying only to its own kinds; serving attached
-# files is Content::AttachedFiles, for every kind.
+# Kind-specific rules live in Content::DivisionBehavior, Content::AssetBehavior
+# and Content::GeneratedAssetBehavior, each applying only to its own kinds;
+# serving attached files is Content::AttachedFiles, for every kind.
 class Content < ApplicationRecord
   include Content::AttachedFiles
   include Content::DivisionBehavior
   include Content::AssetBehavior
+  include Content::GeneratedAssetBehavior
 
   # touch: bumps source_updated_at *and* updated_at on the project. The editor
   # saves content through nested attributes, which leaves the projects row itself
@@ -29,8 +30,9 @@ class Content < ApplicationRecord
   # timestamp to trust.
   belongs_to :project, touch: :source_updated_at
 
-  # Any content may carry attachments, served by Content::AttachedFiles; only a
-  # file asset uses them so far, and only one (see Content::AssetBehavior).
+  # Any content may carry attachments, served by Content::AttachedFiles; only
+  # assets use them so far, and only one each: a file asset's upload, a generated
+  # asset's rendered picture (see Content::AssetBehavior).
   has_many_attached :files
 
   # The file/authored distinction an asset used to keep in a column of its own
@@ -39,10 +41,10 @@ class Content < ApplicationRecord
   # scopes: false because the generated scopes would be singular (`division`,
   # `file_asset`); the plural ones below read better at every call site and
   # include the one grouping the enum cannot express, `assets`.
-  enum :kind, { division: 0, snippet: 1, file_asset: 2, authored_asset: 3 },
+  enum :kind, { division: 0, snippet: 1, file_asset: 2, authored_asset: 3, generated_asset: 4 },
     scopes: false, validate: true
 
-  ASSET_KINDS = %w[ file_asset authored_asset ].freeze
+  ASSET_KINDS = %w[ file_asset authored_asset generated_asset ].freeze
 
   scope :divisions, -> { where(kind: :division) }
   scope :snippets, -> { where(kind: :snippet) }
@@ -55,6 +57,6 @@ class Content < ApplicationRecord
   validates :ref, format: REF_REGEX, presence: true, uniqueness: { scope: :project_id }
 
   def asset?
-    file_asset? || authored_asset?
+    file_asset? || authored_asset? || generated_asset?
   end
 end

@@ -3,34 +3,37 @@
  *
  * A generator is one registry entry (see `./index.ts`): how its source is
  * wrapped into PreTeXt, what the editor opens a new asset with, which docinfo
- * elements its render depends on, which files it produces, and — when it can
- * run in the browser — a runtime that renders live. Nothing outside the
- * registry names a specific generator.
+ * elements its render depends on, and — when it can run in the browser — a
+ * runtime that renders live. Nothing outside the registry names a generator.
+ *
+ * The browser render is a preview. The picture it produces is stored with the
+ * asset so the asset list, a peer without an engine and a reload have something
+ * to show; a build generates the asset from its source like any other, with the
+ * build server's own cache deciding whether the generator reruns.
  */
 import type { GeneratorId, SourceFormat } from "../types/editor";
 
-/** One file of a render, named as a build's generated directory names it. */
-export interface GeneratorOutput {
-  /** `<ref>.svg`, `<ref>-annotations.xml`, `<ref>-diagcess.svg`, … */
-  filename: string;
-  blob: Blob;
-}
-
 export interface RenderResult {
-  /** Every file the render produced, in a stable order with the primary SVG first. */
-  outputs: GeneratorOutput[];
-  /** The primary SVG, for the preview pane. */
+  /** The diagram, as standalone SVG markup. */
   svg: string;
+  /** The generator's annotations document for the diagram, when it made one. */
+  annotations: string | null;
   /** The exact source string that was rendered — what the digest must be over. */
   source: string;
+}
+
+export interface RenderOptions {
+  /** TeX macro definitions (the docinfo `<macros>` text) the diagram's labels may use. */
+  macros?: string;
 }
 
 export type GeneratorRuntimeStatus = "idle" | "loading" | "ready" | "failed";
 
 /**
  * A browser-side renderer for one generator, shared by every asset of that
- * generator on the page. Loading is explicit and may be expensive (PreFigure's
- * engine is ~100 MB cold), so nothing loads it but an author's click.
+ * generator on the page. Loading fetches the engine (a couple of megabytes for
+ * PreFigure's wasm build), so it happens once a generated asset is opened, not
+ * on page load.
  */
 export interface GeneratorRuntime {
   readonly status: GeneratorRuntimeStatus;
@@ -40,8 +43,8 @@ export interface GeneratorRuntime {
   readonly progress: string | undefined;
   /** Start the engine. Safe to call repeatedly; later calls await the first. */
   load(): Promise<void>;
-  /** Render `source` for the asset `ref`. Rejects with the generator's own message. */
-  render(source: string, ref: string): Promise<RenderResult>;
+  /** Render `source`. Rejects with the generator's own message. */
+  render(source: string, options?: RenderOptions): Promise<RenderResult>;
   /** Tear the engine down; the next `load()` starts afresh. */
   dispose(): void;
   /** Notified on every status/progress change. Returns the unsubscribe. */
@@ -54,11 +57,10 @@ export interface GeneratorRuntimeOptions {
   workerUrl: string;
   /**
    * Where the generator's own runtime files are served from — for PreFigure the
-   * `prefig` and `segno` wheels — with a trailing slash.
+   * wasm engine and its JS glue (see `prefigure/worker/protocol.ts`) — with a
+   * trailing slash.
    */
   assetBaseUrl: string;
-  /** Override the Pyodide distribution (default: the pinned jsDelivr copy). */
-  pyodideIndexUrl?: string;
 }
 
 /** Per-generator runtime configuration a host passes to `Editors`. */
@@ -74,17 +76,15 @@ export interface AssetGenerator {
   starterSource: string;
   /**
    * The PreTeXt child of `<image>` for this source — the only form the
-   * document ever carries. `ref` becomes the generator's `@label`, so a build
-   * that regenerates names its output exactly as the stored output is named.
+   * document ever carries. `ref` becomes the generator's `@label`, which a
+   * build uses as the output's basename.
    */
   wrapSource(source: string, ref: string): string;
   /**
    * The docinfo elements whose inner text is part of the render input, in
-   * order. Mirrors the Rails `Asset::DOCINFO_INPUT_ELEMENTS` entry.
+   * order. Mirrors the Rails `Content::GeneratedAssetBehavior::DOCINFO_INPUT_ELEMENTS` entry.
    */
   docinfoInputElements: readonly string[];
-  /** The files a render of `source` for `ref` produces, primary SVG first. */
-  outputFilenames(ref: string, source: string): string[];
-  /** Absent when the generator has no browser runtime (server-rendered only). */
+  /** Absent when the generator has no browser runtime. */
   createRuntime?(options: GeneratorRuntimeOptions): GeneratorRuntime;
 }

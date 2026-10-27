@@ -7,14 +7,6 @@ export type SourceFormat = "pretext" | "latex" | "markdown";
  */
 export type GeneratorId = "prefigure";
 
-/** One file a generated asset contributes to a build's generated directory. */
-export interface AssetRendition {
-  /** The name a build gives it: `<ref>.svg`, `<ref>-annotations.xml`, … */
-  filename: string;
-  /** Where the host serves it. */
-  path: string;
-}
-
 /** An asset owned by a single project. */
 export interface Asset {
   /**
@@ -61,21 +53,19 @@ export interface Asset {
   isFile?: boolean;
   /**
    * For a *generated* asset: the tool that renders `source` into its picture
-   * (the host's `kind === "generated"`). The document carries the source,
-   * wrapped by the generator's element (`<prefigure>`); the rendered output is
-   * stored with the asset like an upload and ships beside builds. Absent for
-   * file and authored assets.
+   * (the host's `kind === "generated_asset"`). The document carries the source,
+   * wrapped by the generator's element (`<prefigure>`), and builds generate the
+   * picture from that; the browser's render is stored with the asset like an
+   * upload, as the picture to show. Absent for file and authored assets.
    */
   generator?: GeneratorId;
   /**
    * For a generated asset: the sha256 of the render input (see
-   * `generators/renderInput.ts`) the stored output was built from. Compared to
-   * the digest of the *current* source to decide whether the output is stale;
+   * `generators/renderInput.ts`) the stored picture was built from. Compared to
+   * the digest of the *current* source to decide whether the picture is stale;
    * never trusted as a boolean on its own.
    */
   outputSourceDigest?: string;
-  /** For a generated asset with a stored output: every file of that output. */
-  renditions?: AssetRendition[];
   /**
    * Publicly accessible URL for the asset's full file, used for the "edit
    * asset" preview (`<img src={url}>`) and as the fallback thumbnail source

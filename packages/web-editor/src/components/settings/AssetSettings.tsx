@@ -210,8 +210,8 @@ const AssetSettings = ({
         {generator ? (
           <>
             The editor holds the {generator.label} source of this diagram; the
-            document carries it inside <code>{"<image>"}</code>, and the rendered
-            picture is stored with the project so builds need not regenerate it.
+            document carries it inside <code>{"<image>"}</code>, and builds generate
+            the picture from it. The picture rendered here is kept as the preview.
           </>
         ) : asset.isFile ? (
           <>

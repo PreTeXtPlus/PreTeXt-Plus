@@ -262,32 +262,33 @@ a peer removing the open item does not (`openItemState`'s `byAuthor`).
 
 ### Generated assets (`src/generators/`)
 
-A *generated* asset (`asset.generator`, the host's `kind === "generated"`) is
-authored source that a generator turns into a picture — PreFigure first. The
+A *generated* asset (`asset.generator`, the host's `kind === "generated_asset"`)
+is authored source that a generator turns into a picture — PreFigure first. The
 registry (`generators/index.ts`) is the one place generators are named: each
 entry says how its source is wrapped into PreTeXt (`wrapSource`: the
 `<prefigure label="ref">` the document always carries — a generated asset is
-never emitted as `<image source>`), what a new asset opens with, which docinfo
-elements its render depends on (`renderInput.ts`; Rails' `Asset#render_input`
-digests the identical string, pinned by a shared fixture hex in both test
-suites), which files it produces (named as `pretext generate` names them), and
-an optional browser runtime.
+never emitted as `<image source>`; builds generate it from that source), what a
+new asset opens with, which docinfo elements its render depends on
+(`renderInput.ts`; Rails' `Content#render_input` digests the identical string,
+pinned by a shared fixture hex in both test suites), and an optional browser
+runtime. The browser's picture is stored with the asset as a preview — never a
+build input.
 
 - `prefigure/runtime.ts` is the main-thread side of the engine: a Web Worker
   (`src/prefigureWorker.ts`, bundled by the host like the preview worker) that
-  loads Pyodide from jsDelivr and the `prefig` wheel from the host's
-  `generatorRuntimes.prefigure.assetBaseUrl`, with MathJax 4 answering
-  PreFigure's `prefigBrowserApi` for TeX labels (`worker/compat-api.ts`, ported
-  from the PreFigure playground — see the NOTICE there). SVG only: no
-  tactile/braille. One runtime per generator per page (`runtimeFor`), loaded
-  only by the author's click, disposed after ten idle minutes; renders are
-  latest-wins.
+  loads PreFigure's wasm build (the prefigure repo's `prefig-wasm` crate,
+  MathJax variant; glue + binary served from the host's
+  `generatorRuntimes.prefigure.assetBaseUrl`), with MathJax 4 answering the
+  engine's host API for TeX labels and the docinfo `<macros>` in scope
+  (`worker/compat-api.ts`, ported from the PreFigure playground — see the NOTICE
+  there). SVG only: no tactile/braille. One runtime per generator per page
+  (`runtimeFor`), started when a generated asset's pane mounts; renders are
+  latest-wins. `__tests__/prefigureWasm.test.ts` drives the real engine through
+  the worker handler with a stub host.
 - `GeneratedAssetPreview.tsx` replaces `AssetPreview` for a generated asset:
-  the stored picture and whether it matches the current source, the "Load
-  engine" button, live renders a second after typing stops, and `onAssetOutput`
-  to the host with the files and the digest of exactly the source rendered.
-  Companions (`-annotations.xml`, `-diagcess.svg`) only for authored
-  `<annotations>`: PreFigure invents annotations in the browser, a build does not.
+  the stored picture and whether it matches the current source, live renders a
+  second after typing stops, and `onAssetOutput` to the host with the SVG and
+  the digest of exactly the source rendered.
 - `NewAssetForm` grows one tab per registry entry → `onCreateGenerated`.
   `VERBATIM_SOURCES` and the spell checker's `latexImage` scope both list
   `prefigure`. The collab doc carries `generator` and `outputSourceDigest`;

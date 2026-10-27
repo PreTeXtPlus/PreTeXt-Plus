@@ -21,18 +21,12 @@ if asset.file_attached?
     json.thumbnail_path content_thumbnail_project_path(asset.project, ref: asset.ref, format: extension)
   end
 end
-if asset.generated_kind?
-  # The generator's id and the digest the attached outputs were built from. The
-  # editor recomputes currency itself from the live source (it has text the server
-  # has not been sent yet); `output_current` is the server's reading of the saved row,
-  # for anything that only sees JSON.
+if asset.generated_asset?
+  # The generator's id and the digest the stored picture was built from. The editor
+  # recomputes currency itself from the live source (it has text the server has not
+  # been sent yet); `output_current` is the server's reading of the saved row, for
+  # anything that only sees JSON.
   json.generator asset.generator
   json.output_source_digest asset.output_source_digest
   json.output_current asset.output_current?
-  # Every file this asset contributes to a build's generated directory, as a build
-  # names them, each with the project-scoped route that serves it (see
-  # AssetsController#generated_file). The primary SVG is also `path` above.
-  json.renditions(asset.generated_files.map do |filename, _blob|
-    { filename: filename, path: generated_file_project_path(asset.project, generator: asset.generator, filename: filename) }
-  end)
 end

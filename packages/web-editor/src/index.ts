@@ -15,7 +15,6 @@ export {
 } from "./contentConversion";
 export type {
   Asset,
-  AssetRendition,
   GeneratorId,
   EditorContentChange,
   EditorContentState,
@@ -126,9 +125,9 @@ export type { CollabSession, CollabUser } from "./collab/types";
 export { generators, generatorIds } from "./generators";
 export type {
   AssetGenerator,
-  GeneratorOutput,
   GeneratorRuntimeConfigs,
   GeneratorRuntimeOptions,
+  RenderResult,
 } from "./generators";
 export type { GeneratedAssetOutput } from "./components/GeneratedAssetPreview";
 

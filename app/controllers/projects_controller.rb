@@ -507,7 +507,7 @@ class ProjectsController < ApplicationController
         :title, :docinfo, :use_common_docinfo, :visibility, :language, :description,
         divisions_attributes: [ [ :id, :source, :source_format, :is_root, :ref, :title, :division_type,
                                   { attrs: {} }, :_destroy ] ],
-        assets_attributes: [ [ :id, :ref, :kind, :file, :source, :short_description, :description, :title, :_destroy ] ],
+        assets_attributes: [ [ :id, :ref, :kind, :file, :source, :short_description, :description, :title, :generator, :output_source_digest, :_destroy ] ],
         snippets_attributes: [ [ :id, :source, :source_format, :ref, :title, :_destroy ] ]
       ]
       permitted << :document_type if action_name == "create"
