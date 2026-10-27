@@ -1,0 +1,24 @@
+<%# Site-wide warning for the next scheduled maintenance window, shown once it is
+    within MaintenanceWindow::WARNING_PERIOD. Fixed to the bottom so it sits over the
+    editor too. The Stimulus controller keeps the countdown live and remembers a
+    dismissal per window -- keyed on the start time too, so rescheduling re-shows it. %>
+<% if (window = MaintenanceWindow.imminent) %>
+  <div role="alert"
+       class="fixed z-30 bottom-0 inset-x-0 border-t border-yellow-200 bg-yellow-50 px-4 py-2 text-sm text-yellow-800 shadow"
+       data-controller="maintenance-banner"
+       data-maintenance-banner-starts-at-value="<%= window.starts_at.utc.iso8601 %>"
+       data-maintenance-banner-key-value="<%= window.id %>@<%= window.starts_at.utc.iso8601 %>">
+    <div class="mx-auto flex w-full items-center justify-between gap-3 lg:w-2/3">
+      <span>
+        <svg class="inline mr-2" width="24px" height="24px" stroke-width="1" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" color="currentColor" aria-hidden="true"><path d="M20.0429 21H3.95705C2.41902 21 1.45658 19.3364 2.22324 18.0031L10.2662 4.01533C11.0352 2.67792 12.9648 2.67791 13.7338 4.01532L21.7768 18.0031C22.5434 19.3364 21.581 21 20.0429 21Z" stroke="currentColor" stroke-width="1" stroke-linecap="round"></path><path d="M12 9V13" stroke="currentColor" stroke-width="1" stroke-linecap="round"></path><path d="M12 17.01L12.01 16.9989" stroke="currentColor" stroke-width="1" stroke-linecap="round" stroke-linejoin="round"></path></svg>
+        Scheduled maintenance begins <strong><%= local_time_tag(window.starts_at) %></strong>
+        (<strong data-maintenance-banner-target="remaining">in <%= distance_of_time_in_words(Time.current, window.starts_at) %></strong>).
+        PreTeXt.Plus may be unavailable during this time.
+        <%= window.note %>
+      </span>
+      <button type="button" class="cursor-pointer shrink-0" aria-label="Dismiss" data-action="maintenance-banner#dismiss">
+        <svg width="24px" height="24px" stroke-width="1" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><path d="M6.75827 17.2426L12.0009 12M17.2435 6.75736L12.0009 12M12.0009 12L6.75827 6.75736M12.0009 12L17.2435 17.2426" stroke="currentColor" stroke-width="1" stroke-linecap="round" stroke-linejoin="round"></path></svg>
+      </button>
+    </div>
+  </div>
+<% end %>
