@@ -76,55 +76,46 @@ class ProjectTest < ActiveSupport::TestCase
 
   # ---- structural_document_type ----
   #
-  # The TOC lets an author switch a document between article and book by rewriting its
-  # source, without ever resaving document_type (see ProjectsController#project_params).
-  # This is what Publication::Settings reads instead, so numbering options stay in step
-  # with the document the author is actually looking at.
-  #
-  # `root_element` is where that switch lands: ProjectDocProjection writes it from the
-  # root division's type in the collaborative document. See ProjectDocProjectionTest for
-  # the tests that it gets there.
+  # The TOC lets an author switch a document between article and book on its root
+  # division's own record, without ever resaving document_type (see
+  # ProjectsController#project_params). This is what Publication::Settings reads
+  # instead, so numbering options stay in step with the document the author is
+  # actually looking at.
 
-  test "structural_document_type follows root_element even though document_type does not" do
+  test "structural_document_type follows the root division's type even though document_type does not" do
     project = projects(:one)
     assert_equal "article", project.document_type
 
-    project.update!(root_element: "book")
+    project.root_division.update!(division_type: "book")
 
     assert_equal "article", project.reload.document_type,
                  "document_type itself is untouched -- it is not on this axis"
     assert_equal "book", project.structural_document_type
   end
 
-  # Storing the resolved root element rather than re-reading one out of source is what
-  # makes this markup-agnostic: the editor derived it before it ever reached this column,
-  # so there is no second (or third) spelling of "book" to know about here.
+  # The type is a column, whatever markup style the root is written in -- there is no
+  # second (or third) spelling of "book" to know about here.
   test "structural_document_type reads a latex-authored project the same way" do
     project = projects(:two)
     assert project.root_division.latex_source_format?
-    assert_equal "article", project.document_type
 
-    project.update!(root_element: "book")
+    project.root_division.update!(division_type: "book")
 
     assert_equal "book", project.reload.structural_document_type
   end
 
-  # Between creation/import and the first projection there is no root_element yet -- and
-  # the column is exactly as its author left it, so it is still the right answer.
-  test "structural_document_type falls back to document_type when root_element is unset" do
+  test "structural_document_type falls back to document_type before there is a root" do
     project = Project.new(user: users(:one), document_type: :book)
 
-    assert_nil project.root_element
     assert_equal "book", project.structural_document_type
   end
 
-  # A blank is treated as absent rather than as an answer, so a row written by something
-  # that had nothing to say still falls back instead of reporting "".
-  test "structural_document_type falls back when root_element is blank" do
-    project = projects(:one)
-    project.update_column(:root_element, "")
+  # A project's default root is typed after its document type, so a new deck is
+  # assembled as a <slideshow> from the start.
+  test "a new project's root division takes the document type as its type" do
+    project = Project.create!(user: users(:one), title: "Deck", document_type: :slideshow)
 
-    assert_equal "article", project.reload.structural_document_type
+    assert_equal "slideshow", project.root_division.division_type
   end
 
   # ---- source_updated_at ----
@@ -162,7 +153,7 @@ class ProjectTest < ActiveSupport::TestCase
     project = projects(:one)
     project.update_column(:source_updated_at, 3.days.ago)
 
-    assets(:authored_one).update!(source: "<p>new</p>")
+    contents(:authored_one).update!(source: "<p>new</p>")
 
     assert_operator project.reload.source_updated_at, :>, 1.minute.ago
   end

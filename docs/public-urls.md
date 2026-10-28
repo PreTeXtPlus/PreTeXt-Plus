@@ -107,7 +107,7 @@ loads a project inherits *both* forms with no other change.
 | Column | New migration — add nullable, backfill, then unique index + `NOT NULL` |
 | Model | `app/models/project.rb` — assignment on create, `to_param`, `find_by_public_id!` |
 | Loaded controllers | `find_by: :public_id` on `projects_controller.rb`, `targets_controller.rb`, `builds_controller.rb` |
-| Bare finds | `published_controller.rb`, `assets_controller.rb`, `admin/projects_controller.rb` |
+| Bare finds | `published_controller.rb`, `projects_controller.rb` (`content_file`, `legacy_content_file`), `admin/projects_controller.rb` |
 | Editor | `app/views/projects/_form.html.erb` — `project.to_param`, so the React editor's hand-built `/projects/${projectId}` fetches match |
 | Fixtures | `test/fixtures/projects.yml` — a `NOT NULL` unique column needs a value per row |
 

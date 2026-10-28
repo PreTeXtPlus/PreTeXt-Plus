@@ -1,8 +1,8 @@
 class ProjectsController < ApplicationController
-  allow_unauthenticated_access only: %i[ share preview source ]
+  allow_unauthenticated_access only: %i[ share preview source content_file content_thumbnail ]
   require_unauthenticated_access only: %i[ tryit ]
-  load_and_authorize_resource except: %i[ index owned shared new tryit preview pandoc feedback import_share create_from_template create_from_import ]
-  skip_authorize_resource only: %i[ share ]
+  load_and_authorize_resource except: %i[ index owned shared new tryit preview pandoc feedback import_share create_from_template create_from_import legacy_content_file ]
+  skip_authorize_resource only: %i[ share content_file content_thumbnail ]
   after_action :allow_iframe, only: :share
   rate_limit to: 25, within: 10.minutes, only: :preview,
              with: -> { render plain: "Preview limit reached. Please wait a few minutes and try again, or create an account to continue writing and save your work!", status: :too_many_requests },
@@ -158,6 +158,16 @@ class ProjectsController < ApplicationController
     # before @project.user is ever assigned.
     params[:project]&.delete(:visibility) if cannot?(:update_visibility, @project)
 
+    # A division's element is built from its record's fields (collab schema
+    # version 3), so a tab loaded before that -- which still writes the element
+    # into each division's source -- would have every division assembled
+    # wrapped twice. Its division writes are refused, and it is told to reload.
+    if params.dig(:project, :divisions_attributes).present? && !ProjectDoc.compatible?(params[:schema_version])
+      return render json: { error: "This editor is out of date. Reload the page to keep editing.",
+                            schema_version: ProjectDoc::SCHEMA_VERSION },
+                    status: :conflict
+    end
+
     respond_to do |format|
       if @project.update(project_params)
         format.json { render :show, status: :ok, location: @project }
@@ -185,6 +195,43 @@ class ProjectsController < ApplicationController
     respond_to do |format|
       format.html { redirect_to projects_path, notice: "Project was successfully destroyed.", status: :see_other }
     end
+  end
+
+  # GET /projects/:id/(*)/external/:ref
+  #
+  # Public: a content's file, by the ref a `<plus:* ref="..."/>` placeholder
+  # names it with -- used both by the editor's own full-size previews and by
+  # published/shared builds' <image source> resolution, which is why any path
+  # may precede `external/`. Looked up across every kind of content, not only
+  # assets; one without a file redirects to the not-found image.
+  def content_file
+    redirect_to_cdn_url @project.contents.find_by!(ref: params[:ref]).url
+  end
+
+  # GET /projects/:id/(*)/external/:ref/thumbnail
+  #
+  # Same lookup as `content_file`, but redirects to a small resized preview
+  # instead of the full file -- used by the editor's asset list and the project
+  # dashboard's. 404s when there's nothing to preview (no file, or a file type
+  # ActiveStorage can't raster a variant of); callers fall back to a generic
+  # file icon in that case.
+  def content_thumbnail
+    url = @project.contents.find_by!(ref: params[:ref]).thumbnail_url
+    return head :not_found unless url
+
+    redirect_to_cdn_url url
+  end
+
+  # GET /share_assets/external/:id
+  #
+  # Deprecated legacy link (used by old builds to serve up assets), kept
+  # working. Owner/collaborator-only and id-scoped -- see `content_file` for the
+  # current, project+ref-scoped mechanism used everywhere else. `:id` is the
+  # content's, not a project's, so the project resource isn't loaded for it.
+  def legacy_content_file
+    content = Content.find(params[:id])
+    authorize! :read, content
+    redirect_to_cdn_url content.url
   end
 
   # Legacy share link. These URLs are already in the world -- handed to students,
@@ -458,9 +505,10 @@ class ProjectsController < ApplicationController
     def project_params
       permitted = [
         :title, :docinfo, :use_common_docinfo, :visibility, :language, :description,
-        divisions_attributes: [ [ :id, :source, :source_format, :is_root, :ref, :_destroy ] ],
+        divisions_attributes: [ [ :id, :source, :source_format, :is_root, :ref, :title, :division_type,
+                                  { attrs: {} }, :_destroy ] ],
         assets_attributes: [ [ :id, :ref, :kind, :file, :source, :short_description, :description, :title, :_destroy ] ],
-        snippets_attributes: [ [ :id, :source, :source_format, :ref, :_destroy ] ]
+        snippets_attributes: [ [ :id, :source, :source_format, :ref, :title, :_destroy ] ]
       ]
       permitted << :document_type if action_name == "create"
       params.expect(project: permitted)
@@ -477,10 +525,11 @@ class ProjectsController < ApplicationController
     def import_params
       attrs = params.expect(project: [
         :title, :docinfo, :document_type,
-        divisions_attributes: [ [ :ref, :source, :source_format, :is_root ] ],
+        divisions_attributes: [ [ :ref, :source, :source_format, :is_root, :title, :division_type,
+                                  { attrs: {} } ] ],
         assets_attributes: [ [ :ref, :kind, :title, :short_description,
                                { file: [ :filename, :content_type, :data ] } ] ],
-        snippets_attributes: [ [ :ref, :source, :source_format ] ]
+        snippets_attributes: [ [ :ref, :source, :source_format, :title ] ]
       ]).to_h.deep_symbolize_keys
 
       if attrs[:assets_attributes].present?

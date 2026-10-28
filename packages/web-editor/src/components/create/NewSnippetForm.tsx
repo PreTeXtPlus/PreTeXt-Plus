@@ -19,7 +19,7 @@ export interface NewSnippetFormProps {
    * has the final say on ref uniqueness. Without one, the snippet is created
    * locally (no-host demos and tests).
    */
-  onCreate?: (ref: string, sourceFormat: SourceFormat) => Promise<Snippet>;
+  onCreate?: (ref: string, sourceFormat: SourceFormat, title: string) => Promise<Snippet>;
   /** The snippet now exists — see `NewItemPane`. */
   onCreated: (snippet: Snippet) => void;
   onCancel: () => void;  /** Told when a request to the host starts and settles. */
@@ -36,8 +36,8 @@ function localSnippetId(): string {
 }
 
 /**
- * The creation form for a project snippet: its reference id and source
- * format. Its source is written afterwards, in the code editor it opens in.
+ * The creation form for a project snippet: its title (optional), reference id
+ * and source format. Its source is written afterwards, in the code editor it opens in.
  */
 const NewSnippetForm = ({
   resolveRef,
@@ -50,6 +50,7 @@ const NewSnippetForm = ({
   const projectSnippets = useEditorStore((s) => s.projectSnippets);
   const projectAssets = useEditorStore((s) => s.projectAssets);
 
+  const [title, setTitle] = useState("");
   const [ref, setRef] = useState(resolveRef ?? "");
   const [sourceFormat, setSourceFormat] = useState<SourceFormat>("pretext");
   const [error, setError] = useState<string | null>(null);
@@ -79,13 +80,14 @@ const NewSnippetForm = ({
       return;
     }
     setError(null);
+    const trimmedTitle = title.trim();
     if (!onCreate) {
-      onCreated({ id: localSnippetId(), ref: sanitized, source: "", sourceFormat });
+      onCreated({ id: localSnippetId(), ref: sanitized, title: trimmedTitle, source: "", sourceFormat });
       return;
     }
     setIsCreating(true);
     try {
-      onCreated(await onCreate(sanitized, sourceFormat));
+      onCreated(await onCreate(sanitized, sourceFormat, trimmedTitle));
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to create snippet.");
       setIsCreating(false);
@@ -98,6 +100,18 @@ const NewSnippetForm = ({
 
   return (
     <div className="flex flex-col gap-2.5" data-testid="new-snippet-form">
+      <SettingsField label="Title" htmlFor={`${fieldId}-title`}>
+        <input
+          id={`${fieldId}-title`}
+          className={FIELD_CONTROL_CLASSES}
+          type="text"
+          value={title}
+          placeholder="optional"
+          onChange={(e) => setTitle(e.target.value)}
+          onKeyDown={handleKeyDown}
+          disabled={isCreating}
+        />
+      </SettingsField>
       <SettingsField label="Reference id" htmlFor={`${fieldId}-ref`}>
         <input
           id={`${fieldId}-ref`}

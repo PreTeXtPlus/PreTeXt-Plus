@@ -54,19 +54,6 @@ ActiveRecord::Schema[8.1].define(version: 2026_10_27_120000) do
     t.datetime "updated_at", null: false
   end
 
-  create_table "assets", id: :uuid, default: -> { "gen_random_uuid()" }, force: :cascade do |t|
-    t.datetime "created_at", null: false
-    t.text "description"
-    t.integer "kind", default: 0, null: false
-    t.uuid "project_id", null: false
-    t.string "ref"
-    t.string "short_description"
-    t.text "source"
-    t.string "title"
-    t.datetime "updated_at", null: false
-    t.index ["project_id"], name: "index_assets_on_project_id"
-  end
-
   create_table "build_files", id: :uuid, default: -> { "gen_random_uuid()" }, force: :cascade do |t|
     t.uuid "build_id", null: false
     t.datetime "created_at", null: false
@@ -103,7 +90,41 @@ ActiveRecord::Schema[8.1].define(version: 2026_10_27_120000) do
     t.index ["user_id"], name: "index_collaborations_on_user_id"
   end
 
-  create_table "divisions", id: :uuid, default: -> { "gen_random_uuid()" }, force: :cascade do |t|
+  create_table "contents", id: :uuid, default: -> { "gen_random_uuid()" }, force: :cascade do |t|
+    t.uuid "project_id", null: false
+    t.integer "kind", null: false
+    t.string "ref", null: false
+    t.text "source"
+    t.integer "source_format", default: 0, null: false
+    t.boolean "is_root", default: false, null: false
+    t.text "title"
+    t.string "division_type"
+    t.jsonb "attrs", default: {}, null: false
+    t.string "short_description"
+    t.text "description"
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["project_id", "kind"], name: "index_contents_on_project_id_and_kind"
+    t.index ["project_id", "ref"], name: "index_contents_on_project_id_and_ref", unique: true
+    t.index ["project_id"], name: "index_contents_on_project_id_unique_root", unique: true, where: "is_root"
+    t.check_constraint "NOT is_root OR kind = 0", name: "contents_root_is_a_division"
+    t.check_constraint "kind <> 0 OR division_type IS NOT NULL", name: "contents_division_has_a_type"
+  end
+
+  create_table "legacy_assets", id: :uuid, default: -> { "gen_random_uuid()" }, force: :cascade do |t|
+    t.datetime "created_at", null: false
+    t.text "description"
+    t.integer "kind", default: 0, null: false
+    t.uuid "project_id", null: false
+    t.string "ref"
+    t.string "short_description"
+    t.text "source"
+    t.string "title"
+    t.datetime "updated_at", null: false
+    t.index ["project_id"], name: "index_legacy_assets_on_project_id"
+  end
+
+  create_table "legacy_divisions", id: :uuid, default: -> { "gen_random_uuid()" }, force: :cascade do |t|
     t.datetime "created_at", null: false
     t.boolean "is_root", default: false, null: false
     t.uuid "project_id", null: false
@@ -111,8 +132,18 @@ ActiveRecord::Schema[8.1].define(version: 2026_10_27_120000) do
     t.text "source"
     t.integer "source_format", default: 0, null: false
     t.datetime "updated_at", null: false
-    t.index ["project_id"], name: "index_divisions_on_project_id"
     t.index ["project_id"], name: "index_divisions_on_project_id_unique_root", unique: true, where: "is_root"
+    t.index ["project_id"], name: "index_legacy_divisions_on_project_id"
+  end
+
+  create_table "legacy_snippets", id: :uuid, default: -> { "gen_random_uuid()" }, force: :cascade do |t|
+    t.datetime "created_at", null: false
+    t.uuid "project_id", null: false
+    t.string "ref"
+    t.text "source"
+    t.integer "source_format", default: 0, null: false
+    t.datetime "updated_at", null: false
+    t.index ["project_id"], name: "index_legacy_snippets_on_project_id"
   end
 
   create_table "maintenance_windows", id: :uuid, default: -> { "gen_random_uuid()" }, force: :cascade do |t|
@@ -250,16 +281,6 @@ ActiveRecord::Schema[8.1].define(version: 2026_10_27_120000) do
     t.index ["user_id"], name: "index_projects_on_user_id"
   end
 
-  create_table "snippets", id: :uuid, default: -> { "gen_random_uuid()" }, force: :cascade do |t|
-    t.datetime "created_at", null: false
-    t.uuid "project_id", null: false
-    t.string "ref"
-    t.text "source"
-    t.integer "source_format", default: 0, null: false
-    t.datetime "updated_at", null: false
-    t.index ["project_id"], name: "index_snippets_on_project_id"
-  end
-
   create_table "subscription_seats", id: :uuid, default: -> { "gen_random_uuid()" }, force: :cascade do |t|
     t.datetime "created_at", null: false
     t.uuid "pay_subscription_id", null: false
@@ -372,20 +393,18 @@ ActiveRecord::Schema[8.1].define(version: 2026_10_27_120000) do
 
   add_foreign_key "active_storage_attachments", "active_storage_blobs", column: "blob_id"
   add_foreign_key "active_storage_variant_records", "active_storage_blobs", column: "blob_id"
-  add_foreign_key "assets", "projects"
   add_foreign_key "build_files", "builds"
   add_foreign_key "builds", "projects"
   add_foreign_key "builds", "targets"
   add_foreign_key "collaborations", "projects"
   add_foreign_key "collaborations", "users"
-  add_foreign_key "divisions", "projects"
+  add_foreign_key "contents", "projects"
   add_foreign_key "pay_charges", "pay_customers", column: "customer_id"
   add_foreign_key "pay_charges", "pay_subscriptions", column: "subscription_id"
   add_foreign_key "pay_payment_methods", "pay_customers", column: "customer_id"
   add_foreign_key "pay_subscriptions", "pay_customers", column: "customer_id"
   add_foreign_key "projects", "projects", column: "backup_of_id"
   add_foreign_key "projects", "users"
-  add_foreign_key "snippets", "projects"
   add_foreign_key "subscription_seats", "pay_subscriptions"
   add_foreign_key "subscription_seats", "users"
   add_foreign_key "targets", "projects"

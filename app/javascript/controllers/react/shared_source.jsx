@@ -38,8 +38,9 @@ import { TOOLS_ENTRIES } from "./toolsEntries";
 function railsToReadOnlyState(json) {
   const root = (json.divisions ?? []).find((d) => d.is_root);
   const title = json.title ?? "";
-  const projectType = json.document_type === "book" ? "book" : "article";
-  const rootMeta = { type: projectType, title };
+  const projectType = ["book", "slideshow"].includes(json.document_type)
+    ? json.document_type
+    : "article";
   return {
     title,
     docinfo: json.docinfo ?? "",
@@ -47,7 +48,7 @@ function railsToReadOnlyState(json) {
     useCommonDocinfo: json.use_common_docinfo ?? false,
     language: json.language,
     projectType,
-    divisions: (json.divisions ?? []).map((d) => railsDivisionToEditor(d, rootMeta)),
+    divisions: (json.divisions ?? []).map((d) => railsDivisionToEditor(d, projectType)),
     projectAssets: (json.assets ?? []).map(railsAssetToEditor),
     projectSnippets: (json.snippets ?? []).map(railsSnippetToEditor),
     rootDivisionId: root ? (root.ref ?? "") : undefined,

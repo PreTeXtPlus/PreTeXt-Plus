@@ -1,5 +1,4 @@
 import { Editor } from "@monaco-editor/react";
-import { constrainedEditor } from "constrained-editor-plugin";
 import { useState, useRef, useEffect, useMemo, useCallback, forwardRef, useImperativeHandle, type ReactNode } from "react";
 import {
   copySelection,
@@ -7,7 +6,7 @@ import {
   insertSnippet,
   pasteFromClipboard,
   runEditorCommand,
-  selectEditableRegion,
+  MONACO_COMMANDS,
 } from "./editorCommands";
 import type { EditorMenuActions } from "./CodeEditorMenu";
 import type * as Y from "yjs";
@@ -19,9 +18,6 @@ import { summarizeCleanFixes, type CleanFinding } from "../cleanFindings";
 import { usePretextDiagnostics } from "./editorConfigs/usePretextDiagnostics";
 import type { PretextValidationInput } from "./editorConfigs/pretextDiagnostics";
 import { MonacoCollabBinding } from "../collab/monacoBinding";
-import { installEditGuard } from "../collab/editGuard";
-import { computeLockedRegion, findPretextHeaderEnd, isRangeWithin } from "./lockedRegion";
-import { isLatexDivisionHeaderLine } from "../sectionUtils";
 import { planSnippetInsertion } from "./editorConfigs/insertContext";
 import type { EditorSnippet } from "./editorConfigs/snippets";
 import type { CollabUser } from "../collab/types";
@@ -77,15 +73,9 @@ interface CodeEditorProps {
    */
   onRequestWrapperEdit?: () => void;
   /**
-   * Whether the buffer is a division, whose structural lines (the PreTeXt
-   * wrapper tag and title, the Markdown frontmatter, the LaTeX `\section`
-   * header) are locked and normalized. Defaults to true. A snippet or asset
-   * body has no such structure, so it passes false and every line is editable.
-   */
-  lockStructure?: boolean;
-  /**
    * Generated lines drawn, locked, around the buffer without being part of it —
-   * an asset's `<image>` wrapper around its authored source. They're rendered
+   * an asset's `<image>` wrapper around its authored source, a division's
+   * element around its body. They're rendered
    * as Monaco view zones, so the model (and a collab binding to it) holds only
    * the buffer's own text. Clicking one calls `onRequestWrapperEdit`. Memoize
    * it; a new identity each render redraws the zones.
@@ -112,10 +102,7 @@ interface CodeEditorProps {
    * When set, the editor model is bound to this shared `Y.Text` instead of
    * being driven by the `content` prop: keystrokes emit CRDT deltas, remote
    * edits land in the model directly, and remote cursors render as colored
-   * carets. The structural lines stay locked, but enforcement switches from
-   * the constrained-editor plugin (which reverts, and cannot tell a remote
-   * delta from local typing) to the preventive guard in
-   * `src/collab/editGuard.ts`.
+   * carets.
    */
   collab?: CodeEditorCollab;
   /**
@@ -289,7 +276,6 @@ const CodeEditor = forwardRef<CodeEditorHandle, CodeEditorProps>(({
   onCursorLineChange,
   onOpenFindInProject,
   onRequestWrapperEdit,
-  lockStructure = true,
   virtualWrapper,
   readOnly,
   pasteAutoConvert = true,
@@ -303,7 +289,7 @@ const CodeEditor = forwardRef<CodeEditorHandle, CodeEditorProps>(({
   const editorRef = useRef<any>(null);
   const monacoRef = useRef<any>(null);
   // The live Monaco↔Y.Text binding when collaboration is on. Read through a
-  // ref inside applyConstraints/mount handlers, which aren't re-created per
+  // ref inside mount handlers, which aren't re-created per
   // render.
   const collabRef = useRef(collab);
   collabRef.current = collab;
@@ -313,35 +299,14 @@ const CodeEditor = forwardRef<CodeEditorHandle, CodeEditorProps>(({
   const extensionContextRef = useRef<MonacoExtensionContext>({
     isRemoteChange: () => collabBindingRef.current?.isApplyingRemote ?? false,
   });
-  const constrainedRef = useRef<ReturnType<typeof constrainedEditor> | null>(null);
-  // Removes the collab edit guard's patch from the model. Installed once at
-  // mount; the guard itself only enforces while a collab binding is live.
-  const editGuardRef = useRef<(() => void) | null>(null);
-  // Set while the editor applies its own structural normalization, so those
-  // edits — which deliberately write to the locked lines — pass the guard.
-  const guardBypassRef = useRef(false);
-  // Set while the structural normalizations run, so the content-change they
-  // trigger doesn't re-enter applyConstraints halfway through it.
-  const normalizingRef = useRef(false);
-  // The live source format, read from inside the mount-time guard closure.
+  // The live source format, read from inside mount-time closures.
   const sourceFormatRef = useRef(sourceFormat);
   sourceFormatRef.current = sourceFormat;
-  // Likewise read from mount-time closures (the guard, Mod+A, insertion).
-  const lockStructureRef = useRef(lockStructure);
-  lockStructureRef.current = lockStructure;
   // The latest `content` prop, for realigning the model when a collab binding
   // goes away with nothing to replace it (see rebindCollab).
   const contentPropRef = useRef(content);
   contentPropRef.current = content;
-  /**
-   * The structural lines of the buffer, or `null` when nothing is locked —
-   * always the case for a buffer that isn't a division.
-   */
-  const lockedRegionOf = (model: any) =>
-    lockStructureRef.current
-      ? computeLockedRegion(model, sourceFormatRef.current)
-      : null;
-  // Read from the mount-time Mod+A handler, which is registered once.
+  // Read from mount-time closures, which are registered once.
   const readOnlyRef = useRef(readOnly);
   readOnlyRef.current = readOnly;
   // Read from the mount-time paste listener, likewise registered once.
@@ -355,21 +320,6 @@ const CodeEditor = forwardRef<CodeEditorHandle, CodeEditorProps>(({
   contentRef.current = content;
   /** Removes the DOM paste listener; see `handleEditorMount`. */
   const pasteListenerRef = useRef<(() => void) | null>(null);
-  const lockedDecorationsRef = useRef<any>(null);
-  const lockedRef = useRef(false);
-  // How many lines at the very top are locked (the wrapper tag + title for
-  // PreTeXt, the frontmatter block — title included — for Markdown). Clicking
-  // any of them opens the TOC properties form.
-  const leadingLockedLinesRef = useRef(0);
-  // Always points at the latest `applyConstraints` closure. The collab content
-  // listener below is registered once inside `handleEditorMount` and is never
-  // re-subscribed when `sourceFormat` changes later (Monaco's `onMount` fires
-  // once per component lifetime, and this editor persists across division
-  // switches) — so it must go through this ref rather than close over
-  // `applyConstraints` directly, or every keystroke in collab mode would
-  // silently re-lock the document using whatever format was active at the very
-  // first mount instead of the division actually being edited.
-  const applyConstraintsRef = useRef<() => void>(() => {});
   const contentListenerRef = useRef<{ dispose: () => void } | null>(null);
   const mouseListenerRef = useRef<{ dispose: () => void } | null>(null);
   const cursorListenerRef = useRef<{ dispose: () => void } | null>(null);
@@ -513,10 +463,7 @@ const CodeEditor = forwardRef<CodeEditorHandle, CodeEditorProps>(({
     applyCleanFixes: (ruleIds?: string[]) => {
       const clean = editorConfigs[sourceFormatRef.current].clean;
       if (!clean) return;
-      applyCleanFixes(monacoRef.current, editorRef.current, clean, {
-        sourceFormat: sourceFormatRef.current,
-        ruleIds,
-      });
+      applyCleanFixes(monacoRef.current, editorRef.current, clean, { ruleIds });
       // No host notification here: these are ordinary model edits, so Monaco's
       // `onChange` fires and the debounce below reports them like any typing.
     },
@@ -570,9 +517,6 @@ const CodeEditor = forwardRef<CodeEditorHandle, CodeEditorProps>(({
             extensionContextRef.current,
           ) ?? null)
         : null;
-    // Switching format toggles whether the wrapper is locked (PreTeXt only).
-    applyConstraints();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sourceFormat]);
 
   usePretextDiagnostics(
@@ -591,9 +535,6 @@ const CodeEditor = forwardRef<CodeEditorHandle, CodeEditorProps>(({
       pasteListenerRef.current = null;
       cursorListenerRef.current?.dispose?.();
       selectionListenerRef.current?.dispose?.();
-      constrainedRef.current?.disposeConstrainer?.();
-      editGuardRef.current?.();
-      editGuardRef.current = null;
       findStateListenerRef.current?.dispose?.();
       // Deliver a change the debounce is still holding, never drop it: the
       // editor can unmount under the author's hands (crossing the tabbed/split
@@ -605,230 +546,6 @@ const CodeEditor = forwardRef<CodeEditorHandle, CodeEditorProps>(({
       pending?.();
     };
   }, []);
-
-  // When a PreTeXt division has collapsed to exactly its locked header
-  // (opening tag, plus a title line when present) directly above its closing
-  // tag, insert a blank line between them so the body always has at least one
-  // editable, non-locked line. The edit is flagged programmatic so it doesn't
-  // echo back to the host as a content change (it's a display normalization,
-  // not a user edit).
-  const ensurePretextBodyLine = (editor: any, model: any, monaco: any) => {
-    if (sourceFormat !== "pretext") return;
-    const lineCount = model.getLineCount();
-    if (lineCount < 2) return;
-    const open = model.getLineContent(1).trim();
-    if (!open.startsWith("<") || open.startsWith("</") || open.endsWith("/>")) {
-      return;
-    }
-    const headerEnd = findPretextHeaderEnd(model);
-    if (lineCount !== headerEnd + 1) return;
-    const close = model.getLineContent(lineCount).trim();
-    if (!/^<\/[A-Za-z][\w.:-]*\s*>$/.test(close)) return;
-
-    isProgrammaticUpdateRef.current = true;
-    const endCol = model.getLineMaxColumn(headerEnd);
-    // The insertion point is the end of the locked header, so it has to skip
-    // the collab guard (which would otherwise reject its own repair).
-    guardBypassRef.current = true;
-    try {
-      editor.executeEdits("ensure-body-line", [
-        {
-          range: new monaco.Range(headerEnd, endCol, headerEnd, endCol),
-          text: "\n",
-          forceMoveMarkers: true,
-        },
-      ]);
-    } finally {
-      guardBypassRef.current = false;
-    }
-    queueMicrotask(() => {
-      isProgrammaticUpdateRef.current = false;
-    });
-  };
-
-  // A LaTeX division's header must be followed by a blank line:
-  // `@pretextbook/latex-pretext` reads a first paragraph butted straight
-  // against the header as part of the header, so a division imported without
-  // one converts wrongly — and since `computeLockedRegion` locks that blank
-  // line along with the header, it can't be typed away again once it's here.
-  // Insert it when it's missing. Flagged programmatic so it doesn't echo back
-  // to the host as a user edit; the same repair is applied at the source level
-  // by `normalizeLatexDivisionSource` when the division is loaded.
-  const ensureLatexHeaderBlankLine = (editor: any, model: any, monaco: any) => {
-    if (sourceFormat !== "latex") return;
-    if (!isLatexDivisionHeaderLine(model.getLineContent(1))) return;
-    if (model.getLineCount() >= 2 && model.getLineContent(2).trim() === "") {
-      return;
-    }
-
-    isProgrammaticUpdateRef.current = true;
-    // The insertion point is the end of the locked header line, so it has to
-    // skip the collab guard (which would otherwise reject its own repair).
-    guardBypassRef.current = true;
-    try {
-      const endCol = model.getLineMaxColumn(1);
-      editor.executeEdits("ensure-latex-header-gap", [
-        {
-          range: new monaco.Range(1, endCol, 1, endCol),
-          text: "\n",
-          forceMoveMarkers: true,
-        },
-      ]);
-    } finally {
-      guardBypassRef.current = false;
-    }
-    queueMicrotask(() => {
-      isProgrammaticUpdateRef.current = false;
-    });
-  };
-
-  // An imported PreTeXt division can end with one or more trailing blank
-  // lines after its closing tag (e.g. carried over from a file that ended
-  // with a newline). `computeLockedRegion` always locks the model's last
-  // line as the closing tag, so a trailing blank line leaves the real
-  // closing tag sitting inside the "editable" region, unprotected. Strip
-  // any such trailing blank lines so the closing tag is truly last and gets
-  // locked correctly.
-  const trimPretextTrailingBlankLines = (editor: any, model: any, monaco: any) => {
-    if (sourceFormat !== "pretext") return;
-    const lineCount = model.getLineCount();
-    if (lineCount < 2 || model.getLineContent(lineCount).trim() !== "") return;
-    let lastContentLine = lineCount - 1;
-    while (lastContentLine > 1 && model.getLineContent(lastContentLine).trim() === "") {
-      lastContentLine--;
-    }
-    const closing = model.getLineContent(lastContentLine).trim();
-    if (!/^<\/[A-Za-z][\w.:-]*\s*>$/.test(closing)) return;
-
-    isProgrammaticUpdateRef.current = true;
-    // Spans the (currently unlocked) trailing blank lines down past what will
-    // become the locked closing tag, so it too must skip the collab guard.
-    guardBypassRef.current = true;
-    try {
-      editor.executeEdits("trim-trailing-blank-lines", [
-        {
-          range: new monaco.Range(
-            lastContentLine,
-            model.getLineMaxColumn(lastContentLine),
-            lineCount,
-            model.getLineMaxColumn(lineCount),
-          ),
-          text: "",
-          forceMoveMarkers: true,
-        },
-      ]);
-    } finally {
-      guardBypassRef.current = false;
-    }
-    queueMicrotask(() => {
-      isProgrammaticUpdateRef.current = false;
-    });
-  };
-
-  // Lock the division's structural metadata so it can't be edited in the code
-  // editor: the body stays editable, but the type/xml:id/label are edited from
-  // the Table of Contents instead. For PreTeXt this is the wrapper tag on the
-  // first/last lines; for Markdown it's the leading YAML frontmatter block.
-  // Recomputed whenever the content or source format changes; see
-  // {@link computeLockedRegion} for the per-format geometry.
-  const applyConstraints = () => {
-    const editor = editorRef.current;
-    const monaco = monacoRef.current;
-    const instance = constrainedRef.current;
-    if (!editor || !monaco || !instance) return;
-    const model = editor.getModel();
-    if (!model) return;
-    // Re-entered from the collab content listener by the normalizations below.
-    // That inner pass is redundant — this one goes on to recompute the region
-    // against the normalized model — so drop it.
-    if (normalizingRef.current) return;
-
-    // Start clean — the previous restrictions reference stale line numbers.
-    // This also tears the plugin off a model that has just entered collab mode
-    // (a newly created division reaches the shared doc mid-session), where the
-    // guard takes over enforcement instead.
-    if (typeof model.disposeRestrictions === "function") {
-      model.disposeRestrictions();
-    }
-
-    normalizingRef.current = true;
-    try {
-      // Everything below reshapes a division's structure; a snippet or asset
-      // body has none, and its blank lines are the author's.
-      if (lockStructureRef.current) {
-        trimPretextTrailingBlankLines(editor, model, monaco);
-
-        // A PreTeXt division whose body is emptied collapses to just its locked
-        // wrapper tags (`<section…>` / `</section>`) on adjacent lines. With no line
-        // between them there's nowhere unlocked to type — and `computeLockedRegion`
-        // bails (`lineCount < 3`), dropping the wrapper protection entirely. Insert a
-        // blank middle line so the wrapper stays locked and there is always a clean,
-        // editable line in between to add content back into.
-        //
-        // This runs in collab mode too. Two peers staring at the same emptied
-        // division would each insert a newline, leaving one stray blank line — a
-        // cosmetic, self-limiting outcome (the condition stops holding once either
-        // lands), and far cheaper than leaving the wrapper unguarded.
-        ensurePretextBodyLine(editor, model, monaco);
-        ensureLatexHeaderBlankLine(editor, model, monaco);
-      }
-    } finally {
-      normalizingRef.current = false;
-    }
-
-    const region = lockedRegionOf(model);
-    lockedRef.current = region !== null;
-    leadingLockedLinesRef.current = region?.leadingLockedLines ?? 0;
-
-    // Solo editing enforces through the plugin. Collab editing must not: the
-    // plugin reverts an out-of-range change by calling `model.undo()` from a
-    // content listener that cannot distinguish local typing from a remote CRDT
-    // delta, so it would undo a peer's edit — and re-broadcast that undo. The
-    // guard installed at mount enforces the same geometry by prevention
-    // instead; see `src/collab/editGuard.ts`.
-    if (region && !collabRef.current) {
-      instance.addRestrictionsTo(model, [
-        { range: region.editableRange, allowMultiline: true },
-      ]);
-    }
-
-    // Cosmetic: dim the locked lines so they read as structural.
-    if (typeof editor.createDecorationsCollection === "function") {
-      if (!lockedDecorationsRef.current) {
-        lockedDecorationsRef.current = editor.createDecorationsCollection();
-      }
-      if (!region) {
-        lockedDecorationsRef.current.clear();
-      } else {
-        const hoverMessage = {
-          value:
-            "These properties are structural — edit them from the Table of Contents.",
-        };
-        // `className` + `isWholeLine` paints a full-width tint *behind* the text;
-        // `inlineClassName` is merged onto the token spans themselves so we can
-        // recolor them. The latter only applies to the decoration's range, so
-        // each range must span the whole line's text (col 1 → last column).
-        const lockedLineOptions = {
-          isWholeLine: true,
-          className: "pretext-plus-editor__locked-line",
-          inlineClassName: "pretext-plus-editor__locked-line-text",
-          // Never let the gray inline style grow onto text typed at a locked
-          // line's edges — otherwise content re-added next to the wrapper tags
-          // inherits the structural styling and looks (and reads) as locked.
-          stickiness:
-            monaco.editor.TrackedRangeStickiness.NeverGrowsWhenTypingAtEdges,
-          hoverMessage,
-        };
-        lockedDecorationsRef.current.set(
-          region.lockedLines.map((ln) => ({
-            range: new monaco.Range(ln, 1, ln, model.getLineMaxColumn(ln)),
-            options: lockedLineOptions,
-          })),
-        );
-      }
-    }
-  };
-  applyConstraintsRef.current = applyConstraints;
 
   /**
    * Draw `virtualWrapper` as view zones: its `before` lines above line 1 and its
@@ -892,14 +609,7 @@ const CodeEditor = forwardRef<CodeEditorHandle, CodeEditorProps>(({
   const setModelValueSafely = (model: any, nextValue: string) => {
     if (model.getValue() === nextValue) return;
     isProgrammaticUpdateRef.current = true;
-    // Restrictions must be removed before a programmatic full-document setValue,
-    // or the plugin reverts it as an edit to the locked ranges. They're
-    // re-applied (against the new line count) immediately after.
-    if (typeof model.disposeRestrictions === "function") {
-      model.disposeRestrictions();
-    }
     model.setValue(nextValue);
-    applyConstraints();
     queueMicrotask(() => {
       isProgrammaticUpdateRef.current = false;
     });
@@ -935,7 +645,6 @@ const CodeEditor = forwardRef<CodeEditorHandle, CodeEditorProps>(({
       if (position) editor.setPosition(position);
       if (selections) editor.setSelections(selections);
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [content]);
 
   // ── Collaboration binding lifecycle ───────────────────────────────────────
@@ -958,20 +667,13 @@ const CodeEditor = forwardRef<CodeEditorHandle, CodeEditorProps>(({
     if (!c) {
       // Unbound now. The content effect normally realigns the model, but it
       // only fires on a *changed* prop — if the unshared buffer happens to hold
-      // what the prop already said, restore it (and the solo-mode plugin) here.
-      if (previous) {
-        setModelValueSafely(model, contentPropRef.current);
-        applyConstraints();
-      }
+      // what the prop already said, restore it here.
+      if (previous) setModelValueSafely(model, contentPropRef.current);
       return;
     }
     // The shared text is authoritative; align the model before binding so the
     // binding never observes a divergent starting state.
     setModelValueSafely(model, c.ytext.toString());
-    // Entering collab mode has to hand enforcement from the plugin to the guard
-    // even when the model already held the shared text — `setModelValueSafely`
-    // short-circuits on an identical value and would leave the plugin attached.
-    applyConstraints();
     const binding = new MonacoCollabBinding({
       ytext: c.ytext,
       editor,
@@ -997,17 +699,6 @@ const CodeEditor = forwardRef<CodeEditorHandle, CodeEditorProps>(({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [collab?.ytext]);
 
-  // Switching between a division and a snippet/asset buffer toggles the lock
-  // even when the text happens to be identical (no content change to ride on).
-  // Declared after the rebind effect on purpose — effects run in order. Its
-  // normalizations reshape a division, and on a switch from a shared snippet
-  // they must not run while the snippet's binding is still attached, or they
-  // would be written into the snippet's shared text and sent to every peer.
-  useEffect(() => {
-    applyConstraints();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [lockStructure]);
-
   useEffect(() => {
     return () => {
       collabBindingRef.current?.dispose();
@@ -1015,34 +706,9 @@ const CodeEditor = forwardRef<CodeEditorHandle, CodeEditorProps>(({
     };
   }, []);
 
-  /**
-   * Select the editable body, leaving the locked structural lines out.
-   *
-   * Shared by the Edit menu's Select All and the Mod+A keybinding registered at
-   * mount, so both mean the same thing. The geometry is recomputed per
-   * invocation — the locked lines move as the body grows, and in collab mode a
-   * remote edit moves them with no local event.
-   *
-   * A read-only buffer selects everything instead: nothing there is editable,
-   * and selecting the whole document to copy it is the point.
-   */
-  const selectEditableContent = () => {
-    const editor = editorRef.current;
-    const model = editor?.getModel?.();
-    if (!editor || !model) return;
-    const editable = readOnlyRef.current
-      ? null
-      : (lockedRegionOf(model)?.editableRange ?? null);
-    selectEditableRegion(editor, editable);
-  };
-
   const handleEditorMount = (editor: any, monaco: any) => {
     editorRef.current = editor;
     monacoRef.current = monaco;
-    // Wire up the constrained-editor instance once per mount; restrictions
-    // themselves are (re)applied by applyConstraints below and on every sync.
-    constrainedRef.current = constrainedEditor(monaco);
-    constrainedRef.current.initializeIn(editor);
     // Ensure the newly mounted editor has the latest content in case the
     // component was remounted while content changed without triggering the
     // content-sync effect (editorRef.current was null at that point). In
@@ -1052,22 +718,6 @@ const CodeEditor = forwardRef<CodeEditorHandle, CodeEditorProps>(({
     if (!collabRef.current && model && model.getValue() !== contentRef.current) {
       setModelValueSafely(model, contentRef.current);
     }
-    // Install the collab edit guard once per mount. It enforces only while a
-    // binding is live (`isEnabled`), so it is inert in solo mode where the
-    // constrained-editor plugin owns the locked ranges, and it takes over
-    // without a re-install when a division later joins the shared doc.
-    editGuardRef.current?.();
-    editGuardRef.current = installEditGuard(model, {
-      isEnabled: () => Boolean(collabRef.current),
-      isBypassed: () => guardBypassRef.current,
-      // Recomputed per edit: the locked lines move as the body grows and
-      // shrinks, and remote deltas move them with no local event to react to.
-      getEditableRange: () => {
-        const current = editorRef.current?.getModel?.();
-        if (!current) return null;
-        return lockedRegionOf(current)?.editableRange ?? null;
-      },
-    });
     // Report line changes for source → preview sync.
     cursorListenerRef.current?.dispose?.();
     cursorListenerRef.current = editor.onDidChangeCursorPosition((e: any) => {
@@ -1096,14 +746,8 @@ const CodeEditor = forwardRef<CodeEditorHandle, CodeEditorProps>(({
     contentListenerRef.current?.dispose?.();
     contentListenerRef.current = editor.onDidChangeModelContent(() => {
       updateUndoRedoState();
-      // Solo mode leaves this to the plugin, which tracks its own ranges as the
-      // text shifts. Collab mode has no such bookkeeping, and the geometry does
-      // move — a PreTeXt division's closing tag is whatever line is last — so
-      // recompute the locked lines (and their dimming) after every change,
-      // local or remote. Goes through the ref (not the closed-over
-      // `applyConstraints`) since this listener is registered once here and
-      // never re-subscribed when `sourceFormat` changes later.
-      if (collabRef.current) applyConstraintsRef.current();
+      // The closing wrapper zone is anchored to the last line, which any edit,
+      // local or remote, may move.
       syncVirtualWrapper();
     });
     updateUndoRedoState();
@@ -1125,26 +769,14 @@ const CodeEditor = forwardRef<CodeEditorHandle, CodeEditorProps>(({
         sourceFormatRef.current === "pretext",
     });
 
-    // Clicking any locked leading line (the PreTeXt opening tag/title, or the
-    // Markdown frontmatter block) opens the division's properties editor in
-    // the TOC, since the type/title/xml:id/label can't
-    // be edited in place.
+    // Clicking a `virtualWrapper` line — drawn in a view zone, so it has no
+    // model position — opens the settings drawer, where what those lines show
+    // (a division's type/title/xml:id/label, an asset's alt text) is edited.
     mouseListenerRef.current?.dispose?.();
     mouseListenerRef.current = editor.onMouseDown((e: any) => {
-      // A click on a `virtualWrapper` line — drawn in a view zone, so it has
-      // no model position — asks for the same metadata editor.
       if (
         e?.target?.type === monaco.editor.MouseTargetType.CONTENT_VIEW_ZONE &&
         wrapperZonesRef.current.ids.includes(e.target.detail?.viewZoneId)
-      ) {
-        onRequestWrapperEditRef.current?.();
-        return;
-      }
-      const line = e?.target?.position?.lineNumber;
-      if (
-        lockedRef.current &&
-        typeof line === "number" &&
-        line <= leadingLockedLinesRef.current
       ) {
         onRequestWrapperEditRef.current?.();
       }
@@ -1186,24 +818,6 @@ const CodeEditor = forwardRef<CodeEditorHandle, CodeEditorProps>(({
         if (e.isRevealed) setIsFindingInFile(!!findState.isRevealed);
       }) ?? null;
 
-    // Take over Mod+A so select-all stops at the editable body. A dynamic
-    // keybinding outweighs Monaco's built-in `editor.action.selectAll`, which
-    // stays registered for the command palette; the Edit menu reaches this
-    // same handler through `menuActions.selectAll`.
-    //
-    // Scoped to `editorTextFocus` — the buffer itself — rather than the
-    // built-in's `textInputFocus`, which also covers the editor's own widgets.
-    // Without that, Mod+A in the find box would select the document instead of
-    // the search term; with it, this rule simply doesn't match there and
-    // Monaco's own select-all takes the keystroke.
-    editor.addCommand(
-      monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyA,
-      () => {
-        selectEditableContent();
-      },
-      "editorTextFocus",
-    );
-
     languageExtensionsRef.current?.dispose?.();
     // Through the ref: Monaco's `onMount` is this function as of the first
     // render, and the format may have changed while Monaco loaded (a click on
@@ -1217,7 +831,6 @@ const CodeEditor = forwardRef<CodeEditorHandle, CodeEditorProps>(({
         extensionContextRef.current,
       ) ?? null;
 
-    applyConstraints();
     rebindCollab();
     setIsEditorMounted(true);
   };
@@ -1266,53 +879,13 @@ const CodeEditor = forwardRef<CodeEditorHandle, CodeEditorProps>(({
   }, []);
 
   /**
-   * Park the cursor inside the editable body before writing to it.
-   *
-   * The caret can legitimately sit on a locked structural line — clicking one
-   * opens the TOC properties form, but the click still moves the cursor there.
-   * An insert from that position would be reverted by the constrained-editor
-   * plugin (or refused by the collab guard) with nothing to show for it, so
-   * move to the first editable line instead of writing into a locked one.
-   */
-  const ensureCursorInEditableRegion = () => {
-    const editor = editorRef.current;
-    const model = editor?.getModel?.();
-    if (!editor || !model) return;
-    const region = lockedRegionOf(model);
-    if (!region) return;
-    const selection = editor.getSelection();
-    if (selection && isRangeWithin(region.editableRange, selection)) return;
-    const [lineNumber, column] = region.editableRange;
-    editor.setPosition({ lineNumber, column });
-  };
-
-  /** Whether the caret may be placed here — nothing is locked, or this is body. */
-  const isEditablePosition = (
-    model: any,
-    position: { lineNumber: number; column: number },
-  ): boolean => {
-    const region = lockedRegionOf(model);
-    if (!region) return true;
-    return isRangeWithin(region.editableRange, {
-      startLineNumber: position.lineNumber,
-      startColumn: position.column,
-      endLineNumber: position.lineNumber,
-      endColumn: position.column,
-    });
-  };
-
-  /**
    * Insert a snippet where it is legal, rather than only where the caret is.
    *
    * `planSnippetInsertion` reads the cursor's surroundings and decides both the
    * text and the spot: a list gains a `<p>` unless the cursor is already in one,
-   * a theorem moves past the paragraph it can't nest inside. The one thing it
-   * can't know about is the locked structural lines, so a move onto one — an
-   * unterminated `<p>` running past the division's body — is declined and the
-   * snippet goes in at the caret as written.
+   * a theorem moves past the paragraph it can't nest inside.
    */
   const insertSnippetInContext = (snippet: EditorSnippet) => {
-    ensureCursorInEditableRegion();
     const editor = editorRef.current;
     const model = editor?.getModel?.();
     const position = editor?.getPosition?.();
@@ -1325,14 +898,7 @@ const CodeEditor = forwardRef<CodeEditorHandle, CodeEditorProps>(({
       snippet,
       sourceFormatRef.current,
     );
-    if (plan.offset !== offset) {
-      const target = model.getPositionAt(plan.offset);
-      if (!isEditablePosition(model, target)) {
-        insertSnippet(editor, snippet.body);
-        return;
-      }
-      editor.setPosition(target);
-    }
+    if (plan.offset !== offset) editor.setPosition(model.getPositionAt(plan.offset));
     insertSnippet(editor, plan.body);
   };
 
@@ -1348,14 +914,10 @@ const CodeEditor = forwardRef<CodeEditorHandle, CodeEditorProps>(({
       },
       cut: () => cutSelection(editorRef.current),
       copy: () => copySelection(editorRef.current),
-      selectAll: selectEditableContent,
-      paste: async () => {
-        ensureCursorInEditableRegion();
-        return pasteFromClipboard(editorRef.current);
-      },
+      selectAll: () => runEditorCommand(editorRef.current, MONACO_COMMANDS.selectAll.id),
+      paste: () => pasteFromClipboard(editorRef.current),
       insertSnippet: insertSnippetInContext,
     }),
-    // eslint-disable-next-line react-hooks/exhaustive-deps
     [],
   );
 

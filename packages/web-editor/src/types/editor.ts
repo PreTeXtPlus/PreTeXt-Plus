@@ -108,6 +108,13 @@ export interface Snippet {
    * Division, Asset, and Snippet in the project.
    */
   ref: string;
+  /**
+   * A plain-text name for the snippet, shown in the editor's lists and title
+   * bar. Display only -- a snippet is spliced into its parent with no element
+   * of its own, so nothing is built from it. Empty or absent means untitled,
+   * and the `ref` is shown instead.
+   */
+  title?: string;
   /** The snippet's own source content, in `sourceFormat`. */
   source: string;
   /** The source format `source` is authored in. */

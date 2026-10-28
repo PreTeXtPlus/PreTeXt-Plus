@@ -47,7 +47,6 @@
     "@pretextbook/typing-shortcuts": "^0.4.0",
     "@tailwindcss/vite": "^4.3.3",
     "clsx": "^2.1.1",
-    "constrained-editor-plugin": "^1.4.0",
     "dictionary-en": "^4.0.0",
     "nspell": "^2.1.5",
     "react-resizable-panels": "^4.12.2",

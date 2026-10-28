@@ -192,8 +192,8 @@ Rails.application.routes.draw do
       post "share/copy" => "projects#copy", as: "copy"
       # Automatic backups are restored into a new project; see ProjectBackup.
       post "backups/:backup_id/restore" => "projects#restore_backup", as: "restore_backup"
-      get "(*_)/external/:ref" => "assets#share", as: "share_asset"
-      get "(*_)/external/:ref/thumbnail" => "assets#share_thumbnail", as: "share_asset_thumbnail"
+      get "(*_)/external/:ref" => "projects#content_file", as: "content_file"
+      get "(*_)/external/:ref/thumbnail" => "projects#content_thumbnail", as: "content_thumbnail"
       post "preview" => "projects#preview", as: "preview"
       get "*/lunr-pretext-search-index.js", to: redirect("/ptx-search.js")
     end
@@ -201,7 +201,7 @@ Rails.application.routes.draw do
   resources :announcements, only: %i[index show]
 
   # Deprecated asset share link (used by old builds to serve up assets).
-  get "share_assets/external/:id" => "assets#file", as: "share_asset_file"
+  get "share_assets/external/:id" => "projects#legacy_content_file", as: "legacy_content_file"
   get "builds/:build_id/files(/*relative_path)", to: "build_files#show", as: "build_file", format: false
   get "builds/:build_id/zip", to: "build_files#zip", as: "build_zip"
   resources :asset_fetches, only: :create

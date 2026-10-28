@@ -261,7 +261,7 @@ class PublicationSettingsControllerTest < ActionDispatch::IntegrationTest
 
     assert_select "#publication-tab-epub"
     assert_select "select[name='publication_settings[epub_cover]'] " \
-                  "option[value=?]", "#{assets(:image_one).ref}.png"
+                  "option[value=?]", "#{contents(:image_one).ref}.png"
   end
 
   # Without one, the tab stays but says what to do -- an author who has never built an
@@ -279,7 +279,7 @@ class PublicationSettingsControllerTest < ActionDispatch::IntegrationTest
     get edit_project_publication_settings_url(@project), headers: modal_headers
 
     assert_select "select[name='publication_settings[brandlogo]'] " \
-                  "option[value=?]", "#{assets(:image_one).ref}.png"
+                  "option[value=?]", "#{contents(:image_one).ref}.png"
   end
 
   test "a subscriber can type a link for the logo" do

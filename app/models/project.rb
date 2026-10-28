@@ -5,6 +5,10 @@ class Project < ApplicationRecord
   # lists projects by the dozen -- and so the eventual migration dropping it cannot
   # break a process still running with the column in its cached schema.
   self.ignored_columns += [ "pretext_source" ]
+  # The root division's element type, stored here while it lived only in that
+  # division's source. It is the division's own `division_type` column now (see
+  # #structural_document_type); kept, unread, until a migration drops it.
+  self.ignored_columns += [ "root_element" ]
 
   # Publisher options for every output of this project, overriding the owner's account
   # defaults and overridden in turn by any one output. See Publication::Settings.
@@ -23,22 +27,24 @@ class Project < ApplicationRecord
   # an opaque key and the server -- not this record -- is what integrates its
   # updates. See ProjectDoc, #collaborative? and #reset_collaborative_doc!.
 
-  # dependent: :destroy so deleting a project drops its assets (and their
-  # attached files) too -- an asset has no life outside its
-  # project, so there's nothing to preserve.
-  has_many :assets, dependent: :destroy
-  # allow_destroy lets the editor delete an asset by sending `_destroy: true`.
-  accepts_nested_attributes_for :assets, allow_destroy: true
+  # Everything the document is made of: its divisions, snippets and assets
+  # (see Content). dependent: :destroy so deleting a project drops all of it,
+  # attached files included -- none of it has a life outside its project. Only
+  # this association cascades; the per-kind ones below are views of it.
+  has_many :contents, dependent: :destroy
+
+  # Each kind as a collection of its own, which is how the editor sends them
+  # (`divisions_attributes`, ...) and how nearly everything reads them. A record
+  # built through `divisions` or `snippets` takes its kind from the scope; an
+  # asset says which kind of asset it is itself.
+  has_many :divisions, -> { divisions }, class_name: "Content", inverse_of: :project
+  has_many :snippets, -> { snippets }, class_name: "Content", inverse_of: :project
+  has_many :assets, -> { assets }, class_name: "Content", inverse_of: :project
+  # allow_destroy lets the editor remove a record by sending `_destroy: true`.
+  accepts_nested_attributes_for :divisions, :snippets, :assets, allow_destroy: true
 
   has_many :targets, dependent: :destroy
   has_many :builds, dependent: :destroy
-  has_many :divisions, dependent: :destroy
-  # allow_destroy lets the editor remove a division by sending `_destroy: true`.
-  accepts_nested_attributes_for :divisions, allow_destroy: true
-
-  has_many :snippets, dependent: :destroy
-  # allow_destroy lets the editor remove a snippet by sending `_destroy: true`.
-  accepts_nested_attributes_for :snippets, allow_destroy: true
 
   # All three nested collections accept ids the editor minted itself; see
   # #tolerate_client_minted_ids for why, and for what these overrides do.
@@ -104,8 +110,8 @@ class Project < ApplicationRecord
   enum :backup_tier, BACKUP_TIERS.keys.each_with_index.to_h, prefix: :backup
 
   # Attributes a build actually consumes. Changing any of them makes every built target
-  # stale; changing `visibility` or `description` does not. Divisions and assets bump the
-  # same timestamp from their own `belongs_to ... touch:`.
+  # stale; changing `visibility` or `description` does not. Contents bump the same
+  # timestamp from their own `belongs_to ... touch:`.
   SOURCE_ATTRIBUTES = %w[ title language docinfo use_common_docinfo document_type publication_settings ].freeze
 
   # Slug omitted deliberately: Target derives "website" from this name like it does for
@@ -124,7 +130,7 @@ class Project < ApplicationRecord
 
   before_validation :stamp_source_updated_at, if: -> { (changed & SOURCE_ATTRIBUTES).any? }
   before_validation(on: :create) { self.source_updated_at ||= Time.current }
-  # Every project starts with exactly one root division; Division keeps it that
+  # Every project starts with exactly one root division; Content keeps it that
   # way from then on.
   before_validation :build_root_division, on: :create
   validate :exactly_one_root_division, on: :create
@@ -170,23 +176,15 @@ class Project < ApplicationRecord
   # document_type from :update on purpose -- it also carries the deck axis, which
   # *is* fixed at creation).
   #
-  # What the author switched is the root division's own source, in whichever
-  # markup style they write, which is why this is a stored answer rather than a
-  # computed one. Reading it out of the source means knowing all three spellings
-  # of "book", and the one artifact that has resolved them -- the assembled
-  # document -- costs a Node process to produce (SourceAssembler). This is read
-  # on settings and admin pages, so it has to be a column read.
+  # What the author switched is the root division's own type -- its
+  # `division_type`, the element its document is assembled with -- so that is
+  # what this reads.
   #
-  # ProjectDocProjection writes it, from the type the editor keeps on the root
-  # division in the collaborative document. That is the same value the editor
-  # itself renders from, so what this reports and what the author is looking at
-  # cannot disagree.
-  #
-  # Falls back to `document_type` when it is unset -- a project between
-  # creation/import and its first projection, where that column is exactly as its
-  # author left it and so still right.
+  # Falls back to `document_type` for a root without one of the root elements,
+  # which validation keeps from being saved but which a record still being built
+  # may be.
   def structural_document_type
-    root_element.presence || document_type
+    root_division&.division_type.presence_in(ROOT_ELEMENT_TYPES) || document_type
   end
 
   # Until this moment every owner gets the subscriber (unlimited) cap as a
@@ -344,7 +342,10 @@ class Project < ApplicationRecord
       title: self.title,
       docinfo: self.docinfo,
       divisions: self.divisions.map { |d|
-        { id: d.id || d.ref, ref: d.ref, is_root: d.is_root, source: d.source, source_format: d.source_format }
+        {
+          id: d.id || d.ref, ref: d.ref, is_root: d.is_root, source: d.source, source_format: d.source_format,
+          title: d.title, division_type: d.division_type, attrs: d.attrs
+        }
       }
     }.to_json
   end
@@ -377,20 +378,17 @@ class Project < ApplicationRecord
         target.dup.attributes.except("current_build_id", "latest_build_id", "last_built_at", "published")
       )
     end
-    divisions.each do |division|
-      duplicate.divisions.build(division.dup.attributes)
-    end
-    snippets.each do |snippet|
-      duplicate.snippets.build(snippet.dup.attributes)
-    end
-    assets.each do |asset|
-      # Each asset is owned directly by its project, so a duplicate needs a
-      # genuinely independent Asset row: copy its attributes (dup clears
-      # `id`, so this gets a fresh one) and re-attach the SAME file blob --
-      # no bytes are re-uploaded, only a new active_storage_attachments row
-      # is created once `duplicate` saves.
-      new_asset = duplicate.assets.build(asset.dup.attributes)
-      new_asset.file.attach(asset.file.blob) if asset.file.attached?
+    # Each record is owned directly by its project, so a duplicate needs a
+    # genuinely independent row: copy its attributes (dup clears `id`, so this
+    # gets a fresh one) and re-attach the SAME file blobs -- no bytes are
+    # re-uploaded, only new active_storage_attachments rows are created once
+    # `duplicate` saves. Built through the per-kind collections, which are what
+    # the root-division checks below read.
+    [ [ divisions, duplicate.divisions ], [ snippets, duplicate.snippets ], [ assets, duplicate.assets ] ].each do |originals, copies|
+      originals.each do |content|
+        copy = copies.build(content.dup.attributes)
+        copy.files = content.files.blobs if content.files.attached?
+      end
     end
     duplicate
   end
@@ -408,9 +406,12 @@ class Project < ApplicationRecord
   def self.tryit
     project = self.new(title: "Try it!")
     project.docinfo = TRYIT_DOCINFO
-    project.divisions.build(ref: "tryit", is_root: true, source_format: :latex, source: TRYIT_ROOT_SOURCE)
-    project.divisions.build(ref: "tryit-xml", source_format: :pretext, source: TRYIT_PRETEXT_SOURCE)
-    project.divisions.build(ref: "tryit-markdown", source_format: :markdown, source: TRYIT_MARKDOWN_SOURCE)
+    project.divisions.build(ref: "tryit", is_root: true, division_type: "article", title: "Try PreTeXt.Plus!",
+      source_format: :latex, source: TRYIT_ROOT_SOURCE)
+    project.divisions.build(ref: "tryit-xml", division_type: "section", title: "Classic PreTeXt XML",
+      source_format: :pretext, source: TRYIT_PRETEXT_SOURCE)
+    project.divisions.build(ref: "tryit-markdown", division_type: "section", title: "Markdown-style PreTeXt",
+      source_format: :markdown, source: TRYIT_MARKDOWN_SOURCE)
     project
   end
 
@@ -451,10 +452,16 @@ class Project < ApplicationRecord
 
       association.load_target
       known = association.filter_map { |record| record.id&.to_s }.to_set
+      # Ids this project holds as some *other* kind of content. One of those
+      # can't be built here -- the row exists -- nor updated through this
+      # collection, which doesn't hold it; a client naming one is confused, and
+      # the entry is dropped rather than failing the save on a primary key.
+      elsewhere = contents.where.not(id: known.to_a).pluck(:id).map(&:to_s).to_set
 
       entries.filter_map do |entry|
         id = (entry[:id] || entry["id"]).presence&.to_s
         next entry if id.nil? || known.include?(id)
+        next nil if elsewhere.include?(id)
         next nil if ActiveModel::Type::Boolean.new.cast(entry[:_destroy] || entry["_destroy"])
 
         association.build(id: id)
@@ -465,7 +472,7 @@ class Project < ApplicationRecord
 
     # The root division is the document itself, so it goes only with its project
     # (through `dependent: :destroy`), never through a nested `_destroy`.
-    # Division refuses the destroy itself (see Division#keep_root), but from here
+    # Content refuses the destroy itself (see Content::DivisionBehavior#keep_root), but from here
     # that refusal would raise out of the save; the `_destroy` is dropped instead,
     # since the editor re-sends tombstones until they stick (see
     # #tolerate_client_minted_ids) and would otherwise block every later save.
@@ -487,7 +494,9 @@ class Project < ApplicationRecord
     # A caller that supplied no root (POST /projects with only a title) gets the
     # default one, exactly as #new offers it.
     def build_root_division
-      divisions.build(is_root: true, ref: "document") if divisions.none?(&:is_root?)
+      return if divisions.any?(&:is_root?)
+
+      divisions.build(is_root: true, ref: "document", division_type: document_type)
     end
 
     def exactly_one_root_division

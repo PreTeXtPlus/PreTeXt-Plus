@@ -1,27 +1,16 @@
-class Asset < ApplicationRecord
-  include HasUniqueRef
-  ref_sibling_classes "Division", "Snippet"
-
-  # See Division: a build consumes assets too, so changing one makes built targets stale.
-  belongs_to :project, touch: :source_updated_at
-  has_one_attached :file
-
-  enum :kind, {
-    file: 0,
-    authored: 1
-  }, suffix: true
-
-  # The cap applies only when adding a new asset: an account already over its
-  # limit (subscription lapsed) keeps its existing assets rather than being
-  # forced to delete them (see Collaboration#within_collaborator_limit for the
-  # identical grandfathering rule).
-  # Never for a backup's assets: taking a backup re-attaches blobs the account
-  # already holds, and must not fail -- or count -- against the cap.
-  validate :within_asset_quota, on: :create, if: -> { project.present? && !project.backup? }
+# The files a Content carries, and how they are served -- for every kind of
+# content, not only assets. ProjectsController#content_file and
+# #content_thumbnail look a record up by ref across all of a project's
+# contents and serve whatever it has through these.
+#
+# What may carry a file is a separate question, answered by validation (see
+# Content::AssetBehavior#attachments_fit_kind): today, a file asset, once.
+module Content::AttachedFiles
+  extend ActiveSupport::Concern
 
   # Rails forces SVGs to download rather than display inline by default,
-  # since an SVG can carry a <script> (a stored-XSS precaution). This asset's
-  # file is only ever rendered via `<img src>` in the asset manager/editor,
+  # since an SVG can carry a <script> (a stored-XSS precaution). Content's
+  # files are only ever rendered via `<img src>` in the asset manager/editor,
   # which never executes embedded scripts, so it's safe to bypass that
   # default here. Scoped to this method (rather than the app-wide Rails
   # config) rather than changing the default for every blob URL app-wide.
@@ -48,38 +37,62 @@ class Asset < ApplicationRecord
     "image/svg+xml" => "svg"
   }.freeze
 
+  THUMBNAIL_SIZE = [ 200, 200 ].freeze
+
+  # The content's file: the one attachment it carries. Nil when there is none.
+  def file
+    files.attachments.first
+  end
+
+  # Whether there is an image to serve. Safe on any kind.
+  def file_attached?
+    files.attached?
+  end
+
+  # Make `attachable` (an upload, an io hash, or an existing blob) this
+  # content's file, in place of any it already has. Assigning a has_many_attached
+  # replaces the whole list, and the replaced attachment is purged once the
+  # record saves -- so, like any attribute, this takes effect on save.
+  def attach_file(attachable)
+    self.files = [ attachable ]
+  end
+
+  # Nested attributes and the upload/import params carry an asset's file under
+  # the singular `file` key, as they always have; it lands here.
+  alias_method :file=, :attach_file
+
   # The bare filename extension (no leading dot) inferred from the attached
   # file's content type -- never from the uploaded filename, which a browser
   # paste can't supply reliably (the web-editor renames a pasted image's file
   # to a bare, extensionless placeholder before it ever reaches here). Nil
   # when there's no file, or its content type isn't a recognized image type.
   def file_extension
-    CONTENT_TYPE_EXTENSIONS[file_content_type] if file.attached?
+    CONTENT_TYPE_EXTENSIONS[file_content_type] if file_attached?
   end
 
   # The attached file's MIME type (e.g. "image/png"), or nil when there's no
-  # file. Delegates through the attachment proxy to the blob.
+  # file. Delegates through the attachment to the blob.
   def file_content_type
-    file.content_type if file.attached?
+    file.content_type if file_attached?
   end
 
-  # The filename this asset is presented as everywhere outside its own byte
+  # The filename this content's file is presented as everywhere outside its own byte
   # storage: "REF.EXT" (or bare REF if the content type isn't recognized).
   # Single source of truth for every place that names this asset's file for
   # external consumption -- ProjectArchiveBuilder's external/ entry, the EPUB
-  # cover picker, and this asset's own download/inline Content-Disposition
+  # cover picker, and the file's own download/inline Content-Disposition
   # (`url`, below) all call this instead of re-deriving a filename
   # themselves. Computed fresh from `ref` + `file_extension` rather than read
   # off the stored blob filename, since the same blob can be shared by
-  # multiple Asset rows with different refs (see Project#full_dup).
+  # multiple Content rows with different refs (see Project#full_dup).
   def external_filename
-    return nil unless file.attached?
+    return nil unless file_attached?
 
     file_extension ? "#{ref}.#{file_extension}" : ref
   end
 
   def url
-    return "/image-not-found.svg" unless file.present?
+    return "/image-not-found.svg" unless file_attached?
 
     blob = file.blob
     # use 1.hour to avoid clock skew
@@ -91,15 +104,13 @@ class Asset < ApplicationRecord
     end
   end
 
-  THUMBNAIL_SIZE = [ 200, 200 ].freeze
-
   # Whether `thumbnail_url` has anything to show: no file, or a file type
   # ActiveStorage can't raster a variant of, means no preview -- callers fall
   # back to a generic file icon. Cheap (no processing), so it's safe to call
   # from JSON rendering to decide whether to advertise a thumbnail path at
   # all, without paying for `thumbnail_url`'s variant processing there.
   def thumbnailable?
-    return false unless file.present?
+    return false unless file_attached?
 
     blob = file.blob
     INLINE_OVERRIDE_CONTENT_TYPES.include?(blob.content_type) || blob.variable?
@@ -120,17 +131,5 @@ class Asset < ApplicationRecord
     return url if INLINE_OVERRIDE_CONTENT_TYPES.include?(blob.content_type)
 
     file.variant(resize_to_limit: THUMBNAIL_SIZE).processed.url(expires_in: 1.hour)
-  end
-
-  private
-
-  # Keyed to the project OWNER, not whoever is actually uploading -- an
-  # asset's storage cost belongs to whoever's account it lives in, exactly
-  # like Project#collaborator_limit follows the owner rather than the inviter.
-  def within_asset_quota
-    owner = project.user
-    if owner.present? && owner.assets.count >= owner.asset_quota
-      errors.add(:base, "Asset limit (#{owner.asset_quota}) reached for this account")
-    end
   end
 end

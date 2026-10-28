@@ -20,24 +20,24 @@ class SourceAssemblerTest < ActionDispatch::IntegrationTest
     assert_payload_agrees_with SourceAssembler.new(@project).payload, json
   end
 
-  # The one field the editor's JSON sends that is not simply a column. A latex or
-  # markdown root has no PreTeXt tag for the assembler to read a root element
-  # from, so this value is the root element, and sending `document_type` instead
-  # would report such a document as whatever kind it was created as.
+  # The one field the editor's JSON sends that is not simply a column: the type a
+  # root with none of its own would be given. It is the root's own type, so that
+  # sending `document_type` instead cannot report a document as whatever kind it
+  # was created as.
   test "the payload sends the structural document type, not the document_type column" do
-    @project.update!(root_element: "book")
+    @project.root_division.update!(division_type: "book")
 
     assert_equal "article", @project.document_type
     assert_equal "book", SourceAssembler.new(@project).payload[:document_type]
   end
 
   test "an asset with no file attached carries no extension, content type or path" do
-    asset = assets(:authored_one)
+    asset = contents(:authored_one)
     payload = SourceAssembler.new(asset.project).payload
     entry = payload[:assets].find { |a| a[:id] == asset.id }
 
     assert_not_nil entry
-    assert_equal "authored", entry[:kind]
+    assert_equal "authored_asset", entry[:kind]
     # The web-editor reads these being absent as "this asset has no file", and
     # writes no @source on the <image> it generates. An extension invented here
     # would name a file the archive never wrote.
@@ -89,7 +89,7 @@ class SourceAssemblerTest < ActionDispatch::IntegrationTest
     skip_without_bundle
     # Unreachable through the models now, which keep exactly one root, but rows
     # from before that rule may still be rootless.
-    @project.divisions.delete_all
+    @project.divisions.delete_all(:delete_all)
 
     assert_equal "", SourceAssembler.new(@project.reload).call
   end

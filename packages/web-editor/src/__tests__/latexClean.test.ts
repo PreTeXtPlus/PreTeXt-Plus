@@ -106,18 +106,13 @@ class FakeModel {
 
 const editorFor = (model: FakeModel) => ({ getModel: () => model });
 
-const run = (
-  model: FakeModel,
-  options: { sourceFormat?: "latex" | "pretext"; ruleIds?: string[] } = {},
-) =>
+const run = (model: FakeModel, options: { ruleIds?: string[] } = {}) =>
   applyCleanFixes(fakeMonaco, editorFor(model), clean, {
-    sourceFormat: options.sourceFormat ?? "pretext",
     ruleIds: options.ruleIds,
   });
 
 describe("applyCleanFixes", () => {
   it("removes presentational markup", () => {
-    // No locked region: a one-line buffer has nothing to lock.
     const model = new FakeModel("Some text \\hspace{1cm} more text.");
 
     const result = run(model);
@@ -172,20 +167,6 @@ describe("applyCleanFixes", () => {
     expect(result.applied).toBe(1);
   });
 
-  it("skips a finding on a locked structural line", () => {
-    // A LaTeX division's `\section{…}` header is line 1 and is not editable
-    // here — it is edited from the Table of Contents.
-    const model = new FakeModel(
-      "\\section{Limits \\hspace{1cm}}\nBody text \\hspace{2cm} here.",
-    );
-
-    const result = run(model, { sourceFormat: "latex" });
-
-    expect(model.getLineContent(1)).toBe("\\section{Limits \\hspace{1cm}}");
-    expect(model.getLineContent(2)).toBe("Body text  here.");
-    expect(result.applied).toBe(1);
-  });
-
   it("stops instead of spinning when the model refuses the edits", () => {
     // The collab guard drops a whole batch it will not allow; without the
     // no-progress check the same fixes would be found and pushed until the
@@ -215,7 +196,6 @@ describe("applyCleanFixes", () => {
       fakeMonaco,
       { getModel: () => null },
       clean,
-      { sourceFormat: "latex" },
     );
 
     expect(result).toEqual({ applied: 0, passes: 0, truncated: false });

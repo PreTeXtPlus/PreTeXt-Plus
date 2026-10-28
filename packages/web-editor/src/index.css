@@ -1,16 +1,14 @@
 @import "tailwindcss";
 
-/* The wrapper tag lines (opening tag with xml:id, and closing tag) are locked
-   read-only via constrained-editor-plugin. These styles dim them so it's clear
-   they're structural and edited from the Table of Contents instead.
+/* The generated lines drawn around the buffer — a division's element, an
+   asset's <image> — are read-only view zones (see `virtualWrapper` in
+   CodeEditor.tsx). These styles dim them so it's clear they're structural and
+   edited from the settings drawer instead.
 
-   `.locked-line` is the whole-line decoration (a full-width tint painted behind
-   the text), so it can only style the background. `.locked-line-text` is an
-   inline decoration Monaco merges onto the syntax token spans (which carry
-   their own `.mtkN` color class), so `!important` is needed to override the
-   per-token theme colors with a single muted slate. Both are passed as literal
-   strings to Monaco's decoration API (see CodeEditor.tsx), not to a React
-   className prop, so they can't become Tailwind utility classes on JSX. */
+   `.locked-line` styles the zone's background. `.locked-line-text` its text,
+   with `!important` so it overrides any color Monaco gives the zone's lines.
+   Both are set on DOM nodes CodeEditor.tsx builds by hand for Monaco, not on a
+   React className prop, so they can't become Tailwind utility classes on JSX. */
 .pretext-plus-editor__locked-line {
   background: rgba(148, 163, 184, 0.12);
 }

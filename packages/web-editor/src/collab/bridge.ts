@@ -54,42 +54,18 @@ import {
   type CollabDivisionSnapshot,
 } from "./schema";
 import { diffReplace } from "./textDiff";
-import {
-  extractDivisionMetadata,
-  extractLatexDivisionTitle,
-  extractMarkdownDivisionMetadata,
-} from "../sectionUtils";
-
 /** Division record derived from a doc entry, for insertion into the store pool. */
-const snapshotToRecord = (snapshot: CollabDivisionSnapshot): Division => {
-  // Prefer the record fields the remote actor carried on the entry; fall back
-  // to deriving them from the source itself (same derivations the store's
-  // load-time normalization uses), since title/type are required on Division.
-  let title = snapshot.title;
-  let type = snapshot.type;
-  if (title === undefined || type === undefined) {
-    const meta =
-      snapshot.sourceFormat === "markdown"
-        ? extractMarkdownDivisionMetadata(snapshot.source)
-        : snapshot.sourceFormat === "pretext"
-          ? extractDivisionMetadata(snapshot.source)
-          : null;
-    title ??=
-      meta?.title ??
-      (snapshot.sourceFormat === "latex"
-        ? (extractLatexDivisionTitle(snapshot.source) ?? "")
-        : "");
-    type ??= meta?.type ?? "section";
-  }
-  return {
-    id: snapshot.id,
-    xmlId: snapshot.xmlId,
-    sourceFormat: snapshot.sourceFormat,
-    source: snapshot.source,
-    title,
-    type,
-  };
-};
+const snapshotToRecord = (snapshot: CollabDivisionSnapshot): Division => ({
+  id: snapshot.id,
+  xmlId: snapshot.xmlId,
+  sourceFormat: snapshot.sourceFormat,
+  source: snapshot.source,
+  // Required on a Division; an entry written without them gets the same
+  // defaults the store's load-time normalization gives a host record.
+  title: snapshot.title ?? "",
+  type: snapshot.type ?? "section",
+  ...(snapshot.attrs && { attrs: snapshot.attrs }),
+});
 
 export class CollabBridge {
   /** Origin tag for the bridge's own doc transactions. */
@@ -242,6 +218,7 @@ export class CollabBridge {
           source: division.source,
           title: division.title,
           type: division.type,
+          attrs: division.attrs,
         }),
       );
       // A division created now and removed later in the same session must not
@@ -280,6 +257,7 @@ export class CollabBridge {
       }
       if (changes.title !== undefined) entry.set("title", changes.title);
       if (changes.type !== undefined) entry.set("type", changes.type);
+      if (changes.attrs !== undefined) entry.set("attrs", changes.attrs);
     }, this.localOrigin);
     if (changes.xmlId != null && changes.xmlId !== xmlId) {
       this.keyToXmlId.set(key, changes.xmlId);
@@ -646,6 +624,7 @@ export class CollabBridge {
           if (field === "type" && snapshot.type !== undefined) {
             changes.type = snapshot.type;
           }
+          if (field === "attrs") changes.attrs = snapshot.attrs ?? {};
         });
         if (Object.keys(changes).length === 0) continue;
         state.patchDivision(oldXmlId, changes);

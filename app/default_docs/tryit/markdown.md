@@ -1,9 +1,3 @@
----
-division: section
-id: tryit-markdown
-title: Markdown-style PreTeXt
----
-
 This section is written in Markdown-style PreTeXt markup.
 You can edit this content using supported Markdown syntax. For
 authors not familiar with LaTeX or PreTeXt, or coming from other

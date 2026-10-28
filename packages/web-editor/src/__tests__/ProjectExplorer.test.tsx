@@ -13,8 +13,9 @@ import {
   toggleRow,
   visibleTitles,
 } from "./tocTestUtils";
+import { legacyDivisions } from "./legacyDivision";
 
-const withOrphan: Division[] = [
+const withOrphan: Division[] = legacyDivisions([
   ...divisions,
   {
     id: "3",
@@ -24,7 +25,7 @@ const withOrphan: Division[] = [
     sourceFormat: "pretext",
     source: '<section xml:id="orph"><title>Unplaced thing</title></section>',
   },
-];
+]);
 
 function renderExplorer(props: Partial<ProjectExplorerProps> = {}) {
   return renderWithStore(

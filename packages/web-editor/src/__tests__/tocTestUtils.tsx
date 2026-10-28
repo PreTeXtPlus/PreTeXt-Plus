@@ -7,10 +7,11 @@ import { render, screen, within, fireEvent } from "@testing-library/react";
 import { createEditorStore } from "../store/editorStore";
 import { EditorStoreProvider } from "../store/EditorStoreProvider";
 import type { Division } from "../types/sections";
+import { legacyDivisions } from "./legacyDivision";
 
 export type TestStore = ReturnType<typeof createEditorStore>["store"];
 
-export const divisions: Division[] = [
+export const divisions: Division[] = legacyDivisions([
   {
     id: "1",
     xmlId: "doc",
@@ -27,7 +28,7 @@ export const divisions: Division[] = [
     sourceFormat: "pretext",
     source: '<section xml:id="sec"><title>A section</title></section>',
   },
-];
+]);
 
 /** Render `ui` inside a fresh editor store seeded with `docDivisions`. */
 export function renderWithStore(

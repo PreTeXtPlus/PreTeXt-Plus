@@ -98,9 +98,9 @@ function renderEditors(overrides: Partial<Parameters<typeof Editors>[0]> = {}) {
       projectSnippets={[snippet]}
       projectAssets={[asset]}
       onContentChange={(c) => changes.push(c)}
-      onCreateSnippet={async (ref, sourceFormat) => {
-        createdSnippets.push({ ref, sourceFormat });
-        return { id: `s-${ref}`, ref, source: "", sourceFormat: sourceFormat ?? "pretext" };
+      onCreateSnippet={async (ref, sourceFormat, title) => {
+        createdSnippets.push({ ref, sourceFormat, ...(title && { title }) });
+        return { id: `s-${ref}`, ref, title, source: "", sourceFormat: sourceFormat ?? "pretext" };
       }}
       onCreateAuthored={async (title) => {
         authored.push(title);
@@ -184,6 +184,30 @@ describe("creating a snippet", () => {
     expect(createdSnippets).toEqual([{ ref: "theorem-note", sourceFormat: "latex" }]);
     expect(screen.queryByTestId("new-item-pane")).toBeNull();
     expect(barTitle()).toHaveTextContent("theorem-note");
+  });
+
+  it("creates it with a title, shown in the title bar and the list", async () => {
+    const { createdSnippets } = renderEditors();
+    showSnippets();
+    fireEvent.click(screen.getByTestId("toc-new-snippet-btn"));
+
+    fireEvent.change(within(pane()).getByLabelText("Title"), {
+      target: { value: "  A useful note " },
+    });
+    fireEvent.change(within(pane()).getByLabelText("Reference id"), {
+      target: { value: "useful-note" },
+    });
+    await act(async () => {
+      fireEvent.click(within(pane()).getByText("Create"));
+    });
+
+    expect(createdSnippets).toEqual([
+      { ref: "useful-note", sourceFormat: "pretext", title: "A useful note" },
+    ]);
+    expect(barTitle()).toHaveTextContent("A useful note");
+    const row = screen.getByTestId("snippet-row-useful-note");
+    expect(row).toHaveTextContent("A useful note");
+    expect(row).toHaveTextContent("useful-note");
   });
 
   it("links an unlinked placeholder, renaming it if the author changes the ref", async () => {

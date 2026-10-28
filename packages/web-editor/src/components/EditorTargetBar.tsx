@@ -130,8 +130,8 @@ const EditorTargetBar = ({
     if (notPlaced) status = "not placed";
   } else if (target.kind === "snippet") {
     const { snippet } = target;
-    title = snippet.ref;
-    id = "";
+    title = snippet.title || snippet.ref;
+    id = snippet.ref;
     if (notPlaced) status = "not placed";
   } else {
     const { asset } = target;
@@ -152,7 +152,7 @@ const EditorTargetBar = ({
           data-testid="editor-target-title"
           className={clsx(
             "min-w-0 overflow-hidden text-ellipsis whitespace-nowrap text-[0.85rem] font-semibold text-slate-800",
-            target.kind === "snippet" && "font-mono",
+            target.kind === "snippet" && !target.snippet.title && "font-mono",
           )}
           title={title}
         >

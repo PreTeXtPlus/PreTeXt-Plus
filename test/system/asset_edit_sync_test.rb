@@ -17,7 +17,7 @@ class AssetEditSyncTest < ApplicationSystemTestCase
   setup do
     @user = users(:one)
     @project = projects(:one)
-    @asset = assets(:image_one)
+    @asset = contents(:image_one)
     log_in_through_form
   end
 
@@ -68,11 +68,11 @@ class AssetEditSyncTest < ApplicationSystemTestCase
     # so the whole end state is what's polled for.
     replacement = eventually do
       candidate = @project.assets.reload.find_by(ref: @asset.ref)
-      candidate if candidate && candidate.id != @asset.id && candidate.file.attached?
+      candidate if candidate && candidate.id != @asset.id && candidate.file_attached?
     end
     assert replacement, "expected a new file-backed asset to have taken over ref #{@asset.ref}"
     assert_equal @asset.title, replacement.title
-    assert_not Asset.exists?(@asset.id), "the replaced asset's row should be gone"
+    assert_not Content.exists?(@asset.id), "the replaced asset's row should be gone"
   end
 
   test "authoring a new asset creates it without a file, and editing its source persists it" do
@@ -97,8 +97,8 @@ class AssetEditSyncTest < ApplicationSystemTestCase
 
     asset = eventually { @project.assets.reload.find_by(ref: ref) }
     assert asset, "expected an authored asset to have been created with ref #{ref}"
-    assert_equal "authored", asset.kind
-    assert_not asset.file.attached?
+    assert_equal "authored_asset", asset.kind
+    assert_not asset.file_attached?
 
     # An authored asset's source is its entire content, typed straight into
     # the code editor.

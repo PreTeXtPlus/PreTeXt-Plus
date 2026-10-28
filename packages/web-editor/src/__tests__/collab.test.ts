@@ -16,8 +16,9 @@ import { Awareness } from "y-protocols/awareness";
 import type { CollabSession } from "../collab/types";
 import type { Division } from "../types/sections";
 import type { Asset, Snippet } from "../types/editor";
+import { legacyDivisions } from "./legacyDivision";
 
-const DIVISIONS: Division[] = [
+const DIVISIONS: Division[] = legacyDivisions([
   {
     id: "root-id",
     xmlId: "doc-root",
@@ -34,7 +35,7 @@ const DIVISIONS: Division[] = [
     sourceFormat: "pretext",
     source: `<section xml:id="sec-a">\n  <title>Alpha</title>\n  <p>Hello.</p>\n</section>`,
   },
-];
+]);
 
 const seedState = () => ({
   title: "Demo",
@@ -112,13 +113,14 @@ describe("collab schema", () => {
     const doc = new Y.Doc();
     seedDocFromState(doc, {
       ...seedState(),
-      snippets: [{ id: "snip-1", ref: "note", source: "<p>Hi.</p>", sourceFormat: "pretext" }],
+      snippets: [{ id: "snip-1", ref: "note", title: "A note", source: "<p>Hi.</p>", sourceFormat: "pretext" }],
     });
     const state = docToState(doc);
     expect(state.snippets).toHaveLength(1);
     expect(state.snippets[0]).toMatchObject({
       id: "snip-1",
       ref: "note",
+      title: "A note",
       source: "<p>Hi.</p>",
       sourceFormat: "pretext",
     });
@@ -366,10 +368,10 @@ describe("CollabBridge", () => {
     expect(remote?.id).toBe("snippet-1");
     expect(remote?.source).toBe("<p>A note.</p>");
 
-    bridgeA.localSnippetUpdate({ ...snippet, source: "<p>Updated.</p>" });
-    expect(
-      storeB.store.getState().projectSnippets?.find((s) => s.ref === "note")?.source,
-    ).toBe("<p>Updated.</p>");
+    bridgeA.localSnippetUpdate({ ...snippet, title: "A note", source: "<p>Updated.</p>" });
+    const updated = storeB.store.getState().projectSnippets?.find((s) => s.ref === "note");
+    expect(updated?.source).toBe("<p>Updated.</p>");
+    expect(updated?.title).toBe("A note");
 
     bridgeA.localSnippetRemove(snippet);
     expect(storeB.store.getState().projectSnippets ?? []).toHaveLength(0);
