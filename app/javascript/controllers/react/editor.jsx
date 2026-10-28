@@ -28,6 +28,7 @@ import {
 } from "./railsProjectMapping";
 import AccountArea from "./AccountArea";
 import { buildHelpMenu } from "./helpEntries";
+import { TOOLS_ENTRIES } from "./toolsEntries";
 
 /** @typedef {import("@pretextbook/web-editor").Asset} Asset */
 /** @typedef {import("@pretextbook/web-editor").Division} Division */
@@ -1656,6 +1657,7 @@ function EditorApp({ config }) {
           },
           helpMenu: (helpers) =>
             buildHelpMenu({ onGiveFeedback: helpers.onGiveFeedback }),
+          toolsEntries: TOOLS_ENTRIES,
         }}
         onContentChange={onContentChange}
         importEngines={importEngines}

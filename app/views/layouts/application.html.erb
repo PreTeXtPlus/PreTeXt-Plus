@@ -53,12 +53,12 @@
                 <%= link_to :projects, class: "my-1 text-gray-800 hover:text-blue-500 lg:mx-4 lg:my-0" do %>
                   Projects
                 <% end %>
-                <%= link_to :root, class: "my-1 text-gray-800 hover:text-blue-500 lg:mx-4 lg:my-0" do %>
-                  About
-                <% end %>
                 <%= link_to announcements_path, class: "my-1 text-gray-800 hover:text-blue-500 lg:mx-4 lg:my-0" do %>
                   Announcements
                 <% end %>
+                <a href="https://labs.pretext.plus" target="_blank" rel="noopener" class="my-1 text-gray-800 hover:text-blue-500 lg:mx-4 lg:my-0">
+                  Labs
+                </a>
                 <%= render "layouts/help_menu" %>
                 <% if current_user&.admin? %>
                   <div class="relative group my-1 lg:m-0">
@@ -78,6 +78,9 @@
                       <% end %>
                       <%= link_to admin_workshops_path, class: "block px-4 py-2 text-gray-800 hover:bg-blue-50 hover:text-blue-500" do %>
                         Workshops
+                      <% end %>
+                      <%= link_to admin_maintenance_windows_path, class: "block px-4 py-2 text-gray-800 hover:bg-blue-50 hover:text-blue-500" do %>
+                        Maintenance
                       <% end %>
                       <%= link_to subscription_types_path, class: "block px-4 py-2 text-gray-800 hover:bg-blue-50 hover:text-blue-500" do %>
                         Subscription Types
@@ -224,5 +227,6 @@
         the target drawer, and a frame nested in the drawer would be emptied along with
         it. Empty until something aims at it; the modal closes by emptying it again. %>
     <%= turbo_frame_tag "modal" %>
+    <%= render "layouts/maintenance_banner" %>
   </body>
 </html>

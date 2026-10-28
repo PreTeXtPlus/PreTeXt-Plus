@@ -8,6 +8,7 @@ import {
   railsSnippetToEditor,
 } from "./railsProjectMapping";
 import { buildHelpMenu } from "./helpEntries";
+import { TOOLS_ENTRIES } from "./toolsEntries";
 
 /** @typedef {import("./railsProjectMapping").RailsDivision} RailsDivision */
 /** @typedef {import("./railsProjectMapping").RailsAsset} RailsAsset */
@@ -118,6 +119,7 @@ function SharedSourceApp({ config }) {
       topBar={{
         logo,
         helpMenu: () => buildHelpMenu(),
+        toolsEntries: TOOLS_ENTRIES,
         titleOverride: `${state.title} (Shared source)`,
       }}
     />

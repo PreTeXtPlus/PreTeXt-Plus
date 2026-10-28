@@ -134,6 +134,11 @@ interface CodeEditorMenuProps {
    * File menu. Defaults to `true`.
    */
   showDocumentActionsInTools?: boolean;
+  /**
+   * Host entries appended to the end of Tools, below a separator — e.g. links
+   * to the host's companion tools.
+   */
+  extraToolsEntries?: MenuEntry[];
   /** Merged onto the root `role="menubar"` div, so a composing host (`TopBar`) can adjust layout. */
   className?: string;
 }
@@ -200,6 +205,7 @@ const CodeEditorMenu: React.FC<CodeEditorMenuProps> = ({
   leadingMenus,
   trailingMenus,
   showDocumentActionsInTools,
+  extraToolsEntries,
   className,
 }) => {
   // Which menu is open, so opening one closes the last and hovering across the
@@ -428,6 +434,9 @@ const CodeEditorMenu: React.FC<CodeEditorMenuProps> = ({
             onSelect: onConvertToPretext,
           } as MenuEntry,
         ]
+      : []),
+    ...(extraToolsEntries?.length
+      ? [separator("host-tools"), ...extraToolsEntries]
       : []),
   ];
 

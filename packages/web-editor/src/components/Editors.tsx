@@ -474,6 +474,11 @@ export interface editorProps {
       helpers: TopBarAccountAreaHelpers,
     ) => { label: string; entries: MenuEntry[] };
     /**
+     * Host entries appended to the end of the Tools menu, below a separator —
+     * e.g. links to the host's companion tools.
+     */
+    toolsEntries?: MenuEntry[];
+    /**
      * Renders in place of the editable title control when set — e.g. a host
      * with nothing to persist a title edit to (a demo/tryit project).
      */
@@ -2591,6 +2596,7 @@ const EditorsInner = (props: EditorsInnerProps) => {
         logo={props.topBar.logo}
         accountArea={props.topBar.accountArea}
         helpMenu={props.topBar.helpMenu}
+        toolsEntries={props.topBar.toolsEntries}
         titleOverride={props.topBar.titleOverride}
         saveStatus={props.topBar.saveStatus}
         onSaveNow={props.onSave}

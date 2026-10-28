@@ -4,6 +4,7 @@ import { Editors } from "@pretextbook/web-editor";
 import AccountArea from "./AccountArea";
 import { railsDivisionToEditor } from "./railsProjectMapping";
 import { buildHelpMenu } from "./helpEntries";
+import { TOOLS_ENTRIES } from "./toolsEntries";
 
 /** @typedef {import("./railsProjectMapping").RailsDivision} RailsDivision */
 
@@ -100,6 +101,7 @@ function TryItApp({ config }) {
           />
         ),
         helpMenu: () => buildHelpMenu(),
+        toolsEntries: TOOLS_ENTRIES,
         titleOverride: "Try PreTeXt in Your Browser!",
       }}
     />

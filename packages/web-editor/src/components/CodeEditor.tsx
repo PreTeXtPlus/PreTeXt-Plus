@@ -819,7 +819,11 @@ const CodeEditor = forwardRef<CodeEditorHandle, CodeEditorProps>(({
       }) ?? null;
 
     languageExtensionsRef.current?.dispose?.();
-    const config = editorConfigs[sourceFormat];
+    // Through the ref: Monaco's `onMount` is this function as of the first
+    // render, and the format may have changed while Monaco loaded (a click on
+    // a division in another format). The `[sourceFormat]` effect can't cover
+    // that switch — it ran before there was an editor to register against.
+    const config = editorConfigs[sourceFormatRef.current];
     languageExtensionsRef.current =
       config.registerMonacoExtensions?.(
         monaco,

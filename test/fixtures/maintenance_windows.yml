@@ -1,0 +1,8 @@
+# Kept outside MaintenanceWindow::WARNING_PERIOD so they don't put the banner on
+# every page other tests render.
+upcoming:
+  starts_at: <%= 5.days.from_now %>
+  note: "Database upgrade"
+
+past:
+  starts_at: <%= 2.days.ago %>
