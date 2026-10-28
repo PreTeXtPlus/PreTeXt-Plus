@@ -43,6 +43,14 @@ interface CodeEditorProps {
   /** The current source content to display. */
   content: string;
   /**
+   * Names the buffer `content` belongs to — a division, snippet or asset
+   * (`editorTargetKey`). When it changes, the cursor, selection and scroll
+   * position of the buffer being left are remembered under its key and the
+   * new buffer's are restored, so switching tabs and back lands where the
+   * author was. A buffer seen for the first time starts at the top.
+   */
+  bufferKey?: string;
+  /**
    * Determines the Monaco language mode — see `editorConfigs`, which maps this
    * to `"xml"`, `"pretext-latex"`, or `"pretext-markdown"`.
    */
@@ -257,6 +265,9 @@ const baseOptions = {
  *
  * Exposes a {@link CodeEditorHandle} via `forwardRef` for programmatic control.
  */
+/** How many buffers' view states are remembered — see `bufferKey`. */
+const MAX_VIEW_STATES = 32;
+
 /** See {@link CodeEditorProps.virtualWrapper}. */
 export interface VirtualWrapper {
   /** Lines drawn above the first line of the buffer. */
@@ -269,6 +280,7 @@ export interface VirtualWrapper {
 
 const CodeEditor = forwardRef<CodeEditorHandle, CodeEditorProps>(({
   content,
+  bufferKey,
   sourceFormat,
   onChange,
   onRebuild,
@@ -498,6 +510,36 @@ const CodeEditor = forwardRef<CodeEditorHandle, CodeEditorProps>(({
     onRequestWrapperEditRef.current = onRequestWrapperEdit;
   }, [onRequestWrapperEdit]);
 
+  // ── Per-buffer view state ─────────────────────────────────────────────────
+  // Monaco's view state (cursor, selection, scroll, folds) for each buffer the
+  // editor has shown, keyed by `bufferKey`. Saved as a buffer is left — here,
+  // *before* the wrapper-zone effect below redraws the zones for the new
+  // buffer (a saved scroll offset is measured from the first line, under
+  // whatever zones sit above it at the time) and before the content effect
+  // replaces the model's text — and restored after the model holds the new
+  // buffer (the effect after the collab rebind). Bounded, so a long session
+  // doesn't keep a state per division ever opened: beyond `MAX_VIEW_STATES`
+  // the oldest is dropped.
+  const viewStatesRef = useRef(new Map<string, unknown>());
+  const bufferKeyRef = useRef(bufferKey);
+  const switchedBufferRef = useRef(false);
+  useEffect(() => {
+    const previous = bufferKeyRef.current;
+    bufferKeyRef.current = bufferKey;
+    if (previous === bufferKey) return;
+    switchedBufferRef.current = true;
+    const editor = editorRef.current;
+    if (!editor || previous === undefined) return;
+    const states = viewStatesRef.current;
+    states.delete(previous);
+    states.set(previous, editor.saveViewState());
+    while (states.size > MAX_VIEW_STATES) {
+      const oldest = states.keys().next().value;
+      if (oldest === undefined) break;
+      states.delete(oldest);
+    }
+  }, [bufferKey]);
+
   useEffect(() => {
     syncVirtualWrapper();
   }, [virtualWrapper, isEditorMounted]);
@@ -698,6 +740,30 @@ const CodeEditor = forwardRef<CodeEditorHandle, CodeEditorProps>(({
     rebindCollab();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [collab?.ytext]);
+
+  // The second half of the view-state effect above: the model now holds the
+  // new buffer, so put the cursor back where it was in it — or at the top, for
+  // a buffer not seen before (the content effect keeps the previous buffer's
+  // cursor position, which means nothing in another text). A reveal the parent
+  // asked for lands after this, since its effects run after ours.
+  useEffect(() => {
+    if (!switchedBufferRef.current) return;
+    switchedBufferRef.current = false;
+    const editor = editorRef.current;
+    if (!editor || bufferKey === undefined) return;
+    const saved = viewStatesRef.current.get(bufferKey);
+    // Not a quiet move like `revealLine`'s: the preview is about to show this
+    // buffer and should follow the cursor in *it*, so the move is reported
+    // even to a line number the previous buffer's cursor happened to share.
+    lastCursorLineRef.current = null;
+    if (saved) {
+      editor.restoreViewState(saved);
+    } else {
+      editor.setPosition({ lineNumber: 1, column: 1 });
+      editor.setScrollTop(0);
+    }
+    lastCursorLineRef.current = editor.getPosition()?.lineNumber ?? null;
+  }, [bufferKey]);
 
   useEffect(() => {
     return () => {

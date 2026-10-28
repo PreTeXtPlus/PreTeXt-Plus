@@ -154,8 +154,31 @@ Read the open division through `selectOpenDivisionId`, which is `null` while a
 snippet or asset is open; the host-facing `activeDivisionId` prop and
 `onDivisionSelect` still speak only of divisions. Opening a different item
 closes the drawer and abandons any creation form; removing the open item (or a
-peer removing it) falls back to the root, and renames carry it along.
+peer removing it) closes its tab (see below), and renames carry it along.
 
+- **Tabs** (`EditorTabs.tsx`, the store's `openTabs`): the author can step
+  aside from a division to a snippet or asset and come back. `openTabs` is an
+  ordered list of `OpenItem`s of which `openItem` is the active one; a tab is
+  *only* that entry — the one code editor and one preview show the active tab,
+  so a tab holds no buffer, model or iframe of its own. The rule
+  (`openTabsAfterOpening`): an item that already has a tab is activated; a
+  division opened while a division is active *replaces* that tab in place, so
+  walking the TOC never accumulates tabs (that is what opening a division always
+  did); anything else — a snippet or asset, or a division opened from one — gets
+  a new tab right after the active one. Closing a tab (`closeTab`, the ×,
+  middle-click, Delete on a focused tab) lands on its left neighbour (its
+  right one, from the first); closing the only tab opens the root. Removing an
+  item closes its tab the same way (so losing an open snippet falls back to the
+  division it was opened beside, not the root), and renames carry tabs along.
+  The strip above the title bar renders only with two or more tabs — one would
+  just repeat the bar — and a tab whose item no longer resolves is simply not
+  drawn. Picking a division's tab notifies the host like an explorer click.
+  `CodeEditor`'s `bufferKey` (the `editorTargetKey`) is what makes a tab feel
+  kept: the editor saves Monaco's view state (cursor, selection, scroll,
+  folds) under the key being left and restores the new key's, so returning to
+  a division lands where the author was; a buffer not seen before starts at the
+  top. The map is capped (`MAX_VIEW_STATES`), and a restore reports the cursor
+  line so the preview follows it.
 - `components/editorTarget.ts` resolves `openItem` against the pools.
   `Editors.tsx` derives the buffer from it: a division's body (schema lint,
   preview, Y.Text binding), a snippet's source in its own format, or an

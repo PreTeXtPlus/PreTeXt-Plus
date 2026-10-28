@@ -35,6 +35,7 @@ import DocinfoEditor from "./DocinfoEditor";
 import FullSourceModal from "./FullSourceModal";
 import NewItemPane from "./create/NewItemPane";
 import EditorTargetBar from "./EditorTargetBar";
+import EditorTabs, { type EditorTab } from "./EditorTabs";
 import AssetPreview from "./AssetPreview";
 import {
   editorTargetKey,
@@ -107,6 +108,7 @@ import {
   type DivisionChanges,
   type EditorCallbacks,
   type EditorStoreHandle,
+  type OpenItem,
 } from "../store/editorStore";
 import { EditorStoreProvider } from "../store/EditorStoreProvider";
 import { useEditorStore, useEditorStoreApi } from "../store/hooks";
@@ -687,6 +689,9 @@ const EditorsInner = (props: EditorsInnerProps) => {
   const openDivision = useEditorStore((s) => s.openDivision);
   const openAsset = useEditorStore((s) => s.openAsset);
   const openSnippet = useEditorStore((s) => s.openSnippet);
+  const setOpenItem = useEditorStore((s) => s.setOpenItem);
+  const openTabs = useEditorStore((s) => s.openTabs);
+  const closeTab = useEditorStore((s) => s.closeTab);
   const creating = useEditorStore((s) => s.creating);
   const startCreate = useEditorStore((s) => s.startCreate);
   const openModal = useEditorStore((s) => s.openModal);
@@ -807,6 +812,26 @@ const EditorsInner = (props: EditorsInnerProps) => {
     [openItem, divisions, projectSnippets, projectAssets, rootDivision],
   );
   const editorKey = editorTargetKey(editorTarget);
+
+  // The tab strip's entries. A tab whose item no longer resolves — its
+  // record went with a pool the host replaced — is simply not shown; the
+  // active one is drawn as whatever `editorTarget` fell back to.
+  const editorTabs: EditorTab[] = useMemo(() => {
+    const tabs: EditorTab[] = [];
+    for (const item of openTabs) {
+      const target = resolveEditorTarget(
+        item,
+        divisions,
+        projectSnippets,
+        projectAssets,
+        null,
+      );
+      if (target && (target.kind === item.kind || item === openItem)) {
+        tabs.push({ item, target });
+      }
+    }
+    return tabs;
+  }, [openTabs, openItem, divisions, projectSnippets, projectAssets]);
 
   const activeDivision =
     editorTarget?.kind === "division" ? editorTarget.division : null;
@@ -1105,6 +1130,24 @@ const EditorsInner = (props: EditorsInnerProps) => {
   const applyDivisionSelect = (xmlId: string) => {
     openDivision(xmlId);
     props.onDivisionSelect?.(xmlId);
+  };
+
+  // ── Editor tabs ──────────────────────────────────────────────────────────
+  // Picking a tab is opening its item; the host hears of a division the same
+  // way it would from the explorer. Closing one may land on another tab's
+  // division, which the host is told about too.
+  const handleTabSelect = (item: OpenItem) => {
+    if (item.kind === "division") applyDivisionSelect(item.ref);
+    else setOpenItem(item);
+    codeEditorRef.current?.focus();
+  };
+  const handleTabClose = (item: OpenItem) => {
+    const before = storeApi.getState().openItem;
+    closeTab(item);
+    const after = storeApi.getState().openItem;
+    if (after !== before && after.kind === "division") {
+      props.onDivisionSelect?.(after.ref);
+    }
   };
 
   // ── Project-wide find/replace ────────────────────────────────────────────
@@ -2326,6 +2369,7 @@ const EditorsInner = (props: EditorsInnerProps) => {
     <CodeEditor
       ref={codeEditorRef}
       content={editorContent}
+      bufferKey={editorKey}
       sourceFormat={editorFormat}
       // Only a division's buffer can be schema-checked: the linter validates
       // the assembled document, which a snippet or asset fragment isn't.
@@ -2387,6 +2431,12 @@ const EditorsInner = (props: EditorsInnerProps) => {
   // collaboration binding are untouched when the form goes away.
   const editorPane = (
     <div className="flex flex-col flex-1 h-full min-h-0">
+      <EditorTabs
+        tabs={editorTabs}
+        active={openItem}
+        onSelect={handleTabSelect}
+        onClose={handleTabClose}
+      />
       {creating && (
         <NewItemPane
           onCreateSnippet={props.onCreateSnippet}

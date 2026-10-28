@@ -121,7 +121,7 @@ const commands = {
     await page.fill('input[name="user[password]"]', password);
     await Promise.all([
       page.waitForURL((u) => !u.pathname.startsWith("/users/sign_in")),
-      page.click('input[type="submit"][value="Log in"]'),
+      page.click('form input[type="submit"]'),
     ]);
     console.log(`signed in as ${email} -> ${page.url()}`);
   },
