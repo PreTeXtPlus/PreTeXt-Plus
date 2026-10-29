@@ -23,6 +23,19 @@ class ContentTest < ActiveSupport::TestCase
     assert projects(:one).snippets.build(ref: "unique_ref", source: "hello").valid?
   end
 
+  # A ref is an xml:id and a label, and the last part of a generated image's
+  # filename: letters, digits, "-" and "_", not starting with a digit or "-".
+  # The `A-z` range this once had also let `[`, `\`, `]`, `^` and a backtick
+  # lead.
+  test "a ref starts with a letter or underscore and holds only letters, digits, - and _" do
+    %w[ graph _graph Graph-2 a_b-c ].each do |ref|
+      assert projects(:one).snippets.build(ref: ref).valid?, "#{ref} should be a valid ref"
+    end
+    [ "2graph", "-graph", "[graph", "\\graph", "]graph", "^graph", "`graph", "gr.aph", "gr aph" ].each do |ref|
+      assert_not projects(:one).snippets.build(ref: ref).valid?, "#{ref} should not be a valid ref"
+    end
+  end
+
   # ---- kinds ---------------------------------------------------------------
 
   test "a record built through a kind's collection is of that kind" do
