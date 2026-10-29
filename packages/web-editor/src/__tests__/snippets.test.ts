@@ -345,7 +345,7 @@ describe("PreTeXt snippets", () => {
       (id): Asset => ({
         title: `A ${id} diagram`,
         ref: `gen-${id}`,
-        generator: id,
+        sourceFormat: id,
         source: generators[id].starterSource,
         shortDescription: "A diagram.",
       }),

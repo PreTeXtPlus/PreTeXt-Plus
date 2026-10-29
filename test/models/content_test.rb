@@ -397,7 +397,7 @@ class ContentTest < ActiveSupport::TestCase
   # --- Generated assets (docs/generated-assets-plan.md) ---
 
   def generated_asset(source: '<diagram dimensions="(300,300)"/>', **attrs)
-    projects(:one).assets.build({ kind: :generated_asset, generator: "prefigure", ref: "graph", title: "Graph",
+    projects(:one).assets.build({ kind: :authored_asset, source_format: "prefigure", ref: "graph", title: "Graph",
                                   source: source }.merge(attrs))
   end
 
@@ -406,18 +406,30 @@ class ContentTest < ActiveSupport::TestCase
                    filename: "graph.svg", content_type: "image/svg+xml" }
   end
 
-  test "a generated asset needs a known generator, and other kinds must not name one" do
-    assert generated_asset.valid?
-    assert_not generated_asset(generator: nil).valid?
-    assert_not generated_asset(generator: "tikz").valid?
+  test "an authored asset in a generator's format is a generated asset, wrapped in that generator's element" do
+    asset = generated_asset
+    assert asset.valid?, asset.errors.full_messages.inspect
+    assert asset.generated_asset?
+    assert_equal "prefigure", asset.generated_element
 
-    authored = contents(:authored_one)
-    authored.generator = "prefigure"
-    assert_not authored.valid?
+    plain = contents(:authored_one)
+    assert plain.pretext_source_format?
+    assert_not plain.generated_asset?
+    assert_nil plain.generated_element
   end
 
-  test "the legacy kind spelling 'generated' is accepted on the way in" do
-    assert generated_asset(kind: "generated").generated_asset?
+  test "only an authored asset may take a generator's format, and no asset a prose one" do
+    assert_not generated_asset(source_format: "latex").valid?
+    assert_not generated_asset(source_format: "markdown").valid?
+    assert_not generated_asset(source_format: "tikz").valid?
+
+    file = contents(:image_one)
+    file.source_format = "prefigure"
+    assert_not file.valid?
+
+    division = contents(:one)
+    division.source_format = "prefigure"
+    assert_not division.valid?
   end
 
   # The same input, byte for byte, is digested by the web-editor (see its generators
@@ -437,26 +449,26 @@ class ContentTest < ActiveSupport::TestCase
     assert_equal "", Content.docinfo_element_inner("<docinfo/>", "prefigure-preamble")
   end
 
-  test "output_current? holds only while the digest matches the source and docinfo" do
+  test "preview_current? holds only while the digest matches the source and docinfo" do
     asset = generated_asset
     attach_svg(asset)
-    asset.output_source_digest = Digest::SHA256.hexdigest(asset.render_input)
-    assert asset.output_current?
+    asset.preview_input_digest = Digest::SHA256.hexdigest(asset.render_input)
+    assert asset.preview_current?
 
     asset.source = "<diagram/>"
-    assert_not asset.output_current?, "editing the source must invalidate the picture"
+    assert_not asset.preview_current?, "editing the source must invalidate the picture"
 
     asset.source = '<diagram dimensions="(300,300)"/>'
-    assert asset.output_current?
+    assert asset.preview_current?
     asset.project.docinfo = "<docinfo><macros>\\newcommand{\\N}{x}</macros></docinfo>"
-    assert_not asset.output_current?, "macros are an input to the render"
+    assert_not asset.preview_current?, "macros are an input to the render"
   end
 
-  test "output_current? is false with no picture or no digest" do
-    assert_not generated_asset.output_current?
+  test "preview_current? is false with no picture or no digest" do
+    assert_not generated_asset.preview_current?
     asset = generated_asset
     attach_svg(asset)
-    assert_not asset.output_current?
+    assert_not asset.preview_current?
   end
 
   test "a generated asset's picture must be an SVG, and it serves as the asset's file" do

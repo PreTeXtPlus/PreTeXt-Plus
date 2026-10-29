@@ -93,11 +93,11 @@ describe('resolveAssetRef', () => {
   it('wraps a generated asset\'s source in its generator element, with the ref as label', () => {
     const asset: Asset = {
       ...baseAsset,
-      generator: 'prefigure',
+      sourceFormat: 'prefigure',
       source: '<diagram/>',
       shortDescription: 'A graph',
       url: 'https://example.com/euler-painting.svg',
-      outputSourceDigest: 'abc',
+      previewInputDigest: 'abc',
     }
     expect(resolveAssetRef('euler-painting', [asset])).toBe(
       '<image>\n<shortdescription>A graph</shortdescription>\n<prefigure xmlns="https://prefigure.org" label="euler-painting">\n<diagram/>\n</prefigure>\n</image>',
@@ -107,7 +107,7 @@ describe('resolveAssetRef', () => {
   it('emits the source form for a generated asset even if it is flagged as a file', () => {
     const asset: Asset = {
       ...baseAsset,
-      generator: 'prefigure',
+      sourceFormat: 'prefigure',
       isFile: true,
       fileRef: 'euler-painting.svg',
       source: '<diagram/>',
@@ -141,7 +141,7 @@ describe('assetWrapperLines', () => {
   })
 
   it('draws the generator element around a generated asset\'s source', () => {
-    const asset: Asset = { ...baseAsset, generator: 'prefigure', shortDescription: 'A graph' }
+    const asset: Asset = { ...baseAsset, sourceFormat: 'prefigure', shortDescription: 'A graph' }
     expect(assetWrapperLines(asset)).toEqual({
       before: [
         '<image>',

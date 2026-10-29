@@ -1,14 +1,14 @@
 # What makes a Content an asset: an image an author embeds with
-# `<plus:image ref="..."/>`, either backed by an uploaded file (`file_asset`),
-# defined purely by its authored source (`authored_asset`), or rendered from its
-# source by a generator (`generated_asset`, see Content::GeneratedAssetBehavior).
+# `<plus:image ref="..."/>`, either backed by an uploaded file (`file_asset`) or
+# defined purely by its authored source (`authored_asset`) -- PreTeXt, or a
+# generator's own language for a generated asset (Content::GeneratedAssetBehavior).
 module Content::AssetBehavior
   extend ActiveSupport::Concern
 
   # The kind values an asset arrives as from callers that predate them being
   # part of Content's own `kind` -- the external @pretextbook/import package
   # still writes these -- mapped to the kinds they now are.
-  LEGACY_ASSET_KINDS = { "file" => "file_asset", "authored" => "authored_asset", "generated" => "generated_asset" }.freeze
+  LEGACY_ASSET_KINDS = { "file" => "file_asset", "authored" => "authored_asset" }.freeze
 
   included do
     # The cap applies only when adding a new asset: an account already over its
@@ -21,7 +21,7 @@ module Content::AssetBehavior
 
     # Content can hold any number of attachments (see Content::AttachedFiles),
     # but what uses them so far is a single image: a file asset's upload, or a
-    # generated asset's rendered picture. This is the one place to relax when
+    # generated asset's preview picture. This is the one place to relax when
     # something needs more.
     validate :attachments_fit_kind
   end

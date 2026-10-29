@@ -2,6 +2,7 @@ import { describe, it, expect } from "vitest";
 import {
   generators,
   generatorIds,
+  generatorFor,
   renderInputFor,
   sha256Hex,
   docinfoElementInner,
@@ -42,6 +43,14 @@ describe("registry", () => {
       expect(wrapped).toContain("<diagram/>");
       expect(generator.starterSource.trim()).not.toBe("");
     }
+  });
+
+  // An asset's source format is what makes it a generated asset: each generator's
+  // id is a format, and PreTeXt (or no format at all) is not a generator's.
+  it("finds the generator an asset's source format names, and none for PreTeXt", () => {
+    for (const id of generatorIds) expect(generatorFor(id)).toBe(generators[id]);
+    expect(generatorFor("pretext")).toBeUndefined();
+    expect(generatorFor(undefined)).toBeUndefined();
   });
 
   it("prefigure wraps in the PreFigure namespace", () => {

@@ -3,7 +3,7 @@
  * creation form, the assembler, the preview pane and the tests all iterate
  * this table rather than naming generators.
  */
-import type { GeneratorId } from "../types/editor";
+import type { AssetSourceFormat, GeneratorId } from "../types/editor";
 import type { AssetGenerator, GeneratorRuntime, GeneratorRuntimeConfigs } from "./types";
 import { prefigure } from "./prefigure/definition";
 
@@ -11,8 +11,12 @@ export const generators: Record<GeneratorId, AssetGenerator> = { prefigure };
 
 export const generatorIds = Object.keys(generators) as GeneratorId[];
 
-export const generatorFor = (id: GeneratorId | undefined): AssetGenerator | undefined =>
-  id ? generators[id] : undefined;
+/**
+ * The generator an asset's source format names, or undefined for PreTeXt (or a
+ * format this editor does not know) — i.e. whether the asset is a generated one.
+ */
+export const generatorFor = (format: AssetSourceFormat | undefined): AssetGenerator | undefined =>
+  format === undefined || format === "pretext" ? undefined : generators[format];
 
 /**
  * One runtime per generator per page, created on first request from the host's

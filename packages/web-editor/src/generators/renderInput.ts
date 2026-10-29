@@ -1,5 +1,5 @@
 /**
- * The exact string a generated asset's `outputSourceDigest` is the sha256 of.
+ * The exact string a generated asset's `previewInputDigest` is the sha256 of.
  *
  * The source, then the inner text of each docinfo element the generator's
  * render depends on (core writes `<macros>` and the generator's preamble into

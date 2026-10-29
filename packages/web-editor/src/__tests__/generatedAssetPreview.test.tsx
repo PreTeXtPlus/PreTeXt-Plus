@@ -49,7 +49,7 @@ const asset: Asset = {
   id: "a1",
   ref: "graph",
   title: "Graph",
-  generator: "prefigure",
+  sourceFormat: "prefigure",
   source: "<diagram/>",
   shortDescription: "A graph",
 };
@@ -73,7 +73,7 @@ describe("GeneratedAssetPreview", () => {
     const current = await sha256Hex(renderInputFor(generators.prefigure, "<diagram/>", docinfo));
     const { rerender } = render(
       <GeneratedAssetPreview
-        asset={{ ...asset, url: "/graph.svg", outputSourceDigest: current }}
+        asset={{ ...asset, url: "/graph.svg", previewInputDigest: current }}
         docinfo={docinfo}
         runtime={fakeRuntime()}
       />,
@@ -82,7 +82,7 @@ describe("GeneratedAssetPreview", () => {
 
     rerender(
       <GeneratedAssetPreview
-        asset={{ ...asset, url: "/graph.svg", outputSourceDigest: current, source: "<diagram>edited</diagram>" }}
+        asset={{ ...asset, url: "/graph.svg", previewInputDigest: current, source: "<diagram>edited</diagram>" }}
         docinfo={docinfo}
         runtime={fakeRuntime()}
       />,
@@ -122,7 +122,7 @@ describe("GeneratedAssetPreview", () => {
     expect(runtime.render).toHaveBeenCalledWith("<diagram/>", { macros: "\\newcommand{\\R}{\\mathbb{R}}" });
     const [, output] = onOutput.mock.calls[0];
     expect(output.svg).toBe(SVG);
-    expect(output.outputSourceDigest).toBe(
+    expect(output.previewInputDigest).toBe(
       await sha256Hex(renderInputFor(generators.prefigure, "<diagram/>", docinfo)),
     );
     await waitFor(() =>
@@ -151,7 +151,7 @@ describe("GeneratedAssetPreview", () => {
     await waitFor(() => expect(onOutput).toHaveBeenCalledTimes(1));
     const [sent, output] = onOutput.mock.calls[0];
     expect(sent.source).toBe("<diagram>typed</diagram>");
-    expect(output.outputSourceDigest).toBe(await sha256Hex(renderInputFor(generators.prefigure, typed.source!, "")));
+    expect(output.previewInputDigest).toBe(await sha256Hex(renderInputFor(generators.prefigure, typed.source!, "")));
   });
 
   it("says when the host could not store the picture, and stores it on a retry", async () => {

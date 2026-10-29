@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_10_28_120000) do
+ActiveRecord::Schema[8.1].define(version: 2026_10_29_120000) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
   enable_extension "pgcrypto"
@@ -104,8 +104,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_10_28_120000) do
     t.text "description"
     t.datetime "created_at", null: false
     t.datetime "updated_at", null: false
-    t.string "generator"
-    t.string "output_source_digest"
+    t.string "preview_input_digest"
     t.index ["project_id", "kind"], name: "index_contents_on_project_id_and_kind"
     t.index ["project_id", "ref"], name: "index_contents_on_project_id_and_ref", unique: true
     t.index ["project_id"], name: "index_contents_on_project_id_unique_root", unique: true, where: "is_root"

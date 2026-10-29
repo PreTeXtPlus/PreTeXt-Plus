@@ -222,7 +222,7 @@ class ProjectsController < ApplicationController
     redirect_to_cdn_url url
   end
 
-  # GET /projects/:id/(*)/generated/:generator/:ref.svg
+  # GET /projects/:id/(*)/generated/:element/:ref.svg
   #
   # Public, like `content_file`: a generated asset's stored picture, at the path a
   # PreTeXt renderer gives its output -- `<prefigure label="ref">` becomes
@@ -232,7 +232,9 @@ class ProjectsController < ApplicationController
   # editor's last render of the source, so it can lag behind an edit until the
   # editor renders again. One with no picture yet redirects to the not-found image.
   def generated_file
-    asset = @project.contents.where(kind: :generated_asset, generator: params[:generator]).find_by!(ref: params[:ref])
+    asset = @project.contents.find_by!(kind: :authored_asset, ref: params[:ref])
+    raise ActiveRecord::RecordNotFound unless asset.generated_element == params[:element]
+
     redirect_to_cdn_url asset.url
   end
 
@@ -521,7 +523,7 @@ class ProjectsController < ApplicationController
         :title, :docinfo, :use_common_docinfo, :visibility, :language, :description,
         divisions_attributes: [ [ :id, :source, :source_format, :is_root, :ref, :title, :division_type,
                                   { attrs: {} }, :_destroy ] ],
-        assets_attributes: [ [ :id, :ref, :kind, :file, :source, :short_description, :description, :title, :generator, :output_source_digest, :_destroy ] ],
+        assets_attributes: [ [ :id, :ref, :kind, :file, :source, :short_description, :description, :title, :source_format, :preview_input_digest, :_destroy ] ],
         snippets_attributes: [ [ :id, :source, :source_format, :ref, :title, :_destroy ] ]
       ]
       permitted << :document_type if action_name == "create"

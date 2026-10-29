@@ -38,7 +38,7 @@ import EditorTargetBar from "./EditorTargetBar";
 import EditorTabs, { type EditorTab } from "./EditorTabs";
 import AssetPreview from "./AssetPreview";
 import GeneratedAssetPreview, { type GeneratedAssetOutput } from "./GeneratedAssetPreview";
-import { runtimeFor, type GeneratorRuntimeConfigs } from "../generators";
+import { generatorFor, runtimeFor, type GeneratorRuntimeConfigs } from "../generators";
 import {
   editorTargetKey,
   resolveEditorTarget,
@@ -398,9 +398,10 @@ export interface editorProps {
   /**
    * Called when the user creates a new generated asset (a PreFigure diagram, …)
    * from the "New asset" form's tab for that generator. The host derives the ref
-   * from `title` as it does for `onCreateAuthored`, persists the asset with
-   * `kind: "generated_asset"`, the `generator`, and `source` set to the generator's
-   * starter source (`generators[generator].starterSource`), and returns it.
+   * from `title` as it does for `onCreateAuthored`, persists an authored asset
+   * whose source format is `generator` (the Rails host: `source_format`) and
+   * whose `source` is the generator's starter source
+   * (`generators[generator].starterSource`), and returns it.
    */
   onCreateGenerated?: (generator: GeneratorId, title: string) => Promise<Asset>;
   /**
@@ -413,9 +414,9 @@ export interface editorProps {
   /**
    * A generated asset was rendered in the browser from its current source: the
    * host stores `output.svg` as the asset's file together with
-   * `output.outputSourceDigest`, and may return the asset as persisted: its
+   * `output.previewInputDigest`, and may return the asset as persisted: its
    * stored picture's fields (`url`, `thumbnailUrl`, `extension`, `contentType`,
-   * `fileRef`, `outputSourceDigest`) are taken onto the pool entry, nothing
+   * `fileRef`, `previewInputDigest`) are taken onto the pool entry, nothing
    * else. Reject if the picture was not stored: the preview shows the error
    * and offers to try again. Fires once per distinct digest per session, plus
    * any retries after a rejection.
@@ -902,7 +903,7 @@ const EditorsInner = (props: EditorsInnerProps) => {
       editedAsset?.isFile,
       editedAsset?.fileRef,
       editedAsset?.shortDescription,
-      editedAsset?.generator,
+      editedAsset?.sourceFormat,
     ],
   );
   // A division's element — its type, id, title and label — is likewise drawn
@@ -1431,9 +1432,9 @@ const EditorsInner = (props: EditorsInnerProps) => {
         extension: persisted.extension,
         contentType: persisted.contentType,
         fileRef: persisted.fileRef,
-        outputSourceDigest: persisted.outputSourceDigest ?? output.outputSourceDigest,
+        previewInputDigest: persisted.previewInputDigest ?? output.previewInputDigest,
       }
-      : { ...current, outputSourceDigest: output.outputSourceDigest };
+      : { ...current, previewInputDigest: output.previewInputDigest };
     updateAssetInPool(updated);
     bridge?.localAssetUpdate(updated);
   };
@@ -2532,13 +2533,14 @@ const EditorsInner = (props: EditorsInnerProps) => {
 
   // ── Preview panel ─────────────────────────────────────────────────────────
   let preview: ReactNode;
-  if (showLivePreview && editorTarget?.kind === "asset" && editorTarget.asset.generator) {
+  const assetGenerator = editorTarget?.kind === "asset" ? generatorFor(editorTarget.asset.sourceFormat) : undefined;
+  if (showLivePreview && editorTarget?.kind === "asset" && assetGenerator) {
     // A generated asset renders in its own engine, not the document renderer.
     preview = (
       <GeneratedAssetPreview
         asset={editorTarget.asset}
         docinfo={effectiveDocinfo ?? ""}
-        runtime={runtimeFor(editorTarget.asset.generator, props.generatorRuntimes)}
+        runtime={runtimeFor(assetGenerator.id, props.generatorRuntimes)}
         onOutput={handleAssetOutput}
         readOnly={props.readOnly}
       />

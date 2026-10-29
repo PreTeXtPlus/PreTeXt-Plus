@@ -25,7 +25,7 @@ import { generatorFor } from "./generators";
  * `asset.source` is separate user-authored inner XML (e.g. `<description>`)
  * and is inserted verbatim after it as the element's remaining children.
  *
- * A *generated* asset (`asset.generator`) is always emitted in its source
+ * A *generated* asset (`asset.sourceFormat` names a generator) is always emitted in its source
  * form: its source wrapped by the generator's element (`<prefigure label="ref">`),
  * inside a plain `<image>`. That is true PreTeXt a build can regenerate from;
  * the stored output ships beside the archive under the same name and is never
@@ -52,7 +52,7 @@ function transformImageAsset(asset: Asset, ref: string): string {
 
 /** The `<image>` element's ` source="..."` attribute, or `""` for a non-file asset. */
 function imageSourceAttr(asset: Asset, ref: string): string {
-  return asset.isFile && !asset.generator
+  return asset.isFile && !generatorFor(asset.sourceFormat)
     ? ` source="${escapeAttribute(asset.fileRef || ref)}"`
     : "";
 }
@@ -65,7 +65,7 @@ function imageSourceAttr(asset: Asset, ref: string): string {
  */
 function generatedOrAuthoredSource(asset: Asset, ref: string): string | undefined {
   const source = asset.source?.trim();
-  const generator = generatorFor(asset.generator);
+  const generator = generatorFor(asset.sourceFormat);
   return generator ? generator.wrapSource(source ?? "", ref) : source;
 }
 
@@ -74,7 +74,7 @@ function generatedOrAuthoredSource(asset: Asset, ref: string): string | undefine
  * them locked around the source: the opening tag before, the closing after.
  */
 function generatorWrapperLines(asset: Asset, ref: string): { before: string[]; after: string[] } {
-  const generator = generatorFor(asset.generator);
+  const generator = generatorFor(asset.sourceFormat);
   if (!generator) return { before: [], after: [] };
   // Wrap a marker and split around it, so this stays true to `wrapSource`
   // whatever shape a generator gives its element.

@@ -198,11 +198,12 @@ const ASSET_FIELDS = [
   "contentType",
   "fileRef",
   "isFile",
-  // A generated asset's generator and the digest its stored output was built
-  // from. The output's bytes stay with the host like an upload's; a peer that
-  // edits the source without an engine simply makes the digest mismatch.
-  "generator",
-  "outputSourceDigest",
+  // An asset's source format (a generator's id makes it a generated asset) and
+  // the digest its stored preview was built from. The preview's bytes stay with
+  // the host like an upload's; a peer that edits the source without an engine
+  // simply makes the digest mismatch.
+  "sourceFormat",
+  "previewInputDigest",
 ] as const;
 
 /** A fresh `Y.Text` holding `source`. */
@@ -312,8 +313,8 @@ export const assetEntryToSnapshot = (
   contentType: entry.get("contentType") as string | undefined,
   fileRef: entry.get("fileRef") as string | undefined,
   isFile: entry.get("isFile") as boolean | undefined,
-  generator: entry.get("generator") as CollabAssetSnapshot["generator"],
-  outputSourceDigest: entry.get("outputSourceDigest") as string | undefined,
+  sourceFormat: entry.get("sourceFormat") as CollabAssetSnapshot["sourceFormat"],
+  previewInputDigest: entry.get("previewInputDigest") as string | undefined,
 });
 
 /** Read one snippets-map entry back into plain data. */

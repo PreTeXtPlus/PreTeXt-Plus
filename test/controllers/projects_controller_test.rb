@@ -1634,7 +1634,7 @@ class ProjectsControllerTest < ActionDispatch::IntegrationTest
   test "update creates a generated asset via a JSON assets_attributes entry" do
     assert_difference("@project.assets.count", 1) do
       patch project_url(@project, format: :json),
-        params: { project: { assets_attributes: [ { ref: "graph", kind: "generated_asset", generator: "prefigure",
+        params: { project: { assets_attributes: [ { ref: "graph", kind: "authored_asset", source_format: "prefigure",
                                                      title: "Graph", source: "<diagram/>" } ] } },
         as: :json
     end
@@ -1642,38 +1642,38 @@ class ProjectsControllerTest < ActionDispatch::IntegrationTest
 
     asset = @project.assets.find_by!(ref: "graph")
     assert asset.generated_asset?
-    assert_equal "prefigure", asset.generator
+    assert_equal "prefigure", asset.source_format
     json = response.parsed_body["assets"].find { |a| a["ref"] == "graph" }
-    assert_equal "prefigure", json["generator"]
-    assert_equal false, json["output_current"]
+    assert_equal "prefigure", json["source_format"]
+    assert_equal false, json["preview_current"]
   end
 
   # The editor renders in the browser and hands the picture back with the digest of
   # what it rendered, through the same multipart entry an upload uses.
   test "update stores a generated asset's rendered picture and reports it current" do
-    asset = @project.assets.create!(kind: :generated_asset, generator: "prefigure", ref: "graph", title: "Graph", source: "<diagram/>")
+    asset = @project.assets.create!(kind: :authored_asset, source_format: "prefigure", ref: "graph", title: "Graph", source: "<diagram/>")
     digest = Digest::SHA256.hexdigest(asset.render_input)
 
     patch project_url(@project, format: :json), params: {
       project: { assets_attributes: [ {
         id: asset.id,
-        output_source_digest: digest,
+        preview_input_digest: digest,
         file: fixture_file_upload("test_diagram.svg", "image/svg+xml")
       } ] }
     }
     assert_response :success
 
     asset.reload
-    assert asset.output_current?
+    assert asset.preview_current?
     json = response.parsed_body["assets"].find { |a| a["ref"] == "graph" }
-    assert_equal true, json["output_current"]
+    assert_equal true, json["preview_current"]
     assert_equal "/projects/#{@project.id}/external/graph.svg", json["path"]
   end
 
   # The live preview renders `<prefigure label="graph">` as an <img> of
   # generated/prefigure/graph.svg, relative to the editor page.
   test "generated_file redirects to a generated asset's stored picture, signed out too" do
-    asset = @project.assets.create!(kind: :generated_asset, generator: "prefigure", ref: "graph", title: "Graph",
+    asset = @project.assets.create!(kind: :authored_asset, source_format: "prefigure", ref: "graph", title: "Graph",
                                     source: "<diagram/>", file: fixture_file_upload("test_diagram.svg", "image/svg+xml"))
     sign_out users(:one)
 
@@ -1681,12 +1681,12 @@ class ProjectsControllerTest < ActionDispatch::IntegrationTest
 
     assert_response :redirect
     assert_match %r{/rails/active_storage/}, response.location
-    assert_equal generated_file_project_path(@project, generator: "prefigure", ref: asset.ref, format: "svg"),
+    assert_equal generated_file_project_path(@project, element: "prefigure", ref: asset.ref, format: "svg"),
       "/projects/#{@project.id}/generated/prefigure/graph.svg"
   end
 
   test "generated_file redirects to the not-found image before the editor has rendered one" do
-    @project.assets.create!(kind: :generated_asset, generator: "prefigure", ref: "graph", title: "Graph", source: "<diagram/>")
+    @project.assets.create!(kind: :authored_asset, source_format: "prefigure", ref: "graph", title: "Graph", source: "<diagram/>")
 
     get "/projects/#{@project.id}/generated/prefigure/graph.svg"
 
@@ -1694,12 +1694,14 @@ class ProjectsControllerTest < ActionDispatch::IntegrationTest
     assert_match %r{/image-not-found\.svg\z}, response.location
   end
 
-  test "generated_file serves only a generated asset of that generator" do
-    @project.assets.create!(kind: :generated_asset, generator: "prefigure", ref: "graph", title: "Graph", source: "<diagram/>")
+  test "generated_file serves only a generated asset wrapped in that element" do
+    @project.assets.create!(kind: :authored_asset, source_format: "prefigure", ref: "graph", title: "Graph", source: "<diagram/>")
 
     get "/projects/#{@project.id}/generated/latex-image/graph.svg"
     assert_response :not_found
     get "/projects/#{@project.id}/generated/prefigure/#{contents(:image_one).ref}.svg"
+    assert_response :not_found
+    get "/projects/#{@project.id}/generated/prefigure/#{contents(:authored_one).ref}.svg"
     assert_response :not_found
   end
 

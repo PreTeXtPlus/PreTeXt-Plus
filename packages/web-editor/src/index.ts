@@ -16,6 +16,7 @@ export {
 export type {
   Asset,
   GeneratorId,
+  AssetSourceFormat,
   EditorContentChange,
   EditorContentState,
   EditorDivisionContentChange,

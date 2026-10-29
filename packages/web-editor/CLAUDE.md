@@ -262,9 +262,14 @@ a peer removing the open item does not (`openItemState`'s `byAuthor`).
 
 ### Generated assets (`src/generators/`)
 
-A *generated* asset (`asset.generator`, the host's `kind === "generated_asset"`)
-is authored source that a generator turns into a picture — PreFigure first. The
-registry (`generators/index.ts`) is the one place generators are named: each
+A *generated* asset is an authored asset whose `sourceFormat` is a generator's
+id (`AssetSourceFormat` = `"pretext"` or a `GeneratorId`; the Rails host's
+`source_format`) — source that a generator turns into a picture, PreFigure
+first. The format is chosen when the asset is created and never inferred from
+the source: it decides the preview engine and, in time, the editor tooling, so
+it must not flicker as the author types. `generatorFor(asset.sourceFormat)` is
+the one test for "is this a generated asset". The registry
+(`generators/index.ts`) is the one place generators are named: each
 entry says how its source is wrapped into PreTeXt (`wrapSource`: the
 `<prefigure label="ref">` the document always carries — a generated asset is
 never emitted as `<image source>`; builds generate it from that source), what a
@@ -296,8 +301,9 @@ build input.
   never the record the render started from — that would undo the typing.
 - `NewAssetForm` grows one tab per registry entry → `onCreateGenerated`.
   `VERBATIM_SOURCES` and the spell checker's `latexImage` scope both list
-  `prefigure`. The collab doc carries `generator` and `outputSourceDigest`;
-  bytes stay with the host.
+  `prefigure`. The collab doc carries `sourceFormat` and `previewInputDigest`
+  (the sha256 of the render input the stored preview was built from); bytes
+  stay with the host.
 
 ### Collaboration (`src/collab/`)
 

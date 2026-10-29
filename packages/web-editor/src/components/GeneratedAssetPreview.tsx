@@ -14,7 +14,7 @@ export interface GeneratedAssetOutput {
   /** The picture, as SVG markup. */
   svg: string;
   /** sha256 of the render input the picture was built from. */
-  outputSourceDigest: string;
+  previewInputDigest: string;
 }
 
 export interface GeneratedAssetPreviewProps {
@@ -65,7 +65,7 @@ const GeneratedAssetPreview = ({
   readOnly,
   debounceMs = RENDER_DEBOUNCE_MS,
 }: GeneratedAssetPreviewProps) => {
-  const generator = generatorFor(asset.generator);
+  const generator = generatorFor(asset.sourceFormat);
   const { status, progress, error: loadError } = useRuntimeStatus(runtime);
   const source = asset.source ?? "";
 
@@ -108,12 +108,12 @@ const GeneratedAssetPreview = ({
   const store = async (output: GeneratedAssetOutput) => {
     const { asset: current, onOutput: send } = latest.current;
     if (!send) return;
-    sentDigests.current.add(output.outputSourceDigest);
+    sentDigests.current.add(output.previewInputDigest);
     setSaveFailure(null);
     try {
       await send(current, output);
     } catch (cause) {
-      sentDigests.current.delete(output.outputSourceDigest);
+      sentDigests.current.delete(output.previewInputDigest);
       setSaveFailure({ message: cause instanceof Error ? cause.message : String(cause), output });
     }
   };
@@ -137,8 +137,8 @@ const GeneratedAssetPreview = ({
         // typing has overtaken is shown but not stored.
         const now = latest.current;
         const liveDigest = await sha256Hex(renderInputFor(generator, now.source, now.docinfo));
-        if (digest === liveDigest && digest !== now.asset.outputSourceDigest && !sentDigests.current.has(digest)) {
-          void store({ svg: result.svg, outputSourceDigest: digest });
+        if (digest === liveDigest && digest !== now.asset.previewInputDigest && !sentDigests.current.has(digest)) {
+          void store({ svg: result.svg, previewInputDigest: digest });
         }
       } catch (cause) {
         setRenderError(cause instanceof Error ? cause.message : String(cause));
@@ -152,12 +152,12 @@ const GeneratedAssetPreview = ({
   if (!generator) {
     return (
       <div data-testid="asset-preview" className="flex flex-1 h-full items-center justify-center p-6 bg-[#fafafa] text-[0.9rem] text-slate-500">
-        Unknown generator “{asset.generator}”.
+        Unknown generator “{asset.sourceFormat}”.
       </div>
     );
   }
 
-  const storedIsCurrent = !!asset.url && !!currentDigest && asset.outputSourceDigest === currentDigest;
+  const storedIsCurrent = !!asset.url && !!currentDigest && asset.previewInputDigest === currentDigest;
   const showingFresh = rendered && rendered.digest === currentDigest;
   const imageUrl = rendered?.url ?? asset.url;
 

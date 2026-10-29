@@ -3,9 +3,18 @@ export type SourceFormat = "pretext" | "latex" | "markdown";
 
 /**
  * A tool that turns an asset's authored `source` into a picture — see
- * `src/generators`. One id per registry entry; `"prefigure"` first.
+ * `src/generators`. One id per registry entry; `"prefigure"` first. The id is
+ * also the asset's {@link AssetSourceFormat}: the language its source is in.
  */
 export type GeneratorId = "prefigure";
+
+/**
+ * The format of an asset's `source`: PreTeXt (the inside of its `<image>`), or
+ * a generator's own language, which makes it a *generated* asset. Kept apart
+ * from {@link SourceFormat}, the prose formats divisions and snippets are
+ * written and converted in.
+ */
+export type AssetSourceFormat = "pretext" | GeneratorId;
 
 /** An asset owned by a single project. */
 export interface Asset {
@@ -52,20 +61,22 @@ export interface Asset {
    */
   isFile?: boolean;
   /**
-   * For a *generated* asset: the tool that renders `source` into its picture
-   * (the host's `kind === "generated_asset"`). The document carries the source,
-   * wrapped by the generator's element (`<prefigure>`), and builds generate the
-   * picture from that; the browser's render is stored with the asset like an
-   * upload, as the picture to show. Absent for file and authored assets.
+   * The language `source` is written in; absent means `"pretext"`. Chosen when
+   * the asset is created, never inferred from the source, since it decides how
+   * the asset is edited and previewed. A generator's id (`"prefigure"`) makes
+   * this a *generated* asset (see `generatorFor`): `source` is that generator's
+   * input, the document carries it wrapped in the generator's element
+   * (`<prefigure>`), and builds generate the picture from that; the browser's
+   * render is stored with the asset like an upload, as a preview.
    */
-  generator?: GeneratorId;
+  sourceFormat?: AssetSourceFormat;
   /**
    * For a generated asset: the sha256 of the render input (see
-   * `generators/renderInput.ts`) the stored picture was built from. Compared to
-   * the digest of the *current* source to decide whether the picture is stale;
-   * never trusted as a boolean on its own.
+   * `generators/renderInput.ts`) the stored preview picture was built from.
+   * Compared to the digest of the *current* source to decide whether the
+   * picture is stale; never trusted as a boolean on its own.
    */
-  outputSourceDigest?: string;
+  previewInputDigest?: string;
   /**
    * Publicly accessible URL for the asset's full file, used for the "edit
    * asset" preview (`<img src={url}>`) and as the fallback thumbnail source

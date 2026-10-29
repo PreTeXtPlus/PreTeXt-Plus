@@ -1068,17 +1068,17 @@ function EditorApp({ config }) {
     [uniqueRef, patchProjectJson, invalidateAssetQueries, recordCreated],
   );
 
-  // A generated asset (a PreFigure diagram): like an authored one, but with its
-  // generator recorded and the generator's starter source persisted on create,
-  // so a peer or a reload opens the same diagram and there is something for the
-  // first render's digest to be current against.
+  // A generated asset (a PreFigure diagram): an authored asset whose source
+  // format is the generator's, created with the generator's starter source so a
+  // peer or a reload opens the same diagram and there is something for the first
+  // render's digest to be current against.
   const onCreateGenerated = useCallback(
-    async (generator, title) => {
+    async (format, title) => {
       const ref = uniqueRef(slugifyRef(title));
       const json = await patchProjectJson({
         assets_attributes: [ {
-          ref, kind: "generated_asset", generator, title,
-          source: generators[generator]?.starterSource ?? "",
+          ref, kind: "authored_asset", source_format: format, title,
+          source: generators[format]?.starterSource ?? "",
         } ],
       });
       const created = toEditorAsset(
@@ -1103,13 +1103,13 @@ function EditorApp({ config }) {
     async (asset, output) => {
       if (!asset.id) return;
       const file = new File([output.svg], `${asset.ref}.svg`, { type: "image/svg+xml" });
-      const json = await patchProjectAssetUpload({ id: asset.id, output_source_digest: output.outputSourceDigest, file });
+      const json = await patchProjectAssetUpload({ id: asset.id, preview_input_digest: output.previewInputDigest, file });
       const saved = (json.assets ?? []).find((a) => String(a.id) === String(asset.id));
       if (!saved) return undefined;
       const record = toEditorAsset(railsAssetToEditor(saved));
       const working = workingRecord("asset", asset.id);
       if (working) Object.assign(working, { url: record.url, thumbnailUrl: record.thumbnailUrl,
-        outputSourceDigest: record.outputSourceDigest,
+        previewInputDigest: record.previewInputDigest,
         extension: record.extension, contentType: record.contentType, fileRef: record.fileRef });
       return record;
     },

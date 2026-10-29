@@ -48,9 +48,9 @@ vi.mock("../components/GeneratedAssetPreview", () => ({
         data-testid="finish-render"
         data-source={props.asset.source}
         data-url={props.asset.url ?? ""}
-        data-digest={props.asset.outputSourceDigest ?? ""}
+        data-digest={props.asset.previewInputDigest ?? ""}
         onClick={() => {
-          finished.current = props.onOutput?.(started.current, { svg: "<svg/>", outputSourceDigest: "d1" });
+          finished.current = props.onOutput?.(started.current, { svg: "<svg/>", previewInputDigest: "d1" });
         }}
       />
     );
@@ -74,7 +74,7 @@ const divisions: Division[] = [
     source: '<article xml:id="doc">\n<title>Main</title>\n<plus:image ref="fig"/>\n</article>',
   },
 ];
-const asset: Asset = { id: "a1", ref: "fig", title: "Figure", generator: "prefigure", source: "<diagram/>" };
+const asset: Asset = { id: "a1", ref: "fig", title: "Figure", sourceFormat: "prefigure", source: "<diagram/>" };
 
 function renderWith(onAssetOutput: (asset: Asset, output: GeneratedAssetOutput) => Promise<Asset | void>) {
   render(
@@ -111,13 +111,13 @@ describe("storing a generated asset's render", () => {
     fireEvent.change(editor(), { target: { value: "<diagram>typed on</diagram>" } });
     // The host's record predates the keystroke, as a real one would.
     await act(async () => {
-      answer({ ...asset, title: "Stale title", url: "/fig.svg", contentType: "image/svg+xml", outputSourceDigest: "d1" });
+      answer({ ...asset, title: "Stale title", url: "/fig.svg", contentType: "image/svg+xml", previewInputDigest: "d1" });
       await finished.current;
     });
 
     expect(onAssetOutput).toHaveBeenCalledWith(expect.objectContaining({ source: "<diagram/>" }), {
       svg: "<svg/>",
-      outputSourceDigest: "d1",
+      previewInputDigest: "d1",
     });
     expect(editor().value).toBe("<diagram>typed on</diagram>");
     expect(preview().dataset.source).toBe("<diagram>typed on</diagram>");

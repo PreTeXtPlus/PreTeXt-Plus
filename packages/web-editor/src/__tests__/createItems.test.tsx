@@ -260,7 +260,7 @@ describe("creating an asset", () => {
     renderEditors({
       onCreateGenerated: async (generator, title) => {
         generated.push([generator, title]);
-        return { id: "a-graph", ref: "graph", title, generator, source: "<diagram/>" };
+        return { id: "a-graph", ref: "graph", title, sourceFormat: generator, source: "<diagram/>" };
       },
     });
     showAssets();

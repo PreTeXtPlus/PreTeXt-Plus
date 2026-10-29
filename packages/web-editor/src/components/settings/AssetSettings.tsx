@@ -52,7 +52,7 @@ const AssetSettings = ({
   const [error, setError] = useState<string | null>(null);
 
   const ref = asset.ref ?? "";
-  const generator = generatorFor(asset.generator);
+  const generator = generatorFor(asset.sourceFormat);
   const row = buildProjectAssetView(divisions, projectAssets).find(
     (r) => r.ref === ref,
   );

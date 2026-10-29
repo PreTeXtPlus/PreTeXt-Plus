@@ -11,7 +11,9 @@ route, and the PreFigure maintainer's advice to use the repo's rust-wasm build. 
 first version of this plan shipped the browser's picture to the build server with a
 `--keep-generated` flag so builds would not rerun the generator; that is gone — the
 build server caches generated assets per project itself, so nothing here is a build
-input. **The browser render is a preview.**
+input. **The browser render is a preview.** Revised again 2026-10-29: a generated asset
+is no longer a kind of its own but an authored asset whose `source_format` is a
+generator's (Decision 1).
 
 ## What exists (2026-10-27)
 
@@ -22,11 +24,11 @@ author types, the SVG is stored with the asset and the server reads it as curren
 
 | Part | State |
 | --- | --- |
-| 1 Rails model / JSON | Done. `Content#kind: generated_asset (4)`, `generator`, `output_source_digest`, `render_input`, `output_current?` (`Content::GeneratedAssetBehavior`); the picture is the content's one file. |
+| 1 Rails model / JSON | Done. An `authored_asset` with `source_format: prefigure (3)`; `preview_input_digest`, `render_input`, `preview_current?`, `generated_element` (`Content::GeneratedAssetBehavior`); the picture is the content's one file. |
 | 2 registry + assembly | Done. `packages/web-editor/src/generators/`; generated assets always assemble to the source form; `prefigure` is verbatim for ref scanning and code for spell check. |
 | 3 create/edit UI | Done. PreFigure tab, generator shown in settings, Replace/Duplicate hidden, Download SVG. |
 | 4 browser engine + pane | Done for SVG. PreFigure's `prefig-wasm` (MathJax variant, 1.3 MB) vendored under `vendor/prefigure`, MathJax 4 in the worker with the docinfo `<macros>` in scope. **No tactile/braille**, **no diagcess iframe** (the pane shows the SVG as an image). |
-| 4.3 document preview | **Not started.** The live document preview renders `<image><prefigure>` through pretext-html, which looks for `generated/prefigure/<ref>.svg`; the preview worker is not given the stored picture yet. |
+| 4.3 document preview | Done for stored pictures: `generated/:element/:ref.svg` serves the asset's stored picture, which is where pretext-html's `<img>` points. A render not yet stored is not shown there. |
 | 5 browser-rendered save | Done, as a multipart PATCH per render (`onAssetOutput`): the SVG as `file` + the digest. |
 | 6 `latex-image` via `/generate` | Not started. |
 
@@ -37,8 +39,8 @@ A `Content` that is an asset ([content.rb](../app/models/content.rb)) is one of 
 | kind | what it is | how it is assembled |
 | --- | --- | --- |
 | `file_asset` | uploaded bytes | `<image source="ref.ext">`; the bytes land in `source/external/ref.ext` |
-| `authored_asset` | raw PreTeXt in `source` (a hand-written `<latex-image>`, say) | `<image>` + the source, verbatim |
-| `generated_asset` | source for a `generator` in `source`, plus the picture rendered from it as the file | `<image>` + `wrapSource(source, ref)`: `<prefigure label="ref">…</prefigure>` |
+| `authored_asset`, `source_format: pretext` | raw PreTeXt in `source` (a hand-written `<latex-image>`, say) | `<image>` + the source, verbatim |
+| `authored_asset`, a generator's `source_format` (`prefigure`) — a *generated asset* | the generator's input in `source`, plus the picture rendered from it as the file | `<image>` + `wrapSource(source, ref)`: `<prefigure label="ref">…</prefigure>` |
 
 The picture of a generated asset is what the asset list thumbnails, what a peer without
 an engine or a reload sees, and the "current / stale" line in the preview pane. The
@@ -94,19 +96,38 @@ source and keeps it in the project's cache (below).
 
 ## Decisions
 
-1. **A generated asset is a `Content` of kind `generated_asset` with a `generator` and
-   one file.** `source` holds the generator's input (for PreFigure the `<diagram>`
+1. **A generated asset is an `authored_asset` whose `source_format` is a generator's,
+   with one file.** `source` holds the generator's input (for PreFigure the `<diagram>`
    element, never the `<image>`/`<prefigure>` wrapper). The picture is the content's
    single attachment, so `url`, `thumbnail_url`, the asset list, `external/:ref` and
    `Project#full_dup` work unchanged. `attachments_fit_kind` admits it; it must be SVG.
+   - *Why `source_format`:* it already means "the language `source` is written in", and
+     for divisions and snippets it already decides the editor's language, completions
+     and conversion — the same switch a generated asset needs for its preview engine and
+     tooling. Divisions set the precedent: `kind: division` plus `division_type` and
+     `source_format`, not a kind per division type. Divisions and snippets accept only
+     the prose formats; file assets only `pretext`.
+   - *Why not a kind per type* (`prefigure_asset`, `tikz_asset`, …): `kind` is the storage
+     role (bytes attached or not, how it is assembled); a type change would be a kind
+     change, and every kind check would grow. Types are not even one-to-one with PreTeXt
+     elements — TikZ is written inside `<latex-image>` — so a future `tikz` format can
+     wrap in `<latex-image>` and still get its own preview and completions.
+   - *Why not infer it from the source* (`<prefigure>` present ⇒ PreFigure): the format
+     decides the preview engine and the editor's tooling, which must not flicker while a
+     tag is half typed or switch when one is deleted. It is chosen at creation; changing
+     it is a deliberate act (for `pretext` ↔ a generator, wrapping or unwrapping the
+     generator's element).
 
 2. **The document always carries the source form.** `transformImageAsset` emits
    `<image>` + `<shortdescription/>` + `wrapSource(source, ref)` for every generated
    asset, for every target, for the preview. A downloaded project is ordinary PreTeXt.
 
-3. **The picture is a preview, with a currency claim.** `output_source_digest` is the
+3. **The picture is a preview, with a currency claim.** `preview_input_digest` is the
    sha256 of `render_input` (source + the docinfo elements the generator reads) the
-   picture was built from; `output_current?` compares it to the input as it is now.
+   picture was built from; `preview_current?` compares it to the input as it is now. A
+   digest, not a copy, because every use is an equality check: it is fixed-size, it
+   rides the collab doc (replicated, append-only) cheaply, and it cannot be mistaken for
+   a second source.
    Nothing reads a boolean off the row. A peer who edits the source without an engine
    simply makes the digest mismatch.
 
@@ -127,7 +148,7 @@ source and keeps it in the project's cache (below).
    registry names a generator.
 
 7. **The picture rides the existing upload pipeline.** `onAssetOutput` sends
-   `assets_attributes[0]` with `id`, `file` (the SVG) and `output_source_digest` through
+   `assets_attributes[0]` with `id`, `file` (the SVG) and `preview_input_digest` through
    `patchProjectAssetUpload`, once per distinct digest, only for a render of the source
    as it is now.
 
@@ -135,14 +156,17 @@ source and keeps it in the project's cache (below).
 
 ## Part 1 — Model (Rails) — done
 
-Migration on `contents`: `generator`, `output_source_digest`. `kind` gains
-`generated_asset: 4` (additive; integer enums are never renumbered). The legacy spelling
-`generated` is accepted like `file`/`authored`. `Content::GeneratedAssetBehavior`:
-`GENERATORS`, `DOCINFO_INPUT_ELEMENTS` (`prefigure → macros, prefigure-preamble`),
+Migration on `contents`: `preview_input_digest`. `source_format` gains `prefigure: 3`
+(additive; integer enums are never renumbered), allowed only on an authored asset.
+`Content::GeneratedAssetBehavior`: `ELEMENTS` (format → the element its source is
+wrapped in, also its `generated/` directory), `DOCINFO_INPUT_ELEMENTS`
+(`prefigure → macros, prefigure-preamble`), `generated_asset?`, `generated_element`,
 `render_input`, `docinfo_element_inner` (regex, not Nokogiri, so the browser produces the
-same bytes), `output_current?`, SVG-only validation. JSON adds `generator`,
-`output_source_digest`, `output_current`. **The render input is defined twice, in Ruby
-and TypeScript; one fixture hex pins both** (`content_test.rb`, `generators.test.ts`).
+same bytes), `preview_current?`, SVG-only validation. JSON carries every asset's
+`source_format`, and a generated asset's `preview_input_digest` and `preview_current`.
+`GET (*)/generated/:element/:ref.svg` serves the stored picture (Part 4.3). **The render
+input is defined twice, in Ruby and TypeScript; one fixture hex pins both**
+(`content_test.rb`, `generators.test.ts`).
 
 ## Part 2 — Registry and assembly (web-editor) — done
 
@@ -153,7 +177,10 @@ list `prefigure`.
 ## Part 3 — Creating and editing — done
 
 `NewAssetForm` grows one tab per registry entry → `onCreateGenerated(generator, title)`;
-the host persists `kind: "generated_asset"`, the generator and the starter source.
+the host persists an `authored_asset` with `source_format` = the generator and its
+starter source. In the editor, `Asset.sourceFormat` (`AssetSourceFormat`, apart from the
+prose `SourceFormat`) carries it, and `generatorFor(asset.sourceFormat)` is the one test
+for a generated asset.
 Settings show the generator; Replace and Duplicate are hidden; Download SVG is `url`.
 
 ## Part 4 — Engine and pane — done for SVG
@@ -168,13 +195,14 @@ Settings show the generator; Replace and Duplicate are hidden; Download SVG is `
 debounced render, error strip, retry on a failed load or a failed store. `__tests__/prefigureWasm.test.ts` drives the real vendored engine through the
 handler with a stub host in Node.
 
-### 4.3 Document preview (follow-up)
+### 4.3 Document preview
 
-The live preview's HTML references `generated/prefigure/ref.svg` relative to the
-project. Give the preview worker's mount reader the stored pictures (pending browser
-renders answered from memory, saved ones from `external/:ref`), so a section embedding a
-PreFigure asset shows it. Until then the document preview shows a broken image for a
-generated asset while the asset's own pane shows the diagram.
+The live preview's HTML references `generated/prefigure/ref.svg`, which its srcdoc
+iframe resolves against the editor page; `ProjectsController#generated_file` answers
+with the stored picture (the not-found image before the first render). Two gaps remain:
+a render not yet stored is not shown there, and the URL does not change when the
+picture does, so a preview page kept open can show the previous one. Versioning the URL
+by the digest would close the second.
 
 ## Part 6 — `latex-image` via `/generate`
 
@@ -182,12 +210,14 @@ generated asset while the asset's own pane shows the diagram.
 `GenerateAssetJob` builds a one-figure archive with the project's real docinfo and
 publication, POSTs `/generate` with `assets=latex-image`, `target=web`, the
 `project_id` and a callback, and on success attaches the returned SVG as the asset's
-file with `output_source_digest` computed **at enqueue time** (so a source edit during
+file with `preview_input_digest` computed **at enqueue time** (so a source edit during
 the render leaves the result stale rather than wrongly current). `wrapSource` is
 `<latex-image>${source}</latex-image>`; `docinfoInputElements` is `latex-image-preamble`
 + `macros`. The full build then finds the figure already in the project's cache.
-Existing `authored` assets that are a bare `<latex-image>` can be migrated by
-unwrapping; a rake task, not part of this plan.
+It is a `latex_image` `source_format` (a `tikz` format could share its wrapper with its
+own tooling). Existing `pretext` authored assets that are a bare `<latex-image>` can be
+converted by unwrapping and setting the format; a rake task or an author's action, not
+part of this plan.
 
 ---
 
@@ -203,7 +233,7 @@ unwrapping; a rake task, not part of this plan.
 
 ## Traps
 
-- **`output_source_digest` is a claim, not a fact.** Compare to `sha256(render_input)` at
+- **`preview_input_digest` is a claim, not a fact.** Compare to `sha256(render_input)` at
   the moment of use; never read a boolean off the row.
 - **`render_input` is defined twice, in Ruby and TypeScript.** Pin both to one fixture hex.
   Trim nothing, normalize nothing in one place that the other does not.
