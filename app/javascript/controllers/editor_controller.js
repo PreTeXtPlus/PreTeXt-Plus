@@ -21,6 +21,8 @@ export default class extends Controller {
     subscriptionsPath: String,
     signOutPath: String,
     previewWorkerUrl: String,
+    prefigureWorkerUrl: String,
+    prefigureAssetUrls: Object,
   }
 
   /** Load the React bundle as soon as the controller initializes.
@@ -63,6 +65,8 @@ export default class extends Controller {
       subscriptionsPath: this.subscriptionsPathValue,
       signOutPath: this.signOutPathValue,
       previewWorkerUrl: this.previewWorkerUrlValue,
+      prefigureWorkerUrl: this.prefigureWorkerUrlValue,
+      prefigureAssetUrls: this.prefigureAssetUrlsValue,
     })
 
     this.notifyLayoutChange()

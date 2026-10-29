@@ -194,6 +194,8 @@ Rails.application.routes.draw do
       post "backups/:backup_id/restore" => "projects#restore_backup", as: "restore_backup"
       get "(*_)/external/:ref" => "projects#content_file", as: "content_file"
       get "(*_)/external/:ref/thumbnail" => "projects#content_thumbnail", as: "content_thumbnail"
+      get "(*_)/generated/:element/:ref" => "projects#generated_file", as: "generated_file",
+        constraints: { format: "svg" }
       post "preview" => "projects#preview", as: "preview"
       get "*/lunr-pretext-search-index.js", to: redirect("/ptx-search.js")
     end

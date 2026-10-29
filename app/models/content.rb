@@ -15,13 +15,15 @@
 # project is assembled (see the web-editor's `wrapDivisionSource`), in all three
 # markup styles.
 #
-# Kind-specific rules live in Content::DivisionBehavior and
-# Content::AssetBehavior, each applying only to its own kinds; serving attached
-# files is Content::AttachedFiles, for every kind.
+# Kind-specific rules live in Content::DivisionBehavior, Content::AssetBehavior
+# and Content::GeneratedAssetBehavior (an authored asset in a generator's
+# format), each applying only to its own records; serving attached files is
+# Content::AttachedFiles, for every kind.
 class Content < ApplicationRecord
   include Content::AttachedFiles
   include Content::DivisionBehavior
   include Content::AssetBehavior
+  include Content::GeneratedAssetBehavior
 
   # touch: bumps source_updated_at *and* updated_at on the project. The editor
   # saves content through nested attributes, which leaves the projects row itself
@@ -29,8 +31,9 @@ class Content < ApplicationRecord
   # timestamp to trust.
   belongs_to :project, touch: :source_updated_at
 
-  # Any content may carry attachments, served by Content::AttachedFiles; only a
-  # file asset uses them so far, and only one (see Content::AssetBehavior).
+  # Any content may carry attachments, served by Content::AttachedFiles; only
+  # assets use them so far, and only one each: a file asset's upload, a generated
+  # asset's preview picture (see Content::AssetBehavior).
   has_many_attached :files
 
   # The file/authored distinction an asset used to keep in a column of its own
@@ -48,11 +51,20 @@ class Content < ApplicationRecord
   scope :snippets, -> { where(kind: :snippet) }
   scope :assets, -> { where(kind: ASSET_KINDS) }
 
-  # An asset's source is always PreTeXt (the inside of its <image>); for it this
-  # column simply keeps its default.
-  enum :source_format, { pretext: 0, latex: 1, markdown: 2 }, default: :pretext, suffix: true, validate: true
+  # The format of `source`, which decides how it is edited and how it reaches the
+  # assembled document. Divisions and snippets are prose in one of three markup
+  # styles. An asset's source is the inside of its <image>: PreTeXt, except that
+  # an authored asset may instead be written in a generator's own language, which
+  # makes it a generated asset (Content::GeneratedAssetBehavior::FORMATS). A key
+  # added for a generator is the web-editor's id for it.
+  enum :source_format, { pretext: 0, latex: 1, markdown: 2, prefigure: 3 },
+    default: :pretext, suffix: true, validate: true
+
+  PROSE_FORMATS = %w[ pretext latex markdown ].freeze
 
   validates :ref, format: REF_REGEX, presence: true, uniqueness: { scope: :project_id }
+  validates :source_format, inclusion: { in: PROSE_FORMATS }, if: -> { division? || snippet? }
+  validates :source_format, inclusion: { in: %w[ pretext ] }, if: :file_asset?
 
   def asset?
     file_asset? || authored_asset?

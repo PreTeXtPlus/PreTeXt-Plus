@@ -1628,4 +1628,92 @@ class ProjectsControllerTest < ActionDispatch::IntegrationTest
       assert_response :success
       wire.string
     end
+
+  # --- Generated assets ---
+
+  test "update creates a generated asset via a JSON assets_attributes entry" do
+    assert_difference("@project.assets.count", 1) do
+      patch project_url(@project, format: :json),
+        params: { project: { assets_attributes: [ { ref: "graph", kind: "authored_asset", source_format: "prefigure",
+                                                     title: "Graph", source: "<diagram/>" } ] } },
+        as: :json
+    end
+    assert_response :success
+
+    asset = @project.assets.find_by!(ref: "graph")
+    assert asset.generated_asset?
+    assert_equal "prefigure", asset.source_format
+    json = response.parsed_body["assets"].find { |a| a["ref"] == "graph" }
+    assert_equal "prefigure", json["source_format"]
+    assert_equal false, json["preview_current"]
+  end
+
+  # The editor renders in the browser and hands the picture back with the digest of
+  # what it rendered, through the same multipart entry an upload uses.
+  test "update stores a generated asset's rendered picture and reports it current" do
+    asset = @project.assets.create!(kind: :authored_asset, source_format: "prefigure", ref: "graph", title: "Graph", source: "<diagram/>")
+    digest = Digest::SHA256.hexdigest(asset.render_input)
+
+    patch project_url(@project, format: :json), params: {
+      project: { assets_attributes: [ {
+        id: asset.id,
+        preview_input_digest: digest,
+        file: fixture_file_upload("test_diagram.svg", "image/svg+xml")
+      } ] }
+    }
+    assert_response :success
+
+    asset.reload
+    assert asset.preview_current?
+    json = response.parsed_body["assets"].find { |a| a["ref"] == "graph" }
+    assert_equal true, json["preview_current"]
+    assert_equal "/projects/#{@project.id}/external/graph.svg", json["path"]
+  end
+
+  # The live preview renders `<prefigure label="graph">` as an <img> of
+  # generated/prefigure/graph.svg, relative to the editor page.
+  test "generated_file redirects to a generated asset's stored picture, signed out too" do
+    asset = @project.assets.create!(kind: :authored_asset, source_format: "prefigure", ref: "graph", title: "Graph",
+                                    source: "<diagram/>", file: fixture_file_upload("test_diagram.svg", "image/svg+xml"))
+    sign_out users(:one)
+
+    get "/projects/#{@project.id}/generated/prefigure/graph.svg"
+
+    assert_response :redirect
+    assert_match %r{/rails/active_storage/}, response.location
+    assert_equal generated_file_project_path(@project, element: "prefigure", ref: asset.ref, format: "svg"),
+      "/projects/#{@project.id}/generated/prefigure/graph.svg"
+  end
+
+  test "generated_file redirects to the not-found image before the editor has rendered one" do
+    @project.assets.create!(kind: :authored_asset, source_format: "prefigure", ref: "graph", title: "Graph", source: "<diagram/>")
+
+    get "/projects/#{@project.id}/generated/prefigure/graph.svg"
+
+    assert_response :redirect
+    assert_match %r{/image-not-found\.svg\z}, response.location
+  end
+
+  test "generated_file serves only a generated asset wrapped in that element" do
+    @project.assets.create!(kind: :authored_asset, source_format: "prefigure", ref: "graph", title: "Graph", source: "<diagram/>")
+
+    get "/projects/#{@project.id}/generated/latex-image/graph.svg"
+    assert_response :not_found
+    get "/projects/#{@project.id}/generated/prefigure/#{contents(:image_one).ref}.svg"
+    assert_response :not_found
+    get "/projects/#{@project.id}/generated/prefigure/#{contents(:authored_one).ref}.svg"
+    assert_response :not_found
+  end
+
+  # /assets is cached for a year by URL, and a rebuilt engine keeps its filenames, so
+  # the editor must be pointed at digested ones.
+  test "edit hands the editor a digested URL for each PreFigure engine file" do
+    get edit_project_url(@project)
+    assert_response :success
+
+    urls = JSON.parse(css_select("[data-editor-prefigure-asset-urls-value]").first["data-editor-prefigure-asset-urls-value"])
+    assert_equal %w[ prefig_wasm.js prefig_wasm_bg.wasm ], urls.keys
+    assert_match %r{\A/assets/prefigure/prefig_wasm-\h+\.js\z}, urls["prefig_wasm.js"]
+    assert_match %r{\A/assets/prefigure/prefig_wasm_bg-\h+\.wasm\z}, urls["prefig_wasm_bg.wasm"]
+  end
 end

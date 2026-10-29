@@ -32,8 +32,16 @@ import type { PreviewLineMap } from "./previewSync";
 import type { PreviewScope } from "../store/editorStore";
 import { inlinePreviewRenderer, type PreviewRenderer } from "./previewRenderer";
 import type { PtxSourceMap, SourceMapEntry } from "@pretextbook/pretext-html";
+import { rewriteGeneratedImages, type GeneratedImageResolver } from "../generators/previewImages";
 
 interface LivePreviewProps {
+  /**
+   * Where a generated asset's picture is, for the `generated/<element>/<label>.svg`
+   * the rendered page refers to (see `generators/previewImages.ts`). Applied to
+   * the page as delivered, never to the render, so a newly stored picture
+   * reaches the page without re-rendering. Memoize it.
+   */
+  generatedImageUrl?: GeneratedImageResolver;
   /**
    * What the local renderer is given: a complete `<pretext>` document, or —
    * with {@link LivePreviewProps.fragment} — one division on its own.
@@ -391,6 +399,7 @@ const LivePreview = forwardRef<LivePreviewHandle, LivePreviewProps>(
       cursorLine,
       onScopeChange,
       renderer = inlinePreviewRenderer,
+      generatedImageUrl,
     },
     ref,
   ) => {
@@ -617,15 +626,16 @@ const LivePreview = forwardRef<LivePreviewHandle, LivePreviewProps>(
     // a second of waiting.
     const pageHtml = useMemo(() => {
       if (previewHtml === null) return null;
+      const rendered = generatedImageUrl ? rewriteGeneratedImages(previewHtml, generatedImageUrl) : previewHtml;
       const page =
         renderTarget === "slides"
-          ? applyRevealView(previewHtml, revealView, revealZoom)
-          : previewHtml;
+          ? applyRevealView(rendered, revealView, revealZoom)
+          : rendered;
       // Unconditionally, "off" included: the print bridge keeps its answer on
       // a window property, so a page delivered without one would inherit
       // whatever the previous delivery said.
       return applyPrintPreview(page, printoutId ?? undefined);
-    }, [previewHtml, renderTarget, revealView, revealZoom, printoutId]);
+    }, [previewHtml, renderTarget, revealView, revealZoom, printoutId, generatedImageUrl]);
 
     // Put the page on screen. A re-render of the page already there is patched
     // into it (see patchPreviewPage): only the blocks that changed are replaced

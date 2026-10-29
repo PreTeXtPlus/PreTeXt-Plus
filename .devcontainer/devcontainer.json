@@ -13,7 +13,11 @@
     "ghcr.io/devcontainers/features/node:1": {"version": "24.21.0"},
     "ghcr.io/devcontainers/features/docker-outside-of-docker:1": {"moby":false},
     "ghcr.io/rails/devcontainer/features/postgres-client": {},
-    "ghcr.io/nullcoder/devcontainer-features/stripe-cli:1": {}
+    "ghcr.io/nullcoder/devcontainer-features/stripe-cli:1": {},
+    // Rust with the wasm target, for script/build-prefig-wasm.sh (PreFigure's
+    // wasm engine, vendored under vendor/prefigure). wasm-pack itself is
+    // installed by postCreateCommand.
+    "ghcr.io/devcontainers/features/rust:1": {"version": "latest", "targets": "wasm32-unknown-unknown"}
   },
 
   "containerEnv": {
@@ -76,6 +80,7 @@
   // Use 'postCreateCommand' to run commands after the container is created.
   // Installs Chromium plus its OS-level dependencies (via sudo apt-get) so
   // Playwright can drive a headless browser for screenshots/inspection of
-  // rendered pages, e.g. from Claude Code.
-  "postCreateCommand": "bin/setup --skip-server && npx playwright install --with-deps chromium"
+  // rendered pages, e.g. from Claude Code; and wasm-pack, which
+  // script/build-prefig-wasm.sh needs (the Rust feature above provides cargo).
+  "postCreateCommand": "bin/setup --skip-server && npx playwright install --with-deps chromium && cargo install wasm-pack --locked"
 }

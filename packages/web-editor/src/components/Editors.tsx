@@ -37,6 +37,8 @@ import NewItemPane from "./create/NewItemPane";
 import EditorTargetBar from "./EditorTargetBar";
 import EditorTabs, { type EditorTab } from "./EditorTabs";
 import AssetPreview from "./AssetPreview";
+import GeneratedAssetPreview, { type GeneratedAssetOutput } from "./GeneratedAssetPreview";
+import { generatorFor, runtimeFor, type GeneratorRuntimeConfigs } from "../generators";
 import {
   editorTargetKey,
   resolveEditorTarget,
@@ -58,6 +60,7 @@ import type {
   EditorContentChange,
   EditorDivisionContentChange,
   Asset,
+  GeneratorId,
   FeedbackSubmission,
   RecordKind,
   Snippet,
@@ -115,6 +118,8 @@ import { useEditorStore, useEditorStoreApi } from "../store/hooks";
 import { CollabBridge } from "../collab/bridge";
 import type { CollabSession } from "../collab/types";
 import PresenceAvatars from "../collab/PresenceAvatars";
+import { placementUses, type PlacementCheckInput } from "./editorConfigs/placementDiagnostics";
+import { generatedImageResolver } from "../generators/previewImages";
 
 /**
  * Default wording for the live preview's warning banner.
@@ -392,6 +397,33 @@ export interface editorProps {
    * code editor.
    */
   onCreateAuthored?: (title: string) => Promise<Asset>;
+  /**
+   * Called when the user creates a new generated asset (a PreFigure diagram, …)
+   * from the "New asset" form's tab for that generator. The host derives the ref
+   * from `title` as it does for `onCreateAuthored`, persists an authored asset
+   * whose source format is `generator` (the Rails host: `source_format`) and
+   * whose `source` is the generator's starter source
+   * (`generators[generator].starterSource`), and returns it.
+   */
+  onCreateGenerated?: (generator: GeneratorId, title: string) => Promise<Asset>;
+  /**
+   * Per-generator browser engines: where the host serves each generator's
+   * worker and runtime files. Without an entry for a generator, its assets show
+   * their stored picture and render nothing live — builds still generate them.
+   * See `GeneratorRuntimeConfigs`.
+   */
+  generatorRuntimes?: GeneratorRuntimeConfigs;
+  /**
+   * A generated asset was rendered in the browser from its current source: the
+   * host stores `output.svg` as the asset's file together with
+   * `output.previewInputDigest`, and may return the asset as persisted: its
+   * stored picture's fields (`url`, `thumbnailUrl`, `extension`, `contentType`,
+   * `fileRef`, `previewInputDigest`) are taken onto the pool entry, nothing
+   * else. Reject if the picture was not stored: the preview shows the error
+   * and offers to try again. Fires once per distinct digest per session, plus
+   * any retries after a rejection.
+   */
+  onAssetOutput?: (asset: Asset, output: GeneratedAssetOutput) => Promise<Asset | void> | void;
   /**
    * Called when the user removes an asset from the project. Return a promise
    * if the removal is persisted asynchronously: the Replace flow awaits it
@@ -873,6 +905,7 @@ const EditorsInner = (props: EditorsInnerProps) => {
       editedAsset?.isFile,
       editedAsset?.fileRef,
       editedAsset?.shortDescription,
+      editedAsset?.sourceFormat,
     ],
   );
   // A division's element — its type, id, title and label — is likewise drawn
@@ -1370,6 +1403,42 @@ const EditorsInner = (props: EditorsInnerProps) => {
     // by the time this runs the host has already stored the file and handed
     // back a URL, so the entry carries everything a peer needs.
     bridge?.localAssetAdd(asset);
+  };
+
+  /**
+   * A browser render of a generated asset, for the host to store. Nothing is
+   * written until the host has stored it, so a failed upload leaves the asset
+   * describing the picture it really has; the rejection goes back to the
+   * preview, which reports it. Once stored, only the stored picture's fields —
+   * its `url` and the digest it was rendered from — are laid onto the asset *as
+   * it is now*: typing may have overtaken the render, so every other field,
+   * the source above all, is newer than the record the render started from.
+   * Hence the flush, as in `settledDivisions`: a keystroke the code editor's
+   * debounce still holds is otherwise only in the buffer, and writing the
+   * pool's older source to the doc would undo it. Peers learn the digest and
+   * URL through the doc, the bytes through the host.
+   */
+  const handleAssetOutput = async (asset: Asset, output: GeneratedAssetOutput): Promise<void> => {
+    if (!props.onAssetOutput) return;
+    const persisted = await props.onAssetOutput(asset, output);
+    codeEditorRef.current?.flushPendingChange();
+    const current = storeApi
+      .getState()
+      .projectAssets?.find((a) => (asset.id ? a.id === asset.id : a.ref === asset.ref));
+    if (!current) return;
+    const updated: Asset = persisted
+      ? {
+        ...current,
+        url: persisted.url,
+        thumbnailUrl: persisted.thumbnailUrl,
+        extension: persisted.extension,
+        contentType: persisted.contentType,
+        fileRef: persisted.fileRef,
+        previewInputDigest: persisted.previewInputDigest ?? output.previewInputDigest,
+      }
+      : { ...current, previewInputDigest: output.previewInputDigest };
+    updateAssetInPool(updated);
+    bridge?.localAssetUpdate(updated);
   };
 
   const handleAssetRemove = (asset: Asset) => {
@@ -2127,6 +2196,41 @@ const EditorsInner = (props: EditorsInnerProps) => {
     [activeDivisionFormat, divisionActiveSource, previewContent],
   );
 
+  // A generated asset in the document preview shows its stored picture, under
+  // whichever label its placement gave it (see generators/previewImages.ts).
+  const generatedImageUrl = useMemo(() => generatedImageResolver(projectAssets ?? []), [projectAssets]);
+
+  // The open division's or snippet's placeholders are checked against every
+  // other placement in the project, so a record placed twice without an
+  // instance name is flagged where it is placed (see placementDiagnostics.ts).
+  // The open record's own placements come from its live buffer, not from here.
+  const placementTarget =
+    editorTarget?.kind === "division"
+      ? { kind: "division" as const, ref: editorTarget.division.xmlId, format: editorTarget.division.sourceFormat }
+      : editorTarget?.kind === "snippet"
+        ? { kind: "snippet" as const, ref: editorTarget.snippet.ref, format: editorTarget.snippet.sourceFormat }
+        : null;
+  const placementCheck = useMemo((): PlacementCheckInput | undefined => {
+    if (!placementTarget) return undefined;
+    const isOpen = (kind: "division" | "snippet", ref: string | undefined) =>
+      kind === placementTarget.kind && ref === placementTarget.ref;
+    const elsewhere = placementUses([
+      ...divisions
+        .filter((d) => !isOpen("division", d.xmlId))
+        .map((d) => ({ name: d.title?.trim() || d.xmlId, source: d.source ?? "", sourceFormat: d.sourceFormat })),
+      ...(projectSnippets ?? [])
+        .filter((sn) => !isOpen("snippet", sn.ref))
+        .map((sn) => ({ name: sn.title?.trim() || sn.ref, source: sn.source ?? "", sourceFormat: sn.sourceFormat })),
+    ]);
+    const knownRefs = new Set<string>([
+      ...divisions.map((d) => d.xmlId),
+      ...(projectSnippets ?? []).map((sn) => sn.ref),
+      ...(projectAssets ?? []).flatMap((a) => (a.ref ? [a.ref] : [])),
+    ]);
+    return { sourceFormat: placementTarget.format, recordRef: placementTarget.ref, elsewhere, knownRefs };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [placementTarget?.kind, placementTarget?.ref, placementTarget?.format, divisions, projectSnippets, projectAssets]);
+
   // A snippet previews on its own: resolved as an embed of it would be, inside
   // a plain article (see `assembleSnippetPreviewSource`). Only while the
   // preview is open — it walks the snippet's nested refs, and runs the
@@ -2374,6 +2478,7 @@ const EditorsInner = (props: EditorsInnerProps) => {
       // Only a division's buffer can be schema-checked: the linter validates
       // the assembled document, which a snippet or asset fragment isn't.
       pretextValidation={isDivisionOpen ? pretextValidation : undefined}
+      placementCheck={placementCheck}
       virtualWrapper={assetWrapper ?? divisionWrapper}
       collab={
         props.collaboration && bridge && activeCollabText && editorKey
@@ -2443,6 +2548,7 @@ const EditorsInner = (props: EditorsInnerProps) => {
           onUploadAsset={props.onAssetUpload}
           onFetchAssetUrl={props.onAssetFetchUrl}
           onCreateAuthoredAsset={props.onCreateAuthored}
+          onCreateGeneratedAsset={props.onCreateGenerated}
           onSnippetCreated={handleSnippetCreated}
           onAssetCreated={(asset, request) => void handleAssetCreated(asset, request)}
         />
@@ -2465,7 +2571,19 @@ const EditorsInner = (props: EditorsInnerProps) => {
 
   // ── Preview panel ─────────────────────────────────────────────────────────
   let preview: ReactNode;
-  if (showLivePreview && editorTarget?.kind === "asset") {
+  const assetGenerator = editorTarget?.kind === "asset" ? generatorFor(editorTarget.asset.sourceFormat) : undefined;
+  if (showLivePreview && editorTarget?.kind === "asset" && assetGenerator) {
+    // A generated asset renders in its own engine, not the document renderer.
+    preview = (
+      <GeneratedAssetPreview
+        asset={editorTarget.asset}
+        docinfo={effectiveDocinfo ?? ""}
+        runtime={runtimeFor(assetGenerator.id, props.generatorRuntimes)}
+        onOutput={handleAssetOutput}
+        readOnly={props.readOnly}
+      />
+    );
+  } else if (showLivePreview && editorTarget?.kind === "asset") {
     // A stored image needs no renderer, so this doesn't wait on `canPreview`.
     preview = <AssetPreview asset={editorTarget.asset} />;
   } else if (showLivePreview && canPreview) {
@@ -2509,6 +2627,7 @@ const EditorsInner = (props: EditorsInnerProps) => {
         {...target}
         onRebuild={props.onPreviewRebuild}
         renderer={previewRendererFor(props.previewWorkerUrl)}
+        generatedImageUrl={generatedImageUrl}
         docinfo={effectiveDocinfo}
         theme={props.previewTheme}
         bannerMessage={

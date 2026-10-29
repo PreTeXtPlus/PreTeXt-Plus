@@ -4,6 +4,7 @@
  */
 import { escapeAttribute, escapeText } from "./xmlUtils";
 import type { Asset } from "./types/editor";
+import { generatorFor } from "./generators";
 
 /**
  * `<image>` markup for an asset.
@@ -24,6 +25,12 @@ import type { Asset } from "./types/editor";
  * `asset.source` is separate user-authored inner XML (e.g. `<description>`)
  * and is inserted verbatim after it as the element's remaining children.
  *
+ * A *generated* asset (`asset.sourceFormat` names a generator) is always emitted in its source
+ * form: its source wrapped by the generator's element (`<prefigure label="ref">`),
+ * inside a plain `<image>`. That is true PreTeXt a build can regenerate from;
+ * the stored output ships beside the archive under the same name and is never
+ * referenced from the document, so no target-dependent branch is needed here.
+ *
  * Per-embedding attributes such as `width="50%"` are NOT handled here: they
  * are written on the placeholder (`<plus:image ref="..." width="50%"/>`) and
  * copied onto the `<image>` element this returns by `applyPlaceholderAttrs`
@@ -35,7 +42,7 @@ function transformImageAsset(asset: Asset, ref: string): string {
     return `<!-- image asset "${ref}" is marked as file-based but has no fileRef or url -->`;
   }
   const sourceAttr = imageSourceAttr(asset, ref);
-  const inner = [ shortDescriptionTag(asset), asset.source?.trim() ]
+  const inner = [ shortDescriptionTag(asset), generatedOrAuthoredSource(asset, ref) ]
     .filter(Boolean)
     .join("\n");
   return inner
@@ -45,9 +52,38 @@ function transformImageAsset(asset: Asset, ref: string): string {
 
 /** The `<image>` element's ` source="..."` attribute, or `""` for a non-file asset. */
 function imageSourceAttr(asset: Asset, ref: string): string {
-  return asset.isFile
+  return asset.isFile && !generatorFor(asset.sourceFormat)
     ? ` source="${escapeAttribute(asset.fileRef || ref)}"`
     : "";
+}
+
+/**
+ * The asset's source as the `<image>` carries it: wrapped by its generator's
+ * element for a generated asset, verbatim otherwise. A generated asset with an
+ * unknown generator falls back to verbatim, which a schema check then reports
+ * rather than this silently dropping the diagram.
+ */
+function generatedOrAuthoredSource(asset: Asset, ref: string): string | undefined {
+  const source = asset.source?.trim();
+  const generator = generatorFor(asset.sourceFormat);
+  return generator ? generator.wrapSource(source ?? "", ref) : source;
+}
+
+/**
+ * The lines of a generated asset's wrapper element, as the code editor shows
+ * them locked around the source: the opening tag before, the closing after.
+ */
+function generatorWrapperLines(asset: Asset, ref: string): { before: string[]; after: string[] } {
+  const generator = generatorFor(asset.sourceFormat);
+  if (!generator) return { before: [], after: [] };
+  // Wrap a marker and split around it, so this stays true to `wrapSource`
+  // whatever shape a generator gives its element.
+  const marker = "\u0000";
+  const [before, after] = generator.wrapSource(marker, ref).split(marker);
+  return {
+    before: before.replace(/\n$/, "").split("\n"),
+    after: after.replace(/^\n/, "").split("\n"),
+  };
 }
 
 /** The auto-generated `<shortdescription>` child, or `""` when there's no alt text. */
@@ -69,11 +105,13 @@ export function assetWrapperLines(asset: Asset): {
   before: string[];
   after: string[];
 } {
-  const opening = `<image${imageSourceAttr(asset, asset.ref ?? "")}>`;
+  const ref = asset.ref ?? "";
+  const opening = `<image${imageSourceAttr(asset, ref)}>`;
   const shortDescription = shortDescriptionTag(asset);
+  const wrapper = generatorWrapperLines(asset, ref);
   return {
-    before: shortDescription ? [opening, shortDescription] : [opening],
-    after: ["</image>"],
+    before: [opening, ...(shortDescription ? [shortDescription] : []), ...wrapper.before],
+    after: [...wrapper.after, "</image>"],
   };
 }
 

@@ -36,6 +36,12 @@ import {
  * @property {string} id
  * @property {string} [ref]
  * @property {"file_asset"|"authored_asset"} kind
+ * @property {string} [source_format] - "pretext", or for a generated asset (an authored
+ *   one written in a generator's language) the generator's id ("prefigure"), which
+ *   decides how the editor treats the source and the element the assembled `<image>`
+ *   wraps it in.
+ * @property {string} [preview_input_digest] - For a generated asset, the sha256 of the
+ *   render input its stored picture was built from (see Content#render_input).
  * @property {string} [title]
  * @property {string} [source]
  * @property {string} [short_description] - Plain-text image alt description; rendered as
@@ -205,6 +211,8 @@ export function railsAssetToEditor(a) {
     contentType: a.content_type ?? undefined,
     isFile: a.kind === "file_asset",
     fileRef: fileRefFor(a, a.ref),
+    sourceFormat: a.source_format ?? undefined,
+    previewInputDigest: a.preview_input_digest ?? undefined,
   };
 }
 
@@ -231,6 +239,8 @@ export function toEditorAsset(rec) {
     // Already correctly set by railsAssetToEditor upstream (from Rails' real
     // `kind` column) for every asset that reaches this function.
     isFile: rec.isFile,
+    sourceFormat: rec.sourceFormat,
+    previewInputDigest: rec.previewInputDigest,
   };
 }
 

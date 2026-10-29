@@ -102,6 +102,13 @@ Splits and merges PreTeXt documents at section boundaries. Supported section typ
 - A LaTeX holder has nowhere inline to write them, so `\plus` takes an optional argument: `\plus[component=teacher]{section}{x}`. Both converters already emit these as real attributes; the helpers here only have to tolerate and preserve the shape. The placeholder *writers* stay on the bare form — the optional argument is the author's to add.
 - `renameDivisionRef` rewrites a placeholder in place rather than rebuilding it from type and id, precisely so these attributes survive an `xml:id` rename. Rebuilding drops them silently, which shows up much later as a division that quietly starts appearing in every build.
 
+**A record placed more than once names its other placements.** The one exception to the pass-through rule is `instance` (with `ref`, in `PLACEHOLDER_OWN_ATTRS`): it names *this placement*, and assembly appends it to every `@xml:id` and `@label` inside the resolved markup — and to the `@ref`/`@first`/`@last` inside that pointed at them — so `graph` becomes `graph-ch3` (`qualifyIdentifiers`). PreTeXt reports a repeated `@label` or `@xml:id` as an error, and a generated image's `@label` is its filename, so all but one placement of an image or snippet must carry one; the unnamed placement keeps the record's own identifiers.
+
+- The name is written in the source, never derived from document order or the enclosing division: an identifier must not change because something was placed earlier (Runestone keys student answers by `@label`; HTML filenames and fragments follow it too).
+- Generator elements (`OPAQUE_ELEMENTS`: `prefigure`, `latex-image`, …) have their own start tag qualified but not their insides, which are the generator's vocabulary or drawing code.
+- LaTeX names it in the optional argument (`\plus[instance=ch3]{image}{graph}`), Markdown in the directive (`::image{ref="graph" instance="ch3"}`); both converters pass it through like any attribute. `parsePlacements`/`addPlacementInstance` read and write all three syntaxes.
+- `editorConfigs/placementDiagnostics.ts` (via `usePlacementDiagnostics` in `CodeEditor`) flags, on the open division's or snippet's live text, a second unnamed placement of the same image or snippet anywhere in the project, a repeated instance name, a malformed one, and one whose qualified label would equal another record's ref — with a quick fix that writes a free instance name (seeded from the open record's ref) in that buffer's syntax. `Editors` supplies every other placement and every ref as `placementCheck`.
+
 ### Project Explorer (`src/components/ProjectExplorer.tsx` + `src/components/toc/`)
 
 The left sidebar is an always-visible icon rail plus a panel for the selected
@@ -259,6 +266,52 @@ a peer removing the open item does not (`openItemState`'s `byAuthor`).
   it. Entry points: a Contents row's [+], the [+] button in the
   Snippets/Assets panel header, File → New Asset… / New Snippet…, unlinked
   rows, Replace image….
+
+### Generated assets (`src/generators/`)
+
+A *generated* asset is an authored asset whose `sourceFormat` is a generator's
+id (`AssetSourceFormat` = `"pretext"` or a `GeneratorId`; the Rails host's
+`source_format`) — source that a generator turns into a picture, PreFigure
+first. The format is chosen when the asset is created and never inferred from
+the source: it decides the preview engine and, in time, the editor tooling, so
+it must not flicker as the author types. `generatorFor(asset.sourceFormat)` is
+the one test for "is this a generated asset". The registry
+(`generators/index.ts`) is the one place generators are named: each
+entry says how its source is wrapped into PreTeXt (`wrapSource`: the
+`<prefigure label="ref">` the document always carries — a generated asset is
+never emitted as `<image source>`; builds generate it from that source), what a
+new asset opens with, which docinfo elements its render depends on
+(`renderInput.ts`; Rails' `Content#render_input` digests the identical string,
+pinned by a shared fixture hex in both test suites), and an optional browser
+runtime. The browser's picture is stored with the asset as a preview — never a
+build input.
+
+- `prefigure/runtime.ts` is the main-thread side of the engine: a Web Worker
+  (`src/prefigureWorker.ts`, bundled by the host like the preview worker) that
+  loads PreFigure's wasm build (the prefigure repo's `prefig-wasm` crate,
+  MathJax variant; glue + binary at the URLs the host gives per file in
+  `generatorRuntimes.prefigure.assetUrls`, digested so a long cache can't serve
+  a stale engine), with MathJax 4 answering the
+  engine's host API for TeX labels and the docinfo `<macros>` in scope
+  (`worker/compat-api.ts`, ported from the PreFigure playground — see the NOTICE
+  there). SVG only: no tactile/braille. One runtime per generator per page
+  (`runtimeFor`), started when a generated asset's pane mounts; renders are
+  latest-wins. `__tests__/prefigureWasm.test.ts` drives the real engine through
+  the worker handler with a stub host.
+- `GeneratedAssetPreview.tsx` replaces `AssetPreview` for a generated asset:
+  the stored picture and whether it matches the current source, live renders a
+  second after typing stops, and `onAssetOutput` to the host with the SVG and
+  the digest of exactly the source rendered. A render that typing overtook is
+  shown but not sent; a failed store is shown with a retry. `Editors` writes
+  nothing until the host has stored the picture, then lays only the stored
+  picture's fields onto the asset as it is *now* (after flushing the debounce),
+  never the record the render started from — that would undo the typing.
+- The document preview's `generated/<element>/<label>.svg` references are rewritten to the asset's stored picture, versioned by its digest (`generators/previewImages.ts`, applied in `LivePreview`'s `pageHtml`), under a placement's qualified label as well as the plain one.
+- `NewAssetForm` grows one tab per registry entry → `onCreateGenerated`.
+  `VERBATIM_SOURCES` and the spell checker's `latexImage` scope both list
+  `prefigure`. The collab doc carries `sourceFormat` and `previewInputDigest`
+  (the sha256 of the render input the stored preview was built from); bytes
+  stay with the host.
 
 ### Collaboration (`src/collab/`)
 

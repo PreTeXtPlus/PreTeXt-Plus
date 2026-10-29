@@ -23,6 +23,19 @@ class ContentTest < ActiveSupport::TestCase
     assert projects(:one).snippets.build(ref: "unique_ref", source: "hello").valid?
   end
 
+  # A ref is an xml:id and a label, and the last part of a generated image's
+  # filename: letters, digits, "-" and "_", not starting with a digit or "-".
+  # The `A-z` range this once had also let `[`, `\`, `]`, `^` and a backtick
+  # lead.
+  test "a ref starts with a letter or underscore and holds only letters, digits, - and _" do
+    %w[ graph _graph Graph-2 a_b-c ].each do |ref|
+      assert projects(:one).snippets.build(ref: ref).valid?, "#{ref} should be a valid ref"
+    end
+    [ "2graph", "-graph", "[graph", "\\graph", "]graph", "^graph", "`graph", "gr.aph", "gr aph" ].each do |ref|
+      assert_not projects(:one).snippets.build(ref: ref).valid?, "#{ref} should not be a valid ref"
+    end
+  end
+
   # ---- kinds ---------------------------------------------------------------
 
   test "a record built through a kind's collection is of that kind" do
@@ -208,7 +221,7 @@ class ContentTest < ActiveSupport::TestCase
     snippet.attach_file(io: StringIO.new("x"), filename: "x.txt", content_type: "text/plain")
 
     assert_not snippet.valid?
-    assert_includes snippet.errors[:files], "can be attached only to a file asset"
+    assert_includes snippet.errors[:files], "can be attached only to a file or generated asset"
   end
 
   test "url returns the attached file's url, named after the asset's ref rather than the upload" do
@@ -392,5 +405,96 @@ class ContentTest < ActiveSupport::TestCase
 
     assert_not_nil url
     assert_not_equal asset.url, url
+  end
+
+  # --- Generated assets (docs/generated-assets-plan.md) ---
+
+  def generated_asset(source: '<diagram dimensions="(300,300)"/>', **attrs)
+    projects(:one).assets.build({ kind: :authored_asset, source_format: "prefigure", ref: "graph", title: "Graph",
+                                  source: source }.merge(attrs))
+  end
+
+  def attach_svg(asset)
+    asset.file = { io: File.open(Rails.root.join("test/fixtures/files/test_diagram.svg")),
+                   filename: "graph.svg", content_type: "image/svg+xml" }
+  end
+
+  test "an authored asset in a generator's format is a generated asset, wrapped in that generator's element" do
+    asset = generated_asset
+    assert asset.valid?, asset.errors.full_messages.inspect
+    assert asset.generated_asset?
+    assert_equal "prefigure", asset.generated_element
+
+    plain = contents(:authored_one)
+    assert plain.pretext_source_format?
+    assert_not plain.generated_asset?
+    assert_nil plain.generated_element
+  end
+
+  test "only an authored asset may take a generator's format, and no asset a prose one" do
+    assert_not generated_asset(source_format: "latex").valid?
+    assert_not generated_asset(source_format: "markdown").valid?
+    assert_not generated_asset(source_format: "tikz").valid?
+
+    file = contents(:image_one)
+    file.source_format = "prefigure"
+    assert_not file.valid?
+
+    division = contents(:one)
+    division.source_format = "prefigure"
+    assert_not division.valid?
+  end
+
+  # The same input, byte for byte, is digested by the web-editor (see its generators
+  # test): the hex here is the one both sides must agree on.
+  test "render_input is the source and the docinfo elements the generator reads, and digests to the shared fixture" do
+    asset = generated_asset
+    docinfo = "<docinfo>\n  <macros>\\newcommand{\\R}{\\mathbb{R}}</macros>\n</docinfo>"
+
+    assert_equal [ '<diagram dimensions="(300,300)"/>', "\\newcommand{\\R}{\\mathbb{R}}", "" ].join("\n\u0000\n"),
+                 asset.render_input(docinfo)
+    assert_equal "65ad0eda2b54873333e717242fe79d69243c7ac4f4f1ce5a37fe8641f0d2e9c3",
+                 Digest::SHA256.hexdigest(asset.render_input(docinfo))
+  end
+
+  test "docinfo_element_inner reads the raw inner text, tolerating attributes, and is empty when absent" do
+    assert_equal " a &amp; b ", Content.docinfo_element_inner('<docinfo><macros xml:space="preserve"> a &amp; b </macros></docinfo>', "macros")
+    assert_equal "", Content.docinfo_element_inner("<docinfo/>", "prefigure-preamble")
+  end
+
+  test "preview_current? holds only while the digest matches the source and docinfo" do
+    asset = generated_asset
+    attach_svg(asset)
+    asset.preview_input_digest = Digest::SHA256.hexdigest(asset.render_input)
+    assert asset.preview_current?
+
+    asset.source = "<diagram/>"
+    assert_not asset.preview_current?, "editing the source must invalidate the picture"
+
+    asset.source = '<diagram dimensions="(300,300)"/>'
+    assert asset.preview_current?
+    asset.project.docinfo = "<docinfo><macros>\\newcommand{\\N}{x}</macros></docinfo>"
+    assert_not asset.preview_current?, "macros are an input to the render"
+  end
+
+  test "preview_current? is false with no picture or no digest" do
+    assert_not generated_asset.preview_current?
+    asset = generated_asset
+    attach_svg(asset)
+    assert_not asset.preview_current?
+  end
+
+  test "a generated asset's picture must be an SVG, and it serves as the asset's file" do
+    asset = generated_asset
+    asset.file = { io: File.open(Rails.root.join("test/fixtures/files/test_image.png")),
+                   filename: "graph.png", content_type: "image/png" }
+    assert_not asset.valid?
+    assert_match(/SVG/, asset.errors.full_messages.join)
+
+    asset = generated_asset
+    attach_svg(asset)
+    assert asset.save, asset.errors.full_messages.inspect
+    assert_equal "graph.svg", asset.external_filename
+    assert asset.thumbnailable?
   end
 end

@@ -1,4 +1,6 @@
-json.extract! asset, :id, :project_id, :ref, :kind, :source, :description, :short_description, :title, :created_at, :updated_at
+# `source_format`: "pretext" for most assets; a generator's id ("prefigure") for a
+# generated asset, whose `source` is then that generator's input, not PreTeXt.
+json.extract! asset, :id, :project_id, :ref, :kind, :source_format, :source, :description, :short_description, :title, :created_at, :updated_at
 if asset.file_attached?
   extension = asset.file_extension
   # `file`: the public, project+ref-scoped redirect to the asset's current
@@ -20,4 +22,12 @@ if asset.file_attached?
   if asset.thumbnailable?
     json.thumbnail_path content_thumbnail_project_path(asset.project, ref: asset.ref, format: extension)
   end
+end
+if asset.generated_asset?
+  # The digest the stored picture was built from. The editor recomputes currency
+  # itself from the live source (it has text the server has not been sent yet);
+  # `preview_current` is the server's reading of the saved row, for anything that
+  # only sees JSON.
+  json.preview_input_digest asset.preview_input_digest
+  json.preview_current asset.preview_current?
 end

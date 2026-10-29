@@ -87,6 +87,34 @@ describe('resolveAssetRef', () => {
       '<!-- missing asset: missing-ref -->',
     )
   })
+
+  // A generated asset is always the source form: the generator's element wrapping
+  // the source, inside a plain <image> -- never <image source>, whatever is stored.
+  it('wraps a generated asset\'s source in its generator element, with the ref as label', () => {
+    const asset: Asset = {
+      ...baseAsset,
+      sourceFormat: 'prefigure',
+      source: '<diagram/>',
+      shortDescription: 'A graph',
+      url: 'https://example.com/euler-painting.svg',
+      previewInputDigest: 'abc',
+    }
+    expect(resolveAssetRef('euler-painting', [asset])).toBe(
+      '<image>\n<shortdescription>A graph</shortdescription>\n<prefigure xmlns="https://prefigure.org" label="euler-painting">\n<diagram/>\n</prefigure>\n</image>',
+    )
+  })
+
+  it('emits the source form for a generated asset even if it is flagged as a file', () => {
+    const asset: Asset = {
+      ...baseAsset,
+      sourceFormat: 'prefigure',
+      isFile: true,
+      fileRef: 'euler-painting.svg',
+      source: '<diagram/>',
+    }
+    expect(resolveAssetRef('euler-painting', [asset])).not.toContain('source=')
+    expect(resolveAssetRef('euler-painting', [asset])).toContain('<prefigure')
+  })
 })
 
 describe('assetWrapperLines', () => {
@@ -110,5 +138,17 @@ describe('assetWrapperLines', () => {
       '<image>',
       '<shortdescription>Euler &amp; friends</shortdescription>',
     ])
+  })
+
+  it('draws the generator element around a generated asset\'s source', () => {
+    const asset: Asset = { ...baseAsset, sourceFormat: 'prefigure', shortDescription: 'A graph' }
+    expect(assetWrapperLines(asset)).toEqual({
+      before: [
+        '<image>',
+        '<shortdescription>A graph</shortdescription>',
+        '<prefigure xmlns="https://prefigure.org" label="euler-painting">',
+      ],
+      after: ['</prefigure>', '</image>'],
+    })
   })
 })

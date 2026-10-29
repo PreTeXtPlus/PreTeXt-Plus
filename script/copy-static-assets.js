@@ -34,3 +34,16 @@ copy(
 const dictionary = path.dirname(require.resolve("dictionary-en"));
 copy(path.join(dictionary, "index.aff"), "public/assets/dictionaries/en.aff");
 copy(path.join(dictionary, "index.dic"), "public/assets/dictionaries/en.dic");
+
+// PreFigure's wasm engine (vendor/prefigure, built by script/build-prefig-wasm.sh),
+// loaded by the PreFigure engine worker
+// (packages/web-editor/src/generators/prefigure/worker). Unlike the files above
+// it goes to app/assets/builds, beside the bundles, so the asset pipeline serves
+// it under digested names: public/assets is cached for a year by filename, and
+// these filenames stay the same when the engine is rebuilt. projects/_form hands
+// the editor each file's digested URL as `prefigureAssetUrls`; the two filenames
+// are pinned in the worker's protocol.ts.
+const engine = path.join(__dirname, "..", "vendor", "prefigure");
+for (const name of ["prefig_wasm.js", "prefig_wasm_bg.wasm"]) {
+  copy(path.join(engine, name), path.join("app/assets/builds/prefigure", name));
+}

@@ -13,6 +13,7 @@ import {
   DashboardIcon,
   DEFAULT_LANGUAGE,
   COLLAB_SCHEMA_VERSION,
+  generators,
 } from "@pretextbook/web-editor";
 import { buildImportEngines } from "./importEngines";
 import { buildImportShare } from "./importShare";
@@ -373,6 +374,12 @@ function editorStateToCollabSeed(state) {
  * @property {string} apiBase - The editor-state endpoint URL (`editorStateUrl`).
  * @property {string} [pandocUrl] - POST target that proxies pandoc conversions (projects#pandoc).
  * @property {string} [csrfToken]
+ * @property {string} [prefigureWorkerUrl] - Where the PreFigure engine worker bundle
+ *   (app/javascript/prefigure_worker.js) is served from. Omitted, PreFigure assets
+ *   show their stored picture and render nothing live.
+ * @property {Object<string, string>} [prefigureAssetUrls] - The digested URL of each
+ *   file of the PreFigure wasm engine, by filename (vendor/prefigure, copied into
+ *   app/assets/builds/prefigure by script/copy-static-assets.js).
  * @property {string} [previewWorkerUrl] - Where the preview render worker bundle
  *   (app/javascript/preview_worker.js) is served from; previews render off the
  *   main thread when set.
@@ -396,6 +403,8 @@ function EditorApp({ config }) {
     subscriptionsPath,
     signOutPath,
     previewWorkerUrl,
+    prefigureWorkerUrl,
+    prefigureAssetUrls,
   } = config;
 
   // Rails routes the React side needs.  Kept here (rather than in many data
@@ -979,6 +988,13 @@ function EditorApp({ config }) {
     upsertRecord(serverSnapshot.current, kind, record);
   }, []);
 
+  // The working copy's entry for a record, to patch fields onto in place
+  // (`upsertRecord` would do too, but this makes "which fields" explicit).
+  const workingRecord = useCallback(
+    (kind, id) => (working.current?.[RECORD_POOLS[kind]] ?? []).find((r) => r.id === id),
+    [],
+  );
+
   // A removed record leaves both, or a later save would name an id the server
   // has dropped -- which it would read as an insert.
   const recordRemoved = useCallback((kind, id) => {
@@ -1050,6 +1066,54 @@ function EditorApp({ config }) {
       return created;
     },
     [uniqueRef, patchProjectJson, invalidateAssetQueries, recordCreated],
+  );
+
+  // A generated asset (a PreFigure diagram): an authored asset whose source
+  // format is the generator's, created with the generator's starter source so a
+  // peer or a reload opens the same diagram and there is something for the first
+  // render's digest to be current against.
+  const onCreateGenerated = useCallback(
+    async (format, title) => {
+      const ref = uniqueRef(slugifyRef(title));
+      const json = await patchProjectJson({
+        assets_attributes: [ {
+          ref, kind: "authored_asset", source_format: format, title,
+          source: generators[format]?.starterSource ?? "",
+        } ],
+      });
+      const created = toEditorAsset(
+        railsAssetToEditor((json.assets ?? []).find((a) => a.ref === ref)),
+      );
+      recordCreated("asset", created);
+      invalidateAssetQueries();
+      return created;
+    },
+    [uniqueRef, patchProjectJson, invalidateAssetQueries, recordCreated],
+  );
+
+  // The editor rendered a generated asset in the browser: store the picture as
+  // the asset's file, together with the digest of the source it was rendered
+  // from -- the same multipart entry an upload uses, keyed by `id`. Not folded
+  // into the bulk save: in a collaborative session there is no bulk save, and
+  // the picture has to reach the host either way. The response's record (its
+  // new `url`) goes back to the editor, which takes only the stored picture's
+  // fields from it; the working copy likewise keeps its own source, which may be
+  // newer than the row's. A failed upload rejects, and the editor says so.
+  const onAssetOutput = useCallback(
+    async (asset, output) => {
+      if (!asset.id) return;
+      const file = new File([output.svg], `${asset.ref}.svg`, { type: "image/svg+xml" });
+      const json = await patchProjectAssetUpload({ id: asset.id, preview_input_digest: output.previewInputDigest, file });
+      const saved = (json.assets ?? []).find((a) => String(a.id) === String(asset.id));
+      if (!saved) return undefined;
+      const record = toEditorAsset(railsAssetToEditor(saved));
+      const working = workingRecord("asset", asset.id);
+      if (working) Object.assign(working, { url: record.url, thumbnailUrl: record.thumbnailUrl,
+        previewInputDigest: record.previewInputDigest,
+        extension: record.extension, contentType: record.contentType, fileRef: record.fileRef });
+      return record;
+    },
+    [patchProjectAssetUpload, workingRecord],
   );
 
   // Fetches the image bytes server-side and hands back a File -- it does not
@@ -1530,6 +1594,17 @@ function EditorApp({ config }) {
     [projectQuery.data],
   );
 
+  // Browser engines for generated assets, keyed by generator. Only PreFigure so
+  // far, and only when the page was given its worker and engine files; without
+  // them PreFigure assets show their stored picture and render nothing live.
+  const generatorRuntimes = useMemo(
+    () =>
+      prefigureWorkerUrl && prefigureAssetUrls && Object.keys(prefigureAssetUrls).length
+        ? { prefigure: { workerUrl: prefigureWorkerUrl, assetUrls: prefigureAssetUrls } }
+        : undefined,
+    [prefigureWorkerUrl, prefigureAssetUrls],
+  );
+
   // ----- Render ------------------------------------------------------------
   if (projectQuery.isPending) {
     return <div className="flex h-full items-center justify-center">
@@ -1669,6 +1744,9 @@ function EditorApp({ config }) {
         onAssetUpload={onAssetUpload}
         onAssetFetchUrl={onAssetFetchUrl}
         onCreateAuthored={onCreateAuthored}
+        onCreateGenerated={onCreateGenerated}
+        onAssetOutput={onAssetOutput}
+        generatorRuntimes={generatorRuntimes}
         onAssetUpdate={onAssetUpdate}
         onAssetRemove={onAssetRemove}
         onLoadAssets={onLoadAssets}

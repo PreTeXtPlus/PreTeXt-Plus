@@ -253,6 +253,39 @@ describe("creating an asset", () => {
     expect(barTitle()).toHaveTextContent("My Diagram");
   });
 
+  // One tab per generator in the registry; PreFigure is the first. The host is
+  // told which generator and gets the title, exactly as for a custom asset.
+  it("creates a PreFigure asset from its tab and opens it", async () => {
+    const generated: [string, string][] = [];
+    renderEditors({
+      onCreateGenerated: async (generator, title) => {
+        generated.push([generator, title]);
+        return { id: "a-graph", ref: "graph", title, sourceFormat: generator, source: "<diagram/>" };
+      },
+    });
+    showAssets();
+    fireEvent.click(screen.getByTestId("toc-new-asset-btn"));
+
+    fireEvent.click(within(pane()).getByText("PreFigure"));
+    fireEvent.change(within(pane()).getByLabelText("Title"), {
+      target: { value: "Graph" },
+    });
+    await act(async () => {
+      fireEvent.click(within(pane()).getByText("Create"));
+    });
+
+    expect(generated).toEqual([["prefigure", "Graph"]]);
+    expect(screen.queryByTestId("new-item-pane")).toBeNull();
+    expect(barTitle()).toHaveTextContent("Graph");
+  });
+
+  it("offers no generator tab when the host cannot create generated assets", () => {
+    renderEditors();
+    showAssets();
+    fireEvent.click(screen.getByTestId("toc-new-asset-btn"));
+    expect(within(pane()).queryByText("PreFigure")).toBeNull();
+  });
+
   it("links an unlinked image placeholder to the asset it creates", async () => {
     const { sourceOf } = renderEditors();
     showAssets();

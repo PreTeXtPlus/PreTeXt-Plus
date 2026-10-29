@@ -61,6 +61,25 @@ class SourceAssemblerTest < ActionDispatch::IntegrationTest
     assert_not_includes source, "plus:section", "a placeholder survived assembly"
   end
 
+  # A generated asset reaches the document as its source, wrapped by its format's
+  # element -- never as an <image source> naming its stored picture, which is only a
+  # preview. The format travels as `source_format`, through the same mapping the
+  # editor uses.
+  test "a generated asset assembles to its generator's element, not its stored picture" do
+    skip_without_bundle
+    @project.assets.create!(kind: :authored_asset, source_format: "prefigure", ref: "graph", title: "Graph",
+                            source: "<diagram dimensions=\"(10,10)\"/>",
+                            file: fixture_file_upload("test_diagram.svg", "image/svg+xml"))
+    root = @project.root_division
+    root.update!(source: "#{root.source}\n<figure><plus:image ref=\"graph\"/></figure>")
+
+    source = SourceAssembler.new(@project).call
+
+    assert_includes source, '<prefigure xmlns="https://prefigure.org" label="graph">'
+    assert_includes source, '<diagram dimensions="(10,10)"/>'
+    assert_not_includes source, 'source="graph.svg"'
+  end
+
   test "the docinfo in effect is the one that lands in the document" do
     skip_without_bundle
     @project.update!(docinfo: "<docinfo><macros>\\def\\projectown{1}</macros></docinfo>")

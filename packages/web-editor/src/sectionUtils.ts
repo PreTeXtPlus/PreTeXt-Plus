@@ -995,6 +995,8 @@ const VERBATIM_SOURCES: Record<SourceFormat, string[]> = {
     "latex-image",
     "sageplot",
     "asymptote",
+    // A PreFigure diagram is code too; a `<label>` in one can say anything.
+    "prefigure",
   ].map((tag) => `<${tag}(?:\\s[^>]*)?>[\\s\\S]*?</${tag}>`),
   markdown: [
     "```[\\s\\S]*?```", // fenced code block (backticks)
@@ -1334,6 +1336,92 @@ export function snippetEmbedCode(
   if (sourceFormat === "markdown") return `::snippet{ref="${ref}"}`;
   if (sourceFormat === "latex") return `\\plus{snippet}{${ref}}`;
   return `<plus:snippet ref="${ref}"/>`;
+}
+
+// ---------------------------------------------------------------------------
+// Placements — where an image or snippet is placed, and under which instance
+// ---------------------------------------------------------------------------
+
+/** The two kinds of record that may be placed more than once. */
+export type PlacementTag = "image" | "snippet";
+
+/**
+ * One `<plus:image>`/`<plus:snippet>` placeholder in a source: what it places,
+ * the `instance` it names (see {@link qualifyIdentifiers}), and where it is.
+ */
+export interface Placement {
+  tag: PlacementTag;
+  ref: string;
+  instance?: string;
+  /** Offset and length of the placeholder's text in the source. */
+  index: number;
+  length: number;
+}
+
+/**
+ * The placeholder syntax of each format. LaTeX names the instance in the
+ * optional argument (`\plus[instance=ch3]{image}{graph}`), which the
+ * converter turns into the same attribute the other two write directly.
+ */
+const PLACEMENT_SOURCE: Record<SourceFormat, string> = {
+  pretext: `<plus:(image|snippet)\\b([^>]*?)\\/?>`,
+  markdown: `::(image|snippet)(?:\\[[^\\]]*\\])?\\{([^}]*)\\}`,
+  latex: `\\\\plus(?:\\[([^\\]]*)\\])?\\{(image|snippet)\\}\\{([^}]+)\\}`,
+};
+
+const quotedAttr = (attrs: string, name: string): string | undefined =>
+  new RegExp(`\\b${name}\\s*=\\s*"([^"]*)"`).exec(attrs)?.[1];
+
+/**
+ * Every image and snippet placement in `content`, in document order, ignoring
+ * examples inside verbatim spans — the same placeholders {@link parseAssetRefs}
+ * and {@link parseSnippetRefs} find, with their position and instance name.
+ */
+export function parsePlacements(content: string, sourceFormat: SourceFormat): Placement[] {
+  const re = new RegExp(PLACEMENT_SOURCE[sourceFormat], "g");
+  const scanned = blankVerbatim(content, sourceFormat);
+  const placements: Placement[] = [];
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(scanned)) !== null) {
+    let tag: string, ref: string | undefined, instance: string | undefined;
+    if (sourceFormat === "latex") {
+      tag = m[2];
+      ref = m[3].trim();
+      instance = /(?:^|,)\s*instance\s*=\s*\{?([^,}]*)\}?/.exec(m[1] ?? "")?.[1];
+    } else {
+      tag = m[1];
+      ref = quotedAttr(m[2], "ref");
+      instance = quotedAttr(m[2], "instance");
+    }
+    if (!ref) continue;
+    placements.push({
+      tag: tag as PlacementTag,
+      ref,
+      instance: instance?.trim() || undefined,
+      index: m.index,
+      length: m[0].length,
+    });
+  }
+  return placements;
+}
+
+/**
+ * `placeholder` — the text of one placement, in `sourceFormat`'s syntax — with
+ * `instance` named on it, everything else as written.
+ */
+export function addPlacementInstance(
+  placeholder: string,
+  sourceFormat: SourceFormat,
+  instance: string,
+): string {
+  if (sourceFormat === "markdown") return placeholder.replace(/\}$/, ` instance="${instance}"}`);
+  if (sourceFormat === "latex") {
+    return /^\\plus\[/.test(placeholder)
+      ? placeholder.replace(/^\\plus\[([^\]]*)\]/, (_m, opts: string) =>
+        `\\plus[${opts}${opts.trim() ? "," : ""}instance=${instance}]`)
+      : placeholder.replace(/^\\plus/, `\\plus[instance=${instance}]`);
+  }
+  return placeholder.replace(/(\s*\/?>)$/, ` instance="${instance}"$1`);
 }
 
 /**
@@ -2776,14 +2864,15 @@ const ATTR_RE = /([A-Za-z_:][-\w.:]*)\s*=\s*(?:"([^"]*)"|'([^']*)')/g;
 /**
  * Attribute names a `<plus:*>` placeholder consumes itself, and which
  * therefore must not be copied onto the element that replaces it. `ref` names
- * the record being included; it has no meaning in real PreTeXt.
+ * the record being included, and `instance` names this placement of it (see
+ * {@link qualifyIdentifiers}); neither has a meaning in real PreTeXt.
  */
-const PLACEHOLDER_OWN_ATTRS: ReadonlySet<string> = new Set(["ref"]);
+const PLACEHOLDER_OWN_ATTRS: ReadonlySet<string> = new Set(["ref", "instance"]);
 
 /**
  * Every attribute of a `<plus:*>` placeholder that belongs to the *element it
  * resolves to* rather than to the placeholder itself — i.e. all of them but
- * `ref`.
+ * `ref` and `instance`.
  *
  * This is deliberately a blanket rule rather than a list of known attributes.
  * `@component`, `@width`, `@xml:lang` and whatever PreTeXt adds next are all
@@ -2799,6 +2888,14 @@ function parsePlaceholderAttrs(attrs: string): PlaceholderAttr[] {
     out.push({ name, value: m[2] ?? m[3] ?? "" });
   }
   return out;
+}
+
+/** The placeholder's `instance` name, or undefined when it has none. */
+function placeholderInstance(attrs: string): string | undefined {
+  for (const m of attrs.matchAll(ATTR_RE)) {
+    if (m[1] === "instance") return (m[2] ?? m[3] ?? "").trim() || undefined;
+  }
+  return undefined;
 }
 
 /**
@@ -2905,15 +3002,121 @@ function applyPlaceholderAttrs(xml: string, attrs: PlaceholderAttr[]): string {
 }
 
 /**
+ * Elements whose content is not PreTeXt — a generator's input (`<diagram>` and
+ * its own vocabulary) or drawing code. Their start tag is PreTeXt and carries
+ * the image's `@label`, but nothing inside them is an identifier of the
+ * document's, so {@link qualifyIdentifiers} leaves their insides alone.
+ */
+const OPAQUE_ELEMENTS: ReadonlySet<string> = new Set([
+  "prefigure",
+  "latex-image",
+  "sageplot",
+  "asymptote",
+  "mermaid",
+]);
+
+/** Attributes that give an element an identity PreTeXt requires to be unique. */
+const IDENTIFIER_ATTRS: ReadonlySet<string> = new Set(["xml:id", "label"]);
+
+/** Attributes that point at an identity: an `<xref>`'s `@ref`, `@first`, `@last`. */
+const REFERENCE_ATTRS: ReadonlySet<string> = new Set(["ref", "first", "last"]);
+
+/**
+ * The identifier `id` takes inside the placement named `instance`. Refs never
+ * contain anything but letters, digits, `-` and `_`, and neither may an
+ * instance name, so the result is itself a valid ref-shaped label.
+ */
+export function qualifiedIdentifier(id: string, instance: string): string {
+  return `${id}-${instance}`;
+}
+
+/**
+ * `xml` with `rewrite` applied to every start tag, in document order, except
+ * those inside an {@link OPAQUE_ELEMENTS} element (whose own start tag is
+ * still rewritten). An opaque element's end is found by its closing tag's
+ * text rather than by counting tags: its contents may be LaTeX, where `a<b`
+ * is no tag at all.
+ */
+function rewriteStartTags(xml: string, rewrite: (startTag: string) => string): string {
+  let out = "";
+  let copied = 0;
+  let i = 0;
+  for (;;) {
+    const tag = nextTag(xml, i);
+    if (!tag) break;
+    i = tag.close;
+    if (tag.closing) continue;
+    out += xml.slice(copied, tag.open) + rewrite(xml.slice(tag.open, tag.close));
+    copied = tag.close;
+    const localName = tag.name.slice(tag.name.indexOf(":") + 1);
+    if (tag.selfClosing || !OPAQUE_ELEMENTS.has(localName)) continue;
+    const end = xml.indexOf(`</${tag.name}`, tag.close);
+    if (end === -1) break; // unbalanced: leave the rest as it is
+    i = end;
+  }
+  return out + xml.slice(copied);
+}
+
+/** `startTag` with the value of each attribute named in `names` mapped through `map`. */
+function rewriteAttrValues(
+  startTag: string,
+  names: ReadonlySet<string>,
+  map: (value: string) => string,
+): string {
+  return startTag.replace(ATTR_RE, (whole, name: string, dq?: string, sq?: string) => {
+    if (!names.has(name)) return whole;
+    const value = map(dq ?? sq ?? "");
+    return renderAttr({ name, value });
+  });
+}
+
+/**
+ * Make one placement of an included record's identifiers its own, for a
+ * placeholder that names its `instance`: every `@xml:id` and `@label` in the
+ * resolved markup becomes {@link qualifiedIdentifier}`(id, instance)`, and
+ * every `@ref`/`@first`/`@last` inside it that pointed at one of those follows
+ * — so a snippet's xref to its own theorem stays inside the same placement,
+ * while one pointing outside is untouched.
+ *
+ * PreTeXt requires both attributes to be unique across the document (its
+ * assembly reports a duplicate as an error), and a generated image's `@label`
+ * is also its output filename, so a record placed twice must not carry the
+ * same ones twice. Its unnamed placement keeps the record's own identifiers;
+ * every other placement is named in the source, which is what keeps these
+ * stable: a label never changes because something was placed earlier.
+ *
+ * Applied to fully resolved markup, so identifiers of records nested inside
+ * (an image in a snippet) are qualified too, by every enclosing instance.
+ */
+export function qualifyIdentifiers(xml: string, instance: string): string {
+  const renamed = new Set<string>();
+  const qualified = rewriteStartTags(xml, (tag) =>
+    rewriteAttrValues(tag, IDENTIFIER_ATTRS, (id) => {
+      renamed.add(id);
+      return qualifiedIdentifier(id, instance);
+    }),
+  );
+  if (renamed.size === 0) return qualified;
+  // A reference may name several targets, separated by commas or spaces.
+  return rewriteStartTags(qualified, (tag) =>
+    rewriteAttrValues(tag, REFERENCE_ATTRS, (value) =>
+      value.replace(/[^\s,]+/g, (id) => (renamed.has(id) ? qualifiedIdentifier(id, instance) : id)),
+    ),
+  );
+}
+
+/**
  * Scan `xml` for every `<plus:* ref="..."/>` placeholder and expand each one:
  * `image` resolves against `assets`, `snippet` resolves (recursively —
  * see {@link resolveSnippetRef}) against `snippets`, and anything else is
  * treated as a division ref and resolved via {@link resolveDivisionXml}.
  *
- * Every attribute of the placeholder *except* `ref` is then copied onto the
- * markup that replaces it (see {@link applyPlaceholderAttrs}) — that is how a
- * `@component` reaches a division that is included by reference rather than
- * written inline, and how an `<image>` gets its per-embedding `@width`.
+ * A placeholder naming its `instance` then has the identifiers in that markup
+ * made its own (see {@link qualifyIdentifiers}), and every other attribute of
+ * the placeholder *except* `ref` is copied onto the markup that replaces it
+ * (see {@link applyPlaceholderAttrs}) — that is how a `@component` reaches a
+ * division that is included by reference rather than written inline, and how
+ * an `<image>` gets its per-embedding `@width`.
  *
  * The copy happens here, on the resolved output, rather than anywhere inside
  * resolution: `divisionToPretext` caches its conversion per `xml:id`, so
@@ -2943,7 +3146,9 @@ function expandRefs(
           : tag === "snippet"
             ? resolveSnippetRef(ref, snippets, divisions, assets, ancestors)
             : resolveDivisionXml(ref, divisions, snippets, assets, ancestors);
-      return applyPlaceholderAttrs(resolved, parsePlaceholderAttrs(attrs));
+      const instance = placeholderInstance(attrs);
+      const placed = instance ? qualifyIdentifiers(resolved, instance) : resolved;
+      return applyPlaceholderAttrs(placed, parsePlaceholderAttrs(attrs));
     },
   );
 }

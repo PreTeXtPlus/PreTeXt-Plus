@@ -110,6 +110,10 @@ class SourceAssembler
         id: asset.id,
         ref: asset.ref,
         kind: asset.kind,
+        # A generated asset is assembled in its source form, wrapped in its
+        # generator's element, which the format decides; its stored picture is a
+        # preview, not something the document references.
+        source_format: asset.source_format,
         source: asset.source,
         short_description: asset.short_description,
         title: asset.title
