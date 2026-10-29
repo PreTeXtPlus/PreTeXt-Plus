@@ -413,9 +413,12 @@ export interface editorProps {
   /**
    * A generated asset was rendered in the browser from its current source: the
    * host stores `output.svg` as the asset's file together with
-   * `output.outputSourceDigest`, and may return the asset as persisted (its new
-   * `url`), which replaces the pool entry. Fires at most once per distinct
-   * digest per session.
+   * `output.outputSourceDigest`, and may return the asset as persisted: its
+   * stored picture's fields (`url`, `thumbnailUrl`, `extension`, `contentType`,
+   * `fileRef`, `outputSourceDigest`) are taken onto the pool entry, nothing
+   * else. Reject if the picture was not stored: the preview shows the error
+   * and offers to try again. Fires once per distinct digest per session, plus
+   * any retries after a rejection.
    */
   onAssetOutput?: (asset: Asset, output: GeneratedAssetOutput) => Promise<Asset | void> | void;
   /**
@@ -1400,23 +1403,39 @@ const EditorsInner = (props: EditorsInnerProps) => {
   };
 
   /**
-   * A browser render of a generated asset's current source. The host stores the
-   * picture; the pool records the digest at once so the status line reads
-   * "current" without waiting, and takes the host's record (its new `url`) when
-   * it answers. Peers learn the digest through the doc, the bytes through the host.
+   * A browser render of a generated asset, for the host to store. Nothing is
+   * written until the host has stored it, so a failed upload leaves the asset
+   * describing the picture it really has; the rejection goes back to the
+   * preview, which reports it. Once stored, only the stored picture's fields —
+   * its `url` and the digest it was rendered from — are laid onto the asset *as
+   * it is now*: typing may have overtaken the render, so every other field,
+   * the source above all, is newer than the record the render started from.
+   * Hence the flush, as in `settledDivisions`: a keystroke the code editor's
+   * debounce still holds is otherwise only in the buffer, and writing the
+   * pool's older source to the doc would undo it. Peers learn the digest and
+   * URL through the doc, the bytes through the host.
    */
-  const handleAssetOutput = (asset: Asset, output: GeneratedAssetOutput) => {
-    const withDigest: Asset = { ...asset, outputSourceDigest: output.outputSourceDigest };
-    updateAssetInPool(withDigest);
-    bridge?.localAssetUpdate(withDigest);
-    void Promise.resolve(props.onAssetOutput?.(asset, output)).then((persisted) => {
-      if (!persisted) return;
-      // Keep the live source: the host's copy may predate the latest keystroke.
-      const current = storeApi.getState().projectAssets?.find((a) => a.id === asset.id);
-      const merged: Asset = { ...persisted, source: current?.source ?? persisted.source };
-      updateAssetInPool(merged);
-      bridge?.localAssetUpdate(merged);
-    });
+  const handleAssetOutput = async (asset: Asset, output: GeneratedAssetOutput): Promise<void> => {
+    if (!props.onAssetOutput) return;
+    const persisted = await props.onAssetOutput(asset, output);
+    codeEditorRef.current?.flushPendingChange();
+    const current = storeApi
+      .getState()
+      .projectAssets?.find((a) => (asset.id ? a.id === asset.id : a.ref === asset.ref));
+    if (!current) return;
+    const updated: Asset = persisted
+      ? {
+        ...current,
+        url: persisted.url,
+        thumbnailUrl: persisted.thumbnailUrl,
+        extension: persisted.extension,
+        contentType: persisted.contentType,
+        fileRef: persisted.fileRef,
+        outputSourceDigest: persisted.outputSourceDigest ?? output.outputSourceDigest,
+      }
+      : { ...current, outputSourceDigest: output.outputSourceDigest };
+    updateAssetInPool(updated);
+    bridge?.localAssetUpdate(updated);
   };
 
   const handleAssetRemove = (asset: Asset) => {

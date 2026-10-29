@@ -130,6 +130,43 @@ describe("GeneratedAssetPreview", () => {
     );
   });
 
+  it("does not hand the host a render that typing overtook, but does the next one", async () => {
+    const runtime = fakeRuntime("ready");
+    let release!: () => void;
+    const held = new Promise<void>((resolve) => (release = resolve));
+    (runtime.render as ReturnType<typeof vi.fn>).mockImplementationOnce(async (source: string) => {
+      await held;
+      return { svg: SVG, annotations: null, source };
+    });
+    const onOutput = vi.fn();
+    const { rerender } = render(
+      <GeneratedAssetPreview asset={asset} docinfo="" runtime={runtime} onOutput={onOutput} debounceMs={0} />,
+    );
+    await waitFor(() => expect(runtime.render).toHaveBeenCalledTimes(1));
+
+    const typed = { ...asset, source: "<diagram>typed</diagram>" };
+    rerender(<GeneratedAssetPreview asset={typed} docinfo="" runtime={runtime} onOutput={onOutput} debounceMs={0} />);
+    release();
+
+    await waitFor(() => expect(onOutput).toHaveBeenCalledTimes(1));
+    const [sent, output] = onOutput.mock.calls[0];
+    expect(sent.source).toBe("<diagram>typed</diagram>");
+    expect(output.outputSourceDigest).toBe(await sha256Hex(renderInputFor(generators.prefigure, typed.source!, "")));
+  });
+
+  it("says when the host could not store the picture, and stores it on a retry", async () => {
+    const runtime = fakeRuntime("ready");
+    const onOutput = vi.fn().mockRejectedValueOnce(new Error("Upload failed: 500")).mockResolvedValueOnce(undefined);
+    render(<GeneratedAssetPreview asset={asset} docinfo="" runtime={runtime} onOutput={onOutput} debounceMs={0} />);
+
+    expect(await screen.findByTestId("generated-asset-save-error")).toHaveTextContent("Upload failed: 500");
+    fireEvent.click(screen.getByTestId("retry-generated-asset-save"));
+
+    await waitFor(() => expect(onOutput).toHaveBeenCalledTimes(2));
+    expect(onOutput.mock.calls[1][1]).toEqual(onOutput.mock.calls[0][1]);
+    await waitFor(() => expect(screen.queryByTestId("generated-asset-save-error")).not.toBeInTheDocument());
+  });
+
   it("shows the engine's error and keeps going", async () => {
     const runtime = fakeRuntime("ready");
     (runtime.render as ReturnType<typeof vi.fn>).mockRejectedValueOnce(new Error("ValueError: not well-formed"));

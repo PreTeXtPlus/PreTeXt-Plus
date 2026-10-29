@@ -377,9 +377,9 @@ function editorStateToCollabSeed(state) {
  * @property {string} [prefigureWorkerUrl] - Where the PreFigure engine worker bundle
  *   (app/javascript/prefigure_worker.js) is served from. Omitted, PreFigure assets
  *   show their stored picture and render nothing live.
- * @property {string} [prefigureAssetsUrl] - Base URL (trailing slash) of the PreFigure
- *   wasm engine (vendor/prefigure, copied to public/assets/prefigure by
- *   script/copy-static-assets.js).
+ * @property {Object<string, string>} [prefigureAssetUrls] - The digested URL of each
+ *   file of the PreFigure wasm engine, by filename (vendor/prefigure, copied into
+ *   app/assets/builds/prefigure by script/copy-static-assets.js).
  * @property {string} [previewWorkerUrl] - Where the preview render worker bundle
  *   (app/javascript/preview_worker.js) is served from; previews render off the
  *   main thread when set.
@@ -404,7 +404,7 @@ function EditorApp({ config }) {
     signOutPath,
     previewWorkerUrl,
     prefigureWorkerUrl,
-    prefigureAssetsUrl,
+    prefigureAssetUrls,
   } = config;
 
   // Rails routes the React side needs.  Kept here (rather than in many data
@@ -1096,8 +1096,9 @@ function EditorApp({ config }) {
   // from -- the same multipart entry an upload uses, keyed by `id`. Not folded
   // into the bulk save: in a collaborative session there is no bulk save, and
   // the picture has to reach the host either way. The response's record (its
-  // new `url`) goes back to the editor; the working copy keeps its own source,
-  // which may be newer than the row's.
+  // new `url`) goes back to the editor, which takes only the stored picture's
+  // fields from it; the working copy likewise keeps its own source, which may be
+  // newer than the row's. A failed upload rejects, and the editor says so.
   const onAssetOutput = useCallback(
     async (asset, output) => {
       if (!asset.id) return;
@@ -1110,7 +1111,7 @@ function EditorApp({ config }) {
       if (working) Object.assign(working, { url: record.url, thumbnailUrl: record.thumbnailUrl,
         outputSourceDigest: record.outputSourceDigest,
         extension: record.extension, contentType: record.contentType, fileRef: record.fileRef });
-      return { ...record, source: working?.source ?? record.source };
+      return record;
     },
     [patchProjectAssetUpload, workingRecord],
   );
@@ -1594,14 +1595,14 @@ function EditorApp({ config }) {
   );
 
   // Browser engines for generated assets, keyed by generator. Only PreFigure so
-  // far, and only when the page was given its worker; the editor then offers the
-  // "Load engine" button on PreFigure assets.
+  // far, and only when the page was given its worker and engine files; without
+  // them PreFigure assets show their stored picture and render nothing live.
   const generatorRuntimes = useMemo(
     () =>
-      prefigureWorkerUrl && prefigureAssetsUrl
-        ? { prefigure: { workerUrl: prefigureWorkerUrl, assetBaseUrl: prefigureAssetsUrl } }
+      prefigureWorkerUrl && prefigureAssetUrls && Object.keys(prefigureAssetUrls).length
+        ? { prefigure: { workerUrl: prefigureWorkerUrl, assetUrls: prefigureAssetUrls } }
         : undefined,
-    [prefigureWorkerUrl, prefigureAssetsUrl],
+    [prefigureWorkerUrl, prefigureAssetUrls],
   );
 
   // ----- Render ------------------------------------------------------------

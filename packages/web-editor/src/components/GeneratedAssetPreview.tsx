@@ -23,8 +23,11 @@ export interface GeneratedAssetPreviewProps {
   docinfo: string;
   /** The generator's browser engine, or undefined when the host configured none. */
   runtime: GeneratorRuntime | undefined;
-  /** A render whose digest matches the source it rendered; the host persists it. */
-  onOutput?: (asset: Asset, output: GeneratedAssetOutput) => void;
+  /**
+   * A render of the current source, for the host to store. Rejecting means it
+   * was not stored: the pane says so and offers to try again.
+   */
+  onOutput?: (asset: Asset, output: GeneratedAssetOutput) => Promise<void> | void;
   readOnly?: boolean;
   /** How long typing must settle before a render; tests shorten it. */
   debounceMs?: number;
@@ -51,7 +54,8 @@ const useRuntimeStatus = (runtime: GeneratorRuntime | undefined) => {
  * stops, the previous picture staying up and an engine error showing beneath
  * it, and each fresh picture goes to the host through `onOutput` with the digest
  * of exactly the source rendered — so a keystroke that lands mid-render leaves
- * the stored picture honestly stale rather than wrongly current.
+ * the stored picture honestly stale rather than wrongly current. A picture the
+ * host fails to store is reported beneath it, with a retry.
  */
 const GeneratedAssetPreview = ({
   asset,
@@ -88,8 +92,31 @@ const GeneratedAssetPreview = ({
   const [isRendering, setIsRendering] = useState(false);
   const [renderError, setRenderError] = useState<string | null>(null);
   const [failedUrl, setFailedUrl] = useState<string | null>(null);
+  const [saveFailure, setSaveFailure] = useState<{ message: string; output: GeneratedAssetOutput } | null>(null);
   // What the host has been handed this session, so the same render is not sent twice.
   const sentDigests = useRef(new Set<string>());
+  // The props as of the latest render. A render is awaited across keystrokes,
+  // and its closure's `source` is by definition the one it rendered, so whether
+  // typing has overtaken it — and which asset to hand the host — is read here.
+  const latest = useRef({ asset, source, docinfo, onOutput });
+  useEffect(() => {
+    latest.current = { asset, source, docinfo, onOutput };
+  });
+
+  // Hand the host a render to store. A failure forgets the digest, so a retry —
+  // or the same source rendered again — can send it anew.
+  const store = async (output: GeneratedAssetOutput) => {
+    const { asset: current, onOutput: send } = latest.current;
+    if (!send) return;
+    sentDigests.current.add(output.outputSourceDigest);
+    setSaveFailure(null);
+    try {
+      await send(current, output);
+    } catch (cause) {
+      sentDigests.current.delete(output.outputSourceDigest);
+      setSaveFailure({ message: cause instanceof Error ? cause.message : String(cause), output });
+    }
+  };
 
   useEffect(() => () => void (rendered && URL.revokeObjectURL(rendered.url)), [rendered]);
 
@@ -108,10 +135,10 @@ const GeneratedAssetPreview = ({
         });
         // Hand the host only a render of the source as it is *now*; one that
         // typing has overtaken is shown but not stored.
-        const liveDigest = await sha256Hex(renderInputFor(generator, source, docinfo));
-        if (digest === liveDigest && digest !== asset.outputSourceDigest && !sentDigests.current.has(digest)) {
-          sentDigests.current.add(digest);
-          onOutput?.(asset, { svg: result.svg, outputSourceDigest: digest });
+        const now = latest.current;
+        const liveDigest = await sha256Hex(renderInputFor(generator, now.source, now.docinfo));
+        if (digest === liveDigest && digest !== now.asset.outputSourceDigest && !sentDigests.current.has(digest)) {
+          void store({ svg: result.svg, outputSourceDigest: digest });
         }
       } catch (cause) {
         setRenderError(cause instanceof Error ? cause.message : String(cause));
@@ -120,9 +147,7 @@ const GeneratedAssetPreview = ({
       }
     }, debounceMs);
     return () => clearTimeout(timer);
-    // `asset` itself changes on every pool write; the fields that matter are listed.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [runtime, status, generator, asset.ref, asset.outputSourceDigest, source, docinfo, readOnly, debounceMs]);
+  }, [runtime, status, generator, asset.ref, source, docinfo, readOnly, debounceMs]);
 
   if (!generator) {
     return (
@@ -171,6 +196,21 @@ const GeneratedAssetPreview = ({
         >
           {renderError}
         </pre>
+      )}
+      {saveFailure && (
+        <div className="flex flex-col items-center gap-1">
+          <div data-testid="generated-asset-save-error" className="text-[0.75rem] text-red-700 text-center">
+            The picture couldn't be saved: {saveFailure.message}
+          </div>
+          <button
+            type="button"
+            data-testid="retry-generated-asset-save"
+            className="rounded border border-slate-300 bg-white px-3 py-1 text-[0.8rem] text-slate-800 hover:bg-slate-100"
+            onClick={() => void store(saveFailure.output)}
+          >
+            Try again
+          </button>
+        </div>
       )}
       {!runtime ? (
         <div className="text-[0.75rem] text-slate-400 text-center">
