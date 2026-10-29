@@ -53,7 +53,7 @@ describe.skipIf(!existsSync(binary))("the vendored PreFigure engine", () => {
   beforeAll(async () => {
     resetPrefigureEngineForTests();
     const responses = await run({ type: "load", token: 1, glueUrl: glue, wasmUrl: binary });
-    expect(responses.at(-1)).toEqual({ type: "loaded", token: 1 });
+    expect(responses[responses.length - 1]).toEqual({ type: "loaded", token: 1 });
   });
 
   it("is the version the worker expects", async () => {
