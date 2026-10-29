@@ -197,12 +197,14 @@ handler with a stub host in Node.
 
 ### 4.3 Document preview
 
-The live preview's HTML references `generated/prefigure/ref.svg`, which its srcdoc
-iframe resolves against the editor page; `ProjectsController#generated_file` answers
-with the stored picture (the not-found image before the first render). Two gaps remain:
-a render not yet stored is not shown there, and the URL does not change when the
-picture does, so a preview page kept open can show the previous one. Versioning the URL
-by the digest would close the second.
+The live preview's HTML references `generated/prefigure/<label>.svg`. The editor rewrites
+those references to the asset's stored picture, versioned by its digest so a newly
+stored picture replaces the old one (`generators/previewImages.ts`); that also covers a
+placement's qualified label (`graph-ch3`, see "Ref is label is basename" below), which
+nothing else serves. Unrewritten, the srcdoc iframe resolves the path against the editor
+page and `ProjectsController#generated_file` answers for the plain label (the not-found
+image before the first render). One gap remains: a render not yet stored is not shown
+there.
 
 ## Part 6 — `latex-image` via `/generate`
 
@@ -239,8 +241,12 @@ part of this plan.
   Trim nothing, normalize nothing in one place that the other does not.
 - **Macros are an input.** The worker prepends them to every label; a change to them is a
   change to the picture, and the digest says so.
-- **Ref is label is basename.** Embedding one asset twice puts the same `@label` in the
-  document twice; core extracts to one file.
+- **Ref is label is basename.** Embedding one asset twice would put the same `@label` in
+  the document twice, which PreTeXt reports as an error. Every placement but one names an
+  `instance` (`<plus:image ref="graph" instance="ch3"/>`), and assembly qualifies the
+  identifiers inside it (`graph-ch3`); the editor flags an unnamed second placement and
+  offers a name. The name is written down, not derived from order, so labels never move.
+  Builds generate one file per label; the CLI's content-keyed cache makes the copies hits.
 - **Assembly is synchronous.** Keep the digest on the pool entry, never hash inside
   `transformImageAsset`.
 - **Never auto-load the engine on page load** — only when a generated asset's pane mounts.

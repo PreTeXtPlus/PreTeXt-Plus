@@ -118,6 +118,8 @@ import { useEditorStore, useEditorStoreApi } from "../store/hooks";
 import { CollabBridge } from "../collab/bridge";
 import type { CollabSession } from "../collab/types";
 import PresenceAvatars from "../collab/PresenceAvatars";
+import { placementUses, type PlacementCheckInput } from "./editorConfigs/placementDiagnostics";
+import { generatedImageResolver } from "../generators/previewImages";
 
 /**
  * Default wording for the live preview's warning banner.
@@ -2194,6 +2196,41 @@ const EditorsInner = (props: EditorsInnerProps) => {
     [activeDivisionFormat, divisionActiveSource, previewContent],
   );
 
+  // A generated asset in the document preview shows its stored picture, under
+  // whichever label its placement gave it (see generators/previewImages.ts).
+  const generatedImageUrl = useMemo(() => generatedImageResolver(projectAssets ?? []), [projectAssets]);
+
+  // The open division's or snippet's placeholders are checked against every
+  // other placement in the project, so a record placed twice without an
+  // instance name is flagged where it is placed (see placementDiagnostics.ts).
+  // The open record's own placements come from its live buffer, not from here.
+  const placementTarget =
+    editorTarget?.kind === "division"
+      ? { kind: "division" as const, ref: editorTarget.division.xmlId, format: editorTarget.division.sourceFormat }
+      : editorTarget?.kind === "snippet"
+        ? { kind: "snippet" as const, ref: editorTarget.snippet.ref, format: editorTarget.snippet.sourceFormat }
+        : null;
+  const placementCheck = useMemo((): PlacementCheckInput | undefined => {
+    if (!placementTarget) return undefined;
+    const isOpen = (kind: "division" | "snippet", ref: string | undefined) =>
+      kind === placementTarget.kind && ref === placementTarget.ref;
+    const elsewhere = placementUses([
+      ...divisions
+        .filter((d) => !isOpen("division", d.xmlId))
+        .map((d) => ({ name: d.title?.trim() || d.xmlId, source: d.source ?? "", sourceFormat: d.sourceFormat })),
+      ...(projectSnippets ?? [])
+        .filter((sn) => !isOpen("snippet", sn.ref))
+        .map((sn) => ({ name: sn.title?.trim() || sn.ref, source: sn.source ?? "", sourceFormat: sn.sourceFormat })),
+    ]);
+    const knownRefs = new Set<string>([
+      ...divisions.map((d) => d.xmlId),
+      ...(projectSnippets ?? []).map((sn) => sn.ref),
+      ...(projectAssets ?? []).flatMap((a) => (a.ref ? [a.ref] : [])),
+    ]);
+    return { sourceFormat: placementTarget.format, recordRef: placementTarget.ref, elsewhere, knownRefs };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [placementTarget?.kind, placementTarget?.ref, placementTarget?.format, divisions, projectSnippets, projectAssets]);
+
   // A snippet previews on its own: resolved as an embed of it would be, inside
   // a plain article (see `assembleSnippetPreviewSource`). Only while the
   // preview is open — it walks the snippet's nested refs, and runs the
@@ -2441,6 +2478,7 @@ const EditorsInner = (props: EditorsInnerProps) => {
       // Only a division's buffer can be schema-checked: the linter validates
       // the assembled document, which a snippet or asset fragment isn't.
       pretextValidation={isDivisionOpen ? pretextValidation : undefined}
+      placementCheck={placementCheck}
       virtualWrapper={assetWrapper ?? divisionWrapper}
       collab={
         props.collaboration && bridge && activeCollabText && editorKey
@@ -2589,6 +2627,7 @@ const EditorsInner = (props: EditorsInnerProps) => {
         {...target}
         onRebuild={props.onPreviewRebuild}
         renderer={previewRendererFor(props.previewWorkerUrl)}
+        generatedImageUrl={generatedImageUrl}
         docinfo={effectiveDocinfo}
         theme={props.previewTheme}
         bannerMessage={

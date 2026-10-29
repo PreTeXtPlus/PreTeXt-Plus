@@ -22,6 +22,7 @@ export const PREFIGURE_STARTER_SOURCE = `<diagram dimensions="(300,300)" margins
 export const prefigure: AssetGenerator = {
   id: "prefigure",
   label: "PreFigure",
+  element: "prefigure",
   language: "pretext",
   starterSource: PREFIGURE_STARTER_SOURCE,
   wrapSource: (source, ref) =>

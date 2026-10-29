@@ -16,6 +16,8 @@ import type { MonacoExtensionContext } from "./editorConfigs/types";
 import { applyCleanFixes, fixesForModel } from "./editorConfigs/latexClean";
 import { summarizeCleanFixes, type CleanFinding } from "../cleanFindings";
 import { usePretextDiagnostics } from "./editorConfigs/usePretextDiagnostics";
+import { usePlacementDiagnostics } from "./editorConfigs/usePlacementDiagnostics";
+import type { PlacementCheckInput } from "./editorConfigs/placementDiagnostics";
 import type { PretextValidationInput } from "./editorConfigs/pretextDiagnostics";
 import { MonacoCollabBinding } from "../collab/monacoBinding";
 import { planSnippetInsertion } from "./editorConfigs/insertContext";
@@ -23,6 +25,9 @@ import type { EditorSnippet } from "./editorConfigs/snippets";
 import type { CollabUser } from "../collab/types";
 import type { SourceFormat } from "../types/editor";
 import { installPasteConvertListener } from "../pasteConvert";
+
+/** Every buffer format's Monaco language, for the placement quick fix. */
+const PLACEMENT_LANGUAGE_IDS = Object.values(editorConfigs).map((config) => config.language);
 
 /** Live-collaboration wiring for the open buffer's shared text. */
 export interface CodeEditorCollab {
@@ -124,6 +129,12 @@ interface CodeEditorProps {
    * would restart the debounce forever and never lint.
    */
   pretextValidation?: PretextValidationInput;
+  /**
+   * The project's other placements, against which the placeholders in this
+   * buffer are checked for a record placed twice without an instance name
+   * (see `editorConfigs/placementDiagnostics.ts`). Memoize it, as above.
+   */
+  placementCheck?: PlacementCheckInput;
   /**
    * Collaborator presence indicator (avatar chips), when collaboration is on.
    * Rendered floating over the editor's lower-right corner, next to the
@@ -293,6 +304,7 @@ const CodeEditor = forwardRef<CodeEditorHandle, CodeEditorProps>(({
   pasteAutoConvert = true,
   onMenuStateChange,
   pretextValidation,
+  placementCheck,
   collab,
   presence,
   onConvertToPretext,
@@ -566,6 +578,14 @@ const CodeEditor = forwardRef<CodeEditorHandle, CodeEditorProps>(({
     editorRef,
     sourceFormat === "pretext" ? pretextValidation : undefined,
     isEditorMounted,
+  );
+
+  usePlacementDiagnostics(
+    monacoRef,
+    editorRef,
+    placementCheck?.sourceFormat === sourceFormat ? placementCheck : undefined,
+    isEditorMounted,
+    PLACEMENT_LANGUAGE_IDS,
   );
 
   useEffect(() => {

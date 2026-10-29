@@ -72,6 +72,12 @@ export interface AssetGenerator {
   id: GeneratorId;
   /** Tab and title-bar label: "PreFigure". */
   label: string;
+  /**
+   * The PreTeXt element `wrapSource` wraps the source in, which is also the
+   * directory under `generated/` a renderer puts the picture in. Mirrors
+   * Rails' `Content::GeneratedAssetBehavior::ELEMENTS`.
+   */
+  element: string;
   /** The code editor's language for the source buffer. */
   language: SourceFormat;
   /** What a new asset of this generator opens with. Persisted on create. */
