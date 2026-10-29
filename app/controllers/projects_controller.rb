@@ -1,8 +1,8 @@
 class ProjectsController < ApplicationController
-  allow_unauthenticated_access only: %i[ share preview source content_file content_thumbnail ]
+  allow_unauthenticated_access only: %i[ share preview source content_file content_thumbnail generated_file ]
   require_unauthenticated_access only: %i[ tryit ]
   load_and_authorize_resource except: %i[ index owned shared new tryit preview pandoc feedback import_share create_from_template create_from_import legacy_content_file ]
-  skip_authorize_resource only: %i[ share content_file content_thumbnail ]
+  skip_authorize_resource only: %i[ share content_file content_thumbnail generated_file ]
   after_action :allow_iframe, only: :share
   rate_limit to: 25, within: 10.minutes, only: :preview,
              with: -> { render plain: "Preview limit reached. Please wait a few minutes and try again, or create an account to continue writing and save your work!", status: :too_many_requests },
@@ -220,6 +220,20 @@ class ProjectsController < ApplicationController
     return head :not_found unless url
 
     redirect_to_cdn_url url
+  end
+
+  # GET /projects/:id/(*)/generated/:generator/:ref.svg
+  #
+  # Public, like `content_file`: a generated asset's stored picture, at the path a
+  # PreTeXt renderer gives its output -- `<prefigure label="ref">` becomes
+  # `generated/prefigure/ref.svg`. The editor's live preview renders in the browser
+  # into a srcdoc iframe, which resolves that against the editor page, so it lands
+  # here; a real build generates its own copy and never asks. The picture is the
+  # editor's last render of the source, so it can lag behind an edit until the
+  # editor renders again. One with no picture yet redirects to the not-found image.
+  def generated_file
+    asset = @project.contents.where(kind: :generated_asset, generator: params[:generator]).find_by!(ref: params[:ref])
+    redirect_to_cdn_url asset.url
   end
 
   # GET /share_assets/external/:id

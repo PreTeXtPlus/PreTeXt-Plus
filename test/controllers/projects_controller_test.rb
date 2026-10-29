@@ -1670,6 +1670,39 @@ class ProjectsControllerTest < ActionDispatch::IntegrationTest
     assert_equal "/projects/#{@project.id}/external/graph.svg", json["path"]
   end
 
+  # The live preview renders `<prefigure label="graph">` as an <img> of
+  # generated/prefigure/graph.svg, relative to the editor page.
+  test "generated_file redirects to a generated asset's stored picture, signed out too" do
+    asset = @project.assets.create!(kind: :generated_asset, generator: "prefigure", ref: "graph", title: "Graph",
+                                    source: "<diagram/>", file: fixture_file_upload("test_diagram.svg", "image/svg+xml"))
+    sign_out users(:one)
+
+    get "/projects/#{@project.id}/generated/prefigure/graph.svg"
+
+    assert_response :redirect
+    assert_match %r{/rails/active_storage/}, response.location
+    assert_equal generated_file_project_path(@project, generator: "prefigure", ref: asset.ref, format: "svg"),
+      "/projects/#{@project.id}/generated/prefigure/graph.svg"
+  end
+
+  test "generated_file redirects to the not-found image before the editor has rendered one" do
+    @project.assets.create!(kind: :generated_asset, generator: "prefigure", ref: "graph", title: "Graph", source: "<diagram/>")
+
+    get "/projects/#{@project.id}/generated/prefigure/graph.svg"
+
+    assert_response :redirect
+    assert_match %r{/image-not-found\.svg\z}, response.location
+  end
+
+  test "generated_file serves only a generated asset of that generator" do
+    @project.assets.create!(kind: :generated_asset, generator: "prefigure", ref: "graph", title: "Graph", source: "<diagram/>")
+
+    get "/projects/#{@project.id}/generated/latex-image/graph.svg"
+    assert_response :not_found
+    get "/projects/#{@project.id}/generated/prefigure/#{contents(:image_one).ref}.svg"
+    assert_response :not_found
+  end
+
   # /assets is cached for a year by URL, and a rebuilt engine keeps its filenames, so
   # the editor must be pointed at digested ones.
   test "edit hands the editor a digested URL for each PreFigure engine file" do
