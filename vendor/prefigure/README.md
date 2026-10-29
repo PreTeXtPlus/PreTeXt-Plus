@@ -10,7 +10,9 @@ diagram as the author types. `BUILD` records the commit and version.
 | `prefig_wasm.js` | wasm-pack's `--target web` glue: `default(init)`, `set_host_api`, `version`, `build_from_string` |
 | `prefig_wasm_bg.wasm` | the engine |
 
-`script/copy-static-assets.js` copies both to `public/assets/prefigure/`, and
+`script/copy-static-assets.js` copies both to `app/assets/builds/prefigure/`,
+where the asset pipeline serves them under digested names (projects/_form hands
+the editor each file's URL), and
 `packages/web-editor/src/generators/prefigure/worker/protocol.ts` pins the
 filenames and the version the worker expects.
 

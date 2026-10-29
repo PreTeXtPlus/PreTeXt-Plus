@@ -1669,4 +1669,16 @@ class ProjectsControllerTest < ActionDispatch::IntegrationTest
     assert_equal true, json["output_current"]
     assert_equal "/projects/#{@project.id}/external/graph.svg", json["path"]
   end
+
+  # /assets is cached for a year by URL, and a rebuilt engine keeps its filenames, so
+  # the editor must be pointed at digested ones.
+  test "edit hands the editor a digested URL for each PreFigure engine file" do
+    get edit_project_url(@project)
+    assert_response :success
+
+    urls = JSON.parse(css_select("[data-editor-prefigure-asset-urls-value]").first["data-editor-prefigure-asset-urls-value"])
+    assert_equal %w[ prefig_wasm.js prefig_wasm_bg.wasm ], urls.keys
+    assert_match %r{\A/assets/prefigure/prefig_wasm-\h+\.js\z}, urls["prefig_wasm.js"]
+    assert_match %r{\A/assets/prefigure/prefig_wasm_bg-\h+\.wasm\z}, urls["prefig_wasm_bg.wasm"]
+  end
 end

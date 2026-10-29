@@ -114,8 +114,10 @@ source and keeps it in the project's cache (below).
    shipping, no flags, no CLI change.
 
 5. **The browser engine is PreFigure's wasm build, MathJax variant, in a Web Worker we
-   own,** ported from the playground's worker: the glue and binary served from
-   `public/assets/prefigure/`, MathJax 4 bundled in the worker, one shared runtime per
+   own,** ported from the playground's worker: the glue and binary served by the asset
+   pipeline from `app/assets/builds/prefigure/` under digested names (a rebuilt engine
+   keeps its filenames, and `/assets` is cached for a year), MathJax 4 bundled in the
+   worker, one shared runtime per
    page, started when a generated asset's pane mounts (it is a few megabytes, so no
    "load" button). Never on page load.
 
@@ -161,9 +163,9 @@ Settings show the generator; Replace and Duplicate are hidden; Download SVG is `
 `handler.ts` imports the glue from the host's URL, `init`s the binary, `set_host_api`;
 `compat-api.ts` is the host: MathJax, canvas text metrics, macros). The host bundles
 `src/prefigureWorker.ts` as `app/javascript/prefigure_worker.js` and passes
-`prefigureWorkerUrl` + `prefigureAssetsUrl`. `GeneratedAssetPreview.tsx`: stored picture
-and whether it matches, auto-start, debounced render, error strip, retry on a failed
-load. `__tests__/prefigureWasm.test.ts` drives the real vendored engine through the
+`prefigureWorkerUrl` + `prefigureAssetUrls` (each engine file's digested URL).
+`GeneratedAssetPreview.tsx`: stored picture and whether it matches, auto-start,
+debounced render, error strip, retry on a failed load or a failed store. `__tests__/prefigureWasm.test.ts` drives the real vendored engine through the
 handler with a stub host in Node.
 
 ### 4.3 Document preview (follow-up)

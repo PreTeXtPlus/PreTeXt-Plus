@@ -6,5 +6,5 @@
 // the editor is handed the URL it is served from (projects/_form) and starts it
 // as an ES-module Web Worker when a PreFigure asset is opened. The engine itself
 // (vendor/prefigure, a couple of megabytes) is fetched by the worker from
-// public/assets/prefigure (script/copy-static-assets.js).
+// app/assets/builds/prefigure under digested names (script/copy-static-assets.js).
 import "@pretextbook/web-editor/prefigure-worker";

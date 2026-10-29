@@ -47,12 +47,18 @@ class FakeWorker implements PrefigureWorkerLike {
   }
 }
 
-const options = { workerUrl: "/w.js", assetBaseUrl: "https://host.test/assets/prefigure/" };
+const options = {
+  workerUrl: "/w.js",
+  assetUrls: {
+    "prefig_wasm.js": "https://host.test/assets/prefigure/prefig_wasm-0a1b.js",
+    "prefig_wasm_bg.wasm": "https://host.test/assets/prefigure/prefig_wasm_bg-2c3d.wasm",
+  },
+};
 
 const flush = () => new Promise((r) => setTimeout(r, 0));
 
 describe("createPrefigureRuntime", () => {
-  it("loads once, reporting progress, and names the engine's files under the host's base URL", async () => {
+  it("loads once, reporting progress, and hands the worker the host's URL for each engine file", async () => {
     const worker = new FakeWorker();
     const runtime = createPrefigureRuntime(options, { createWorker: () => worker });
     const seen: string[] = [];
@@ -64,10 +70,21 @@ describe("createPrefigureRuntime", () => {
     expect(runtime.status).toBe("ready");
     expect(worker.requests.filter((r) => r.type === "load")).toHaveLength(1);
     const load = worker.requests[0] as Extract<PrefigureWorkerRequest, { type: "load" }>;
-    expect(load.glueUrl).toBe("https://host.test/assets/prefigure/prefig_wasm.js");
-    expect(load.wasmUrl).toBe("https://host.test/assets/prefigure/prefig_wasm_bg.wasm");
+    expect(load.glueUrl).toBe("https://host.test/assets/prefigure/prefig_wasm-0a1b.js");
+    expect(load.wasmUrl).toBe("https://host.test/assets/prefigure/prefig_wasm_bg-2c3d.wasm");
     expect(seen).toContain("loading:Loading MathJax…");
     runtime.dispose();
+  });
+
+  it("fails to load, without starting a worker, when the host left out an engine file", async () => {
+    const createWorker = vi.fn(() => new FakeWorker());
+    const runtime = createPrefigureRuntime(
+      { workerUrl: "/w.js", assetUrls: { "prefig_wasm.js": "https://host.test/glue.js" } },
+      { createWorker },
+    );
+    await expect(runtime.load()).rejects.toThrow("prefig_wasm_bg.wasm");
+    expect(runtime.status).toBe("failed");
+    expect(createWorker).not.toHaveBeenCalled();
   });
 
   it("renders to the SVG and annotations, forwarding the macros, and reports the source rendered", async () => {

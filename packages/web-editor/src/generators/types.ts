@@ -56,11 +56,13 @@ export interface GeneratorRuntimeOptions {
   /** The bundled worker (`@pretextbook/web-editor/prefigure-worker`), as an ES module. */
   workerUrl: string;
   /**
-   * Where the generator's own runtime files are served from — for PreFigure the
-   * wasm engine and its JS glue (see `prefigure/worker/protocol.ts`) — with a
-   * trailing slash.
+   * The URL of each of the generator's own runtime files, keyed by filename —
+   * for PreFigure the wasm engine and its JS glue (the names in
+   * `prefigure/worker/protocol.ts`). Per file rather than one base directory so
+   * a host can serve them under content-digested names: the engine changes
+   * without its filenames changing, and a long-cached copy must not outlive it.
    */
-  assetBaseUrl: string;
+  assetUrls: Readonly<Record<string, string>>;
 }
 
 /** Per-generator runtime configuration a host passes to `Editors`. */

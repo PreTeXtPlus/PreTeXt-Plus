@@ -111,7 +111,18 @@ export function createPrefigureRuntime(
   const load = (): Promise<void> => {
     if (loadPromise) return loadPromise;
     setStatus("loading", "Starting the PreFigure engine…");
+    // The host may give paths ("/assets/prefigure/prefig_wasm-1a2b.js"); the
+    // worker needs absolute URLs, since its own location is wherever the bundle
+    // was served from.
+    const urlOf = (name: string) => {
+      const url = options.assetUrls[name];
+      if (!url) throw new Error(`The host gave no URL for the PreFigure engine's ${name}`);
+      return new URL(url, globalThis.location?.href).toString();
+    };
+    let glueUrl: string, wasmUrl: string;
     try {
+      glueUrl = urlOf(PREFIG_WASM_GLUE);
+      wasmUrl = urlOf(PREFIG_WASM_BINARY);
       worker = createWorker();
     } catch (cause) {
       setStatus("failed", cause instanceof Error ? cause.message : String(cause));
@@ -124,15 +135,8 @@ export function createPrefigureRuntime(
       setStatus("failed", message);
       loadPromise = null;
     });
-    // The host may give a path ("/assets/prefigure/"); the worker needs absolute
-    // URLs, since its own location is wherever the bundle was served from.
-    const base = new URL(options.assetBaseUrl, globalThis.location?.href);
     loadPromise = send(
-      {
-        type: "load",
-        glueUrl: new URL(PREFIG_WASM_GLUE, base).toString(),
-        wasmUrl: new URL(PREFIG_WASM_BINARY, base).toString(),
-      },
+      { type: "load", glueUrl, wasmUrl },
       (message) => setStatus("loading", message),
     ).then(
       () => setStatus("ready"),

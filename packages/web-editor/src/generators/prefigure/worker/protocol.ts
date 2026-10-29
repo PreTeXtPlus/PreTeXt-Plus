@@ -11,7 +11,7 @@
 export const PREFIG_WASM_VERSION = "0.7.9";
 
 /**
- * The engine's files under `assetBaseUrl`: wasm-pack's `--target web` output
+ * The engine's files, keyed so in the host's `assetUrls`: wasm-pack's `--target web` output
  * for the prefigure repo's `packages/prefig-wasm` crate — the JS glue, which
  * loads the binary and exposes `build_from_string`, and the binary itself.
  */

@@ -277,8 +277,9 @@ build input.
 - `prefigure/runtime.ts` is the main-thread side of the engine: a Web Worker
   (`src/prefigureWorker.ts`, bundled by the host like the preview worker) that
   loads PreFigure's wasm build (the prefigure repo's `prefig-wasm` crate,
-  MathJax variant; glue + binary served from the host's
-  `generatorRuntimes.prefigure.assetBaseUrl`), with MathJax 4 answering the
+  MathJax variant; glue + binary at the URLs the host gives per file in
+  `generatorRuntimes.prefigure.assetUrls`, digested so a long cache can't serve
+  a stale engine), with MathJax 4 answering the
   engine's host API for TeX labels and the docinfo `<macros>` in scope
   (`worker/compat-api.ts`, ported from the PreFigure playground — see the NOTICE
   there). SVG only: no tactile/braille. One runtime per generator per page
@@ -288,7 +289,11 @@ build input.
 - `GeneratedAssetPreview.tsx` replaces `AssetPreview` for a generated asset:
   the stored picture and whether it matches the current source, live renders a
   second after typing stops, and `onAssetOutput` to the host with the SVG and
-  the digest of exactly the source rendered.
+  the digest of exactly the source rendered. A render that typing overtook is
+  shown but not sent; a failed store is shown with a retry. `Editors` writes
+  nothing until the host has stored the picture, then lays only the stored
+  picture's fields onto the asset as it is *now* (after flushing the debounce),
+  never the record the render started from — that would undo the typing.
 - `NewAssetForm` grows one tab per registry entry → `onCreateGenerated`.
   `VERBATIM_SOURCES` and the spell checker's `latexImage` scope both list
   `prefigure`. The collab doc carries `generator` and `outputSourceDigest`;
