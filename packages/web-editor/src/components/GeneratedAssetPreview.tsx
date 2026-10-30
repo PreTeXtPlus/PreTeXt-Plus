@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import type { Asset } from "../types/editor";
+import { PREVIEW_IMAGE_CLASS } from "./AssetPreview";
 import {
   docinfoInputsFor,
   GeneratorRenderError,
@@ -29,6 +30,8 @@ export interface GeneratedAssetPreviewProps {
    * was not stored: the pane says so and offers to try again.
    */
   onOutput?: (asset: Asset, output: GeneratedAssetOutput) => Promise<void> | void;
+  /** Where the stored picture downloads from, when that isn't `asset.url` (see `Editors`). */
+  downloadUrlFor?: (asset: Asset) => string | undefined;
   readOnly?: boolean;
   /** How long typing must settle before a render; tests shorten it. */
   debounceMs?: number;
@@ -57,13 +60,17 @@ const useRuntimeStatus = (runtime: GeneratorRuntime | undefined) => {
  * each fresh picture goes to the host through `onOutput` with the digest
  * of exactly the source rendered — so a keystroke that lands mid-render leaves
  * the stored picture honestly stale rather than wrongly current. A picture the
- * host fails to store is reported beneath it, with a retry.
+ * host fails to store is reported beneath it, with a retry. The picture on
+ * screen, fresh or stored, can be downloaded as `<ref>.svg`.
+ *
+ * Holds the picture of one asset, so `Editors` gives each asset its own pane.
  */
 const GeneratedAssetPreview = ({
   asset,
   docinfo,
   runtime,
   onOutput,
+  downloadUrlFor,
   readOnly,
   debounceMs = RENDER_DEBOUNCE_MS,
 }: GeneratedAssetPreviewProps) => {
@@ -165,6 +172,10 @@ const GeneratedAssetPreview = ({
   const storedIsCurrent = !!asset.url && !!currentDigest && asset.previewInputDigest === currentDigest;
   const showingFresh = rendered && rendered.digest === currentDigest;
   const imageUrl = rendered?.url ?? asset.url;
+  // A render is already here as a blob. The stored file may be a redirect to
+  // another origin, where `download` is ignored, so the host says how to ask for
+  // it as an attachment; a new tab keeps the editor if a host hasn't.
+  const downloadUrl = rendered?.url ?? downloadUrlFor?.(asset) ?? asset.url;
 
   let statusLine: string;
   if (showingFresh) statusLine = isRendering ? "Rendering…" : "Rendered from the current source.";
@@ -183,7 +194,7 @@ const GeneratedAssetPreview = ({
         <img
           src={imageUrl}
           alt={asset.shortDescription || asset.title}
-          className="max-w-full min-h-0 flex-shrink object-contain border border-slate-200 rounded bg-white"
+          className={PREVIEW_IMAGE_CLASS}
           onError={() => setFailedUrl(imageUrl)}
         />
       ) : imageUrl ? (
@@ -248,6 +259,18 @@ const GeneratedAssetPreview = ({
           </button>
         </div>
       ) : null}
+      {downloadUrl && failedUrl !== imageUrl && (
+        <a
+          data-testid="download-generated-asset"
+          href={downloadUrl}
+          download={`${asset.ref}.svg`}
+          target="_blank"
+          rel="noreferrer"
+          className="rounded border border-slate-300 bg-white px-3 py-1 text-[0.8rem] text-slate-800 no-underline hover:bg-slate-100"
+        >
+          Download SVG
+        </a>
+      )}
     </div>
   );
 };

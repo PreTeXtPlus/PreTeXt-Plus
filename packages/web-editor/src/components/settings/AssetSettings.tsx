@@ -195,14 +195,6 @@ const AssetSettings = ({
         <SettingsField label="Generator">
           <div data-testid="asset-settings-generator" className="text-[0.85rem] text-slate-700">
             {generator.label}
-            {asset.url && (
-              <>
-                {" · "}
-                <a href={asset.url} download className="underline text-slate-600 hover:text-slate-900">
-                  Download SVG
-                </a>
-              </>
-            )}
           </div>
         </SettingsField>
       )}

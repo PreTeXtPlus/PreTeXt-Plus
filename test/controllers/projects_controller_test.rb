@@ -357,6 +357,23 @@ class ProjectsControllerTest < ActionDispatch::IntegrationTest
     assert_match %r{/rails/active_storage/}, response.location
   end
 
+  test "content_file serves the file as a named attachment with ?download, and inline without" do
+    asset = contents(:image_one)
+    asset.attach_file(io: StringIO.new("<svg xmlns='http://www.w3.org/2000/svg'/>"), filename: "x.svg", content_type: "image/svg+xml")
+    asset.save!(validate: false)
+
+    get content_file_project_path(@project, ref: asset.ref, format: "svg", download: 1)
+    assert_response :redirect
+    follow_redirect!
+    assert_response :success
+    assert_equal "attachment", response.headers["Content-Disposition"].split(";").first
+    assert_includes response.headers["Content-Disposition"], "#{asset.ref}.svg"
+
+    get content_file_project_path(@project, ref: asset.ref, format: "svg")
+    follow_redirect!
+    assert_equal "inline", response.headers["Content-Disposition"].split(";").first
+  end
+
   test "content_file redirects to the asset's current file URL when signed out entirely" do
     asset = contents(:image_one)
 

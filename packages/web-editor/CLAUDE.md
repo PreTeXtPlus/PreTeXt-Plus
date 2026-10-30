@@ -323,7 +323,11 @@ build input.
   second after typing stops, and `onAssetOutput` to the host with the SVG and
   the digest of exactly the source rendered. A render that typing overtook is
   shown but not sent; a failed store is shown with a retry. A failed render
-  shows its message, with any transcript folded under it. `Editors` writes
+  shows its message, with any transcript folded under it. The picture on screen
+  can be downloaded as `<ref>.svg`: a render from its blob, a stored picture from
+  the host's `assetDownloadUrl` (the Rails host's `content_file?download=1`, an
+  attachment redirect, since `download` is ignored once a redirect leaves the
+  origin). The pane holds a rendered picture, so `Editors` keys it by asset. `Editors` writes
   nothing until the host has stored the picture, then lays only the stored
   picture's fields onto the asset as it is *now* (after flushing the debounce),
   never the record the render started from — that would undo the typing.

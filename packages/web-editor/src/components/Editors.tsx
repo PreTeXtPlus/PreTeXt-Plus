@@ -427,6 +427,12 @@ export interface editorProps {
    */
   onAssetOutput?: (asset: Asset, output: GeneratedAssetOutput) => Promise<Asset | void> | void;
   /**
+   * Where a generated asset's stored picture downloads from, for a host whose
+   * `Asset.url` serves it inline or from another origin, where a link's
+   * `download` attribute is ignored. Omitted, the link goes to `Asset.url`.
+   */
+  assetDownloadUrl?: (asset: Asset) => string | undefined;
+  /**
    * Called when the user removes an asset from the project. Return a promise
    * if the removal is persisted asynchronously: the Replace flow awaits it
    * before handing the removed asset's `ref` to its replacement.
@@ -2583,10 +2589,12 @@ const EditorsInner = (props: EditorsInnerProps) => {
     // A generated asset renders in its own engine, not the document renderer.
     preview = (
       <GeneratedAssetPreview
+        key={editorKey}
         asset={editorTarget.asset}
         docinfo={effectiveDocinfo ?? ""}
         runtime={runtimeFor(assetGenerator.id, props.generatorRuntimes)}
         onOutput={handleAssetOutput}
+        downloadUrlFor={props.assetDownloadUrl}
         readOnly={props.readOnly}
       />
     );

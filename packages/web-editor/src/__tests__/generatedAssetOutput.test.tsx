@@ -47,6 +47,7 @@ vi.mock("../components/GeneratedAssetPreview", () => ({
       <button
         data-testid="finish-render"
         data-source={props.asset.source}
+        data-first-seen={started.current.ref}
         data-url={props.asset.url ?? ""}
         data-digest={props.asset.previewInputDigest ?? ""}
         onClick={() => {
@@ -76,7 +77,10 @@ const divisions: Division[] = [
 ];
 const asset: Asset = { id: "a1", ref: "fig", title: "Figure", sourceFormat: "prefigure", source: "<diagram/>" };
 
-function renderWith(onAssetOutput: (asset: Asset, output: GeneratedAssetOutput) => Promise<Asset | void>) {
+function renderWith(
+  onAssetOutput: (asset: Asset, output: GeneratedAssetOutput) => Promise<Asset | void>,
+  projectAssets: Asset[] = [asset],
+) {
   render(
     <Editors
       divisions={divisions}
@@ -84,7 +88,7 @@ function renderWith(onAssetOutput: (asset: Asset, output: GeneratedAssetOutput) 
       projectType="article"
       title="Doc"
       topBar={{}}
-      projectAssets={[asset]}
+      projectAssets={projectAssets}
       onContentChange={() => {}}
       onPreviewRebuild={async () => ""}
       onAssetOutput={onAssetOutput}
@@ -98,6 +102,16 @@ const editor = () => screen.getByTestId("code-editor") as HTMLTextAreaElement;
 const preview = () => screen.getByTestId("finish-render");
 
 describe("storing a generated asset's render", () => {
+  // The pane holds a rendered picture: reused, it would show one asset's picture
+  // under the next one's name, and download it as that.
+  it("gives each generated asset its own pane", () => {
+    const second: Asset = { ...asset, id: "a2", ref: "fig-two", title: "Second" };
+    renderWith(vi.fn(), [asset, second]);
+    expect(preview()).toHaveAttribute("data-first-seen", "fig");
+    fireEvent.click(within(screen.getByTestId("asset-row-fig-two")).getByRole("button"));
+    expect(preview()).toHaveAttribute("data-first-seen", "fig-two");
+  });
+
   it("keeps what the author typed while it rendered and was stored, and takes the stored picture's fields", async () => {
     let answer!: (asset: Asset) => void;
     const onAssetOutput = vi.fn(() => new Promise<Asset>((resolve) => (answer = resolve)));

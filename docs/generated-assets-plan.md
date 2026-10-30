@@ -264,7 +264,7 @@ the host persists an `authored_asset` with `source_format` = the generator and i
 starter source. In the editor, `Asset.sourceFormat` (`AssetSourceFormat`, apart from the
 prose `SourceFormat`) carries it, and `generatorFor(asset.sourceFormat)` is the one test
 for a generated asset.
-Settings show the generator; Replace and Duplicate are hidden; Download SVG is `url`.
+Settings show the generator; Replace and Duplicate are hidden; the preview pane has Download SVG.
 
 ## Part 4 — Engine and pane — done for SVG
 

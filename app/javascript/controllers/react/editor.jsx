@@ -1123,6 +1123,10 @@ function EditorApp({ config }) {
     [patchProjectAssetUpload, workingRecord],
   );
 
+  // An asset's `url` is `content_file`, which redirects to storage and shows the
+  // file inline; this is the same route asking for it as an attachment.
+  const assetDownloadUrl = useCallback((asset) => asset.url && `${asset.url}?download=1`, []);
+
   // Fetches the image bytes server-side and hands back a File -- it does not
   // create a persisted asset. The editor commits the file (possibly after
   // letting the user edit it) through onAssetUpload, the same path used for
@@ -1757,6 +1761,7 @@ function EditorApp({ config }) {
         onCreateAuthored={onCreateAuthored}
         onCreateGenerated={onCreateGenerated}
         onAssetOutput={onAssetOutput}
+        assetDownloadUrl={assetDownloadUrl}
         generatorRuntimes={generatorRuntimes}
         onAssetUpdate={onAssetUpdate}
         onAssetRemove={onAssetRemove}
