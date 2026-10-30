@@ -23,6 +23,8 @@ export default class extends Controller {
     previewWorkerUrl: String,
     prefigureWorkerUrl: String,
     prefigureAssetUrls: Object,
+    tikzWorkerUrl: String,
+    tikzEngineUrl: String,
   }
 
   /** Load the React bundle as soon as the controller initializes.
@@ -67,6 +69,8 @@ export default class extends Controller {
       previewWorkerUrl: this.previewWorkerUrlValue,
       prefigureWorkerUrl: this.prefigureWorkerUrlValue,
       prefigureAssetUrls: this.prefigureAssetUrlsValue,
+      tikzWorkerUrl: this.tikzWorkerUrlValue,
+      tikzEngineUrl: this.tikzEngineUrlValue,
     })
 
     this.notifyLayoutChange()

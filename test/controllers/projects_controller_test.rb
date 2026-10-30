@@ -1694,6 +1694,16 @@ class ProjectsControllerTest < ActionDispatch::IntegrationTest
     assert_match %r{/image-not-found\.svg\z}, response.location
   end
 
+  test "generated_file serves a TikZ asset's picture at its latex-image path" do
+    @project.assets.create!(kind: :authored_asset, source_format: "tikz", ref: "plot", title: "Plot", source: "\\tikz;",
+                            file: fixture_file_upload("test_diagram.svg", "image/svg+xml"))
+
+    get "/projects/#{@project.id}/generated/latex-image/plot.svg"
+    assert_response :redirect
+    get "/projects/#{@project.id}/generated/prefigure/plot.svg"
+    assert_response :not_found
+  end
+
   test "generated_file serves only a generated asset wrapped in that element" do
     @project.assets.create!(kind: :authored_asset, source_format: "prefigure", ref: "graph", title: "Graph", source: "<diagram/>")
 
@@ -1715,5 +1725,23 @@ class ProjectsControllerTest < ActionDispatch::IntegrationTest
     assert_equal %w[ prefig_wasm.js prefig_wasm_bg.wasm ], urls.keys
     assert_match %r{\A/assets/prefigure/prefig_wasm-\h+\.js\z}, urls["prefig_wasm.js"]
     assert_match %r{\A/assets/prefigure/prefig_wasm_bg-\h+\.wasm\z}, urls["prefig_wasm_bg.wasm"]
+  end
+
+  test "edit hands the editor the TikZ worker, and the engine's directory only once it has been fetched" do
+    Dir.mktmpdir do |public_path|
+      pin = JSON.parse(Rails.root.join("config/tikz_engine.json").read)
+      engine = "engines/#{pin["name"]}-#{pin["version"]}/"
+      Rails.stub(:public_path, Pathname(public_path)) do
+        get edit_project_url(@project)
+        assert_response :success
+        assert_match %r{\A/assets/tikz_worker-\h+\.js\z}, css_select("[data-editor-tikz-worker-url-value]").first["data-editor-tikz-worker-url-value"]
+        assert_equal "", css_select("[data-editor-tikz-engine-url-value]").first["data-editor-tikz-engine-url-value"]
+
+        FileUtils.mkdir_p(File.join(public_path, engine))
+        FileUtils.touch(File.join(public_path, engine, "index.js"))
+        get edit_project_url(@project)
+        assert_equal "/#{engine}", css_select("[data-editor-tikz-engine-url-value]").first["data-editor-tikz-engine-url-value"]
+      end
+    end
   end
 end

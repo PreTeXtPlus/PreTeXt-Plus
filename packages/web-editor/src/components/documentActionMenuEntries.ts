@@ -1,12 +1,12 @@
 import { formatPretext } from "@pretextbook/format";
-import type { SourceFormat } from "../types/editor";
+import type { EditorLanguage } from "../types/editor";
 import type { MenuEntry } from "./MenuDropdown";
 
 /** The docinfo editor is named for what that format keeps in it. */
 const docinfoNaming = (
-  sourceFormat: SourceFormat,
+  sourceFormat: EditorLanguage,
 ): { label: string; title: string } =>
-  sourceFormat === "latex"
+  sourceFormat === "latex" || sourceFormat === "tex"
     ? {
         label: "Edit Preamble…",
         title: "Edit the LaTeX preamble shared by the whole project",
@@ -19,7 +19,7 @@ const docinfoNaming = (
 export interface DocumentActionEntriesArgs {
   /** Current source content; passed to the formatter for "Format PreTeXt". */
   content: string;
-  sourceFormat: SourceFormat;
+  sourceFormat: EditorLanguage;
   readOnly?: boolean;
   /** Called with the formatted content after a successful format operation. */
   onContentChange: (newContent: string) => void;

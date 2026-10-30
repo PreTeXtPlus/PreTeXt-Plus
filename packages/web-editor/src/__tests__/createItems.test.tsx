@@ -279,6 +279,29 @@ describe("creating an asset", () => {
     expect(barTitle()).toHaveTextContent("Graph");
   });
 
+  it("creates a TikZ asset from its tab, as the registry's second entry", async () => {
+    const generated: [string, string][] = [];
+    renderEditors({
+      onCreateGenerated: async (generator, title) => {
+        generated.push([generator, title]);
+        return { id: "a-plot", ref: "plot", title, sourceFormat: generator, source: "\\tikz;" };
+      },
+    });
+    showAssets();
+    fireEvent.click(screen.getByTestId("toc-new-asset-btn"));
+
+    fireEvent.click(within(pane()).getByText("TikZ"));
+    fireEvent.change(within(pane()).getByLabelText("Title"), {
+      target: { value: "Plot" },
+    });
+    await act(async () => {
+      fireEvent.click(within(pane()).getByText("Create"));
+    });
+
+    expect(generated).toEqual([["tikz", "Plot"]]);
+    expect(barTitle()).toHaveTextContent("Plot");
+  });
+
   it("offers no generator tab when the host cannot create generated assets", () => {
     renderEditors();
     showAssets();

@@ -271,8 +271,8 @@ a peer removing the open item does not (`openItemState`'s `byAuthor`).
 
 A *generated* asset is an authored asset whose `sourceFormat` is a generator's
 id (`AssetSourceFormat` = `"pretext"` or a `GeneratorId`; the Rails host's
-`source_format`) — source that a generator turns into a picture, PreFigure
-first. The format is chosen when the asset is created and never inferred from
+`source_format`) — source that a generator turns into a picture, PreFigure or
+TikZ. The format is chosen when the asset is created and never inferred from
 the source: it decides the preview engine and, in time, the editor tooling, so
 it must not flicker as the author types. `generatorFor(asset.sourceFormat)` is
 the one test for "is this a generated asset". The registry
@@ -286,7 +286,12 @@ pinned by a shared fixture hex in both test suites), and an optional browser
 runtime. The browser's picture is stored with the asset as a preview — never a
 build input.
 
-- `prefigure/runtime.ts` is the main-thread side of the engine: a Web Worker
+- `workerRuntime.ts` is the main-thread side of any engine in a worker:
+  lifecycle, status and progress, the latest-wins render queue, and an optional
+  watchdog. `RenderOptions.docinfo` carries the raw `docinfoInputElements` by
+  element. A failed render rejects with `GeneratorRenderError`, whose `log` is
+  the engine's transcript when it keeps one.
+- `prefigure/runtime.ts` is PreFigure's use of it: a Web Worker
   (`src/prefigureWorker.ts`, bundled by the host like the preview worker) that
   loads PreFigure's wasm build (the prefigure repo's `prefig-wasm` crate,
   MathJax variant; glue + binary at the URLs the host gives per file in
@@ -298,11 +303,27 @@ build input.
   (`runtimeFor`), started when a generated asset's pane mounts; renders are
   latest-wins. `__tests__/prefigureWasm.test.ts` drives the real engine through
   the worker handler with a stub host.
+- `tikz/` is TeX, the text of a `<latex-image>`, in a buffer of the `tex`
+  `EditorLanguage` (highlighting and brackets only; `AssetGenerator.language`
+  decides, and `Editors` hands it to `CodeEditor` and the menus while every
+  record-level decision keeps `SourceFormat`). `wrapSource` escapes exactly `&`,
+  `<` and `>`: the buffer is TeX and only the document's copy is XML. The worker
+  (`src/tikzWorker.ts`, `tikz/worker/`) runs mp-tikz-wasm in-process, importing it
+  from `generatorRuntimes.tikz.baseUrl`, a versioned directory, since TeX's lookups
+  are too many for `assetUrls`; `tikz/document.ts` writes the document core writes,
+  turning the docinfo's XML into TeX; `tikz/texLog.ts` cuts the transcript down to
+  the first error, with lines counted from the source. TeX can hang, so its renders
+  have the watchdog: a stopped worker leaves the status alone so the pane does not
+  render the same source again, and the next edit starts a new one. Raw specials
+  put any markup in the SVG, so `tikz/sanitizeSvg.ts` (DOMPurify, on the main thread)
+  runs on every picture before anything shows or stores it. `__tests__/tikzEngine.test.ts`
+  is the real engine, opt-in with `RUN_TIKZ_ENGINE=1`; see the plan on what it owes.
 - `GeneratedAssetPreview.tsx` replaces `AssetPreview` for a generated asset:
   the stored picture and whether it matches the current source, live renders a
   second after typing stops, and `onAssetOutput` to the host with the SVG and
   the digest of exactly the source rendered. A render that typing overtook is
-  shown but not sent; a failed store is shown with a retry. `Editors` writes
+  shown but not sent; a failed store is shown with a retry. A failed render
+  shows its message, with any transcript folded under it. `Editors` writes
   nothing until the host has stored the picture, then lays only the stored
   picture's fields onto the asset as it is *now* (after flushing the debounce),
   never the record the render started from — that would undo the typing.

@@ -9,7 +9,7 @@ import StoreFeedbackLink from "./StoreFeedbackLink";
 import { buildDocumentActionEntries } from "./documentActionMenuEntries";
 import { useEditorStore } from "../store/hooks";
 import { LANGUAGES } from "../languages";
-import type { SourceFormat } from "../types/editor";
+import type { EditorLanguage } from "../types/editor";
 import type { RootDivisionType } from "../types/sections";
 
 const NOOP_ACTIONS: EditorMenuActions = {
@@ -100,7 +100,7 @@ export interface TopBarProps {
 
   // ── Shared with the code-editor menu (Edit/Insert/Tools + File's document actions) ──
   content: string;
-  sourceFormat: SourceFormat;
+  sourceFormat: EditorLanguage;
   rootType?: RootDivisionType;
   onContentChange: (newContent: string) => void;
   onOpenImport?: () => void;

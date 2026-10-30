@@ -594,6 +594,15 @@ describe("CodeEditorMenu", () => {
       expect(menuItem(/^Command Palette/)).toBeInTheDocument();
     });
 
+    // A TikZ asset's buffer: drawing code, which no document action or construct fits.
+    it("offers nothing written for a document while a TeX buffer is open", async () => {
+      render(<CodeEditorMenu {...baseProps()} sourceFormat="tex" />);
+      expect(screen.getByRole("button", { name: "Insert" })).toBeDisabled();
+      await openMenu("Tools");
+      expect(queryMenuItem("Format PreTeXt")).not.toBeInTheDocument();
+      expect(menuItem("Edit Preamble…")).toBeInTheDocument();
+    });
+
     it("keeps the document-actions block in Tools by default", async () => {
       render(<CodeEditorMenu {...baseProps()} sourceFormat="pretext" />);
       await openMenu("Tools");

@@ -39,6 +39,7 @@ import EditorTabs, { type EditorTab } from "./EditorTabs";
 import AssetPreview from "./AssetPreview";
 import GeneratedAssetPreview, { type GeneratedAssetOutput } from "./GeneratedAssetPreview";
 import { generatorFor, runtimeFor, type GeneratorRuntimeConfigs } from "../generators";
+import { editorConfigs } from "./editorConfigs";
 import {
   editorTargetKey,
   resolveEditorTarget,
@@ -65,6 +66,7 @@ import type {
   RecordKind,
   Snippet,
   SourceFormat,
+  EditorLanguage,
 } from "../types/editor";
 import type { Division, DivisionType, RootDivisionType } from "../types/sections";
 import {
@@ -935,6 +937,11 @@ const EditorsInner = (props: EditorsInnerProps) => {
       : editorTarget?.kind === "asset"
         ? "pretext"
         : activeDivisionFormat;
+  // What the open buffer is written in, for the code editor and its menus. Every
+  // asset counts as PreTeXt to the project, but a generator's source may not be.
+  const editorLanguage: EditorLanguage =
+    (editorTarget?.kind === "asset" ? generatorFor(editorTarget.asset.sourceFormat)?.language : undefined) ??
+    editorFormat;
 
   // ── Cross-division preview sync ──────────────────────────────────────────
   // Clicking inside a child division's content opens that division. Its line
@@ -2474,7 +2481,7 @@ const EditorsInner = (props: EditorsInnerProps) => {
       ref={codeEditorRef}
       content={editorContent}
       bufferKey={editorKey}
-      sourceFormat={editorFormat}
+      sourceFormat={editorLanguage}
       // Only a division's buffer can be schema-checked: the linter validates
       // the assembled document, which a snippet or asset fragment isn't.
       pretextValidation={isDivisionOpen ? pretextValidation : undefined}
@@ -2774,11 +2781,11 @@ const EditorsInner = (props: EditorsInnerProps) => {
         onSaveAndClose={props.onSaveAndClose}
         saveAndCloseLabel={props.saveAndCloseLabel}
         content={editorContent}
-        sourceFormat={editorFormat}
+        sourceFormat={editorLanguage}
         rootType={previewRootType}
         onContentChange={handleEditorChange}
         onOpenImport={onOpenImport}
-        onOpenClean={handleOpenCleanDialog}
+        onOpenClean={editorConfigs[editorLanguage].clean ? handleOpenCleanDialog : undefined}
         onOpenDocinfoEditor={onOpenDocinfoEditor}
         onOpenConvertToPretext={onOpenConvertToPretext}
         canConvertToPretext={canConvertToPretext}

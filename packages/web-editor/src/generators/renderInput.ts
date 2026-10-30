@@ -13,10 +13,14 @@ import type { AssetGenerator } from "./types";
 
 export const RENDER_INPUT_SEPARATOR = "\n\u0000\n";
 
-/** The raw inner text of the first `<element …>…</element>` in `docinfo`, or "". */
+/**
+ * The raw inner text of the first `<element …>…</element>` in `docinfo` without
+ * `@syntax`, or "". Core reads only such a `<latex-image-preamble>`; one with
+ * `@syntax` belongs to some other image language.
+ */
 export function docinfoElementInner(docinfo: string, element: string): string {
   const name = element.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-  const match = new RegExp(`<${name}(?:\\s[^>]*)?>([\\s\\S]*?)</${name}>`).exec(docinfo);
+  const match = new RegExp(`<${name}(?![^>]*\\ssyntax\\s*=)(?:\\s[^>]*)?>([\\s\\S]*?)</${name}>`).exec(docinfo);
   return match ? match[1] : "";
 }
 

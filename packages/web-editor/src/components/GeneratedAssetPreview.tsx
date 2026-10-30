@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import type { Asset } from "../types/editor";
 import {
   docinfoElementInner,
+  GeneratorRenderError,
   generatorFor,
   renderInputFor,
   sha256Hex,
@@ -19,7 +20,7 @@ export interface GeneratedAssetOutput {
 
 export interface GeneratedAssetPreviewProps {
   asset: Asset;
-  /** The docinfo in force, whose macros are part of the render input. */
+  /** The docinfo in force, parts of which are the render's input (`docinfoInputElements`). */
   docinfo: string;
   /** The generator's browser engine, or undefined when the host configured none. */
   runtime: GeneratorRuntime | undefined;
@@ -52,7 +53,8 @@ const useRuntimeStatus = (runtime: GeneratorRuntime | undefined) => {
  * page); until it is up, the stored picture shows with a line saying whether it
  * matches the current source. Then the engine renders a second after typing
  * stops, the previous picture staying up and an engine error showing beneath
- * it, and each fresh picture goes to the host through `onOutput` with the digest
+ * it (with its whole transcript folded away, for an engine that keeps one), and
+ * each fresh picture goes to the host through `onOutput` with the digest
  * of exactly the source rendered — so a keystroke that lands mid-render leaves
  * the stored picture honestly stale rather than wrongly current. A picture the
  * host fails to store is reported beneath it, with a retry.
@@ -90,7 +92,7 @@ const GeneratedAssetPreview = ({
 
   const [rendered, setRendered] = useState<{ url: string; digest: string } | null>(null);
   const [isRendering, setIsRendering] = useState(false);
-  const [renderError, setRenderError] = useState<string | null>(null);
+  const [renderError, setRenderError] = useState<{ message: string; log?: string } | null>(null);
   const [failedUrl, setFailedUrl] = useState<string | null>(null);
   const [saveFailure, setSaveFailure] = useState<{ message: string; output: GeneratedAssetOutput } | null>(null);
   // What the host has been handed this session, so the same render is not sent twice.
@@ -120,13 +122,14 @@ const GeneratedAssetPreview = ({
 
   useEffect(() => () => void (rendered && URL.revokeObjectURL(rendered.url)), [rendered]);
 
-  // Render on a debounce whenever the source (or macros) change while the engine is up.
+  // Render on a debounce whenever the source (or docinfo) change while the engine is up.
   useEffect(() => {
     if (!runtime || status !== "ready" || !generator || !asset.ref || readOnly) return;
     const timer = setTimeout(async () => {
       setIsRendering(true);
       try {
-        const result = await runtime.render(source, { macros: docinfoElementInner(docinfo, "macros") });
+        const inputs = generator.docinfoInputElements.map((element) => [element, docinfoElementInner(docinfo, element)]);
+        const result = await runtime.render(source, { docinfo: Object.fromEntries(inputs) });
         const digest = await sha256Hex(renderInputFor(generator, result.source, docinfo));
         setRenderError(null);
         setRendered((previous) => {
@@ -141,7 +144,10 @@ const GeneratedAssetPreview = ({
           void store({ svg: result.svg, previewInputDigest: digest });
         }
       } catch (cause) {
-        setRenderError(cause instanceof Error ? cause.message : String(cause));
+        setRenderError({
+          message: cause instanceof Error ? cause.message : String(cause),
+          log: cause instanceof GeneratorRenderError ? cause.log : undefined,
+        });
       } finally {
         setIsRendering(false);
       }
@@ -192,10 +198,18 @@ const GeneratedAssetPreview = ({
       {renderError && (
         <pre
           data-testid="generated-asset-error"
-          className="max-w-full overflow-x-auto whitespace-pre-wrap rounded border border-red-200 bg-red-50 px-3 py-2 text-[0.75rem] text-red-800"
+          className="max-w-full max-h-48 flex-none overflow-auto whitespace-pre-wrap rounded border border-red-200 bg-red-50 px-3 py-2 text-[0.75rem] text-red-800"
         >
-          {renderError}
+          {renderError.message}
         </pre>
+      )}
+      {renderError?.log && (
+        <details data-testid="generated-asset-log" className="max-w-full flex-none text-[0.75rem] text-slate-600">
+          <summary className="cursor-pointer text-center">Full log</summary>
+          <pre className="mt-1 max-h-64 overflow-auto whitespace-pre-wrap rounded border border-slate-200 bg-white px-3 py-2 text-[0.7rem]">
+            {renderError.log}
+          </pre>
+        </details>
       )}
       {saveFailure && (
         <div className="flex flex-col items-center gap-1">

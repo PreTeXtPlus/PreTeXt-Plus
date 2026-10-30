@@ -1,9 +1,20 @@
 module ProjectsHelper
+  TIKZ_ENGINE = JSON.parse(Rails.root.join("config/tikz_engine.json").read).freeze
+
   VISIBILITY_PILL = {
     "public" =>   [ "Public",   "bg-green-100 text-green-800" ],
     "unlisted" => [ "Unlisted", "bg-amber-100 text-amber-900" ],
     "private" =>  [ "Private",  "bg-gray-100 text-gray-700" ]
   }.freeze
+
+  # Where the TikZ engine is served from: its pinned release, unpacked under public/engines
+  # by script/fetch-tikz-engine.js. A new version is a new directory, so the year-long
+  # cache on public files is safe. Nil until it has been fetched; the editor then shows a
+  # TikZ asset's stored picture and renders nothing live.
+  def tikz_engine_url
+    directory = "engines/#{TIKZ_ENGINE.fetch("name")}-#{TIKZ_ENGINE.fetch("version")}/"
+    "/#{directory}" if Rails.public_path.join(directory, "index.js").exist?
+  end
 
   def project_visibility_pill(project)
     label, classes = VISIBILITY_PILL.fetch(project.visibility)

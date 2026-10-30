@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from "react";
 import clsx from "clsx";
-import type { SourceFormat } from "../types/editor";
+import type { EditorLanguage } from "../types/editor";
 import type { RootDivisionType } from "../types/sections";
 import MenuDropdown, { type MenuEntry, type MenuLeafEntry } from "./MenuDropdown";
 import {
@@ -49,7 +49,7 @@ interface CodeEditorMenuProps {
   /** Current source content; passed to the formatter for "Format PreTeXt". */
   content: string;
   /** Decides which document actions and which snippets the menus offer. */
-  sourceFormat: SourceFormat;
+  sourceFormat: EditorLanguage;
   /**
    * The project's root element. Gates the constructs that only exist under one
    * of them — the Slides group appears for a `<slideshow>` and nowhere else.
@@ -445,7 +445,7 @@ const CodeEditorMenu: React.FC<CodeEditorMenuProps> = ({
     { key: "edit", label: "Edit", entries: editEntries },
     ...(readOnly
       ? []
-      : [{ key: "insert", label: "Insert", entries: insertEntries }]),
+      : [{ key: "insert", label: "Insert", entries: insertEntries, disabled: insertEntries.length === 0 }]),
     { key: "tools", label: "Tools", entries: toolsEntries },
     ...(trailingMenus ?? []),
   ];

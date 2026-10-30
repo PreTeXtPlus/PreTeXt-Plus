@@ -21,6 +21,7 @@ import type {
 import { derivePretextContent } from "./contentConversion";
 import { resolveAssetRef } from "./assetTransforms";
 import { escapeAttribute, escapeText, unescapeAttribute } from "./xmlUtils";
+import { DEFAULT_LATEX_IMAGE_PREAMBLE } from "./generators/tikz/document";
 
 // ---------------------------------------------------------------------------
 // Internal helpers
@@ -3238,13 +3239,7 @@ export function assembleProjectSource(
   );
 }
 
-/**
- * The line every build's `<latex-image-preamble>` starts with, so a TikZ
- * `<latex-image>` builds without its author first having to find the docinfo
- * editor and load the package there. An author who loads it anyway loses
- * nothing: a second `\usepackage` of the same package is a no-op.
- */
-export const DEFAULT_LATEX_IMAGE_PREAMBLE = "\\usepackage{tikz, pgf}";
+export { DEFAULT_LATEX_IMAGE_PREAMBLE };
 
 const SYNTAX_ATTR_RE = /\ssyntax\s*=/;
 

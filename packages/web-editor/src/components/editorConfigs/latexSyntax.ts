@@ -1,8 +1,21 @@
 import { PRETEXT_LATEX_LANGUAGE_ID } from "@pretextbook/latex-style-pretext";
 
+/** A Monaco language written in LaTeX's syntax, whatever it is used for. */
+export interface LatexSyntaxLanguage {
+  id: string;
+  extensions: string[];
+  aliases: string[];
+}
+
+const PRETEXT_LATEX: LatexSyntaxLanguage = {
+  id: PRETEXT_LATEX_LANGUAGE_ID,
+  extensions: [".ptx.tex"],
+  aliases: ["PreTeXt (LaTeX)"],
+};
+
 /**
- * Registers a `pretext-latex` language in Monaco with a Monarch tokenizer for
- * LaTeX-style PreTeXt.
+ * Registers a `pretext-latex` language (or, given one, another language with
+ * LaTeX's syntax) in Monaco with a Monarch tokenizer for LaTeX-style PreTeXt.
  *
  * Monaco ships **no** built-in `latex` language (see
  * `monaco-editor/esm/vs/basic-languages/`), and an unregistered language id
@@ -18,14 +31,14 @@ import { PRETEXT_LATEX_LANGUAGE_ID } from "@pretextbook/latex-style-pretext";
  *  - `delimiter.curly` → punctuation   — used for braces around it
  *  - `string.escape`   → string color  — used for escapes such as `\%`, `\&`
  */
-export function registerLatexSyntax(monaco: any): { dispose: () => void } {
-  monaco.languages.register({
-    id: PRETEXT_LATEX_LANGUAGE_ID,
-    extensions: [".ptx.tex"],
-    aliases: ["PreTeXt (LaTeX)"],
-  });
+export function registerLatexSyntax(
+  monaco: any,
+  language: LatexSyntaxLanguage = PRETEXT_LATEX,
+): { dispose: () => void } {
+  const { id } = language;
+  monaco.languages.register(language);
 
-  monaco.languages.setMonarchTokensProvider(PRETEXT_LATEX_LANGUAGE_ID, {
+  monaco.languages.setMonarchTokensProvider(id, {
     tokenizer: {
       root: [
         // Comments first — everything after `%` is inert, including macros.
@@ -33,7 +46,7 @@ export function registerLatexSyntax(monaco: any): { dispose: () => void } {
         // `\begin{env}` / `\end{env}` as one rule so the environment name can
         // be colored differently from the command itself.
         [
-          /\\(begin|end)(\{)([a-zA-Z0-9*-]*)(\})/,
+          /(\\(?:begin|end))(\{)([a-zA-Z0-9*-]*)(\})/,
           ["keyword", "delimiter.curly", "type", "delimiter.curly"],
         ],
         [/\\[a-zA-Z@]+/, "keyword"],
@@ -46,7 +59,7 @@ export function registerLatexSyntax(monaco: any): { dispose: () => void } {
     },
   });
 
-  monaco.languages.setLanguageConfiguration(PRETEXT_LATEX_LANGUAGE_ID, {
+  monaco.languages.setLanguageConfiguration(id, {
     comments: { lineComment: "%" },
     brackets: [
       ["{", "}"],
