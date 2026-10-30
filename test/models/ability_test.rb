@@ -48,6 +48,12 @@ class AbilityTest < ActiveSupport::TestCase
     assert ability.can?(:manage, asset)
   end
 
+  test "only a subscribed owner bulk adds collaborators" do
+    assert Ability.new(users(:subscribed)).can?(:bulk_create, Collaboration.new(project: projects(:team)))
+    assert_not Ability.new(users(:one)).can?(:bulk_create, Collaboration.new(project: projects(:one))), "free owner"
+    assert_not Ability.new(users(:subscribed)).can?(:bulk_create, Collaboration.new(project: projects(:one))), "subscribed, but not the owner"
+  end
+
   test "only the owner creates collaborations; either side can destroy their own" do
     owner = Ability.new(users(:one))
     collaborator = Ability.new(users(:two))

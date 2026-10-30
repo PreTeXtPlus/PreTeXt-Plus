@@ -122,6 +122,9 @@ Rails.application.routes.draw do
       get "download" => "projects#download", as: "download"
     end
     resources :collaborations, only: [ :create, :destroy ] do
+      collection do
+        post "bulk" => "collaborations#bulk_create", as: "bulk"
+      end
       member do
         patch "transfer_ownership" => "collaborations#transfer_ownership", as: "transfer_ownership"
       end
