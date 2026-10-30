@@ -8,7 +8,14 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import GeneratedAssetPreview from "../components/GeneratedAssetPreview";
-import { renderInputFor, sha256Hex, generators, type GeneratorRuntime, type RenderResult } from "../generators";
+import {
+  GeneratorRenderError,
+  renderInputFor,
+  sha256Hex,
+  generators,
+  type GeneratorRuntime,
+  type RenderResult,
+} from "../generators";
 import type { Asset } from "../types/editor";
 
 const SVG = '<svg xmlns="http://www.w3.org/2000/svg" width="1" height="1"/>';
@@ -68,6 +75,55 @@ describe("GeneratedAssetPreview", () => {
     expect(screen.getByTestId("asset-preview")).toHaveTextContent("Live rendering isn't available here");
   });
 
+  describe("downloading the picture", () => {
+    const link = () => screen.queryByTestId("download-generated-asset");
+
+    it("offers nothing until there is a picture", () => {
+      render(<GeneratedAssetPreview asset={asset} docinfo="" runtime={undefined} />);
+      expect(link()).not.toBeInTheDocument();
+    });
+
+    it("saves the stored picture as the asset's ref, from where the host says", () => {
+      render(
+        <GeneratedAssetPreview
+          asset={{ ...asset, url: "/graph.svg" }}
+          docinfo=""
+          runtime={undefined}
+          downloadUrlFor={(a) => `${a.url}?download=1`}
+        />,
+      );
+      expect(link()).toHaveAttribute("href", "/graph.svg?download=1");
+      expect(link()).toHaveAttribute("download", "graph.svg");
+    });
+
+    it("falls back to the picture's own URL when the host says nothing", () => {
+      render(<GeneratedAssetPreview asset={{ ...asset, url: "/graph.svg" }} docinfo="" runtime={undefined} />);
+      expect(link()).toHaveAttribute("href", "/graph.svg");
+    });
+
+    it("saves a fresh render rather than the stored picture it replaced", async () => {
+      const createObjectURL = vi.spyOn(URL, "createObjectURL").mockReturnValue("blob:fresh");
+      render(
+        <GeneratedAssetPreview
+          asset={{ ...asset, url: "/graph.svg" }}
+          docinfo=""
+          runtime={fakeRuntime("ready")}
+          downloadUrlFor={(a) => `${a.url}?download=1`}
+          debounceMs={0}
+        />,
+      );
+      await waitFor(() => expect(link()).toHaveAttribute("href", "blob:fresh"));
+      expect(link()).toHaveAttribute("download", "graph.svg");
+      createObjectURL.mockRestore();
+    });
+
+    it("offers nothing when the picture on screen would not load", () => {
+      render(<GeneratedAssetPreview asset={{ ...asset, url: "/graph.svg" }} docinfo="" runtime={undefined} />);
+      fireEvent.error(screen.getByRole("img"));
+      expect(link()).not.toBeInTheDocument();
+    });
+  });
+
   it("reports whether the stored picture matches the current source", async () => {
     const docinfo = "<docinfo/>";
     const current = await sha256Hex(renderInputFor(generators.prefigure, "<diagram/>", docinfo));
@@ -119,7 +175,9 @@ describe("GeneratedAssetPreview", () => {
     );
 
     await waitFor(() => expect(onOutput).toHaveBeenCalledTimes(1));
-    expect(runtime.render).toHaveBeenCalledWith("<diagram/>", { macros: "\\newcommand{\\R}{\\mathbb{R}}" });
+    expect(runtime.render).toHaveBeenCalledWith("<diagram/>", {
+      docinfo: { macros: "\\newcommand{\\R}{\\mathbb{R}}", "prefigure-preamble": "" },
+    });
     const [, output] = onOutput.mock.calls[0];
     expect(output.svg).toBe(SVG);
     expect(output.previewInputDigest).toBe(
@@ -128,6 +186,42 @@ describe("GeneratedAssetPreview", () => {
     await waitFor(() =>
       expect(screen.getByTestId("generated-asset-status")).toHaveTextContent("Rendered from the current source"),
     );
+  });
+
+  it("gives a render each docinfo element its generator reads", async () => {
+    const runtime = fakeRuntime("ready");
+    const docinfo =
+      "<docinfo><macros>\\def\\a{1}</macros><latex-image-preamble>\\usepackage{tikz-cd}</latex-image-preamble></docinfo>";
+    const tikz: Asset = { ...asset, sourceFormat: "tikz", source: "\\tikz\\draw (0,0);" };
+    render(<GeneratedAssetPreview asset={tikz} docinfo={docinfo} runtime={runtime} debounceMs={0} />);
+
+    await waitFor(() => expect(runtime.render).toHaveBeenCalledTimes(1));
+    expect(runtime.render).toHaveBeenCalledWith("\\tikz\\draw (0,0);", {
+      docinfo: { macros: "\\def\\a{1}", "latex-image-preamble": "\\usepackage{tikz-cd}" },
+    });
+  });
+
+  it("shows the excerpt of a failed render, with the whole transcript folded under it", async () => {
+    const runtime = fakeRuntime("ready");
+    vi.mocked(runtime.render).mockRejectedValue(
+      new GeneratorRenderError("! Undefined control sequence.", "This is pdfTeX\n! Undefined control sequence."),
+    );
+    render(<GeneratedAssetPreview asset={asset} docinfo="" runtime={runtime} debounceMs={0} />);
+
+    await waitFor(() =>
+      expect(screen.getByTestId("generated-asset-error")).toHaveTextContent("! Undefined control sequence."),
+    );
+    expect(screen.getByTestId("generated-asset-log")).toHaveTextContent("This is pdfTeX");
+    expect(screen.getByTestId("generated-asset-log")).not.toHaveAttribute("open");
+  });
+
+  it("has no transcript to show for an engine that keeps none", async () => {
+    const runtime = fakeRuntime("ready");
+    vi.mocked(runtime.render).mockRejectedValue(new Error("no <diagram>"));
+    render(<GeneratedAssetPreview asset={asset} docinfo="" runtime={runtime} debounceMs={0} />);
+
+    await waitFor(() => expect(screen.getByTestId("generated-asset-error")).toHaveTextContent("no <diagram>"));
+    expect(screen.queryByTestId("generated-asset-log")).toBeNull();
   });
 
   it("does not hand the host a render that typing overtook, but does the next one", async () => {

@@ -2,11 +2,19 @@
 export type SourceFormat = "pretext" | "latex" | "markdown";
 
 /**
- * A tool that turns an asset's authored `source` into a picture — see
- * `src/generators`. One id per registry entry; `"prefigure"` first. The id is
- * also the asset's {@link AssetSourceFormat}: the language its source is in.
+ * What the code editor treats a buffer as: a prose {@link SourceFormat}, or
+ * plain TeX, the language of a generated asset whose source is not PreTeXt.
+ * Only the code editor and its menus deal in this; everything else is about a
+ * record's format.
  */
-export type GeneratorId = "prefigure";
+export type EditorLanguage = SourceFormat | "tex";
+
+/**
+ * A tool that turns an asset's authored `source` into a picture — see
+ * `src/generators`. One id per registry entry. The id is also the asset's
+ * {@link AssetSourceFormat}: the language its source is in.
+ */
+export type GeneratorId = "prefigure" | "tikz";
 
 /**
  * The format of an asset's `source`: PreTeXt (the inside of its `<image>`), or
@@ -66,7 +74,7 @@ export interface Asset {
    * the asset is edited and previewed. A generator's id (`"prefigure"`) makes
    * this a *generated* asset (see `generatorFor`): `source` is that generator's
    * input, the document carries it wrapped in the generator's element
-   * (`<prefigure>`), and builds generate the picture from that; the browser's
+   * (`<prefigure>`, `<latex-image>`), and builds generate the picture from that; the browser's
    * render is stored with the asset like an upload, as a preview.
    */
   sourceFormat?: AssetSourceFormat;

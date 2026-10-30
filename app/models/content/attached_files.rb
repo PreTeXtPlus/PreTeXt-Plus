@@ -104,6 +104,18 @@ module Content::AttachedFiles
     end
   end
 
+  # `url`, for saving the file rather than showing it: storage says "attachment",
+  # so the browser saves it as `external_filename` even from another origin,
+  # where a link's own `download` attribute is ignored. An SVG can be served this
+  # way without the caveat above, since nothing renders it.
+  def download_url
+    return url unless file_attached?
+
+    blob = file.blob
+    blob.service.url(blob.key, expires_in: 1.hour, filename: ActiveStorage::Filename.new(external_filename),
+      content_type: blob.content_type, disposition: :attachment)
+  end
+
   # Whether `thumbnail_url` has anything to show: no file, or a file type
   # ActiveStorage can't raster a variant of, means no preview -- callers fall
   # back to a generic file icon. Cheap (no processing), so it's safe to call

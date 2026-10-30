@@ -13,6 +13,8 @@
     data-editor-preview-worker-url-value="<%= asset_path("preview_worker.js") %>"
     data-editor-prefigure-worker-url-value="<%= asset_path("prefigure_worker.js") %>"
     data-editor-prefigure-asset-urls-value="<%= %w[ prefig_wasm.js prefig_wasm_bg.wasm ].index_with { |name| asset_path("prefigure/#{name}") }.to_json %>"
+    data-editor-tikz-worker-url-value="<%= asset_path("tikz_worker.js") %>"
+    data-editor-tikz-engine-url-value="<%= tikz_engine_url %>"
     data-turbo="false">
   <div data-editor-target="root" class="w-full flex-1 min-h-0">
     <div class="flex h-full items-center justify-center">

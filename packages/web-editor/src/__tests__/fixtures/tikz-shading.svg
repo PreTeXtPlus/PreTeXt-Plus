@@ -1,0 +1,82 @@
+<svg version='1.1' xmlns='http://www.w3.org/2000/svg' xmlns:xlink='http://www.w3.org/1999/xlink' style="width:min(100%,578px)" viewBox='-69.011212 -69.011216 255.117998 34.01606'>
+<g id='tz-shading-page1'>
+<g stroke-miterlimit='10' transform='translate(-69.011212,-34.995157)scale(0.996264,-0.996264)'>
+<g fill='#000' stroke='#000'>
+<g stroke-width='0.4'>
+<clipPath id='tz-shading-pgfcp1'>
+<path d='M0 0V34.1432H68.2864V0ZM68.2864 34.1432'/> </clipPath>
+<g clip-path='url(#tz-shading-pgfcp1)'>
+<g transform='matrix(1,0,0,1,34.1432,17.0716)'>
+<g transform='matrix(0.0,1.0,-1.0,0.0,0.0,0.0)'>
+<g transform='matrix(0.6804,0,0,1.36081,0.0,0.0)'>
+<linearGradient gradientTransform='rotate(90)' id='tz-shading-pgfsh2'>
+ <stop offset='0.0' stop-color=' #00f '/>
+ <stop offset='0.25' stop-color=' #00f '/>
+ <stop offset='0.5' stop-color=' #800080 '/>
+ <stop offset='0.75' stop-color=' #f00 '/>
+ <stop offset='1.0' stop-color=' #f00 '/>
+ </linearGradient>
+<g transform='translate(-50.1875,-50.1875)'>
+<rect height='100.375' style='fill:url(#tz-shading-pgfsh2); stroke:none' width='100.375'/>
+</g>
+</g>
+</g>
+</g>
+</g>
+<clipPath id='tz-shading-pgfcp3'>
+<path d='M119.50185 17.07181C119.50185 26.50043 111.85866 34.14362 102.43004 34.14362S85.35823 26.50043 85.35823 17.07181S93.00142 0 102.43004 0S119.50185 7.64319 119.50185 17.07181ZM102.43004 17.07181'/> </clipPath>
+<g clip-path='url(#tz-shading-pgfcp3)'>
+<g transform='matrix(1,0,0,1,102.43002,17.07181)'>
+<g transform='matrix(0.6804,0,0,0.6804,0.0,0.0)'>
+<radialGradient fx='0.5' fy='0.5' id='tz-shading-pgfsh4'>
+ <stop offset='0.0' stop-color=' #fff '/>
+ <stop offset='0.5' stop-color=' #ff8000 '/>
+ <stop offset='1.0' stop-color=' #ff8000 '/>
+ </radialGradient>
+<g transform='translate(-50.1875,-50.1875)'>
+<circle cx='50.1875' cy='50.1875' r='50.1875' style='fill:url(#tz-shading-pgfsh4); stroke:none'/>
+</g>
+</g>
+</g>
+</g>
+<clipPath id='tz-shading-pgfcp5'>
+<path d='M170.71645 17.07181C170.71645 26.50043 163.07326 34.14362 153.64464 34.14362S136.57283 26.50043 136.57283 17.07181S144.21602 0 153.64464 0S170.71645 7.64319 170.71645 17.07181ZM153.64464 17.07181'/> </clipPath>
+<g clip-path='url(#tz-shading-pgfcp5)'>
+<g transform='matrix(1,0,0,1,153.64462,17.07181)'>
+<g transform='matrix(0.6804,0,0,0.6804,0.0,0.0)'>
+<radialGradient fx='0.40001' fy='0.59999' id='tz-shading-pgfsh6'>
+ <stop offset='0.0' stop-color=' #d9f4d9 '/>
+ <stop offset='0.18' stop-color=' #40c640 '/>
+ <stop offset='0.35999' stop-color=' #007d00 '/>
+ <stop offset='0.5' stop-color=' #005900 '/>
+ <stop offset='1.0' stop-color=' #000 '/>
+ </radialGradient>
+<g transform='translate(-50.1875,-50.1875)'>
+<circle cx='50.1875' cy='50.1875' r='50.1875' style='fill:url(#tz-shading-pgfsh6); stroke:none'/>
+</g>
+</g>
+</g>
+</g>
+<clipPath id='tz-shading-pgfcp7'>
+<path d='M187.78827 0V34.1432H256.07469V0ZM256.07469 34.1432'/> </clipPath>
+<g clip-path='url(#tz-shading-pgfcp7)'>
+<g transform='matrix(1,0,0,1,221.93147,17.0716)'>
+<g transform='matrix(1.36081,0,0,0.6804,0.0,0.0)'>
+<linearGradient gradientTransform='rotate(90)' id='tz-shading-pgfsh8'>
+ <stop offset='0.0' stop-color=' #b366b3 '/>
+ <stop offset='0.25' stop-color=' #b366b3 '/>
+ <stop offset='0.5' stop-color=' #fff '/>
+ <stop offset='0.75' stop-color=' #6ff '/>
+ <stop offset='1.0' stop-color=' #6ff '/>
+ </linearGradient>
+<g transform='translate(-50.1875,-50.1875)'>
+<rect height='100.375' style='fill:url(#tz-shading-pgfsh8); stroke:none' width='100.375'/>
+</g>
+</g>
+</g>
+</g>
+</g>
+</g>
+</g>
+</g>
+</svg>

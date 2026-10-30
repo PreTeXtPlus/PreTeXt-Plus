@@ -1,12 +1,16 @@
 import { formatPretext } from "@pretextbook/format";
-import type { SourceFormat } from "../types/editor";
+import type { EditorLanguage, SourceFormat } from "../types/editor";
 import type { MenuEntry } from "./MenuDropdown";
 
-/** The docinfo editor is named for what that format keeps in it. */
+/**
+ * The docinfo editor is named for what the project's format keeps in it — the
+ * project's, not the open buffer's: it edits the one `<docinfo>` whatever is
+ * open, so its name must not change between a division and a TikZ asset.
+ */
 const docinfoNaming = (
-  sourceFormat: SourceFormat,
+  docinfoFormat: SourceFormat,
 ): { label: string; title: string } =>
-  sourceFormat === "latex"
+  docinfoFormat === "latex"
     ? {
         label: "Edit Preamble…",
         title: "Edit the LaTeX preamble shared by the whole project",
@@ -19,7 +23,13 @@ const docinfoNaming = (
 export interface DocumentActionEntriesArgs {
   /** Current source content; passed to the formatter for "Format PreTeXt". */
   content: string;
-  sourceFormat: SourceFormat;
+  /** What the open buffer is written in; decides the actions that act on it. */
+  sourceFormat: EditorLanguage;
+  /**
+   * The project's format (its root division's), which names the docinfo
+   * editor. Defaults to the buffer's, for a buffer that is a document.
+   */
+  docinfoFormat?: SourceFormat;
   readOnly?: boolean;
   /** Called with the formatted content after a successful format operation. */
   onContentChange: (newContent: string) => void;
@@ -43,6 +53,7 @@ export interface DocumentActionEntriesArgs {
 export function buildDocumentActionEntries({
   content,
   sourceFormat,
+  docinfoFormat = sourceFormat === "tex" ? "pretext" : sourceFormat,
   readOnly,
   onContentChange,
   onOpenImport,
@@ -96,7 +107,7 @@ export function buildDocumentActionEntries({
     entries.push({
       kind: "item",
       key: "docinfo",
-      ...docinfoNaming(sourceFormat),
+      ...docinfoNaming(docinfoFormat),
       onSelect: onOpenDocinfoEditor,
     });
     if (onOpenAssets && !hideAssets) {

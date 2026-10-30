@@ -39,6 +39,7 @@ export default defineConfig(() => ({
         index: path.resolve(__dirname, 'src/index.ts'),
         'preview-worker': path.resolve(__dirname, 'src/previewWorker.ts'),
         'prefigure-worker': path.resolve(__dirname, 'src/prefigureWorker.ts'),
+        'tikz-worker': path.resolve(__dirname, 'src/tikzWorker.ts'),
       },
       name: 'PretextWebEditor',
       formats: ['es', 'cjs'],

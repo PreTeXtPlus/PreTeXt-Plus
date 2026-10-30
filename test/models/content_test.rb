@@ -434,7 +434,7 @@ class ContentTest < ActiveSupport::TestCase
   test "only an authored asset may take a generator's format, and no asset a prose one" do
     assert_not generated_asset(source_format: "latex").valid?
     assert_not generated_asset(source_format: "markdown").valid?
-    assert_not generated_asset(source_format: "tikz").valid?
+    assert_not generated_asset(source_format: "asymptote").valid?
 
     file = contents(:image_one)
     file.source_format = "prefigure"
@@ -455,6 +455,30 @@ class ContentTest < ActiveSupport::TestCase
                  asset.render_input(docinfo)
     assert_equal "65ad0eda2b54873333e717242fe79d69243c7ac4f4f1ce5a37fe8641f0d2e9c3",
                  Digest::SHA256.hexdigest(asset.render_input(docinfo))
+  end
+
+  test "a TikZ asset is wrapped in latex-image and digests to the fixture the web-editor pins" do
+    source = "\\begin{tikzpicture}\\draw (0,0) -- (1,1);\\end{tikzpicture}"
+    asset = generated_asset(source: source, source_format: "tikz")
+    docinfo = <<~XML
+      <docinfo>
+        <macros>\\newcommand{\\R}{\\mathbb{R}}</macros>
+        <latex-image-preamble syntax="PGF">\\usepackage{ignored}</latex-image-preamble>
+        <latex-image-preamble>\\usetikzlibrary{calc}</latex-image-preamble>
+      </docinfo>
+    XML
+
+    assert asset.valid?, asset.errors.full_messages.inspect
+    assert_equal "latex-image", asset.generated_element
+    assert_equal [ source, "\\newcommand{\\R}{\\mathbb{R}}", "\\usetikzlibrary{calc}" ].join("\n\u0000\n"),
+                 asset.render_input(docinfo)
+    assert_equal "9cbc7d80acb18afb7b3fb96cdab13750344d897c4fe2d55d98be4e3dfdcfa711",
+                 Digest::SHA256.hexdigest(asset.render_input(docinfo))
+  end
+
+  test "docinfo_element_inner passes over an element with @syntax, as core does" do
+    docinfo = '<latex-image-preamble syntax="PGF">no</latex-image-preamble><latex-image-preamble>yes</latex-image-preamble>'
+    assert_equal "yes", Content.docinfo_element_inner(docinfo, "latex-image-preamble")
   end
 
   test "docinfo_element_inner reads the raw inner text, tolerating attributes, and is empty when absent" do

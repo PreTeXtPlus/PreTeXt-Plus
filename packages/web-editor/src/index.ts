@@ -121,8 +121,8 @@ export type {
 export type { CollabSession, CollabUser } from "./collab/types";
 // Generated assets: the generator registry a host may inspect, the runtime
 // configuration it passes as `generatorRuntimes`, and the output it receives
-// through `onAssetOutput`. The PreFigure worker a host bundles is the
-// `./prefigure-worker` export.
+// through `onAssetOutput`. The workers a host bundles are the
+// `./prefigure-worker` and `./tikz-worker` exports.
 export { generators, generatorIds } from "./generators";
 export type {
   AssetGenerator,

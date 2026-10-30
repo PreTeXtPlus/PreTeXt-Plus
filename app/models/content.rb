@@ -57,7 +57,7 @@ class Content < ApplicationRecord
   # an authored asset may instead be written in a generator's own language, which
   # makes it a generated asset (Content::GeneratedAssetBehavior::FORMATS). A key
   # added for a generator is the web-editor's id for it.
-  enum :source_format, { pretext: 0, latex: 1, markdown: 2, prefigure: 3 },
+  enum :source_format, { pretext: 0, latex: 1, markdown: 2, prefigure: 3, tikz: 4 },
     default: :pretext, suffix: true, validate: true
 
   PROSE_FORMATS = %w[ pretext latex markdown ].freeze

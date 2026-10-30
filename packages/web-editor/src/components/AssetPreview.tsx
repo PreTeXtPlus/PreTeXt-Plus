@@ -6,6 +6,14 @@ export interface AssetPreviewProps {
 }
 
 /**
+ * An image in a preview panel: as large as the panel lets it be, keeping its
+ * proportions, however small the file says it is. Whatever sits beneath it
+ * keeps its own height.
+ */
+export const PREVIEW_IMAGE_CLASS =
+  "w-full flex-1 min-h-0 object-contain border border-slate-200 rounded bg-white";
+
+/**
  * The preview panel while an asset is open: its uploaded image, with the file's
  * content type and filename beneath. An authored asset has no file behind it,
  * and rendering its PreTeXt source on its own isn't built yet.
@@ -37,7 +45,7 @@ const AssetPreview = ({ asset }: AssetPreviewProps) => {
         <img
           src={asset.url}
           alt={asset.shortDescription || asset.title}
-          className="max-w-full min-h-0 flex-shrink object-contain border border-slate-200 rounded bg-white"
+          className={PREVIEW_IMAGE_CLASS}
           onError={() => setFailedUrl(asset.url ?? null)}
         />
       )}

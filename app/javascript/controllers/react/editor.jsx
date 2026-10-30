@@ -380,6 +380,11 @@ function editorStateToCollabSeed(state) {
  * @property {Object<string, string>} [prefigureAssetUrls] - The digested URL of each
  *   file of the PreFigure wasm engine, by filename (vendor/prefigure, copied into
  *   app/assets/builds/prefigure by script/copy-static-assets.js).
+ * @property {string} [tikzWorkerUrl] - Where the TikZ engine worker bundle
+ *   (app/javascript/tikz_worker.js) is served from.
+ * @property {string} [tikzEngineUrl] - The directory the TikZ engine is served from
+ *   (public/engines, filled by script/fetch-tikz-engine.js). Omitted, or without the
+ *   worker, TikZ assets show their stored picture and render nothing live.
  * @property {string} [previewWorkerUrl] - Where the preview render worker bundle
  *   (app/javascript/preview_worker.js) is served from; previews render off the
  *   main thread when set.
@@ -405,6 +410,8 @@ function EditorApp({ config }) {
     previewWorkerUrl,
     prefigureWorkerUrl,
     prefigureAssetUrls,
+    tikzWorkerUrl,
+    tikzEngineUrl,
   } = config;
 
   // Rails routes the React side needs.  Kept here (rather than in many data
@@ -1068,8 +1075,8 @@ function EditorApp({ config }) {
     [uniqueRef, patchProjectJson, invalidateAssetQueries, recordCreated],
   );
 
-  // A generated asset (a PreFigure diagram): an authored asset whose source
-  // format is the generator's, created with the generator's starter source so a
+  // A generated asset (a PreFigure diagram, a TikZ picture): an authored asset
+  // whose source format is the generator's, created with the generator's starter source so a
   // peer or a reload opens the same diagram and there is something for the first
   // render's digest to be current against.
   const onCreateGenerated = useCallback(
@@ -1115,6 +1122,10 @@ function EditorApp({ config }) {
     },
     [patchProjectAssetUpload, workingRecord],
   );
+
+  // An asset's `url` is `content_file`, which redirects to storage and shows the
+  // file inline; this is the same route asking for it as an attachment.
+  const assetDownloadUrl = useCallback((asset) => asset.url && `${asset.url}?download=1`, []);
 
   // Fetches the image bytes server-side and hands back a File -- it does not
   // create a persisted asset. The editor commits the file (possibly after
@@ -1594,15 +1605,19 @@ function EditorApp({ config }) {
     [projectQuery.data],
   );
 
-  // Browser engines for generated assets, keyed by generator. Only PreFigure so
-  // far, and only when the page was given its worker and engine files; without
-  // them PreFigure assets show their stored picture and render nothing live.
+  // Browser engines for generated assets, keyed by generator, each only when the
+  // page was given its worker and engine files; without them that generator's
+  // assets show their stored picture and render nothing live.
   const generatorRuntimes = useMemo(
-    () =>
-      prefigureWorkerUrl && prefigureAssetUrls && Object.keys(prefigureAssetUrls).length
+    () => ({
+      ...(prefigureWorkerUrl && prefigureAssetUrls && Object.keys(prefigureAssetUrls).length
         ? { prefigure: { workerUrl: prefigureWorkerUrl, assetUrls: prefigureAssetUrls } }
-        : undefined,
-    [prefigureWorkerUrl, prefigureAssetUrls],
+        : {}),
+      ...(tikzWorkerUrl && tikzEngineUrl
+        ? { tikz: { workerUrl: tikzWorkerUrl, baseUrl: tikzEngineUrl } }
+        : {}),
+    }),
+    [prefigureWorkerUrl, prefigureAssetUrls, tikzWorkerUrl, tikzEngineUrl],
   );
 
   // ----- Render ------------------------------------------------------------
@@ -1746,6 +1761,7 @@ function EditorApp({ config }) {
         onCreateAuthored={onCreateAuthored}
         onCreateGenerated={onCreateGenerated}
         onAssetOutput={onAssetOutput}
+        assetDownloadUrl={assetDownloadUrl}
         generatorRuntimes={generatorRuntimes}
         onAssetUpdate={onAssetUpdate}
         onAssetRemove={onAssetRemove}

@@ -39,6 +39,7 @@ import EditorTabs, { type EditorTab } from "./EditorTabs";
 import AssetPreview from "./AssetPreview";
 import GeneratedAssetPreview, { type GeneratedAssetOutput } from "./GeneratedAssetPreview";
 import { generatorFor, runtimeFor, type GeneratorRuntimeConfigs } from "../generators";
+import { editorConfigs } from "./editorConfigs";
 import {
   editorTargetKey,
   resolveEditorTarget,
@@ -65,6 +66,7 @@ import type {
   RecordKind,
   Snippet,
   SourceFormat,
+  EditorLanguage,
 } from "../types/editor";
 import type { Division, DivisionType, RootDivisionType } from "../types/sections";
 import {
@@ -424,6 +426,12 @@ export interface editorProps {
    * any retries after a rejection.
    */
   onAssetOutput?: (asset: Asset, output: GeneratedAssetOutput) => Promise<Asset | void> | void;
+  /**
+   * Where a generated asset's stored picture downloads from, for a host whose
+   * `Asset.url` serves it inline or from another origin, where a link's
+   * `download` attribute is ignored. Omitted, the link goes to `Asset.url`.
+   */
+  assetDownloadUrl?: (asset: Asset) => string | undefined;
   /**
    * Called when the user removes an asset from the project. Return a promise
    * if the removal is persisted asynchronously: the Replace flow awaits it
@@ -935,6 +943,11 @@ const EditorsInner = (props: EditorsInnerProps) => {
       : editorTarget?.kind === "asset"
         ? "pretext"
         : activeDivisionFormat;
+  // What the open buffer is written in, for the code editor and its menus. Every
+  // asset counts as PreTeXt to the project, but a generator's source may not be.
+  const editorLanguage: EditorLanguage =
+    (editorTarget?.kind === "asset" ? generatorFor(editorTarget.asset.sourceFormat)?.language : undefined) ??
+    editorFormat;
 
   // ── Cross-division preview sync ──────────────────────────────────────────
   // Clicking inside a child division's content opens that division. Its line
@@ -2474,7 +2487,7 @@ const EditorsInner = (props: EditorsInnerProps) => {
       ref={codeEditorRef}
       content={editorContent}
       bufferKey={editorKey}
-      sourceFormat={editorFormat}
+      sourceFormat={editorLanguage}
       // Only a division's buffer can be schema-checked: the linter validates
       // the assembled document, which a snippet or asset fragment isn't.
       pretextValidation={isDivisionOpen ? pretextValidation : undefined}
@@ -2576,10 +2589,12 @@ const EditorsInner = (props: EditorsInnerProps) => {
     // A generated asset renders in its own engine, not the document renderer.
     preview = (
       <GeneratedAssetPreview
+        key={editorKey}
         asset={editorTarget.asset}
         docinfo={effectiveDocinfo ?? ""}
         runtime={runtimeFor(assetGenerator.id, props.generatorRuntimes)}
         onOutput={handleAssetOutput}
+        downloadUrlFor={props.assetDownloadUrl}
         readOnly={props.readOnly}
       />
     );
@@ -2774,11 +2789,12 @@ const EditorsInner = (props: EditorsInnerProps) => {
         onSaveAndClose={props.onSaveAndClose}
         saveAndCloseLabel={props.saveAndCloseLabel}
         content={editorContent}
-        sourceFormat={editorFormat}
+        sourceFormat={editorLanguage}
+        docinfoFormat={rootDivision?.sourceFormat ?? activeDivisionFormat}
         rootType={previewRootType}
         onContentChange={handleEditorChange}
         onOpenImport={onOpenImport}
-        onOpenClean={handleOpenCleanDialog}
+        onOpenClean={editorConfigs[editorLanguage].clean ? handleOpenCleanDialog : undefined}
         onOpenDocinfoEditor={onOpenDocinfoEditor}
         onOpenConvertToPretext={onOpenConvertToPretext}
         canConvertToPretext={canConvertToPretext}

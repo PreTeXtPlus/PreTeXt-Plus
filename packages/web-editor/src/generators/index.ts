@@ -6,8 +6,9 @@
 import type { AssetSourceFormat, GeneratorId } from "../types/editor";
 import type { AssetGenerator, GeneratorRuntime, GeneratorRuntimeConfigs } from "./types";
 import { prefigure } from "./prefigure/definition";
+import { tikz } from "./tikz/definition";
 
-export const generators: Record<GeneratorId, AssetGenerator> = { prefigure };
+export const generators: Record<GeneratorId, AssetGenerator> = { prefigure, tikz };
 
 export const generatorIds = Object.keys(generators) as GeneratorId[];
 
@@ -45,5 +46,12 @@ export function resetRuntimesForTests(): void {
   runtimes.clear();
 }
 
-export { renderInputFor, sha256Hex, docinfoElementInner, RENDER_INPUT_SEPARATOR } from "./renderInput";
+export {
+  renderInputFor,
+  docinfoInputsFor,
+  sha256Hex,
+  docinfoElementInner,
+  RENDER_INPUT_SEPARATOR,
+} from "./renderInput";
+export { GeneratorRenderError } from "./workerRuntime";
 export type * from "./types";

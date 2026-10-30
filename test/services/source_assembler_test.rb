@@ -80,6 +80,19 @@ class SourceAssemblerTest < ActionDispatch::IntegrationTest
     assert_not_includes source, 'source="graph.svg"'
   end
 
+  # TikZ is TeX: the buffer is not XML, so the document's copy of it is escaped.
+  test "a TikZ asset assembles to a latex-image with its source as XML text" do
+    skip_without_bundle
+    @project.assets.create!(kind: :authored_asset, source_format: "tikz", ref: "plot", title: "Plot",
+                            source: "\\node {$a < b$} \\amp c & d;")
+    root = @project.root_division
+    root.update!(source: "#{root.source}\n<figure><plus:image ref=\"plot\"/></figure>")
+
+    source = SourceAssembler.new(@project).call
+
+    assert_includes source, %(<latex-image label="plot">\n\\node {$a &lt; b$} \\amp c &amp; d;\n</latex-image>)
+  end
+
   test "the docinfo in effect is the one that lands in the document" do
     skip_without_bundle
     @project.update!(docinfo: "<docinfo><macros>\\def\\projectown{1}</macros></docinfo>")

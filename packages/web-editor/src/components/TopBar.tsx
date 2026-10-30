@@ -9,7 +9,7 @@ import StoreFeedbackLink from "./StoreFeedbackLink";
 import { buildDocumentActionEntries } from "./documentActionMenuEntries";
 import { useEditorStore } from "../store/hooks";
 import { LANGUAGES } from "../languages";
-import type { SourceFormat } from "../types/editor";
+import type { EditorLanguage, SourceFormat } from "../types/editor";
 import type { RootDivisionType } from "../types/sections";
 
 const NOOP_ACTIONS: EditorMenuActions = {
@@ -100,7 +100,9 @@ export interface TopBarProps {
 
   // ── Shared with the code-editor menu (Edit/Insert/Tools + File's document actions) ──
   content: string;
-  sourceFormat: SourceFormat;
+  sourceFormat: EditorLanguage;
+  /** The project's format, which names the docinfo editor (see `buildDocumentActionEntries`). */
+  docinfoFormat?: SourceFormat;
   rootType?: RootDivisionType;
   onContentChange: (newContent: string) => void;
   onOpenImport?: () => void;
@@ -172,6 +174,7 @@ const TopBar = (props: TopBarProps) => {
     ...buildDocumentActionEntries({
       content: props.content,
       sourceFormat: props.sourceFormat,
+      docinfoFormat: props.docinfoFormat,
       readOnly: props.readOnly,
       onContentChange: props.onContentChange,
       onOpenImport: props.onOpenImport,
@@ -221,6 +224,7 @@ const TopBar = (props: TopBarProps) => {
           className="flex-1 border-b-0"
           content={props.content}
           sourceFormat={props.sourceFormat}
+          docinfoFormat={props.docinfoFormat}
           rootType={props.rootType}
           onContentChange={props.onContentChange}
           onOpenImport={props.onOpenImport}
