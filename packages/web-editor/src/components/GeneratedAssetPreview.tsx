@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import type { Asset } from "../types/editor";
 import {
-  docinfoElementInner,
+  docinfoInputsFor,
   GeneratorRenderError,
   generatorFor,
   renderInputFor,
@@ -128,8 +128,7 @@ const GeneratedAssetPreview = ({
     const timer = setTimeout(async () => {
       setIsRendering(true);
       try {
-        const inputs = generator.docinfoInputElements.map((element) => [element, docinfoElementInner(docinfo, element)]);
-        const result = await runtime.render(source, { docinfo: Object.fromEntries(inputs) });
+        const result = await runtime.render(source, { docinfo: docinfoInputsFor(generator, docinfo) });
         const digest = await sha256Hex(renderInputFor(generator, result.source, docinfo));
         setRenderError(null);
         setRendered((previous) => {

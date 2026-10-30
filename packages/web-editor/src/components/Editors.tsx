@@ -2782,6 +2782,7 @@ const EditorsInner = (props: EditorsInnerProps) => {
         saveAndCloseLabel={props.saveAndCloseLabel}
         content={editorContent}
         sourceFormat={editorLanguage}
+        docinfoFormat={rootDivision?.sourceFormat ?? activeDivisionFormat}
         rootType={previewRootType}
         onContentChange={handleEditorChange}
         onOpenImport={onOpenImport}

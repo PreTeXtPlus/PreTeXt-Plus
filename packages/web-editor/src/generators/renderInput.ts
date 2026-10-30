@@ -9,7 +9,7 @@
  * without having to agree on a serialization. **Change either and both tests
  * pinning the shared fixture hex fail** — that is the point of them.
  */
-import type { AssetGenerator } from "./types";
+import type { AssetGenerator, DocinfoInputs } from "./types";
 
 export const RENDER_INPUT_SEPARATOR = "\n\u0000\n";
 
@@ -24,16 +24,26 @@ export function docinfoElementInner(docinfo: string, element: string): string {
   return match ? match[1] : "";
 }
 
+/**
+ * The docinfo pieces a generator's render depends on, by element: what the
+ * runtime is handed as `RenderOptions.docinfo`, and what the digest is of.
+ */
+export function docinfoInputsFor(
+  generator: Pick<AssetGenerator, "docinfoInputElements">,
+  docinfo: string,
+): DocinfoInputs {
+  return Object.fromEntries(
+    generator.docinfoInputElements.map((element) => [element, docinfoElementInner(docinfo, element)]),
+  );
+}
+
 export function renderInputFor(
   generator: Pick<AssetGenerator, "docinfoInputElements">,
   source: string,
   docinfo: string,
 ): string {
-  const parts = [source];
-  for (const element of generator.docinfoInputElements) {
-    parts.push(docinfoElementInner(docinfo, element));
-  }
-  return parts.join(RENDER_INPUT_SEPARATOR);
+  const inputs = docinfoInputsFor(generator, docinfo);
+  return [source, ...generator.docinfoInputElements.map((element) => inputs[element])].join(RENDER_INPUT_SEPARATOR);
 }
 
 /** Lower-case hex sha256 of `text`, via Web Crypto (Node 20+ has it too). */

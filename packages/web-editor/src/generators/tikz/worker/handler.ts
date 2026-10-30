@@ -128,7 +128,7 @@ export async function handleTikzWorkerRequest(
       post({ type: "rendered", token, svg, annotations: null });
     } else {
       const log = result.texLog || result.log;
-      post({ type: "failed", token, message: tikzFailureMessage(log, request.source, sourceLine), log });
+      post({ type: "failed", token, message: tikzFailureMessage(log, sourceLine), log });
     }
   } catch (error) {
     fail(error);

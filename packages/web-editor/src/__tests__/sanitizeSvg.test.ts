@@ -80,6 +80,24 @@ describe("sanitizeSvg", () => {
     expect(countOf(clean, "image")).toBe(0);
   });
 
+  it("drops a paint, filter or style that reaches outside, keeping the element", () => {
+    const clean = parsed(
+      sanitizeSvg(
+        hostile(`
+          <defs><linearGradient id="g"/></defs>
+          <rect id="a" width="1" height="1" style="fill:url(https://example.com/x.svg#p)"/>
+          <rect id="b" width="1" height="1" fill="url('//example.com/x.svg#p')" stroke="url(#g)"/>
+          <rect id="c" width="1" height="1" filter="url( &quot;x.svg#f&quot; )" style="fill: url( #g )"/>`),
+      ),
+    );
+    expect(countOf(clean, "rect")).toBe(3);
+    expect(clean.querySelector("#a")?.hasAttribute("style")).toBe(false);
+    expect(clean.querySelector("#b")?.hasAttribute("fill")).toBe(false);
+    expect(clean.querySelector("#b")?.getAttribute("stroke")).toBe("url(#g)");
+    expect(clean.querySelector("#c")?.hasAttribute("filter")).toBe(false);
+    expect(clean.querySelector("#c")?.getAttribute("style")).toContain("url( #g )");
+  });
+
   it("keeps the drawing inside a link and drops where it goes", () => {
     const clean = parsed(
       sanitizeSvg(hostile('<a xlink:href="javascript:alert(1)"><rect width="1" height="1"/></a>')),

@@ -46,6 +46,12 @@ export function resetRuntimesForTests(): void {
   runtimes.clear();
 }
 
-export { renderInputFor, sha256Hex, docinfoElementInner, RENDER_INPUT_SEPARATOR } from "./renderInput";
+export {
+  renderInputFor,
+  docinfoInputsFor,
+  sha256Hex,
+  docinfoElementInner,
+  RENDER_INPUT_SEPARATOR,
+} from "./renderInput";
 export { GeneratorRenderError } from "./workerRuntime";
 export type * from "./types";

@@ -600,7 +600,16 @@ describe("CodeEditorMenu", () => {
       expect(screen.getByRole("button", { name: "Insert" })).toBeDisabled();
       await openMenu("Tools");
       expect(queryMenuItem("Format PreTeXt")).not.toBeInTheDocument();
+      expect(menuItem("Edit Macros…")).toBeInTheDocument();
+    });
+
+    // The docinfo editor edits the project's one <docinfo> whatever is open, so
+    // it is named for the project's format, not the buffer's.
+    it("names the docinfo editor for the project, not the open buffer", async () => {
+      render(<CodeEditorMenu {...baseProps()} sourceFormat="tex" docinfoFormat="latex" />);
+      await openMenu("Tools");
       expect(menuItem("Edit Preamble…")).toBeInTheDocument();
+      expect(queryMenuItem("Edit Macros…")).not.toBeInTheDocument();
     });
 
     it("keeps the document-actions block in Tools by default", async () => {

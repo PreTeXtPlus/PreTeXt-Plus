@@ -131,26 +131,44 @@ export function createWorkerRuntime<Request>(config: WorkerRuntimeConfig<Request
     setStatus("idle");
   };
 
-  const load = (): Promise<void> => {
+  /**
+   * Start a worker, loudly or quietly. Loud is the pane's load: the status goes
+   * through `loading` to `ready`. Quiet is a restart after the watchdog stopped
+   * the worker while the status stayed `ready`: it stays `ready` throughout,
+   * because a status change makes the pane render again, and the source it
+   * would render is the one that just hung. A failure is reported either way.
+   */
+  const start = (quiet: boolean): Promise<void> => {
     if (loadPromise) return loadPromise;
-    setStatus("loading", `Starting the ${label} engine…`);
+    if (!quiet) setStatus("loading", `Starting the ${label} engine…`);
     let loadRequest: WithoutToken<Request>;
+    let started: GeneratorWorkerLike<Request>;
     try {
       loadRequest = config.loadRequest();
-      worker = config.createWorker();
+      started = config.createWorker();
     } catch (cause) {
       setStatus("failed", cause instanceof Error ? cause.message : String(cause));
       return Promise.reject(new Error(error));
     }
-    worker.addEventListener("message", handleMessage);
-    worker.addEventListener("error", (event) => {
-      const message = event.message || `The ${label} worker failed to start`;
-      failAll(message);
-      setStatus("failed", message);
-      loadPromise = null;
+    worker = started;
+    // A worker that has been replaced (stopped by the watchdog, failed, or
+    // disposed) has nothing to say about the one running now.
+    worker.addEventListener("message", (event) => {
+      if (worker === started) handleMessage(event);
     });
-    loadPromise = send(loadRequest, (message) => setStatus("loading", message)).then(
-      () => setStatus("ready"),
+    worker.addEventListener("error", (event) => {
+      if (worker !== started) return;
+      const message = event.message || `The ${label} worker failed to start`;
+      // The worker is in no state to go on with: stop it rather than leave it
+      // running beside the one the next load starts.
+      stopWorker(message);
+      setStatus("failed", message);
+    });
+    const onProgress = quiet ? undefined : (message: string) => setStatus("loading", message);
+    loadPromise = send(loadRequest, onProgress).then(
+      () => {
+        if (!quiet) setStatus("ready");
+      },
       (cause: Error) => {
         setStatus("failed", cause.message);
         loadPromise = null;
@@ -160,11 +178,17 @@ export function createWorkerRuntime<Request>(config: WorkerRuntimeConfig<Request
     return loadPromise;
   };
 
+  const load = (): Promise<void> => start(false);
+
+  /** The worker for a render: the running one, or a quiet restart of a stopped one. */
+  const ensureWorker = (): Promise<void> => start(status === "ready");
+
   /** Watch a render on the worker. Returns the call that stops watching. */
   const watchRender = (): (() => void) => {
     if (!watchdog) return () => {};
-    // The status stays as it is. A change would make the pane render again, and
-    // the same source would hang the same way; the next edit restarts the worker.
+    // The status stays as it is, here and through the restart (`ensureWorker`).
+    // A change would make the pane render again, and the same source would hang
+    // the same way; the next edit restarts the worker.
     const stop = (reason: string) =>
       stopWorker(`${reason}. Does the source loop forever? The next edit tries again.`);
     let stall: ReturnType<typeof setTimeout>;
@@ -193,7 +217,7 @@ export function createWorkerRuntime<Request>(config: WorkerRuntimeConfig<Request
 
   const renderNow = async (source: string, docinfo: DocinfoInputs): Promise<RenderResult> => {
     // The watchdog may have stopped the worker since this job was queued.
-    await load();
+    await ensureWorker();
     const unwatch = watchRender();
     try {
       const response = await send(config.renderRequest(source, docinfo));
@@ -220,7 +244,7 @@ export function createWorkerRuntime<Request>(config: WorkerRuntimeConfig<Request
   };
 
   const render = async (source: string, renderOptions: RenderOptions = {}): Promise<RenderResult> => {
-    await load();
+    await ensureWorker();
     const docinfo = renderOptions.docinfo ?? {};
     return new Promise<RenderResult>((resolve, reject) => {
       const settle = { resolve, reject };

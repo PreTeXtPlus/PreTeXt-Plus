@@ -7,7 +7,7 @@ import type { GeneratorWorkerResponse } from "../../workerProtocol";
 /**
  * The engine's bundles the worker reads. They must be the ones
  * `script/fetch-tikz-engine.js` keeps, listed in `config/tikz_engine.json`;
- * `tikzGenerator.test.ts` holds the two together.
+ * `__tests__/tikzDocument.test.ts` holds the two together.
  */
 export const TIKZ_BUNDLES = [
   "core",

@@ -13,6 +13,16 @@ const staysInPicture = (element: Element, target: string) =>
   target.startsWith("#") || (element.localName === "image" && target.startsWith("data:image/"));
 
 /**
+ * A `url(…)` in CSS or a presentation attribute — `fill`, `filter`, `mask`,
+ * `style="fill:url(…)"` — which DOMPurify leaves alone, and a browser showing
+ * the file on its own (not in an `<img>`) will fetch.
+ */
+const URL_REFERENCE = /url\(\s*(['"]?)([^'")]*)\1\s*\)/gi;
+
+const reachesOutside = (value: string) =>
+  Array.from(value.matchAll(URL_REFERENCE)).some(([, , target]) => !target.trim().startsWith("#"));
+
+/**
  * `svg` with everything but the drawing taken out, as standalone XML. DOMPurify
  * parses and reserializes as HTML, which is not what an `image/svg+xml` file is
  * read as, so the DOM it leaves is written out here instead: that keeps the
@@ -36,6 +46,10 @@ export function sanitizeSvg(svg: string): string {
       // A link is only a wrapper: its drawing stays, without somewhere to go.
       if (element.localName === "a") element.removeAttribute(name);
       else element.remove();
+    }
+    // A paint or filter from elsewhere: the element stays, drawn without it.
+    for (const attribute of Array.from(element.attributes)) {
+      if (reachesOutside(attribute.value)) element.removeAttributeNode(attribute);
     }
   }
   return new XMLSerializer().serializeToString(root);

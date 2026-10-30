@@ -16,6 +16,7 @@ const SVG = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1 1"><path d="
 class FakeWorker implements TikzWorkerLike {
   requests: TikzWorkerRequest[] = [];
   private listeners: ((event: { data: TikzWorkerResponse }) => void)[] = [];
+  private errorListeners: ((event: { message?: string }) => void)[] = [];
   terminated = false;
 
   postMessage(message: TikzWorkerRequest): void {
@@ -24,6 +25,11 @@ class FakeWorker implements TikzWorkerLike {
   }
   addEventListener(type: "message" | "error", listener: (event: never) => void): void {
     if (type === "message") this.listeners.push(listener as (event: { data: TikzWorkerResponse }) => void);
+    else this.errorListeners.push(listener as (event: { message?: string }) => void);
+  }
+  /** An uncaught error in the worker, as the browser reports it. */
+  crash(message: string) {
+    queueMicrotask(() => this.errorListeners.forEach((listener) => listener({ message })));
   }
   terminate(): void {
     this.terminated = true;
@@ -132,6 +138,50 @@ describe("createTikzRuntime", () => {
     const next = runtime.render("\\tikz;");
     await flush();
     expect(workers).toHaveLength(2);
+    workers[1].answer();
+    expect((await next).source).toBe("\\tikz;");
+    // The restart was as quiet as the stop: a loading→ready round trip would
+    // have the pane render the same source a second time.
+    expect(statuses).toEqual([]);
+    expect(runtime.status).toBe("ready");
+    runtime.dispose();
+  });
+
+  it("reports a restart that fails, quiet or not", async () => {
+    const runtime = start();
+    const hung = runtime.render("hangs").catch((cause) => cause);
+    await flush();
+    await vi.advanceTimersByTimeAsync(TIKZ_STALL_MS);
+    await hung;
+
+    const next = runtime.render("\\tikz;").catch((cause) => cause);
+    await flush();
+    workers[1].crash("out of memory");
+    expect((await next).message).toBe("out of memory");
+    expect(runtime.status).toBe("failed");
+    expect(runtime.error).toBe("out of memory");
+    runtime.dispose();
+  });
+
+  it("stops a worker that crashes, and lets nothing it says afterwards reach the next one", async () => {
+    const runtime = start();
+    const crashed = runtime.render("\\tikz;").catch((cause) => cause);
+    await flush();
+    workers[0].crash("RuntimeError: unreachable");
+    expect((await crashed).message).toBe("RuntimeError: unreachable");
+    expect(workers[0].terminated).toBe(true);
+    expect(runtime.status).toBe("failed");
+
+    await runtime.load();
+    expect(workers).toHaveLength(2);
+    expect(runtime.status).toBe("ready");
+    const next = runtime.render("\\tikz;");
+    await flush();
+    // The first worker's events must not fail the second worker's render.
+    workers[0].crash("late");
+    workers[0].emit({ type: "failed", token: workers[1].lastRender.token, message: "stale" });
+    await flush();
+    expect(runtime.status).toBe("ready");
     workers[1].answer();
     expect((await next).source).toBe("\\tikz;");
     runtime.dispose();

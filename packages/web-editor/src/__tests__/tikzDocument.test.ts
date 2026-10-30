@@ -83,9 +83,27 @@ describe("texErrorExcerpt", () => {
     expect(under.indexOf("(1,1)")).toBe(context.length);
   });
 
-  it("names the preamble for a line before the source", () => {
-    const missing = "! LaTeX Error: File `nope.sty' not found.\nl.4 \\usepackage{nope}\n";
-    expect(texErrorExcerpt(missing, 9)).toContain("preamble \\usepackage{nope}");
+  it("names the preamble for a line before the source, shifting the next line to match", () => {
+    const context = "l.4 \\usepackage{nope}";
+    const missing = `! LaTeX Error: File \`nope.sty' not found.\n${context}\n${" ".repeat(context.length)}{x}`;
+    const [, renumbered, under] = texErrorExcerpt(missing, 9)!.split("\n");
+    expect(renumbered).toBe("preamble \\usepackage{nope}");
+    expect(under.indexOf("{x}")).toBe(renumbered.length);
+  });
+
+  it("leaves a line of a package file as the package's own", () => {
+    const inPackage = [
+      "(./doc.tex (/tex/latex/base/article.cls",
+      "Document Class: article 2024/06/29 v1.4n (LaTeX2e)",
+      ") (/tex/latex/foo/foo.sty",
+      "! Undefined control sequence.",
+      "l.120 \\nosuch",
+      "",
+    ].join("\n");
+    expect(texErrorExcerpt(inPackage, 9)).toContain("l.120 \\nosuch");
+
+    const inDocument = inPackage.replace("(/tex/latex/foo/foo.sty", "(/tex/latex/foo/foo.sty)");
+    expect(texErrorExcerpt(inDocument, 9)).toContain("l.112 \\nosuch");
   });
 
   it("stops at a bound when TeX gives no line", () => {
@@ -100,14 +118,26 @@ describe("texErrorExcerpt", () => {
 
 describe("tikzFailureMessage", () => {
   it("falls back to a plain statement when TeX reported no error", () => {
-    expect(tikzFailureMessage("no errors here", "\\tikz;", 1)).toBe("TeX produced no picture.");
+    expect(tikzFailureMessage("no errors here", 1)).toBe("TeX produced no picture.");
   });
 
-  it("points at \\amp when a tikzcd has a literal ampersand", () => {
-    const message = tikzFailureMessage("! Undefined control sequence.\n", "\\begin{tikzcd} A & B \\end{tikzcd}", 1);
+  it("points at \\amp when TeX stopped at a bare ampersand, and only then", () => {
+    // What the engine says of `A \arrow[r, "f"] & B` in a tikzcd.
+    const log = [
+      "! Undefined control sequence.",
+      "<argument> \\pgf@matrix@last@nextcell@options ",
+      "                                             ",
+      'l.2 A \\arrow[r, "f"] &',
+      "                       B",
+      "",
+    ].join("\n");
+    const message = tikzFailureMessage(log, 1);
     expect(message).toContain("! Undefined control sequence.");
     expect(message).toContain("\\amp");
-    expect(tikzFailureMessage("! x\n", "\\begin{tikzcd} A \\amp B \\end{tikzcd}", 1)).not.toContain("\\amp");
+    // An unrelated error stopping elsewhere on a line with a `&` (a comment, say).
+    expect(tikzFailureMessage("! Undefined control sequence.\nl.3 \\nosuch\n           % a & b\n", 1)).not.toContain(
+      "\\amp",
+    );
   });
 });
 
