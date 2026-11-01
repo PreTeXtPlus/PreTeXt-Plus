@@ -2,7 +2,7 @@ import { useEffect, useId, useState, type KeyboardEvent } from "react";
 import clsx from "clsx";
 import type { Snippet, SourceFormat } from "../../types/editor";
 import { sanitizeXmlId } from "../../sectionUtils";
-import { useEditorStore } from "../../store/hooks";
+import { useTakenRefs } from "../../store/hooks";
 import { SOURCE_FORMAT_LABELS } from "../toc/types";
 import {
   FIELD_CONTROL_CLASSES,
@@ -46,9 +46,7 @@ const NewSnippetForm = ({
   onCancel,
   onBusyChange,
 }: NewSnippetFormProps) => {
-  const divisions = useEditorStore((s) => s.divisions);
-  const projectSnippets = useEditorStore((s) => s.projectSnippets);
-  const projectAssets = useEditorStore((s) => s.projectAssets);
+  const takenRefs = useTakenRefs();
 
   const [title, setTitle] = useState("");
   const [ref, setRef] = useState(resolveRef ?? "");
@@ -68,14 +66,7 @@ const NewSnippetForm = ({
       setError("Reference ID can't be empty.");
       return;
     }
-    // A snippet's ref must not collide with a division's xml:id, an asset's
-    // ref, or another snippet's ref.
-    const taken = new Set<string>([
-      ...(divisions ?? []).map((d) => d.xmlId),
-      ...(projectAssets ?? []).map((a) => a.ref).filter((r): r is string => !!r),
-      ...(projectSnippets ?? []).map((s) => s.ref),
-    ]);
-    if (taken.has(sanitized)) {
+    if (takenRefs.has(sanitized)) {
       setError(`Reference ID "${sanitized}" is already in use. Choose a unique Reference ID.`);
       return;
     }

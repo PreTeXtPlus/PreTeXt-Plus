@@ -1044,9 +1044,10 @@ function EditorApp({ config }) {
   const onAssetInsert = useCallback(() => {}, []);
 
   const onAssetUpload = useCallback(
-    async (file, title) => {
+    async (file, title, chosenRef) => {
       title = title || "New Asset";
-      const ref = uniqueRef(slugifyRef(title.replace(/\.[^.]+$/, "")));
+      // A Duplicate or a Replace names no ref; the form always does.
+      const ref = chosenRef ?? uniqueRef(slugifyRef(title.replace(/\.[^.]+$/, "")));
       const json = await patchProjectAssetUpload({ ref, kind: "file_asset", title, file });
       const created = toEditorAsset(
         railsAssetToEditor((json.assets ?? []).find((a) => a.ref === ref)),
@@ -1061,14 +1062,13 @@ function EditorApp({ config }) {
 
   // Creates a file-less "authored" asset -- unlike onAssetUpload there's no
   // file to multipart-upload, so this goes through patchProjectJson (like
-  // onDivisionAdd) instead of patchProjectAssetUpload. `title` comes from the
-  // editor's "New asset" form; the ref is derived from it exactly like
-  // onAssetUpload derives one from an uploaded file's title. `source` starts
+  // onDivisionAdd) instead of patchProjectAssetUpload. `title` and the ref come
+  // from the editor's "New asset" form. `source` starts
   // empty and is filled in afterward through onAssetUpdate, the same as any
   // other edit.
   const onCreateAuthored = useCallback(
-    async (title) => {
-      const ref = uniqueRef(slugifyRef(title));
+    async (title, chosenRef) => {
+      const ref = chosenRef ?? uniqueRef(slugifyRef(title));
       const json = await patchProjectJson({
         assets_attributes: [ { ref, kind: "authored_asset", title, source: "" } ],
       });
@@ -1087,8 +1087,8 @@ function EditorApp({ config }) {
   // peer or a reload opens the same diagram and there is something for the first
   // render's digest to be current against.
   const onCreateGenerated = useCallback(
-    async (format, title) => {
-      const ref = uniqueRef(slugifyRef(title));
+    async (format, title, chosenRef) => {
+      const ref = chosenRef ?? uniqueRef(slugifyRef(title));
       const json = await patchProjectJson({
         assets_attributes: [ {
           ref, kind: "authored_asset", source_format: format, title,

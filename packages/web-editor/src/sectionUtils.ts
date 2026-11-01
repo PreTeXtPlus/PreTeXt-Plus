@@ -651,6 +651,18 @@ export function slugifyTitle(title: string): string {
   return sanitizeXmlId(slug);
 }
 
+/**
+ * `base` if nothing holds it yet, else the first of `base-2`, `base-3`, … that
+ * is free. Refs are one namespace across every kind of record in a project.
+ */
+export function uniqueRef(base: string, taken: ReadonlySet<string>): string {
+  if (!taken.has(base)) return base;
+  for (let n = 2; ; n++) {
+    const candidate = `${base}-${n}`;
+    if (!taken.has(candidate)) return candidate;
+  }
+}
+
 // ---------------------------------------------------------------------------
 // Markdown frontmatter utilities
 // ---------------------------------------------------------------------------

@@ -2,7 +2,7 @@ import { useEffect, useId, useState, type KeyboardEvent } from "react";
 import clsx from "clsx";
 import type { Exercise } from "../../types/editor";
 import { sanitizeXmlId } from "../../sectionUtils";
-import { useEditorStore } from "../../store/hooks";
+import { useTakenRefs } from "../../store/hooks";
 import {
   EXERCISE_KINDS,
   EXERCISE_KIND_LABELS,
@@ -55,10 +55,7 @@ const NewExerciseForm = ({
   onCancel,
   onBusyChange,
 }: NewExerciseFormProps) => {
-  const divisions = useEditorStore((s) => s.divisions);
-  const projectSnippets = useEditorStore((s) => s.projectSnippets);
-  const projectAssets = useEditorStore((s) => s.projectAssets);
-  const projectExercises = useEditorStore((s) => s.projectExercises);
+  const takenRefs = useTakenRefs();
 
   const [title, setTitle] = useState("");
   const [ref, setRef] = useState(resolveRef ?? "");
@@ -78,14 +75,7 @@ const NewExerciseForm = ({
       setError("Reference ID can't be empty.");
       return;
     }
-    // Refs are one namespace across every kind of record in the project.
-    const taken = new Set<string>([
-      ...(divisions ?? []).map((d) => d.xmlId),
-      ...(projectAssets ?? []).map((a) => a.ref).filter((r): r is string => !!r),
-      ...(projectSnippets ?? []).map((s) => s.ref),
-      ...(projectExercises ?? []).map((e) => e.ref),
-    ]);
-    if (taken.has(sanitized)) {
+    if (takenRefs.has(sanitized)) {
       setError(`Reference ID "${sanitized}" is already in use. Choose a unique Reference ID.`);
       return;
     }

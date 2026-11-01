@@ -1,4 +1,4 @@
-import { createContext, useContext } from "react";
+import { createContext, useContext, useMemo } from "react";
 import { useStore } from "zustand";
 import type { EditorStoreInstance, EditorStoreState } from "./editorStore";
 
@@ -27,4 +27,25 @@ export function useEditorStore<T>(selector: (state: EditorStoreState) => T): T {
     throw new Error("useEditorStore must be used within an EditorStoreProvider");
   }
   return useStore(store, selector);
+}
+
+/**
+ * Every ref in the project. Refs are one namespace across divisions, assets,
+ * snippets and exercises, so this is what a new record's ref must avoid.
+ */
+export function useTakenRefs(): ReadonlySet<string> {
+  const divisions = useEditorStore((s) => s.divisions);
+  const assets = useEditorStore((s) => s.projectAssets);
+  const snippets = useEditorStore((s) => s.projectSnippets);
+  const exercises = useEditorStore((s) => s.projectExercises);
+  return useMemo(
+    () =>
+      new Set<string>([
+        ...(divisions ?? []).map((d) => d.xmlId),
+        ...(assets ?? []).flatMap((a) => (a.ref ? [a.ref] : [])),
+        ...(snippets ?? []).map((s) => s.ref),
+        ...(exercises ?? []).map((e) => e.ref),
+      ]),
+    [divisions, assets, snippets, exercises],
+  );
 }

@@ -88,6 +88,7 @@ export {
   renameSnippetRef,
   removeSnippetRef,
   snippetEmbedCode,
+  uniqueRef,
   // Exercise ref utilities
   parseExerciseRefs,
   renameExerciseRef,

@@ -16,10 +16,10 @@ export interface NewItemPaneProps {
   onCreateSnippet?: (ref: string, sourceFormat: SourceFormat, title: string) => Promise<Snippet>;
   /** Persist a new exercise — see `NewExerciseForm`. */
   onCreateExercise?: (exercise: Exercise) => Promise<Exercise>;
-  onUploadAsset?: (file: File, title?: string) => Promise<Asset>;
+  onUploadAsset?: (file: File, title?: string, ref?: string) => Promise<Asset>;
   onFetchAssetUrl?: (url: string) => Promise<File>;
-  onCreateAuthoredAsset?: (title: string) => Promise<Asset>;
-  onCreateGeneratedAsset?: (generator: GeneratorId, title: string) => Promise<Asset>;
+  onCreateAuthoredAsset?: (title: string, ref?: string) => Promise<Asset>;
+  onCreateGeneratedAsset?: (generator: GeneratorId, title: string, ref?: string) => Promise<Asset>;
   /**
    * A snippet, exercise or asset the host has created for `request`: add it to the
    * project, bind or replace whatever the request names, and open it.
@@ -209,6 +209,7 @@ const NewItemPane = ({
         <NewAssetForm
           isReplace={!!creating.replaceRef}
           initialTitle={creating.resolveRef}
+          resolveRef={creating.resolveRef}
           onUpload={onUploadAsset}
           onFetchUrl={onFetchAssetUrl}
           onCreateAuthored={onCreateAuthoredAsset}

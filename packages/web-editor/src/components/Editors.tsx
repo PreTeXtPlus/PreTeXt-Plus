@@ -384,9 +384,12 @@ export interface editorProps {
    * Called when the user uploads an image file, or after `onAssetFetchUrl`
    * fetches an external URL. `title` is the human-readable title the user
    * entered in the modal (may differ from `file.name`) — persist it as the
-   * asset's title rather than deriving one from the filename.
+   * asset's title rather than deriving one from the filename. `ref` is the
+   * Reference ID the user chose in that form, checked against every ref the
+   * editor knows of; it is absent for a Duplicate or a Replace, which give the
+   * asset its ref afterwards, and the host then picks one of its own.
    */
-  onAssetUpload?: (file: File, title?: string) => Promise<Asset>;
+  onAssetUpload?: (file: File, title?: string, ref?: string) => Promise<Asset>;
   /**
    * Called when the user adds an image by URL. Should fetch the URL
    * server-side (to avoid CORS) and return the raw file bytes — it must
@@ -397,21 +400,20 @@ export interface editorProps {
   onAssetFetchUrl?: (url: string) => Promise<File>;
   /**
    * Called when the user creates a new authored (file-less) asset from the
-   * "New asset" form's Custom tab. Host derives the ref from `title` itself
-   * (the same way it already does for `onAssetUpload`) and returns the
-   * created asset — its `source` is empty until the user fills it in via the
+   * "New asset" form's Custom tab, under the `ref` chosen there, and returns
+   * the created asset — its `source` is empty until the user fills it in via the
    * code editor.
    */
-  onCreateAuthored?: (title: string) => Promise<Asset>;
+  onCreateAuthored?: (title: string, ref?: string) => Promise<Asset>;
   /**
    * Called when the user creates a new generated asset (a PreFigure diagram, …)
-   * from the "New asset" form's tab for that generator. The host derives the ref
-   * from `title` as it does for `onCreateAuthored`, persists an authored asset
+   * from the "New asset" form's tab for that generator, under the `ref` chosen
+   * there. The host persists an authored asset
    * whose source format is `generator` (the Rails host: `source_format`) and
    * whose `source` is the generator's starter source
    * (`generators[generator].starterSource`), and returns it.
    */
-  onCreateGenerated?: (generator: GeneratorId, title: string) => Promise<Asset>;
+  onCreateGenerated?: (generator: GeneratorId, title: string, ref?: string) => Promise<Asset>;
   /**
    * Per-generator browser engines: where the host serves each generator's
    * worker and runtime files. Without an entry for a generator, its assets show

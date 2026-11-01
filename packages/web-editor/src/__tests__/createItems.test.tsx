@@ -474,6 +474,134 @@ describe("while an upload is in flight", () => {
   });
 });
 
+describe("the new asset form's title and Reference ID", () => {
+  const titleField = () => within(pane()).getByLabelText("Title") as HTMLInputElement;
+  const refField = () => within(pane()).getByLabelText("Reference ID") as HTMLInputElement;
+  const pick = (name: string) =>
+    fireEvent.change(pane().querySelector('input[type="file"]') as HTMLInputElement, {
+      target: { files: [new File(["png"], name, { type: "image/png" })] },
+    });
+  const uploader = () =>
+    vi.fn(async (_file: File, title?: string, ref?: string) => ({
+      id: "up",
+      ref: ref ?? "derived",
+      title: title ?? "",
+    }));
+  const open = () => {
+    showAssets();
+    fireEvent.click(screen.getByTestId("toc-new-asset-btn"));
+  };
+  const create = () =>
+    act(async () => {
+      fireEvent.click(within(pane()).getByText("Create"));
+    });
+
+  it("suggests both after an upload, and hands them to the host", async () => {
+    const upload = uploader();
+    renderEditors({ onAssetUpload: upload });
+    open();
+    pick("stop-sign_v2.png");
+
+    expect(titleField().value).toBe("Stop sign v2");
+    expect(refField().value).toBe("stop-sign-v2");
+    await create();
+    expect(upload).toHaveBeenCalledWith(expect.any(File), "Stop sign v2", "stop-sign-v2");
+  });
+
+  it("suggests a ref nothing in the project holds", () => {
+    renderEditors({ onAssetUpload: uploader() });
+    open();
+    // A snippet holds this one: refs are one namespace.
+    fireEvent.change(titleField(), { target: { value: "Greeting" } });
+    expect(refField().value).toBe("greeting-2");
+  });
+
+  it("stops following the title once the ref is edited", () => {
+    renderEditors({ onAssetUpload: uploader() });
+    open();
+    fireEvent.change(titleField(), { target: { value: "First" } });
+    expect(refField().value).toBe("first");
+
+    fireEvent.change(refField(), { target: { value: "mine" } });
+    fireEvent.change(titleField(), { target: { value: "Second" } });
+    expect(refField().value).toBe("mine");
+  });
+
+  it("keeps an edited title when another file is picked", () => {
+    renderEditors({ onAssetUpload: uploader() });
+    open();
+    pick("one.png");
+    fireEvent.click(within(pane()).getByText("Choose a different file"));
+    pick("two.png");
+    expect(titleField().value).toBe("Two");
+
+    fireEvent.change(titleField(), { target: { value: "Chosen" } });
+    fireEvent.click(within(pane()).getByText("Choose a different file"));
+    pick("three.png");
+    expect(titleField().value).toBe("Chosen");
+  });
+
+  it("refuses an empty or taken ref without calling the host", async () => {
+    const upload = uploader();
+    renderEditors({ onAssetUpload: upload });
+    open();
+    pick("one.png");
+
+    fireEvent.change(refField(), { target: { value: "" } });
+    await create();
+    expect(within(pane()).getByRole("alert")).toHaveTextContent("Reference ID can't be empty");
+
+    fireEvent.change(refField(), { target: { value: "fig" } });
+    await create();
+    expect(within(pane()).getByRole("alert")).toHaveTextContent("already in use");
+    expect(upload).not.toHaveBeenCalled();
+  });
+
+  it("suggests both from an external URL", async () => {
+    const upload = uploader();
+    renderEditors({
+      onAssetUpload: upload,
+      onAssetFetchUrl: async () => new File(["png"], "x.png", { type: "image/png" }),
+    });
+    open();
+    fireEvent.click(within(pane()).getByText("External URL"));
+    fireEvent.change(within(pane()).getByLabelText("Image URL"), {
+      target: { value: "https://example.com/a/road%20map.png?size=2" },
+    });
+
+    expect(titleField().value).toBe("Road map");
+    expect(refField().value).toBe("road-map");
+    await create();
+    expect(upload).toHaveBeenCalledWith(expect.any(File), "Road map", "road-map");
+  });
+
+  it("keeps an unlinked placeholder's ref while the title changes", () => {
+    renderEditors();
+    showAssets();
+    fireEvent.click(within(screen.getByTestId("asset-row-nofig")).getByRole("button"));
+    fireEvent.click(within(pane()).getByText("Custom"));
+    expect(refField().value).toBe("nofig");
+
+    fireEvent.change(titleField(), { target: { value: "New figure" } });
+    expect(refField().value).toBe("nofig");
+  });
+
+  it("has no Reference ID when replacing, and sends none", async () => {
+    const upload = uploader();
+    renderEditors({ onAssetUpload: upload, onAssetRemove: async () => {} });
+    showAssets();
+    fireEvent.click(within(screen.getByTestId("asset-row-fig")).getByRole("button"));
+    fireEvent.click(screen.getByText("Replace image…"));
+
+    expect(within(pane()).queryByLabelText("Reference ID")).toBeNull();
+    pick("new.png");
+    await act(async () => {
+      fireEvent.click(within(pane()).getByText("Replace"));
+    });
+    expect(upload).toHaveBeenCalledWith(expect.any(File), "New", undefined);
+  });
+});
+
 describe("leaving the form", () => {
   it("abandons it when the author opens an item from the explorer", () => {
     renderEditors();
