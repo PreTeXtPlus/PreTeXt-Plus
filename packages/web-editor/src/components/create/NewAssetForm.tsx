@@ -347,32 +347,13 @@ const NewAssetForm = ({
           id={`${fieldId}-title`}
           type="text"
           className={FIELD_CONTROL_CLASSES}
-          placeholder={
-            isSourceTab ? "My Diagram" : file?.name ?? "My image"
-          }
+          placeholder="My Asset"
           value={title}
           onChange={(e) => setEditedTitle(e.target.value)}
           onKeyDown={(e) => { if (e.key === "Enter") handleSubmit(); }}
           disabled={isBusy}
           autoFocus={isSourceTab}
         />
-        <SettingsNote>
-          {generatorTab ? (
-            <>
-              You'll write the{" "}
-              {generators[generatorTab].label} diagram in the editor next, and
-              its picture is rendered and stored as you work.
-            </>
-          ) : tab === "authored" ? (
-            <>
-              You'll write the
-              asset's PreTeXt content (e.g. <code>{"<latex-image>"}</code>) in
-              the editor next.
-            </>
-          ) : (
-            "Optional."
-          )}
-        </SettingsNote>
       </SettingsField>
 
       {!isReplace && (
@@ -381,7 +362,7 @@ const NewAssetForm = ({
             id={`${fieldId}-ref`}
             type="text"
             className={clsx(FIELD_CONTROL_CLASSES, "font-mono")}
-            placeholder="my-image"
+            placeholder="my-asset"
             value={ref}
             onChange={(e) => setEditedRef(e.target.value)}
             onKeyDown={(e) => { if (e.key === "Enter") handleSubmit(); }}

@@ -66,6 +66,7 @@ const SectionEditForm = ({
         <input
           id={`${fieldId}-title`}
           ref={titleRef}
+          placeholder="My Division"
           className={FIELD_CONTROL_CLASSES}
           type="text"
           value={draft.title}
@@ -137,6 +138,7 @@ const SectionEditForm = ({
           className={clsx(FIELD_CONTROL_CLASSES, "font-mono")}
           type="text"
           value={draft.xmlId}
+          placeholder="my-division"
           onChange={(e) => {
             idFollowsTitle.current = false;
             onDraftChange({ ...draft, xmlId: e.target.value });

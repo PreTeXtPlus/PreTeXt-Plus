@@ -602,6 +602,88 @@ describe("the new asset form's title and Reference ID", () => {
   });
 });
 
+describe("every creation form's title and Reference ID", () => {
+  it.each([
+    ["division", "My Division", "my-division", () => fireEvent.click(screen.getAllByTestId("toc-add-child")[0])],
+    ["snippet", "My Snippet", "my-snippet", () => {
+      showSnippets();
+      fireEvent.click(screen.getByTestId("toc-new-snippet-btn"));
+    }],
+    ["exercise", "My Exercise", "my-exercise", () => {
+      fireEvent.click(screen.getByTestId("explorer-tab-exercises"));
+      fireEvent.click(screen.getByTestId("toc-new-exercise-btn"));
+    }],
+    ["asset", "My Asset", "my-asset", () => {
+      showAssets();
+      fireEvent.click(screen.getByTestId("toc-new-asset-btn"));
+    }],
+  ])("the %s form uses the shared placeholders", (_kind, title, ref, open) => {
+    renderEditors({ projectExercises: [] });
+    open();
+    expect(within(pane()).getByLabelText("Title")).toHaveAttribute("placeholder", title);
+    expect(within(pane()).getByLabelText("Reference ID")).toHaveAttribute("placeholder", ref);
+  });
+
+  it.each([
+    ["snippet", () => {
+      showSnippets();
+      fireEvent.click(screen.getByTestId("toc-new-snippet-btn"));
+    }],
+    ["exercise", () => {
+      fireEvent.click(screen.getByTestId("explorer-tab-exercises"));
+      fireEvent.click(screen.getByTestId("toc-new-exercise-btn"));
+    }],
+  ])("the %s form opens with the title focused", (_kind, open) => {
+    renderEditors({ projectExercises: [] });
+    open();
+    expect(within(pane()).getByLabelText("Title")).toHaveFocus();
+  });
+
+  describe.each([
+    ["snippet", () => {
+      showSnippets();
+      fireEvent.click(screen.getByTestId("toc-new-snippet-btn"));
+    }],
+    ["exercise", () => {
+      fireEvent.click(screen.getByTestId("explorer-tab-exercises"));
+      fireEvent.click(screen.getByTestId("toc-new-exercise-btn"));
+    }],
+  ])("the %s form's suggested Reference ID", (_kind, open) => {
+    const titleField = () => within(pane()).getByLabelText("Title") as HTMLInputElement;
+    const refField = () => within(pane()).getByLabelText("Reference ID") as HTMLInputElement;
+
+    it("follows the title, avoiding every ref in the project", () => {
+      renderEditors({ projectExercises: [] });
+      open();
+      expect(refField().value).toBe("");
+
+      fireEvent.change(titleField(), { target: { value: "Road Map" } });
+      expect(refField().value).toBe("road-map");
+      // An asset holds this one: refs are one namespace.
+      fireEvent.change(titleField(), { target: { value: "Fig" } });
+      expect(refField().value).toBe("fig-2");
+    });
+
+    it("stops following once the ref is edited, even to blank", () => {
+      renderEditors({ projectExercises: [] });
+      open();
+      fireEvent.change(titleField(), { target: { value: "First" } });
+      fireEvent.change(refField(), { target: { value: "" } });
+      fireEvent.change(titleField(), { target: { value: "Second" } });
+      expect(refField().value).toBe("");
+    });
+  });
+
+  it("explains nothing under the asset form's title, on any tab", () => {
+    renderEditors({ onAssetUpload: async () => asset });
+    showAssets();
+    fireEvent.click(screen.getByTestId("toc-new-asset-btn"));
+    expect(within(pane()).queryByText("Optional.")).toBeNull();
+    fireEvent.click(within(pane()).getByText("Custom"));
+    expect(within(pane()).queryByText(/in the editor next/)).toBeNull();
+  });
+});
+
 describe("leaving the form", () => {
   it("abandons it when the author opens an item from the explorer", () => {
     renderEditors();

@@ -135,12 +135,13 @@ const SnippetSettings = ({
           value={snippet.title ?? ""}
           onCommit={commitTitle}
           disabled={readOnly}
-          placeholder="optional"
+          placeholder="My Snippet"
         />
       </SettingsField>
       <SettingsField label="Reference ID" htmlFor="snippet-settings-ref">
         <CommitField
           id="snippet-settings-ref"
+          placeholder="my-snippet"
           value={snippet.ref}
           onCommit={commitRef}
           disabled={readOnly}

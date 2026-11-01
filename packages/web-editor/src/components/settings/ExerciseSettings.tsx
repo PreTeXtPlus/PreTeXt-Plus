@@ -92,12 +92,13 @@ const ExerciseSettings = ({ exercise, embedFormat, onSave, readOnly }: ExerciseS
           value={exercise.title ?? ""}
           onCommit={commitTitle}
           disabled={readOnly}
-          placeholder="optional"
+          placeholder="My Exercise"
         />
       </SettingsField>
       <SettingsField label="Reference ID" htmlFor="exercise-settings-ref">
         <CommitField
           id="exercise-settings-ref"
+          placeholder="my-exercise"
           value={exercise.ref}
           onCommit={commitRef}
           disabled={readOnly}

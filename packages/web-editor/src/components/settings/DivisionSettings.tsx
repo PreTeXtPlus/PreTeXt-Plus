@@ -82,6 +82,7 @@ const DivisionSettings = ({ division, embedFormat }: DivisionSettingsProps) => {
       <SettingsField label="Title" htmlFor="division-settings-title">
         <CommitField
           id="division-settings-title"
+          placeholder="My Division"
           value={division.title}
           onCommit={commitTitle}
           autoSelect
@@ -120,6 +121,7 @@ const DivisionSettings = ({ division, embedFormat }: DivisionSettingsProps) => {
           id="division-settings-id"
           value={division.xmlId}
           onCommit={(next) => updateDivisionProperties(division.xmlId, { xmlId: next })}
+          placeholder="my-division"
           mono
         />
       </SettingsField>

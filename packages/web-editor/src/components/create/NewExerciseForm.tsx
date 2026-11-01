@@ -1,7 +1,7 @@
 import { useEffect, useId, useState, type KeyboardEvent } from "react";
 import clsx from "clsx";
 import type { Exercise } from "../../types/editor";
-import { sanitizeXmlId } from "../../sectionUtils";
+import { sanitizeXmlId, slugifyTitle, uniqueRef } from "../../sectionUtils";
 import { useTakenRefs } from "../../store/hooks";
 import {
   EXERCISE_KINDS,
@@ -58,7 +58,11 @@ const NewExerciseForm = ({
   const takenRefs = useTakenRefs();
 
   const [title, setTitle] = useState("");
-  const [ref, setRef] = useState(resolveRef ?? "");
+  // Suggested from the title until the author edits it, and theirs from then
+  // on, even blank: `null` means "still following the suggestion".
+  const [editedRef, setEditedRef] = useState<string | null>(resolveRef ?? null);
+  const ref =
+    editedRef ?? (title.trim() ? uniqueRef(slugifyTitle(title) || "exercise", takenRefs) : "");
   const [kind, setKind] = useState<ExerciseKind>("multiplechoice");
   const [error, setError] = useState<string | null>(null);
   const [isCreating, setIsCreating] = useState(false);
@@ -110,10 +114,11 @@ const NewExerciseForm = ({
           className={FIELD_CONTROL_CLASSES}
           type="text"
           value={title}
-          placeholder="optional"
+          placeholder="My Exercise"
           onChange={(e) => setTitle(e.target.value)}
           onKeyDown={handleKeyDown}
           disabled={isCreating}
+          autoFocus
         />
       </SettingsField>
       <SettingsField label="Reference ID" htmlFor={`${fieldId}-ref`}>
@@ -123,10 +128,9 @@ const NewExerciseForm = ({
           type="text"
           value={ref}
           placeholder="my-exercise"
-          onChange={(e) => setRef(e.target.value)}
+          onChange={(e) => setEditedRef(e.target.value)}
           onKeyDown={handleKeyDown}
           disabled={isCreating}
-          autoFocus
         />
         {resolveRef && (
           <SettingsNote>

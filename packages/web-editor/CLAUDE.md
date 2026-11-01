@@ -249,8 +249,9 @@ a peer removing the open item does not (`openItemState`'s `byAuthor`).
   notification in one go — under the id the author chose, so a new division is
   never renamed, which is why only *existing* divisions reach
   `syncParentDivisionRef`.
-- **Snippet** (`create/NewSnippetForm.tsx`): an optional title, ref (checked
-  against every division/asset/snippet ref) and source format →
+- **Snippet** (`create/NewSnippetForm.tsx`): an optional title, ref (suggested
+  from the title until edited, as an asset's is; checked against every ref in
+  the project, `useTakenRefs`) and source format →
   `onCreateSnippet(ref, sourceFormat, title)`. A snippet's title is a
   plain-text display name only — it is spliced into its parent with no element
   of its own — so lists and the title bar fall back to the ref without one, and

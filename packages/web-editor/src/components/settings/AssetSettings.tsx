@@ -147,6 +147,7 @@ const AssetSettings = ({
       <SettingsField label="Title" htmlFor="asset-settings-title">
         <CommitField
           id="asset-settings-title"
+          placeholder="My Asset"
           value={asset.title}
           onCommit={commitTitle}
           disabled={readOnly}
@@ -155,6 +156,7 @@ const AssetSettings = ({
       <SettingsField label="Reference ID" htmlFor="asset-settings-ref">
         <CommitField
           id="asset-settings-ref"
+          placeholder="my-asset"
           value={ref}
           onCommit={commitRef}
           disabled={readOnly}
