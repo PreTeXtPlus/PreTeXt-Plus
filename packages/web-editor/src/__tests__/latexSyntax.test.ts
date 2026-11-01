@@ -24,6 +24,21 @@ function rulesOf(language?: Parameters<typeof registerLatexSyntax>[1]) {
 }
 
 describe("the LaTeX grammar", () => {
+  it("does not auto-close `$`, but still wraps a selection in it", () => {
+    let configuration: { autoClosingPairs: { open: string }[]; surroundingPairs: { open: string }[] } | undefined;
+    registerLatexSyntax({
+      languages: {
+        register: () => {},
+        setMonarchTokensProvider: () => {},
+        setLanguageConfiguration: (_id: string, given: typeof configuration) => {
+          configuration = given;
+        },
+      },
+    });
+    expect(configuration!.autoClosingPairs.map((pair) => pair.open)).not.toContain("$");
+    expect(configuration!.surroundingPairs.map((pair) => pair.open)).toContain("$");
+  });
+
   it("captures all of a match in a rule with an action per group", () => {
     const line = "\\begin{tikzpicture}[scale=2]";
     const grouped = rulesOf().filter(([, action]) => Array.isArray(action));
