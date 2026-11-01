@@ -3,6 +3,8 @@
  * worker (`./handler.ts`). Plain data only.
  */
 
+import type { GeneratorWorkerResponse } from "../../workerProtocol";
+
 /**
  * The PreFigure release the vendored engine was built from (`vendor/prefigure`
  * in the Rails app, which `script/build-prefig-wasm.sh` produces). The worker
@@ -22,8 +24,4 @@ export type PrefigureWorkerRequest =
   | { type: "load"; token: number; glueUrl: string; wasmUrl: string }
   | { type: "render"; token: number; source: string; macros: string };
 
-export type PrefigureWorkerResponse =
-  | { type: "progress"; token: number; message: string }
-  | { type: "loaded"; token: number }
-  | { type: "rendered"; token: number; svg: string; annotations: string | null }
-  | { type: "failed"; token: number; message: string };
+export type PrefigureWorkerResponse = GeneratorWorkerResponse;

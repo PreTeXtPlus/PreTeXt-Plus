@@ -203,9 +203,11 @@ class ProjectsController < ApplicationController
   # names it with -- used both by the editor's own full-size previews and by
   # published/shared builds' <image source> resolution, which is why any path
   # may precede `external/`. Looked up across every kind of content, not only
-  # assets; one without a file redirects to the not-found image.
+  # assets; one without a file redirects to the not-found image. `?download=1`
+  # asks for the file as an attachment instead of inline.
   def content_file
-    redirect_to_cdn_url @project.contents.find_by!(ref: params[:ref]).url
+    content = @project.contents.find_by!(ref: params[:ref])
+    redirect_to_cdn_url params[:download].present? ? content.download_url : content.url
   end
 
   # GET /projects/:id/(*)/external/:ref/thumbnail

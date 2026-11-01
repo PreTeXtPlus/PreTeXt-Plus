@@ -11,7 +11,7 @@
  * to show; a build generates the asset from its source like any other, with the
  * build server's own cache deciding whether the generator reruns.
  */
-import type { GeneratorId, SourceFormat } from "../types/editor";
+import type { EditorLanguage, GeneratorId } from "../types/editor";
 
 export interface RenderResult {
   /** The diagram, as standalone SVG markup. */
@@ -22,9 +22,14 @@ export interface RenderResult {
   source: string;
 }
 
+/**
+ * The raw inner text of the docinfo elements a render depends on, by element
+ * (`macros`, `latex-image-preamble`, …): a generator's `docinfoInputElements`.
+ */
+export type DocinfoInputs = Readonly<Record<string, string>>;
+
 export interface RenderOptions {
-  /** TeX macro definitions (the docinfo `<macros>` text) the diagram's labels may use. */
-  macros?: string;
+  docinfo?: DocinfoInputs;
 }
 
 export type GeneratorRuntimeStatus = "idle" | "loading" | "ready" | "failed";
@@ -43,7 +48,10 @@ export interface GeneratorRuntime {
   readonly progress: string | undefined;
   /** Start the engine. Safe to call repeatedly; later calls await the first. */
   load(): Promise<void>;
-  /** Render `source`. Rejects with the generator's own message. */
+  /**
+   * Render `source`. Rejects with the generator's own message, in a
+   * `GeneratorRenderError` carrying its transcript when it keeps one.
+   */
   render(source: string, options?: RenderOptions): Promise<RenderResult>;
   /** Tear the engine down; the next `load()` starts afresh. */
   dispose(): void;
@@ -53,7 +61,7 @@ export interface GeneratorRuntime {
 
 /** What a host must provide for a generator's browser runtime to exist. */
 export interface GeneratorRuntimeOptions {
-  /** The bundled worker (`@pretextbook/web-editor/prefigure-worker`), as an ES module. */
+  /** The bundled worker (`@pretextbook/web-editor/<generator>-worker`), as an ES module. */
   workerUrl: string;
   /**
    * The URL of each of the generator's own runtime files, keyed by filename —
@@ -62,7 +70,13 @@ export interface GeneratorRuntimeOptions {
    * a host can serve them under content-digested names: the engine changes
    * without its filenames changing, and a long-cached copy must not outlive it.
    */
-  assetUrls: Readonly<Record<string, string>>;
+  assetUrls?: Readonly<Record<string, string>>;
+  /**
+   * The directory an engine's files are served from, for one that fetches too
+   * many, by name, for `assetUrls` to carry (TeX's own file lookups). The
+   * directory is versioned, which does for it what digests do for `assetUrls`.
+   */
+  baseUrl?: string;
 }
 
 /** Per-generator runtime configuration a host passes to `Editors`. */
@@ -79,7 +93,7 @@ export interface AssetGenerator {
    */
   element: string;
   /** The code editor's language for the source buffer. */
-  language: SourceFormat;
+  language: EditorLanguage;
   /** What a new asset of this generator opens with. Persisted on create. */
   starterSource: string;
   /**

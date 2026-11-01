@@ -1,0 +1,62 @@
+<svg version='1.1' xmlns='http://www.w3.org/2000/svg' xmlns:xlink='http://www.w3.org/1999/xlink' style="width:min(100%,567px)" viewBox='-69.011212 -69.011216 250.245778 57.367472'>
+<defs>
+<pattern height='3.0' id='tz-patterns-pgfpat3' patternTransform='matrix(1.0 0.0 0.0 1.0 0.0 0.0)' patternUnits='userSpaceOnUse' width='3.0'/> <symbol id='tz-patterns-pgfsym3'> <g stroke-width='0.4'>
+ <path d='M0 0L3.1 3.1' fill='none'/>
+ </g>
+  </symbol>
+<pattern height='3.0' id='tz-patterns-pgfpat8' patternTransform='matrix(1.0 0.0 0.0 1.0 0.0 0.0)' patternUnits='userSpaceOnUse' width='3.0'/> <symbol id='tz-patterns-pgfsym8'> <path d='M.5 0C.5 .27614 .27614 .5 0 .5S-.5 .27614-.5 0S-.27614-.5 0-.5S.5-.27614 .5 0ZM2 1.5C2 1.77614 1.77614 2 1.5 2S1 1.77614 1 1.5S1.22386 1 1.5 1S2 1.22386 2 1.5ZM1.5 1.5' stroke='none'/>
+  </symbol>
+</defs>
+<g id='tz-patterns-page1'>
+<g stroke-miterlimit='10' transform='translate(-68.612713,-29.326366)scale(0.996264,-0.996264)'>
+<g fill='#000' stroke='#000'>
+<g stroke-width='0.4'>
+<pattern id='tz-patterns-pgfupat1' xlink:href='#tz-patterns-pgfpat3'> <g fill='#808080' stroke='#808080'> <use xlink:href='#tz-patterns-pgfsym3'/> </g> </pattern>
+<g fill='url(#tz-patterns-pgfupat1)'>
+<path d='M0 0V34.1432H56.90549V0ZM56.90549 34.1432' stroke='none'/>
+</g>
+<pattern id='tz-patterns-pgfupat2' xlink:href='#tz-patterns-pgfpat8'> <g fill='#66f' stroke='#66f'> <use xlink:href='#tz-patterns-pgfsym8'/> </g> </pattern>
+<g fill='url(#tz-patterns-pgfupat2)'>
+<path d='M65.44139 0V34.1432H122.34688V0ZM122.34688 34.1432' stroke='none'/>
+</g>
+<clipPath id='tz-patterns-pgfcp3'>
+<path d='M176.4069 17.07181C176.4069 28.0717 167.48997 36.98863 156.49008 36.98863S136.57326 28.0717 136.57326 17.07181C136.57326 6.07191 145.49019-2.84502 156.49008-2.84502S176.4069 6.07191 176.4069 17.07181ZM156.49008 17.07181'/> </clipPath>
+<g clip-path='url(#tz-patterns-pgfcp3)'>
+<g fill='#ff8000' stroke='#ff8000'>
+<path d='M128.03734 0V36.98865H184.94283V0ZM184.94283 36.98865' stroke='none'/>
+</g>
+<g stroke-width='0.8'>
+<path d='M128.03734 17.07181C129.28734 17.07181 129.91234 19.57181 131.16234 19.57181C132.06734 19.57181 132.84732 18.35179 133.66234 17.07181C134.47734 15.79182 135.25734 14.57181 136.16234 14.57181S137.84732 15.79182 138.66234 17.07181C139.47734 18.35179 140.25734 19.57181 141.16234 19.57181S142.84732 18.35179 143.66234 17.07181C144.47734 15.79182 145.25734 14.57181 146.16234 14.57181S147.84732 15.79182 148.66234 17.07181C149.47734 18.35179 150.25734 19.57181 151.16234 19.57181S152.84732 18.35179 153.66234 17.07181C154.47734 15.79182 155.25734 14.57181 156.16234 14.57181S157.84732 15.79182 158.66234 17.07181C159.47734 18.35179 160.25734 19.57181 161.16234 19.57181S162.84732 18.35179 163.66234 17.07181C164.47734 15.79182 165.25734 14.57181 166.16234 14.57181S167.84732 15.79182 168.66234 17.07181C169.47734 18.35179 170.25734 19.57181 171.16234 19.57181S172.84732 18.35179 173.66234 17.07181C174.47734 15.79182 175.25734 14.57181 176.16234 14.57181S177.84732 15.79182 178.66234 17.07181C179.47734 18.35179 180.25734 19.57181 181.16234 19.57181C182.41234 19.57181 183.03734 17.07181 184.28734 17.07181H184.94283' fill='none'/>
+</g>
+</g>
+<g fill='#f00' stroke='#f00'>
+<g stroke-opacity='0.5'>
+<g fill-opacity='0.5'>
+<path d='M199.1692 0V34.1432H233.31241V0ZM233.31241 34.1432' stroke='none'/>
+</g>
+</g>
+</g>
+<g fill='#00f' stroke='#00f'>
+<g stroke-opacity='0.5'>
+<g fill-opacity='0.5'>
+<path d='M216.24101 5.69046V39.83366H250.38422V5.69046ZM250.38422 39.83366' stroke='none'/>
+</g>
+</g>
+</g>
+<g stroke-width='0.8'>
+<path d='M0-14.22636H250.38422' fill='none'/>
+<g transform='translate(124.7921,-14.22636)'>
+<g stroke-dasharray='none' stroke-dashoffset='0.0'>
+ <g stroke-linecap='round'>
+ <g stroke-linejoin='round'>
+ <path d='M-2.56 3.12257C-2.0923 1.24901-1.05006 .3643 0 0C-1.05006-.3643-2.0923-1.24901-2.56-3.12257' fill='none'/>
+ </g>
+ </g>
+ </g>
+</g>
+</g>
+</g>
+</g>
+</g>
+</g>
+</svg>

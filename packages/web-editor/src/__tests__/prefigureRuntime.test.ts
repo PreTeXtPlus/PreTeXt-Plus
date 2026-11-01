@@ -91,7 +91,7 @@ describe("createPrefigureRuntime", () => {
     const worker = new FakeWorker();
     const runtime = createPrefigureRuntime(options, { createWorker: () => worker });
 
-    const result = runtime.render("<diagram/>", { macros: "\\newcommand{\\R}{\\mathbb{R}}" });
+    const result = runtime.render("<diagram/>", { docinfo: { macros: "\\newcommand{\\R}{\\mathbb{R}}" } });
     await flush();
     expect(worker.pendingRenders[0].macros).toBe("\\newcommand{\\R}{\\mathbb{R}}");
     worker.answerRender();

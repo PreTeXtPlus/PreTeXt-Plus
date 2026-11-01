@@ -1,4 +1,4 @@
-# `source_format`: "pretext" for most assets; a generator's id ("prefigure") for a
+# `source_format`: "pretext" for most assets; a generator's id ("prefigure", "tikz") for a
 # generated asset, whose `source` is then that generator's input, not PreTeXt.
 json.extract! asset, :id, :project_id, :ref, :kind, :source_format, :source, :description, :short_description, :title, :created_at, :updated_at
 if asset.file_attached?

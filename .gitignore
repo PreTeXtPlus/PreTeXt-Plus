@@ -30,6 +30,10 @@
 
 /public/assets
 
+# The TikZ engine, fetched by script/fetch-tikz-engine.js at the version pinned in
+# config/tikz_engine.json. About 70 MB across thousands of files, served as they are.
+/public/engines
+
 # Ignore key files for decrypting credentials and more.
 /config/*.key
 

@@ -27,7 +27,7 @@
  * quoting — but a literal `$` or a LaTeX `\\` line break does, hence the two
  * constants below.
  */
-import type { SourceFormat } from "../../types/editor";
+import type { EditorLanguage } from "../../types/editor";
 import type { RootDivisionType } from "../../types/sections";
 
 /** A literal `$`; a bare one would open a tab stop. */
@@ -759,10 +759,12 @@ const MARKDOWN_BODIES: Record<string, string> = {
   program: lines("```${1:python}", "$0", "```"),
 };
 
-const BODIES: Record<SourceFormat, Record<string, string>> = {
+const BODIES: Record<EditorLanguage, Record<string, string>> = {
   pretext: PRETEXT_BODIES,
   latex: LATEX_BODIES,
   markdown: MARKDOWN_BODIES,
+  // Drawing code: the catalog is document constructs, none of which it can hold.
+  tex: {},
 };
 
 /**
@@ -772,7 +774,7 @@ const BODIES: Record<SourceFormat, Record<string, string>> = {
  * never sees a Slides group at all.
  */
 export const snippetGroupsFor = (
-  format: SourceFormat,
+  format: EditorLanguage,
   rootType: RootDivisionType = "article",
 ): SnippetGroup[] => {
   const bodies = BODIES[format];

@@ -23,7 +23,7 @@ import { MonacoCollabBinding } from "../collab/monacoBinding";
 import { planSnippetInsertion } from "./editorConfigs/insertContext";
 import type { EditorSnippet } from "./editorConfigs/snippets";
 import type { CollabUser } from "../collab/types";
-import type { SourceFormat } from "../types/editor";
+import type { EditorLanguage } from "../types/editor";
 import { installPasteConvertListener } from "../pasteConvert";
 
 /** Every buffer format's Monaco language, for the placement quick fix. */
@@ -59,7 +59,7 @@ interface CodeEditorProps {
    * Determines the Monaco language mode — see `editorConfigs`, which maps this
    * to `"xml"`, `"pretext-latex"`, or `"pretext-markdown"`.
    */
-  sourceFormat: SourceFormat;
+  sourceFormat: EditorLanguage;
   /** Called (debounced 500 ms) whenever the user edits the content. */
   onChange: (value: string | undefined) => void;
   /** If provided, Ctrl+Enter in the editor triggers this callback. */
@@ -236,10 +236,11 @@ export interface CodeEditorHandle {
 }
 
 /** Labels for the floating source-format badge in the editor's lower-right corner. */
-const FORMAT_LABELS: Record<SourceFormat, string> = {
+const FORMAT_LABELS: Record<EditorLanguage, string> = {
   pretext: "PreTeXt",
   latex: "LaTeX",
   markdown: "Markdown",
+  tex: "TeX",
 };
 
 const CONVERT_BUTTON_CLASSES =

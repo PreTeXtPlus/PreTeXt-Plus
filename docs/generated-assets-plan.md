@@ -1,7 +1,7 @@
 # Generated assets
 
 Plan of record for assets whose picture is *computed from source* — PreFigure first,
-`latex-image` after — where the author writes the generator's source in the editor and
+then TikZ and other `latex-image`s — where the author writes the generator's source in the editor and
 watches the picture render, the document carries that source as ordinary PreTeXt, and
 builds generate the picture from it like any other PreTeXt asset.
 
@@ -13,7 +13,9 @@ first version of this plan shipped the browser's picture to the build server wit
 build server caches generated assets per project itself, so nothing here is a build
 input. **The browser render is a preview.** Revised again 2026-10-29: a generated asset
 is no longer a kind of its own but an authored asset whose `source_format` is a
-generator's (Decision 1).
+generator's (Decision 1). Extended 2026-10-29 with TikZ as the second generator with a
+browser preview (Part 7), after a survey of browser TeX engines. Built 2026-10-30, all but
+its spike: see "Where the spike stands" in 7.3.
 
 ## What exists (2026-10-27)
 
@@ -31,6 +33,7 @@ author types, the SVG is stored with the asset and the server reads it as curren
 | 4.3 document preview | Done for stored pictures: `generated/:element/:ref.svg` serves the asset's stored picture, which is where pretext-html's `<img>` points. A render not yet stored is not shown there. |
 | 5 browser-rendered save | Done, as a multipart PATCH per render (`onAssetOutput`): the SVG as `file` + the digest. |
 | 6 `latex-image` via `/generate` | Not started. |
+| 7 TikZ | Built. The maintainer tried it in a browser on 2026-10-30 and it worked well; the spike's checks are still owed (7.3). |
 
 ## Context
 
@@ -91,6 +94,86 @@ source and keeps it in the project's cache (below).
   ref is the label**.
 - Annotated diagrams in HTML are not an `<img>`: core emits a `ChemAccess-element` div
   reading `-diagcess.svg` and `-annotations.xml`. Builds make those; the preview does not.
+
+### How PreTeXt builds a `latex-image` (2026-10-29)
+
+- `extract-latex-image.xsl` writes one document per image: `\documentclass[<font-size>]{article}`
+  with `geometry`; `\usepackage{amsmath,amssymb}`; the first `<latex-image-preamble>`
+  *without `@syntax`*; `\ifdefined\tikzset \tikzset{ampersand replacement = \amp}\fi`; the
+  docinfo `<macros>`; then the image's text in `\resizebox{\width}{\height}{…}` on an
+  empty page.
+- The CLI compiles it with the project's `latex-engine`, **xelatex unless one is set**,
+  crops the PDF (pdfCropMargins) and converts it with PyMuPDF, which writes glyphs as
+  paths (`individual_latex_image_conversion` in core's `pretext.py`). Under xelatex the
+  text font is Latin Modern; math is Computer Modern either way.
+- `@label` on `<latex-image>` is the output basename, as for PreFigure
+  (`image-source-basename` in pretext-common.xsl); pretext-html refers to
+  `generated/latex-image/<label>.svg`.
+- Our assembly puts `\usepackage{tikz, pgf}` (`DEFAULT_LATEX_IMAGE_PREAMBLE`) first in that
+  preamble for every build, adding the element when there is none.
+
+### TikZ in the browser (surveyed 2026-10-29)
+
+| Engine | What runs | Text in the SVG | Packages | First load | Status |
+| --- | --- | --- | --- | --- | --- |
+| [mp-tikz-wasm](https://github.com/jmckalex/mp-tikz-wasm) 0.5.0 | pdfTeX 1.40.27 (TeX Live 2025, DVI mode) + dvisvgm 3.4.3, both wasm; real kpathsea | Glyph paths (woff2 optional): self-contained | Any preamble its bundles satisfy: every PGF library, pgfplots, tikz-cd, circuitikz, chemfig, tikz-3dplot, amsmath, mathtools, xcolor… | ≈4.7 MB; ≈60 MB of bundles on the server, fetched per file | LGPL-3.0 library, GPL engines. Created 2026-09-13, seven releases, one author, not on npm |
+| [@drgrice1/tikzjax](https://github.com/drgrice1/tikzjax) 1.0.0-beta24 | web2js e-TeX from a frozen memory image (`standalone`, `xcolor[svgnames]`, TikZ preloaded) → DVI → dvi2html | `<text font-family="cmr10">` against BaKoMa webfonts | 171 bundled files: amsmath/amssymb, pgfplots, tikz-cd, tikz-3dplot, xparse, every TikZ library; no circuitikz | ≈6.5 MB (core.dump.gz 5.9 MB) + packages per file | GPL-3.0+. npm 2025-01; repo dependency updates 2026-06. What Labs uses |
+| rod2ik/tikzjax, isomorphic-tikzjax | The TikZJax engine | As TikZJax | Adds circuitikz, chemfig | Similar | Forks; worker quirks |
+| [rust-tikz](https://github.com/siefkenj/rust-tikzjax) 0.1.0 | The TikZJax engine (`tex.wasm` and `core.dump` byte-identical to node-tikzjax's) inside `wasmi`, an interpreter itself compiled to wasm | `<text font-family="cmr10">`, no fonts embedded | 213 bundled files: amsmath/amssymb, pgfplots, tikz-cd, circuitikz, chemfig, tikz-3dplot; no mathtools | 5.2 MB gzipped, 75 MB uncompressed; the Typst plugin is the only prebuilt wasm | MIT crate, bundled TeX under its own licenses (node-tikzjax is LPPL-1.3c). Jason Siefken; one release, last push 2025-05. Tested 2026-10-30: not viable as it stands |
+| BusyTeX, SwiftLaTeX, Siglum + mupdf.js | Full TeX Live → PDF | Via PDF → SVG | Everything | 30–400 MB, or a TeX Live server, or cross-origin isolation for the whole page | Too heavy for a preview |
+
+- **mp-tikz-wasm** claims output byte-identical to native `latex` + `dvisvgm` (its golden
+  corpora, the whole PGF manual) and, on Apple silicon, about 120 ms a TikZ figure and
+  270 ms a pgfplots axis. It runs in a Web Worker by default, reads files with synchronous
+  XHR there, and kills a run that stalls. Its files must keep their names (they are TeX's
+  lookups), and its README warns that `\special{dvisvgm:raw …}` puts arbitrary markup in
+  the SVG.
+- **TikZJax**'s `tikzjax.js` is only a page loader that watches for
+  `<script type="text/tikz">`; the worker behind it (`run-tex.js`, exposing
+  `load(urlRoot)` and `texify(input, dataset)`) can be driven directly. A file outside the
+  bundle, or an option clash with the preloaded `xcolor`, fails the run; adding a file
+  means rebuilding against a local TeX Live. A file it does not bundle falls back to
+  `fetch(filename)` — any URL the TeX names.
+- **rust-tikz** (tested 2026-10-30, running its prebuilt wasm and then the same
+  `tex.wasm` and `core.dump` directly, both in Node's V8 on a 2-core container, so the
+  ratios matter more than the times). It suits a host with no wasm of its own, like
+  Typst; a browser is already a wasm runtime, so the interpreter buys nothing there.
+  - *Speed.* `wasmi` costs about 40–60×: axes and a plot 17 s against 0.39 s direct,
+    tikz-cd 19 s against 0.44 s, circuitikz 52 s against 0.96 s, pgfplots 69 s against
+    1.2 s. Later direct runs were faster (0.27, 0.31, 0.77 and 1.1 s); later rust-tikz
+    runs were not. Its times include startup and the SVG; the direct times stop at DVI.
+  - *Fonts.* `\textbf`, `\small` and anything under `amsmath` stop with "Metric (TFM)
+    file not found", and PreTeXt's image document always loads `amsmath`. The cause is
+    the host, not TeX: it must strip the `TeXfonts:` prefix, serve `.tfm` data (as
+    TikZJax's host does from dvi2html's table) and report end of file only after a read
+    past the end. With those three changes, our 7.1.3 document compiled to DVI in
+    0.05–1.2 s: bold, `\mathbb`, font sizes, tikz-cd with `\amp`, pgfplots, circuitikz,
+    shadings and patterns. That covers TeX's run only; those pictures were never drawn.
+  - *Text.* Math comes out wrong without BaKoMa-encoded fonts, and an `<img>` cannot load
+    any: `\alpha` is `®`, `\int` is `R`, `\sum` is `P`, `\infty` is `1`. Read from the
+    SVG, not viewed in a browser.
+  - *Limits of the engine itself.* The memory image dates from LaTeX 2020-02-02;
+    `\usepackage[dvipsnames]{xcolor}` clashes with the preloaded copy, and `mathtools`
+    is not bundled. PGF's raw markup reaches the SVG unchanged, so 7.1.4 still applies.
+  - *What it would take.* The three host fixes (small), a browser build without `wasmi`
+    (medium), glyphs as paths in the SVG (large), and a rebuilt `core.dump` (toolchain
+    work). Together they roughly recreate what mp-tikz-wasm claims today.
+  - *Not measured.* mp-tikz-wasm itself, and any real browser. The direct figures are for
+    node-tikzjax's files, not @drgrice1's build. Those files are about 4.7 MB gzipped
+    without the interpreter.
+
+### PreTeXt-Plus-Labs' TikZ applet (2026-10-28)
+
+Steven's "TikZ Image" applet (PreTeXtPlus/PreTeXt-Plus-Labs#1, `src/applets/latex-image/`)
+runs TikZJax through its page loader: it puts a `<script type="text/tikz">` in a
+container, watches for the SVG or the broken-image placeholder, and reads the TeX
+transcript off `console.log`; one compile at a time, 600 ms debounce. A form holds the
+environment (`tikzpicture` or `tikzcd`), its options and body, packages from TikZJax's
+list, libraries and extra preamble, and emits a `<latex-image label>` plus the `<docinfo>`
+preamble the image needs. Export inlines the woff2 faces the SVG names as data URIs and
+rasterizes that to a 300 DPI PNG. Worth taking: the TeX error excerpt (the first `!` line
+and what follows) and splitting a pasted environment. Not: the page loader, or a preamble
+per image — PreTeXt has one per document.
 
 ---
 
@@ -181,7 +264,7 @@ the host persists an `authored_asset` with `source_format` = the generator and i
 starter source. In the editor, `Asset.sourceFormat` (`AssetSourceFormat`, apart from the
 prose `SourceFormat`) carries it, and `generatorFor(asset.sourceFormat)` is the one test
 for a generated asset.
-Settings show the generator; Replace and Duplicate are hidden; Download SVG is `url`.
+Settings show the generator; Replace and Duplicate are hidden; the preview pane has Download SVG.
 
 ## Part 4 — Engine and pane — done for SVG
 
@@ -208,18 +291,201 @@ there.
 
 ## Part 6 — `latex-image` via `/generate`
 
-`latex-image` cannot run in the browser, so it has no `createRuntime`. A
-`GenerateAssetJob` builds a one-figure archive with the project's real docinfo and
-publication, POSTs `/generate` with `assets=latex-image`, `target=web`, the
+A `latex-image` in general cannot run in the browser (TikZ can, Part 7), so it has no
+`createRuntime`. A `GenerateAssetJob` builds a one-figure archive with the project's real
+docinfo and publication, POSTs `/generate` with `assets=latex-image`, `target=web`, the
 `project_id` and a callback, and on success attaches the returned SVG as the asset's
 file with `preview_input_digest` computed **at enqueue time** (so a source edit during
 the render leaves the result stale rather than wrongly current). `wrapSource` is
-`<latex-image>${source}</latex-image>`; `docinfoInputElements` is `latex-image-preamble`
-+ `macros`. The full build then finds the figure already in the project's cache.
-It is a `latex_image` `source_format` (a `tikz` format could share its wrapper with its
-own tooling). Existing `pretext` authored assets that are a bare `<latex-image>` can be
-converted by unwrapping and setting the format; a rake task or an author's action, not
-part of this plan.
+`<latex-image label="ref">` around the source escaped as XML text (7.1);
+`docinfoInputElements` is `macros` + `latex-image-preamble`. The full build then finds
+the figure already in the project's cache. It is a `latex_image` `source_format`; `tikz`
+shares its wrapper and uses this job as its server render (7.4). Existing `pretext`
+authored assets that are a bare `<latex-image>` can be converted by unwrapping and
+setting the format; a rake task or an author's action, not part of this plan.
+
+## Part 7 — TikZ
+
+An `authored_asset` with `source_format: tikz`, wrapped in `<latex-image>`, previewed in
+the browser by a TeX engine in a Web Worker. Parts 1–5 carry over unchanged; this is
+what is new.
+
+### 7.1 Decisions
+
+1. **`source` is TeX: the text of the `<latex-image>`,** usually one `tikzpicture`.
+   `wrapSource` escapes it as XML text (`&`, `<`, `>`) inside
+   `<latex-image label="ref">`. PreFigure's source is XML and goes in verbatim; TeX is
+   not, and an author typing `x < y` or a `tikzcd` row should not have to write entities.
+   The document still carries ordinary PreTeXt, and the locked wrapper lines
+   (`generatorWrapperLines`) still show the `<latex-image>` tags around the buffer.
+2. **The preamble is the document's.** `DOCINFO_INPUT_ELEMENTS["tikz"]` is
+   `macros latex-image-preamble`. Packages and `\usetikzlibrary` lines live in the
+   docinfo's `<latex-image-preamble>`, which the DocinfoEditor already edits; the asset
+   has no preamble of its own (unlike the Labs applet). When TeX reports a missing library
+   or command, the pane can offer to add the line there. A preamble edit makes every TikZ
+   asset stale, which is true of the build too.
+3. **The browser compiles the document PreTeXt compiles.** The worker builds it:
+   `amsmath,amssymb`; `\usepackage{tikz, pgf}` and then the preamble; core's guarded
+   `\tikzset{ampersand replacement=\amp}`; the macros; the source. It uses `standalone`
+   instead of `article` + crop + `\resizebox`, which gives the same picture with one
+   conversion fewer. So the preview fails where the build would (an `&` that wants `\amp`,
+   a macro the preamble lacks) and not where it would not. The engine is fixed to pdfTeX,
+   never its `auto`, which picks LuaTeX for `\directlua`; a build has no LuaTeX.
+   - *`border=2pt`, with dvisvgm's `--bbox=papersize`, not "no border" as first planned.*
+     PGF leaves classic arrow tips (`>=latex`, `stealth`) out of its bounding box, so a
+     tight page cuts off what core's crop-to-ink keeps (the note in mp-tikz-wasm's
+     `figures.js`, which does the same). The preview has a 2pt margin the build does not.
+4. **The SVG is sanitized before it is shown or stored.** PGF's SVG driver uses
+   `\special{dvisvgm:raw …}`, so TeX can put `<script>`, event handlers and `javascript:`
+   links in the SVG, and a collaborator's source compiles in my browser. DOMPurify with
+   its SVG profile, keeping only same-document references, runs on the main thread
+   (it needs a DOM) before the pane shows the SVG or `onAssetOutput` sends it. `<style>` is
+   forbidden as well: of 36 real figures only the one with `fonts: 'woff2'` had one, and
+   the worker asks for paths. An `<a>` loses its target and keeps its drawing. The DOM is
+   written out with `XMLSerializer`, since DOMPurify's own output is HTML and an `<img>`
+   reads the file as XML.
+5. **The engine sits behind `GeneratorRuntime` and the worker;** nothing else knows which
+   TeX it is, so changing engines (7.3) is a worker change. It runs in-process in our
+   worker (`worker: false`) rather than starting its own, which leaves one worker to stop.
+   The stall watchdog therefore lives in `workerRuntime.ts`, on the main thread: 20 s with
+   no message from the worker (the library's own default), or 120 s in any case, for a
+   loop that keeps printing. A stopped worker leaves the status alone, or the pane would
+   render the same source and hang again; the next edit starts a new one.
+6. **Engine files are served from a versioned directory, not as digested assets.** Either
+   engine fetches hundreds of files by name (TeX's own lookups), which a per-file
+   `assetUrls` map cannot carry. They live in `public/engines/<engine>-<version>/`
+   (gitignored); a new version is a new directory, so long caching is safe. The host
+   passes the worker's URL and that base URL (`GeneratorRuntimeOptions` grows an optional
+   `baseUrl`), the base URL only once the engine is there; otherwise the pane says live
+   rendering isn't available.
+   - *`script/fetch-tikz-engine.js` puts it there, not `copy-static-assets.js` as first
+     planned.* `npm run build` runs in watch mode all through development and must not
+     depend on the network (see the README on journals), and copying 3,700 files on each
+     start buys nothing. `bin/setup` runs the script, and `assets:precompile` does on every
+     deploy (`lib/tasks/tikz_engine.rake`), failing the deploy if it cannot. Hatchbox builds
+     each release in a fresh directory, so that is a download every time.
+     `config/tikz_engine.json` is the one pin, read by the script and by Rails.
+   - *The deployed copy is 65 MB, not about 60 MB plus the opt-ins.* The default bundles
+     less `luatex`; none of the opt-in bundles. `classico` above all, whose licence forbids
+     commercial redistribution.
+
+### 7.2 Work
+
+All of this is done but 6, with these notes:
+
+- 3 uncovered that `AssetGenerator.language` was never read, every asset being `"pretext"`
+  to the code editor. `EditorLanguage` (`SourceFormat | "tex"`) now reaches `CodeEditor`
+  and its menus; everything about records keeps `SourceFormat`. In a TeX buffer Insert is
+  disabled, and File offers neither Format PreTeXt nor Clean up LaTeX. The latter was
+  offered in every format until now. It also uncovered a bug in the LaTeX Monarch grammar,
+  whose `\begin` rule threw on every `\begin{…}` line, in LaTeX divisions too.
+- 7.1.2's offer to add a missing library to the preamble is not built; 7.2 did not list it.
+
+1. **Rails.** `source_format` gains `tikz: 4`; `ELEMENTS["tikz"] = "latex-image"`;
+   `DOCINFO_INPUT_ELEMENTS["tikz"]`; a TikZ fixture hex beside PreFigure's in
+   `content_test.rb` and `generators.test.ts`. `generated_file` and its route already
+   accept `latex-image`.
+2. **Registry.** `GeneratorId` gains `"tikz"`; `generators/tikz/definition.ts` (label
+   "TikZ"; starter: axes, a plotted function, a labelled point, like PreFigure's).
+   `VERBATIM_SOURCES` and the spell checker's `latexImage` scope already list
+   `latex-image`. The create tab, the settings and Download SVG follow from the registry.
+3. **Editor language.** `AssetGenerator.language` is a prose `SourceFormat`, and `latex`
+   is LaTeX-flavoured PreTeXt, whose cleanup diagnostics (`\vspace` and friends) and
+   conversions are wrong for TikZ. Add a plain TeX language (highlighting, bracket
+   matching; TikZ completions later) and widen the type.
+4. **Runtime.** Lift the engine-independent half of `prefigure/runtime.ts` (worker
+   lifecycle, status and progress, the latest-wins queue) into a helper both use. Widen
+   `RenderOptions` from `macros` to the docinfo inputs by element. `src/tikzWorker.ts` is
+   bundled as `app/javascript/tikz_worker.js`; host props `tikzWorkerUrl` and the
+   engine's base URL are wired like PreFigure's through `editor_controller.js` and
+   `editor.jsx`.
+5. **Pane.** `GeneratedAssetPreview` already takes any runtime. Add the TeX log under the
+   error strip (the excerpt from the first `!` line; the full transcript collapsed) and a
+   first-load note (a few megabytes).
+6. **Later.** "Convert to TikZ" on a `pretext` authored asset whose source is one bare
+   `<latex-image>` (unwrap, unescape, set the format), and back. Part 6's `/generate` as
+   "Render on the server" (7.4).
+
+### 7.3 Engine: mp-tikz-wasm, after a spike
+
+Recommendation: **mp-tikz-wasm**, with @drgrice1/tikzjax as the fallback.
+
+- **Any preamble works.** Authors write the preamble freely, and it applies to every TikZ
+  asset. With TikZJax, one package outside its 171 files, or a
+  `\usepackage[dvipsnames]{xcolor}` clashing with the preloaded one, breaks the preview of
+  every TikZ asset in the project.
+- **Closest to the build.** Real pdfTeX and dvisvgm from TeX Live 2025; what remains
+  different is xelatex's Latin Modern text.
+- **Self-contained SVG.** Glyphs are paths, so the stored picture shows the same as an
+  `<img>` with no font-inlining step.
+- **Smaller first load:** about 4.7 MB against about 6.5 MB.
+
+The risk is its age: six weeks old, one author, not on npm. A pinned release cannot
+disappear on us, the picture is a preview (no build depends on it), and 7.1.5 limits a
+switch to TikZJax to the worker. Its default bundles add about 60 MB to the deployed
+image.
+
+**Spike** (half a day, before 7.2.4), in our own worker:
+- Compile the starter, a `tikzcd` with `\amp` and one with `&`, a pgfplots axis, a
+  circuitikz figure, and real `latex-image-preamble`s from production projects.
+- Measure cold and warm render times in Chromium and Firefox, and the first-load
+  transfer.
+- Try running it in our worker against letting it start its own (its stall watchdog needs
+  a worker it can terminate).
+- Compare against the same figures from `pretext generate latex-image`.
+- Check that sanitizing keeps shadings, patterns, opacity and clipping, and that TeX can
+  read nothing outside the bundle directory.
+
+If it fails: TikZJax, driving `run-tex.js` directly, inlining fonts as Labs does, and
+listing the bundled packages in the pane.
+
+#### Where the spike stands (2026-10-30)
+
+The worker was written from the release's `dist/index.js`, `dist/core.js` and type
+declarations, without running the engine: code fetched from outside the repo needs the
+maintainer's say-so, which that session did not have. The maintainer then tried it in a
+browser and it worked well. Nothing below has been measured or checked against it.
+
+Verified without the engine, in Chromium against the dev server, with a stand-in module at
+the engine's URL answering from real SVG: the worker bundle starts as an ES module and
+imports from `/engines/…`; nothing is fetched before a TikZ asset opens; a render shows,
+stores through the upload pipeline and reappears after a reload; the document preview's
+`generated/latex-image/<label>.svg` resolves to the stored picture; a failed run shows its
+excerpt with lines counted from the source, the log folded and the old picture up; injected
+`<script>` and `onload` are gone before showing; a real hang is stopped at about 20 s, is
+not retried on its own, and the next edit recovers; with no engine the pane says so.
+Sanitizing was checked against the 36 real figures in the release's `guide.html`, drawn
+through `<img>` before and after: 35 are pixel-identical (shadings, patterns and clips
+among them), and the other is the `woff2` figure, whose `<style>` goes on purpose.
+TeX reading outside the bundle was checked by reading the code only: a lazy file exists
+only for a manifest entry, so `\input{https://…}` has nothing to fetch.
+
+Still owed, in order:
+
+1. `node script/fetch-tikz-engine.js`, then `RUN_TIKZ_ENGINE=1 npx vitest run tikzEngine` in
+   `packages/web-editor`: the figures above and the sandbox, through the worker's handler,
+   in Node. It is skipped otherwise, and **has never been run**, so expect to fix it too.
+2. The same in a browser: the sync XHR path, cold and warm times in Chromium and Firefox,
+   the first-load transfer (Thruster's gzip was assumed, not measured, for `.wasm` and the
+   TeX tree), and whether `snapshot: 'auto'` earns its 5.8 MB. Left at the library's
+   browser default, `none`.
+3. The side-by-side with `pretext generate latex-image`. This container has no TeX Live.
+4. Whether `\rotatebox` and `\scalebox` need `\usepackage[dvisvgm]{graphicx}`: under
+   graphicx's default dvips driver they are PostScript, which the library skips with a
+   warning, and the pane shows warnings nowhere.
+
+rust-tikz is not a third option for the preview: it is TikZJax's engine, 40–60× slower
+(see the survey). It did show a simpler form of the fallback, though. A host of about 120
+lines ran `tex.wasm` and `core.dump` directly in the 2026-10-30 test, and with file
+lookups kept in memory it has no `fetch(filename)`. It would replace `run-tex.js`, but
+still needs a DVI-to-SVG step and fonts, and must provide the three host fixes.
+
+### 7.4 The server render
+
+Neither engine is TeX Live as the build runs it. Part 6's `/generate` job serves `tikz`
+unchanged (same wrapper) and covers xelatex-only preambles (`fontspec`), packages outside
+the bundle and the exact final picture. It is offered when a browser render fails on a
+missing file, and as an explicit action.
 
 ---
 
@@ -232,6 +498,11 @@ part of this plan.
 | Should a docinfo macros edit re-render every PreFigure asset? | — | Only the open one renders; the rest show "source changed" until opened. Fine. |
 | Is `diagcess` redistribution acceptable for an annotated preview? | 4 | Load PreTeXt's shipped copy; ask Volker Sorge before vendoring. |
 | Should `tryit` get PreFigure? | 4 | No — nothing to save to. |
+| Does a literal `&` in a `tikzcd` survive core's `ampersand replacement=\amp`? | — | Not on TikZJax's engine (2026-10-30): "Undefined control sequence" at the `&`, from PGF's matrix code, so the build probably fails too. Confirm in the spike against `pretext generate`. The pane's error already names `\amp` when a failed `tikzcd` has an `&`; Labs' `tikzcd` sample uses `&`. |
+| Send Jason Siefken the rust-tikz font fixes? | — | Yes, whichever engine we pick: the three host fixes (see the survey) probably explain the bold limitation in its README. Nothing has been sent yet. |
+| Commit the mp-tikz-wasm release, or fetch it at build? | — | Decided: a pinned version with a checksum (`config/tikz_engine.json`), fetched by its own script, not by the build (7.1.6). |
+| Load `lmodern` in the preview to match xelatex's text font? | — | Decide from the spike's side-by-side; it is one line in the worker's document. |
+| Is a separate `latex_image` format (Part 6) still wanted? | 6 | Only for non-TikZ LaTeX pictures no browser engine runs; `tikz` covers the common case. |
 
 ## Traps
 
@@ -256,3 +527,21 @@ part of this plan.
   mis-parsed as a placeholder.
 - **The vendored engine and `PREFIG_WASM_VERSION` move together.** The handler warns on
   a mismatch; `prefigureWasm.test.ts` fails on one.
+- **TikZ: `wrapSource` escapes; the worker does not.** The buffer is TeX; only the
+  document's copy is XML. Escape exactly `&`, `<` and `>`, so converting `pretext` ↔ `tikz`
+  round-trips.
+- **The docinfo pieces are XML, and the worker needs TeX.** Unescape the preamble and macros
+  before compiling; the digest stays over their raw inner text.
+- **Core reads the first `<latex-image-preamble>` without `@syntax`; so does
+  `docinfoElementInner`.** Both languages have the rule in their regex, and the TikZ fixture
+  hex is computed over a docinfo with an `@syntax` one first.
+- **The default `\usepackage{tikz, pgf}` is assembly's, not the docinfo's.** The render
+  input digests the stored docinfo; the worker adds the line itself, as assembly does for
+  builds.
+- **No network from TeX.** TikZJax fetches a file it does not bundle by its name as a URL,
+  so `\input{https://…}` in a collaborator's source would make every viewer's browser
+  fetch it. Remove that fallback if TikZJax is the engine.
+- **`TIKZ_BUNDLES` and `config/tikz_engine.json` move together.** The worker fails to start
+  on a bundle the fetch script left out; `tikzDocument.test.ts` compares the two.
+- **`index.js` under `public/engines` is how Rails knows the engine is there.** A file left
+  at that path makes every TikZ asset try to load it.

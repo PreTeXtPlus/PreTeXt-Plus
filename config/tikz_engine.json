@@ -1,0 +1,17 @@
+{
+  "name": "mp-tikz-wasm",
+  "version": "0.5.0",
+  "url": "https://github.com/jmckalex/mp-tikz-wasm/releases/download/v0.5.0/mp-tikz-wasm-0.5.0.tar.gz",
+  "sha256": "76b5591a83adfb96e8087b8560fd993c6ebba475ad15a63269a8aa47517dd575",
+  "bundles": [
+    "core",
+    "cm-tfm",
+    "cm-type1",
+    "lm-fonts",
+    "ps-fonts",
+    "tex-plain",
+    "latex-core",
+    "latex-extra",
+    "tikz-snapshot"
+  ]
+}

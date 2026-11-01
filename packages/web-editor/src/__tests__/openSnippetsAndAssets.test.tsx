@@ -135,6 +135,24 @@ afterEach(() => {
   vi.useRealTimers();
 });
 
+describe("opening a generated asset", () => {
+  it("edits it in its generator's language", () => {
+    renderEditors({
+      projectAssets: [
+        { ...asset, ref: "fig", sourceFormat: "tikz", source: "\\tikz;" },
+        { ...asset, id: "a2", ref: "diagram", title: "A diagram", sourceFormat: "prefigure", source: "<diagram/>" },
+      ],
+    });
+
+    openAssetRow("fig");
+    expect(editor().dataset.format).toBe("tex");
+
+    // The panel is open already, and its rail icon would shut it.
+    fireEvent.click(within(screen.getByTestId("asset-row-diagram")).getByRole("button"));
+    expect(editor().dataset.format).toBe("pretext");
+  });
+});
+
 describe("opening a snippet", () => {
   it("shows its source in the code editor, unwrapped, under a bar naming it", () => {
     renderEditors();

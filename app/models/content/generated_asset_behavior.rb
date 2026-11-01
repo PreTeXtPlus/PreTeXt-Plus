@@ -1,6 +1,6 @@
 # What makes a Content a generated asset: an authored asset whose `source_format`
-# is a generator's (PreFigure first), so its `source` is that generator's input --
-# a `<diagram>`, not PreTeXt. The format is chosen when the asset is created and
+# is a generator's (PreFigure, TikZ), so its `source` is that generator's input --
+# a `<diagram>` or a `tikzpicture`, not PreTeXt. The format is chosen when the asset is created and
 # decides how the editor treats it (its preview engine, its tooling) and how it is
 # assembled: the document carries the source wrapped in the generator's own
 # element (see the web-editor's generator registry), and a build generates the
@@ -17,16 +17,20 @@ module Content::GeneratedAssetBehavior
 
   # Each generator's format, and the PreTeXt element its source is wrapped in --
   # also the directory under `generated/` a renderer puts the picture in.
-  ELEMENTS = { "prefigure" => "prefigure" }.freeze
+  ELEMENTS = { "prefigure" => "prefigure", "tikz" => "latex-image" }.freeze
 
   # The docinfo elements each generator's render depends on, besides the asset's own
-  # source. Core writes these into the generator's publication file for a real build
-  # (extract-prefigure.xsl), so a change to them is a change to the picture.
+  # source. Core writes these into the generator's publication file or the image's
+  # LaTeX document for a real build (extract-prefigure.xsl, extract-latex-image.xsl), so
+  # a change to them is a change to the picture.
   #
   # Mirrored in packages/web-editor/src/generators/renderInput.ts; the two must digest
   # byte-identical strings, which test/models/content_test.rb and the web-editor's
   # generators test both pin to one fixture hex.
-  DOCINFO_INPUT_ELEMENTS = { "prefigure" => %w[ macros prefigure-preamble ] }.freeze
+  DOCINFO_INPUT_ELEMENTS = {
+    "prefigure" => %w[ macros prefigure-preamble ],
+    "tikz" => %w[ macros latex-image-preamble ]
+  }.freeze
   RENDER_INPUT_SEPARATOR = "\n\u0000\n".freeze
 
   included do
@@ -35,12 +39,14 @@ module Content::GeneratedAssetBehavior
   end
 
   class_methods do
-    # The raw inner text of the first `<element …>…</element>` in `docinfo`, or "".
-    # A regex rather than a parse, so the browser (which has only the docinfo string)
-    # can produce the same bytes without agreeing with Nokogiri about serialization.
+    # The raw inner text of the first `<element …>…</element>` in `docinfo` without
+    # `@syntax`, or "". Core reads only such a `<latex-image-preamble>`; one with `@syntax`
+    # belongs to some other image language. A regex rather than a parse, so the browser
+    # (which has only the docinfo string) can produce the same bytes without agreeing
+    # with Nokogiri about serialization.
     def docinfo_element_inner(docinfo, element)
       name = Regexp.escape(element)
-      match = docinfo.match(/<#{name}(?:\s[^>]*)?>([\s\S]*?)<\/#{name}>/)
+      match = docinfo.match(/<#{name}(?![^>]*\ssyntax\s*=)(?:\s[^>]*)?>([\s\S]*?)<\/#{name}>/)
       match ? match[1] : ""
     end
   end

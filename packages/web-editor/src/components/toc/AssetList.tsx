@@ -65,7 +65,7 @@ const AssetList = ({ canCreate }: AssetListProps) => {
                   {row.asset?.thumbnailUrl || row.asset?.url ? (
                     <img
                       src={row.asset?.thumbnailUrl || row.asset.url}
-                      className="h-[30px] cursor-pointer"
+                      className="h-[30px] max-w-[60px] shrink-0 object-contain cursor-pointer"
                       onClick={() => openAssetRow(row)}
                       alt=""
                     />

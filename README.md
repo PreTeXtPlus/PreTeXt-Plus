@@ -60,6 +60,30 @@ journals. PreTeXt does not record that distinction — its own list is flat — 
 keeps it in a `publisher_wide` list, files anything unrecognised as an individual journal,
 and says so when a newly added journal looks like it belongs in the other group.
 
+## The TikZ engine
+
+TikZ assets render as the author types in a TeX compiled to WebAssembly,
+[mp-tikz-wasm](https://github.com/jmckalex/mp-tikz-wasm). It is about 65 MB across
+thousands of files, so it is not in the repo: `script/fetch-tikz-engine.js` downloads the
+release pinned in `config/tikz_engine.json`, checks its sha256, and unpacks what the editor
+needs into `public/engines/` (gitignored).
+
+```bash
+node script/fetch-tikz-engine.js
+```
+
+`bin/setup` runs it in development, and `assets:precompile` runs it on every deploy
+(`lib/tasks/tikz_engine.rake`), so there is no deploy step to remember. A deploy that cannot
+fetch it fails, and the running release carries on. It is deliberately not part of
+`npm run build` or the test hooks, which should not depend on the network. Without the
+engine nothing breaks, but TikZ assets show their stored picture and render nothing live.
+To update, change the version, URL and checksum in `config/tikz_engine.json`.
+
+The engines are GPL and the library LGPL, and their terms and notices are unpacked with
+them. Source for the pinned version is at the project's repository and release. The bundles
+named in `config/tikz_engine.json` exclude `classico`, whose licence forbids commercial
+redistribution. Keep it out.
+
 ## Testing
 
 The test suite uses Rails' built-in Minitest framework.

@@ -22,7 +22,7 @@
  * Only PreTeXt buffers are gated. LaTeX and Markdown have no `<p>` for the
  * cursor to be inside of, and their bodies carry no wrapper to add or remove.
  */
-import type { SourceFormat } from "../../types/editor";
+import type { EditorLanguage } from "../../types/editor";
 import { type EditorSnippet, wrapInParagraph } from "./snippets";
 import { findTagEnd, isNameStart, readName } from "./xmlTags";
 
@@ -143,7 +143,7 @@ export const planSnippetInsertion = (
   source: string,
   offset: number,
   snippet: EditorSnippet,
-  sourceFormat: SourceFormat,
+  sourceFormat: EditorLanguage,
 ): SnippetInsertion => {
   if (sourceFormat !== "pretext") return { offset, body: snippet.body };
   const paragraph = enclosingParagraph(source, offset);
