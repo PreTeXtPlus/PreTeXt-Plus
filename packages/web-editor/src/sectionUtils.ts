@@ -9,7 +9,7 @@
 import { fromXml } from "xast-util-from-xml";
 import { toXml } from "xast-util-to-xml";
 import type { Element, Root } from "xast";
-import type { Asset, Snippet, SourceFormat } from "./types/editor";
+import type { Asset, Exercise, Snippet, SourceFormat } from "./types/editor";
 import type {
   Division,
   DivisionType,
@@ -1243,12 +1243,75 @@ export function assetEmbedCode(
 }
 
 // ---------------------------------------------------------------------------
-// Snippet ref utilities — `<plus:snippet ref="..."/>` placeholder parsing
+// Snippet and exercise ref utilities — `<plus:snippet ref="..."/>` and
+// `<plus:exercise ref="..."/>` placeholder parsing
 // ---------------------------------------------------------------------------
+
+/** The record kinds placed by a `<plus:snippet>`- or `<plus:exercise>`-shaped placeholder. */
+type RecordRefTag = "snippet" | "exercise";
 
 /** A `<plus:snippet ref="..."/>` snippet placeholder. */
 export interface SnippetRef {
   ref: string;
+}
+
+/** A `<plus:exercise ref="..."/>` exercise placeholder. */
+export type ExerciseRef = SnippetRef;
+
+function parseRecordRefs(
+  tag: RecordRefTag,
+  content: string,
+  sourceFormat: SourceFormat,
+): SnippetRef[] {
+  const refs: SnippetRef[] = [];
+  const source: Record<SourceFormat, string> = {
+    pretext: `<plus:${tag}\\b[^>]*\\bref="([^"]+)"`,
+    markdown: `::${tag}(?:\\[[^\\]]*\\])?\\{[^}]*\\bref="([^"]+)"[^}]*\\}`,
+    latex: `\\\\plus(?:\\[[^\\]]*\\])?\\{${tag}\\}\\{([^}]+)\\}`,
+  };
+  const re = new RegExp(source[sourceFormat], "g");
+  const scanned = blankVerbatim(content, sourceFormat);
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(scanned)) !== null) {
+    refs.push({ ref: m[1] });
+  }
+  return refs;
+}
+
+function renameRecordRef(
+  tag: RecordRefTag,
+  content: string,
+  oldRef: string,
+  newRef: string,
+): string {
+  const oldR = escapeRegex(oldRef);
+  const xmlRe = new RegExp(`(<plus:${tag}\\b[^>]*?\\bref=")${oldR}(")`, "g");
+  const mdRe = new RegExp(
+    `(::${tag}(?:\\[[^\\]]*\\])?\\{[^}]*?\\bref=")${oldR}(")`,
+    "g",
+  );
+  const latexRe = new RegExp(`(\\\\plus(?:\\[[^\\]]*\\])?\\{${tag}\\}\\{)${oldR}(\\})`, "g");
+  return content
+    .replace(xmlRe, `$1${newRef}$2`)
+    .replace(mdRe, `$1${newRef}$2`)
+    .replace(latexRe, `$1${newRef}$2`);
+}
+
+function removeRecordRef(tag: RecordRefTag, content: string, ref: string): string {
+  const r = escapeRegex(ref);
+  const xmlRe = new RegExp(`<plus:${tag}\\b[^>]*?\\bref="${r}"[^>]*/?>`, "g");
+  const mdRe = new RegExp(
+    `::${tag}(?:\\[[^\\]]*\\])?\\{[^}]*?\\bref="${r}"[^}]*\\}`,
+    "g",
+  );
+  const latexRe = new RegExp(`\\\\plus(?:\\[[^\\]]*\\])?\\{${tag}\\}\\{${r}\\}`, "g");
+  return content.replace(xmlRe, "").replace(mdRe, "").replace(latexRe, "");
+}
+
+function recordEmbedCode(tag: RecordRefTag, ref: string, sourceFormat: SourceFormat): string {
+  if (sourceFormat === "markdown") return `::${tag}{ref="${ref}"}`;
+  if (sourceFormat === "latex") return `\\plus{${tag}}{${ref}}`;
+  return `<plus:${tag} ref="${ref}"/>`;
 }
 
 /**
@@ -1260,25 +1323,13 @@ export interface SnippetRef {
  *
  * Snippet placeholders share the same shape as division/asset refs (see
  * {@link DIVISION_REF_TAGS}) but are deliberately parsed by a separate,
- * disjoint tag (`snippet`) so the three kinds of include are never conflated.
+ * disjoint tag (`snippet`) so the kinds of include are never conflated.
  */
 export function parseSnippetRefs(
   content: string,
   sourceFormat: SourceFormat,
 ): SnippetRef[] {
-  const refs: SnippetRef[] = [];
-  const source: Record<SourceFormat, string> = {
-    pretext: `<plus:snippet\\b[^>]*\\bref="([^"]+)"`,
-    markdown: `::snippet(?:\\[[^\\]]*\\])?\\{[^}]*\\bref="([^"]+)"[^}]*\\}`,
-    latex: `\\\\plus(?:\\[[^\\]]*\\])?\\{snippet\\}\\{([^}]+)\\}`,
-  };
-  const re = new RegExp(source[sourceFormat], "g");
-  const scanned = blankVerbatim(content, sourceFormat);
-  let m: RegExpExecArray | null;
-  while ((m = re.exec(scanned)) !== null) {
-    refs.push({ ref: m[1] });
-  }
-  return refs;
+  return parseRecordRefs("snippet", content, sourceFormat);
 }
 
 /**
@@ -1294,17 +1345,7 @@ export function renameSnippetRef(
   oldRef: string,
   newRef: string,
 ): string {
-  const oldR = escapeRegex(oldRef);
-  const xmlRe = new RegExp(`(<plus:snippet\\b[^>]*?\\bref=")${oldR}(")`, "g");
-  const mdRe = new RegExp(
-    `(::snippet(?:\\[[^\\]]*\\])?\\{[^}]*?\\bref=")${oldR}(")`,
-    "g",
-  );
-  const latexRe = new RegExp(`(\\\\plus(?:\\[[^\\]]*\\])?\\{snippet\\}\\{)${oldR}(\\})`, "g");
-  return content
-    .replace(xmlRe, `$1${newRef}$2`)
-    .replace(mdRe, `$1${newRef}$2`)
-    .replace(latexRe, `$1${newRef}$2`);
+  return renameRecordRef("snippet", content, oldRef, newRef);
 }
 
 /**
@@ -1314,14 +1355,7 @@ export function renameSnippetRef(
  * (one with no backing snippet) directly from the source.
  */
 export function removeSnippetRef(content: string, ref: string): string {
-  const r = escapeRegex(ref);
-  const xmlRe = new RegExp(`<plus:snippet\\b[^>]*?\\bref="${r}"[^>]*/?>`, "g");
-  const mdRe = new RegExp(
-    `::snippet(?:\\[[^\\]]*\\])?\\{[^}]*?\\bref="${r}"[^}]*\\}`,
-    "g",
-  );
-  const latexRe = new RegExp(`\\\\plus(?:\\[[^\\]]*\\])?\\{snippet\\}\\{${r}\\}`, "g");
-  return content.replace(xmlRe, "").replace(mdRe, "").replace(latexRe, "");
+  return removeRecordRef("snippet", content, ref);
 }
 
 /**
@@ -1333,17 +1367,49 @@ export function snippetEmbedCode(
   ref: string,
   sourceFormat: SourceFormat = "pretext",
 ): string {
-  if (sourceFormat === "markdown") return `::snippet{ref="${ref}"}`;
-  if (sourceFormat === "latex") return `\\plus{snippet}{${ref}}`;
-  return `<plus:snippet ref="${ref}"/>`;
+  return recordEmbedCode("snippet", ref, sourceFormat);
+}
+
+/**
+ * Every exercise placeholder in `content` — `<plus:exercise ref="..."/>`,
+ * `::exercise{ref="..."}` or `\plus{exercise}{...}` — in document order, as
+ * {@link parseSnippetRefs} does for snippets.
+ */
+export function parseExerciseRefs(
+  content: string,
+  sourceFormat: SourceFormat,
+): ExerciseRef[] {
+  return parseRecordRefs("exercise", content, sourceFormat);
+}
+
+/** {@link renameSnippetRef}, for exercise placeholders. */
+export function renameExerciseRef(
+  content: string,
+  oldRef: string,
+  newRef: string,
+): string {
+  return renameRecordRef("exercise", content, oldRef, newRef);
+}
+
+/** {@link removeSnippetRef}, for exercise placeholders. */
+export function removeExerciseRef(content: string, ref: string): string {
+  return removeRecordRef("exercise", content, ref);
+}
+
+/** {@link snippetEmbedCode}, for an exercise. */
+export function exerciseEmbedCode(
+  ref: string,
+  sourceFormat: SourceFormat = "pretext",
+): string {
+  return recordEmbedCode("exercise", ref, sourceFormat);
 }
 
 // ---------------------------------------------------------------------------
 // Placements — where an image or snippet is placed, and under which instance
 // ---------------------------------------------------------------------------
 
-/** The two kinds of record that may be placed more than once. */
-export type PlacementTag = "image" | "snippet";
+/** The kinds of record that may be placed more than once. */
+export type PlacementTag = "image" | "snippet" | "exercise";
 
 /**
  * One `<plus:image>`/`<plus:snippet>` placeholder in a source: what it places,
@@ -1364,9 +1430,9 @@ export interface Placement {
  * converter turns into the same attribute the other two write directly.
  */
 const PLACEMENT_SOURCE: Record<SourceFormat, string> = {
-  pretext: `<plus:(image|snippet)\\b([^>]*?)\\/?>`,
-  markdown: `::(image|snippet)(?:\\[[^\\]]*\\])?\\{([^}]*)\\}`,
-  latex: `\\\\plus(?:\\[([^\\]]*)\\])?\\{(image|snippet)\\}\\{([^}]+)\\}`,
+  pretext: `<plus:(image|snippet|exercise)\\b([^>]*?)\\/?>`,
+  markdown: `::(image|snippet|exercise)(?:\\[[^\\]]*\\])?\\{([^}]*)\\}`,
+  latex: `\\\\plus(?:\\[([^\\]]*)\\])?\\{(image|snippet|exercise)\\}\\{([^}]+)\\}`,
 };
 
 const quotedAttr = (attrs: string, name: string): string | undefined =>
@@ -3106,6 +3172,17 @@ export function qualifyIdentifiers(xml: string, instance: string): string {
 }
 
 /**
+ * Every pool a `<plus:* ref/>` placeholder may resolve against. Refs are
+ * unique across all of them project-wide.
+ */
+export interface RecordPools {
+  divisions: Division[];
+  snippets: Snippet[];
+  assets: Asset[];
+  exercises: Exercise[];
+}
+
+/**
  * Scan `xml` for every `<plus:* ref="..."/>` placeholder and expand each one:
  * `image` resolves against `assets`, `snippet` resolves (recursively —
  * see {@link resolveSnippetRef}) against `snippets`, and anything else is
@@ -3131,9 +3208,7 @@ export function qualifyIdentifiers(xml: string, instance: string): string {
  */
 function expandRefs(
   xml: string,
-  divisions: Division[],
-  snippets: Snippet[],
-  assets: Asset[],
+  pools: RecordPools,
   ancestors: Set<string>,
 ): string {
   return xml.replace(
@@ -3142,10 +3217,12 @@ function expandRefs(
       const ref = /ref="([^"]+)"/.exec(attrs)?.[1] ?? "";
       const resolved =
         tag === "image"
-          ? resolveAssetRef(ref, assets)
+          ? resolveAssetRef(ref, pools.assets)
           : tag === "snippet"
-            ? resolveSnippetRef(ref, snippets, divisions, assets, ancestors)
-            : resolveDivisionXml(ref, divisions, snippets, assets, ancestors);
+            ? resolveSnippetRef(ref, pools, ancestors)
+            : tag === "exercise"
+              ? resolveExerciseRef(ref, pools, ancestors)
+              : resolveDivisionXml(ref, pools, ancestors);
       const instance = placeholderInstance(attrs);
       const placed = instance ? qualifyIdentifiers(resolved, instance) : resolved;
       return applyPlaceholderAttrs(placed, parsePlaceholderAttrs(attrs));
@@ -3170,18 +3247,16 @@ function expandRefs(
  */
 function resolveDivisionXml(
   xmlId: string,
-  divisions: Division[],
-  snippets: Snippet[],
-  assets: Asset[],
+  pools: RecordPools,
   ancestors: Set<string>,
 ): string {
-  const division = divisions.find((d) => d.xmlId === xmlId);
+  const division = pools.divisions.find((d) => d.xmlId === xmlId);
   if (!division) return `<!-- missing division: ${xmlId} -->`;
   if (ancestors.has(xmlId)) return `<!-- circular reference: ${xmlId} -->`;
 
   const xml = divisionToPretext(division);
   const nextAncestors = new Set(ancestors).add(xmlId);
-  return expandRefs(xml, divisions, snippets, assets, nextAncestors);
+  return expandRefs(xml, pools, nextAncestors);
 }
 
 /**
@@ -3196,12 +3271,10 @@ function resolveDivisionXml(
  */
 function resolveSnippetRef(
   ref: string,
-  snippets: Snippet[],
-  divisions: Division[],
-  assets: Asset[],
+  pools: RecordPools,
   ancestors: Set<string>,
 ): string {
-  const snippet = snippets.find((s) => s.ref === ref);
+  const snippet = pools.snippets.find((s) => s.ref === ref);
   if (!snippet) return `<!-- missing snippet: ${ref} -->`;
   if (ancestors.has(ref)) return `<!-- circular reference: ${ref} -->`;
 
@@ -3211,7 +3284,41 @@ function resolveSnippetRef(
   );
   const xml = pretextSource ?? `<!-- conversion error: ${pretextError} -->`;
   const nextAncestors = new Set(ancestors).add(ref);
-  return expandRefs(xml, divisions, snippets, assets, nextAncestors);
+  return expandRefs(xml, pools, nextAncestors);
+}
+
+/**
+ * An exercise's complete `<exercise>` element: its body with the element built
+ * from its fields around it, as a PreTeXt division's is — the ref as both
+ * `xml:id` and `label`, the title (already PreTeXt markup) as `<title>`, and
+ * every other attribute from `attrs`.
+ */
+export function wrapExerciseSource(exercise: Exercise): string {
+  const pairs: [string, string][] = [["xml:id", exercise.ref], ["label", exercise.ref]];
+  for (const [name, value] of Object.entries(exercise.attrs ?? {})) {
+    if (name !== "xml:id" && name !== "label") pairs.push([name, value]);
+  }
+  const attrs = pairs.map(([name, value]) => ` ${name}="${escapeAttribute(value)}"`).join("");
+  const title = exercise.title?.trim() ? `<title>${exercise.title.trim()}</title>\n` : "";
+  return `<exercise${attrs}>\n${title}${exercise.source.trim()}\n</exercise>`;
+}
+
+/**
+ * Resolve a single `<plus:exercise ref="..."/>` placeholder: the matching
+ * {@link Exercise}'s element built around its body ({@link wrapExerciseSource}),
+ * with any `<plus:image>` or other placeholder inside it expanded in turn.
+ */
+function resolveExerciseRef(
+  ref: string,
+  pools: RecordPools,
+  ancestors: Set<string>,
+): string {
+  const exercise = pools.exercises.find((e) => e.ref === ref);
+  if (!exercise) return `<!-- missing exercise: ${ref} -->`;
+  if (ancestors.has(ref)) return `<!-- circular reference: ${ref} -->`;
+
+  const nextAncestors = new Set(ancestors).add(ref);
+  return expandRefs(wrapExerciseSource(exercise), pools, nextAncestors);
 }
 
 /**
@@ -3232,9 +3339,10 @@ export function assembleProjectSource(
   rootXmlId: string,
   assets: Asset[] = [],
   snippets: Snippet[] = [],
+  exercises: Exercise[] = [],
 ): string {
   return ensureRootLabel(
-    resolveDivisionXml(rootXmlId, divisions, snippets, assets, new Set()),
+    resolveDivisionXml(rootXmlId, { divisions, snippets, assets, exercises }, new Set()),
   );
 }
 
@@ -3353,8 +3461,9 @@ export function assembleFullProjectSource(
   assets: Asset[] = [],
   lang?: string,
   snippets: Snippet[] = [],
+  exercises: Exercise[] = [],
 ): string {
-  const body = resolveDivisionXml(rootXmlId, divisions, snippets, assets, new Set());
+  const body = resolveDivisionXml(rootXmlId, { divisions, snippets, assets, exercises }, new Set());
   return wrapInPretextDocument(body, docinfo, lang);
 }
 
@@ -3450,12 +3559,37 @@ export function assembleSnippetPreviewSource(
   assets: Asset[],
   docinfo: string,
   lang?: string,
+  exercises: Exercise[] = [],
 ): string {
-  const body = resolveSnippetRef(snippetRef, snippets, divisions, assets, new Set());
+  const body = resolveSnippetRef(snippetRef, { divisions, snippets, assets, exercises }, new Set());
   // A snippet's title is plain text, so it is escaped into the element.
   const title = escapeText(snippetPreviewTitle(snippets.find((s) => s.ref === snippetRef)));
   return wrapInPretextDocument(
     `<article>\n<title>${title}</title>\n${body}\n</article>`,
+    docinfo,
+    lang,
+  );
+}
+
+/** The `<title>` of the article an exercise is previewed inside of. */
+export const EXERCISE_PREVIEW_TITLE = "exercise preview";
+
+/**
+ * A complete PreTeXt document for previewing one exercise on its own: the
+ * exercise resolved exactly as a placement of it would be
+ * ({@link resolveExerciseRef}), inside a plain `<article>`, wrapped in
+ * `<pretext>` with `docinfo` — the exercise counterpart of
+ * {@link assembleSnippetPreviewSource}.
+ */
+export function assembleExercisePreviewSource(
+  exerciseRef: string,
+  pools: RecordPools,
+  docinfo: string,
+  lang?: string,
+): string {
+  const body = resolveExerciseRef(exerciseRef, pools, new Set());
+  return wrapInPretextDocument(
+    `<article>\n<title>${EXERCISE_PREVIEW_TITLE}</title>\n${body}\n</article>`,
     docinfo,
     lang,
   );

@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import type { Asset, GeneratorId, Snippet, SourceFormat } from "../../types/editor";
+import type { Asset, Exercise, GeneratorId, Snippet, SourceFormat } from "../../types/editor";
 import { useEditorStore } from "../../store/hooks";
 import type { CreateRequest } from "../../store/editorStore";
 import { KindIcon } from "../EditorTargetBar";
@@ -9,19 +9,23 @@ import { useDivisionActions } from "../toc/useDivisionActions";
 import { SettingsActions, SettingsNote } from "../settings/settingsUi";
 import NewSnippetForm from "./NewSnippetForm";
 import NewAssetForm from "./NewAssetForm";
+import NewExerciseForm from "./NewExerciseForm";
 
 export interface NewItemPaneProps {
   /** Persist a new snippet — see `NewSnippetForm`. */
   onCreateSnippet?: (ref: string, sourceFormat: SourceFormat, title: string) => Promise<Snippet>;
+  /** Persist a new exercise — see `NewExerciseForm`. */
+  onCreateExercise?: (exercise: Exercise) => Promise<Exercise>;
   onUploadAsset?: (file: File, title?: string) => Promise<Asset>;
   onFetchAssetUrl?: (url: string) => Promise<File>;
   onCreateAuthoredAsset?: (title: string) => Promise<Asset>;
   onCreateGeneratedAsset?: (generator: GeneratorId, title: string) => Promise<Asset>;
   /**
-   * A snippet or asset the host has created for `request`: add it to the
+   * A snippet, exercise or asset the host has created for `request`: add it to the
    * project, bind or replace whatever the request names, and open it.
    */
   onSnippetCreated: (snippet: Snippet, request: CreateRequest & { kind: "snippet" }) => void;
+  onExerciseCreated: (exercise: Exercise, request: CreateRequest & { kind: "exercise" }) => void;
   onAssetCreated: (asset: Asset, request: CreateRequest & { kind: "asset" }) => void;
 }
 
@@ -31,6 +35,8 @@ const heading = (request: CreateRequest): string => {
       return "New division";
     case "snippet":
       return request.resolveRef ? "Link snippet" : "New snippet";
+    case "exercise":
+      return request.resolveRef ? "Link exercise" : "New exercise";
     case "asset":
       return request.replaceRef
         ? "Replace asset"
@@ -43,17 +49,19 @@ const heading = (request: CreateRequest): string => {
 /**
  * What the editor pane shows while the author is creating something (the
  * store's `creating`): in place of the title bar and code editor, a form to
- * initialize the new division, snippet or asset. Nothing exists until it is
+ * initialize the new division, snippet, exercise or asset. Nothing exists until it is
  * submitted; then the new item opens in the editor. Cancel (or Escape, or
  * opening any item) leaves the project as it was.
  */
 const NewItemPane = ({
   onCreateSnippet,
+  onCreateExercise,
   onUploadAsset,
   onFetchAssetUrl,
   onCreateAuthoredAsset,
   onCreateGeneratedAsset,
   onSnippetCreated,
+  onExerciseCreated,
   onAssetCreated,
 }: NewItemPaneProps) => {
   const creating = useEditorStore((s) => s.creating);
@@ -67,6 +75,9 @@ const NewItemPane = ({
   );
   const removeAssetRefFromDocument = useEditorStore(
     (s) => s.removeAssetRefFromDocument,
+  );
+  const removeExerciseRefFromDocument = useEditorStore(
+    (s) => s.removeExerciseRefFromDocument,
   );
 
   // While the form waits on the host, Cancel would only pretend: the request
@@ -100,6 +111,7 @@ const NewItemPane = ({
           disabled: isBusy,
           onClick: () => {
             if (creating.kind === "snippet") removeSnippetRefFromDocument(unlinkedRef);
+            else if (creating.kind === "exercise") removeExerciseRefFromDocument(unlinkedRef);
             else removeAssetRefFromDocument(unlinkedRef);
             cancelCreate();
           },
@@ -111,7 +123,7 @@ const NewItemPane = ({
   const ref =
     creating.kind === "asset"
       ? (creating.replaceRef ?? creating.resolveRef)
-      : creating.kind === "snippet"
+      : creating.kind === "snippet" || creating.kind === "exercise"
         ? creating.resolveRef
         : undefined;
 
@@ -154,6 +166,25 @@ const NewItemPane = ({
           resolveRef={creating.resolveRef}
           onCreate={onCreateSnippet}
           onCreated={(snippet) => onSnippetCreated(snippet, creating)}
+          onCancel={cancelCreate}
+          onBusyChange={setIsBusy}
+        />
+        {removeUnlinked}
+      </>
+    );
+  } else if (creating.kind === "exercise") {
+    body = (
+      <>
+        {creating.resolveRef && (
+          <SettingsNote>
+            The document refers to an exercise <code>{creating.resolveRef}</code>{" "}
+            that doesn't exist yet. Create it here.
+          </SettingsNote>
+        )}
+        <NewExerciseForm
+          resolveRef={creating.resolveRef}
+          onCreate={onCreateExercise}
+          onCreated={(exercise) => onExerciseCreated(exercise, creating)}
           onCancel={cancelCreate}
           onBusyChange={setIsBusy}
         />

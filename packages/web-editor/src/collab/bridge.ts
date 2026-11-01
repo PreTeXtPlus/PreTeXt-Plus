@@ -32,10 +32,11 @@
 import * as Y from "yjs";
 import type { Division } from "../types/sections";
 import type { DivisionChanges, EditorStoreInstance } from "../store/editorStore";
-import type { Asset, RecordKind, Snippet } from "../types/editor";
+import type { Asset, Exercise, RecordKind, Snippet } from "../types/editor";
 import type { CollabSession } from "./types";
 import {
   applyAssetFields,
+  applyExerciseFields,
   applySnippetFields,
   assetEntryToSnapshot,
   entryToSnapshot,
@@ -44,12 +45,15 @@ import {
   getDivisionsMap,
   getEntryText,
   getMetaMap,
+  getExercisesMap,
   getSnippetsMap,
   makeAssetEntry,
   makeDivisionEntry,
+  makeExerciseEntry,
   makeSnippetEntry,
   makeText,
   markDeleted,
+  exerciseEntryToSnapshot,
   snippetEntryToSnapshot,
   type CollabDivisionSnapshot,
 } from "./schema";
@@ -89,6 +93,9 @@ export class CollabBridge {
   /** Snippet entry key (record id) ↔ current `ref`, both directions. Same reason as assets. */
   private readonly keyToSnippetRef = new Map<string, string>();
   private readonly snippetRefToKey = new Map<string, string>();
+  /** Exercise entry key (record id) ↔ current `ref`, both directions. Same reason as assets. */
+  private readonly keyToExerciseRef = new Map<string, string>();
+  private readonly exerciseRefToKey = new Map<string, string>();
   private attached = false;
 
   // A tiny external-store handle so React re-renders when the set of doc
@@ -129,6 +136,7 @@ export class CollabBridge {
     getDivisionsMap(this.doc).observeDeep(this.onDivisionsEvents);
     getAssetsMap(this.doc).observeDeep(this.onAssetsEvents);
     getSnippetsMap(this.doc).observeDeep(this.onSnippetsEvents);
+    getExercisesMap(this.doc).observeDeep(this.onExercisesEvents);
     getMetaMap(this.doc).observe(this.onMetaEvent);
     this.reconcileFromDoc();
   }
@@ -139,6 +147,7 @@ export class CollabBridge {
     getDivisionsMap(this.doc).unobserveDeep(this.onDivisionsEvents);
     getAssetsMap(this.doc).unobserveDeep(this.onAssetsEvents);
     getSnippetsMap(this.doc).unobserveDeep(this.onSnippetsEvents);
+    getExercisesMap(this.doc).unobserveDeep(this.onExercisesEvents);
     getMetaMap(this.doc).unobserve(this.onMetaEvent);
   }
 
@@ -149,12 +158,21 @@ export class CollabBridge {
     return getEntryText(getDivisionsMap(this.doc).get(key));
   }
 
-  /** The shared text for a project snippet's or asset's source, by its `ref`. */
+  /** The shared text for a project snippet's, exercise's or asset's source, by its `ref`. */
   getRecordText(kind: RecordKind, ref: string): Y.Text | undefined {
     const key =
-      kind === "snippet" ? this.snippetRefToKey.get(ref) : this.assetRefToKey.get(ref);
+      kind === "snippet"
+        ? this.snippetRefToKey.get(ref)
+        : kind === "exercise"
+          ? this.exerciseRefToKey.get(ref)
+          : this.assetRefToKey.get(ref);
     if (!key) return undefined;
-    const map = kind === "snippet" ? getSnippetsMap(this.doc) : getAssetsMap(this.doc);
+    const map =
+      kind === "snippet"
+        ? getSnippetsMap(this.doc)
+        : kind === "exercise"
+          ? getExercisesMap(this.doc)
+          : getAssetsMap(this.doc);
     return getEntryText(map.get(key));
   }
 
@@ -413,6 +431,73 @@ export class CollabBridge {
     return previous;
   }
 
+  /**
+   * Mirror a locally created project exercise into the doc, synchronously,
+   * as {@link localSnippetAdd} does a snippet.
+   */
+  localExerciseAdd(exercise: Exercise): void {
+    if (!exercise.id) return;
+    const exercises = getExercisesMap(this.doc);
+    this.doc.transact(() => {
+      const existing = exercises.get(exercise.id as string);
+      if (existing) {
+        applyExerciseFields(existing, exercise);
+        this.syncEntryText(existing, exercise.source);
+      } else exercises.set(exercise.id as string, makeExerciseEntry(exercise));
+      getDeletedMap(this.doc).delete(exercise.id as string);
+    }, this.localOrigin);
+    this.trackExerciseKey(exercise.id, exercise);
+    this.bump();
+  }
+
+  /**
+   * Mirror an edit to a exercise's fields. `previousRef` names the ref the
+   * exercise had before this edit, when the edit renames it.
+   */
+  localExerciseUpdate(exercise: Exercise, previousRef?: string): void {
+    const key =
+      exercise.id ?? this.exerciseRefToKey.get(previousRef ?? exercise.ref ?? "");
+    if (!key) return;
+    const exercises = getExercisesMap(this.doc);
+    this.doc.transact(() => {
+      const entry = exercises.get(key);
+      if (entry) {
+        applyExerciseFields(entry, exercise);
+        this.syncEntryText(entry, exercise.source);
+      } else exercises.set(key, makeExerciseEntry(exercise));
+    }, this.localOrigin);
+    this.trackExerciseKey(key, exercise);
+    this.bump();
+  }
+
+  localExerciseRemove(exercise: Exercise): void {
+    const key = exercise.id ?? this.exerciseRefToKey.get(exercise.ref ?? "");
+    if (!key) return;
+    this.doc.transact(() => {
+      getExercisesMap(this.doc).delete(key);
+      markDeleted(this.doc, "exercise", key);
+    }, this.localOrigin);
+    this.untrackExerciseKey(key);
+    this.bump();
+  }
+
+  private trackExerciseKey(key: string, exercise: Exercise): void {
+    this.untrackExerciseKey(key);
+    const current = exercise.ref;
+    this.keyToExerciseRef.set(key, current);
+    this.exerciseRefToKey.set(current, key);
+  }
+
+  /** Mirrors {@link untrackAssetKey} — see there for why the ownership check matters. */
+  private untrackExerciseKey(key: string): string | undefined {
+    const previous = this.keyToExerciseRef.get(key);
+    this.keyToExerciseRef.delete(key);
+    if (previous === undefined) return undefined;
+    if (this.exerciseRefToKey.get(previous) !== key) return undefined;
+    this.exerciseRefToKey.delete(previous);
+    return previous;
+  }
+
   localTitleChange(title: string): void {
     this.doc.transact(() => {
       getMetaMap(this.doc).set("title", title);
@@ -542,6 +627,29 @@ export class CollabBridge {
         state.removeSnippetFromPool(snippet);
       } else if (!snippets.has(snippet.id)) {
         this.localSnippetAdd(snippet);
+      }
+    }
+
+    const exercises = getExercisesMap(this.doc);
+    exercises.forEach((entry, key) => {
+      const snapshot = exerciseEntryToSnapshot(key, entry);
+      this.trackExerciseKey(key, snapshot);
+      const pooled = this.store
+        .getState()
+        .projectExercises?.find((s) => s.id === key);
+      if (pooled && pooled.ref !== snapshot.ref) {
+        state.renameExerciseInPool(pooled.ref, snapshot);
+      } else {
+        state.updateExerciseInPool(snapshot);
+      }
+    });
+
+    for (const exercise of [...(this.store.getState().projectExercises ?? [])]) {
+      if (!exercise.id) continue;
+      if (deleted.get(exercise.id) === "exercise") {
+        state.removeExerciseFromPool(exercise);
+      } else if (!exercises.has(exercise.id)) {
+        this.localExerciseAdd(exercise);
       }
     }
 
@@ -774,6 +882,69 @@ export class CollabBridge {
       state.updateSnippetInPool(snippet);
     }
     this.trackSnippetKey(key, snippet);
+    return previous !== current;
+  }
+
+  /** Mirrors {@link onAssetsEvents} — see there for the ref-keyed-pool reasoning. */
+  private onExercisesEvents = (
+    events: Y.YEvent<any>[],
+    transaction: Y.Transaction,
+  ): void => {
+    if (this.isLocal(transaction)) return;
+    const state = this.store.getState();
+    const exercises = getExercisesMap(this.doc);
+    let structureChanged = false;
+
+    for (const event of events) {
+      if (event.target === exercises) {
+        event.changes.keys.forEach((change, key) => {
+          if (change.action === "delete") {
+            const previous = this.untrackExerciseKey(key);
+            if (previous === undefined) return;
+            state.removeExerciseFromPool({
+              id: key,
+              ref: previous,
+              source: "",
+            });
+            structureChanged = true;
+            return;
+          }
+          const entry = exercises.get(key);
+          if (!entry) return;
+          this.applyRemoteExercise(key, exerciseEntryToSnapshot(key, entry));
+          structureChanged = true;
+        });
+      } else if (
+        (event.target instanceof Y.Map && event.path.length === 1) ||
+        event.target instanceof Y.Text
+      ) {
+        const key = String(event.path[0]);
+        const entry = exercises.get(key);
+        if (!entry) continue;
+        if (this.applyRemoteExercise(key, exerciseEntryToSnapshot(key, entry))) {
+          structureChanged = true;
+        }
+      }
+    }
+
+    if (structureChanged) this.bump();
+  };
+
+  /** Returns whether the record's ref changed (or it is newly tracked). */
+  private applyRemoteExercise(key: string, exercise: Exercise): boolean {
+    const state = this.store.getState();
+    const previous = this.keyToExerciseRef.get(key);
+    const current = exercise.ref;
+    if (
+      previous !== undefined &&
+      previous !== current &&
+      this.exerciseRefToKey.get(previous) === key
+    ) {
+      state.renameExerciseInPool(previous, exercise);
+    } else {
+      state.updateExerciseInPool(exercise);
+    }
+    this.trackExerciseKey(key, exercise);
     return previous !== current;
   }
 

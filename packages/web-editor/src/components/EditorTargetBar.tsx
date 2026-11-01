@@ -1,16 +1,18 @@
 import { useEffect, useMemo, type ReactNode } from "react";
 import clsx from "clsx";
-import type { Asset, Snippet, SourceFormat } from "../types/editor";
+import type { Asset, Exercise, Snippet, SourceFormat } from "../types/editor";
 import { buildProjectAssetView } from "../assetView";
 import { buildProjectSnippetView } from "../snippetView";
+import { buildProjectExerciseView } from "../exerciseView";
 import { useEditorStore } from "../store/hooks";
 import type { EditorTarget } from "./editorTarget";
-import { AssetsIcon, GearIcon, SnippetsIcon, TocIcon } from "./icons";
+import { AssetsIcon, ExercisesIcon, GearIcon, SnippetsIcon, TocIcon } from "./icons";
 import { divisionDisplayTitle, TYPE_FULL_LABELS } from "./toc/types";
 import { useDivisionActions } from "./toc/useDivisionActions";
 import { findDivisionPlacement } from "./toc/divisionActions";
 import DivisionSettings from "./settings/DivisionSettings";
 import SnippetSettings from "./settings/SnippetSettings";
+import ExerciseSettings from "./settings/ExerciseSettings";
 import AssetSettings from "./settings/AssetSettings";
 
 export interface EditorTargetBarProps {
@@ -19,6 +21,8 @@ export interface EditorTargetBarProps {
   readOnly?: boolean;
   /** Persist a snippet metadata edit — see `SnippetSettings`' `onSave`. */
   onSaveSnippet: (snippet: Snippet, prevRef: string) => Promise<void>;
+  /** Persist an exercise metadata edit — see `ExerciseSettings`' `onSave`. */
+  onSaveExercise: (exercise: Exercise, prevRef: string) => Promise<void>;
   /** Persist an asset metadata edit — see `AssetSettings`' `onSave`. */
   onSaveAsset: (asset: Asset, prevRef: string) => Promise<void>;
   /** Offer "Replace image…", which opens the "Replace asset" form. */
@@ -28,12 +32,20 @@ export interface EditorTargetBarProps {
 const KIND_LABELS: Record<EditorTarget["kind"], string> = {
   division: "Division",
   snippet: "Snippet",
+  exercise: "Exercise",
   asset: "Asset",
 };
 
 /** The explorer rail's icons, drawn at bar size. */
 export const KindIcon = ({ kind }: { kind: EditorTarget["kind"] }) => {
-  const Icon = kind === "division" ? TocIcon : kind === "snippet" ? SnippetsIcon : AssetsIcon;
+  const Icon =
+    kind === "division"
+      ? TocIcon
+      : kind === "snippet"
+        ? SnippetsIcon
+        : kind === "exercise"
+          ? ExercisesIcon
+          : AssetsIcon;
   return (
     <span
       className="inline-flex shrink-0 text-slate-500 [&>svg]:w-6 [&>svg]:h-6"
@@ -62,6 +74,7 @@ const EditorTargetBar = ({
   target,
   readOnly,
   onSaveSnippet,
+  onSaveExercise,
   onSaveAsset,
   canReplaceAsset,
 }: EditorTargetBarProps) => {
@@ -71,6 +84,7 @@ const EditorTargetBar = ({
   const divisions = useEditorStore((s) => s.divisions);
   const projectSnippets = useEditorStore((s) => s.projectSnippets);
   const projectAssets = useEditorStore((s) => s.projectAssets);
+  const projectExercises = useEditorStore((s) => s.projectExercises);
   const { rootDivision } = useDivisionActions();
   const embedFormat: SourceFormat = rootDivision?.sourceFormat ?? "pretext";
 
@@ -102,11 +116,15 @@ const EditorTargetBar = ({
         ? buildProjectSnippetView(divisions, projectSnippets ?? []).find(
           (r) => r.ref === target.snippet.ref,
         )
-        : buildProjectAssetView(divisions, projectAssets ?? []).find(
+        : target.kind === "exercise"
+          ? buildProjectExerciseView(divisions, projectExercises ?? []).find(
+            (r) => r.ref === target.exercise.ref,
+          )
+          : buildProjectAssetView(divisions, projectAssets ?? []).find(
           (r) => r.ref === target.asset.ref,
         );
     return !!row && !row.inDocument;
-  }, [target, divisions, rootXmlId, projectSnippets, projectAssets]);
+  }, [target, divisions, rootXmlId, projectSnippets, projectExercises, projectAssets]);
 
   if (!target) return null;
 
@@ -133,6 +151,11 @@ const EditorTargetBar = ({
     title = snippet.title || snippet.ref;
     id = snippet.ref;
     if (notPlaced) status = "not placed";
+  } else if (target.kind === "exercise") {
+    const { exercise } = target;
+    title = exercise.title || exercise.ref;
+    id = exercise.ref;
+    if (notPlaced) status = "not placed";
   } else {
     const { asset } = target;
     title = asset.title || asset.ref || "Untitled asset";
@@ -153,6 +176,7 @@ const EditorTargetBar = ({
           className={clsx(
             "min-w-0 overflow-hidden text-ellipsis whitespace-nowrap text-[0.85rem] font-semibold text-slate-800",
             target.kind === "snippet" && !target.snippet.title && "font-mono",
+            target.kind === "exercise" && !target.exercise.title && "font-mono",
           )}
           title={title}
         >
@@ -211,6 +235,15 @@ const EditorTargetBar = ({
                 snippet={target.snippet}
                 embedFormat={embedFormat}
                 onSave={onSaveSnippet}
+                readOnly={readOnly}
+              />
+            )}
+            {target.kind === "exercise" && (
+              <ExerciseSettings
+                key={target.exercise.id ?? target.exercise.ref}
+                exercise={target.exercise}
+                embedFormat={embedFormat}
+                onSave={onSaveExercise}
                 readOnly={readOnly}
               />
             )}

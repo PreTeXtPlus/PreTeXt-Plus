@@ -153,6 +153,35 @@ export interface Snippet {
   sourceFormat: SourceFormat;
 }
 
+/**
+ * An interactive exercise owned by a single project, placed wherever it's
+ * referenced by `<plus:exercise ref="..."/>`. Stored like a {@link Division}:
+ * `source` is the exercise's *body* -- the children of its `<exercise>` -- and
+ * the element itself is built from the record's fields when the project is
+ * assembled (`ref` as its `xml:id` and `label`, `title` as its `<title>`,
+ * `attrs` as its other attributes). Edited with the exercise designer, never
+ * as text, so its source is always PreTeXt.
+ */
+export interface Exercise {
+  /** Stable server-assigned identifier; see {@link Snippet.id}. */
+  id?: string;
+  /**
+   * The exercise's one name: its placeholder's `ref`, and its `xml:id` and
+   * `@label` (which Runestone keys student answers on). Unique across every
+   * record in the project.
+   */
+  ref: string;
+  /** The exercise's `<title>`, as PreTeXt inline markup. Empty means untitled. */
+  title?: string;
+  /** The children of the exercise's `<exercise>` element, as PreTeXt. */
+  source: string;
+  /**
+   * The `<exercise>` element's attributes other than `xml:id` and `label`
+   * (a Parsons problem's `language`, a free response's `attachment`, ...).
+   */
+  attrs?: Record<string, string>;
+}
+
 /** Payload emitted when a user submits feedback from the editor UI. */
 export interface FeedbackSubmission {
   /** Location where feedback was submitted (for example, "main-editor"). */
@@ -226,12 +255,13 @@ export interface EditorDivisionContentChange extends EditorContentState {
   xmlId: string;
 }
 
-/** The two kinds of project record a division embeds by `ref`. */
-export type RecordKind = "snippet" | "asset";
+/** The kinds of project record a division embeds by `ref`. */
+export type RecordKind = "snippet" | "exercise" | "asset";
 
 /**
- * A project snippet's or asset's source, as typed into the code editor and
- * passed to `onContentChange`. The host keeps it with the rest of its unsaved
+ * A project snippet's or asset's source, as typed into the code editor (or an
+ * exercise's body, as written by the exercise designer) and passed to
+ * `onContentChange`. The host keeps it with the rest of its unsaved
  * content and persists it the same way; `onSnippetUpdate`/`onAssetUpdate` are
  * for metadata edits only.
  */

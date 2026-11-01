@@ -9,6 +9,8 @@ class ProjectDocProjectionTest < ActiveSupport::TestCase
   ASSET_ID = "88888888-8888-4888-8888-888888888888".freeze
   UNKNOWN_ASSET_ID = "99999999-9999-4999-8999-999999999999".freeze
   GONE_SNIPPET_ID = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa".freeze
+  EXERCISE_ID = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb".freeze
+  GONE_EXERCISE_ID = "cccccccc-cccc-4ccc-8ccc-cccccccccccc".freeze
 
   def fixture(name)
     File.binread(Rails.root.join("test/fixtures/files/collab/#{name}.bin"))
@@ -224,5 +226,28 @@ class ProjectDocProjectionTest < ActiveSupport::TestCase
     project!
 
     assert_not Content.exists?(GONE_SNIPPET_ID)
+  end
+
+  test "exercises are written from the document, body and attributes both" do
+    ProjectDoc.seed(@project, fixture("projection_records_state"))
+
+    project!
+
+    exercise = Content.find(EXERCISE_ID)
+    assert exercise.exercise?
+    assert_equal @project.id, exercise.project_id
+    assert_equal "projected-quiz", exercise.ref
+    assert_equal "A Projected Quiz", exercise.title
+    assert_equal "<statement><p>Order the lines.</p></statement>", exercise.source
+    assert_equal({ "language" => "python" }, exercise.attrs)
+  end
+
+  test "an exercise tombstone removes the exercise" do
+    @project.exercises.create!(id: GONE_EXERCISE_ID, ref: "gone-quiz", source: "")
+    ProjectDoc.seed(@project, fixture("projection_records_state"))
+
+    project!
+
+    assert_not Content.exists?(GONE_EXERCISE_ID)
   end
 end

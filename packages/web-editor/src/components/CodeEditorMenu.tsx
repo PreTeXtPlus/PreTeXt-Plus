@@ -100,6 +100,8 @@ interface CodeEditorMenuProps {
   onOpenAssets?: () => void;
   /** If provided, a "New Snippet…" item is shown (PreTeXt mode only). */
   onOpenSnippets?: () => void;
+  /** If provided, a "New Exercise…" item is shown (PreTeXt mode only). */
+  onOpenExercises?: () => void;
   /** Opens the assembled-source modal. */
   onShowFullSource: () => void;
   /** If provided, a "Find in Project…" item is shown after Monaco's own Find/Replace. */
@@ -113,6 +115,7 @@ interface CodeEditorMenuProps {
   onSwitchToFindInProject?: () => void;
   hideAssets?: boolean;
   hideSnippets?: boolean;
+  hideExercises?: boolean;
   /** When true, every editing action is hidden — only viewing actions remain. */
   readOnly?: boolean;
   /**
@@ -197,6 +200,8 @@ const CodeEditorMenu: React.FC<CodeEditorMenuProps> = ({
   hideAssets,
   onOpenSnippets,
   hideSnippets,
+  onOpenExercises,
+  hideExercises,
   onShowFullSource,
   onOpenFindInProject,
   isFindingInFile,
@@ -407,6 +412,8 @@ const CodeEditorMenu: React.FC<CodeEditorMenuProps> = ({
           hideAssets,
           onOpenSnippets,
           hideSnippets,
+          onOpenExercises,
+          hideExercises,
           onShowFullSource,
         });
 

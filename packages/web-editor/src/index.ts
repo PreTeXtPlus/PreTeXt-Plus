@@ -22,6 +22,7 @@ export type {
   EditorDivisionContentChange,
   EditorRecordSourceChange,
   RecordKind,
+  Exercise,
   FeedbackSubmission,
   Snippet,
   SourceFormat,
@@ -64,6 +65,8 @@ export {
   wrapDivisionForPreview,
   assembleSnippetPreviewSource,
   SNIPPET_PREVIEW_TITLE,
+  assembleExercisePreviewSource,
+  wrapExerciseSource,
   // Division element utilities: a division stores its body only, and its
   // element (type, xml:id, title, label, attributes) is built from its fields.
   splitDivisionSource,
@@ -85,12 +88,19 @@ export {
   renameSnippetRef,
   removeSnippetRef,
   snippetEmbedCode,
+  // Exercise ref utilities
+  parseExerciseRefs,
+  renameExerciseRef,
+  removeExerciseRef,
+  exerciseEmbedCode,
 } from "./sectionUtils";
 export {
   buildProjectSnippetView,
   makeUniqueSnippetRef,
 } from "./snippetView";
 export type { SnippetRow, SnippetStatus } from "./snippetView";
+export { buildProjectExerciseView } from "./exerciseView";
+export type { ExerciseRow, ExerciseStatus } from "./exerciseView";
 
 // Collaboration: the shared-doc schema (hosts seed/serialize through these)
 // and the session types the `collaboration` prop expects. The host owns the
@@ -103,6 +113,7 @@ export {
   getDivisionsMap,
   getAssetsMap,
   getSnippetsMap,
+  getExercisesMap,
   getMetaMap,
   getDeletedMap,
   getDivisionText,
@@ -112,6 +123,7 @@ export {
 export type {
   CollabAssetSnapshot,
   CollabSnippetSnapshot,
+  CollabExerciseSnapshot,
   CollabDeletedKind,
   CollabDeletion,
   CollabDivisionSnapshot,

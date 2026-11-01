@@ -1,5 +1,5 @@
-# One piece of a project's content: a division of the document, a snippet, or
-# an asset. `kind` says which.
+# One piece of a project's content: a division of the document, a snippet, an
+# exercise, or an asset. `kind` says which.
 #
 # They share a table because they share almost everything that matters: every
 # one is named by a `ref` that a `<plus:* ref="..."/>` placeholder elsewhere in
@@ -42,13 +42,14 @@ class Content < ApplicationRecord
   # scopes: false because the generated scopes would be singular (`division`,
   # `file_asset`); the plural ones below read better at every call site and
   # include the one grouping the enum cannot express, `assets`.
-  enum :kind, { division: 0, snippet: 1, file_asset: 2, authored_asset: 3 },
+  enum :kind, { division: 0, snippet: 1, file_asset: 2, authored_asset: 3, exercise: 4 },
     scopes: false, validate: true
 
   ASSET_KINDS = %w[ file_asset authored_asset ].freeze
 
   scope :divisions, -> { where(kind: :division) }
   scope :snippets, -> { where(kind: :snippet) }
+  scope :exercises, -> { where(kind: :exercise) }
   scope :assets, -> { where(kind: ASSET_KINDS) }
 
   # The format of `source`, which decides how it is edited and how it reaches the
@@ -65,6 +66,11 @@ class Content < ApplicationRecord
   validates :ref, format: REF_REGEX, presence: true, uniqueness: { scope: :project_id }
   validates :source_format, inclusion: { in: PROSE_FORMATS }, if: -> { division? || snippet? }
   validates :source_format, inclusion: { in: %w[ pretext ] }, if: :file_asset?
+  # An exercise is stored like a division: `source` is its body -- the children
+  # of its <exercise> -- and the element itself (xml:id and label from `ref`,
+  # <title> from `title`, the rest from `attrs`) is built when the project is
+  # assembled. The designer that edits it writes PreTeXt only.
+  validates :source_format, inclusion: { in: %w[ pretext ] }, if: :exercise?
 
   def asset?
     file_asset? || authored_asset?

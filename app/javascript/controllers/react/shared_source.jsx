@@ -6,6 +6,7 @@ import {
   railsDivisionToEditor,
   railsAssetToEditor,
   railsSnippetToEditor,
+  railsExerciseToEditor,
 } from "./railsProjectMapping";
 import { buildHelpMenu } from "./helpEntries";
 import { TOOLS_ENTRIES } from "./toolsEntries";
@@ -27,6 +28,7 @@ import { TOOLS_ENTRIES } from "./toolsEntries";
  * @property {RailsDivision[]} [divisions]
  * @property {RailsAsset[]} [assets]
  * @property {RailsSnippet[]} [snippets]
+ * @property {import("./railsProjectMapping").RailsExercise[]} [exercises]
  */
 
 // This host never saves anything, so unlike ./editor.jsx there's no working
@@ -51,6 +53,7 @@ function railsToReadOnlyState(json) {
     divisions: (json.divisions ?? []).map((d) => railsDivisionToEditor(d, projectType)),
     projectAssets: (json.assets ?? []).map(railsAssetToEditor),
     projectSnippets: (json.snippets ?? []).map(railsSnippetToEditor),
+    projectExercises: (json.exercises ?? []).map(railsExerciseToEditor),
     rootDivisionId: root ? (root.ref ?? "") : undefined,
   };
 }
@@ -115,6 +118,8 @@ function SharedSourceApp({ config }) {
       hideAssets
       projectSnippets={state.projectSnippets}
       hideSnippets
+      projectExercises={state.projectExercises}
+      hideExercises
       onContentChange={() => {}}
       topBar={{
         logo,

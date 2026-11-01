@@ -524,7 +524,8 @@ class ProjectsController < ApplicationController
         divisions_attributes: [ [ :id, :source, :source_format, :is_root, :ref, :title, :division_type,
                                   { attrs: {} }, :_destroy ] ],
         assets_attributes: [ [ :id, :ref, :kind, :file, :source, :short_description, :description, :title, :source_format, :preview_input_digest, :_destroy ] ],
-        snippets_attributes: [ [ :id, :source, :source_format, :ref, :title, :_destroy ] ]
+        snippets_attributes: [ [ :id, :source, :source_format, :ref, :title, :_destroy ] ],
+        exercises_attributes: [ [ :id, :source, :ref, :title, { attrs: {} }, :_destroy ] ]
       ]
       permitted << :document_type if action_name == "create"
       params.expect(project: permitted)
@@ -545,7 +546,8 @@ class ProjectsController < ApplicationController
                                   { attrs: {} } ] ],
         assets_attributes: [ [ :ref, :kind, :title, :short_description,
                                { file: [ :filename, :content_type, :data ] } ] ],
-        snippets_attributes: [ [ :ref, :source, :source_format, :title ] ]
+        snippets_attributes: [ [ :ref, :source, :source_format, :title ] ],
+        exercises_attributes: [ [ :ref, :source, :title, { attrs: {} } ] ]
       ]).to_h.deep_symbolize_keys
 
       if attrs[:assets_attributes].present?

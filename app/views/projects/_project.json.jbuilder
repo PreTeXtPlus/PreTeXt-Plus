@@ -33,3 +33,6 @@ end
 json.snippets project.snippets do |snippet|
   json.partial! "snippets/snippet", snippet: snippet
 end
+json.exercises project.exercises do |exercise|
+  json.partial! "exercises/exercise", exercise: exercise
+end

@@ -31,6 +31,7 @@ export default function TocWithSettings({ readOnly }: { readOnly?: boolean }) {
         target={target}
         readOnly={readOnly}
         onSaveSnippet={async () => {}}
+        onSaveExercise={async () => {}}
         onSaveAsset={async () => {}}
       />
     </>

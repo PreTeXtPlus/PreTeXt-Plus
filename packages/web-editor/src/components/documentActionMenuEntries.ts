@@ -30,12 +30,14 @@ export interface DocumentActionEntriesArgs {
   hideAssets?: boolean;
   onOpenSnippets?: () => void;
   hideSnippets?: boolean;
+  onOpenExercises?: () => void;
+  hideExercises?: boolean;
   onShowFullSource: () => void;
 }
 
 /**
  * The document-level actions — Format PreTeXt, Import, Clean up LaTeX, Edit
- * Macros/Preamble, Assets, Snippets, Display Full Source — as opposed to the
+ * Macros/Preamble, Assets, Snippets, Exercises, Display Full Source — as opposed to the
  * generic Monaco commands (Go to Line, Toggle Comment, …). Shared between
  * `CodeEditorMenu`'s Tools menu and `TopBar`'s File menu so the two can never
  * drift apart.
@@ -52,6 +54,8 @@ export function buildDocumentActionEntries({
   hideAssets,
   onOpenSnippets,
   hideSnippets,
+  onOpenExercises,
+  hideExercises,
   onShowFullSource,
 }: DocumentActionEntriesArgs): MenuEntry[] {
   const entries: MenuEntry[] = [];
@@ -115,6 +119,15 @@ export function buildDocumentActionEntries({
         label: "New Snippet…",
         title: "Add a reusable source snippet to the project",
         onSelect: onOpenSnippets,
+      });
+    }
+    if (onOpenExercises && !hideExercises) {
+      entries.push({
+        kind: "item",
+        key: "exercises",
+        label: "New Exercise…",
+        title: "Add an interactive exercise to the project",
+        onSelect: onOpenExercises,
       });
     }
   }

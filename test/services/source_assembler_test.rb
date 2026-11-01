@@ -80,6 +80,23 @@ class SourceAssemblerTest < ActionDispatch::IntegrationTest
     assert_not_includes source, 'source="graph.svg"'
   end
 
+  # An exercise stores its body; the <exercise> element around it is built from
+  # its ref, title and attrs, exactly as the editor's preview builds it.
+  test "an exercise placeholder assembles to an exercise built from its record" do
+    skip_without_bundle
+    @project.exercises.create!(ref: "quiz", title: "Quiz", attrs: { "language" => "python" },
+      source: "<statement><p>Pick one.</p></statement>")
+    child = @project.divisions.find_by!(ref: "subdivision")
+    child.update!(source: "#{child.source}\n<plus:exercise ref=\"quiz\"/>")
+
+    source = SourceAssembler.new(@project).call
+
+    assert_includes source, '<exercise xml:id="quiz" label="quiz" language="python">'
+    assert_includes source, "<title>Quiz</title>"
+    assert_includes source, "Pick one."
+    assert_not_includes source, "plus:exercise"
+  end
+
   test "the docinfo in effect is the one that lands in the document" do
     skip_without_bundle
     @project.update!(docinfo: "<docinfo><macros>\\def\\projectown{1}</macros></docinfo>")

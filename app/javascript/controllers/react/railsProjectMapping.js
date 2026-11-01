@@ -13,6 +13,7 @@ import {
 /** @typedef {import("@pretextbook/web-editor").Asset} Asset */
 /** @typedef {import("@pretextbook/web-editor").Division} Division */
 /** @typedef {import("@pretextbook/web-editor").Snippet} Snippet */
+/** @typedef {import("@pretextbook/web-editor").Exercise} Exercise */
 
 /**
  * A division record as returned by the Rails `divisions` JSON array
@@ -63,6 +64,18 @@ import {
  * @property {string} [title]
  * @property {string} [source]
  * @property {string} [source_format]
+ */
+
+/**
+ * An exercise record as returned by Rails' `exercises` JSON array
+ * (`exercises/_exercise.json.jbuilder`). `source` is the children of its
+ * `<exercise>`; the element is built from `ref`, `title` and `attrs`.
+ * @typedef {Object} RailsExercise
+ * @property {string} id
+ * @property {string} [ref]
+ * @property {string} [title]
+ * @property {string} [source]
+ * @property {Object<string, string>} [attrs]
  */
 
 /**
@@ -277,6 +290,37 @@ export function toEditorSnippet(rec) {
   };
 }
 
+// Map one Rails exercise to the web-editor's Exercise shape.
+/**
+ * @param {RailsExercise} e
+ * @returns {Exercise}
+ */
+export function railsExerciseToEditor(e) {
+  return {
+    id: String(e.id),
+    ref: e.ref ?? "",
+    title: e.title ?? "",
+    source: e.source ?? "",
+    attrs: e.attrs ?? {},
+  };
+}
+
+// Strip a host project-exercise record down to the bare web-editor Exercise
+// shape. Mirrors `toEditorSnippet`.
+/**
+ * @param {Exercise} rec
+ * @returns {Exercise}
+ */
+export function toEditorExercise(rec) {
+  return {
+    id: rec.id,
+    ref: rec.ref,
+    title: rec.title,
+    source: rec.source,
+    attrs: rec.attrs,
+  };
+}
+
 // ---------------------------------------------------------------------------
 // Whole-project mapping and assembly
 // ---------------------------------------------------------------------------
@@ -306,6 +350,7 @@ export function toEditorSnippet(rec) {
  * @property {RailsDivision[]} [divisions]
  * @property {RailsAsset[]} [assets]
  * @property {RailsSnippet[]} [snippets]
+ * @property {RailsExercise[]} [exercises]
  */
 
 /**
@@ -321,6 +366,7 @@ export function toEditorSnippet(rec) {
  * @property {EditorDivision[]} divisions
  * @property {Asset[]} [projectAssets]
  * @property {Snippet[]} [projectSnippets]
+ * @property {Exercise[]} [projectExercises]
  * @property {string} [rootDivisionId]
  */
 
@@ -355,6 +401,7 @@ export function railsToEditorState(json) {
     divisions: (json.divisions ?? []).map((d) => railsDivisionToEditor(d, projectType)),
     projectAssets: (json.assets ?? []).map(railsAssetToEditor),
     projectSnippets: (json.snippets ?? []).map(railsSnippetToEditor),
+    projectExercises: (json.exercises ?? []).map(railsExerciseToEditor),
     // rootDivisionId is the root division's *xmlId* (its ref), which is how the
     // web-editor identifies divisions, not the database id.
     rootDivisionId: root ? (root.ref ?? "") : undefined,
@@ -398,9 +445,10 @@ export function effectiveDocinfo(state) {
  * @param {EditorState} state
  * @param {Asset[]} projectAssets
  * @param {Snippet[]} projectSnippets
+ * @param {Exercise[]} [projectExercises]
  * @returns {string}
  */
-export function assembleFullPretextSource(state, projectAssets, projectSnippets) {
+export function assembleFullPretextSource(state, projectAssets, projectSnippets, projectExercises = []) {
   if (!state.rootDivisionId) return "";
   return assembleFullProjectSource(
     state.divisions,
@@ -409,6 +457,7 @@ export function assembleFullPretextSource(state, projectAssets, projectSnippets)
     projectAssets.map(toEditorAsset),
     state.language,
     projectSnippets.map(toEditorSnippet),
+    projectExercises.map(toEditorExercise),
   );
 }
 
@@ -427,5 +476,10 @@ export function assembleFullPretextSource(state, projectAssets, projectSnippets)
  */
 export function assembleProjectJson(json) {
   const state = railsToEditorState(json);
-  return assembleFullPretextSource(state, state.projectAssets, state.projectSnippets);
+  return assembleFullPretextSource(
+    state,
+    state.projectAssets,
+    state.projectSnippets,
+    state.projectExercises,
+  );
 }

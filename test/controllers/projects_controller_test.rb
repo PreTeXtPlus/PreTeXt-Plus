@@ -491,6 +491,31 @@ class ProjectsControllerTest < ActionDispatch::IntegrationTest
     assert_equal "", snippet.reload.title.to_s
   end
 
+  # ---- exercises ----
+
+  test "update creates an exercise with its attributes, and the JSON carries them" do
+    patch project_url(@project),
+      params: { project: { exercises_attributes: [ {
+        ref: "quiz", title: "A quiz", source: "<statement><p>Q</p></statement>",
+        attrs: { language: "python", adaptive: "yes" }
+      } ] } },
+      as: :json
+
+    assert_response :success
+    exercise = @project.exercises.find_by!(ref: "quiz")
+    assert_equal "A quiz", exercise.title
+    assert_equal({ "language" => "python", "adaptive" => "yes" }, exercise.attrs)
+    json = response.parsed_body["exercises"].find { |e| e["ref"] == "quiz" }
+    assert_equal "<statement><p>Q</p></statement>", json["source"]
+    assert_equal "python", json["attrs"]["language"]
+
+    patch project_url(@project),
+      params: { project: { exercises_attributes: [ { id: exercise.id, _destroy: true } ] } },
+      as: :json
+
+    assert_not Content.exists?(exercise.id)
+  end
+
   # --- Visibility ---
 
   test "update changes project visibility via a plain HTML form post" do

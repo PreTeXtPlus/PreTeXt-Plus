@@ -109,10 +109,11 @@ markDeleted(projected, "division", "55555555-5555-4555-8555-555555555555");
 markDeleted(projected, "asset", "66666666-6666-4666-8666-666666666666");
 writeFileSync(OUT + "projection_state.bin", Y.encodeStateAsUpdate(projected));
 
-// Snippets and assets as ProjectDocProjection reads them: each record's source
-// is shared text (a nested Y.Text), like a division's. One asset the project
-// knows, one it doesn't (an asset row is created by its upload, never by a
-// projection), and a snippet removed during the session.
+// Snippets, exercises and assets as ProjectDocProjection reads them: each
+// record's source is shared text (a nested Y.Text), like a division's. One
+// asset the project knows, one it doesn't (an asset row is created by its
+// upload, never by a projection), and a snippet and an exercise removed during
+// the session.
 const records = new Y.Doc();
 seedDocFromState(records, {
   title: "Records",
@@ -125,6 +126,15 @@ seedDocFromState(records, {
       title: "A Projected Note",
       sourceFormat: "latex",
       source: "A \\emph{projected} note.",
+    },
+  ],
+  exercises: [
+    {
+      id: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+      ref: "projected-quiz",
+      title: "A Projected Quiz",
+      attrs: { language: "python" },
+      source: "<statement><p>Order the lines.</p></statement>",
     },
   ],
   assets: [
@@ -144,6 +154,7 @@ seedDocFromState(records, {
   ],
 });
 markDeleted(records, "snippet", "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa");
+markDeleted(records, "exercise", "cccccccc-cccc-4ccc-8ccc-cccccccccccc");
 writeFileSync(OUT + "projection_records_state.bin", Y.encodeStateAsUpdate(records));
 
 console.log(`wrote collab fixtures to ${OUT}`);

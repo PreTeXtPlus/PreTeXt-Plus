@@ -72,7 +72,7 @@ export function placementUses(records: readonly PlacementSourceRecord[]): Placem
 }
 
 const INSTANCE_NAME = /^[A-Za-z0-9_-]+$/;
-const KIND_NAME: Record<PlacementTag, string> = { image: "image", snippet: "snippet" };
+const KIND_NAME: Record<PlacementTag, string> = { image: "image", snippet: "snippet", exercise: "exercise" };
 
 /** An instance name for a placement of `tag`/`ref` that nothing else uses. */
 function suggestInstance(
