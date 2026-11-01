@@ -115,20 +115,13 @@ const DivisionSettings = ({ division, embedFormat }: DivisionSettingsProps) => {
       </SettingsField>
       {/* xml:id applies to every format — for LaTeX it's written as the
           header's `\label` — and is the division's PreTeXt @label too. */}
-      <SettingsField label="Id" htmlFor="division-settings-id">
+      <SettingsField label="Reference ID" htmlFor="division-settings-id">
         <CommitField
           id="division-settings-id"
           value={division.xmlId}
           onCommit={(next) => updateDivisionProperties(division.xmlId, { xmlId: next })}
-          placeholder="unique identifier"
           mono
         />
-        {placement.kind !== "root" && (
-          <SettingsNote>
-            Used in the embed code. Changing it updates every reference to this
-            division already in your document.
-          </SettingsNote>
-        )}
       </SettingsField>
       {placement.kind !== "root" && (
         <EmbedCode

@@ -65,7 +65,7 @@ const NewSnippetForm = ({
     if (isCreating) return;
     const sanitized = sanitizeXmlId(ref);
     if (!sanitized) {
-      setError("Reference can't be empty.");
+      setError("Reference ID can't be empty.");
       return;
     }
     // A snippet's ref must not collide with a division's xml:id, an asset's
@@ -76,7 +76,7 @@ const NewSnippetForm = ({
       ...(projectSnippets ?? []).map((s) => s.ref),
     ]);
     if (taken.has(sanitized)) {
-      setError(`Reference "${sanitized}" is already in use. Choose a unique reference.`);
+      setError(`Reference ID "${sanitized}" is already in use. Choose a unique Reference ID.`);
       return;
     }
     setError(null);
@@ -112,7 +112,7 @@ const NewSnippetForm = ({
           disabled={isCreating}
         />
       </SettingsField>
-      <SettingsField label="Reference id" htmlFor={`${fieldId}-ref`}>
+      <SettingsField label="Reference ID" htmlFor={`${fieldId}-ref`}>
         <input
           id={`${fieldId}-ref`}
           className={clsx(FIELD_CONTROL_CLASSES, "font-mono")}

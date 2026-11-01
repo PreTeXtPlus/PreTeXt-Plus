@@ -46,10 +46,10 @@ function xmlIdError(
   divisions: Division[],
 ): string | null {
   if (!sanitized) {
-    return "The id can't be empty — it identifies the division and is used by references to it.";
+    return "Reference ID can't be empty.";
   }
   if (divisions.some((d) => d.xmlId !== selfXmlId && d.xmlId === sanitized)) {
-    return `"${sanitized}" is already used by another division. Choose a unique id.`;
+    return `"${sanitized}" is already used by another division. Choose a unique Reference ID.`;
   }
   return null;
 }

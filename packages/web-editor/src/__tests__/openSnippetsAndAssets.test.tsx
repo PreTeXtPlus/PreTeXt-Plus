@@ -245,7 +245,7 @@ describe("opening a snippet", () => {
     const { changes, snippetUpdates } = renderEditors();
     openSnippetRow("greeting");
 
-    const idField = screen.getByLabelText("Id") as HTMLInputElement;
+    const idField = screen.getByLabelText("Reference ID") as HTMLInputElement;
     fireEvent.change(idField, { target: { value: "salutation" } });
     await act(async () => {
       fireEvent.keyDown(idField, { key: "Enter" });

@@ -311,18 +311,18 @@ const NewAssetForm = ({
         <SettingsNote>
           {generatorTab ? (
             <>
-              A reference id is generated from the title. You'll write the{" "}
+              You'll write the{" "}
               {generators[generatorTab].label} diagram in the editor next, and
               its picture is rendered and stored as you work.
             </>
           ) : tab === "authored" ? (
             <>
-              A reference id is generated from the title. You'll write the
+              You'll write the
               asset's PreTeXt content (e.g. <code>{"<latex-image>"}</code>) in
               the editor next.
             </>
           ) : (
-            "Optional. A reference id is generated from the title."
+            "Optional."
           )}
         </SettingsNote>
       </SettingsField>

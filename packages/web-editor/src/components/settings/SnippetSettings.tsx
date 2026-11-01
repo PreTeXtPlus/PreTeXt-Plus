@@ -66,11 +66,11 @@ const SnippetSettings = ({
   const commitRef = async (next: string): Promise<string | void> => {
     const ref = sanitizeXmlId(next);
     if (!ref) {
-      return "The id can't be empty — it identifies the snippet and is used by every embed of it.";
+      return "Reference ID can't be empty.";
     }
     if (ref === snippet.ref) return;
     if (projectSnippets.some((s) => s.ref === ref)) {
-      return `"${ref}" is already used by another snippet. Choose a unique id.`;
+      return `"${ref}" is already used by another snippet. Choose a unique Reference ID.`;
     }
     await onSave({ ...snippet, ref }, snippet.ref);
   };
@@ -138,7 +138,7 @@ const SnippetSettings = ({
           placeholder="optional"
         />
       </SettingsField>
-      <SettingsField label="Id" htmlFor="snippet-settings-ref">
+      <SettingsField label="Reference ID" htmlFor="snippet-settings-ref">
         <CommitField
           id="snippet-settings-ref"
           value={snippet.ref}
@@ -146,10 +146,6 @@ const SnippetSettings = ({
           disabled={readOnly}
           mono
         />
-        <SettingsNote>
-          Used in the embed code. Changing it updates every reference to this
-          snippet already in your document.
-        </SettingsNote>
       </SettingsField>
       <SettingsField label="Source format" htmlFor="snippet-settings-format">
         <select

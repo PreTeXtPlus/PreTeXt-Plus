@@ -156,7 +156,7 @@ describe("creating a snippet", () => {
     });
     expect(within(pane()).getByRole("alert")).toHaveTextContent("can't be empty");
 
-    fireEvent.change(within(pane()).getByLabelText("Reference id"), {
+    fireEvent.change(within(pane()).getByLabelText("Reference ID"), {
       target: { value: "greeting" },
     });
     await act(async () => {
@@ -171,7 +171,7 @@ describe("creating a snippet", () => {
     showSnippets();
     fireEvent.click(screen.getByTestId("toc-new-snippet-btn"));
 
-    fireEvent.change(within(pane()).getByLabelText("Reference id"), {
+    fireEvent.change(within(pane()).getByLabelText("Reference ID"), {
       target: { value: "theorem-note" },
     });
     fireEvent.change(within(pane()).getByLabelText("Source format"), {
@@ -194,7 +194,7 @@ describe("creating a snippet", () => {
     fireEvent.change(within(pane()).getByLabelText("Title"), {
       target: { value: "  A useful note " },
     });
-    fireEvent.change(within(pane()).getByLabelText("Reference id"), {
+    fireEvent.change(within(pane()).getByLabelText("Reference ID"), {
       target: { value: "useful-note" },
     });
     await act(async () => {
@@ -218,7 +218,7 @@ describe("creating a snippet", () => {
     );
 
     expect(screen.getByTestId("new-item-heading")).toHaveTextContent("Link snippet");
-    const refField = within(pane()).getByLabelText("Reference id") as HTMLInputElement;
+    const refField = within(pane()).getByLabelText("Reference ID") as HTMLInputElement;
     expect(refField.value).toBe("missing");
 
     fireEvent.change(refField, { target: { value: "found" } });

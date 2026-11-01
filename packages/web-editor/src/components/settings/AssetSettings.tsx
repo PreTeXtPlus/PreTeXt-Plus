@@ -65,13 +65,13 @@ const AssetSettings = ({
   const commitRef = async (next: string): Promise<string | void> => {
     const nextRef = sanitizeXmlId(next);
     if (!nextRef) {
-      return "The id can't be empty — it identifies the asset and is used by every embed of it.";
+      return "Reference ID can't be empty.";
     }
     if (nextRef === ref) return;
     // A ref must stay unique project-wide: it's the key every
     // `<plus:image ref="..."/>` placeholder resolves against.
     if (projectAssets.some((a) => a.ref === nextRef)) {
-      return `"${nextRef}" is already used by another asset. Choose a unique id.`;
+      return `"${nextRef}" is already used by another asset. Choose a unique Reference ID.`;
     }
     await onSave({ ...asset, ref: nextRef }, ref);
   };
@@ -152,7 +152,7 @@ const AssetSettings = ({
           disabled={readOnly}
         />
       </SettingsField>
-      <SettingsField label="Id" htmlFor="asset-settings-ref">
+      <SettingsField label="Reference ID" htmlFor="asset-settings-ref">
         <CommitField
           id="asset-settings-ref"
           value={ref}
@@ -160,10 +160,6 @@ const AssetSettings = ({
           disabled={readOnly}
           mono
         />
-        <SettingsNote>
-          Used in the embed code. Changing it updates every reference to this
-          asset already in your document.
-        </SettingsNote>
       </SettingsField>
       <SettingsField
         label="Short description"

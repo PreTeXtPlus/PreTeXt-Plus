@@ -51,7 +51,7 @@ const ExerciseSettings = ({ exercise, embedFormat, onSave, readOnly }: ExerciseS
   const commitRef = async (next: string): Promise<string | void> => {
     const ref = sanitizeXmlId(next);
     if (!ref) {
-      return "The id can't be empty — it identifies the exercise and is used by every embed of it.";
+      return "Reference ID can't be empty.";
     }
     if (ref === exercise.ref) return;
     const taken = [
@@ -61,7 +61,7 @@ const ExerciseSettings = ({ exercise, embedFormat, onSave, readOnly }: ExerciseS
       ...projectExercises.map((e) => e.ref),
     ];
     if (taken.includes(ref)) {
-      return `"${ref}" is already used in this project. Choose a unique id.`;
+      return `"${ref}" is already used in this project. Choose a unique Reference ID.`;
     }
     await onSave({ ...exercise, ref }, exercise.ref);
   };
@@ -95,7 +95,7 @@ const ExerciseSettings = ({ exercise, embedFormat, onSave, readOnly }: ExerciseS
           placeholder="optional"
         />
       </SettingsField>
-      <SettingsField label="Id" htmlFor="exercise-settings-ref">
+      <SettingsField label="Reference ID" htmlFor="exercise-settings-ref">
         <CommitField
           id="exercise-settings-ref"
           value={exercise.ref}
@@ -103,11 +103,6 @@ const ExerciseSettings = ({ exercise, embedFormat, onSave, readOnly }: ExerciseS
           disabled={readOnly}
           mono
         />
-        <SettingsNote>
-          Used in the embed code, and as the exercise's label, which Runestone
-          keys readers' answers on. Changing it updates every reference to this
-          exercise already in your document.
-        </SettingsNote>
       </SettingsField>
       <EmbedCode
         codeFor={(format) => exerciseEmbedCode(exercise.ref, format)}

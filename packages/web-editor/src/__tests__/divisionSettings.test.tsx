@@ -147,7 +147,7 @@ describe("an existing division's settings", () => {
   it("refuses an id another division already uses, and saves nothing", async () => {
     const { sourceOf, fieldsOf } = renderEditors();
     const drawer = openSettings("Getting started");
-    const id = field(drawer, "Id");
+    const id = field(drawer, "Reference ID");
     fireEvent.change(id, { target: { value: "other" } });
     fireEvent.blur(id);
     expect(
@@ -160,7 +160,7 @@ describe("an existing division's settings", () => {
   it("renames the id everywhere on Enter", () => {
     const { sourceOf, fieldsOf } = renderEditors();
     const drawer = openSettings("Getting started");
-    const id = field(drawer, "Id");
+    const id = field(drawer, "Reference ID");
     fireEvent.change(id, { target: { value: "welcome" } });
     fireEvent.keyDown(id, { key: "Enter" });
     expect(fieldsOf("intro-sec")?.xmlId).toBe("welcome");
