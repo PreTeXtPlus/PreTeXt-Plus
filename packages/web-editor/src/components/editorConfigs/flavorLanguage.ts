@@ -288,6 +288,16 @@ const toMonacoCompletion = (monaco: any, item: LspCompletionItem) => {
         ? { value: item.documentation.value }
         : item.documentation,
     sortText: item.sortText,
+    // A label needn't be what the author types: `\begin{...}` matches on `begin`.
+    filterText: item.filterText,
+    // What to do once the item is in: LaTeX's `\begin{...}` opens the list of
+    // environment names, and picking a name moves on to the body. LSP calls the
+    // id `command`, Monaco calls it `id`.
+    command: item.command && {
+      id: item.command.command,
+      title: item.command.title,
+      arguments: item.command.arguments,
+    },
   };
 };
 

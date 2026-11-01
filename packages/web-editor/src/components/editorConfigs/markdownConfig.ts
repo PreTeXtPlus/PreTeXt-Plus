@@ -2,10 +2,30 @@ import {
   PRETEXT_MARKDOWN_LANGUAGE_ID,
   pretextMarkdownLanguage,
 } from "@pretextbook/markdown-style-pretext";
+import type { PretextFlavorLanguage } from "@pretextbook/latex-style-pretext";
+import { maskProseDollars } from "./markdownDollars";
 import { registerMarkdownSyntax } from "./markdownSyntax";
 import { registerFlavorLanguage } from "./flavorLanguage";
 import { registerConfiguredSpellCheck } from "./spellcheck";
 import type { FormatEditorConfig } from "./types";
+
+/**
+ * The language core, reading the `$` the way the converter does. Blanking keeps
+ * every offset, so what comes back fits the buffer as it stands. The newline is
+ * for a cursor at the very end of the buffer: the core reads open math as ending
+ * just before it, and with `$` not auto-closed that is where math gets typed.
+ */
+export const markdownFlavor: PretextFlavorLanguage = {
+  ...pretextMarkdownLanguage,
+  getCompletions: ({ text, offset, ...rest }) =>
+    pretextMarkdownLanguage.getCompletions({
+      text: `${maskProseDollars(text, offset)}\n`,
+      offset,
+      ...rest,
+    }),
+  getDiagnostics: (text) =>
+    pretextMarkdownLanguage.getDiagnostics(maskProseDollars(text)),
+};
 
 export const markdownConfig: FormatEditorConfig = {
   // Same id the local Monarch grammar registers below; the language core
@@ -17,7 +37,7 @@ export const markdownConfig: FormatEditorConfig = {
     // come from the shared core.
     const syntax = registerMarkdownSyntax(monaco);
     const language = registerFlavorLanguage(monaco, editor, {
-      flavor: pretextMarkdownLanguage,
+      flavor: markdownFlavor,
       monacoLanguageId: PRETEXT_MARKDOWN_LANGUAGE_ID,
       // `:` opens a directive, `#` a cross-reference target, `\` a math macro,
       // `{` a directive's `{#id}` modifier.  All four are ordinary prose

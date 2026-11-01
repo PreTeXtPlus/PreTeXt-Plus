@@ -2,6 +2,7 @@ import {
   scanDocument,
   type DirectiveOccurrence,
 } from "@pretextbook/markdown-style-pretext";
+import { maskProseDollars } from "../markdownDollars";
 import {
   checkableRegions,
   mathDelimiterRegions,
@@ -36,7 +37,7 @@ export const findCheckableMarkdownRegions = (
   source: string,
   scopes: SpellCheckScope,
 ): TextRegion[] => {
-  const scan = scanDocument(source);
+  const scan = scanDocument(maskProseDollars(source));
   const suppressed: TextRegion[] = [];
 
   // YAML frontmatter is document metadata: keys the author didn't choose and
@@ -59,6 +60,7 @@ export const findCheckableMarkdownRegions = (
   }
 
   suppressMatches(suppressed, source, MODIFIER_GROUP);
+  suppressMatches(suppressed, source, RAW_TAG);
   suppressMatches(suppressed, source, URL);
   suppressMatches(suppressed, source, EMPHASIS_DELIMITER);
   if (scopes.inlineCode === "Ignore") {
@@ -89,6 +91,12 @@ const markerRegion = (directive: DirectiveOccurrence): TextRegion =>
  * so they are hidden whatever the scopes say, as `xml:id="…"` is in XML.
  */
 const MODIFIER_GROUP = /\{[^{}\n]*\}/g;
+
+/**
+ * Raw PreTeXt tags: names, attributes and all, whatever the scopes say, for the
+ * same reason. What's between a pair is still prose.
+ */
+const RAW_TAG = /<\/?[A-Za-z][\w:-]*(?:\s[^<>\n]*)?\/?>/g;
 
 /** Backtick code spans, line-bounded so an unpaired tick costs one line. */
 const INLINE_CODE = /`+[^`\n]*`+/g;

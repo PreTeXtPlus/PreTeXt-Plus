@@ -4,6 +4,7 @@ import {
   getLatexCleanDiagnostics,
   PRETEXT_LATEX_LANGUAGE_ID,
   pretextLatexLanguage,
+  type PretextFlavorLanguage,
 } from "@pretextbook/latex-style-pretext";
 import { registerLatexSyntax } from "./latexSyntax";
 import { registerFlavorLanguage } from "./flavorLanguage";
@@ -36,6 +37,30 @@ const latexCleanSupport: CleanSupport = {
   describeFix,
 };
 
+/** Whether the backslashes before `offset` pair off, as `\\` does at a line end. */
+const afterLineBreak = (text: string, offset: number): boolean => {
+  const run = /(\\+)[a-zA-Z]*$/.exec(text.slice(0, offset));
+  return run !== null && run[1].length % 2 === 0;
+};
+
+/**
+ * The language core, minus its macro list after a `\\`. The second backslash
+ * looks like the start of a macro, and with the list open the Enter that ends a
+ * table row would accept `\begin{...}` rather than start a new line. The newline
+ * is for a cursor at the very end of the buffer: the core reads open math as
+ * ending just before it, and with `$` not auto-closed that is where math gets
+ * typed.
+ */
+export const latexFlavor: PretextFlavorLanguage = {
+  ...pretextLatexLanguage,
+  getCompletions: (params) =>
+    afterLineBreak(params.text, params.offset)
+      ? []
+      : pretextLatexLanguage.getCompletions({
+          ...params,
+          text: `${params.text}\n`,
+        }),
+};
 
 export const latexConfig: FormatEditorConfig = {
   // Not Monaco's `latex` — there is no such built-in language, and an
@@ -47,7 +72,7 @@ export const latexConfig: FormatEditorConfig = {
   registerMonacoExtensions: (monaco, editor) => {
     const syntax = registerLatexSyntax(monaco);
     const language = registerFlavorLanguage(monaco, editor, {
-      flavor: pretextLatexLanguage,
+      flavor: latexFlavor,
       monacoLanguageId: PRETEXT_LATEX_LANGUAGE_ID,
       // `\` opens a macro, `{` an environment name after \begin/\end, `[` a
       // \hyperref target.

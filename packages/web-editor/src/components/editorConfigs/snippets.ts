@@ -10,9 +10,9 @@
  * three menus that have to be kept in step by hand.
  *
  * A format simply omits a key its converter cannot handle, and the menu drops
- * the row. Markdown has no table, image or link support in
- * `@pretextbook/remark-pretext` yet (they convert to `<TODO>` placeholders), so
- * Markdown offers no Table, Figure, Cross-reference or Link — offering them
+ * the row. Markdown has no table or image support in
+ * `@pretextbook/remark-pretext` yet (a table stays as text, an image converts to
+ * a `<TODO>` placeholder), so Markdown offers no Table or Figure — offering them
  * would hand the author markup that silently fails to convert. The tests in
  * `__tests__/snippets.test.ts` run every body through the real converter (and
  * the real schema, for PreTeXt) so this file cannot drift away from what the
@@ -722,11 +722,12 @@ const MARKDOWN_BODIES: Record<string, string> = {
   // Inside a slideshow the heading levels shift down a step: `#` is a section
   // and `##` a slide, where in an article `#` would be the root's own title.
   slide: lines("## ${1:Title}", "", "$0"),
-  // No `paragraph` (prose is prose), and no `term`, `xref`, `link`, `figure` or
-  // `table`: the Markdown converter has no handler for those yet, and emits a
-  // `<TODO>` placeholder instead of the element.
+  // No `paragraph` (prose is prose), and no `figure` or `table`: Markdown's
+  // own syntax for those doesn't convert to the element yet.
   emphasis: "*$0*",
   "code-inline": "`$0`",
+  xref: "[](#${1:id})",
+  link: "[$0](${1:https://example.com})",
   ...markdownFamily(DEFINITION_LIKE, (directive, id) => mdStatement(directive, id)),
   ...markdownFamily(THEOREM_LIKE, (directive, id) => mdStatement(directive, id, "proof")),
   ...markdownFamily(AXIOM_LIKE, (directive, id) => mdStatement(directive, id)),
