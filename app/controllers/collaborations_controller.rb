@@ -122,7 +122,7 @@ class CollaborationsController < ApplicationController
   # Spends one invite from this hour's allowance. The test environment's
   # :null_store counts nothing and returns nil.
   def invite_allowed?
-    count = Rails.cache.increment("invites:#{request.remote_ip}", 1, expires_in: 1.hour)
+    count = Rails.cache.increment("invites:#{@project.user_id}", 1, expires_in: 1.hour)
     count.nil? || count <= (@project.user.has_subscriber_benefits? ? SUBSCRIBER_INVITES_PER_HOUR : INVITES_PER_HOUR)
   end
 
