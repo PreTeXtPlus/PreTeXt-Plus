@@ -263,8 +263,9 @@ a peer removing the open item does not (`openItemState`'s `byAuthor`).
   `replaceRef` ("Replace image…" in the asset drawer: only image sources, and
   `handleAssetReplaceCommit` hands the replacement the old ref).
 - `handleSnippetCreated` / `handleAssetCreated` in `Editors.tsx` add the host's
-  record to the pool and doc, copy its embed code (plain create only), and open
-  it. Entry points: a Contents row's [+], the [+] button in the
+  record to the pool and doc, bind any `resolveRef`, and open it; the author
+  copies its embed code from the settings drawer, and nothing writes to the
+  clipboard on their behalf. Entry points: a Contents row's [+], the [+] button in the
   Snippets/Assets panel header, File → New Asset… / New Snippet…, unlinked
   rows, Replace image….
 

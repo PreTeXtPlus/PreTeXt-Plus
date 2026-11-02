@@ -21,7 +21,7 @@ import { parseAssetRefs } from "./sectionUtils";
  *   - `unlinked` — referenced in the document but with no backing asset (a
  *                  hand-typed or renamed ref that needs an asset chosen for it).
  *   - `unused`   — a project asset not referenced anywhere in the document yet
- *                  (just added; its embed code is waiting to be pasted).
+ *                  (just added; its embed code hasn't been placed).
  */
 export type AssetStatus = "linked" | "unlinked" | "unused";
 
