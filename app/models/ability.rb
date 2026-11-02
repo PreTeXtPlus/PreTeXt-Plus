@@ -73,6 +73,10 @@ class Ability
     # the project.
     can [ :create, :destroy, :transfer_ownership ], Collaboration, project: { user_id: user.id }
     can :destroy, Collaboration, user_id: user.id
+    # Inviting a whole list at once is a subscriber feature.
+    can :bulk_create, Collaboration do |collaboration|
+      collaboration.project.user == user && user.subscribed?
+    end
 
     # Targets and builds belonging to own projects. Build volume is bounded by the rate
     # limit and concurrency cap in BuildsController rather than by who is signed in.

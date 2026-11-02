@@ -7,9 +7,10 @@
     the "Make owner" button on an accepted collaborator's own row below.
 
     Owner: the rest of the roster gets a Remove button, plus an invite form
-    and the cap. Each accepted collaborator's row also gets a "Make owner"
-    button, since only an accepted collaborator (one with a user account
-    attached) is a valid transfer target.
+    (with a "Bulk add" list form tucked under it for subscribers) and the cap.
+    Each accepted collaborator's row also gets a "Make owner" button, since only
+    an accepted collaborator (one with a user account attached) is a valid
+    transfer target.
 
     Collaborator: the same list read-only, plus a "Leave this project" button
     on your own roster row in place of Remove. Same slot, different verb:
@@ -88,6 +89,21 @@
         </div>
         <%= form.submit "Invite",
               class: "cursor-pointer rounded-md bg-indigo-600 px-3 py-2 text-sm font-medium text-white hover:bg-indigo-500" %>
+      <% end %>
+      <% if can?(:bulk_create, Collaboration.new(project: project)) %>
+        <details class="mt-2">
+          <summary class="cursor-pointer text-sm text-blue-600 hover:underline">Bulk add</summary>
+          <%= form_with url: bulk_project_collaborations_path(project), method: :post,
+                class: "mt-2 flex flex-col items-start gap-2" do |form| %>
+            <%= form.label :emails, "Emails separated by commas, semicolons, or new lines (up to #{CollaborationsController::SUBSCRIBER_INVITES_PER_HOUR} at a time)",
+                  class: "block text-xs text-gray-600" %>
+            <%= form.text_area :emails, rows: 4, required: true,
+                  placeholder: "Ada Lovelace <ada@example.com>, grace@example.com",
+                  class: "w-full rounded-md border border-gray-300 px-2 py-1.5 text-sm" %>
+            <%= form.submit "Invite all",
+                  class: "cursor-pointer rounded-md bg-indigo-600 px-3 py-2 text-sm font-medium text-white hover:bg-indigo-500" %>
+          <% end %>
+        </details>
       <% end %>
       <p class="mt-2 text-xs text-gray-500">
         Collaborators can write, build, and publish this project — everything except deleting it.
