@@ -146,8 +146,8 @@ class CollaborationsControllerTest < ActionDispatch::IntegrationTest
   end
 
   test "a free owner cannot bulk add, even during the collaboration preview" do
+    travel_to Project::COLLABORATION_PREVIEW_ENDS - 1.second # COLLAB PREVIEW CLEANUP (after Nov 1, 2026): delete this line.
     sign_in users(:one) # free owner of project one
-    assert Project.collaboration_preview?
 
     assert_no_difference("Collaboration.count") do
       post bulk_project_collaborations_url(projects(:one)), params: { emails: "x@example.com, y@example.com" }
