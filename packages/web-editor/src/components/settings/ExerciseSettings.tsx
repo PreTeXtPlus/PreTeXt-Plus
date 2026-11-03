@@ -1,15 +1,29 @@
+import { useState } from "react";
+import clsx from "clsx";
 import type { Exercise, SourceFormat } from "../../types/editor";
-import { exerciseEmbedCode, sanitizeXmlId } from "../../sectionUtils";
+import {
+  EXERCISE_REF_TAGS,
+  exerciseEmbedCode,
+  sanitizeXmlId,
+  type ExerciseRefTag,
+} from "../../sectionUtils";
 import { buildProjectExerciseView } from "../../exerciseView";
 import { useEditorStore } from "../../store/hooks";
 import {
   CommitField,
   EmbedCode,
+  FIELD_CONTROL_CLASSES,
   SettingsActions,
   SettingsField,
   SettingsNote,
   type SettingsAction,
 } from "./settingsUi";
+
+const EMBED_TAG_LABELS: Record<ExerciseRefTag, string> = {
+  exercise: "Exercise",
+  project: "Project",
+  task: "Task (inside an exercise or project)",
+};
 
 export interface ExerciseSettingsProps {
   exercise: Exercise;
@@ -36,6 +50,9 @@ const ExerciseSettings = ({ exercise, embedFormat, onSave, readOnly }: ExerciseS
   const projectAssets = useEditorStore((s) => s.projectAssets) ?? [];
   const removeExercise = useEditorStore((s) => s.removeExercise);
   const removeExerciseRefFromDocument = useEditorStore((s) => s.removeExerciseRefFromDocument);
+  // Which element an exercise becomes belongs to each placement, so this only
+  // decides the code to copy; nothing about it is saved on the record.
+  const [embedTag, setEmbedTag] = useState<ExerciseRefTag>("exercise");
 
   const row = buildProjectExerciseView(divisions, projectExercises).find(
     (r) => r.ref === exercise.ref,
@@ -105,8 +122,22 @@ const ExerciseSettings = ({ exercise, embedFormat, onSave, readOnly }: ExerciseS
           mono
         />
       </SettingsField>
+      <SettingsField label="Place as" htmlFor="exercise-settings-tag">
+        <select
+          id="exercise-settings-tag"
+          className={clsx(FIELD_CONTROL_CLASSES, "max-w-[200px]")}
+          value={embedTag}
+          onChange={(e) => setEmbedTag(e.target.value as ExerciseRefTag)}
+        >
+          {EXERCISE_REF_TAGS.map((tag) => (
+            <option key={tag} value={tag}>
+              {EMBED_TAG_LABELS[tag]}
+            </option>
+          ))}
+        </select>
+      </SettingsField>
       <EmbedCode
-        codeFor={(format) => exerciseEmbedCode(exercise.ref, format)}
+        codeFor={(format) => exerciseEmbedCode(exercise.ref, format, embedTag)}
         defaultFormat={embedFormat}
       />
       {!inDocument && (

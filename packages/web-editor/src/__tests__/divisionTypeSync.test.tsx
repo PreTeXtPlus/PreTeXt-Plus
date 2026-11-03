@@ -1,9 +1,9 @@
 /**
  * A child division's type is written down twice: on the division's own record,
  * and in the `<plus:TYPE ref="…"/>` placeholder its parent uses to position it.
- * The assembled document reads only the former — the placeholder's tag is a
- * mirror — so the two have to be kept equal from whichever side the author
- * edits, or the TOC and the source start disagreeing about what a division is.
+ * The record decides: retyping it from the TOC rewrites the placeholder, but
+ * typing a different tag changes nothing about the division, and is left for the
+ * placement lint to warn about.
  *
  * These exercise both directions end to end, and the malformed case that made
  * the TOC direction land on the wrong line: a stray copy of the include pasted
@@ -174,76 +174,55 @@ describe("retyping a division from the TOC", () => {
   });
 });
 
-describe("retyping a division from its parent's include macro", () => {
-  it("retypes the child's record", () => {
+describe("typing a different tag in a parent's include macro", () => {
+  it("does not retype the child", () => {
     const { sourceOf, updates } = renderEditors(latexProject());
     typeIntoEditor("Some prose.\n\n\\plus{worksheet}{day-1}\n");
 
+    expect(sourceOf("doc")).toContain("\\plus{worksheet}{day-1}");
     expect(sourceOf("day-1")).toBeUndefined();
-    expect(
-      updates.find((u) => u.xmlId === "day-1")?.changes.type,
-    ).toBe("worksheet");
-  });
-
-  it("shows the new type in the TOC", () => {
-    renderEditors(latexProject());
+    expect(updates.some((u) => u.xmlId === "day-1")).toBe(false);
     expect(tocRow("Day 1").querySelector("button[title]")).toHaveProperty(
       "title",
       "Handout",
     );
+  });
 
-    typeIntoEditor("Some prose.\n\n\\plus{worksheet}{day-1}\n");
+  it("still creates a division for a ref nothing has", () => {
+    renderEditors(latexProject());
+    typeIntoEditor("\\plus{handout}{day-1}\n\\plus{worksheet}{day-2}\n");
 
-    // The TOC labels a row with its division's type, so this is the same fact
-    // the properties form would show — read where a user would see it.
-    expect(tocRow("Day 1").querySelector("button[title]")).toHaveProperty(
+    expect(tocRow("New Worksheet").querySelector("button[title]")).toHaveProperty(
       "title",
       "Worksheet",
     );
   });
 
-  it("does not retype from the generic division alias", () => {
-    // `<plus:division ref="…"/>` names no type, so its "section" reading is a
-    // default rather than a choice — acting on it would silently demote a
-    // worksheet the author picked in the TOC.
-    const divisions: Division[] = legacyDivisions([
-      {
-        id: "1",
-        xmlId: "doc",
-        title: "Main",
-        type: "article",
-        sourceFormat: "pretext",
-        source:
-          '<article xml:id="doc"><title>Main</title><plus:worksheet ref="ws"/></article>',
-      },
-      {
-        id: "2",
-        xmlId: "ws",
-        title: "Worksheet",
-        type: "worksheet",
-        sourceFormat: "pretext",
-        source: '<worksheet xml:id="ws"><title>Worksheet</title></worksheet>',
-      },
-    ]);
-    const { sourceOf, updates } = renderEditors(divisions);
-    typeIntoEditor('<plus:division ref="ws"/>');
+  it("creates no division for a ref another kind of record holds", () => {
+    const added: string[] = [];
+    render(
+      <Editors
+        divisions={latexProject()}
+        rootDivisionId="doc"
+        projectType="article"
+        title="Doc"
+        topBar={{}}
+        onContentChange={() => {}}
+        projectSnippets={[{ ref: "fact", source: "<p/>", sourceFormat: "pretext" }]}
+        projectExercises={[{ ref: "ex", source: "" }]}
+        projectAssets={[{ ref: "graph", isFile: true }] as never}
+        onDivisionAdd={(d) => {
+          added.push(d.xmlId);
+        }}
+      />,
+    );
+    typeIntoEditor(
+      "\\plus{handout}{day-1}\n\\plus{section}{fact}\n\\plus{section}{ex}\n\\plus{section}{graph}\n",
+    );
 
-    expect(sourceOf("ws")).toBeUndefined();
-    expect(updates.some((u) => u.xmlId === "ws")).toBe(false);
-  });
-
-  it("does not retype the division that holds the stray include", () => {
-    // Same malformed markup as above, seen from the other side: typing
-    // `\plus{worksheet}{day-1}` into day-1's own body must not retype day-1.
-    const divisions = latexProject("\n\\plus{handout}{day-1}\n");
-    const { sourceOf, updates } = renderEditors(divisions);
-    // Select the handout so its source is what the code editor edits.
-    fireEvent.click(screen.getByText("Day 1"));
-    typeIntoEditor("Activities.\n\\plus{worksheet}{day-1}\n");
-
-    expect(sourceOf("day-1")).toContain("\\plus{worksheet}{day-1}");
-    expect(
-      updates.some((u) => u.xmlId === "day-1" && u.changes.type === "worksheet"),
-    ).toBe(false);
+    expect(added).toEqual([]);
+    // Contents has no division to show for any of them, and doesn't invent one.
+    expect(tocRow("Day 1")).toBeTruthy();
+    expect(document.querySelectorAll('[data-testid^="toc-item-"]')).toHaveLength(2);
   });
 });

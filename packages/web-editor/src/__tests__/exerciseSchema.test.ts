@@ -43,7 +43,7 @@ afterAll(() => {
 });
 
 /** `exercise` placed in a section of an article, assembled as a build would. */
-const documentWith = (exercise: Exercise) =>
+const documentWith = (exercise: Exercise, placement = `<plus:exercise ref="${exercise.ref}"/>`) =>
   assembleFullProjectSource(
     [
       { xmlId: "art", type: "article", title: "Doc", sourceFormat: "pretext", source: '<plus:section ref="sec"/>' },
@@ -52,7 +52,7 @@ const documentWith = (exercise: Exercise) =>
         type: "section",
         title: "One",
         sourceFormat: "pretext",
-        source: `<p>Try it.</p>\n<plus:exercise ref="${exercise.ref}"/>`,
+        source: `<p>Try it.</p>\n${placement}`,
       },
     ],
     "art",
@@ -70,5 +70,38 @@ describe("exercise designer output", () => {
     const ref = `ex-${kind}`;
     const stored = sourceFromDesign(design, ref);
     expect(await validatePretextDocument(documentWith({ ref, title: "Sample", ...stored }))).toEqual([]);
+  });
+
+  // The same record, placed as the other elements an author can choose.
+  it.each(EXERCISE_KINDS)("the %s sample is valid PreTeXt placed as a project or a task", async (kind) => {
+    const sample = EXERCISE_SAMPLES[kind];
+    const { design } = designFromSource(sample.source, sample.attrs);
+    const ref = `ex-${kind}`;
+    const exercise = { ref, title: "Sample", ...sourceFromDesign(design, ref) };
+    expect(await validatePretextDocument(documentWith(exercise, `<plus:project ref="${ref}"/>`))).toEqual([]);
+    expect(
+      await validatePretextDocument(documentWith(exercise, `<project><plus:task ref="${ref}"/></project>`)),
+    ).toEqual([]);
+  });
+
+  it("a tag that can't stand where it is written still assembles to valid PreTeXt", async () => {
+    const exercise = { ref: "ex", source: "<statement><p>Q</p></statement>" };
+    for (const placement of [
+      '<plus:task ref="ex"/>',
+      '<project><plus:exercise ref="ex"/></project>',
+      '<exercise><plus:project ref="ex"/></exercise>',
+      '<activity><plus:task ref="ex"/></activity>',
+    ]) {
+      expect(await validatePretextDocument(documentWith(exercise, placement)), placement).toEqual([]);
+    }
+  });
+
+  // Not a goal, only a record of a limit: the Markdown converter wraps what is in
+  // a `:::project` in a `<statement>`, which a `<task>` can't be in. The fix
+  // belongs in `@pretextbook/remark-pretext`.
+  it("a task in a <statement> is invalid, which is where Markdown nesting puts it", async () => {
+    const exercise = { ref: "ex", source: "<statement><p>Q</p></statement>" };
+    const placement = '<project><statement><plus:task ref="ex"/></statement></project>';
+    expect(await validatePretextDocument(documentWith(exercise, placement))).not.toEqual([]);
   });
 });

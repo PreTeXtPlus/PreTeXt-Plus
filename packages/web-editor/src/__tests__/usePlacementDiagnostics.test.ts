@@ -55,7 +55,8 @@ describe("usePlacementDiagnostics", () => {
       sourceFormat: "pretext",
       recordRef: "sec-intro",
       elsewhere: placementUses([{ name: "Methods", source: '<plus:image ref="graph"/>', sourceFormat: "pretext" }]),
-      knownRefs: new Set(["graph"]),
+      knownRefs: new Map([["graph", { kind: "asset" }]]),
+      outerHolder: "outside",
     };
 
     const { unmount } = renderHook(() =>
