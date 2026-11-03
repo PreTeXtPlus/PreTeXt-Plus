@@ -374,9 +374,10 @@ export interface editorProps {
   projectAssets?: Asset[];
   /**
    * @deprecated Assets are no longer inserted at the cursor — adding an asset
-   * now copies its embed code to the clipboard. Retained for backward
-   * compatibility; it is no longer called. Use the creation hooks
-   * (`onAssetUpload`) to learn when an asset enters the project.
+   * now opens it, and the author copies its embed code from the settings
+   * drawer. Retained for backward compatibility; it is no longer called. Use
+   * the creation hooks (`onAssetUpload`) to learn when an asset enters the
+   * project.
    */
   onAssetInsert?: (asset: Asset) => void;
   /**

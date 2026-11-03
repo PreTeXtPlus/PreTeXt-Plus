@@ -377,6 +377,23 @@ describe("the clipboard", () => {
     expect(drawerEmbedCode()).toHaveTextContent('<plus:snippet ref="note"/>');
   });
 
+  it("is left alone by a new exercise, whose embed code waits in the drawer", async () => {
+    const writeText = stubClipboard();
+    renderEditors({ projectExercises: [] });
+    fireEvent.click(screen.getByTestId("explorer-tab-exercises"));
+    fireEvent.click(screen.getByTestId("toc-new-exercise-btn"));
+    fireEvent.change(within(pane()).getByLabelText("Reference ID"), {
+      target: { value: "drill" },
+    });
+    await act(async () => {
+      fireEvent.click(within(pane()).getByText("Create"));
+    });
+
+    expect(barTitle()).toHaveTextContent("drill");
+    expect(writeText).not.toHaveBeenCalled();
+    expect(drawerEmbedCode()).toHaveTextContent('<plus:exercise ref="drill"/>');
+  });
+
   it("is left alone by a new asset, whose embed code waits in the drawer", async () => {
     const writeText = stubClipboard();
     renderEditors();
