@@ -93,9 +93,6 @@ import {
   renameExerciseRef,
   removeSnippetRef,
   removeExerciseRef,
-  assetEmbedCode,
-  snippetEmbedCode,
-  exerciseEmbedCode,
   normalizeDivisionsOnLoad,
   isRootDivisionType,
 } from "../sectionUtils";
@@ -1456,8 +1453,8 @@ const EditorsInner = (props: EditorsInnerProps) => {
   // ── Asset embedding ─────────────────────────────────────────────────────
   // Assets are no longer inserted at the Monaco cursor (which silently fails
   // inside a division's locked header). Instead a newly added asset is dropped
-  // into the project pool and its embed code copied to the clipboard (see
-  // `handleAssetCreated`), so the author pastes it wherever it belongs.
+  // into the project pool and opened (see `handleAssetCreated`), and the author
+  // copies its embed code from the settings drawer to paste it where it belongs.
   const handleAssetAdded = (asset: Asset) => {
     // Add to the authoritative pool optimistically so it's editable immediately,
     // even before the host echoes it back as an updated `projectAssets` prop.
@@ -1639,8 +1636,8 @@ const EditorsInner = (props: EditorsInnerProps) => {
 
   // ── Snippet embedding ─────────────────────────────────────────────────────
   // Mirrors "Asset embedding" above: a newly added snippet is dropped into the
-  // project pool and its embed code copied to the clipboard (see
-  // `handleSnippetCreated`), so the author pastes it wherever it belongs.
+  // project pool and opened (see `handleSnippetCreated`), and the author copies
+  // its embed code from the settings drawer to paste it where it belongs.
   const handleSnippetAdded = (snippet: Snippet) => {
     addSnippetToPool(snippet);
     bridge?.localSnippetAdd(snippet);
@@ -1742,12 +1739,8 @@ const EditorsInner = (props: EditorsInnerProps) => {
   // What the "New snippet" / "New asset" forms (`create/NewItemPane.tsx`) do
   // with the record the host created: add it to the project, bind the
   // placeholder it was created for or take over the asset it replaces, and
-  // open it in the editor. A plain create also copies its embed code, so the
-  // author can paste it wherever it belongs.
-  const copyEmbedCode = (code: string) => {
-    navigator.clipboard?.writeText(code).catch(() => {});
-  };
-
+  // open it in the editor.
+  //
   // A host request can't be called back, so a result that arrives after its
   // form was abandoned (the author opened another item mid-upload) is
   // dropped: the author is no longer waiting for it, and for "Replace image…"
@@ -1764,8 +1757,6 @@ const EditorsInner = (props: EditorsInnerProps) => {
     handleSnippetAdded(snippet);
     if (request.resolveRef) {
       renameSnippetRefEverywhere(request.resolveRef, snippet.ref);
-    } else {
-      copyEmbedCode(snippetEmbedCode(snippet.ref, editorFormat));
     }
     openSnippet(snippet.ref);
   };
@@ -1778,8 +1769,6 @@ const EditorsInner = (props: EditorsInnerProps) => {
     handleExerciseAdded(exercise);
     if (request.resolveRef) {
       renameExerciseRefEverywhere(request.resolveRef, exercise.ref);
-    } else {
-      copyEmbedCode(exerciseEmbedCode(exercise.ref, editorFormat));
     }
     openExercise(exercise.ref);
   };
@@ -1803,8 +1792,6 @@ const EditorsInner = (props: EditorsInnerProps) => {
     if (!asset.ref) return;
     if (request.resolveRef) {
       renameAssetRefEverywhere(request.resolveRef, asset.ref);
-    } else {
-      copyEmbedCode(assetEmbedCode(asset.ref, editorFormat));
     }
     openAsset(asset.ref);
   };

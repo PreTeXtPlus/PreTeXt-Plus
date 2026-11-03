@@ -1,3 +1,5 @@
+import { INLINE_MATH, WORD_CHAR } from "./markdownDollars";
+
 const DIRECTIVE_NAMES =
   "theorem|lemma|corollary|proposition|claim|fact|conjecture|axiom|" +
   "principle|hypothesis|algorithm|definition|notation|remark|note|" +
@@ -26,7 +28,10 @@ const PYTHON_DIRECTIVE_PLAIN =
  *  - 4-space-indented lines are NOT coloured as code blocks.
  *  - Colon-fenced directives (:::theorem) are highlighted as keywords.
  *  - Python-style directive lines (Theorem: or Theorem[Title]:) are highlighted as keywords.
- *  - Math delimiters ($, $$, \[, \() are highlighted as numbers.
+ *  - Math delimiters ($, $$, \[, \() are highlighted as numbers, and a `$` is
+ *    math only where the converter says so (see `markdownDollars.ts`).
+ *  - Raw PreTeXt tags and HTML comments are highlighted as such, so a `$` in an
+ *    attribute or a comment is left alone.
  *
  * Token types are chosen to match Monaco's built-in Monarch theme rules:
  *  - `keyword`  → colored (blue/purple) — used for headings, directives, list markers
@@ -36,7 +41,8 @@ const PYTHON_DIRECTIVE_PLAIN =
  *  - `variable.source.markdown` → inline code color
  *  - `string`   → string color          — used for fenced code, links, escapes
  *  - `number`   → number color          — used for math
- *  - `comment`  → comment color         — used for block quotes
+ *  - `comment`  → comment color         — used for block quotes, HTML comments
+ *  - `tag`      → tag color             — used for raw PreTeXt tags
  */
 export function registerMarkdownSyntax(monaco: any): { dispose: () => void } {
   monaco.languages.register({ id: "pretext-markdown" });
@@ -59,6 +65,8 @@ export function registerMarkdownSyntax(monaco: any): { dispose: () => void } {
     // without enumerating both cases. Safe here because no other rule has
     // alphabetic characters where case sensitivity matters.
     ignoreCase: true,
+    // For the `\p{…}` classes the math rule shares with `markdownDollars.ts`.
+    unicode: true,
 
     tokenizer: {
       root: [
@@ -120,6 +128,12 @@ export function registerMarkdownSyntax(monaco: any): { dispose: () => void } {
         [/\\/, "number"],
       ],
 
+      htmlComment: [
+        [/-->/, { token: "comment", next: "@pop" }],
+        [/[^-]+/, "comment"],
+        [/./, "comment"],
+      ],
+
       inline: [
         // Math — same-line forms first, then multi-line openers that switch
         // into a dedicated state. Inside math everything is tokenized as
@@ -135,8 +149,10 @@ export function registerMarkdownSyntax(monaco: any): { dispose: () => void } {
         // LaTeX inline math   \(…\)
         [/\\\([^)]*\\\)/, "number"],
         [/\\\(/, { token: "number", next: "@mathParen" }],
-        // Inline math $…$
-        [/\$[^$\n]+\$/, "number"],
+        // Inline math $…$. The converter's other condition, on the character
+        // before the `$`, is out of a rule's sight: Monarch matches from the
+        // current position. See the text rules at the end of this list.
+        [INLINE_MATH, "number"],
 
         // Bold before italic so ** isn't consumed as two * tokens
         [/\*\*[^*\n]+\*\*/, "strong"],
@@ -155,11 +171,22 @@ export function registerMarkdownSyntax(monaco: any): { dispose: () => void } {
         [/!\[.*?\]\(.*?\)/, "string.link"],
         [/\[.*?\]\(.*?\)/, "string.link"],
 
-        // Escape sequences
-        [/\\[\\`*_{}[\]()#+\-.!]/, "string.escape"],
+        // Raw PreTeXt and `<https://…>` autolinks, whole, so a `$` in an
+        // attribute never reaches the math rule. Comments are dropped on the way
+        // to PreTeXt.
+        [/<!--/, { token: "comment", next: "@htmlComment" }],
+        [/<\/?[a-z][\w:-]*(?:\s[^<>\n]*)?\/?>/, "tag"],
+        [/<[a-z][a-z0-9+.-]*:[^\s<>]*>/, "string.link"],
 
-        // Bulk-consume plain text for performance (avoids one-char-at-a-time fallback)
-        [/[^$*`_[\\!]+/, ""],
+        // Escape sequences
+        [/\\[\\`*_{}[\]()#+\-.!$]/, "string.escape"],
+
+        // A `$` straight after a letter or digit doesn't open math, as in US$5.
+        [new RegExp(`${WORD_CHAR.source}\\$(?!\\$)`, "u"), ""],
+
+        // Bulk-consume plain text for performance (avoids one-char-at-a-time
+        // fallback), stopping short of a character the rule above may want.
+        [/(?:[^$*`_[\\!<](?!\$))+/, ""],
 
         // Single-character fallthrough
         [/./, ""],
@@ -178,7 +205,8 @@ export function registerMarkdownSyntax(monaco: any): { dispose: () => void } {
       { open: "[", close: "]" },
       { open: "(", close: ")" },
       { open: "`", close: "`" },
-      { open: "$", close: "$" },
+      // No `$`: it can't be told from a price while it is being typed, and a
+      // closing `$` the author didn't write turns `$5 today` into math.
     ],
     surroundingPairs: [
       { open: "*", close: "*" },

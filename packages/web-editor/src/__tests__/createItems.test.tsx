@@ -347,6 +347,55 @@ describe("creating an asset", () => {
   });
 });
 
+describe("the clipboard", () => {
+  /** Installs a clipboard stub; jsdom has none of its own. */
+  function stubClipboard() {
+    const writeText = vi.fn(async () => {});
+    Object.defineProperty(navigator, "clipboard", {
+      configurable: true,
+      value: { writeText },
+    });
+    return writeText;
+  }
+  const drawerEmbedCode = () =>
+    within(screen.getByTestId("settings-drawer")).getByTestId("settings-embed-code");
+
+  it("is left alone by a new snippet, whose embed code waits in the drawer", async () => {
+    const writeText = stubClipboard();
+    renderEditors();
+    showSnippets();
+    fireEvent.click(screen.getByTestId("toc-new-snippet-btn"));
+    fireEvent.change(within(pane()).getByLabelText("Reference ID"), {
+      target: { value: "note" },
+    });
+    await act(async () => {
+      fireEvent.click(within(pane()).getByText("Create"));
+    });
+
+    expect(barTitle()).toHaveTextContent("note");
+    expect(writeText).not.toHaveBeenCalled();
+    expect(drawerEmbedCode()).toHaveTextContent('<plus:snippet ref="note"/>');
+  });
+
+  it("is left alone by a new asset, whose embed code waits in the drawer", async () => {
+    const writeText = stubClipboard();
+    renderEditors();
+    showAssets();
+    fireEvent.click(screen.getByTestId("toc-new-asset-btn"));
+    fireEvent.click(within(pane()).getByText("Custom"));
+    fireEvent.change(within(pane()).getByLabelText("Title"), {
+      target: { value: "My Diagram" },
+    });
+    await act(async () => {
+      fireEvent.click(within(pane()).getByText("Create"));
+    });
+
+    expect(barTitle()).toHaveTextContent("My Diagram");
+    expect(writeText).not.toHaveBeenCalled();
+    expect(drawerEmbedCode()).toHaveTextContent('<plus:image ref="my-diagram"/>');
+  });
+});
+
 describe("an unlinked placeholder", () => {
   it.each([
     ["snippet", "missing", '<plus:snippet ref="missing"/>'],

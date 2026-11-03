@@ -68,7 +68,8 @@ export function registerLatexSyntax(
     autoClosingPairs: [
       { open: "{", close: "}" },
       { open: "[", close: "]" },
-      { open: "$", close: "$" },
+      // No `$`: Monaco can't tell one that opens math from one that closes it,
+      // so wrapping an expression by hand would end in `$x + y$$`.
     ],
     surroundingPairs: [
       { open: "{", close: "}" },

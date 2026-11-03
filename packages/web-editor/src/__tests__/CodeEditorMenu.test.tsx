@@ -263,9 +263,9 @@ describe("CodeEditorMenu", () => {
       await openCategory("Text");
 
       expect(menuItem("Emphasis")).toBeInTheDocument();
-      // Markdown converts links and tables to `<TODO>` placeholders today …
-      expect(queryMenuItem("Link")).not.toBeInTheDocument();
-      // … which leaves Figures & Code a code listing alone, offered directly.
+      expect(menuItem("Link")).toBeInTheDocument();
+      // Markdown can't write a table or a figure today, which leaves Figures &
+      // Code a code listing alone, offered directly.
       expect(queryMenuItem(/^Figures & Code/)).not.toBeInTheDocument();
       expect(menuItem("Code listing")).toBeInTheDocument();
       expect(queryMenuItem("Table")).not.toBeInTheDocument();

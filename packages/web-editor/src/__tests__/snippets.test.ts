@@ -521,8 +521,6 @@ describe("Markdown snippets", () => {
     for (const key of [
       "table",
       "figure",
-      "link",
-      "xref",
       // Blocks with no directive yet.
       "identity",
       "heuristic",
