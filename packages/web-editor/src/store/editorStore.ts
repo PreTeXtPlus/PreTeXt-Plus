@@ -26,7 +26,7 @@
  * they are stable while always calling the latest mode-routed callback.
  */
 import { createStore, type StoreApi } from "zustand/vanilla";
-import type { Asset, FeedbackSubmission, Snippet, SourceFormat } from "../types/editor";
+import type { Asset, Exercise, FeedbackSubmission, Snippet, SourceFormat } from "../types/editor";
 import type { Division, DivisionType } from "../types/sections";
 import type { EditDraft } from "../components/toc/types";
 import { sanitizeXmlId } from "../sectionUtils";
@@ -46,10 +46,10 @@ function xmlIdError(
   divisions: Division[],
 ): string | null {
   if (!sanitized) {
-    return "The id can't be empty — it identifies the division and is used by references to it.";
+    return "Reference ID can't be empty.";
   }
   if (divisions.some((d) => d.xmlId !== selfXmlId && d.xmlId === sanitized)) {
-    return `"${sanitized}" is already used by another division. Choose a unique id.`;
+    return `"${sanitized}" is already used by another division. Choose a unique Reference ID.`;
   }
   return null;
 }
@@ -67,6 +67,9 @@ const sameAssetRef = (a: Asset, b: Asset): boolean => a.ref === b.ref;
  * pool mutation keys on. Mirrors {@link sameAssetRef}.
  */
 const sameSnippetRef = (a: Snippet, b: Snippet): boolean => a.ref === b.ref;
+
+/** Exercise identity within a project, by `ref`. Mirrors {@link sameSnippetRef}. */
+const sameExerciseRef = (a: Exercise, b: Exercise): boolean => a.ref === b.ref;
 
 /**
  * Breakpoint shared by `isNarrowScreen` (tabs vs. split layout) and the TOC's
@@ -266,6 +269,7 @@ export interface ExternalUpdate {
   divisions?: Division[];
   projectAssets?: Asset[];
   projectSnippets?: Snippet[];
+  projectExercises?: Exercise[];
   rootDivisionId?: string;
   activeDivisionId?: string | null;
   title?: string;
@@ -306,24 +310,25 @@ type ModalKey =
  *
  * - `division`: a new child of `parentXmlId` (`null` for an unplaced one); its
  *   fields live in `editDraft`.
- * - `snippet` / `asset`: a new project record. With `resolveRef`, the record
+ * - `snippet` / `exercise` / `asset`: a new project record. With `resolveRef`, the record
  *   binds an unlinked `<plus:* ref/>` placeholder; with `replaceRef`, a new
  *   image takes the place of that asset under the same ref.
  */
 export type CreateRequest =
   | { kind: "division"; parentXmlId: string | null }
   | { kind: "snippet"; resolveRef?: string }
+  | { kind: "exercise"; resolveRef?: string }
   | { kind: "asset"; resolveRef?: string; replaceRef?: string };
 
 /**
- * What the code editor has open: a division, a project snippet, or a project
- * asset, each named by the identifier placeholders use to reach it — a
+ * What the code editor has open: a division, a project snippet, a project
+ * exercise, or a project asset, each named by the identifier placeholders use to reach it — a
  * division's `xmlId`, a snippet's or asset's `ref`. There is always exactly one;
  * a `ref` that no longer resolves (the item was just removed) is read as the
  * root division.
  */
 export type OpenItem = {
-  kind: "division" | "snippet" | "asset";
+  kind: "division" | "snippet" | "exercise" | "asset";
   ref: string;
 };
 
@@ -338,7 +343,7 @@ export const selectOpenDivisionId = (s: {
  * project-wide find/replace panel, which shares the explorer's slot rather
  * than docking beside it.
  */
-export type ExplorerView = "toc" | "snippets" | "assets" | "find";
+export type ExplorerView = "toc" | "snippets" | "exercises" | "assets" | "find";
 
 /**
  * All callbacks wired by Editors.tsx that deep components need to call.
@@ -377,6 +382,10 @@ export interface EditorCallbacks {
   snippetRefRemove?: (ref: string) => void;
   /** Duplicate a project snippet under a fresh ref (host persists + pool add). */
   snippetDuplicate?: (snippet: Snippet) => void | Promise<void>;
+  /** Remove a project exercise (optimistic pool drop + host persistence). */
+  exerciseRemove?: (exercise: Exercise) => void;
+  /** Remove every `<plus:exercise ref/>` placeholder for an unresolved ref from source. */
+  exerciseRefRemove?: (ref: string) => void;
   updateTitle: (title: string) => void;
   updateLanguage: (language: string) => void;
   feedbackSubmit?: (feedback: FeedbackSubmission) => void | Promise<void>;
@@ -406,6 +415,11 @@ export interface EditorStoreState {
    * `addSnippetToPool`/`updateSnippetInPool`/`removeSnippetFromPool`.
    */
   projectSnippets: Snippet[] | undefined;
+  /**
+   * Authoritative project-exercise pool, owned like
+   * {@link EditorStoreState.projectSnippets}.
+   */
+  projectExercises: Exercise[] | undefined;
   title: string;
   docinfo: string;
   commonDocinfo: string;
@@ -538,6 +552,8 @@ export interface EditorStoreState {
   openDivision: (xmlId: string | null) => void;
   /** Open a project snippet's source in the code editor. */
   openSnippet: (ref: string) => void;
+  /** Open a project exercise in the exercise designer. */
+  openExercise: (ref: string) => void;
   /** Open a project asset's source in the code editor. */
   openAsset: (ref: string) => void;
   /**
@@ -694,6 +710,20 @@ export interface EditorStoreState {
   /** Optimistically remove the snippet matching `snippet` by ref from the pool. */
   removeSnippetFromPool: (snippet: Snippet) => void;
 
+  // Exercises
+  /** Remove a project exercise (pool + host persistence). */
+  removeExercise: (exercise: Exercise) => void;
+  /** Remove every `<plus:exercise ref/>` placeholder for an unresolved ref. */
+  removeExerciseRefFromDocument: (ref: string) => void;
+  /** Optimistically add an exercise to the pool (no-op if its ref is taken). */
+  addExerciseToPool: (exercise: Exercise) => void;
+  /** Optimistically replace the pool entry matching `exercise` by ref (adding it if absent). */
+  updateExerciseInPool: (exercise: Exercise) => void;
+  /** Optimistically rename an exercise's `ref`. See {@link renameSnippetInPool}. */
+  renameExerciseInPool: (oldRef: string, newExercise: Exercise) => void;
+  /** Optimistically remove the exercise matching `exercise` by ref from the pool. */
+  removeExerciseFromPool: (exercise: Exercise) => void;
+
   updateTitle: (title: string) => void;
   updateLanguage: (language: string) => void;
   feedbackSubmit: (feedback: FeedbackSubmission) => void;
@@ -735,6 +765,7 @@ export interface EditorStoreInit {
   projectAssets: Asset[] | undefined;
   /** Optional (unlike `projectAssets`) so existing hosts/tests need no change to keep compiling. */
   projectSnippets?: Snippet[];
+  projectExercises?: Exercise[];
   /** The host's URL for the project; keys the saved TOC tree shape (see {@link tocTreeKey}). */
   projectUrl?: string;
 }
@@ -897,6 +928,7 @@ export function createEditorStore(init: EditorStoreInit): EditorStoreHandle {
     sourceFormat: init.sourceFormat,
     projectAssets: init.projectAssets,
     projectSnippets: init.projectSnippets,
+    projectExercises: init.projectExercises,
     title: init.title,
     docinfo: init.docinfo,
     commonDocinfo: init.commonDocinfo,
@@ -1031,6 +1063,8 @@ export function createEditorStore(init: EditorStoreInit): EditorStoreHandle {
       set((s) => openItemState(s, { kind: "division", ref: xmlId ?? "" })),
     openSnippet: (ref) =>
       set((s) => openItemState(s, { kind: "snippet", ref })),
+    openExercise: (ref) =>
+      set((s) => openItemState(s, { kind: "exercise", ref })),
     openAsset: (ref) => set((s) => openItemState(s, { kind: "asset", ref })),
     closeTab: (item) => set((s) => closeTabState(s, item)),
     setTitle: (title) => set({ title }),
@@ -1249,6 +1283,43 @@ export function createEditorStore(init: EditorStoreInit): EditorStoreHandle {
           (a) => !sameSnippetRef(a, snippet),
         ),
         ...closeTabState(s, { kind: "snippet", ref: snippet.ref }, false),
+      })),
+    removeExercise: (exercise) => bag.cbs.exerciseRemove?.(exercise),
+    removeExerciseRefFromDocument: (ref) => bag.cbs.exerciseRefRemove?.(ref),
+    addExerciseToPool: (exercise) =>
+      set((s) => {
+        const base = s.projectExercises ?? [];
+        if (base.some((a) => sameExerciseRef(a, exercise))) return {};
+        return { projectExercises: [...base, exercise] };
+      }),
+    updateExerciseInPool: (exercise) =>
+      set((s) => {
+        const base = s.projectExercises ?? [];
+        return base.some((a) => sameExerciseRef(a, exercise))
+          ? { projectExercises: base.map((a) => (sameExerciseRef(a, exercise) ? exercise : a)) }
+          : { projectExercises: [...base, exercise] };
+      }),
+    renameExerciseInPool: (oldRef, newExercise) =>
+      set((s) => {
+        const base = s.projectExercises ?? [];
+        const filtered = base.filter(
+          (a) => a.ref !== oldRef && !sameExerciseRef(a, newExercise),
+        );
+        const isOpen = s.openItem.kind === "exercise" && s.openItem.ref === oldRef;
+        return {
+          projectExercises: [...filtered, newExercise],
+          openTabs: renameTab(s.openTabs, "exercise", oldRef, newExercise.ref),
+          ...(isOpen
+            ? { openItem: { kind: "exercise" as const, ref: newExercise.ref } }
+            : {}),
+        };
+      }),
+    removeExerciseFromPool: (exercise) =>
+      set((s) => ({
+        projectExercises: (s.projectExercises ?? []).filter(
+          (a) => !sameExerciseRef(a, exercise),
+        ),
+        ...closeTabState(s, { kind: "exercise", ref: exercise.ref }, false),
       })),
 
     updateTitle: (title) => bag.cbs.updateTitle(title),

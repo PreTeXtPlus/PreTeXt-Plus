@@ -90,9 +90,7 @@ const titleField = () =>
   within(draftRow()).getByText("Title").parentElement!
     .querySelector("input") as HTMLInputElement;
 const idField = () =>
-  within(draftRow()).getByPlaceholderText(
-    "unique identifier",
-  ) as HTMLInputElement;
+  within(draftRow()).getByLabelText("Reference ID") as HTMLInputElement;
 
 describe("a new division is a draft until it is saved", () => {
   it("cancelling leaves the project untouched", () => {

@@ -25,6 +25,8 @@ import {
   toEditorAsset,
   railsSnippetToEditor,
   toEditorSnippet,
+  railsExerciseToEditor,
+  toEditorExercise,
   railsToEditorState,
 } from "./railsProjectMapping";
 import AccountArea from "./AccountArea";
@@ -34,6 +36,7 @@ import { TOOLS_ENTRIES } from "./toolsEntries";
 /** @typedef {import("@pretextbook/web-editor").Asset} Asset */
 /** @typedef {import("@pretextbook/web-editor").Division} Division */
 /** @typedef {import("@pretextbook/web-editor").Snippet} Snippet */
+/** @typedef {import("@pretextbook/web-editor").Exercise} Exercise */
 /** @typedef {import("./railsProjectMapping").RailsDivision} RailsDivision */
 /** @typedef {import("./railsProjectMapping").RailsAsset} RailsAsset */
 /** @typedef {import("./railsProjectMapping").RailsSnippet} RailsSnippet */
@@ -165,7 +168,7 @@ function slugifyRef(value) {
 // author last typed.
 /**
  * @param {EditorState} state
- * @param {{id: string, kind: "division"|"asset"|"snippet"}[]} [deletes] - Records to destroy.
+ * @param {{id: string, kind: "division"|"asset"|"snippet"|"exercise"}[]} [deletes] - Records to destroy.
  * @param {EditorState|null} [baseline] - The last-saved state; snippet/asset
  *   sources that differ from it are sent.
  * @returns {{project: Object}}
@@ -183,7 +186,7 @@ function editorStateToRailsPayload(state, deletes = [], baseline = null) {
         .map(({ id }) => ({ id, _destroy: true })),
     ],
   };
-  for (const kind of ["asset", "snippet"]) {
+  for (const kind of RECORD_KINDS) {
     const entries = [
       ...changedRecordSources(state, baseline, kind),
       ...deletes
@@ -214,13 +217,18 @@ function withSchemaVersion(body) {
 // (`projectSnippets`/`projectAssets`), so typed source is unsaved work like a
 // division's. Records are matched by `id`, the identity persistence uses.
 
-const RECORD_POOLS = { snippet: "projectSnippets", asset: "projectAssets" };
+const RECORD_POOLS = {
+  snippet: "projectSnippets",
+  exercise: "projectExercises",
+  asset: "projectAssets",
+};
+const RECORD_KINDS = Object.keys(RECORD_POOLS);
 
 /**
  * Add `record` to `state`'s pool of `kind`, or merge it into the entry with its id.
  * @param {EditorState|null} state
- * @param {"snippet"|"asset"} kind
- * @param {Snippet|Asset} record
+ * @param {"snippet"|"exercise"|"asset"} kind
+ * @param {Snippet|Exercise|Asset} record
  */
 function upsertRecord(state, kind, record) {
   if (!state || !record?.id) return;
@@ -233,7 +241,7 @@ function upsertRecord(state, kind, record) {
 
 /**
  * @param {EditorState|null} state
- * @param {"snippet"|"asset"} kind
+ * @param {"snippet"|"exercise"|"asset"} kind
  * @param {string} id
  */
 function removeRecord(state, kind, id) {
@@ -247,7 +255,7 @@ function removeRecord(state, kind, id) {
  * A record the baseline doesn't have was never persisted, so it isn't sent.
  * @param {EditorState} state
  * @param {EditorState|null} baseline
- * @param {"snippet"|"asset"} kind
+ * @param {"snippet"|"exercise"|"asset"} kind
  * @returns {{id: string, source: string}[]}
  */
 function changedRecordSources(state, baseline, kind) {
@@ -261,7 +269,7 @@ function changedRecordSources(state, baseline, kind) {
 /**
  * `pool` with each record's source replaced by the working copy's, where the
  * working copy has the record.
- * @template {Snippet|Asset} T
+ * @template {Snippet|Exercise|Asset} T
  * @param {T[]} pool
  * @param {T[]|undefined} workingPool
  * @returns {T[]}
@@ -279,7 +287,7 @@ function withWorkingSources(pool, workingPool) {
  * @returns {boolean}
  */
 function hasUnsavedRecordSources(state, baseline) {
-  return ["snippet", "asset"].some(
+  return RECORD_KINDS.some(
     (kind) => changedRecordSources(state, baseline, kind).length > 0,
   );
 }
@@ -363,6 +371,7 @@ function editorStateToCollabSeed(state) {
     })),
     assets: (state.projectAssets ?? []).filter((a) => a.id).map(toEditorAsset),
     snippets: (state.projectSnippets ?? []).filter((s) => s.id).map(toEditorSnippet),
+    exercises: (state.projectExercises ?? []).filter((e) => e.id).map(toEditorExercise),
   };
 }
 
@@ -472,6 +481,8 @@ function EditorApp({ config }) {
   const serverAssets = useRef([]);
   // Same as `serverAssets`, for snippets.
   const serverSnippets = useRef([]);
+  // And for exercises.
+  const serverExercises = useRef([]);
   // The project's spell-check dictionary, mirrored the same way: the checker
   // reads it whenever it registers (on mount, and again on a format switch), so
   // going through a ref is what lets a later registration see words a
@@ -508,6 +519,7 @@ function EditorApp({ config }) {
   if (projectQuery.data) {
     serverAssets.current = projectQuery.data.projectAssets;
     serverSnippets.current = projectQuery.data.projectSnippets;
+    serverExercises.current = projectQuery.data.projectExercises;
     dictionaryWords.current = projectQuery.data.dictionaryWords;
   }
 
@@ -746,8 +758,9 @@ function EditorApp({ config }) {
   const onContentChange = useCallback((change) => {
     const w = working.current;
     if (!w) return;
-    // A snippet's or asset's source, typed into the code editor.
-    if (change.kind === "snippet" || change.kind === "asset") {
+    // A snippet's or asset's source, typed into the code editor, or an
+    // exercise's body, written by the exercise designer.
+    if (change.kind in RECORD_POOLS) {
       const record = (w[RECORD_POOLS[change.kind]] ?? []).find((r) =>
         change.id ? r.id === change.id : r.ref === change.ref,
       );
@@ -1016,8 +1029,8 @@ function EditorApp({ config }) {
   }, [queryClient, projectId]);
 
   // Pick a project-unique ref from a desired slug.  A ref must be unique among
-  // the project's divisions, assets, AND snippets (one unique index across all
-  // of a project's contents), so we dedupe against all three live pools, suffixing `-2`, `-3`,
+  // the project's divisions, assets, snippets AND exercises (one unique index
+  // across all of a project's contents), so we dedupe against every live pool, suffixing `-2`, `-3`,
   // ... on collision.  Read from refs at call time, so no deps.
   const uniqueRef = useCallback((desired) => {
     const base = slugifyRef(desired) || "asset";
@@ -1025,6 +1038,7 @@ function EditorApp({ config }) {
       ...(working.current?.divisions ?? []).map((d) => d.xmlId),
       ...(serverAssets.current ?? []).map((p) => p.ref),
       ...(serverSnippets.current ?? []).map((p) => p.ref),
+      ...(serverExercises.current ?? []).map((p) => p.ref),
     ]);
     if (!taken.has(base)) return base;
     let n = 2;
@@ -1037,9 +1051,10 @@ function EditorApp({ config }) {
   const onAssetInsert = useCallback(() => {}, []);
 
   const onAssetUpload = useCallback(
-    async (file, title) => {
+    async (file, title, chosenRef) => {
       title = title || "New Asset";
-      const ref = uniqueRef(slugifyRef(title.replace(/\.[^.]+$/, "")));
+      // A Duplicate or a Replace names no ref; the form always does.
+      const ref = chosenRef ?? uniqueRef(slugifyRef(title.replace(/\.[^.]+$/, "")));
       const json = await patchProjectAssetUpload({ ref, kind: "file_asset", title, file });
       const created = toEditorAsset(
         railsAssetToEditor((json.assets ?? []).find((a) => a.ref === ref)),
@@ -1054,14 +1069,13 @@ function EditorApp({ config }) {
 
   // Creates a file-less "authored" asset -- unlike onAssetUpload there's no
   // file to multipart-upload, so this goes through patchProjectJson (like
-  // onDivisionAdd) instead of patchProjectAssetUpload. `title` comes from the
-  // editor's "New asset" form; the ref is derived from it exactly like
-  // onAssetUpload derives one from an uploaded file's title. `source` starts
+  // onDivisionAdd) instead of patchProjectAssetUpload. `title` and the ref come
+  // from the editor's "New asset" form. `source` starts
   // empty and is filled in afterward through onAssetUpdate, the same as any
   // other edit.
   const onCreateAuthored = useCallback(
-    async (title) => {
-      const ref = uniqueRef(slugifyRef(title));
+    async (title, chosenRef) => {
+      const ref = chosenRef ?? uniqueRef(slugifyRef(title));
       const json = await patchProjectJson({
         assets_attributes: [ { ref, kind: "authored_asset", title, source: "" } ],
       });
@@ -1080,8 +1094,8 @@ function EditorApp({ config }) {
   // peer or a reload opens the same diagram and there is something for the first
   // render's digest to be current against.
   const onCreateGenerated = useCallback(
-    async (format, title) => {
-      const ref = uniqueRef(slugifyRef(title));
+    async (format, title, chosenRef) => {
+      const ref = chosenRef ?? uniqueRef(slugifyRef(title));
       const json = await patchProjectJson({
         assets_attributes: [ {
           ref, kind: "authored_asset", source_format: format, title,
@@ -1328,6 +1342,68 @@ function EditorApp({ config }) {
           console.error("Error removing snippet:", error);
           if (!providerRef.current) {
             alert("An error occurred while removing the snippet.");
+          }
+        });
+    },
+    [patchProjectJson, invalidateSnippetQueries, recordRemoved],
+  );
+
+  // ----- Exercises -----------------------------------------------------------
+  // Mirrors "Snippets" above. The editor hands over a whole new exercise -- its
+  // ref, title, and the blank body and attributes of the type the author chose
+  // -- so create writes all of it.
+
+  const onCreateExercise = useCallback(
+    async (exercise) => {
+      const json = await patchProjectJson({
+        exercises_attributes: [ {
+          ref: exercise.ref,
+          title: exercise.title ?? "",
+          source: exercise.source ?? "",
+          attrs: exercise.attrs ?? {},
+        } ],
+      });
+      const created = toEditorExercise(
+        railsExerciseToEditor((json.exercises ?? []).find((e) => e.ref === exercise.ref)),
+      );
+      recordCreated("exercise", created);
+      invalidateSnippetQueries();
+      return created;
+    },
+    [patchProjectJson, invalidateSnippetQueries, recordCreated],
+  );
+
+  // Persists an exercise's metadata -- `ref`, `title`, and the `attrs` its
+  // designer sets -- keyed by `id`. Its body arrives through onContentChange,
+  // as a snippet's typed source does, but is sent here too since a metadata
+  // write carries every field (see writeRecord).
+  const onExerciseUpdate = useCallback(
+    async (exercise) => {
+      await writeRecord("exercise", toEditorExercise(exercise), () =>
+        patchProjectJson({
+          exercises_attributes: [ {
+            id: exercise.id,
+            ref: exercise.ref,
+            title: exercise.title ?? "",
+            source: exercise.source ?? "",
+            attrs: exercise.attrs ?? {},
+          } ],
+        }),
+      );
+      invalidateSnippetQueries();
+    },
+    [patchProjectJson, invalidateSnippetQueries, writeRecord],
+  );
+
+  const onExerciseRemove = useCallback(
+    (exercise) => {
+      recordRemoved("exercise", exercise.id);
+      return patchProjectJson({ exercises_attributes: [{ id: exercise.id, _destroy: true }] })
+        .then(() => invalidateSnippetQueries())
+        .catch((error) => {
+          console.error("Error removing exercise:", error);
+          if (!providerRef.current) {
+            alert("An error occurred while removing the exercise.");
           }
         });
     },
@@ -1605,6 +1681,16 @@ function EditorApp({ config }) {
     [projectQuery.data],
   );
 
+  // And for exercises.
+  const projectExercises = useMemo(
+    () =>
+      withWorkingSources(
+        projectQuery.data?.projectExercises ?? [],
+        working.current?.projectExercises,
+      ).map(toEditorExercise),
+    [projectQuery.data],
+  );
+
   // Browser engines for generated assets, keyed by generator, each only when the
   // page was given its worker and engine files; without them that generator's
   // assets show their stored picture and render nothing live.
@@ -1721,6 +1807,7 @@ function EditorApp({ config }) {
         }
         projectAssets={projectAssets}
         projectSnippets={projectSnippets}
+        projectExercises={projectExercises}
         projectUrl={feedbackProjectUrl}
         userEmail={userEmail}
         topBar={{
@@ -1769,6 +1856,9 @@ function EditorApp({ config }) {
         onCreateSnippet={onCreateSnippet}
         onSnippetUpdate={onSnippetUpdate}
         onSnippetRemove={onSnippetRemove}
+        onCreateExercise={onCreateExercise}
+        onExerciseUpdate={onExerciseUpdate}
+        onExerciseRemove={onExerciseRemove}
         onTitleChange={onTitleChange}
         onLanguageChange={onLanguageChange}
         onUseCommonDocinfoChange={onUseCommonDocinfoChange}

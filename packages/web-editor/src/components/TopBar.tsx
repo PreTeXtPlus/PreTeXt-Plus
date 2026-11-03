@@ -112,10 +112,12 @@ export interface TopBarProps {
   canConvertToPretext?: boolean;
   onOpenAssets?: () => void;
   onOpenSnippets?: () => void;
+  onOpenExercises?: () => void;
   onShowFullSource: () => void;
   onOpenFindInProject?: () => void;
   hideAssets?: boolean;
   hideSnippets?: boolean;
+  hideExercises?: boolean;
   pasteAutoConvert?: boolean;
   onTogglePasteAutoConvert?: () => void;
 
@@ -184,6 +186,8 @@ const TopBar = (props: TopBarProps) => {
       hideAssets: props.hideAssets,
       onOpenSnippets: props.onOpenSnippets,
       hideSnippets: props.hideSnippets,
+      onOpenExercises: props.onOpenExercises,
+      hideExercises: props.hideExercises,
       onShowFullSource: props.onShowFullSource,
     }),
     ...(props.onSaveAndClose
@@ -242,6 +246,7 @@ const TopBar = (props: TopBarProps) => {
           canConvertToPretext={props.canConvertToPretext}
           onOpenAssets={props.onOpenAssets}
           onOpenSnippets={props.onOpenSnippets}
+          onOpenExercises={props.onOpenExercises}
           onOpenFindInProject={props.onOpenFindInProject}
           isFindingInFile={state.isFindingInFile}
           onSwitchToFindInProject={
@@ -250,6 +255,7 @@ const TopBar = (props: TopBarProps) => {
           onShowFullSource={props.onShowFullSource}
           hideAssets={props.hideAssets}
           hideSnippets={props.hideSnippets}
+          hideExercises={props.hideExercises}
           readOnly={props.readOnly}
           leadingMenus={[{ key: "file", label: "File", entries: fileEntries }]}
           trailingMenus={trailingMenus}

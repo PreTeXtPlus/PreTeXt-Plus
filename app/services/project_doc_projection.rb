@@ -23,7 +23,7 @@ class ProjectDocProjection
   # can read a document but not write one. That is cheap and safe: a delete is
   # idempotent, so re-sending one costs nothing, and the map grows by one short
   # entry per record ever removed.
-  DELETABLE_KINDS = %w[ division asset snippet ].freeze
+  DELETABLE_KINDS = %w[ division asset snippet exercise ].freeze
 
   def initialize(project)
     @project = project
@@ -47,6 +47,7 @@ class ProjectDocProjection
     deleted = read_map(doc, "deleted")
     divisions = read_map(doc, "divisions")
     snippets = read_map(doc, "snippets")
+    exercises = read_map(doc, "exercises")
     assets = read_map(doc, "assets")
 
     attributes = {
@@ -64,6 +65,8 @@ class ProjectDocProjection
     attributes[:assets_attributes] = rows if rows.any?
     rows = snippet_attributes(snippets, deleted)
     attributes[:snippets_attributes] = rows if rows.any?
+    rows = exercise_attributes(exercises, deleted)
+    attributes[:exercises_attributes] = rows if rows.any?
 
     attributes
   end
@@ -110,6 +113,20 @@ class ProjectDocProjection
       attributes
     end
     present + destroy_attributes(deleted, "snippet")
+  end
+
+  # An exercise is a snippet whose element, like a division's, is built from its
+  # fields: its `source` is the body, and `attrs` the <exercise>'s attributes.
+  def exercise_attributes(exercises, deleted)
+    present = exercises.filter_map do |id, entry|
+      next if deleted[id] == "exercise"
+
+      attributes = { id: id, ref: entry["ref"].to_s, source: entry["source"].to_s }
+      attributes[:title] = entry["title"].to_s if entry.key?("title")
+      attributes[:attrs] = entry["attrs"] if entry["attrs"].is_a?(Hash)
+      attributes
+    end
+    present + destroy_attributes(deleted, "exercise")
   end
 
   # An asset's text -- its source, title, id and alt text -- is projected like a

@@ -64,6 +64,7 @@ import type {
   GeneratorId,
   FeedbackSubmission,
   RecordKind,
+  Exercise,
   Snippet,
   SourceFormat,
   EditorLanguage,
@@ -76,6 +77,7 @@ import {
   createDivisionWithId,
   insertDivisionRef,
   wrapDivisionForPreview,
+  assembleExercisePreviewSource,
   assembleSnippetPreviewSource,
   snippetPreviewTitle,
   assembleProjectSource,
@@ -88,7 +90,9 @@ import {
   renameAssetRef,
   removeAssetRef,
   renameSnippetRef,
+  renameExerciseRef,
   removeSnippetRef,
+  removeExerciseRef,
   normalizeDivisionsOnLoad,
   isRootDivisionType,
 } from "../sectionUtils";
@@ -100,6 +104,7 @@ import {
 import { buildProjectAssetView, makeUniqueAssetRef } from "../assetView";
 import { assetWrapperLines } from "../assetTransforms";
 import { buildProjectSnippetView, makeUniqueSnippetRef } from "../snippetView";
+import ExerciseDesigner, { type ExerciseSourceValue } from "../exerciseDesigner/ExerciseDesigner";
 import { newRecordId } from "../recordId";
 import type { ConversionShare, ImportEngine } from "@pretextbook/import/react";
 import { takenImportIds } from "../importConvert";
@@ -369,18 +374,22 @@ export interface editorProps {
   projectAssets?: Asset[];
   /**
    * @deprecated Assets are no longer inserted at the cursor — adding an asset
-   * now copies its embed code to the clipboard. Retained for backward
-   * compatibility; it is no longer called. Use the creation hooks
-   * (`onAssetUpload`) to learn when an asset enters the project.
+   * now opens it, and the author copies its embed code from the settings
+   * drawer. Retained for backward compatibility; it is no longer called. Use
+   * the creation hooks (`onAssetUpload`) to learn when an asset enters the
+   * project.
    */
   onAssetInsert?: (asset: Asset) => void;
   /**
    * Called when the user uploads an image file, or after `onAssetFetchUrl`
    * fetches an external URL. `title` is the human-readable title the user
    * entered in the modal (may differ from `file.name`) — persist it as the
-   * asset's title rather than deriving one from the filename.
+   * asset's title rather than deriving one from the filename. `ref` is the
+   * Reference ID the user chose in that form, checked against every ref the
+   * editor knows of; it is absent for a Duplicate or a Replace, which give the
+   * asset its ref afterwards, and the host then picks one of its own.
    */
-  onAssetUpload?: (file: File, title?: string) => Promise<Asset>;
+  onAssetUpload?: (file: File, title?: string, ref?: string) => Promise<Asset>;
   /**
    * Called when the user adds an image by URL. Should fetch the URL
    * server-side (to avoid CORS) and return the raw file bytes — it must
@@ -391,21 +400,20 @@ export interface editorProps {
   onAssetFetchUrl?: (url: string) => Promise<File>;
   /**
    * Called when the user creates a new authored (file-less) asset from the
-   * "New asset" form's Custom tab. Host derives the ref from `title` itself
-   * (the same way it already does for `onAssetUpload`) and returns the
-   * created asset — its `source` is empty until the user fills it in via the
+   * "New asset" form's Custom tab, under the `ref` chosen there, and returns
+   * the created asset — its `source` is empty until the user fills it in via the
    * code editor.
    */
-  onCreateAuthored?: (title: string) => Promise<Asset>;
+  onCreateAuthored?: (title: string, ref?: string) => Promise<Asset>;
   /**
    * Called when the user creates a new generated asset (a PreFigure diagram, …)
-   * from the "New asset" form's tab for that generator. The host derives the ref
-   * from `title` as it does for `onCreateAuthored`, persists an authored asset
+   * from the "New asset" form's tab for that generator, under the `ref` chosen
+   * there. The host persists an authored asset
    * whose source format is `generator` (the Rails host: `source_format`) and
    * whose `source` is the generator's starter source
    * (`generators[generator].starterSource`), and returns it.
    */
-  onCreateGenerated?: (generator: GeneratorId, title: string) => Promise<Asset>;
+  onCreateGenerated?: (generator: GeneratorId, title: string, ref?: string) => Promise<Asset>;
   /**
    * Per-generator browser engines: where the host serves each generator's
    * worker and runtime files. Without an entry for a generator, its assets show
@@ -490,6 +498,28 @@ export interface editorProps {
   hideSnippets?: boolean;
 
   /**
+   * Interactive exercises already associated with this project. When omitted,
+   * the Exercises view and the "New Exercise…" menu item are hidden.
+   */
+  projectExercises?: Exercise[];
+  /**
+   * Called when the user creates an exercise from the "New exercise" form,
+   * with its ref, title and a blank body of the chosen type. The host persists
+   * it and returns the created record (with its `id`).
+   */
+  onCreateExercise?: (exercise: Exercise) => Promise<Exercise>;
+  /** Called when the user removes an exercise from the project. */
+  onExerciseRemove?: (exercise: Exercise) => Promise<void> | void;
+  /**
+   * Called when an exercise's metadata changes: its title or ref from its
+   * settings, or its `attrs` from the designer. (Its body arrives through
+   * `onContentChange`, like a snippet's source.) Identified by `id`.
+   */
+  onExerciseUpdate?: (exercise: Exercise) => Promise<void> | void;
+  /** If true, the explorer's Exercises view and the "New Exercise…" menu item are hidden. */
+  hideExercises?: boolean;
+
+  /**
    * The unified top bar: logo, then a title/language row above a
    * File/Edit/Insert/Tools/Help menu row, with the host's Account content
    * flush right. The host supplies the host-specific slots this
@@ -572,6 +602,12 @@ const findRootDivision = (
   divisions[0] ??
   null;
 
+/** Whether two attribute maps hold the same pairs, in any order. */
+const sameAttrs = (a: Record<string, string>, b: Record<string, string>): boolean => {
+  const keys = Object.keys(a);
+  return keys.length === Object.keys(b).length && keys.every((k) => a[k] === b[k]);
+};
+
 // ── Outer component: creates store + provides it ───────────────────────────
 
 /**
@@ -589,10 +625,14 @@ export interface EditorsHandle {
   flushPendingEdits: () => void;
 }
 
-type RecordOf<K extends RecordKind> = K extends "snippet" ? Snippet : Asset;
+type RecordOf<K extends RecordKind> = K extends "snippet"
+  ? Snippet
+  : K extends "exercise"
+    ? Exercise
+    : Asset;
 
 /** The store, doc and host operations `Editors` applies to one kind of record. */
-interface RecordOps<T extends Snippet | Asset> {
+interface RecordOps<T extends Snippet | Exercise | Asset> {
   /** The live pool, read at call time. */
   pool: () => T[] | undefined;
   update: (record: T) => void;
@@ -645,6 +685,7 @@ const Editors = forwardRef(function Editors(
       activeDivisionId: initActiveId,
       projectAssets: props.projectAssets,
       projectSnippets: props.projectSnippets,
+      projectExercises: props.projectExercises,
       projectUrl: props.projectUrl,
     });
   });
@@ -727,6 +768,7 @@ const EditorsInner = (props: EditorsInnerProps) => {
   const openDivision = useEditorStore((s) => s.openDivision);
   const openAsset = useEditorStore((s) => s.openAsset);
   const openSnippet = useEditorStore((s) => s.openSnippet);
+  const openExercise = useEditorStore((s) => s.openExercise);
   const setOpenItem = useEditorStore((s) => s.setOpenItem);
   const openTabs = useEditorStore((s) => s.openTabs);
   const closeTab = useEditorStore((s) => s.closeTab);
@@ -751,6 +793,13 @@ const EditorsInner = (props: EditorsInnerProps) => {
   const updateSnippetInPool = useEditorStore((s) => s.updateSnippetInPool);
   const renameSnippetInPool = useEditorStore((s) => s.renameSnippetInPool);
   const removeSnippetFromPool = useEditorStore((s) => s.removeSnippetFromPool);
+
+  // And for exercises.
+  const projectExercises = useEditorStore((s) => s.projectExercises);
+  const addExerciseToPool = useEditorStore((s) => s.addExerciseToPool);
+  const updateExerciseInPool = useEditorStore((s) => s.updateExerciseInPool);
+  const renameExerciseInPool = useEditorStore((s) => s.renameExerciseInPool);
+  const removeExerciseFromPool = useEditorStore((s) => s.removeExerciseFromPool);
 
   // ── Authoritative editing buffer (read from the store, not props) ─────────
   // The store owns the live edit after the initial seed.  Reading these here
@@ -846,8 +895,9 @@ const EditorsInner = (props: EditorsInnerProps) => {
         projectSnippets,
         projectAssets,
         rootDivision,
+        projectExercises,
       ),
-    [openItem, divisions, projectSnippets, projectAssets, rootDivision],
+    [openItem, divisions, projectSnippets, projectAssets, rootDivision, projectExercises],
   );
   const editorKey = editorTargetKey(editorTarget);
 
@@ -863,13 +913,14 @@ const EditorsInner = (props: EditorsInnerProps) => {
         projectSnippets,
         projectAssets,
         null,
+        projectExercises,
       );
       if (target && (target.kind === item.kind || item === openItem)) {
         tabs.push({ item, target });
       }
     }
     return tabs;
-  }, [openTabs, openItem, divisions, projectSnippets, projectAssets]);
+  }, [openTabs, openItem, divisions, projectSnippets, projectAssets, projectExercises]);
 
   const activeDivision =
     editorTarget?.kind === "division" ? editorTarget.division : null;
@@ -888,7 +939,9 @@ const EditorsInner = (props: EditorsInnerProps) => {
       ? editorTarget.snippet.source
       : editorTarget?.kind === "asset"
         ? (editorTarget.asset.source ?? "")
-        : divisionActiveSource;
+        : editorTarget?.kind === "exercise"
+          ? editorTarget.exercise.source
+          : divisionActiveSource;
   // An asset's source is only the inside of its generated `<image>`; the code
   // editor draws that wrapper, locked, around it (edited from Asset settings).
   // Keyed on the fields the wrapper reads, not the asset itself — the asset is
@@ -938,7 +991,7 @@ const EditorsInner = (props: EditorsInnerProps) => {
   const editorFormat: SourceFormat =
     editorTarget?.kind === "snippet"
       ? editorTarget.snippet.sourceFormat
-      : editorTarget?.kind === "asset"
+      : editorTarget?.kind === "asset" || editorTarget?.kind === "exercise"
         ? "pretext"
         : activeDivisionFormat;
   // What the open buffer is written in, for the code editor and its menus. Every
@@ -1648,6 +1701,41 @@ const EditorsInner = (props: EditorsInnerProps) => {
     }
   };
 
+  // ── Exercises ─────────────────────────────────────────────────────────────
+  // Handled like snippets: a new exercise joins the pool and the doc, and its
+  // placeholders are renamed or removed across every division with it.
+  const handleExerciseAdded = (exercise: Exercise) => {
+    addExerciseToPool(exercise);
+    bridge?.localExerciseAdd(exercise);
+  };
+
+  const handleExerciseRemove = (exercise: Exercise) => {
+    removeExerciseFromPool(exercise);
+    bridge?.localExerciseRemove(exercise);
+    props.onExerciseRemove?.(exercise);
+  };
+
+  /** {@link renameSnippetRefEverywhere}, for `<plus:exercise ref/>` placeholders. */
+  const renameExerciseRefEverywhere = (oldRef: string, newRef: string) => {
+    if (oldRef === newRef) return;
+    for (const division of divisions) {
+      const next = renameExerciseRef(division.source, oldRef, newRef);
+      if (next !== division.source) {
+        emitContentChange(division.xmlId, next, division.sourceFormat);
+      }
+    }
+  };
+
+  /** Delete every `<plus:exercise ref="ref"/>` placeholder for an unresolved ref. */
+  const removeExerciseRefEverywhere = (ref: string) => {
+    for (const division of divisions) {
+      const next = removeExerciseRef(division.source, ref);
+      if (next !== division.source) {
+        emitContentChange(division.xmlId, next, division.sourceFormat);
+      }
+    }
+  };
+
   // ── Creation form results ────────────────────────────────────────────────
   // What the "New snippet" / "New asset" forms (`create/NewItemPane.tsx`) do
   // with the record the host created: add it to the project, bind the
@@ -1672,6 +1760,18 @@ const EditorsInner = (props: EditorsInnerProps) => {
       renameSnippetRefEverywhere(request.resolveRef, snippet.ref);
     }
     openSnippet(snippet.ref);
+  };
+
+  const handleExerciseCreated = (
+    exercise: Exercise,
+    request: CreateRequest & { kind: "exercise" },
+  ) => {
+    if (!isCurrentRequest(request)) return;
+    handleExerciseAdded(exercise);
+    if (request.resolveRef) {
+      renameExerciseRefEverywhere(request.resolveRef, exercise.ref);
+    }
+    openExercise(exercise.ref);
   };
 
   const handleAssetCreated = async (
@@ -1716,6 +1816,14 @@ const EditorsInner = (props: EditorsInnerProps) => {
       renameRefs: renameSnippetRefEverywhere,
       persist: props.onSnippetUpdate,
       mirror: (snippet, prevRef) => bridge?.localSnippetUpdate(snippet, prevRef),
+    },
+    exercise: {
+      pool: () => storeApi.getState().projectExercises,
+      update: updateExerciseInPool,
+      rename: renameExerciseInPool,
+      renameRefs: renameExerciseRefEverywhere,
+      persist: props.onExerciseUpdate,
+      mirror: (exercise, prevRef) => bridge?.localExerciseUpdate(exercise, prevRef),
     },
     asset: {
       pool: () => storeApi.getState().projectAssets,
@@ -1773,6 +1881,21 @@ const EditorsInner = (props: EditorsInnerProps) => {
     });
   };
 
+  /**
+   * An edit in the exercise designer. Its body travels like a snippet's typed
+   * source (see `applyRecordSourceChange`); its attributes are fields of the
+   * record, so a change to them is saved as metadata.
+   */
+  const applyExerciseDesignChange = (ref: string, next: ExerciseSourceValue) => {
+    applyRecordSourceChange("exercise", ref, next.source);
+    const current = storeApi.getState().projectExercises?.find((e) => e.ref === ref);
+    if (!current || sameAttrs(current.attrs ?? {}, next.attrs)) return;
+    const updated = { ...current, attrs: next.attrs };
+    updateExerciseInPool(updated);
+    bridge?.localExerciseUpdate(updated);
+    void props.onExerciseUpdate?.(updated);
+  };
+
   // ── Resize listener ──────────────────────────────────────────────────────
   // The TOC follows the same narrow/wide breakpoint as the tabs-vs-split
   // layout: collapsed on narrow screens, back to the author's remembered
@@ -1825,6 +1948,8 @@ const EditorsInner = (props: EditorsInnerProps) => {
       snippetRemove: handleSnippetRemove,
       snippetRefRemove: removeSnippetRefEverywhere,
       snippetDuplicate: canDuplicateSnippet ? handleSnippetDuplicate : undefined,
+      exerciseRemove: handleExerciseRemove,
+      exerciseRefRemove: removeExerciseRefEverywhere,
       insertContentAtCursor: (content) =>
         codeEditorRef.current?.insertAtCursor(content),
       updateTitle: (value) => {
@@ -1876,6 +2001,7 @@ const EditorsInner = (props: EditorsInnerProps) => {
     divisions: props.divisions,
     projectAssets: props.projectAssets,
     projectSnippets: props.projectSnippets,
+    projectExercises: props.projectExercises,
     title: props.title,
     docinfo: props.docinfo,
     commonDocinfo: props.commonDocinfo,
@@ -1908,6 +2034,10 @@ const EditorsInner = (props: EditorsInnerProps) => {
       !bridge &&
       props.projectSnippets !== undefined &&
       props.projectSnippets !== prev.projectSnippets;
+    const resetsExercises =
+      !bridge &&
+      props.projectExercises !== undefined &&
+      props.projectExercises !== prev.projectExercises;
     const { openItem } = storeApi.getState();
     if (
       (resetsAssets && openItem.kind === "asset") ||
@@ -1916,7 +2046,7 @@ const EditorsInner = (props: EditorsInnerProps) => {
       codeEditorRef.current?.flushPendingChange();
     }
     const keepOpenSource = <T extends { id?: string; ref?: string; source?: string }>(
-      kind: "snippet" | "asset",
+      kind: "snippet" | "exercise" | "asset",
       incoming: T[],
       local: T[] | undefined,
     ): T[] => {
@@ -1945,6 +2075,17 @@ const EditorsInner = (props: EditorsInnerProps) => {
         "snippet",
         props.projectSnippets,
         storeApi.getState().projectSnippets,
+      );
+      changed = true;
+    }
+
+    // And for exercises. The designer writes on every change, with no debounce
+    // to flush, but the open exercise's local body is still the newest.
+    if (resetsExercises && props.projectExercises) {
+      update.projectExercises = keepOpenSource(
+        "exercise",
+        props.projectExercises,
+        storeApi.getState().projectExercises,
       );
       changed = true;
     }
@@ -2016,6 +2157,7 @@ const EditorsInner = (props: EditorsInnerProps) => {
       divisions: props.divisions,
       projectAssets: props.projectAssets,
       projectSnippets: props.projectSnippets,
+      projectExercises: props.projectExercises,
       title: props.title,
       docinfo: props.docinfo,
       commonDocinfo: props.commonDocinfo,
@@ -2046,6 +2188,7 @@ const EditorsInner = (props: EditorsInnerProps) => {
         projectAssets ?? [],
         language,
         projectSnippets ?? [],
+        projectExercises ?? [],
       );
     } catch (error) {
       return `<!-- Unable to assemble document source: ${
@@ -2059,6 +2202,7 @@ const EditorsInner = (props: EditorsInnerProps) => {
     effectiveDocinfo,
     projectAssets,
     projectSnippets,
+    projectExercises,
     language,
   ]);
 
@@ -2082,9 +2226,10 @@ const EditorsInner = (props: EditorsInnerProps) => {
             activeDivision.xmlId,
             projectAssets,
             projectSnippets,
+            projectExercises,
           )
         : undefined,
-    [activeDivision, divisions, projectAssets, projectSnippets],
+    [activeDivision, divisions, projectAssets, projectSnippets, projectExercises],
   );
 
   // The root division's own tag wins over `props.projectType`: the source is
@@ -2156,6 +2301,7 @@ const EditorsInner = (props: EditorsInnerProps) => {
         projectAssets ?? [],
         language,
         projectSnippets ?? [],
+        projectExercises ?? [],
       );
     } catch {
       // A malformed sibling division must not take the preview down with it;
@@ -2171,6 +2317,7 @@ const EditorsInner = (props: EditorsInnerProps) => {
     effectiveDocinfo,
     projectAssets,
     projectSnippets,
+    projectExercises,
     language,
   ]);
 
@@ -2228,11 +2375,12 @@ const EditorsInner = (props: EditorsInnerProps) => {
     const knownRefs = new Set<string>([
       ...divisions.map((d) => d.xmlId),
       ...(projectSnippets ?? []).map((sn) => sn.ref),
+      ...(projectExercises ?? []).map((ex) => ex.ref),
       ...(projectAssets ?? []).flatMap((a) => (a.ref ? [a.ref] : [])),
     ]);
     return { sourceFormat: placementTarget.format, recordRef: placementTarget.ref, elsewhere, knownRefs };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [placementTarget?.kind, placementTarget?.ref, placementTarget?.format, divisions, projectSnippets, projectAssets]);
+  }, [placementTarget?.kind, placementTarget?.ref, placementTarget?.format, divisions, projectSnippets, projectExercises, projectAssets]);
 
   // A snippet previews on its own: resolved as an embed of it would be, inside
   // a plain article (see `assembleSnippetPreviewSource`). Only while the
@@ -2250,6 +2398,7 @@ const EditorsInner = (props: EditorsInnerProps) => {
             projectAssets ?? [],
             effectiveDocinfo,
             language,
+            projectExercises ?? [],
           )
         : undefined,
     [
@@ -2258,6 +2407,38 @@ const EditorsInner = (props: EditorsInnerProps) => {
       divisions,
       projectSnippets,
       projectAssets,
+      projectExercises,
+      effectiveDocinfo,
+      language,
+    ],
+  );
+
+  // An exercise previews the same way: placed on its own in a plain article
+  // (see `assembleExercisePreviewSource`).
+  const activeExercise =
+    editorTarget?.kind === "exercise" ? editorTarget.exercise : null;
+  const exercisePreviewContent = useMemo(
+    () =>
+      showLivePreview && activeExercise
+        ? assembleExercisePreviewSource(
+            activeExercise.ref,
+            {
+              divisions,
+              snippets: projectSnippets ?? [],
+              assets: projectAssets ?? [],
+              exercises: projectExercises ?? [],
+            },
+            effectiveDocinfo,
+            language,
+          )
+        : undefined,
+    [
+      showLivePreview,
+      activeExercise,
+      divisions,
+      projectSnippets,
+      projectAssets,
+      projectExercises,
       effectiveDocinfo,
       language,
     ],
@@ -2444,6 +2625,9 @@ const EditorsInner = (props: EditorsInnerProps) => {
   // still holding when the author switches away lands on the record that was
   // open when it was typed — not on whatever `openItem` says by then.
   const handleEditorChange = (content: string | undefined) => {
+    // An exercise is edited in the designer; the code editor, hidden behind
+    // it, has nothing of the exercise's to deliver.
+    if (editorTarget?.kind === "exercise") return;
     if (openRecord) applyRecordSourceChange(openRecord.kind, openRecord.ref, content);
     else handleDivisionContentChange(content);
   };
@@ -2468,6 +2652,10 @@ const EditorsInner = (props: EditorsInnerProps) => {
   const onOpenSnippets =
     props.projectSnippets !== undefined && editorFormat === "pretext"
       ? () => startCreate({ kind: "snippet" })
+      : undefined;
+  const onOpenExercises =
+    props.projectExercises !== undefined && editorFormat === "pretext"
+      ? () => startCreate({ kind: "exercise" })
       : undefined;
   const onShowFullSource = () => openModal("isFullSourceOpen");
 
@@ -2548,11 +2736,13 @@ const EditorsInner = (props: EditorsInnerProps) => {
       {creating && (
         <NewItemPane
           onCreateSnippet={props.onCreateSnippet}
+          onCreateExercise={props.onCreateExercise}
           onUploadAsset={props.onAssetUpload}
           onFetchAssetUrl={props.onAssetFetchUrl}
           onCreateAuthoredAsset={props.onCreateAuthored}
           onCreateGeneratedAsset={props.onCreateGenerated}
           onSnippetCreated={handleSnippetCreated}
+          onExerciseCreated={handleExerciseCreated}
           onAssetCreated={(asset, request) => void handleAssetCreated(asset, request)}
         />
       )}
@@ -2564,10 +2754,25 @@ const EditorsInner = (props: EditorsInnerProps) => {
           target={editorTarget}
           readOnly={props.readOnly}
           onSaveSnippet={(snippet, prevRef) => saveRecord("snippet", snippet, prevRef)}
+          onSaveExercise={(exercise, prevRef) => saveRecord("exercise", exercise, prevRef)}
           onSaveAsset={(asset, prevRef) => saveRecord("asset", asset, prevRef)}
           canReplaceAsset={canReplaceAsset}
         />
-        <div className="flex flex-col flex-1 min-h-0 relative">{codeEditor}</div>
+        {/* An exercise is edited in the designer, not as text. The code
+            editor stays mounted (hidden) beneath it, as under a creation
+            form, so returning to a division finds its buffer intact. */}
+        {activeExercise && (
+          <ExerciseDesigner
+            key={editorKey}
+            exerciseRef={activeExercise.ref}
+            value={{ source: activeExercise.source, attrs: activeExercise.attrs ?? {} }}
+            onChange={(next) => applyExerciseDesignChange(activeExercise.ref, next)}
+            readOnly={props.readOnly}
+          />
+        )}
+        <div className={clsx("flex flex-col flex-1 min-h-0 relative", activeExercise && "hidden")}>
+          {codeEditor}
+        </div>
       </div>
     </div>
   );
@@ -2596,7 +2801,22 @@ const EditorsInner = (props: EditorsInnerProps) => {
     // project to number it against and no division for either sync direction
     // to translate through. Its `divisionId` is only the key LivePreview
     // rebuilds on when the open item changes — not an xml:id.
-    const target = activeSnippet
+    const target = activeExercise
+      ? {
+          content: exercisePreviewContent || "",
+          serverContent: exercisePreviewContent || "",
+          title: activeExercise.title?.trim() || activeExercise.ref,
+          documentTarget: "html" as const,
+          onSyncToSource: undefined,
+          divisionId: `exercise:${activeExercise.ref}`,
+          previewLineMap: null,
+          fragment: false,
+          contextSource: undefined,
+          scope: "editor" as const,
+          cursorLine: undefined,
+          onScopeChange: undefined,
+        }
+      : activeSnippet
       ? {
           content: snippetPreviewContent || "",
           serverContent: snippetPreviewContent || "",
@@ -2669,6 +2889,8 @@ const EditorsInner = (props: EditorsInnerProps) => {
       canCreateAssets={props.projectAssets !== undefined}
       hideSnippets={props.hideSnippets}
       canCreateSnippets={props.projectSnippets !== undefined}
+      hideExercises={props.hideExercises || props.projectExercises === undefined}
+      canCreateExercises={props.projectExercises !== undefined}
       onJumpToMatch={handleJumpToMatch}
       onReplaceMatches={handleReplaceMatches}
     />
@@ -2790,10 +3012,12 @@ const EditorsInner = (props: EditorsInnerProps) => {
         canConvertToPretext={canConvertToPretext}
         onOpenAssets={onOpenAssets}
         onOpenSnippets={onOpenSnippets}
+        onOpenExercises={onOpenExercises}
         onShowFullSource={onShowFullSource}
         onOpenFindInProject={handleOpenFindPanel}
         hideAssets={props.hideAssets}
         hideSnippets={props.hideSnippets}
+        hideExercises={props.hideExercises}
         pasteAutoConvert={pasteAutoConvert}
         onTogglePasteAutoConvert={togglePasteAutoConvert}
         menuState={codeEditorMenuState}
@@ -2807,7 +3031,10 @@ const EditorsInner = (props: EditorsInnerProps) => {
             engines={props.importEngines}
             onShare={props.onImportShare}
             parentType={activeDivision?.type}
-            takenIds={takenImportIds(divisions, projectAssets, projectSnippets)}
+            takenIds={takenImportIds(divisions, projectAssets, [
+              ...(projectSnippets ?? []),
+              ...(projectExercises ?? []),
+            ])}
             onClose={() => closeModal("isImportDialogOpen")}
           />
         ) : null}

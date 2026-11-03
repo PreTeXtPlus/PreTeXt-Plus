@@ -9,6 +9,7 @@ class ContentTest < ActiveSupport::TestCase
 
     [ project.divisions.build(ref: "taken_ref"),
       project.snippets.build(ref: "taken_ref"),
+      project.exercises.build(ref: "taken_ref"),
       project.assets.build(ref: "taken_ref", kind: :file_asset) ].each do |content|
       assert_not content.valid?, "a #{content.kind} took a ref a snippet holds"
       assert_includes content.errors[:ref], "has already been taken"
@@ -43,6 +44,7 @@ class ContentTest < ActiveSupport::TestCase
 
     assert project.divisions.build(ref: "d").division?
     assert project.snippets.build(ref: "s").snippet?
+    assert project.exercises.build(ref: "e").exercise?
   end
 
   test "the per-kind collections hold only their own kind" do
@@ -520,5 +522,15 @@ class ContentTest < ActiveSupport::TestCase
     assert asset.save, asset.errors.full_messages.inspect
     assert_equal "graph.svg", asset.external_filename
     assert asset.thumbnailable?
+  end
+
+  # ---- exercises -----------------------------------------------------------
+
+  test "an exercise's source is always PreTeXt" do
+    assert projects(:one).exercises.build(ref: "quiz", source: "<statement><p>Q</p></statement>").valid?
+
+    exercise = projects(:one).exercises.build(ref: "quiz", source_format: :latex)
+    assert_not exercise.valid?
+    assert exercise.errors[:source_format].any?
   end
 end

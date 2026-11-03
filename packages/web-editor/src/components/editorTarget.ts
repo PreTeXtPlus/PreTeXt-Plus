@@ -1,4 +1,4 @@
-import type { Asset, Snippet } from "../types/editor";
+import type { Asset, Exercise, Snippet } from "../types/editor";
 import type { Division } from "../types/sections";
 import type { OpenItem } from "../store/editorStore";
 
@@ -6,6 +6,7 @@ import type { OpenItem } from "../store/editorStore";
 export type EditorTarget =
   | { kind: "division"; division: Division }
   | { kind: "snippet"; snippet: Snippet }
+  | { kind: "exercise"; exercise: Exercise }
   | { kind: "asset"; asset: Asset };
 
 /**
@@ -20,10 +21,14 @@ export function resolveEditorTarget(
   snippets: Snippet[] | undefined,
   assets: Asset[] | undefined,
   rootDivision: Division | null,
+  exercises?: Exercise[],
 ): EditorTarget | null {
   if (openItem.kind === "snippet") {
     const snippet = snippets?.find((s) => s.ref === openItem.ref);
     if (snippet) return { kind: "snippet", snippet };
+  } else if (openItem.kind === "exercise") {
+    const exercise = exercises?.find((e) => e.ref === openItem.ref);
+    if (exercise) return { kind: "exercise", exercise };
   } else if (openItem.kind === "asset") {
     const asset = assets?.find((a) => a.ref === openItem.ref);
     if (asset) return { kind: "asset", asset };
@@ -46,4 +51,6 @@ export const editorTargetKey = (target: EditorTarget | null): string =>
       ? target.division.xmlId
       : target.kind === "snippet"
         ? `snippet:${target.snippet.id ?? target.snippet.ref}`
-        : `asset:${target.asset.id ?? target.asset.ref ?? ""}`;
+        : target.kind === "exercise"
+          ? `exercise:${target.exercise.id ?? target.exercise.ref}`
+          : `asset:${target.asset.id ?? target.asset.ref ?? ""}`;

@@ -156,7 +156,7 @@ describe("creating a snippet", () => {
     });
     expect(within(pane()).getByRole("alert")).toHaveTextContent("can't be empty");
 
-    fireEvent.change(within(pane()).getByLabelText("Reference id"), {
+    fireEvent.change(within(pane()).getByLabelText("Reference ID"), {
       target: { value: "greeting" },
     });
     await act(async () => {
@@ -171,7 +171,7 @@ describe("creating a snippet", () => {
     showSnippets();
     fireEvent.click(screen.getByTestId("toc-new-snippet-btn"));
 
-    fireEvent.change(within(pane()).getByLabelText("Reference id"), {
+    fireEvent.change(within(pane()).getByLabelText("Reference ID"), {
       target: { value: "theorem-note" },
     });
     fireEvent.change(within(pane()).getByLabelText("Source format"), {
@@ -194,7 +194,7 @@ describe("creating a snippet", () => {
     fireEvent.change(within(pane()).getByLabelText("Title"), {
       target: { value: "  A useful note " },
     });
-    fireEvent.change(within(pane()).getByLabelText("Reference id"), {
+    fireEvent.change(within(pane()).getByLabelText("Reference ID"), {
       target: { value: "useful-note" },
     });
     await act(async () => {
@@ -218,7 +218,7 @@ describe("creating a snippet", () => {
     );
 
     expect(screen.getByTestId("new-item-heading")).toHaveTextContent("Link snippet");
-    const refField = within(pane()).getByLabelText("Reference id") as HTMLInputElement;
+    const refField = within(pane()).getByLabelText("Reference ID") as HTMLInputElement;
     expect(refField.value).toBe("missing");
 
     fireEvent.change(refField, { target: { value: "found" } });
@@ -365,7 +365,7 @@ describe("the clipboard", () => {
     renderEditors();
     showSnippets();
     fireEvent.click(screen.getByTestId("toc-new-snippet-btn"));
-    fireEvent.change(within(pane()).getByLabelText("Reference id"), {
+    fireEvent.change(within(pane()).getByLabelText("Reference ID"), {
       target: { value: "note" },
     });
     await act(async () => {
@@ -375,6 +375,23 @@ describe("the clipboard", () => {
     expect(barTitle()).toHaveTextContent("note");
     expect(writeText).not.toHaveBeenCalled();
     expect(drawerEmbedCode()).toHaveTextContent('<plus:snippet ref="note"/>');
+  });
+
+  it("is left alone by a new exercise, whose embed code waits in the drawer", async () => {
+    const writeText = stubClipboard();
+    renderEditors({ projectExercises: [] });
+    fireEvent.click(screen.getByTestId("explorer-tab-exercises"));
+    fireEvent.click(screen.getByTestId("toc-new-exercise-btn"));
+    fireEvent.change(within(pane()).getByLabelText("Reference ID"), {
+      target: { value: "drill" },
+    });
+    await act(async () => {
+      fireEvent.click(within(pane()).getByText("Create"));
+    });
+
+    expect(barTitle()).toHaveTextContent("drill");
+    expect(writeText).not.toHaveBeenCalled();
+    expect(drawerEmbedCode()).toHaveTextContent('<plus:exercise ref="drill"/>');
   });
 
   it("is left alone by a new asset, whose embed code waits in the drawer", async () => {
@@ -543,6 +560,216 @@ describe("while an upload is in flight", () => {
     });
     expect(onAssetRemove).not.toHaveBeenCalled();
     expect(barTitle()).toHaveTextContent("greeting");
+  });
+});
+
+describe("the new asset form's title and Reference ID", () => {
+  const titleField = () => within(pane()).getByLabelText("Title") as HTMLInputElement;
+  const refField = () => within(pane()).getByLabelText("Reference ID") as HTMLInputElement;
+  const pick = (name: string) =>
+    fireEvent.change(pane().querySelector('input[type="file"]') as HTMLInputElement, {
+      target: { files: [new File(["png"], name, { type: "image/png" })] },
+    });
+  const uploader = () =>
+    vi.fn(async (_file: File, title?: string, ref?: string) => ({
+      id: "up",
+      ref: ref ?? "derived",
+      title: title ?? "",
+    }));
+  const open = () => {
+    showAssets();
+    fireEvent.click(screen.getByTestId("toc-new-asset-btn"));
+  };
+  const create = () =>
+    act(async () => {
+      fireEvent.click(within(pane()).getByText("Create"));
+    });
+
+  it("suggests both after an upload, and hands them to the host", async () => {
+    const upload = uploader();
+    renderEditors({ onAssetUpload: upload });
+    open();
+    pick("stop-sign_v2.png");
+
+    expect(titleField().value).toBe("Stop sign v2");
+    expect(refField().value).toBe("stop-sign-v2");
+    await create();
+    expect(upload).toHaveBeenCalledWith(expect.any(File), "Stop sign v2", "stop-sign-v2");
+  });
+
+  it("suggests a ref nothing in the project holds", () => {
+    renderEditors({ onAssetUpload: uploader() });
+    open();
+    // A snippet holds this one: refs are one namespace.
+    fireEvent.change(titleField(), { target: { value: "Greeting" } });
+    expect(refField().value).toBe("greeting-2");
+  });
+
+  it("stops following the title once the ref is edited", () => {
+    renderEditors({ onAssetUpload: uploader() });
+    open();
+    fireEvent.change(titleField(), { target: { value: "First" } });
+    expect(refField().value).toBe("first");
+
+    fireEvent.change(refField(), { target: { value: "mine" } });
+    fireEvent.change(titleField(), { target: { value: "Second" } });
+    expect(refField().value).toBe("mine");
+  });
+
+  it("keeps an edited title when another file is picked", () => {
+    renderEditors({ onAssetUpload: uploader() });
+    open();
+    pick("one.png");
+    fireEvent.click(within(pane()).getByText("Choose a different file"));
+    pick("two.png");
+    expect(titleField().value).toBe("Two");
+
+    fireEvent.change(titleField(), { target: { value: "Chosen" } });
+    fireEvent.click(within(pane()).getByText("Choose a different file"));
+    pick("three.png");
+    expect(titleField().value).toBe("Chosen");
+  });
+
+  it("refuses an empty or taken ref without calling the host", async () => {
+    const upload = uploader();
+    renderEditors({ onAssetUpload: upload });
+    open();
+    pick("one.png");
+
+    fireEvent.change(refField(), { target: { value: "" } });
+    await create();
+    expect(within(pane()).getByRole("alert")).toHaveTextContent("Reference ID can't be empty");
+
+    fireEvent.change(refField(), { target: { value: "fig" } });
+    await create();
+    expect(within(pane()).getByRole("alert")).toHaveTextContent("already in use");
+    expect(upload).not.toHaveBeenCalled();
+  });
+
+  it("suggests both from an external URL", async () => {
+    const upload = uploader();
+    renderEditors({
+      onAssetUpload: upload,
+      onAssetFetchUrl: async () => new File(["png"], "x.png", { type: "image/png" }),
+    });
+    open();
+    fireEvent.click(within(pane()).getByText("External URL"));
+    fireEvent.change(within(pane()).getByLabelText("Image URL"), {
+      target: { value: "https://example.com/a/road%20map.png?size=2" },
+    });
+
+    expect(titleField().value).toBe("Road map");
+    expect(refField().value).toBe("road-map");
+    await create();
+    expect(upload).toHaveBeenCalledWith(expect.any(File), "Road map", "road-map");
+  });
+
+  it("keeps an unlinked placeholder's ref while the title changes", () => {
+    renderEditors();
+    showAssets();
+    fireEvent.click(within(screen.getByTestId("asset-row-nofig")).getByRole("button"));
+    fireEvent.click(within(pane()).getByText("Custom"));
+    expect(refField().value).toBe("nofig");
+
+    fireEvent.change(titleField(), { target: { value: "New figure" } });
+    expect(refField().value).toBe("nofig");
+  });
+
+  it("has no Reference ID when replacing, and sends none", async () => {
+    const upload = uploader();
+    renderEditors({ onAssetUpload: upload, onAssetRemove: async () => {} });
+    showAssets();
+    fireEvent.click(within(screen.getByTestId("asset-row-fig")).getByRole("button"));
+    fireEvent.click(screen.getByText("Replace image…"));
+
+    expect(within(pane()).queryByLabelText("Reference ID")).toBeNull();
+    pick("new.png");
+    await act(async () => {
+      fireEvent.click(within(pane()).getByText("Replace"));
+    });
+    expect(upload).toHaveBeenCalledWith(expect.any(File), "New", undefined);
+  });
+});
+
+describe("every creation form's title and Reference ID", () => {
+  it.each([
+    ["division", "My Division", "my-division", () => fireEvent.click(screen.getAllByTestId("toc-add-child")[0])],
+    ["snippet", "My Snippet", "my-snippet", () => {
+      showSnippets();
+      fireEvent.click(screen.getByTestId("toc-new-snippet-btn"));
+    }],
+    ["exercise", "My Exercise", "my-exercise", () => {
+      fireEvent.click(screen.getByTestId("explorer-tab-exercises"));
+      fireEvent.click(screen.getByTestId("toc-new-exercise-btn"));
+    }],
+    ["asset", "My Asset", "my-asset", () => {
+      showAssets();
+      fireEvent.click(screen.getByTestId("toc-new-asset-btn"));
+    }],
+  ])("the %s form uses the shared placeholders", (_kind, title, ref, open) => {
+    renderEditors({ projectExercises: [] });
+    open();
+    expect(within(pane()).getByLabelText("Title")).toHaveAttribute("placeholder", title);
+    expect(within(pane()).getByLabelText("Reference ID")).toHaveAttribute("placeholder", ref);
+  });
+
+  it.each([
+    ["snippet", () => {
+      showSnippets();
+      fireEvent.click(screen.getByTestId("toc-new-snippet-btn"));
+    }],
+    ["exercise", () => {
+      fireEvent.click(screen.getByTestId("explorer-tab-exercises"));
+      fireEvent.click(screen.getByTestId("toc-new-exercise-btn"));
+    }],
+  ])("the %s form opens with the title focused", (_kind, open) => {
+    renderEditors({ projectExercises: [] });
+    open();
+    expect(within(pane()).getByLabelText("Title")).toHaveFocus();
+  });
+
+  describe.each([
+    ["snippet", () => {
+      showSnippets();
+      fireEvent.click(screen.getByTestId("toc-new-snippet-btn"));
+    }],
+    ["exercise", () => {
+      fireEvent.click(screen.getByTestId("explorer-tab-exercises"));
+      fireEvent.click(screen.getByTestId("toc-new-exercise-btn"));
+    }],
+  ])("the %s form's suggested Reference ID", (_kind, open) => {
+    const titleField = () => within(pane()).getByLabelText("Title") as HTMLInputElement;
+    const refField = () => within(pane()).getByLabelText("Reference ID") as HTMLInputElement;
+
+    it("follows the title, avoiding every ref in the project", () => {
+      renderEditors({ projectExercises: [] });
+      open();
+      expect(refField().value).toBe("");
+
+      fireEvent.change(titleField(), { target: { value: "Road Map" } });
+      expect(refField().value).toBe("road-map");
+      // An asset holds this one: refs are one namespace.
+      fireEvent.change(titleField(), { target: { value: "Fig" } });
+      expect(refField().value).toBe("fig-2");
+    });
+
+    it("stops following once the ref is edited, even to blank", () => {
+      renderEditors({ projectExercises: [] });
+      open();
+      fireEvent.change(titleField(), { target: { value: "First" } });
+      fireEvent.change(refField(), { target: { value: "" } });
+      fireEvent.change(titleField(), { target: { value: "Second" } });
+      expect(refField().value).toBe("");
+    });
+  });
+
+  it("explains nothing under the asset form's title, on any tab", () => {
+    renderEditors({ onAssetUpload: async () => asset });
+    showAssets();
+    fireEvent.click(screen.getByTestId("toc-new-asset-btn"));
+    expect(within(pane()).queryByText("Optional.")).toBeNull();
+    fireEvent.click(within(pane()).getByText("Custom"));
+    expect(within(pane()).queryByText(/in the editor next/)).toBeNull();
   });
 });
 

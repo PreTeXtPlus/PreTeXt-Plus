@@ -250,14 +250,19 @@ a peer removing the open item does not (`openItemState`'s `byAuthor`).
   notification in one go — under the id the author chose, so a new division is
   never renamed, which is why only *existing* divisions reach
   `syncParentDivisionRef`.
-- **Snippet** (`create/NewSnippetForm.tsx`): an optional title, ref (checked
-  against every division/asset/snippet ref) and source format →
+- **Snippet** (`create/NewSnippetForm.tsx`): an optional title, ref (suggested
+  from the title until edited, as an asset's is; checked against every ref in
+  the project, `useTakenRefs`) and source format →
   `onCreateSnippet(ref, sourceFormat, title)`. A snippet's title is a
   plain-text display name only — it is spliced into its parent with no element
   of its own — so lists and the title bar fall back to the ref without one, and
   its preview article is titled after it (`snippetPreviewTitle`).
 - **Asset** (`create/NewAssetForm.tsx`): Upload / External URL / Custom →
-  `onAssetUpload` / `onAssetFetchUrl` + `onAssetUpload` / `onCreateAuthored`.
+  `onAssetUpload` / `onAssetFetchUrl` + `onAssetUpload` / `onCreateAuthored`,
+  each handed the title and ref. Both are suggested until the author edits
+  them: the title from the file or URL's name, the ref from the title
+  (`uniqueRef` against `useTakenRefs`). A replacement keeps the old ref, so
+  that form has no ref field.
 - A request may carry `resolveRef` (an `unlinked` explorer row: the new record
   binds that placeholder, renaming it when the ref differs) or, for assets,
   `replaceRef` ("Replace image…" in the asset drawer: only image sources, and

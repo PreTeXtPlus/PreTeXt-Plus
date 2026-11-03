@@ -27,7 +27,7 @@ class Project < ApplicationRecord
   # an opaque key and the server -- not this record -- is what integrates its
   # updates. See ProjectDoc, #collaborative? and #reset_collaborative_doc!.
 
-  # Everything the document is made of: its divisions, snippets and assets
+  # Everything the document is made of: its divisions, snippets, exercises and assets
   # (see Content). dependent: :destroy so deleting a project drops all of it,
   # attached files included -- none of it has a life outside its project. Only
   # this association cascades; the per-kind ones below are views of it.
@@ -39,14 +39,15 @@ class Project < ApplicationRecord
   # asset says which kind of asset it is itself.
   has_many :divisions, -> { divisions }, class_name: "Content", inverse_of: :project
   has_many :snippets, -> { snippets }, class_name: "Content", inverse_of: :project
+  has_many :exercises, -> { exercises }, class_name: "Content", inverse_of: :project
   has_many :assets, -> { assets }, class_name: "Content", inverse_of: :project
   # allow_destroy lets the editor remove a record by sending `_destroy: true`.
-  accepts_nested_attributes_for :divisions, :snippets, :assets, allow_destroy: true
+  accepts_nested_attributes_for :divisions, :snippets, :exercises, :assets, allow_destroy: true
 
   has_many :targets, dependent: :destroy
   has_many :builds, dependent: :destroy
 
-  # All three nested collections accept ids the editor minted itself; see
+  # Every nested collection accepts ids the editor minted itself; see
   # #tolerate_client_minted_ids for why, and for what these overrides do.
   # Divisions additionally never lose their root this way; see #keep_root_division.
   def divisions_attributes=(attributes)
@@ -59,6 +60,10 @@ class Project < ApplicationRecord
 
   def snippets_attributes=(attributes)
     super(tolerate_client_minted_ids(snippets, attributes))
+  end
+
+  def exercises_attributes=(attributes)
+    super(tolerate_client_minted_ids(exercises, attributes))
   end
 
   enum :document_type, { article: 0, book: 1, slideshow: 2 }, default: :article, suffix: true, validate: true
@@ -384,7 +389,8 @@ class Project < ApplicationRecord
     # re-uploaded, only new active_storage_attachments rows are created once
     # `duplicate` saves. Built through the per-kind collections, which are what
     # the root-division checks below read.
-    [ [ divisions, duplicate.divisions ], [ snippets, duplicate.snippets ], [ assets, duplicate.assets ] ].each do |originals, copies|
+    [ [ divisions, duplicate.divisions ], [ snippets, duplicate.snippets ], [ exercises, duplicate.exercises ],
+      [ assets, duplicate.assets ] ].each do |originals, copies|
       originals.each do |content|
         copy = copies.build(content.dup.attributes)
         copy.files = content.files.blobs if content.files.attached?

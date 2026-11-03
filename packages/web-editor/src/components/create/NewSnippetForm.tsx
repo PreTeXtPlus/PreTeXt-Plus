@@ -1,8 +1,8 @@
 import { useEffect, useId, useState, type KeyboardEvent } from "react";
 import clsx from "clsx";
 import type { Snippet, SourceFormat } from "../../types/editor";
-import { sanitizeXmlId } from "../../sectionUtils";
-import { useEditorStore } from "../../store/hooks";
+import { sanitizeXmlId, slugifyTitle, uniqueRef } from "../../sectionUtils";
+import { useTakenRefs } from "../../store/hooks";
 import { SOURCE_FORMAT_LABELS } from "../toc/types";
 import {
   FIELD_CONTROL_CLASSES,
@@ -46,12 +46,14 @@ const NewSnippetForm = ({
   onCancel,
   onBusyChange,
 }: NewSnippetFormProps) => {
-  const divisions = useEditorStore((s) => s.divisions);
-  const projectSnippets = useEditorStore((s) => s.projectSnippets);
-  const projectAssets = useEditorStore((s) => s.projectAssets);
+  const takenRefs = useTakenRefs();
 
   const [title, setTitle] = useState("");
-  const [ref, setRef] = useState(resolveRef ?? "");
+  // Suggested from the title until the author edits it, and theirs from then
+  // on, even blank: `null` means "still following the suggestion".
+  const [editedRef, setEditedRef] = useState<string | null>(resolveRef ?? null);
+  const ref =
+    editedRef ?? (title.trim() ? uniqueRef(slugifyTitle(title) || "snippet", takenRefs) : "");
   const [sourceFormat, setSourceFormat] = useState<SourceFormat>("pretext");
   const [error, setError] = useState<string | null>(null);
   const [isCreating, setIsCreating] = useState(false);
@@ -65,18 +67,11 @@ const NewSnippetForm = ({
     if (isCreating) return;
     const sanitized = sanitizeXmlId(ref);
     if (!sanitized) {
-      setError("Reference can't be empty.");
+      setError("Reference ID can't be empty.");
       return;
     }
-    // A snippet's ref must not collide with a division's xml:id, an asset's
-    // ref, or another snippet's ref.
-    const taken = new Set<string>([
-      ...(divisions ?? []).map((d) => d.xmlId),
-      ...(projectAssets ?? []).map((a) => a.ref).filter((r): r is string => !!r),
-      ...(projectSnippets ?? []).map((s) => s.ref),
-    ]);
-    if (taken.has(sanitized)) {
-      setError(`Reference "${sanitized}" is already in use. Choose a unique reference.`);
+    if (takenRefs.has(sanitized)) {
+      setError(`Reference ID "${sanitized}" is already in use. Choose a unique Reference ID.`);
       return;
     }
     setError(null);
@@ -106,23 +101,23 @@ const NewSnippetForm = ({
           className={FIELD_CONTROL_CLASSES}
           type="text"
           value={title}
-          placeholder="optional"
+          placeholder="My Snippet"
           onChange={(e) => setTitle(e.target.value)}
           onKeyDown={handleKeyDown}
           disabled={isCreating}
+          autoFocus
         />
       </SettingsField>
-      <SettingsField label="Reference id" htmlFor={`${fieldId}-ref`}>
+      <SettingsField label="Reference ID" htmlFor={`${fieldId}-ref`}>
         <input
           id={`${fieldId}-ref`}
           className={clsx(FIELD_CONTROL_CLASSES, "font-mono")}
           type="text"
           value={ref}
           placeholder="my-snippet"
-          onChange={(e) => setRef(e.target.value)}
+          onChange={(e) => setEditedRef(e.target.value)}
           onKeyDown={handleKeyDown}
           disabled={isCreating}
-          autoFocus
         />
         {resolveRef && (
           <SettingsNote>

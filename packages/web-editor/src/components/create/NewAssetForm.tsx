@@ -2,6 +2,8 @@ import { useEffect, useId, useRef, useState } from "react";
 import clsx from "clsx";
 import type { Asset, GeneratorId } from "../../types/editor";
 import { generatorIds, generators } from "../../generators";
+import { sanitizeXmlId, slugifyTitle, uniqueRef } from "../../sectionUtils";
+import { useTakenRefs } from "../../store/hooks";
 import { DialogFileInput, DialogTab, DialogTabBar } from "../Dialog";
 import {
   FIELD_CONTROL_CLASSES,
@@ -16,26 +18,29 @@ export interface NewAssetFormProps {
    * Custom (authored) source is not offered.
    */
   isReplace?: boolean;
-  /** Prefills the title, so the host-derived ref is likely to match it. */
+  /** Prefills the title. */
   initialTitle?: string;
+  /** The unlinked placeholder ref this asset will bind: prefills the Reference ID. */
+  resolveRef?: string;
   /**
    * Upload an image file; the host returns the created asset. `title` is the
-   * human-readable title the author entered — distinct from `file.name`.
+   * human-readable title the author entered — distinct from `file.name` — and
+   * `ref` the Reference ID, omitted when replacing, whose asset keeps its own.
    */
-  onUpload?: (file: File, title?: string) => Promise<Asset>;
+  onUpload?: (file: File, title?: string, ref?: string) => Promise<Asset>;
   /**
    * Fetch an external URL on the author's behalf and return its bytes, which
    * are then committed through `onUpload` — one code path creates files.
    */
   onFetchUrl?: (url: string) => Promise<File>;
-  /** Create an authored asset (no file; the host derives its ref from `title`). */
-  onCreateAuthored?: (title: string) => Promise<Asset>;
+  /** Create an authored asset (no file) under `ref`. */
+  onCreateAuthored?: (title: string, ref?: string) => Promise<Asset>;
   /**
    * Create a generated asset for `generator` — one tab per registry entry
-   * (PreFigure, …). The host derives the ref from `title` and persists the
-   * generator's starter source; the diagram is written in the editor next.
+   * (PreFigure, …), under `ref`. The host persists the generator's starter
+   * source; the diagram is written in the editor next.
    */
-  onCreateGenerated?: (generator: GeneratorId, title: string) => Promise<Asset>;
+  onCreateGenerated?: (generator: GeneratorId, title: string, ref?: string) => Promise<Asset>;
   /** The asset now exists — see `NewItemPane`. */
   onCreated: (asset: Asset) => void;
   onCancel: () => void;  /** Told when a request to the host starts and settles. */
@@ -62,6 +67,25 @@ function namePastedImageFile(file: File): File {
   return new File([file], `pasted-image-${Date.now()}`, { type: file.type });
 }
 
+/** A readable title from a filename: `stop-sign_v2.png` is "Stop sign v2". */
+function titleFromFilename(name: string): string {
+  const words = name
+    .replace(/\.[^.]+$/, "")
+    .replace(/[-_]+/g, " ")
+    .trim();
+  return words.charAt(0).toUpperCase() + words.slice(1);
+}
+
+/** {@link titleFromFilename} for a URL's last path segment; `""` if it has none. */
+function titleFromUrl(url: string): string {
+  try {
+    const segment = new URL(url).pathname.split("/").pop() ?? "";
+    return titleFromFilename(decodeURIComponent(segment));
+  } catch {
+    return "";
+  }
+}
+
 const errorMessage = (err: unknown, fallback: string) =>
   err instanceof Error ? err.message : fallback;
 
@@ -73,6 +97,7 @@ const errorMessage = (err: unknown, fallback: string) =>
 const NewAssetForm = ({
   isReplace,
   initialTitle = "",
+  resolveRef,
   onUpload,
   onFetchUrl,
   onCreateAuthored,
@@ -87,7 +112,11 @@ const NewAssetForm = ({
     onUpload ? "upload" : canAuthor ? "authored" : "url",
   );
   const generatorTab = generatorTabs.find((id) => id === tab);
-  const [title, setTitle] = useState(initialTitle);
+  // The title and ref are suggested until the author edits them, and theirs
+  // from then on, even blank: `null` means "still following the suggestion".
+  const [editedTitle, setEditedTitle] = useState<string | null>(initialTitle || null);
+  const [editedRef, setEditedRef] = useState<string | null>(resolveRef ?? null);
+  const takenRefs = useTakenRefs();
   const [error, setError] = useState<string | null>(null);
   const [isBusy, setIsBusy] = useState(false);
   const fieldId = useId();
@@ -98,16 +127,17 @@ const NewAssetForm = ({
 
   // A picked file is held for preview until the author confirms.
   const [file, setFile] = useState<File | null>(null);
+  const [fileTitle, setFileTitle] = useState("");
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [isDragging, setIsDragging] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const [url, setUrl] = useState("");
 
-  const pickFile = (picked: File, pickedTitle = picked.name) => {
+  const pickFile = (picked: File, pickedTitle = titleFromFilename(picked.name)) => {
     setError(null);
     setFile(picked);
-    setTitle((t) => t || pickedTitle);
+    setFileTitle(pickedTitle);
     setPreviewUrl(URL.createObjectURL(picked));
   };
 
@@ -149,8 +179,15 @@ const NewAssetForm = ({
     }
   };
 
-  const trimmedTitle = title.trim();
   const trimmedUrl = url.trim();
+  const suggestedTitle =
+    tab === "upload" ? fileTitle : tab === "url" ? titleFromUrl(trimmedUrl) : "";
+  const title = editedTitle ?? suggestedTitle;
+  const trimmedTitle = title.trim();
+  const suggestedRef = trimmedTitle
+    ? uniqueRef(slugifyTitle(trimmedTitle) || "asset", takenRefs)
+    : "";
+  const ref = editedRef ?? suggestedRef;
 
   const canSubmit =
     !isBusy &&
@@ -163,28 +200,39 @@ const NewAssetForm = ({
 
   const handleSubmit = () => {
     if (!canSubmit) return;
+    // A replacement takes over the old asset's ref, so it names none of its own.
+    let newRef: string | undefined;
+    if (!isReplace) {
+      newRef = sanitizeXmlId(ref);
+      if (!newRef) {
+        setError("Reference ID can't be empty.");
+        return;
+      }
+      if (takenRefs.has(newRef)) {
+        setError(`Reference ID "${newRef}" is already in use. Choose a unique Reference ID.`);
+        return;
+      }
+    }
     if (tab === "upload" && file && onUpload) {
-      void run(() => onUpload(file, trimmedTitle || file.name), "Upload failed.");
+      void run(() => onUpload(file, trimmedTitle || file.name, newRef), "Upload failed.");
     } else if (tab === "url") {
       if (onFetchUrl && onUpload) {
         void run(
-          async () => onUpload(await onFetchUrl(trimmedUrl), trimmedTitle || undefined),
+          async () => onUpload(await onFetchUrl(trimmedUrl), trimmedTitle || undefined, newRef),
           "Failed to add URL.",
         );
       } else {
         onCreated({
           id: localAssetId("url"),
           title: trimmedTitle || trimmedUrl,
-          ref: trimmedUrl.split("/").pop() || "image",
+          ref: newRef ?? (trimmedUrl.split("/").pop() || "image"),
           url: trimmedUrl,
         });
       }
     } else if (tab === "authored" && onCreateAuthored) {
-      // Only offered when the host can create one (`canAuthor`), since only
-      // the host derives an authored asset's ref.
-      void run(() => onCreateAuthored(trimmedTitle), "Failed to create asset.");
+      void run(() => onCreateAuthored(trimmedTitle, newRef), "Failed to create asset.");
     } else if (generatorTab && onCreateGenerated) {
-      void run(() => onCreateGenerated(generatorTab, trimmedTitle), "Failed to create asset.");
+      void run(() => onCreateGenerated(generatorTab, trimmedTitle, newRef), "Failed to create asset.");
     }
   };
 
@@ -299,33 +347,29 @@ const NewAssetForm = ({
           id={`${fieldId}-title`}
           type="text"
           className={FIELD_CONTROL_CLASSES}
-          placeholder={
-            isSourceTab ? "My Diagram" : file?.name ?? "My image"
-          }
+          placeholder="My Asset"
           value={title}
-          onChange={(e) => setTitle(e.target.value)}
+          onChange={(e) => setEditedTitle(e.target.value)}
           onKeyDown={(e) => { if (e.key === "Enter") handleSubmit(); }}
           disabled={isBusy}
           autoFocus={isSourceTab}
         />
-        <SettingsNote>
-          {generatorTab ? (
-            <>
-              A reference id is generated from the title. You'll write the{" "}
-              {generators[generatorTab].label} diagram in the editor next, and
-              its picture is rendered and stored as you work.
-            </>
-          ) : tab === "authored" ? (
-            <>
-              A reference id is generated from the title. You'll write the
-              asset's PreTeXt content (e.g. <code>{"<latex-image>"}</code>) in
-              the editor next.
-            </>
-          ) : (
-            "Optional. A reference id is generated from the title."
-          )}
-        </SettingsNote>
       </SettingsField>
+
+      {!isReplace && (
+        <SettingsField label="Reference ID" htmlFor={`${fieldId}-ref`}>
+          <input
+            id={`${fieldId}-ref`}
+            type="text"
+            className={clsx(FIELD_CONTROL_CLASSES, "font-mono")}
+            placeholder="my-asset"
+            value={ref}
+            onChange={(e) => setEditedRef(e.target.value)}
+            onKeyDown={(e) => { if (e.key === "Enter") handleSubmit(); }}
+            disabled={isBusy}
+          />
+        </SettingsField>
+      )}
 
       {error && (
         <div role="alert">
@@ -339,7 +383,7 @@ const NewAssetForm = ({
         </SettingsButton>
         {tab === "upload" && file && (
           <SettingsButton
-            onClick={() => { setFile(null); setPreviewUrl(null); }}
+            onClick={() => { setFile(null); setFileTitle(""); setPreviewUrl(null); }}
             disabled={isBusy}
           >
             Choose a different file

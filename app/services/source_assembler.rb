@@ -82,7 +82,8 @@ class SourceAssembler
       language: @project.language,
       divisions: @project.divisions.map { |division| division_json(division) },
       assets: @project.assets.map { |asset| asset_json(asset) },
-      snippets: @project.snippets.map { |snippet| snippet_json(snippet) }
+      snippets: @project.snippets.map { |snippet| snippet_json(snippet) },
+      exercises: @project.exercises.map { |exercise| exercise_json(exercise) }
     }
   end
 
@@ -137,6 +138,16 @@ class SourceAssembler
         title: snippet.title,
         source: snippet.source,
         source_format: snippet.source_format
+      }
+    end
+
+    def exercise_json(exercise)
+      {
+        id: exercise.id,
+        ref: exercise.ref,
+        title: exercise.title,
+        source: exercise.source,
+        attrs: exercise.attrs
       }
     end
 end

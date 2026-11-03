@@ -29,6 +29,7 @@ const editorTabLabel = (target: EditorTarget): string => {
     );
   }
   if (target.kind === "snippet") return target.snippet.title || target.snippet.ref;
+  if (target.kind === "exercise") return target.exercise.title || target.exercise.ref;
   return target.asset.title || target.asset.ref || "Untitled asset";
 };
 
@@ -93,6 +94,7 @@ const EditorTabs = ({ tabs, active, onSelect, onClose }: EditorTabsProps) => {
                 "min-w-0 overflow-hidden text-ellipsis whitespace-nowrap text-[0.78rem]",
                 isActive && "font-semibold",
                 target.kind === "snippet" && !target.snippet.title && "font-mono",
+                target.kind === "exercise" && !target.exercise.title && "font-mono",
               )}
             >
               {label}

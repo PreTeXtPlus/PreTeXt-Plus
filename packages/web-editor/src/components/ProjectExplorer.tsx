@@ -2,16 +2,19 @@ import { useEffect, type ReactNode } from "react";
 import clsx from "clsx";
 import ArticleToc from "./toc/ArticleToc";
 import SnippetList from "./toc/SnippetList";
+import ExerciseList from "./toc/ExerciseList";
 import AssetList from "./toc/AssetList";
 import FindReplacePanel from "./toc/FindReplacePanel";
 import {
   AssetsIcon,
+  ExercisesIcon,
   FindIcon,
   SnippetsIcon,
   TocIcon,
 } from "./icons";
 import { buildProjectAssetView } from "../assetView";
 import { buildProjectSnippetView } from "../snippetView";
+import { buildProjectExerciseView } from "../exerciseView";
 import type { ExplorerView } from "../store/editorStore";
 import type { ProjectMatch } from "../types/projectScan";
 import { useEditorStore } from "../store/hooks";
@@ -24,6 +27,7 @@ const EXPLORER_VIEWS: {
 }[] = [
   { view: "toc", label: "Table of Contents", icon: TocIcon },
   { view: "snippets", label: "Snippets", icon: SnippetsIcon },
+  { view: "exercises", label: "Exercises", icon: ExercisesIcon },
   { view: "assets", label: "Assets", icon: AssetsIcon },
   { view: "find", label: "Find in Project", icon: FindIcon },
 ];
@@ -37,6 +41,10 @@ export interface ProjectExplorerProps {
   canCreateSnippets?: boolean;
   /** If true, hides the Snippets view entirely. */
   hideSnippets?: boolean;
+  /** Offer "New exercise" in the Exercises view (the host keeps an exercise pool). */
+  canCreateExercises?: boolean;
+  /** If true, hides the Exercises view entirely. */
+  hideExercises?: boolean;
   /** If true, hides every structural action (add/remove/edit/place a division). */
   readOnly?: boolean;
   onJumpToMatch: (match: ProjectMatch) => void;
@@ -45,7 +53,7 @@ export interface ProjectExplorerProps {
 
 /**
  * The left sidebar: an always-visible icon rail and, beside it, the panel for
- * the selected view (Table of Contents, Snippets, Assets, Find). Clicking
+ * the selected view (Table of Contents, Snippets, Exercises, Assets, Find). Clicking
  * the open view's icon collapses the panel, leaving just the rail. Views read
  * their data from the editor store.
  */
@@ -54,6 +62,8 @@ const ProjectExplorer = ({
   hideAssets,
   canCreateSnippets,
   hideSnippets,
+  canCreateExercises,
+  hideExercises,
   readOnly,
   onJumpToMatch,
   onReplaceMatches,
@@ -64,10 +74,13 @@ const ProjectExplorer = ({
   const divisions = useEditorStore((s) => s.divisions);
   const projectAssets = useEditorStore((s) => s.projectAssets) ?? [];
   const projectSnippets = useEditorStore((s) => s.projectSnippets) ?? [];
+  const projectExercises = useEditorStore((s) => s.projectExercises) ?? [];
   const startCreate = useEditorStore((s) => s.startCreate);
 
   const isHidden = (view: ExplorerView) =>
-    (view === "snippets" && hideSnippets) || (view === "assets" && hideAssets);
+    (view === "snippets" && hideSnippets) ||
+    (view === "exercises" && hideExercises) ||
+    (view === "assets" && hideAssets);
   const views = EXPLORER_VIEWS.filter(({ view }) => !isHidden(view));
   const activeView: ExplorerView = isHidden(storedView) ? "toc" : storedView;
   const active = views.find(({ view }) => view === activeView)!;
@@ -86,20 +99,25 @@ const ProjectExplorer = ({
   const count =
     activeView === "snippets"
       ? buildProjectSnippetView(divisions, projectSnippets).length
-      : activeView === "assets"
-        ? buildProjectAssetView(divisions, projectAssets).length
-        : 0;
+      : activeView === "exercises"
+        ? buildProjectExerciseView(divisions, projectExercises).length
+        : activeView === "assets"
+          ? buildProjectAssetView(divisions, projectAssets).length
+          : 0;
 
   // The view's "new item" [+] button, right of its label — a project that
   // keeps no pool for a kind has nothing to create one in.
   const canCreateSnippet = !readOnly && !!canCreateSnippets;
+  const canCreateExercise = !readOnly && !!canCreateExercises;
   const canCreateAsset = !readOnly && !!canCreateAssets;
   const newItemKind =
     activeView === "snippets" && canCreateSnippet
       ? ("snippet" as const)
-      : activeView === "assets" && canCreateAsset
-        ? ("asset" as const)
-        : null;
+      : activeView === "exercises" && canCreateExercise
+        ? ("exercise" as const)
+        : activeView === "assets" && canCreateAsset
+          ? ("asset" as const)
+          : null;
 
   return (
     <div className="flex flex-row h-full shrink-0">
@@ -176,6 +194,9 @@ const ProjectExplorer = ({
           {activeView === "toc" && <ArticleToc readOnly={readOnly} />}
           {activeView === "snippets" && (
             <SnippetList canCreate={canCreateSnippet} />
+          )}
+          {activeView === "exercises" && (
+            <ExerciseList canCreate={canCreateExercise} />
           )}
           {activeView === "assets" && (
             <AssetList canCreate={canCreateAsset} />

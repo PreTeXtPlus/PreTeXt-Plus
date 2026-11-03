@@ -23,10 +23,16 @@
  * - `doc.getMap("snippets")`: key → `Y.Map` entry per project snippet, keyed by
  *   the snippet's record id. `ref`, `title` and `sourceFormat` are last-writer-wins; the
  *   source is a nested `Y.Text` under `"source"`, like a division's.
+ * - `doc.getMap("exercises")`: key → `Y.Map` entry per project exercise, keyed
+ *   by the exercise's record id. `ref`, `title` and `attrs` (the
+ *   `<exercise>`'s other attributes, one last-writer-wins object) are fields;
+ *   the body is a nested `Y.Text` under `"source"`, like a division's. A
+ *   client that predates exercises ignores the map, so adding it needed no
+ *   version bump.
  * - `doc.getMap("meta")`: document-wide fields — `title`, `docinfo`,
  *   `useCommonDocinfo`, `language` — all last-writer-wins values.
  * - `doc.getMap("deleted")`: tombstones, record id → `"division"` | `"asset"` |
- *   `"snippet"`. Removing an entry from a Y.Map is not by itself something the
+ *   `"snippet"` | `"exercise"`. Removing an entry from a Y.Map is not by itself something the
  *   host can observe later: the peer that removed a division persists that
  *   removal immediately, but if its request never lands, nothing in the doc
  *   would ever ask again and a full reload would resurrect the row. A
@@ -47,7 +53,7 @@
  */
 import * as Y from "yjs";
 import type { DivisionType } from "../types/sections";
-import type { Asset, Snippet, SourceFormat } from "../types/editor";
+import type { Asset, Exercise, Snippet, SourceFormat } from "../types/editor";
 
 /**
  * The version of the layout above. Bump it whenever a change means a client
@@ -88,8 +94,14 @@ export type CollabAssetSnapshot = Asset & { id: string };
  */
 export type CollabSnippetSnapshot = Snippet & { id: string };
 
+/**
+ * One project exercise as it crosses the doc boundary. Identical to
+ * {@link Exercise} except that `id` is required.
+ */
+export type CollabExerciseSnapshot = Exercise & { id: string };
+
 /** Which collection a tombstone refers to, so the host can route its delete. */
-export type CollabDeletedKind = "division" | "asset" | "snippet";
+export type CollabDeletedKind = "division" | "asset" | "snippet" | "exercise";
 
 /** A record removed during the session, kept so the delete can be re-sent. */
 export interface CollabDeletion {
@@ -108,6 +120,8 @@ export interface CollabDocState {
   assets?: CollabAssetSnapshot[];
   /** Optional: a project may have no snippets, and a host need not seed them. */
   snippets?: CollabSnippetSnapshot[];
+  /** Optional: a project may have no exercises, and a host need not seed them. */
+  exercises?: CollabExerciseSnapshot[];
   /**
    * Tombstones. Meaningless in a seed (a fresh doc has deleted nothing) and
    * ignored by {@link seedDocFromState}; always present in `docToState` output.
@@ -119,6 +133,7 @@ export interface CollabDocState {
 export interface CollabDocSnapshot extends CollabDocState {
   assets: CollabAssetSnapshot[];
   snippets: CollabSnippetSnapshot[];
+  exercises: CollabExerciseSnapshot[];
   deleted: CollabDeletion[];
 }
 
@@ -130,6 +145,9 @@ export const getAssetsMap = (doc: Y.Doc): Y.Map<Y.Map<unknown>> =>
 
 export const getSnippetsMap = (doc: Y.Doc): Y.Map<Y.Map<unknown>> =>
   doc.getMap<Y.Map<unknown>>("snippets");
+
+export const getExercisesMap = (doc: Y.Doc): Y.Map<Y.Map<unknown>> =>
+  doc.getMap<Y.Map<unknown>>("exercises");
 
 export const getMetaMap = (doc: Y.Doc): Y.Map<unknown> =>
   doc.getMap<unknown>("meta");
@@ -265,6 +283,26 @@ export const applySnippetFields = (
   }
 };
 
+/** Build an exercises-map entry: last-writer-wins fields + `Y.Text` body. */
+export const makeExerciseEntry = (exercise: Exercise): Y.Map<unknown> => {
+  const entry = new Y.Map<unknown>();
+  applyExerciseFields(entry, exercise);
+  entry.set("source", makeText(exercise.source));
+  return entry;
+};
+
+/** Write an exercise's fields onto an entry. See {@link applyAssetFields}. */
+export const applyExerciseFields = (
+  entry: Y.Map<unknown>,
+  exercise: Exercise,
+): void => {
+  entry.set("ref", exercise.ref);
+  if (exercise.title === undefined) entry.delete("title");
+  else entry.set("title", exercise.title);
+  if (exercise.attrs && Object.keys(exercise.attrs).length > 0) entry.set("attrs", exercise.attrs);
+  else entry.delete("attrs");
+};
+
 /** The `Y.Text` holding a division's source, or undefined if absent. */
 export const getDivisionText = (
   doc: Y.Doc,
@@ -329,6 +367,18 @@ export const snippetEntryToSnapshot = (
   sourceFormat: (entry.get("sourceFormat") ?? "pretext") as SourceFormat,
 });
 
+/** Read one exercises-map entry back into plain data. */
+export const exerciseEntryToSnapshot = (
+  id: string,
+  entry: Y.Map<unknown>,
+): CollabExerciseSnapshot => ({
+  id,
+  ref: String(entry.get("ref") ?? ""),
+  title: entry.get("title") as string | undefined,
+  source: getEntryText(entry)?.toString() ?? "",
+  attrs: entry.get("attrs") as Record<string, string> | undefined,
+});
+
 /**
  * Populate an empty doc from host records, in a single transaction. Must only
  * ever run once per project (hosts guard this server-side): two clients each
@@ -358,6 +408,10 @@ export const seedDocFromState = (doc: Y.Doc, state: CollabDocState): void => {
     for (const snippet of state.snippets ?? []) {
       snippets.set(snippet.id, makeSnippetEntry(snippet));
     }
+    const exercises = getExercisesMap(doc);
+    for (const exercise of state.exercises ?? []) {
+      exercises.set(exercise.id, makeExerciseEntry(exercise));
+    }
   });
 };
 
@@ -376,6 +430,10 @@ export const docToState = (doc: Y.Doc): CollabDocSnapshot => {
   getSnippetsMap(doc).forEach((entry, id) => {
     snippets.push(snippetEntryToSnapshot(id, entry));
   });
+  const exercises: CollabExerciseSnapshot[] = [];
+  getExercisesMap(doc).forEach((entry, id) => {
+    exercises.push(exerciseEntryToSnapshot(id, entry));
+  });
   const deleted: CollabDeletion[] = [];
   getDeletedMap(doc).forEach((kind, id) => {
     deleted.push({ id, kind });
@@ -388,6 +446,7 @@ export const docToState = (doc: Y.Doc): CollabDocSnapshot => {
     divisions,
     assets,
     snippets,
+    exercises,
     deleted,
   };
 };
