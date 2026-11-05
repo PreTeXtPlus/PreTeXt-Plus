@@ -94,6 +94,9 @@ Rails.application.routes.draw do
     # account, whatever id the path carries.
     resource :publication_settings, only: [ :edit, :update ]
   end
+  # Deleting your own account (create) and reactivating it within the grace period
+  # (destroy). Singular/no id: it always acts on current_user, like users#edit.
+  resource :account_deletion, only: %i[ new create show destroy ], path: "account/deletion"
   # The leading "@" keeps this off the plain top-level namespace (no bare
   # "/:username" to collide with "/tos", "/subscriptions", etc.) while reading as a
   # public handle, the way it does on most other sites.

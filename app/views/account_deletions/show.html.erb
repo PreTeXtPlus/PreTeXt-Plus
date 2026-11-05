@@ -1,0 +1,24 @@
+<% content_for(:title, "Account deleted") %>
+<% content_for(:heading, "Your account is scheduled for deletion") %>
+
+<div class="my-6 max-w-2xl space-y-6">
+  <p class="text-gray-700">
+    You deleted your account on
+    <%= local_time_tag(current_user.deletion_requested_at, date_only: true) %>. It, and
+    every project you own, will be permanently deleted on
+    <strong><%= local_time_tag(current_user.purge_at, date_only: true) %></strong>.
+  </p>
+  <p class="text-gray-700">
+    Changed your mind? Reactivating restores your account exactly as you left it,
+    including your projects and published outputs.
+  </p>
+
+  <div class="sm:flex sm:items-center sm:gap-4">
+    <%= button_to "Reactivate my account", account_deletion_path, method: :delete,
+          class: "#{button_classes(color: "blue")} w-full sm:w-auto text-center px-3.5 py-2.5 inline-block" %>
+    <div class="mt-4 text-sm sm:mt-0">
+      <%= link_to "Sign out", destroy_user_session_path, data: { turbo_method: :delete },
+            class: "text-gray-700 underline hover:no-underline" %>
+    </div>
+  </div>
+</div>

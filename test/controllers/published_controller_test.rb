@@ -36,6 +36,18 @@ class PublishedControllerTest < ActionDispatch::IntegrationTest
     assert_match "Chapter One", response.body
   end
 
+  test "a published target goes offline while its owner's account awaits deletion" do
+    publish!
+    @project.user.request_deletion!
+
+    get published_file_url(@project, @target.slug, "index.html")
+    assert_response :not_found
+
+    @project.user.cancel_deletion!
+    get published_file_url(@project, @target.slug, "index.html")
+    assert_response :success
+  end
+
   # The private-preview banner (see BuildFilesControllerTest) is only ever a reminder
   # that a build isn't public yet -- it has no business on the page once it is.
   test "published output carries no private-preview banner" do

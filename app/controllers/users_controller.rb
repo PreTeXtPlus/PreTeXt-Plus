@@ -46,6 +46,7 @@ class UsersController < ApplicationController
   private
 
   def profile_visible?(profile_user)
+    return false if profile_user.pending_deletion?
     current_user == profile_user || profile_user.has_subscriber_benefits?
   end
 
