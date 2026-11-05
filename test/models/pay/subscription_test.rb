@@ -41,6 +41,21 @@ class Pay::SubscriptionTest < ActiveSupport::TestCase
     end
   end
 
+  test "a student who buys a plan gets a seat, keeping access after benefits end" do
+    user = users(:one)
+    user.update!(student_benefits_until: 1.day.from_now)
+    customer = Pay::Stripe::Customer.create!(owner: user, processor: "stripe", processor_id: "cus_student")
+
+    subscription = Pay::Stripe::Subscription.create!(
+      customer: customer, name: "sustaining", processor_id: "sub_student",
+      processor_plan: "sustaining", quantity: 1, status: "active"
+    )
+
+    assert_equal [ user ], subscription.seated_users.to_a
+    user.update!(student_benefits_until: 1.day.ago)
+    assert user.reload.paid_subscriber?
+  end
+
   test "active subscription grants privileges" do
     subscription = pay_subscriptions(:one)
     assert subscription.grants_privileges?

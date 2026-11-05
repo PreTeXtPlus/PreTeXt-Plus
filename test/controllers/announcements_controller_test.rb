@@ -30,6 +30,18 @@ class AnnouncementsControllerTest < ActionDispatch::IntegrationTest
     assert_not_includes response.body, announcements(:paid_only).title
   end
 
+  test "index does not list paid-only announcements for students" do
+    users(:one).update!(student_benefits_until: 1.day.from_now)
+    sign_in users(:one)
+    get announcements_path
+    assert_not_includes response.body, announcements(:paid_only).title
+  end
+
+  test "show is not accessible for paid-only announcements for students" do
+    users(:one).update!(student_benefits_until: 1.day.from_now)
+    assert_not Ability.new(users(:one)).can?(:read, announcements(:paid_only))
+  end
+
   test "index lists paid-only announcements for paid subscribers" do
     sign_in users(:subscribed)
     get announcements_path

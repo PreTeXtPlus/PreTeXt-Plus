@@ -14,7 +14,8 @@ class Admin::BaseController < ApplicationController
 
   def access_label_for(user)
     result = "Admin" if user.admin?
-    result = "Subscribed" if result.blank? && user.subscribed?
+    result = "Subscribed" if result.blank? && user.paid_subscriber?
+    result = "Student" if result.blank? && user.student_benefits?
     result = "Standard" if result.blank?
     result += " (Unconfirmed)" unless user.confirmed?
     result

@@ -15,6 +15,32 @@ class Admin::UsersControllerTest < ActionDispatch::IntegrationTest
     assert_redirected_to projects_path
   end
 
+  test "index and show identify a student without crashing on the missing seat" do
+    @non_admin.update!(student_benefits_until: 1.month.from_now)
+    sign_in @admin
+
+    get admin_users_path, params: { q: @non_admin.email }
+    assert_response :success
+    assert_includes response.body, "Student"
+    assert_includes response.body, "Until"
+
+    get admin_user_path(@non_admin)
+    assert_response :success
+    assert_includes response.body, "Student benefits until"
+    assert_not_includes response.body, "No active subscription access."
+  end
+
+  test "show reports no access once student benefits have expired" do
+    @non_admin.update!(student_benefits_until: 1.day.ago)
+    sign_in @admin
+
+    get admin_user_path(@non_admin)
+
+    assert_response :success
+    assert_not_includes response.body, "Student benefits until"
+    assert_includes response.body, "No active subscription access."
+  end
+
   test "renders filtered users index for admins" do
     sign_in @admin
 

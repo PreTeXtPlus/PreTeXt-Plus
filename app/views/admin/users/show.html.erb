@@ -66,7 +66,10 @@
 
     <div class="rounded-xl border border-gray-200 bg-white p-6 shadow-sm">
       <h2 class="text-2xl font-semibold">Subscription access</h2>
-      <% if @user.subscribed? %>
+      <% if @user.student_benefits? %>
+        <p class="mt-4 text-gray-600">Student benefits until <%= local_time_tag(@user.student_benefits_until, date_only: true) %>.</p>
+      <% end %>
+      <% if @user.paid_subscriber? %>
         <div class="mt-4 space-y-3">
           <% @subscription_seats.each do |seat| %>
             <div class="rounded-lg border border-gray-200 p-4">
@@ -102,7 +105,7 @@
             </div>
           <% end %>
         </div>
-      <% else %>
+      <% elsif !@user.student_benefits? %>
         <p class="mt-4 text-gray-600">No active subscription access.</p>
       <% end %>
 

@@ -55,11 +55,14 @@
             </td>
             <td class="px-4 py-4 align-top text-gray-700"><%= projects_count_for(user) %></td>
             <td class="px-4 py-4 align-top text-gray-700">
-              <% if user.subscribed? %>
+              <% if user.paid_subscriber? %>
                 Active
                 <% if user.subscribed_until.present? %>
                   <div class="text-xs text-gray-500">Until <%= local_time_tag(user.subscribed_until, date_only: true) %></div>
                 <% end %>
+              <% elsif user.student_benefits? %>
+                Student
+                <div class="text-xs text-gray-500">Until <%= local_time_tag(user.student_benefits_until, date_only: true) %></div>
               <% else %>
                 None
               <% end %>

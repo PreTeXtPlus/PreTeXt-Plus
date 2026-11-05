@@ -7,6 +7,16 @@ class Admin::DashboardControllerTest < ActionDispatch::IntegrationTest
     @non_admin = users(:two)
   end
 
+  test "counts students separately from subscribed users" do
+    @non_admin.update!(student_benefits_until: 1.month.from_now)
+    sign_in @admin
+
+    get admin_root_path
+
+    assert_response :success
+    assert_includes response.body, "Users with active student benefits"
+  end
+
   test "redirects non-admin users" do
     sign_in @non_admin
 

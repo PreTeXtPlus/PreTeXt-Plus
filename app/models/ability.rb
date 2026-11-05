@@ -13,7 +13,7 @@ class Ability
     can :read, Announcement do |announcement|
       if !announcement.published?
         false
-      elsif announcement.paid_subscribers_only? && !user&.subscribed?
+      elsif announcement.paid_subscribers_only? && !user&.paid_subscriber?
         false
       else
         true
