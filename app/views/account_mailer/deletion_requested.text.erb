@@ -1,0 +1,20 @@
+Your account has been deleted
+=============================
+
+As you asked, your PreTeXt.Plus account (<%= @user.email %>) has been
+deleted. Your public profile and published outputs are no longer available.
+
+On <%= @user.purge_at.strftime("%B %-d, %Y") %>, your account and all of your projects,
+including every file uploaded to them, will be permanently deleted. They
+cannot be recovered after that.
+
+If you change your mind before then, sign in to reactivate your account.
+Everything will be exactly as you left it:
+
+<%= new_user_session_url %>
+
+If you didn't delete your account, sign in and reactivate it right away,
+then change your password.
+
+You are receiving this because you deleted your account on PreTeXt.Plus
+(https://pretext.plus).

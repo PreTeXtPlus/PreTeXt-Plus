@@ -21,7 +21,15 @@ class User < ApplicationRecord
 
   pay_customer stripe_attributes: ->(pay_customer) { { metadata: { user_id: pay_customer.owner_id } } },
     default_payment_processor: :stripe
-  has_many :subscription_seats
+  # dependent: the seat rows have a foreign key to users, so without this an account
+  # holding a seat could never be deleted. The subscription itself is untouched.
+  has_many :subscription_seats, dependent: :destroy
+
+  # How long a deleted account can still be reactivated before AccountPurgeJob removes
+  # it, and every project it owns, for good.
+  DELETION_GRACE_PERIOD = 7.days
+
+  scope :due_for_purge, -> { where(deletion_requested_at: ..DELETION_GRACE_PERIOD.ago) }
 
   normalizes :email, with: ->(e) { e.strip.downcase }
   # Casing is kept (a vanity name is part of the point) -- blank -> nil rather than
@@ -125,6 +133,37 @@ class User < ApplicationRecord
 
   def update_terms
     update(tos: Term.current(:tos), privacy: Term.current(:privacy))
+  end
+
+  # Account deletion is two-step: requesting it takes the account's public face
+  # offline at once (profile, published outputs, source pages -- see Ability) and
+  # starts the grace period; AccountPurgeJob destroys the user, and with it every
+  # project they own, once that has run out. Signing back in before then lands on
+  # AccountDeletionsController#show, where it can be undone.
+  def pending_deletion?
+    deletion_requested_at.present?
+  end
+
+  def purge_at
+    deletion_requested_at && deletion_requested_at + DELETION_GRACE_PERIOD
+  end
+
+  def request_deletion!
+    update!(deletion_requested_at: Time.current)
+  end
+
+  def cancel_deletion!
+    update!(deletion_requested_at: nil)
+  end
+
+  # Subscriptions this user pays for that will charge again. Deletion is refused while
+  # any exist: purging would cancel them outright (Pay cancels every active
+  # subscription when its owner is destroyed), and someone who has already been
+  # charged for a year should decide that for themselves, on the subscriptions page,
+  # rather than find out from a deletion. Invoiced plans count too -- they renew by
+  # invoice instead of by card.
+  def renewing_subscriptions
+    pay_subscriptions.select { |s| s.active? && !s.canceled? }
   end
 
   private

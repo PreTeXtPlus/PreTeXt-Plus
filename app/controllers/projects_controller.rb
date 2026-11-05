@@ -260,6 +260,10 @@ class ProjectsController < ApplicationController
   # Found, not Moved Permanently: a browser that cached a 301 would keep redirecting
   # after the target was unpublished.
   def share
+    # Public like a published target, so it comes down with the rest when the owner
+    # deletes their account (see Ability's Build rule).
+    raise ActiveRecord::RecordNotFound if @project.user.pending_deletion?
+
     # A browsable site, not merely something html-derived: redirecting a link handed to
     # students at a SCORM package would be worse than the quick build it replaces.
     published = @project.targets.detect { |t| t.site? && t.published? && t.current_build_id }
