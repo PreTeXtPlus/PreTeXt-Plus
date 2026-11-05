@@ -3,15 +3,15 @@ class StudentBenefitsController < ApplicationController
   before_action :require_availability
 
   def new
-    @attestation = StudentAttestation.new
+    @attestation = StudentAttestation.new(name: current_user.name)
   end
 
   def create
-    @attestation = StudentAttestation.new(params.expect(student_attestation: [ :school_name, :school_email, :enrolled ]))
+    @attestation = StudentAttestation.new(params.expect(student_attestation: [ :name, :school_name, :school_email, :enrolled ]))
 
     if @attestation.valid?
-      current_user.grant_student_benefits!
-      redirect_to subscriptions_path, notice: "Your student benefits are active."
+      current_user.grant_student_benefits!(name: @attestation.name)
+      redirect_to subscriptions_path, notice: "You've been approved and your student benefits are now active!"
     else
       render :new, status: :unprocessable_entity
     end

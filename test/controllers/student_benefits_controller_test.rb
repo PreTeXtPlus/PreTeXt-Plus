@@ -1,7 +1,7 @@
 require "test_helper"
 
 class StudentBenefitsControllerTest < ActionDispatch::IntegrationTest
-  VALID_PARAMS = { school_name: "Example University", school_email: "1", enrolled: "1" }.freeze
+  VALID_PARAMS = { name: "Ada Lovelace", school_name: "Example University", school_email: "1", enrolled: "1" }.freeze
 
   test "requires sign-in" do
     get new_student_benefits_path
@@ -43,6 +43,46 @@ class StudentBenefitsControllerTest < ActionDispatch::IntegrationTest
       assert_equal 1.year.from_now, user.reload.student_benefits_until
     end
     assert_not_includes user.attributes.values.join, VALID_PARAMS[:school_name]
+  end
+
+  test "form starts with the user's current name" do
+    sign_in users(:one)
+
+    get new_student_benefits_path
+
+    assert_select "input[name=?][value=?]", "student_attestation[name]", users(:one).name
+  end
+
+  test "valid attestation updates the user's name, tidying whitespace" do
+    user = users(:one)
+    sign_in user
+
+    post_attestation(VALID_PARAMS.merge(name: "  Ada   Lovelace "))
+
+    assert_redirected_to subscriptions_path
+    assert_equal "Ada Lovelace", user.reload.name
+  end
+
+  test "a one-word name is rejected" do
+    assert_rejected VALID_PARAMS.merge(name: "Ada")
+  end
+
+  test "a blank name is rejected" do
+    assert_rejected VALID_PARAMS.merge(name: "   ")
+  end
+
+  test "a two-character school name is rejected, not counting surrounding spaces" do
+    assert_rejected VALID_PARAMS.merge(school_name: "  CU  ")
+  end
+
+  test "a three-character school name is accepted" do
+    user = users(:one)
+    sign_in user
+
+    post_attestation(VALID_PARAMS.merge(school_name: "MIT"))
+
+    assert_redirected_to subscriptions_path
+    assert user.reload.student_benefits?
   end
 
   test "blank school name is rejected" do
@@ -102,7 +142,9 @@ class StudentBenefitsControllerTest < ActionDispatch::IntegrationTest
 
       post_attestation(attestation)
 
+      name_before = user.name
       assert_response :unprocessable_entity
       assert_nil user.reload.student_benefits_until
+      assert_equal name_before, user.name
     end
 end

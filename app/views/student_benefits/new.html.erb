@@ -22,8 +22,13 @@
   <% end %>
 
   <div class="my-5">
+    <%= form.label :name, "Your full name" %>
+    <%= form.text_field :name, required: true, autocomplete: "name", class: "block shadow-sm rounded-md border border-gray-400 focus:outline-blue-600 px-3 py-2 mt-2 w-full" %>
+  </div>
+
+  <div class="my-5">
     <%= form.label :school_name, "Your school's name" %>
-    <%= form.text_field :school_name, required: true, class: "block shadow-sm rounded-md border border-gray-400 focus:outline-blue-600 px-3 py-2 mt-2 w-full" %>
+    <%= form.text_field :school_name, required: true, minlength: StudentAttestation::MINIMUM_SCHOOL_NAME_LENGTH, class: "block shadow-sm rounded-md border border-gray-400 focus:outline-blue-600 px-3 py-2 mt-2 w-full" %>
   </div>
 
   <div class="my-5 flex items-start gap-2">

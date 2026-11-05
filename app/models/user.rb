@@ -74,8 +74,8 @@ class User < ApplicationRecord
     !paid_subscriber? && !student_benefits?
   end
 
-  def grant_student_benefits!
-    update!(student_benefits_until: STUDENT_BENEFITS_TERM.from_now)
+  def grant_student_benefits!(name: self.name)
+    update!(name: name, student_benefits_until: STUDENT_BENEFITS_TERM.from_now)
   end
 
   def subscribed_until
