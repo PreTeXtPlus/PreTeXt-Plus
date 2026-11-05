@@ -1,6 +1,10 @@
 class ApplicationController < ActionController::Base
   include ActiveStorage::SetCurrent
   before_action :authenticate_user!
+  # An account awaiting deletion can sign in, but only to reactivate it: everything
+  # else answers with AccountDeletionsController#show. Devise's own controllers are
+  # left alone so signing out (and resetting a forgotten password) still work.
+  before_action :redirect_pending_deletion, unless: :devise_controller?
   around_action :set_time_zone
   # Every authenticated page shows account-specific content, so opt it out of the
   # browser's back/forward cache (bfcache) -- otherwise switching accounts (log out,
@@ -73,6 +77,16 @@ class ApplicationController < ActionController::Base
 
   def redirect_authenticated_user
     redirect_to projects_path if user_signed_in?
+  end
+
+  def redirect_pending_deletion
+    return unless user_signed_in? && current_user.pending_deletion?
+
+    if request.format.html?
+      redirect_to account_deletion_path
+    else
+      head :forbidden
+    end
   end
 
   def allow_iframe

@@ -1,0 +1,93 @@
+<% content_for(:title, "Delete account") %>
+<% content_for(:heading, "Delete your account") %>
+<% purge_date = (Time.current + User::DELETION_GRACE_PERIOD).strftime("%B %-d, %Y") %>
+<% grace_days = User::DELETION_GRACE_PERIOD.in_days.to_i %>
+
+<div class="my-6 max-w-2xl space-y-6">
+  <div class="rounded-md border border-red-300 bg-red-50 p-4 text-red-900">
+    <p class="font-semibold">This will delete everything in your account.</p>
+    <p class="mt-2 text-sm">
+      Your account is closed straight away. For <%= grace_days %> days you can still sign
+      in to reactivate it, with nothing lost. After <strong><%= purge_date %></strong>,
+      your account, all of your projects, and every file uploaded to them are deleted
+      permanently. We cannot recover them after that.
+    </p>
+  </div>
+
+  <div>
+    <h2 class="text-lg font-semibold">What will be deleted</h2>
+    <ul class="mt-2 list-disc space-y-2 pl-6 text-sm text-gray-700">
+      <li>
+        <% if @projects.any? %>
+          <strong><%= pluralize(@projects.size, "project") %></strong> you own, with all of
+          their sources, assets, outputs and backups.
+          <%= link_to "Download a copy", owned_projects_path, class: "text-blue-700 underline hover:no-underline" %>
+          of anything you want to keep first — each project's page has a “Download source” button.
+        <% else %>
+          You don't own any projects.
+        <% end %>
+      </li>
+      <% if @shared_projects.any? %>
+        <li>
+          <strong><%= pluralize(@shared_projects.size, "project") %> you share with collaborators</strong>
+          (<%= @shared_projects.map(&:title).to_sentence %>). Your collaborators will lose
+          them too. To keep a project going without you, make one of them its owner from
+          the project's collaborators panel before you delete your account.
+        </li>
+      <% end %>
+      <% if @published_targets.any? %>
+        <li>
+          <strong><%= pluralize(@published_targets.size, "published output") %></strong>
+          go offline immediately, along with your public profile, and anyone following a
+          link to them will find nothing there.
+        </li>
+      <% end %>
+      <li>
+        You will be removed from any projects other people have shared with you. Those
+        projects themselves are not affected.
+      </li>
+      <% if @seats_for_others > 0 %>
+        <li>
+          <strong><%= pluralize(@seats_for_others, "person") %></strong> you have given a
+          seat on your subscription will lose it when your account is deleted permanently.
+        </li>
+      <% end %>
+    </ul>
+  </div>
+
+  <% if @renewing_subscriptions.any? %>
+    <div class="rounded-md border border-amber-300 bg-amber-50 p-4 text-sm text-amber-900">
+      <p class="font-semibold">Cancel your subscription first.</p>
+      <p class="mt-1">
+        You have a subscription that will renew. Cancel it on the
+        <%= link_to "subscriptions page", subscriptions_path, class: "underline hover:no-underline" %>,
+        then come back here to delete your account.
+      </p>
+    </div>
+  <% else %>
+    <%= form_with url: account_deletion_path, method: :post,
+          data: { turbo_confirm: "Delete your account? Everything in it will be permanently deleted on #{purge_date}." } do |form| %>
+      <div class="my-5 flex items-start gap-3">
+        <%= form.check_box :acknowledge, { required: true, class: "mt-1" }, "1", nil %>
+        <%= form.label :acknowledge, class: "text-sm text-gray-800" do %>
+          I understand that my account and
+          <%= @projects.any? ? "all #{pluralize(@projects.size, 'project')} I own" : "everything in it" %>
+          will be permanently deleted on <%= purge_date %>, unless I sign in and reactivate it before then.
+        <% end %>
+      </div>
+
+      <div class="my-5">
+        <%= form.label :password, "Enter your password to confirm", class: "text-sm font-semibold text-gray-800" %>
+        <%= form.password_field :password, required: true, autocomplete: "current-password",
+              class: "block shadow-sm rounded-md border border-gray-400 focus:outline-blue-600 px-3 py-2 mt-2 w-full" %>
+      </div>
+
+      <div class="sm:flex sm:items-center sm:gap-4">
+        <%= form.submit "Delete my account", class: "#{button_classes(color: "red")} w-full sm:w-auto text-center px-3.5 py-2.5 inline-block" %>
+        <div class="mt-4 text-sm sm:mt-0">
+          <%= link_to "Cancel", edit_user_path(current_user), class: "text-gray-700 underline hover:no-underline" %>
+        </div>
+      </div>
+    <% end %>
+  <% end %>
+</div>
