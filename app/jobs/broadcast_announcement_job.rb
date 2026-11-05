@@ -2,7 +2,7 @@ class BroadcastAnnouncementJob < ApplicationJob
   queue_as :default
 
   def perform(announcement)
-    User.where.not(confirmed_at: nil).find_each do |user|
+    User.where.not(confirmed_at: nil).where(deletion_requested_at: nil).find_each do |user|
       next if announcement.paid_subscribers_only? && !user.paid_subscriber?
       AnnouncementsMailer.announcement(user, announcement).deliver_later
     end

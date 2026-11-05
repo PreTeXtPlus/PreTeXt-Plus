@@ -8,8 +8,11 @@ module ApplicationCable
 
     private
 
+    # An account awaiting deletion has no editor to connect from -- see
+    # ApplicationController#redirect_pending_deletion.
     def find_current_user
-      env["warden"].user
+      user = env["warden"].user
+      user unless user&.pending_deletion?
     end
   end
 end

@@ -5,9 +5,12 @@ class Ability
     # Anyone may read the build a published target currently points at. The
     # current_build_id clause is what makes unpublishing effective and keeps superseded
     # builds private: without it, any build URL would stay readable forever once its
-    # target had been published even once.
+    # target had been published even once. An owner who has asked for their account to
+    # be deleted has asked for this to come down, so it does, right away -- and comes
+    # back untouched if they reactivate within the grace period.
     can :read, Build do |build|
-      build.target.published? && build.target.current_build_id == build.id
+      build.target.published? && build.target.current_build_id == build.id &&
+        !build.project.user.pending_deletion?
     end
 
     can :read, Announcement do |announcement|
@@ -23,7 +26,7 @@ class Ability
     can :read, Workshop
 
     can [ :source ], Project do |project|
-      !project.private_visibility?
+      !project.private_visibility? && !project.user.pending_deletion?
     end
 
     return if user.nil?
@@ -48,7 +51,7 @@ class Ability
       ], Project, collaborations: { user_id: user.id }
     # Copying and viewing source is allowed provided the project is not private.
     can [ :copy ], Project do |project|
-      !project.private_visibility?
+      !project.private_visibility? && !project.user.pending_deletion?
     end
 
     # Build all is a paid convenience, not a cost bound like max_concurrent_builds -- it

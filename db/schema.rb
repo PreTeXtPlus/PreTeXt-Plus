@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_11_08_120000) do
+ActiveRecord::Schema[8.1].define(version: 2026_11_10_120000) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
   enable_extension "pgcrypto"
@@ -339,6 +339,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_11_08_120000) do
     t.datetime "created_at", null: false
     t.datetime "current_sign_in_at"
     t.string "current_sign_in_ip"
+    t.datetime "deletion_requested_at"
     t.string "email", null: false
     t.string "encrypted_password", null: false
     t.boolean "honor_invoices", default: false
@@ -359,6 +360,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_11_08_120000) do
     t.datetime "student_benefits_until"
     t.index "lower((username)::text)", name: "index_users_on_lower_username", unique: true
     t.index ["confirmation_token"], name: "index_users_on_confirmation_token", unique: true
+    t.index ["deletion_requested_at"], name: "index_users_on_deletion_requested_at", where: "(deletion_requested_at IS NOT NULL)"
     t.index ["email"], name: "index_users_on_email", unique: true
     t.index ["privacy_id"], name: "index_users_on_privacy_id"
     t.index ["reset_password_token"], name: "index_users_on_reset_password_token", unique: true
