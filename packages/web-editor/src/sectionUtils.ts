@@ -21,6 +21,7 @@ import type {
 import { derivePretextContent } from "./contentConversion";
 import { resolveAssetRef } from "./assetTransforms";
 import { escapeAttribute, escapeText, unescapeAttribute } from "./xmlUtils";
+import { findTagEnd, isNameStart, readName } from "./components/editorConfigs/xmlTags";
 import { DEFAULT_LATEX_IMAGE_PREAMBLE } from "./generators/tikz/document";
 
 // ---------------------------------------------------------------------------
@@ -1074,10 +1075,7 @@ export interface DivisionRefWithType {
    * the author actually wrote.
    *
    * Callers that *create* a division from a ref can ignore this — they need
-   * some concrete type and `"section"` is the documented default. Callers that
-   * push the tag name onto an *existing* division must not: retyping a
-   * `worksheet` to `section` because someone wrote `<plus:division ref="…"/>`
-   * would silently destroy a type the author chose elsewhere.
+   * some concrete type and `"section"` is the documented default.
    */
   generic: boolean;
 }
@@ -1085,8 +1083,7 @@ export interface DivisionRefWithType {
 /**
  * Like {@link parseDivisionRefs} but also returns the division type inferred
  * from the tag name (e.g. `<plus:chapter ref="x"/>` → `{ type: "chapter", xmlId: "x" }`).
- * Used to auto-create Division records when new refs appear in edited content,
- * and to push a retyped placeholder onto the division it points at.
+ * Used to auto-create Division records when new refs appear in edited content.
  *
  * Only tag names in {@link DIVISION_REF_TAGS} are considered — the asset
  * placeholder (`plus:image`) is not a division and is skipped. The generic
@@ -1260,23 +1257,41 @@ export function assetEmbedCode(
 // `<plus:exercise ref="..."/>` placeholder parsing
 // ---------------------------------------------------------------------------
 
-/** The record kinds placed by a `<plus:snippet>`- or `<plus:exercise>`-shaped placeholder. */
+/**
+ * The tags that place an exercise. An exercise record doesn't know which element
+ * it is: the author chooses by the tag they place it with, so the same record
+ * can be an `<exercise>` in one place and a `<task>` in another.
+ */
+export const EXERCISE_REF_TAGS = ["exercise", "task", "project"] as const;
+export type ExerciseRefTag = (typeof EXERCISE_REF_TAGS)[number];
+
+export const isExerciseRefTag = (tag: string): tag is ExerciseRefTag =>
+  (EXERCISE_REF_TAGS as readonly string[]).includes(tag);
+
+/** The record kinds placed by a `<plus:snippet>`- or exercise-shaped placeholder. */
 type RecordRefTag = "snippet" | "exercise";
+
+/** The regex source for the tag names that place each record kind. */
+const RECORD_TAG_SOURCE: Record<RecordRefTag, string> = {
+  snippet: "snippet",
+  exercise: `(?:${EXERCISE_REF_TAGS.join("|")})`,
+};
 
 /** A `<plus:snippet ref="..."/>` snippet placeholder. */
 export interface SnippetRef {
   ref: string;
 }
 
-/** A `<plus:exercise ref="..."/>` exercise placeholder. */
+/** A `<plus:exercise ref="..."/>` (or `task`, or `project`) exercise placeholder. */
 export type ExerciseRef = SnippetRef;
 
 function parseRecordRefs(
-  tag: RecordRefTag,
+  kind: RecordRefTag,
   content: string,
   sourceFormat: SourceFormat,
 ): SnippetRef[] {
   const refs: SnippetRef[] = [];
+  const tag = RECORD_TAG_SOURCE[kind];
   const source: Record<SourceFormat, string> = {
     pretext: `<plus:${tag}\\b[^>]*\\bref="([^"]+)"`,
     markdown: `::${tag}(?:\\[[^\\]]*\\])?\\{[^}]*\\bref="([^"]+)"[^}]*\\}`,
@@ -1292,11 +1307,12 @@ function parseRecordRefs(
 }
 
 function renameRecordRef(
-  tag: RecordRefTag,
+  kind: RecordRefTag,
   content: string,
   oldRef: string,
   newRef: string,
 ): string {
+  const tag = RECORD_TAG_SOURCE[kind];
   const oldR = escapeRegex(oldRef);
   const xmlRe = new RegExp(`(<plus:${tag}\\b[^>]*?\\bref=")${oldR}(")`, "g");
   const mdRe = new RegExp(
@@ -1310,7 +1326,8 @@ function renameRecordRef(
     .replace(latexRe, `$1${newRef}$2`);
 }
 
-function removeRecordRef(tag: RecordRefTag, content: string, ref: string): string {
+function removeRecordRef(kind: RecordRefTag, content: string, ref: string): string {
+  const tag = RECORD_TAG_SOURCE[kind];
   const r = escapeRegex(ref);
   const xmlRe = new RegExp(`<plus:${tag}\\b[^>]*?\\bref="${r}"[^>]*/?>`, "g");
   const mdRe = new RegExp(
@@ -1321,7 +1338,7 @@ function removeRecordRef(tag: RecordRefTag, content: string, ref: string): strin
   return content.replace(xmlRe, "").replace(mdRe, "").replace(latexRe, "");
 }
 
-function recordEmbedCode(tag: RecordRefTag, ref: string, sourceFormat: SourceFormat): string {
+function recordEmbedCode(tag: string, ref: string, sourceFormat: SourceFormat): string {
   if (sourceFormat === "markdown") return `::${tag}{ref="${ref}"}`;
   if (sourceFormat === "latex") return `\\plus{${tag}}{${ref}}`;
   return `<plus:${tag} ref="${ref}"/>`;
@@ -1385,8 +1402,9 @@ export function snippetEmbedCode(
 
 /**
  * Every exercise placeholder in `content` — `<plus:exercise ref="..."/>`,
- * `::exercise{ref="..."}` or `\plus{exercise}{...}` — in document order, as
- * {@link parseSnippetRefs} does for snippets.
+ * `::exercise{ref="..."}` or `\plus{exercise}{...}`, under any of the
+ * {@link EXERCISE_REF_TAGS} — in document order, as {@link parseSnippetRefs}
+ * does for snippets.
  */
 export function parseExerciseRefs(
   content: string,
@@ -1395,7 +1413,7 @@ export function parseExerciseRefs(
   return parseRecordRefs("exercise", content, sourceFormat);
 }
 
-/** {@link renameSnippetRef}, for exercise placeholders. */
+/** {@link renameSnippetRef}, for exercise placeholders; each keeps the tag it has. */
 export function renameExerciseRef(
   content: string,
   oldRef: string,
@@ -1409,27 +1427,204 @@ export function removeExerciseRef(content: string, ref: string): string {
   return removeRecordRef("exercise", content, ref);
 }
 
-/** {@link snippetEmbedCode}, for an exercise. */
+/**
+ * {@link snippetEmbedCode}, for an exercise. `tag` is the element the author
+ * wants it placed as, which belongs to the placement and not to the record.
+ */
 export function exerciseEmbedCode(
   ref: string,
   sourceFormat: SourceFormat = "pretext",
+  tag: ExerciseRefTag = "exercise",
 ): string {
-  return recordEmbedCode("exercise", ref, sourceFormat);
+  return recordEmbedCode(tag, ref, sourceFormat);
 }
 
 // ---------------------------------------------------------------------------
-// Placements — where an image or snippet is placed, and under which instance
+// Placeholders — every `<plus:* ref/>`, and what its tag may place
 // ---------------------------------------------------------------------------
 
-/** The kinds of record that may be placed more than once. */
-export type PlacementTag = "image" | "snippet" | "exercise";
+/** What a ref names, as far as a placeholder's tag is concerned. */
+export type PlaceholderTarget =
+  | { kind: "division"; divisionType: DivisionType }
+  | { kind: "asset" }
+  | { kind: "snippet" }
+  | { kind: "exercise" };
 
 /**
- * One `<plus:image>`/`<plus:snippet>` placeholder in a source: what it places,
- * the `instance` it names (see {@link qualifyIdentifiers}), and where it is.
+ * Whether a tag may place a record:
+ *   - `ok`: it may, or there is no such record yet (a new division, an
+ *     "unlinked" row), which is the existing flows' business;
+ *   - `mismatch`: a division under another division type's tag, which still
+ *     embeds as the division's own element and is only warned about;
+ *   - `incompatible`: anything else, which embeds nothing.
  */
-export interface Placement {
-  tag: PlacementTag;
+export interface PlaceholderCheck {
+  status: "ok" | "mismatch" | "incompatible";
+  /** The tags that would suit the record, the most specific first. */
+  suggestedTags: string[];
+}
+
+/** The tags that suit `target`, the most specific first. */
+function tagsFor(target: PlaceholderTarget): string[] {
+  switch (target.kind) {
+    case "division":
+      return [target.divisionType, "division"];
+    case "asset":
+      return ["image"];
+    case "snippet":
+      return ["snippet"];
+    case "exercise":
+      return [...EXERCISE_REF_TAGS];
+  }
+}
+
+/**
+ * The one rule for what a placeholder's tag may place, shared by assembly and
+ * the editor's lint so an underline always describes what the document does.
+ */
+export function checkPlaceholderTag(
+  tag: string,
+  target: PlaceholderTarget | undefined,
+): PlaceholderCheck {
+  const family: PlaceholderTarget["kind"] | undefined = DIVISION_REF_TAGS.has(tag)
+    ? "division"
+    : tag === "image"
+      ? "asset"
+      : tag === "snippet"
+        ? "snippet"
+        : isExerciseRefTag(tag)
+          ? "exercise"
+          : undefined;
+  if (!target) {
+    return { status: family ? "ok" : "incompatible", suggestedTags: [] };
+  }
+  if (family !== target.kind) {
+    return { status: "incompatible", suggestedTags: tagsFor(target) };
+  }
+  if (target.kind === "division" && tag !== "division" && tag !== target.divisionType) {
+    return { status: "mismatch", suggestedTags: tagsFor(target) };
+  }
+  return { status: "ok", suggestedTags: [] };
+}
+
+/** What every ref in `pools` names. */
+export function placeholderTargets(pools: {
+  divisions?: readonly Division[];
+  snippets?: readonly Snippet[];
+  assets?: readonly Asset[];
+  exercises?: readonly Exercise[];
+}): Map<string, PlaceholderTarget> {
+  const targets = new Map<string, PlaceholderTarget>();
+  for (const d of pools.divisions ?? []) targets.set(d.xmlId, { kind: "division", divisionType: d.type });
+  for (const s of pools.snippets ?? []) targets.set(s.ref, { kind: "snippet" });
+  for (const e of pools.exercises ?? []) targets.set(e.ref, { kind: "exercise" });
+  for (const a of pools.assets ?? []) if (a.ref) targets.set(a.ref, { kind: "asset" });
+  return targets;
+}
+
+/** The elements PreTeXt allows a `<task>` in. */
+const TASK_HOLDERS: ReadonlySet<string> = new Set([
+  "exercise",
+  "project",
+  "activity",
+  "exploration",
+  "investigation",
+  "task",
+]);
+
+/**
+ * The element an exercise placed with `tag` becomes. PreTeXt allows a `<task>`
+ * only inside a {@link TASK_HOLDERS} element, and nothing but a `<task>` there,
+ * so a tag that can't stand where it was written is corrected rather than
+ * producing an invalid document. The editor warns whenever this differs from
+ * `tag`.
+ */
+export function placedExerciseElement(tag: ExerciseRefTag, insideHolder: boolean): ExerciseRefTag {
+  if (insideHolder) return "task";
+  return tag === "task" ? "exercise" : tag;
+}
+
+/** The elements open at the end of `xml`, read tolerantly (see `xmlTags.ts`). */
+function openXmlElements(xml: string): string[] {
+  const open: string[] = [];
+  let i = xml.indexOf("<");
+  while (i !== -1) {
+    const closing = xml[i + 1] === "/";
+    const nameStart = closing ? i + 2 : i + 1;
+    if (!isNameStart(xml[nameStart])) {
+      i = xml.indexOf("<", i + 1);
+      continue;
+    }
+    const name = readName(xml, nameStart);
+    const end = findTagEnd(xml, i);
+    if (closing) {
+      const at = open.lastIndexOf(name);
+      if (at !== -1) open.length = at;
+    } else if (xml[end - 2] !== "/") {
+      open.push(name);
+    }
+    i = xml.indexOf("<", end);
+  }
+  return open;
+}
+
+/** The environments open at the end of LaTeX source. */
+function openLatexEnvironments(latex: string): string[] {
+  const open: string[] = [];
+  const uncommented = latex.replace(/(?<!\\)%.*$/gm, "");
+  for (const [, command, name] of uncommented.matchAll(/\\(begin|end)\{([^}]+)\}/g)) {
+    if (command === "begin") {
+      open.push(name);
+    } else {
+      const at = open.lastIndexOf(name);
+      if (at !== -1) open.length = at;
+    }
+  }
+  return open;
+}
+
+/** The container directives open at the end of Markdown source. */
+function openMarkdownContainers(markdown: string): string[] {
+  const open: { name: string; fence: number }[] = [];
+  for (const [, colons, name] of markdown.matchAll(/^[ \t]*(:{3,})[ \t]*([A-Za-z][\w-]*)?/gm)) {
+    if (name) {
+      open.push({ name, fence: colons.length });
+    } else {
+      // A bare fence closes the innermost container its length can close.
+      for (let at = open.length - 1; at >= 0; at--) {
+        if (open[at].fence <= colons.length) {
+          open.length = at;
+          break;
+        }
+      }
+    }
+  }
+  return open.map(({ name }) => name);
+}
+
+/**
+ * Whether `offset` in `content` lies inside an element a `<task>` may sit in, at
+ * any depth. A mid-edit source can't be parsed, so this walks it tolerantly:
+ * malformed markup degrades to whatever can still be read, never a throw.
+ */
+export function isInsideTaskHolder(
+  content: string,
+  sourceFormat: SourceFormat,
+  offset: number,
+): boolean {
+  const before = blankVerbatim(content.slice(0, offset), sourceFormat);
+  const open =
+    sourceFormat === "pretext"
+      ? openXmlElements(before.replace(/<!--[\s\S]*?-->/g, ""))
+      : sourceFormat === "latex"
+        ? openLatexEnvironments(before)
+        : openMarkdownContainers(before);
+  return open.some((name) => TASK_HOLDERS.has(name));
+}
+
+/** One `<plus:* ref/>` placeholder in a source, with whatever tag it was written. */
+export interface PlaceholderUse {
+  tag: string;
   ref: string;
   instance?: string;
   /** Offset and length of the placeholder's text in the source. */
@@ -1442,24 +1637,24 @@ export interface Placement {
  * optional argument (`\plus[instance=ch3]{image}{graph}`), which the
  * converter turns into the same attribute the other two write directly.
  */
-const PLACEMENT_SOURCE: Record<SourceFormat, string> = {
-  pretext: `<plus:(image|snippet|exercise)\\b([^>]*?)\\/?>`,
-  markdown: `::(image|snippet|exercise)(?:\\[[^\\]]*\\])?\\{([^}]*)\\}`,
-  latex: `\\\\plus(?:\\[([^\\]]*)\\])?\\{(image|snippet|exercise)\\}\\{([^}]+)\\}`,
+const PLACEHOLDER_SOURCE: Record<SourceFormat, string> = {
+  pretext: `<plus:([a-z-]+)\\b([^>]*?)(?:\\/>|>\\s*<\\/plus:\\1>|>)`,
+  markdown: `(?<!:)::([a-z-]+)(?:\\[[^\\]]*\\])?\\{([^}]*)\\}`,
+  latex: `\\\\plus(?:\\[([^\\]]*)\\])?\\{([a-z-]+)\\}\\{([^}]+)\\}`,
 };
 
 const quotedAttr = (attrs: string, name: string): string | undefined =>
   new RegExp(`\\b${name}\\s*=\\s*"([^"]*)"`).exec(attrs)?.[1];
 
 /**
- * Every image and snippet placement in `content`, in document order, ignoring
- * examples inside verbatim spans — the same placeholders {@link parseAssetRefs}
- * and {@link parseSnippetRefs} find, with their position and instance name.
+ * Every placeholder in `content`, in document order, ignoring examples inside
+ * verbatim spans. A `ref` is what makes one: Markdown's converter turns any leaf
+ * directive into a `plus:` element, and one without a `ref` places nothing.
  */
-export function parsePlacements(content: string, sourceFormat: SourceFormat): Placement[] {
-  const re = new RegExp(PLACEMENT_SOURCE[sourceFormat], "g");
+export function parsePlaceholders(content: string, sourceFormat: SourceFormat): PlaceholderUse[] {
+  const re = new RegExp(PLACEHOLDER_SOURCE[sourceFormat], "g");
   const scanned = blankVerbatim(content, sourceFormat);
-  const placements: Placement[] = [];
+  const placeholders: PlaceholderUse[] = [];
   let m: RegExpExecArray | null;
   while ((m = re.exec(scanned)) !== null) {
     let tag: string, ref: string | undefined, instance: string | undefined;
@@ -1473,15 +1668,70 @@ export function parsePlacements(content: string, sourceFormat: SourceFormat): Pl
       instance = quotedAttr(m[2], "instance");
     }
     if (!ref) continue;
-    placements.push({
-      tag: tag as PlacementTag,
+    placeholders.push({
+      tag,
       ref,
       instance: instance?.trim() || undefined,
       index: m.index,
       length: m[0].length,
     });
   }
-  return placements;
+  return placeholders;
+}
+
+/**
+ * `placeholder` — the text of one placeholder, in `sourceFormat`'s syntax — under
+ * the tag `tag`, everything else as written.
+ */
+export function retagPlaceholder(
+  placeholder: string,
+  sourceFormat: SourceFormat,
+  tag: string,
+): string {
+  if (sourceFormat === "markdown") return placeholder.replace(/^::[a-z-]+/, `::${tag}`);
+  if (sourceFormat === "latex") {
+    return placeholder.replace(
+      /^(\\plus(?:\[[^\]]*\])?\{)[a-z-]+\}/,
+      (_m, head: string) => `${head}${tag}}`,
+    );
+  }
+  return placeholder
+    .replace(/^<plus:[a-z-]+/, `<plus:${tag}`)
+    .replace(/<\/plus:[a-z-]+>$/, `</plus:${tag}>`);
+}
+
+/** `tag` as `sourceFormat` spells it, for naming it in a message. */
+export function placeholderTagLabel(tag: string, sourceFormat: SourceFormat): string {
+  if (sourceFormat === "markdown") return `::${tag}`;
+  if (sourceFormat === "latex") return `\\plus{${tag}}`;
+  return `<plus:${tag}>`;
+}
+
+// ---------------------------------------------------------------------------
+// Placements — where an image, snippet or exercise is placed, and under which
+// instance
+// ---------------------------------------------------------------------------
+
+/** The tags that place a record that may be placed more than once. */
+export type PlacementTag = "image" | "snippet" | ExerciseRefTag;
+
+/**
+ * One placeholder for such a record: what it places, the `instance` it names
+ * (see {@link qualifyIdentifiers}), and where it is.
+ */
+export type Placement = PlaceholderUse & { tag: PlacementTag };
+
+const isPlacement = (use: PlaceholderUse): use is Placement =>
+  use.tag === "image" || use.tag === "snippet" || isExerciseRefTag(use.tag);
+
+/**
+ * Every image, snippet and exercise placement in `content`, in document order,
+ * ignoring examples inside verbatim spans — the same placeholders
+ * {@link parseAssetRefs}, {@link parseSnippetRefs} and {@link parseExerciseRefs}
+ * find, with their position and instance name.
+ */
+export function parsePlacements(content: string, sourceFormat: SourceFormat): Placement[] {
+  return parsePlaceholders(content, sourceFormat).filter(isPlacement);
 }
 
 /**
@@ -1500,7 +1750,8 @@ export function addPlacementInstance(
         `\\plus[${opts}${opts.trim() ? "," : ""}instance=${instance}]`)
       : placeholder.replace(/^\\plus/, `\\plus[instance=${instance}]`);
   }
-  return placeholder.replace(/(\s*\/?>)$/, ` instance="${instance}"$1`);
+  // The first `>` ends the start tag, whichever shape the placeholder is in.
+  return placeholder.replace(/(\s*\/?>)/, ` instance="${instance}"$1`);
 }
 
 /**
@@ -3196,10 +3447,14 @@ export interface RecordPools {
 }
 
 /**
- * Scan `xml` for every `<plus:* ref="..."/>` placeholder and expand each one:
+ * Scan `xml` for every `<plus:* ref="..."/>` placeholder and expand each one
+ * whose tag may place what its ref names (see {@link checkPlaceholderTag}; one
+ * that can't becomes a comment, and nothing is embedded):
  * `image` resolves against `assets`, `snippet` resolves (recursively —
- * see {@link resolveSnippetRef}) against `snippets`, and anything else is
- * treated as a division ref and resolved via {@link resolveDivisionXml}.
+ * see {@link resolveSnippetRef}) against `snippets`, an exercise tag resolves
+ * against `exercises` as the element {@link placedExerciseElement} says, and a
+ * division tag resolves via {@link resolveDivisionXml} as the division's own
+ * element, whichever type the tag names.
  *
  * A placeholder naming its `instance` then has the identifiers in that markup
  * made its own (see {@link qualifyIdentifiers}), and every other attribute of
@@ -3223,18 +3478,23 @@ function expandRefs(
   xml: string,
   pools: RecordPools,
   ancestors: Set<string>,
+  insideHolder = false,
 ): string {
   return xml.replace(
     /<plus:([a-z-]+)\s([^>]*ref="[^"]+"[^>]*?)(?:\/>|>\s*<\/plus:\1>)/g,
-    (_match, tag: string, attrs: string) => {
+    (_match, tag: string, attrs: string, offset: number) => {
       const ref = /ref="([^"]+)"/.exec(attrs)?.[1] ?? "";
+      if (checkPlaceholderTag(tag, placeholderTarget(ref, pools)).status === "incompatible") {
+        return `<!-- incompatible placeholder: ${commentSafe(`plus:${tag} cannot place ${ref}`)} -->`;
+      }
+      const inside = () => insideHolder || isInsideTaskHolder(xml, "pretext", offset);
       const resolved =
         tag === "image"
           ? resolveAssetRef(ref, pools.assets)
           : tag === "snippet"
-            ? resolveSnippetRef(ref, pools, ancestors)
-            : tag === "exercise"
-              ? resolveExerciseRef(ref, pools, ancestors)
+            ? resolveSnippetRef(ref, pools, ancestors, inside())
+            : isExerciseRefTag(tag)
+              ? resolveExerciseRef(ref, placedExerciseElement(tag, inside()), pools, ancestors)
               : resolveDivisionXml(ref, pools, ancestors);
       const instance = placeholderInstance(attrs);
       const placed = instance ? qualifyIdentifiers(resolved, instance) : resolved;
@@ -3242,6 +3502,19 @@ function expandRefs(
     },
   );
 }
+
+/** What `ref` names in `pools`, for {@link checkPlaceholderTag}. */
+function placeholderTarget(ref: string, pools: RecordPools): PlaceholderTarget | undefined {
+  const division = pools.divisions.find((d) => d.xmlId === ref);
+  if (division) return { kind: "division", divisionType: division.type };
+  if (pools.snippets.some((s) => s.ref === ref)) return { kind: "snippet" };
+  if (pools.exercises.some((e) => e.ref === ref)) return { kind: "exercise" };
+  if (pools.assets.some((a) => a.ref === ref)) return { kind: "asset" };
+  return undefined;
+}
+
+/** `text` with nothing that would end or invalidate the XML comment it goes in. */
+const commentSafe = (text: string): string => text.replace(/-{2,}/g, "-");
 
 /**
  * Resolve a single division to its final PreTeXt XML, then recursively expand
@@ -3280,12 +3553,14 @@ function resolveDivisionXml(
  * `<plus:snippet>` / `<plus:image>` refs, so a snippet can embed another
  * snippet or an image. Falls back to an XML comment if no matching snippet
  * is found, its own conversion fails, or it (directly or transitively)
- * references itself.
+ * references itself. `insideHolder` carries where the snippet was placed into
+ * its own expansion, since an exercise in it becomes what that place allows.
  */
 function resolveSnippetRef(
   ref: string,
   pools: RecordPools,
   ancestors: Set<string>,
+  insideHolder = false,
 ): string {
   const snippet = pools.snippets.find((s) => s.ref === ref);
   if (!snippet) return `<!-- missing snippet: ${ref} -->`;
@@ -3297,32 +3572,34 @@ function resolveSnippetRef(
   );
   const xml = pretextSource ?? `<!-- conversion error: ${pretextError} -->`;
   const nextAncestors = new Set(ancestors).add(ref);
-  return expandRefs(xml, pools, nextAncestors);
+  return expandRefs(xml, pools, nextAncestors, insideHolder);
 }
 
 /**
- * An exercise's complete `<exercise>` element: its body with the element built
- * from its fields around it, as a PreTeXt division's is — the ref as both
- * `xml:id` and `label`, the title (already PreTeXt markup) as `<title>`, and
- * every other attribute from `attrs`.
+ * An exercise's complete element: its body with the element built from its
+ * fields around it, as a PreTeXt division's is — the ref as both `xml:id` and
+ * `label`, the title (already PreTeXt markup) as `<title>`, and every other
+ * attribute from `attrs`. Which element it is belongs to the placement, not the
+ * record, so the caller says.
  */
-export function wrapExerciseSource(exercise: Exercise): string {
+export function wrapExerciseSource(exercise: Exercise, element: ExerciseRefTag = "exercise"): string {
   const pairs: [string, string][] = [["xml:id", exercise.ref], ["label", exercise.ref]];
   for (const [name, value] of Object.entries(exercise.attrs ?? {})) {
     if (name !== "xml:id" && name !== "label") pairs.push([name, value]);
   }
   const attrs = pairs.map(([name, value]) => ` ${name}="${escapeAttribute(value)}"`).join("");
   const title = exercise.title?.trim() ? `<title>${exercise.title.trim()}</title>\n` : "";
-  return `<exercise${attrs}>\n${title}${exercise.source.trim()}\n</exercise>`;
+  return `<${element}${attrs}>\n${title}${exercise.source.trim()}\n</${element}>`;
 }
 
 /**
- * Resolve a single `<plus:exercise ref="..."/>` placeholder: the matching
- * {@link Exercise}'s element built around its body ({@link wrapExerciseSource}),
- * with any `<plus:image>` or other placeholder inside it expanded in turn.
+ * Resolve a single exercise placeholder: the matching {@link Exercise}'s body
+ * with `element` built around it ({@link wrapExerciseSource}), and any
+ * `<plus:image>` or other placeholder inside it expanded in turn.
  */
 function resolveExerciseRef(
   ref: string,
+  element: ExerciseRefTag,
   pools: RecordPools,
   ancestors: Set<string>,
 ): string {
@@ -3331,7 +3608,7 @@ function resolveExerciseRef(
   if (ancestors.has(ref)) return `<!-- circular reference: ${ref} -->`;
 
   const nextAncestors = new Set(ancestors).add(ref);
-  return expandRefs(wrapExerciseSource(exercise), pools, nextAncestors);
+  return expandRefs(wrapExerciseSource(exercise, element), pools, nextAncestors);
 }
 
 /**
@@ -3594,7 +3871,7 @@ export function assembleExercisePreviewSource(
   docinfo: string,
   lang?: string,
 ): string {
-  const body = resolveExerciseRef(exerciseRef, pools, new Set());
+  const body = resolveExerciseRef(exerciseRef, "exercise", pools, new Set());
   return wrapInPretextDocument(
     `<article>\n<title>${EXERCISE_PREVIEW_TITLE}</title>\n${body}\n</article>`,
     docinfo,

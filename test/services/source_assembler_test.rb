@@ -97,6 +97,51 @@ class SourceAssemblerTest < ActionDispatch::IntegrationTest
     assert_not_includes source, "plus:exercise"
   end
 
+  # The record doesn't know which element it is; the placeholder's tag decides,
+  # corrected where PreTeXt wouldn't allow that element.
+  test "an exercise assembles to the element its placeholder's tag allows" do
+    skip_without_bundle
+    @project.exercises.create!(ref: "quiz", source: "<statement><p>Pick one.</p></statement>")
+    child = @project.divisions.find_by!(ref: "subdivision")
+    original = child.source
+
+    {
+      '<plus:project ref="quiz"/>' => "project",
+      '<plus:task ref="quiz"/>' => "exercise",
+      '<project><plus:task ref="quiz"/></project>' => "task",
+      '<project><plus:exercise ref="quiz"/></project>' => "task"
+    }.each do |placement, element|
+      child.update!(source: "#{original}\n#{placement}")
+      source = SourceAssembler.new(@project.reload).call
+      assert_includes source, %(<#{element} xml:id="quiz" label="quiz">), placement
+      assert_includes source, "</#{element}>", placement
+    end
+  end
+
+  test "a placeholder whose tag can't place its record embeds nothing" do
+    skip_without_bundle
+    @project.exercises.create!(ref: "quiz", source: "<statement><p>Pick one.</p></statement>")
+    child = @project.divisions.find_by!(ref: "subdivision")
+    child.update!(source: "#{child.source}\n<plus:section ref=\"quiz\"/>")
+
+    source = SourceAssembler.new(@project.reload).call
+
+    assert_includes source, "<!-- incompatible placeholder: plus:section cannot place quiz -->"
+    assert_not_includes source, "Pick one."
+  end
+
+  test "a division under another type's tag embeds as its own element" do
+    skip_without_bundle
+    root = @project.root_division
+    child = @project.divisions.find_by!(ref: "subdivision")
+    root.update!(source: root.source.sub(/<plus:\w+ ref="subdivision"/, '<plus:worksheet ref="subdivision"'))
+
+    source = SourceAssembler.new(@project.reload).call
+
+    assert_includes source, %(<#{child.division_type} xml:id="subdivision")
+    assert_not_includes source, "<worksheet"
+  end
+
   # TikZ is TeX: the buffer is not XML, so the document's copy of it is escaped.
   test "a TikZ asset assembles to a latex-image with its source as XML text" do
     skip_without_bundle
