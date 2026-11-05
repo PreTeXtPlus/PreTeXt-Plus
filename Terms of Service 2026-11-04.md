@@ -108,11 +108,9 @@ We may offer beta, preview, or early-access features.
 
 We may offer student benefits at no charge to eligible students. The benefits and limits that apply are shown in your account and may differ from those of a paid plan.
 
-- **Eligibility.** To claim student benefits, you must have a confirmed email address and be a full-time student actively enrolled in classes on the date you claim them. The email address on your account must be your school email.
-- **Your statement.** When you claim student benefits, you provide the name of your school and confirm that you meet these requirements.
+- **Eligibility.** To claim student benefits, you must have a confirmed email address and truthfully provide the name of a school where you are a full-time student actively enrolled in classes on the date you claim them. The email address on your account must be your school email.
 - **Duration and renewal.** Student benefits last a limited period from the date you claim them and do not renew automatically. After they end, you may claim them again if you are still eligible at that time.
-- **Ending benefits.** We may decline or end student benefits at any time.
-- **Free trials.** Claiming student benefits does not affect your eligibility for a free trial under Section 8.1.
+- **Ending benefits and eligibility changes.** We may decline or end student benefits at any time, and change the requirements for eligibility for student benefits at any time.
 - **After student benefits end.** Your account returns to the limits of the free plan (see Section 9), unless you have a paid subscription.
 
 ## 9. Service Limits, Availability, and Backups
