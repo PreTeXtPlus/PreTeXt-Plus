@@ -19,6 +19,16 @@ class AnnouncementsControllerTest < ActionDispatch::IntegrationTest
     assert_not_includes response.body, announcements(:draft).title
   end
 
+  test "the site-wide callout offers student benefits only to users without benefits" do
+    sign_in users(:one)
+    get announcements_path
+    assert_select "a[href=?]", subscriptions_path, text: "or request student benefits"
+
+    users(:one).update!(student_benefits_until: 1.month.from_now)
+    get announcements_path
+    assert_select "a", text: "or request student benefits", count: 0
+  end
+
   test "index does not list paid-only announcements for guests" do
     get announcements_path
     assert_not_includes response.body, announcements(:paid_only).title

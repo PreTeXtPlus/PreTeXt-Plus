@@ -6,8 +6,8 @@
 <% content_for :heading, "Student Benefits" %>
 
 <p class="my-3">
-  Full-time students get subscriber benefits for free for one year, with a limit of
-  <%= User::STUDENT_ASSET_QUOTA %> assets. After a year, you can repeat this form to claim them again.
+  We're proud to offer full-time students many of our subscriber benefits at no cost, and without
+  needing to provide a payment method!
 </p>
 
 <%= form_with model: @attestation, url: student_benefits_path, class: "max-w-xl" do |form| %>
@@ -22,7 +22,7 @@
   <% end %>
 
   <div class="my-5">
-    <%= form.label :school_name, "School name" %>
+    <%= form.label :school_name, "Your school's name" %>
     <%= form.text_field :school_name, required: true, class: "block shadow-sm rounded-md border border-gray-400 focus:outline-blue-600 px-3 py-2 mt-2 w-full" %>
   </div>
 
@@ -41,4 +41,8 @@
   </div>
 
   <%= form.submit "Claim student benefits", class: "#{button_classes(color: "green")} px-3.5 py-2.5" %>
+  <p class="my-3">
+    If approved, your benefits will last for one year. You can repeat this form to extend these benefits after
+    expiration, as long as you continue your studies.
+  </p>
 <% end %>

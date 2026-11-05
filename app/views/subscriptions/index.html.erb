@@ -63,7 +63,7 @@
 <% if current_user.confirmed? && current_user.student_benefits_available? %>
   <h2 class="text-xl mb-2 mt-8">Student Benefits</h2>
   <p>
-    Full-time students get subscriber benefits for free for one year.
+    Full-time students get many of our subscriber benefits for free.
     <%= link_to "Claim student benefits", new_student_benefits_path, class: "text-blue-500 hover:underline" %>.
   </p>
 <% end %>
