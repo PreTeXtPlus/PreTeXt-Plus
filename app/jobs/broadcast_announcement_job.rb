@@ -3,7 +3,7 @@ class BroadcastAnnouncementJob < ApplicationJob
 
   def perform(announcement)
     User.where.not(confirmed_at: nil).find_each do |user|
-      next if announcement.paid_subscribers_only? && !user.subscribed?
+      next if announcement.paid_subscribers_only? && !user.paid_subscriber?
       AnnouncementsMailer.announcement(user, announcement).deliver_later
     end
   end

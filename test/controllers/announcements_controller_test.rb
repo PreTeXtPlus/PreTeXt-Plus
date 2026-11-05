@@ -19,6 +19,50 @@ class AnnouncementsControllerTest < ActionDispatch::IntegrationTest
     assert_not_includes response.body, announcements(:draft).title
   end
 
+  test "the site-wide callout offers student benefits only to users without benefits" do
+    sign_in users(:one)
+    get announcements_path
+    assert_select "a[href=?]", subscriptions_path, text: "or request student benefits"
+
+    users(:one).update!(student_benefits_until: 1.month.from_now)
+    get announcements_path
+    assert_select "a", text: "or request student benefits", count: 0
+  end
+
+  test "students are reminded of their benefits and that they can still subscribe" do
+    until_date = 1.month.from_now
+    users(:one).update!(student_benefits_until: until_date)
+    sign_in users(:one)
+
+    get announcements_path
+
+    assert_includes response.body, "You have active student benefits until"
+    assert_includes response.body, until_date.utc.strftime("%B %-d, %Y")
+    assert_includes response.body, "You can still subscribe to receive full benefits and support PreTeXt.Plus."
+    assert_select "a[href=?]", subscriptions_path, text: "Subscribe"
+    assert_not_includes response.body, "Sustaining subscribers help keep it running"
+  end
+
+  test "the student callout is gone once benefits expire" do
+    users(:one).update!(student_benefits_until: 1.day.ago)
+    sign_in users(:one)
+
+    get announcements_path
+
+    assert_not_includes response.body, "You have active student benefits"
+    assert_includes response.body, "Sustaining subscribers help keep it running"
+  end
+
+  test "paid subscribers with student benefits see no callout" do
+    users(:subscribed).update!(student_benefits_until: 1.month.from_now)
+    sign_in users(:subscribed)
+
+    get announcements_path
+
+    assert_not_includes response.body, "You have active student benefits"
+    assert_not_includes response.body, "Sustaining subscribers help keep it running"
+  end
+
   test "index does not list paid-only announcements for guests" do
     get announcements_path
     assert_not_includes response.body, announcements(:paid_only).title
@@ -28,6 +72,18 @@ class AnnouncementsControllerTest < ActionDispatch::IntegrationTest
     sign_in users(:one)
     get announcements_path
     assert_not_includes response.body, announcements(:paid_only).title
+  end
+
+  test "index does not list paid-only announcements for students" do
+    users(:one).update!(student_benefits_until: 1.day.from_now)
+    sign_in users(:one)
+    get announcements_path
+    assert_not_includes response.body, announcements(:paid_only).title
+  end
+
+  test "show is not accessible for paid-only announcements for students" do
+    users(:one).update!(student_benefits_until: 1.day.from_now)
+    assert_not Ability.new(users(:one)).can?(:read, announcements(:paid_only))
   end
 
   test "index lists paid-only announcements for paid subscribers" do

@@ -42,6 +42,12 @@ class User < ApplicationRecord
   before_create :set_common_docinfo
   after_create :claim_project_invitations
 
+  FREE_ASSET_QUOTA = 100
+  STUDENT_ASSET_QUOTA = 200
+  STUDENT_BENEFITS_TERM = 1.year
+
+  scope :with_student_benefits, -> { where(student_benefits_until: Time.current..) }
+
   # Case-insensitive counterpart to find_by(username:) -- a profile URL should
   # resolve regardless of how the visitor cased it, matching the uniqueness rule
   # above and the lower(username) index it relies on.
@@ -49,8 +55,27 @@ class User < ApplicationRecord
     find_by("lower(username) = ?", username.to_s.strip.downcase)
   end
 
+  # Has subscriber benefits by paying or by student attestation. Use paid_subscriber?
+  # where the distinction matters.
   def subscribed?
+    paid_subscriber? || student_benefits?
+  end
+
+  def paid_subscriber?
     self.subscription_seats.any? { |s| s.grants_privileges? }
+  end
+
+  def student_benefits?
+    student_benefits_until&.future? || false
+  end
+
+  # Not while benefits are active, so a term can't be extended before it ends.
+  def student_benefits_available?
+    !paid_subscriber? && !student_benefits?
+  end
+
+  def grant_student_benefits!(name: self.name)
+    update!(name: name, student_benefits_until: STUDENT_BENEFITS_TERM.from_now)
   end
 
   def subscribed_until
@@ -77,8 +102,8 @@ class User < ApplicationRecord
   # Total assets across every project the user owns -- a single pool for the
   # whole account, not per-project, since assets are the actual storage cost.
   def asset_quota
-    return Float::INFINITY if has_subscriber_benefits?
-    100
+    return Float::INFINITY if paid_subscriber? || admin
+    student_benefits? ? STUDENT_ASSET_QUOTA : FREE_ASSET_QUOTA
   end
 
   # How many builds this user may have actually running at once, across every project

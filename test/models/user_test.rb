@@ -24,6 +24,67 @@ class UserTest < ActiveSupport::TestCase
     assert_equal Float::INFINITY, user.asset_quota
   end
 
+  test "asset_quota is doubled for a student" do
+    user = users(:one)
+    user.student_benefits_until = 1.day.from_now
+    assert_equal 200, user.asset_quota
+  end
+
+  test "asset_quota stays unlimited for a paid subscriber with student benefits" do
+    user = users(:subscribed)
+    user.student_benefits_until = 1.day.from_now
+    assert_equal Float::INFINITY, user.asset_quota
+  end
+
+  test "student benefits grant other subscriber limits without being a paid subscription" do
+    user = users(:one)
+    user.grant_student_benefits!
+
+    assert user.subscribed?
+    assert user.has_subscriber_benefits?
+    assert_not user.paid_subscriber?
+    assert_equal 12, user.target_quota
+    assert_equal 5, user.max_concurrent_builds
+    assert user.trial_eligible?
+  end
+
+  test "student benefits expire" do
+    user = users(:one)
+    user.student_benefits_until = 1.second.ago
+
+    assert_not user.student_benefits?
+    assert_not user.subscribed?
+    assert_equal 100, user.asset_quota
+  end
+
+  test "grant_student_benefits! lasts one year" do
+    user = users(:one)
+    freeze_time do
+      user.grant_student_benefits!
+      assert_equal 1.year.from_now, user.student_benefits_until
+    end
+  end
+
+  test "student_benefits_available? only without active benefits or a paid subscription" do
+    free = users(:one)
+    assert free.student_benefits_available?
+
+    free.student_benefits_until = 1.day.from_now
+    assert_not free.student_benefits_available?
+
+    free.student_benefits_until = 1.day.ago
+    assert free.student_benefits_available?
+
+    assert_not users(:subscribed).student_benefits_available?
+  end
+
+  test "with_student_benefits only includes unexpired benefits" do
+    users(:one).update!(student_benefits_until: 1.day.from_now)
+    users(:subscribed).update!(student_benefits_until: 1.day.ago)
+
+    assert_equal [ users(:one) ], User.with_student_benefits.to_a
+  end
+
   test "trial_eligible? is true for a user who has never subscribed" do
     assert users(:one).trial_eligible?
   end

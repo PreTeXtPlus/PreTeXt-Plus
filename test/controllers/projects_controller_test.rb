@@ -8,6 +8,25 @@ class ProjectsControllerTest < ActionDispatch::IntegrationTest
     sign_in @user
   end
 
+  test "the dashboard callout offers student benefits only to users without benefits" do
+    get projects_url
+    assert_select "a[href=?]", subscriptions_path, text: "or request student benefits"
+    assert_not_includes response.body, "You have active student benefits"
+
+    @user.update!(student_benefits_until: 1.month.from_now)
+    get projects_url
+    assert_select "a", text: "or request student benefits", count: 0
+  end
+
+  test "students see the student benefits callout on the dashboard instead of the usual one" do
+    @user.update!(student_benefits_until: 1.month.from_now)
+
+    get projects_url
+
+    assert_includes response.body, "You have active student benefits until"
+    assert_not_includes response.body, "Thanks for using"
+  end
+
   test "should get index" do
     get projects_url
     assert_response :success

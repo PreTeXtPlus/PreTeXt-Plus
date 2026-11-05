@@ -67,13 +67,13 @@ You must not:
 - Scrape or automate access in a manner that exceeds reasonable usage limits
 - Infringe intellectual property, privacy, or other rights
 - Use the Service for fraudulent, deceptive, abusive, harassing, or unlawful purposes
-- Create multiple accounts, or otherwise circumvent eligibility limits, to obtain additional free trials or promotional offers
+- Create multiple accounts, or otherwise circumvent eligibility limits, to obtain additional free trials, student benefits, or promotional offers
 
 We may investigate violations and take action, including content removal, access restrictions, suspension, or termination.
 
 ## 7. Subscriptions, Fees, and Billing
 
-- Some features require a paid subscription.
+- Some features require a paid subscription or, where offered, student benefits (see Section 8.3).
 - Payments are processed by third-party providers (including Stripe) under their terms.
 - Subscription fees are billed as disclosed at checkout or in your account.
 - Unless otherwise stated, subscriptions renew automatically until canceled.
@@ -82,7 +82,7 @@ We may investigate violations and take action, including content removal, access
 
 We may change pricing, plans, quotas, or feature access in the future. Where required by law, we provide advance notice.
 
-## 8. Free Trials and Beta Features
+## 8. Free Trials, Beta Features, and Student Benefits
 
 ### 8.1 Free trials
 
@@ -103,6 +103,15 @@ We may offer beta, preview, or early-access features.
 - Beta features are provided as-is, may be incomplete, and may be changed or discontinued at any time.
 - Service levels and support commitments may not apply to beta features.
 - We may suspend or revoke beta access at any time.
+
+### 8.3 Student benefits
+
+We may offer student benefits at no charge to eligible students. The benefits and limits that apply are shown in your account and may differ from those of a paid plan.
+
+- **Eligibility.** To claim student benefits, you must have a confirmed email address and truthfully provide both your name and the name of a school where you are a full-time student actively enrolled in classes on the date you claim them. The email address on your account must be your school email.
+- **Duration and renewal.** Student benefits last a limited period from the date you claim them and do not renew automatically. After they end, you may claim them again if you are still eligible at that time.
+- **Ending benefits and eligibility changes.** We may decline or end student benefits at any time, and change the requirements for eligibility for student benefits at any time.
+- **After student benefits end.** Your account returns to the limits of the free plan (see Section 9), unless you have a paid subscription.
 
 ## 9. Service Limits, Availability, and Backups
 

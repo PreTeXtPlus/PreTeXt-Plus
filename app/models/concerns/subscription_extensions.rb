@@ -3,7 +3,8 @@ module SubscriptionExtensions
 
   included do
     after_create_commit do
-      unless self.user.subscribed?
+      # Not subscribed?: a student who buys a plan needs a seat for when benefits end.
+      unless self.user.paid_subscriber?
         SubscriptionSeat.create!(subscription: self, user: self.user)
       end
     end

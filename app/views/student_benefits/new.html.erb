@@ -1,0 +1,53 @@
+<% content_for :title, "Student Benefits" %>
+<% content_for :subscription_notice do %><!-- no subscribe nudge on subscriptions pages --><% end %>
+<% content_for :breadcrumb do %>
+  <%= link_to "Subscriptions", subscriptions_path, class: "hover:underline" %> /
+<% end %>
+<% content_for :heading, "Student Benefits" %>
+
+<p class="my-3">
+  We're proud to offer full-time students many of our subscriber benefits at no cost, and without
+  needing to provide a payment method!
+</p>
+
+<%= form_with model: @attestation, url: student_benefits_path, class: "max-w-xl" do |form| %>
+  <% if @attestation.errors.any? %>
+    <div id="error_explanation" class="bg-red-50 text-red-500 px-3 py-2 font-medium rounded-md mt-3">
+      <ul class="list-disc ml-6">
+        <% @attestation.errors.each do |error| %>
+          <li><%= error.message %></li>
+        <% end %>
+      </ul>
+    </div>
+  <% end %>
+
+  <div class="my-5">
+    <%= form.label :name, "Your full name" %>
+    <%= form.text_field :name, required: true, autocomplete: "name", class: "block shadow-sm rounded-md border border-gray-400 focus:outline-blue-600 px-3 py-2 mt-2 w-full" %>
+  </div>
+
+  <div class="my-5">
+    <%= form.label :school_name, "Your school's name" %>
+    <%= form.text_field :school_name, required: true, minlength: StudentAttestation::MINIMUM_SCHOOL_NAME_LENGTH, class: "block shadow-sm rounded-md border border-gray-400 focus:outline-blue-600 px-3 py-2 mt-2 w-full" %>
+  </div>
+
+  <div class="my-5 flex items-start gap-2">
+    <%= form.check_box :school_email, class: "mt-1 h-4 w-4 rounded border-gray-300 text-blue-600" %>
+    <%= form.label :school_email do %>
+      The email on this account, <span class="font-mono"><%= current_user.email %></span>, is my school email.
+    <% end %>
+  </div>
+
+  <div class="my-5 flex items-start gap-2">
+    <%= form.check_box :enrolled, class: "mt-1 h-4 w-4 rounded border-gray-300 text-blue-600" %>
+    <%= form.label :enrolled do %>
+      I am a full-time student actively enrolled in classes as of <%= local_time_tag(Time.current, date_only: true) %>.
+    <% end %>
+  </div>
+
+  <%= form.submit "Claim student benefits", class: "#{button_classes(color: "green")} px-3.5 py-2.5" %>
+  <p class="my-3">
+    If approved, your benefits will last for one year. You can repeat this form to extend these benefits after
+    expiration, as long as you continue your studies.
+  </p>
+<% end %>

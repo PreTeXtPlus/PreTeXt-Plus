@@ -168,14 +168,27 @@
                       </div>
                     </div>
                   <% end %>
-                  <% unless current_user.subscribed? %>
+                  <% unless current_user.paid_subscriber? %>
                     <% if content_for?(:subscription_notice) %>
                       <%= yield(:subscription_notice) %>
+                    <% elsif current_user.student_benefits? %>
+                      <div class="mx-auto w-full lg:w-2/3 mt-2 py-2">
+                        <div class="flex items-center justify-between gap-3 rounded-md border border-gray-200 bg-white px-4 py-2 text-sm text-gray-700">
+                          <span>
+                            You have active student benefits until <%= local_time_tag(current_user.student_benefits_until, date_only: true) %>.
+                            You can still subscribe to receive full benefits and support PreTeXt.Plus.
+                          </span>
+                          <%= link_to "Subscribe", subscriptions_path, class: "font-semibold text-blue-700 hover:underline" %>
+                        </div>
+                      </div>
                     <% elsif current_user.confirmed? %>
                       <div class="mx-auto w-full lg:w-2/3 mt-2 py-2">
                         <div class="flex items-center justify-between gap-3 rounded-md border border-gray-200 bg-white px-4 py-2 text-sm text-gray-700">
                           <span>Finding PreTeXt.Plus useful to you? Sustaining subscribers help keep it running.</span>
-                          <%= link_to "Subscribe", subscriptions_path, class: "font-semibold text-blue-700 hover:underline" %>
+                          <span class="flex flex-wrap justify-end gap-x-2">
+                            <%= link_to "Subscribe", subscriptions_path, class: "font-semibold text-blue-700 hover:underline" %>
+                            <%= link_to "or request student benefits", subscriptions_path, class: "text-blue-700 hover:underline" %>
+                          </span>
                         </div>
                       </div>
                     <% end %>

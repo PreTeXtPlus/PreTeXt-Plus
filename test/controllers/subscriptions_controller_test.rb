@@ -21,6 +21,45 @@ class SubscriptionsControllerTest < ActionDispatch::IntegrationTest
     assert_includes response.body, "pay by card, 7-day free trial"
   end
 
+  test "free users are offered student benefits" do
+    sign_in users(:one)
+
+    get_index
+
+    assert_response :success
+    assert_includes response.body, new_student_benefits_path
+  end
+
+  test "a student with no seat sees when benefits end and can't claim again" do
+    users(:one).update!(student_benefits_until: 1.month.from_now)
+    sign_in users(:one)
+
+    get_index
+
+    assert_response :success
+    assert_includes response.body, "Your student benefits run until"
+    assert_not_includes response.body, new_student_benefits_path
+  end
+
+  test "a student buying a plan isn't asked about buying an additional one" do
+    users(:one).update!(student_benefits_until: 1.month.from_now)
+    sign_in users(:one)
+
+    get_index
+
+    assert_not_includes response.body, "You are already subscribed to a plan"
+  end
+
+  test "paid subscribers aren't offered student benefits" do
+    pay_subscriptions(:one).update_columns(current_period_end: 20.days.from_now)
+    sign_in users(:subscribed)
+
+    get_index
+
+    assert_response :success
+    assert_not_includes response.body, new_student_benefits_path
+  end
+
   test "unconfirmed users are asked to confirm their email instead of offered plans" do
     user = users(:unconfirmed)
     user.update_columns(confirmation_sent_at: Time.current)
