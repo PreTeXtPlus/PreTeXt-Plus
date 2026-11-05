@@ -3,6 +3,13 @@ require "test_helper"
 class StudentBenefitsControllerTest < ActionDispatch::IntegrationTest
   VALID_PARAMS = { name: "Ada Lovelace", school_name: "Example University", school_email: "1", enrolled: "1" }.freeze
 
+  test "the form and its submission both live at /students" do
+    assert_equal "/students", new_student_benefits_path
+    assert_equal "/students", student_benefits_path
+    assert_routing({ method: :get, path: "/students" }, { controller: "student_benefits", action: "new" })
+    assert_routing({ method: :post, path: "/students" }, { controller: "student_benefits", action: "create" })
+  end
+
   test "requires sign-in" do
     get new_student_benefits_path
     assert_redirected_to new_user_session_path

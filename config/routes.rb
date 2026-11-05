@@ -110,7 +110,7 @@ Rails.application.routes.draw do
   # SubscriptionExtensions#reminders_enabled?. Singular/no id: it always acts on
   # current_user, like users#edit.
   resource :subscription_reminders, only: :update
-  resource :student_benefits, only: %i[ new create ]
+  resource :student_benefits, only: %i[ new create ], path: "students", path_names: { new: "" }
   resources :subscription_types do
     member do
       get "checkout" => "subscription_types#checkout", as: "checkout"
