@@ -157,4 +157,154 @@ markDeleted(records, "snippet", "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa");
 markDeleted(records, "exercise", "cccccccc-cccc-4ccc-8ccc-cccccccccccc");
 writeFileSync(OUT + "projection_records_state.bin", Y.encodeStateAsUpdate(records));
 
+// The shapes that have stalled a production projection, together in one
+// document, beside a healthy division that must still reach its row:
+//
+// * an asset entry emptied to `{source: ""}` (every metadata key deleted),
+// * a division whose xml:id holds spaces,
+// * two new divisions that want the same ref (both collaborators pressed
+//   "add section" before either saw the other's),
+// * a new division wanting the ref of a row the project already has
+//   (`kept`; the test creates that row), and
+// * a division wanting the ref the emptied asset's row still holds
+//   (`stale-plot`; the test creates that row too).
+//
+// ProjectDocProjection must skip each bad entry on its own and write the rest.
+const issues = new Y.Doc();
+seedDocFromState(issues, {
+  title: "Issues",
+  docinfo: "<docinfo/>",
+  divisions: [
+    {
+      id: "dddddddd-dddd-4ddd-8ddd-ddddddddddd0",
+      xmlId: "healthy-section",
+      sourceFormat: "pretext",
+      type: "section",
+      title: "Healthy",
+      source: "<p>Still projected.</p>",
+    },
+    {
+      id: "dddddddd-dddd-4ddd-8ddd-ddddddddddd1",
+      xmlId: "sec-chapter 1 ",
+      sourceFormat: "pretext",
+      type: "chapter",
+      title: "Spaced",
+      source: "",
+    },
+    {
+      id: "dddddddd-dddd-4ddd-8ddd-ddddddddddd2",
+      xmlId: "twins",
+      sourceFormat: "pretext",
+      type: "section",
+      title: "Twin (lower id)",
+      source: "<p>lower</p>",
+    },
+    {
+      id: "dddddddd-dddd-4ddd-8ddd-ddddddddddd3",
+      xmlId: "twins",
+      sourceFormat: "pretext",
+      type: "section",
+      title: "Twin (higher id)",
+      source: "<p>higher</p>",
+    },
+    {
+      id: "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeee0",
+      xmlId: "kept",
+      sourceFormat: "pretext",
+      type: "section",
+      title: "Keeper",
+      source: "<p>keeper</p>",
+    },
+    {
+      id: "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeee1",
+      xmlId: "kept",
+      sourceFormat: "pretext",
+      type: "section",
+      title: "Newcomer",
+      source: "<p>newcomer</p>",
+    },
+    {
+      id: "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeee2",
+      xmlId: "stale-plot",
+      sourceFormat: "pretext",
+      type: "section",
+      title: "Wants the asset's ref",
+      source: "",
+    },
+  ],
+  assets: [
+    {
+      id: "88888888-8888-4888-8888-888888888888",
+      ref: "projected-plot",
+      title: "Projected Plot",
+      shortDescription: "A plot of the projection",
+      source: "",
+    },
+  ],
+});
+{
+  // What a client that handed applyAssetFields an all-undefined asset left
+  // behind on Nov 4: the Y.Text source and nothing else.
+  const emptied = issues.getMap("assets").get("88888888-8888-4888-8888-888888888888");
+  for (const key of [...emptied.keys()]) if (key !== "source") emptied.delete(key);
+}
+writeFileSync(OUT + "projection_issues_state.bin", Y.encodeStateAsUpdate(issues));
+
+// Legal edits that a single all-or-nothing save refuses as "ref has already
+// been taken", because every record is validated before any is written:
+//
+// * a division removed and a new one created with its ref (`reborn`; the test
+//   creates the removed row),
+// * two divisions whose refs are swapped (`swap-a` <-> `swap-b`), and
+// * a chain: A takes B's ref while B moves on (`chain-a` -> `chain-b` -> `chain-c`).
+const renames = new Y.Doc();
+seedDocFromState(renames, {
+  title: "Renames",
+  docinfo: "<docinfo/>",
+  divisions: [
+    {
+      id: "12121212-1212-4121-8121-121212121212",
+      xmlId: "reborn",
+      sourceFormat: "pretext",
+      type: "section",
+      title: "Reborn",
+      source: "<p>reborn</p>",
+    },
+    {
+      id: "13131313-1313-4131-8131-131313131313",
+      xmlId: "swap-b",
+      sourceFormat: "pretext",
+      type: "section",
+      title: "Was swap-a",
+      source: "",
+    },
+    {
+      id: "14141414-1414-4141-8141-141414141414",
+      xmlId: "swap-a",
+      sourceFormat: "pretext",
+      type: "section",
+      title: "Was swap-b",
+      source: "",
+    },
+    {
+      id: "15151515-1515-4151-8151-151515151515",
+      xmlId: "chain-b",
+      sourceFormat: "pretext",
+      type: "section",
+      title: "Was chain-a",
+      source: "",
+    },
+    {
+      id: "16161616-1616-4161-8161-161616161616",
+      xmlId: "chain-c",
+      sourceFormat: "pretext",
+      type: "section",
+      title: "Was chain-b",
+      source: "",
+    },
+  ],
+});
+markDeleted(renames, "division", "55555555-5555-4555-8555-555555555555");
+writeFileSync(OUT + "projection_renames_state.bin", Y.encodeStateAsUpdate(renames));
+
 console.log(`wrote collab fixtures to ${OUT}`);

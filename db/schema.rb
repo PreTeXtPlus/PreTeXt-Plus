@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_11_04_120000) do
+ActiveRecord::Schema[8.1].define(version: 2026_11_08_120000) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
   enable_extension "pgcrypto"
@@ -276,6 +276,8 @@ ActiveRecord::Schema[8.1].define(version: 2026_11_04_120000) do
     t.uuid "backup_of_id"
     t.integer "backup_tier"
     t.datetime "backed_up_at"
+    t.jsonb "projection_issues", default: [], null: false
+    t.datetime "projection_checked_at"
     t.index ["backup_of_id", "backup_tier"], name: "index_projects_on_backup_of_id_and_backup_tier", unique: true
     t.index ["is_template"], name: "index_projects_on_is_template"
     t.index ["user_id", "visibility"], name: "index_projects_on_user_id_and_visibility"

@@ -156,15 +156,23 @@ class ProjectDocProjectionTest < ActiveSupport::TestCase
       "the document says its root is a <book>, so that is what the project is"
   end
 
-  test "a type that is not a root element is refused for the root" do
+  test "a type that is not a root element is refused for the root, and only for the root" do
     # The projected *child* is a latex chapter. Pointing the project's root at it
     # is the shape of a document whose root carries a non-root type -- not an
-    # answer to "article or book", and not one the root may be saved with.
+    # answer to "article or book", and not one the root may be saved with. The
+    # refusal costs that one record: the rest of the document still projects.
     make_root CHILD_ID
     ProjectDoc.seed(@project, fixture("projection_state"))
 
-    assert_raises(ActiveRecord::RecordInvalid) { project! }
+    projection = ProjectDocProjection.new(@project)
+    assert projection.apply!
+
     assert_equal "book", @project.reload.structural_document_type
+    assert_equal "placeholder", Content.find(CHILD_ID).ref, "the refused root keeps its row as it was"
+    assert_equal "projected-root", Content.find(ROOT_ID).ref, "the other division still projects"
+    assert_equal [ CHILD_ID ], projection.issues.map { |i| i["id"] }
+    assert_match(/root element/, projection.issues.first["reason"])
+    assert_equal projection.issues, @project.projection_issues
   end
 
   test "a document missing the newer meta fields leaves the project's own values" do
@@ -249,5 +257,234 @@ class ProjectDocProjectionTest < ActiveSupport::TestCase
     project!
 
     assert_not Content.exists?(GONE_EXERCISE_ID)
+  end
+
+  # ---- tolerating a bad record ----
+  #
+  # The document accepts any write. Twice in production one malformed entry
+  # made the whole projection raise, which froze every row of the project for a
+  # day while the editor kept showing the edits. A bad record now costs itself
+  # only, and is listed on the project so something can say so.
+
+  HEALTHY_ID = "dddddddd-dddd-4ddd-8ddd-ddddddddddd0".freeze
+  SPACED_ID = "dddddddd-dddd-4ddd-8ddd-ddddddddddd1".freeze
+  TWIN_LOW_ID = "dddddddd-dddd-4ddd-8ddd-ddddddddddd2".freeze
+  TWIN_HIGH_ID = "dddddddd-dddd-4ddd-8ddd-ddddddddddd3".freeze
+  KEEPER_ID = "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeee0".freeze
+  NEWCOMER_ID = "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeee1".freeze
+  WANTS_ASSET_REF_ID = "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeee2".freeze
+  REBORN_ID = "12121212-1212-4121-8121-121212121212".freeze
+  SWAP_A_ID = "13131313-1313-4131-8131-131313131313".freeze
+  SWAP_B_ID = "14141414-1414-4141-8141-141414141414".freeze
+  CHAIN_A_ID = "15151515-1515-4151-8151-151515151515".freeze
+  CHAIN_B_ID = "16161616-1616-4161-8161-161616161616".freeze
+
+  def seed_issues!
+    @project.assets.create!(id: ASSET_ID, ref: "stale-plot", kind: :authored_asset,
+                            title: "Stale", source: "<latex-image>s</latex-image>", short_description: "kept")
+    @project.divisions.create!(id: KEEPER_ID, ref: "kept", source: "<p>row</p>", source_format: "pretext")
+    ProjectDoc.seed(@project, fixture("projection_issues_state"))
+  end
+
+  def projection!
+    ProjectDocProjection.new(@project).tap(&:apply!)
+  end
+
+  test "an asset entry emptied of every field is skipped and its row is untouched" do
+    seed_issues!
+
+    projection = projection!
+
+    asset = Content.find(ASSET_ID)
+    assert_equal "stale-plot", asset.ref
+    assert_equal "Stale", asset.title
+    assert_equal "<latex-image>s</latex-image>", asset.source
+    assert_equal "kept", asset.short_description
+    issue = projection.issues.find { |i| i["id"] == ASSET_ID }
+    assert_equal({ "kind" => "asset", "id" => ASSET_ID, "ref" => nil, "reason" => "ref is missing" }, issue)
+  end
+
+  test "a division whose xml:id is not a valid ref is skipped and listed" do
+    seed_issues!
+
+    projection = projection!
+
+    assert_not Content.exists?(SPACED_ID)
+    issue = projection.issues.find { |i| i["id"] == SPACED_ID }
+    assert_equal "division", issue["kind"]
+    assert_equal "sec-chapter 1 ", issue["ref"]
+    assert_match(/invalid/, issue["reason"])
+  end
+
+  test "the rest of the document still projects around the bad entries" do
+    seed_issues!
+
+    projection!
+
+    assert_equal "Issues", @project.reload.title
+    healthy = Content.find(HEALTHY_ID)
+    assert_equal "healthy-section", healthy.ref
+    assert_equal "<p>Still projected.</p>", healthy.source
+  end
+
+  test "two new records wanting one ref: the lower id is written, the other listed" do
+    seed_issues!
+
+    projection = projection!
+
+    assert_equal "twins", Content.find(TWIN_LOW_ID).ref
+    assert_not Content.exists?(TWIN_HIGH_ID)
+    issue = projection.issues.find { |i| i["id"] == TWIN_HIGH_ID }
+    assert_equal "ref is already used by division #{TWIN_LOW_ID}", issue["reason"]
+  end
+
+  test "a new record wanting an existing row's ref: the row keeps it, the newcomer is listed" do
+    seed_issues!
+
+    projection = projection!
+
+    assert_equal "kept", Content.find(KEEPER_ID).ref
+    assert_equal "<p>keeper</p>", Content.find(KEEPER_ID).source, "the keeper's own entry still projects"
+    assert_not Content.exists?(NEWCOMER_ID)
+    assert_includes projection.issues.map { |i| i["id"] }, NEWCOMER_ID
+  end
+
+  test "a record wanting the ref of a row the document leaves alone is listed" do
+    # The emptied asset's entry was skipped, so its row keeps `stale-plot`; a
+    # division that wants that ref would be refused by the index, so it loses.
+    seed_issues!
+
+    projection = projection!
+
+    assert_not Content.exists?(WANTS_ASSET_REF_ID)
+    issue = projection.issues.find { |i| i["id"] == WANTS_ASSET_REF_ID }
+    assert_equal "ref is already used by asset #{ASSET_ID}", issue["reason"]
+  end
+
+  test "the outcome is recorded on the project, and is the same on every run" do
+    seed_issues!
+
+    first = projection!
+    @project.reload
+    assert_equal first.issues, @project.projection_issues
+    assert_equal %w[ asset division division division division ], @project.projection_issues.map { |i| i["kind"] }
+    assert_in_delta Time.current, @project.projection_checked_at, 5.seconds
+
+    second = projection!
+    assert_equal first.issues, second.issues
+    assert_equal first.issues, @project.reload.projection_issues
+  end
+
+  test "a healthy document leaves the issues empty and stamps the check" do
+    ProjectDoc.seed(@project, fixture("projection_state"))
+
+    project!
+
+    @project.reload
+    assert_equal [], @project.projection_issues
+    assert_not_nil @project.projection_checked_at
+  end
+
+  test "new issues are reported once, not on every run" do
+    seed_issues!
+    notified = []
+
+    Honeybadger.stub(:notify, ->(*args, **kwargs) { notified << [ args, kwargs ] }) do
+      projection!
+      projection!
+    end
+
+    assert_equal 1, notified.size
+    _args, kwargs = notified.first
+    assert_equal "Collab::ProjectionIssues", kwargs[:error_class]
+    assert_equal "projection-#{@project.id}", kwargs[:fingerprint]
+    assert_equal 5, kwargs.dig(:context, :issues).size
+  end
+
+  test "a reset document clears issues recorded against it" do
+    seed_issues!
+    projection!
+    assert @project.reload.projection_issues.any?
+
+    ProjectDoc.reset!(@project)
+    assert_not project!
+
+    assert_equal [], @project.reload.projection_issues
+  end
+
+  # ---- refs that are legal but awkward ----
+  #
+  # Refs are unique per project, and a nested save validates every record
+  # before it writes any. So a removed record's ref reused by a new one, or two
+  # refs swapped, would each be refused as "already taken" unless written in an
+  # order that frees the ref first.
+
+  def seed_renames!
+    @project.divisions.create!(id: GONE_DIVISION_ID, ref: "reborn", source: "", source_format: "pretext")
+    @project.divisions.create!(id: SWAP_A_ID, ref: "swap-a", source: "", source_format: "pretext")
+    @project.divisions.create!(id: SWAP_B_ID, ref: "swap-b", source: "", source_format: "pretext")
+    @project.divisions.create!(id: CHAIN_A_ID, ref: "chain-a", source: "", source_format: "pretext")
+    @project.divisions.create!(id: CHAIN_B_ID, ref: "chain-b", source: "", source_format: "pretext")
+    ProjectDoc.seed(@project, fixture("projection_renames_state"))
+  end
+
+  test "a tombstone plus a new record reusing its ref projects cleanly" do
+    seed_renames!
+
+    projection = projection!
+
+    assert_not Content.exists?(GONE_DIVISION_ID)
+    assert_equal "reborn", Content.find(REBORN_ID).ref
+    assert_empty projection.issues
+  end
+
+  test "swapping the refs of two divisions projects cleanly" do
+    seed_renames!
+
+    projection!
+
+    assert_equal "swap-b", Content.find(SWAP_A_ID).ref
+    assert_equal "swap-a", Content.find(SWAP_B_ID).ref
+  end
+
+  test "a chain of renames projects cleanly, and leaves nothing parked" do
+    seed_renames!
+
+    projection!
+
+    assert_equal "chain-b", Content.find(CHAIN_A_ID).ref
+    assert_equal "chain-c", Content.find(CHAIN_B_ID).ref
+    assert_empty @project.contents.where("ref LIKE 'tmp\\_%'"), "no row is left at its parking ref"
+  end
+
+  test "renames settle on the first run and change nothing on the second" do
+    seed_renames!
+    projection!
+    @project.reload
+    settled = @project.source_updated_at
+
+    travel 1.minute do
+      projection!
+    end
+
+    assert_equal settled, @project.reload.source_updated_at
+  end
+
+  test "a parked row that is then refused is left where its issue says" do
+    # CHAIN_B holds `chain-b`, which CHAIN_A wants, so it is parked first. As
+    # the root it is then refused (its entry says "section"), and by then
+    # CHAIN_A has `chain-b`, so there is nowhere to give it back.
+    make_root CHAIN_B_ID
+    Content.find(CHAIN_B_ID).update_columns(ref: "chain-b")
+    @project.divisions.create!(id: CHAIN_A_ID, ref: "chain-a", source: "", source_format: "pretext")
+    ProjectDoc.seed(@project, fixture("projection_renames_state"))
+
+    projection = projection!
+
+    assert_equal "chain-b", Content.find(CHAIN_A_ID).ref
+    assert_equal ProjectDocProjection.parking_ref(CHAIN_B_ID), Content.find(CHAIN_B_ID).ref
+    issue = projection.issues.find { |i| i["id"] == CHAIN_B_ID }
+    assert_match(/root element/, issue["reason"])
+    assert_match(/parked at tmp_16161616/, issue["reason"])
   end
 end
