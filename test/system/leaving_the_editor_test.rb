@@ -105,8 +105,7 @@ class LeavingTheEditorTest < ApplicationSystemTestCase
     find_field("snippet-settings-ref").send_keys(:enter)
     assert_selector "[data-testid='editor-target-title']", text: "beta-renamed", wait: 10
     assert_equal "beta-renamed", beta.reload.ref
-    assert_operator project_json_requests(project), :>=, requests_before + 2,
-      "expected the rename's PATCH and the re-fetch it triggers"
+    assert_project_json_requests(project, at_least: requests_before + 2)
 
     # The premise: the typing hasn't been saved yet, so only the overlay could
     # have kept it through the re-fetch.
@@ -160,6 +159,23 @@ class LeavingTheEditorTest < ApplicationSystemTestCase
     def open_snippet_row(snippet)
       find("[data-testid='snippet-row-#{snippet.ref}'] button", wait: 20).click
       assert_selector "[data-testid='editor-target-title']", text: snippet.ref, wait: 10
+    end
+
+    # Resource timing records a request only once its response has landed, so
+    # right after the title shows the rename the re-fetch it triggers may still
+    # be on the wire (it was, on a slow CI runner). Wait for it as every other
+    # assertion here waits, rather than reading the count once.
+    def assert_project_json_requests(project, at_least:, wait: 10)
+      deadline = Time.current + wait
+      count = nil
+      loop do
+        count = project_json_requests(project)
+        break if count >= at_least || Time.current > deadline
+
+        sleep 0.1
+      end
+      assert_operator count, :>=, at_least,
+        "expected the rename's PATCH and the re-fetch it triggers"
     end
 
     # Requests the page has made to the project's JSON endpoint (the load,
