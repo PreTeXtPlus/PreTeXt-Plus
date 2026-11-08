@@ -73,6 +73,17 @@ class ContentTest < ActiveSupport::TestCase
 
   # Assembly writes `division_type` as the element's tag, so the two lists have
   # to name the same elements.
+  # The editor checks every ref before writing it to the shared document (the
+  # web-editor's isValidRef); the rows check it here (REF_REGEX). The fixture is
+  # the editor's, and its own test reads the same file, so the two rules cannot
+  # drift apart without one suite noticing.
+  test "REF_REGEX agrees with the web-editor's ref rule on the shared fixture" do
+    fixture = JSON.parse(Rails.root.join("packages/web-editor/src/__tests__/fixtures/refs.json").read)
+
+    fixture["valid"].each { |ref| assert_match REF_REGEX, ref, "#{ref.inspect} should be a valid ref" }
+    fixture["invalid"].each { |ref| assert_no_match REF_REGEX, ref, "#{ref.inspect} should not be a valid ref" }
+  end
+
   test "division types match the web-editor's DivisionType" do
     source = Rails.root.join("packages/web-editor/src/types/sections.ts").read
     union = source[/export type RootDivisionType =(.*?);/m, 1] + source[/export type DivisionType =(.*?);/m, 1]

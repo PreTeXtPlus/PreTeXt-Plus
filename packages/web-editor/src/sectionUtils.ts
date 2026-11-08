@@ -637,6 +637,23 @@ export function sanitizeXmlId(raw: string): string {
 }
 
 /**
+ * Whether `ref` is a ref the host's rows will accept: what {@link sanitizeXmlId}
+ * produces when it produces anything. Every record's ref — a division's
+ * `xml:id`, an asset's, snippet's or exercise's `ref` — is checked against
+ * this before it is written to the shared document (see `collab/bridge.ts`),
+ * because the document accepts any string and a row does not: a ref with a
+ * space in it stalled a project's saved copy for a day in November 2026.
+ *
+ * Equal to the Rails app's `REF_REGEX`, which `__tests__/fixtures/refs.json`
+ * pins from both sides.
+ */
+export const REF_PATTERN = /^[A-Za-z_][A-Za-z0-9_-]*$/;
+
+export function isValidRef(ref: string): boolean {
+  return REF_PATTERN.test(ref);
+}
+
+/**
  * Derive a slug-style `xml:id` from a division's title — lowercased, with
  * whitespace/punctuation collapsed to single hyphens and trimmed from the
  * ends. Used to keep a brand-new, not-yet-saved division's id in sync with

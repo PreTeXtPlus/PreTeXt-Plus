@@ -248,16 +248,44 @@ export const makeAssetEntry = (asset: Asset): Y.Map<unknown> => {
 };
 
 /**
+ * Write one record field onto an entry, by the rule every record map shares:
+ *
+ * - `undefined` means "nothing to say about this field" and leaves the entry
+ *   as it is. A caller holding a partial record (the settings drawer saving
+ *   one field, a host record missing a newer field) must not erase the rest.
+ *   Until November 2026 an undefined field *deleted* the key, which is how an
+ *   asset was once emptied to `{source: ""}` and froze its project's rows.
+ * - `null` clears the field — except `ref`, a record's identity, which is
+ *   never removed; clearing it would make the entry unprojectable.
+ * - Anything else is written only when it differs from what the entry holds,
+ *   so re-saving an unchanged record costs no update and no tombstone.
+ */
+export const applyField = (
+  entry: Y.Map<unknown>,
+  field: string,
+  value: unknown,
+): void => {
+  if (value === undefined) return;
+  if (value === null) {
+    if (field !== "ref" && entry.has(field)) entry.delete(field);
+    return;
+  }
+  const current = entry.get(field);
+  const same =
+    typeof value === "object"
+      ? JSON.stringify(current) === JSON.stringify(value)
+      : current === value;
+  if (!same) entry.set(field, value);
+};
+
+/**
  * Write an asset's metadata fields onto an entry. The source is text, not a
  * field — it changes by diff (see the bridge), never by replacement, so a
  * metadata edit can't clobber concurrent typing. Callers own the transaction.
+ * Field by field, per {@link applyField}.
  */
 export const applyAssetFields = (entry: Y.Map<unknown>, asset: Asset): void => {
-  for (const field of ASSET_FIELDS) {
-    const value = asset[field];
-    if (value === undefined) entry.delete(field);
-    else entry.set(field, value);
-  }
+  for (const field of ASSET_FIELDS) applyField(entry, field, asset[field]);
 };
 
 /** The snippet metadata fields the doc carries; `source` is a `Y.Text`. */
@@ -276,11 +304,7 @@ export const applySnippetFields = (
   entry: Y.Map<unknown>,
   snippet: Snippet,
 ): void => {
-  for (const field of SNIPPET_FIELDS) {
-    const value = snippet[field];
-    if (value === undefined) entry.delete(field);
-    else entry.set(field, value);
-  }
+  for (const field of SNIPPET_FIELDS) applyField(entry, field, snippet[field]);
 };
 
 /** Build an exercises-map entry: last-writer-wins fields + `Y.Text` body. */
@@ -296,11 +320,12 @@ export const applyExerciseFields = (
   entry: Y.Map<unknown>,
   exercise: Exercise,
 ): void => {
-  entry.set("ref", exercise.ref);
-  if (exercise.title === undefined) entry.delete("title");
-  else entry.set("title", exercise.title);
-  if (exercise.attrs && Object.keys(exercise.attrs).length > 0) entry.set("attrs", exercise.attrs);
-  else entry.delete("attrs");
+  applyField(entry, "ref", exercise.ref);
+  applyField(entry, "title", exercise.title);
+  // An exercise's attributes are a whole: an empty object means "no
+  // attributes", so it clears the field, where only `undefined` leaves it.
+  if (exercise.attrs === undefined) return;
+  applyField(entry, "attrs", Object.keys(exercise.attrs).length > 0 ? exercise.attrs : null);
 };
 
 /** The `Y.Text` holding a division's source, or undefined if absent. */

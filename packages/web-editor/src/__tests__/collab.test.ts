@@ -11,11 +11,12 @@ import {
 } from "../collab/schema";
 import { diffReplace } from "../collab/textDiff";
 import { CollabBridge } from "../collab/bridge";
+import type { CollabInvariantViolation } from "../collab/types";
 import { createEditorStore, selectOpenDivisionId } from "../store/editorStore";
 import { Awareness } from "y-protocols/awareness";
 import type { CollabSession } from "../collab/types";
 import type { Division } from "../types/sections";
-import type { Asset, Snippet } from "../types/editor";
+import type { Asset, Exercise, Snippet } from "../types/editor";
 import { legacyDivisions } from "./legacyDivision";
 
 const DIVISIONS: Division[] = legacyDivisions([
@@ -589,5 +590,294 @@ describe("CollabBridge", () => {
     expect(
       store.store.getState().divisions?.find((d) => d.xmlId === "sec-a")?.source,
     ).toContain("ahead");
+  });
+});
+
+// ── the write boundary ───────────────────────────────────────────────────────
+//
+// The document accepts any write; the host's rows do not. Each case below is a
+// write that reached a production document and stalled its project's saved
+// copy, and what the bridge does with it now.
+
+/** A linked pair whose sessions record every violation the bridges report. */
+const makeReportingPair = () => {
+  const violations: { a: CollabInvariantViolation[]; b: CollabInvariantViolation[] } = { a: [], b: [] };
+  const docA = new Y.Doc();
+  const docB = new Y.Doc();
+  seedDocFromState(docA, seedState());
+  Y.applyUpdate(docB, Y.encodeStateAsUpdate(docA), "relay");
+  // Relay is manual here, so a test can hold updates back and release them.
+  const pending: { toB: Uint8Array[]; toA: Uint8Array[] } = { toB: [], toA: [] };
+  docA.on("update", (u: Uint8Array, origin: unknown) => {
+    if (origin !== "relay") pending.toB.push(u);
+  });
+  docB.on("update", (u: Uint8Array, origin: unknown) => {
+    if (origin !== "relay") pending.toA.push(u);
+  });
+  const deliver = () => {
+    // Loop: applying an update may make a bridge write a repair, which queues
+    // another update for the other side.
+    while (pending.toB.length || pending.toA.length) {
+      for (const u of pending.toB.splice(0)) Y.applyUpdate(docB, u, "relay");
+      for (const u of pending.toA.splice(0)) Y.applyUpdate(docA, u, "relay");
+    }
+  };
+  const storeA = makeStore();
+  const storeB = makeStore();
+  const bridgeA = new CollabBridge(
+    {
+      doc: docA,
+      awareness: new Awareness(docA),
+      user: { name: "A", color: "#111" },
+      onInvariantViolation: (v) => violations.a.push(v),
+    },
+    storeA.store,
+  );
+  const bridgeB = new CollabBridge(
+    {
+      doc: docB,
+      awareness: new Awareness(docB),
+      user: { name: "B", color: "#222" },
+      onInvariantViolation: (v) => violations.b.push(v),
+    },
+    storeB.store,
+  );
+  bridgeA.attach();
+  bridgeB.attach();
+  deliver();
+  return { docA, docB, storeA, storeB, bridgeA, bridgeB, deliver, violations };
+};
+
+const fullAsset: Asset = {
+  id: "asset-full",
+  ref: "diagram",
+  title: "A Diagram",
+  shortDescription: "A diagram of the process",
+  isFile: true,
+  url: "/projects/1/assets/diagram",
+  fileRef: "diagram.png",
+  extension: "png",
+};
+
+describe("CollabBridge write boundary", () => {
+  it("leaves every field in place when an update says nothing about them", () => {
+    const { bridgeA, storeA, docA } = makeReportingPair();
+    storeA.store.getState().addAssetToPool(fullAsset);
+    bridgeA.localAssetAdd(fullAsset);
+
+    // What a client handed an all-undefined asset wrote on Nov 4, 2026: every
+    // metadata key deleted, leaving `{source: ""}`.
+    bridgeA.localAssetUpdate({ id: "asset-full", title: "A Diagram" } as Asset);
+
+    const entry = docA.getMap<Y.Map<unknown>>("assets").get("asset-full")!;
+    expect(entry.get("ref")).toBe("diagram");
+    expect(entry.get("shortDescription")).toBe("A diagram of the process");
+    expect(entry.get("fileRef")).toBe("diagram.png");
+    expect(entry.get("isFile")).toBe(true);
+  });
+
+  it("writes only the key that changed", () => {
+    const { bridgeA, storeA, docA } = makeReportingPair();
+    storeA.store.getState().addAssetToPool(fullAsset);
+    bridgeA.localAssetAdd(fullAsset);
+    const entry = docA.getMap<Y.Map<unknown>>("assets").get("asset-full")!;
+    const changed: string[][] = [];
+    entry.observe((event) => changed.push([...event.changes.keys.keys()]));
+
+    bridgeA.localAssetUpdate({ ...fullAsset, shortDescription: "A clearer description" });
+    bridgeA.localAssetUpdate({ ...fullAsset, shortDescription: "A clearer description" });
+
+    expect(changed).toEqual([["shortDescription"]]);
+    expect(entry.get("shortDescription")).toBe("A clearer description");
+  });
+
+  it("clears a field only on an explicit null, and never the ref", () => {
+    const { bridgeA, storeA, docA } = makeReportingPair();
+    storeA.store.getState().addAssetToPool(fullAsset);
+    bridgeA.localAssetAdd(fullAsset);
+
+    bridgeA.localAssetUpdate({
+      id: "asset-full",
+      title: "A Diagram",
+      shortDescription: null,
+      ref: null,
+    } as unknown as Asset);
+
+    const entry = docA.getMap<Y.Map<unknown>>("assets").get("asset-full")!;
+    expect(entry.has("shortDescription")).toBe(false);
+    expect(entry.get("ref")).toBe("diagram");
+  });
+
+  it("refuses a division whose xml:id is not a valid ref, and reports it once", () => {
+    const { bridgeA, docA, violations } = makeReportingPair();
+
+    bridgeA.localDivisionAdd({
+      id: "spaced-id",
+      xmlId: "sec-chapter 1 ",
+      title: "Spaced",
+      type: "section",
+      sourceFormat: "pretext",
+      source: "",
+    });
+
+    expect(getDivisionsMap(docA).has("spaced-id")).toBe(false);
+    expect(violations.a).toHaveLength(1);
+    expect(violations.a[0]).toMatchObject({
+      kind: "invalid_ref",
+      record: "division",
+      id: "spaced-id",
+      ref: "sec-chapter 1 ",
+      operation: "localDivisionAdd",
+    });
+    expect((violations.a[0] as { stack?: string }).stack).toContain("localDivisionAdd");
+  });
+
+  it("refuses an asset, snippet or exercise with an empty or invalid ref", () => {
+    const { bridgeA, docA, violations } = makeReportingPair();
+
+    bridgeA.localAssetAdd({ id: "a1", title: "No ref" } as Asset);
+    bridgeA.localSnippetAdd({ id: "s1", ref: "", source: "", sourceFormat: "pretext" } as Snippet);
+    bridgeA.localExerciseAdd({ id: "e1", ref: "1st-quiz", source: "" } as Exercise);
+
+    expect(docA.getMap("assets").has("a1")).toBe(false);
+    expect(docA.getMap("snippets").has("s1")).toBe(false);
+    expect(docA.getMap("exercises").has("e1")).toBe(false);
+    expect(violations.a.map((v) => v.record)).toEqual(["asset", "snippet", "exercise"]);
+  });
+
+  it("refuses a rename to an invalid xml:id and keeps the old one, applying the rest of the edit", () => {
+    const { bridgeA, docA, violations } = makeReportingPair();
+
+    bridgeA.localDivisionUpdate("sec-a", { xmlId: "sec a", title: "Renamed anyway" });
+
+    const entry = getDivisionsMap(docA).get("sec-a-id")!;
+    expect(entry.get("xmlId")).toBe("sec-a");
+    expect(entry.get("title")).toBe("Renamed anyway");
+    expect(bridgeA.getYText("sec-a")).toBeDefined();
+    expect(violations.a).toHaveLength(1);
+    expect(violations.a[0]).toMatchObject({ kind: "invalid_ref", operation: "localDivisionUpdate" });
+  });
+
+  // Two collaborators press "add section" with the same id before either has
+  // seen the other's. Each tab's local check passes; the document holds both.
+  it("settles two divisions created under one xml:id so both stay visible, the same way on every peer", () => {
+    const { storeA, storeB, bridgeA, bridgeB, docA, docB, deliver, violations } = makeReportingPair();
+    const make = (id: string, title: string) => ({
+      id,
+      xmlId: "dup",
+      title,
+      type: "section" as const,
+      sourceFormat: "pretext" as const,
+      source: `<p>${title}</p>`,
+    });
+    // Each side adds locally while the relay is held back.
+    storeA.store.getState().addDivisionToPool(make("id-1", "From A"));
+    bridgeA.localDivisionAdd(make("id-1", "From A"));
+    storeB.store.getState().addDivisionToPool(make("id-2", "From B"));
+    bridgeB.localDivisionAdd(make("id-2", "From B"));
+
+    deliver();
+
+    // The lower record id keeps the xml:id on both sides; the other is renamed
+    // in the document, not dropped.
+    for (const doc of [docA, docB]) {
+      expect(getDivisionsMap(doc).get("id-1")!.get("xmlId")).toBe("dup");
+      expect(getDivisionsMap(doc).get("id-2")!.get("xmlId")).toBe("dup-2");
+    }
+    for (const store of [storeA, storeB]) {
+      const divisions = store.store.getState().divisions ?? [];
+      expect(divisions.find((d) => d.xmlId === "dup")?.title).toBe("From A");
+      expect(divisions.find((d) => d.xmlId === "dup-2")?.title).toBe("From B");
+    }
+    // Both bridges see the pair, so both report the same repair; the host
+    // de-duplicates nothing and need not, since each tab reports once.
+    expect(violations.a).toHaveLength(1);
+    expect(violations.b).toHaveLength(1);
+    expect(violations.a[0]).toMatchObject({ kind: "duplicate_ref", id: "id-2", ref: "dup", renamedTo: "dup-2" });
+    expect(violations.b[0]).toMatchObject({ kind: "duplicate_ref", id: "id-2", ref: "dup", renamedTo: "dup-2" });
+    // Content follows the record, and text binding works for both.
+    expect(bridgeA.getYText("dup-2")?.toString()).toBe("<p>From B</p>");
+    expect(bridgeB.getYText("dup")?.toString()).toBe("<p>From A</p>");
+  });
+
+  it("settles a remote rename onto an xml:id another division holds", () => {
+    const { storeA, bridgeA, bridgeB, docA, deliver } = makeReportingPair();
+    const extra = {
+      id: "zz-later",
+      xmlId: "sec-b",
+      title: "Beta",
+      type: "section" as const,
+      sourceFormat: "pretext" as const,
+      source: "",
+    };
+    storeA.store.getState().addDivisionToPool(extra);
+    bridgeA.localDivisionAdd(extra);
+    deliver();
+
+    // B renames sec-b onto sec-a while A, unaware, keeps sec-a. "sec-a-id"
+    // sorts before "zz-later", so the renamed division loses.
+    bridgeB.localDivisionUpdate("sec-b", { xmlId: "sec-a" });
+    deliver();
+
+    expect(getDivisionsMap(docA).get("sec-a-id")!.get("xmlId")).toBe("sec-a");
+    expect(getDivisionsMap(docA).get("zz-later")!.get("xmlId")).toBe("sec-a-2");
+    const xmlIds = (storeA.store.getState().divisions ?? []).map((d) => d.xmlId).sort();
+    expect(xmlIds).toEqual(["doc-root", "sec-a", "sec-a-2"]);
+    expect(bridgeA.getYText("sec-a-2")).toBeDefined();
+    expect(bridgeB.getYText("sec-a-2")).toBeDefined();
+  });
+
+  it("settles a pair the document already held when this client attached", () => {
+    const docA = new Y.Doc();
+    seedDocFromState(docA, {
+      ...seedState(),
+      divisions: [
+        ...seedState().divisions,
+        { id: "twin-1", xmlId: "twins", sourceFormat: "pretext", source: "<p>one</p>", title: "One", type: "section" },
+        { id: "twin-2", xmlId: "twins", sourceFormat: "pretext", source: "<p>two</p>", title: "Two", type: "section" },
+      ],
+    });
+    const violations: CollabInvariantViolation[] = [];
+    const store = makeStore();
+    new CollabBridge(
+      {
+        doc: docA,
+        awareness: new Awareness(docA),
+        user: { name: "A", color: "#111" },
+        onInvariantViolation: (v) => violations.push(v),
+      },
+      store.store,
+    ).attach();
+
+    const divisions = store.store.getState().divisions ?? [];
+    expect(divisions.find((d) => d.xmlId === "twins")?.title).toBe("One");
+    expect(divisions.find((d) => d.xmlId === "twins-2")?.title).toBe("Two");
+    expect(getDivisionsMap(docA).get("twin-2")!.get("xmlId")).toBe("twins-2");
+    expect(violations).toHaveLength(1);
+  });
+
+  it("never renames onto a ref an asset, snippet or exercise holds", () => {
+    const { storeA, storeB, bridgeA, bridgeB, docA, deliver } = makeReportingPair();
+    // The obvious free name, dup-2, is an asset's.
+    const asset: Asset = { id: "asset-dup", ref: "dup-2", title: "Taken" };
+    storeA.store.getState().addAssetToPool(asset);
+    bridgeA.localAssetAdd(asset);
+    deliver();
+    const make = (id: string) => ({
+      id,
+      xmlId: "dup",
+      title: id,
+      type: "section" as const,
+      sourceFormat: "pretext" as const,
+      source: "",
+    });
+    storeA.store.getState().addDivisionToPool(make("id-1"));
+    bridgeA.localDivisionAdd(make("id-1"));
+    storeB.store.getState().addDivisionToPool(make("id-2"));
+    bridgeB.localDivisionAdd(make("id-2"));
+
+    deliver();
+
+    expect(getDivisionsMap(docA).get("id-2")!.get("xmlId")).toBe("dup-3");
   });
 });
