@@ -33,6 +33,14 @@ production:
     queue: default
     schedule: every minute
 
+  # One daily summary of collaborative documents whose rows may not be
+  # following them -- the condition that went unnoticed for a day twice in
+  # November 2026. Nothing is at risk while it is quiet; see the job.
+  projection_health:
+    class: ProjectionHealthJob
+    queue: default
+    schedule: at 7am every day
+
   # Automatic project backups for subscribers; see ProjectBackup for the rotation.
   project_backup:
     class: ProjectBackupJob

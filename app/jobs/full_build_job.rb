@@ -28,7 +28,14 @@ class FullBuildJob < ApplicationJob
     # lines above where they are read. A project with no document to project
     # (never opened collaboratively, or already compacted away) returns false
     # and leaves its rows alone, which are then the only truth there is.
-    ProjectDocProjection.new(build.project).apply!
+    projection = ProjectDocProjection.new(build.project)
+    projection.apply!
+    # A record the projection had to skip is one this build will not contain.
+    # The project page and the build drawer show the same list to the author
+    # (Project#projection_issues); this is the operator's copy.
+    projection.issues.each do |issue|
+      Rails.logger.warn("FullBuildJob build #{build.id} skipped #{issue['kind']} #{issue['id']}: #{issue['reason']}")
+    end
 
     archive = ProjectArchiveBuilder.new(build.project.reload).build
 
@@ -64,7 +71,10 @@ class FullBuildJob < ApplicationJob
       Rails.logger.error("FullBuildJob submit failed for build #{build.id} (HTTP #{response.code}): #{response.body}")
     end
   rescue => e
-    build.mark!(:failed)
+    # Before this the drawer showed a failed build with an empty log, so an
+    # author whose source would not assemble had nothing to go on. The message
+    # is the whole of what we know; it is the part they can act on.
+    build.mark!(:failed, log: "The build could not be started.\n\n#{e.message}")
     raise e
   end
 

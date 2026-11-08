@@ -411,6 +411,9 @@ export function railsToEditorState(json) {
     // Real-time collaboration flag + the identity shown on remote cursors.
     collaborative: json.collaborative === true,
     editorUser: json.editor_user ?? null,
+    // Records the collaborative document holds that the saved project does
+    // not (see collab/projectionIssues.js). Always empty for a solo project.
+    projectionIssues: Array.isArray(json.projection_issues) ? json.projection_issues : [],
     // Words the spell checker has been taught on this project. Read-only here,
     // like the two fields above: additions go straight to their own endpoint.
     dictionaryWords: json.dictionary_words ?? [],

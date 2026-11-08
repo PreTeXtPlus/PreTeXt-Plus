@@ -8,6 +8,10 @@ class ProjectsControllerTest < ActionDispatch::IntegrationTest
     sign_in @user
   end
 
+  def collab_fixture(name)
+    File.binread(Rails.root.join("test/fixtures/files/collab/#{name}.bin"))
+  end
+
   test "the dashboard callout offers student benefits only to users without benefits" do
     get projects_url
     assert_select "a[href=?]", subscriptions_path, text: "or request student benefits"
@@ -251,6 +255,65 @@ class ProjectsControllerTest < ActionDispatch::IntegrationTest
     assert_includes entries.keys, "project.ptx"
     assert_includes entries.keys, "publication/publication.ptx"
     assert_includes entries.keys, "source/main.ptx"
+  end
+
+  # Both read the rows, which for a collaborative project follow the live
+  # document only as closely as the last projection. Builds project first for
+  # the same reason; a copy or download taken a minute after an edit must not
+  # be missing it.
+  test "download writes the collaborative document into the rows before reading them" do
+    ProjectDoc.seed(@project, collab_fixture("projection_state"))
+
+    get download_project_url(@project)
+
+    assert_response :success
+    assert_equal "Projected Title", @project.reload.title
+  end
+
+  test "copy writes the collaborative document into the rows before copying them" do
+    ProjectDoc.seed(@project, collab_fixture("projection_state"))
+    @project.update!(visibility: :public) # copying requires a non-private source
+    sign_out :user
+    sign_in users(:subscribed)
+
+    stub_build_server do
+      post copy_project_url(@project)
+    end
+
+    copy = Project.find_by!(title: "Copy of Projected Title", user: users(:subscribed))
+    assert_includes copy.divisions.pluck(:ref), "projected-root"
+  end
+
+  test "a download whose projection fails outright is refused with the reason, not a 500" do
+    ProjectDoc.seed(@project, collab_fixture("projection_state"))
+    exploding = Struct.new(:project) { def apply! = raise("stuck") }
+
+    Honeybadger.stub(:notify, ->(*_a, **_k) { }) do
+      ProjectDocProjection.stub(:new, ->(project) { exploding.new(project) }) do
+        get download_project_url(@project)
+      end
+    end
+
+    assert_redirected_to project_url(@project)
+    assert_match(/could not be updated/, flash[:alert])
+  end
+
+  test "show lists the records the last projection had to leave out" do
+    @project.update_columns(projection_issues: [
+      { "kind" => "division", "id" => SecureRandom.uuid, "ref" => "sec-chapter 1 ", "reason" => "ref \"sec-chapter 1 \" is invalid" }
+    ])
+
+    get project_url(@project)
+
+    assert_response :success
+    assert_select "[role=alert]", text: /sec-chapter 1 /
+  end
+
+  test "show says nothing about projection issues when there are none" do
+    get project_url(@project)
+
+    assert_response :success
+    assert_select "[role=alert]", text: /can't be saved/, count: 0
   end
 
   test "cannot download another user's project" do

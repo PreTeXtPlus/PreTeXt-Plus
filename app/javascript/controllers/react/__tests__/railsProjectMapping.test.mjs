@@ -293,4 +293,16 @@ describe("railsSnippetToEditor", () => {
 
     expect(railsSnippetToEditor({ id: 2, ref: "t" }).title).toBe("");
   });
+  describe("projection issues", () => {
+    it("carries the server's list through unchanged", () => {
+      const issues = [{ kind: "division", id: "d1", ref: "sec 1", reason: "ref is invalid" }];
+      expect(railsToEditorState(project({ projection_issues: issues })).projectionIssues).toEqual(issues);
+    });
+
+    it("is an empty list when the server says nothing (a solo project, or an older server)", () => {
+      expect(railsToEditorState(project()).projectionIssues).toEqual([]);
+      expect(railsToEditorState(project({ projection_issues: null })).projectionIssues).toEqual([]);
+    });
+  });
+
 });

@@ -18,6 +18,7 @@ import {
 import { buildImportEngines } from "./importEngines";
 import { buildImportShare } from "./importShare";
 import { CollabOutdatedError, YCableProvider } from "./collab/yCableProvider";
+import { describeProjectionIssue, sameProjectionIssues } from "./collab/projectionIssues";
 import { reportCollabIncident } from "./collab/reportIncident";
 import {
   editorDivisionToRails,
@@ -549,6 +550,21 @@ function EditorApp({ config }) {
   // it refuses this tab's writes. Nothing typed here can be saved until the
   // page is reloaded.
   const [collabOutdated, setCollabOutdated] = useState(false);
+  // Records the shared document holds that the saved project does not (the
+  // server could not write them: see collab/projectionIssues.js). The editor
+  // shows the author their edits regardless, so this is the only way they
+  // learn a build or copy will leave one out. Loaded with the project, and
+  // refreshed by every flush. A dismissal lasts until the list changes.
+  const [projectionIssues, setProjectionIssues] = useState([]);
+  const [dismissedIssues, setDismissedIssues] = useState(null);
+  const noteProjectionIssues = useCallback((issues) => {
+    setProjectionIssues((current) =>
+      sameProjectionIssues(current, issues) ? current : issues,
+    );
+  }, []);
+  useEffect(() => {
+    if (projectQuery.data) noteProjectionIssues(projectQuery.data.projectionIssues ?? []);
+  }, [projectQuery.data, noteProjectionIssues]);
 
   useEffect(() => {
     const data = projectQuery.data;
@@ -678,7 +694,22 @@ function EditorApp({ config }) {
             method: "POST",
             headers: { Accept: "application/json", "X-CSRF-Token": csrfToken },
           });
+          if (res.status === 422) {
+            // The server could not write the document out at all. The edits
+            // are safe -- they are in the shared document -- but whatever the
+            // caller is about to read or copy is older than what this tab
+            // shows, and that is the author's call to make.
+            const { error } = await res.json().catch(() => ({}));
+            console.error("Flush refused:", error);
+            return window.confirm(
+              `${error || "The saved copy of this project could not be updated."}\n\n` +
+                "Your edits are safe in the shared document, but the project page and any " +
+                "copy or build will show the last version that was saved. Continue anyway?",
+            );
+          }
           if (!res.ok) throw new Error(`Flush failed: ${res.status}`);
+          const { projection_issues: issues } = await res.json().catch(() => ({}));
+          if (Array.isArray(issues)) noteProjectionIssues(issues);
           return true;
         } catch (error) {
           console.error("Error saving:", error);
@@ -715,7 +746,7 @@ function EditorApp({ config }) {
         if (inFlightSave.current === request) inFlightSave.current = null;
       }
     },
-    [isDirty, saveMutation, flushDocUrl, csrfToken, flushPendingEdits],
+    [isDirty, saveMutation, flushDocUrl, csrfToken, flushPendingEdits, noteProjectionIssues],
   );
 
   // ----- Autosave: fire `save` every AUTOSAVE_MS, only when dirty ----------
@@ -1784,6 +1815,36 @@ function EditorApp({ config }) {
         <div class="fixed top-2 left-1/2 z-50 -translate-x-1/2 rounded-md border border-amber-300 bg-amber-50 px-4 py-2 text-sm text-amber-900 shadow-md">
           Live collaboration is interrupted — your work is still being saved, and
           collaborators’ changes will now take a few seconds to appear.
+        </div>
+      )}
+      {/* Same treatment, below the relay notice so both can show. Specific on
+          purpose: it names each record and why, since the fix is the author's
+          to make (usually a reference ID that isn't valid or is already used). */}
+      {projectionIssues.length > 0 && !sameProjectionIssues(dismissedIssues, projectionIssues) && (
+        <div
+          role="alert"
+          class="fixed top-14 left-1/2 z-50 w-[36rem] max-w-[calc(100vw-2rem)] -translate-x-1/2 rounded-md border border-amber-300 bg-amber-50 px-4 py-2 text-sm text-amber-900 shadow-md"
+        >
+          <div class="flex items-start justify-between gap-3">
+            <p class="font-semibold">
+              {projectionIssues.length === 1
+                ? "One record can't be saved to the project, so builds and copies will leave it out."
+                : `${projectionIssues.length} records can't be saved to the project, so builds and copies will leave them out.`}
+            </p>
+            <button
+              type="button"
+              class="shrink-0 cursor-pointer leading-none"
+              aria-label="Dismiss"
+              onClick={() => setDismissedIssues(projectionIssues)}
+            >
+              ×
+            </button>
+          </div>
+          <ul class="mt-1 list-disc pl-5">
+            {projectionIssues.map((issue) => (
+              <li key={`${issue.kind}:${issue.id}`}>{describeProjectionIssue(issue)}</li>
+            ))}
+          </ul>
         </div>
       )}
       <Editors
