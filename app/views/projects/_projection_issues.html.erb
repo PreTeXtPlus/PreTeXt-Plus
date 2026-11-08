@@ -1,0 +1,20 @@
+<%# The records in this project's collaborative document that its saved copy does
+    not hold, with why -- see ProjectDocProjection. Shown wherever an author is
+    about to read the saved copy (the project page, a build's drawer), because the
+    editor shows them their edits and nothing else would say these are missing. %>
+<% if (issues = project.projection_issues).any? %>
+  <div role="alert" class="rounded-md border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+    <p class="font-semibold">
+      <%= pluralize(issues.size, "record") %> in the editor can't be saved to this project, so builds, copies and downloads leave
+      <%= issues.one? ? "it" : "them" %> out.
+    </p>
+    <ul class="mt-1 list-disc pl-5">
+      <% issues.each do |issue| %>
+        <li><%= projection_issue_description(issue) %></li>
+      <% end %>
+    </ul>
+    <p class="mt-1 text-amber-800">
+      Fixing the record in the editor (for a bad reference ID, give it a valid one) clears this.
+    </p>
+  </div>
+<% end %>

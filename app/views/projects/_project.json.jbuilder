@@ -18,6 +18,11 @@ json.url project_url(project, format: :json)
 # pending invites); the editor then joins the shared Yjs doc instead of
 # editing purely locally. `editor_user` is who to show on remote cursors.
 json.collaborative project.collaborative?
+# What the last projection of the collaborative document could not write into
+# the rows (ProjectDocProjection): the records the editor shows that the saved
+# project does not hold, each with why. Empty for a healthy project, and always
+# empty for a solo one. The editor shows these in a banner.
+json.projection_issues project.projection_issues
 if current_user
   json.editor_user do
     json.id current_user.id

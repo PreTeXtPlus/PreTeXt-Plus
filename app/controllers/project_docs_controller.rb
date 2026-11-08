@@ -50,12 +50,23 @@ class ProjectDocsController < ApplicationController
   # would be built from whatever the last scheduled run left behind.
   #
   # Idempotent, and cheap enough to be worth no cleverness: ~15ms to read the
-  # document and write the rows it implies. An exception is deliberately not
-  # rescued -- the client needs to hear that the save did not happen, rather
-  # than navigate away believing it did.
+  # document and write the rows it implies.
+  #
+  # Answers with what the projection had to leave out (see
+  # ProjectDocProjection#issues), so the editor can tell the author which of
+  # their records the saved project does not hold before they go and look at
+  # it. A projection that raises outright is answered as 422 with the message,
+  # not a 500: the client has to hear that the save did not happen, rather than
+  # navigate away believing it did, and has to be able to say why.
   def flush
-    ProjectDocProjection.new(@project).apply!
-    head :no_content
+    projection = ProjectDocProjection.new(@project)
+    projection.apply!
+    render json: { projection_issues: projection.issues }
+  rescue StandardError => e
+    Honeybadger.notify(e, context: { project_id: @project.id, action: "flush" })
+    Rails.logger.error("[collab] flush failed for project #{@project.id}: #{e.message}")
+    render json: { error: "The saved copy of this project could not be updated: #{e.message}" },
+           status: :unprocessable_entity
   end
 
   # GET /projects/:id/doc/version

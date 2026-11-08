@@ -85,9 +85,44 @@ class ProjectDocsControllerTest < ActionDispatch::IntegrationTest
 
     post flush_doc_project_url(@project), as: :json
 
-    assert_response :no_content
+    assert_response :success
+    assert_equal [], response.parsed_body["projection_issues"]
     assert_equal "Projected Title", @project.reload.title,
       "flush must have finished projecting before it answered"
+  end
+
+  # The editor shows the author their edits whatever the rows hold, so the
+  # answer to a save is where they learn which records the saved project is
+  # missing (and the banner they then see is built from exactly this list).
+  test "flush reports the records the projection had to leave out" do
+    ProjectDoc.seed(@project, fixture("projection_issues_state"))
+
+    post flush_doc_project_url(@project), as: :json
+
+    assert_response :success
+    issues = response.parsed_body["projection_issues"]
+    assert_includes issues.map { |i| i["ref"] }, "sec-chapter 1 "
+    assert issues.all? { |i| i.keys.sort == %w[ id kind reason ref ] }
+    assert_equal "Issues", @project.reload.title, "the rest of the document was still written"
+  end
+
+  # A projection that raises outright is a save that did not happen. The
+  # client has to be told so, with the reason, and offered the choice of going
+  # on -- not handed a 500 it can only show as "an error occurred".
+  test "flush answers 422 with the reason when the projection fails outright" do
+    ProjectDoc.seed(@project, fixture("projection_state"))
+    exploding = Struct.new(:project) { def apply! = raise(ActiveRecord::RecordInvalid, Content.new) }
+
+    notified = []
+    Honeybadger.stub(:notify, ->(e, **_kw) { notified << e }) do
+      ProjectDocProjection.stub(:new, ->(project) { exploding.new(project) }) do
+        post flush_doc_project_url(@project), as: :json
+      end
+    end
+
+    assert_response :unprocessable_entity
+    assert_match(/could not be updated/, response.parsed_body["error"])
+    assert_equal 1, notified.size
   end
 
   test "flush on a project with no document is a no-op rather than an error" do
@@ -95,7 +130,7 @@ class ProjectDocsControllerTest < ActionDispatch::IntegrationTest
 
     post flush_doc_project_url(@project), as: :json
 
-    assert_response :no_content
+    assert_response :success
     assert_equal title, @project.reload.title
   end
 
@@ -103,10 +138,10 @@ class ProjectDocsControllerTest < ActionDispatch::IntegrationTest
     ProjectDoc.seed(@project, fixture("projection_state"))
 
     post flush_doc_project_url(@project), as: :json
-    assert_response :no_content
+    assert_response :success
 
     assert_no_difference("Content.divisions.count") { post flush_doc_project_url(@project), as: :json }
-    assert_response :no_content
+    assert_response :success
   end
 
   test "a collaborator may flush, an outsider may not" do
@@ -114,7 +149,7 @@ class ProjectDocsControllerTest < ActionDispatch::IntegrationTest
 
     sign_in users(:two) # accepted collaborator on project one
     post flush_doc_project_url(@project), as: :json
-    assert_response :no_content
+    assert_response :success
 
     sign_in users(:subscribed)
     post flush_doc_project_url(@project), as: :json

@@ -286,6 +286,8 @@ class ProjectsController < ApplicationController
   # publication.ptx. The escape hatch -- someone choosing where to keep five years of
   # writing should be able to leave with it.
   def download
+    return unless rows_current!
+
     send_data ProjectArchiveBuilder.new(@project).build.read,
               filename: "#{@project.title.parameterize.presence || 'project'}.zip",
               type: "application/zip"
@@ -319,6 +321,8 @@ class ProjectsController < ApplicationController
 
   # GET /projects/:project_id/share/copy
   def copy
+    return unless rows_current!
+
     project_copy = @project.full_dup(current_user)
     project_copy.html_source = nil  # don't copy deprecated quick build
     project_copy.visibility = "private"  # don't copy visibility, which may be public
@@ -507,6 +511,23 @@ class ProjectsController < ApplicationController
   end
 
   private
+
+    # Copies and downloads read the project's rows, which for a collaborative
+    # project follow the live document only as closely as the last projection.
+    # Builds project first for the same reason (FullBuildJob); so do these, or a
+    # copy taken a minute after an edit would be missing it. A projection that
+    # fails outright sends the author back to the project with the reason,
+    # rather than handing them a copy of something older than what they see in
+    # the editor.
+    def rows_current!
+      ProjectDocProjection.new(@project).apply!
+      true
+    rescue StandardError => e
+      Honeybadger.notify(e, context: { project_id: @project.id, action: action_name })
+      redirect_to @project, alert: "The saved copy of this project could not be updated: #{e.message}"
+      false
+    end
+
     # Seconds since `started`, or "?" when the failure came before the clock did.
     def pandoc_elapsed(started)
       started ? (Process.clock_gettime(Process::CLOCK_MONOTONIC) - started).round(1) : "?"

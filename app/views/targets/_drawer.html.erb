@@ -181,6 +181,12 @@
       <% end %>
     </div>
 
+    <% if project.projection_issues.any? %>
+      <div class="border-b border-gray-200 p-5">
+        <%= render "projects/projection_issues", project: project %>
+      </div>
+    <% end %>
+
     <% if (log = target.latest_build&.log).present? %>
       <div class="border-b border-gray-200 p-5">
         <p class="font-mono text-xs uppercase tracking-wider text-gray-500">Build log</p>

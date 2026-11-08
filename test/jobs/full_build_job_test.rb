@@ -116,5 +116,20 @@ class FullBuildJobTest < ActiveJob::TestCase
 
     assert_not submitted, "a build with no assembled source must not reach the build server"
     assert_equal "failed", @build.reload.status
+    assert_match(/no assembler/, @build.log, "the drawer has to be able to say why the build failed")
+  end
+
+  # The projection skips a record it cannot write rather than failing the build
+  # (ProjectDocProjection); the build then goes ahead without that record, and
+  # the author is told on the project page and in the drawer.
+  test "a document with a record that cannot be projected still builds" do
+    ProjectDoc.seed(@project, collab_fixture("projection_issues_state"))
+
+    stub_submit do
+      SourceAssembler.stub(:new, capturing_assembler({})) { FullBuildJob.perform_now(@build) }
+    end
+
+    assert_equal "sent_to_server", @build.reload.status
+    assert @project.reload.projection_issues.any?
   end
 end
