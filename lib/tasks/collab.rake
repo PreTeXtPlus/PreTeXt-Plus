@@ -1,5 +1,7 @@
-# Operator tools for collaborative documents. See ProjectDocRepair for the
-# procedure and why it is the only way to purge a bad entry from a document.
+# Operator tools for collaborative documents. docs/collab-repair.md is the
+# runbook (when to look, how to read the report, what not to do); see
+# ProjectDocRepair for the procedure and why it is the only way to purge a bad
+# entry from a document.
 namespace :collab do
   desc "Report what repairing a project's collaborative document would do; with APPLY=1, do it"
   task :repair, [ :project_id ] => :environment do |_task, args|
