@@ -33,7 +33,12 @@ import * as Y from "yjs";
 import type { Division } from "../types/sections";
 import type { DivisionChanges, EditorStoreInstance } from "../store/editorStore";
 import type { Asset, Exercise, RecordKind, Snippet } from "../types/editor";
-import type { CollabSession } from "./types";
+import { isValidRef, uniqueRef } from "../sectionUtils";
+import type {
+  CollabInvariantViolation,
+  CollabRecordKind,
+  CollabSession,
+} from "./types";
 import {
   applyAssetFields,
   applyExerciseFields,
@@ -127,6 +132,104 @@ export class CollabBridge {
   }
   unregisterLocalOrigin(origin: unknown): void {
     this.localOrigins.delete(origin);
+  }
+
+  // ── invariants ─────────────────────────────────────────────────────────────
+  //
+  // The document accepts any write; the host's rows do not. Two things the rows
+  // refuse have reached the document from editors in production — a ref the
+  // ref rule rejects, and two divisions with one xml:id — and each froze a
+  // project's saved copy until someone repaired it by hand. So the bridge,
+  // which every write passes through, is where both are stopped: a bad ref is
+  // refused before it is written, and a duplicate is settled the moment it is
+  // seen. The host is told either way (see CollabInvariantViolation).
+
+  private violate(violation: CollabInvariantViolation): void {
+    this.session.onInvariantViolation?.(violation);
+  }
+
+  /**
+   * Whether `ref` may be written as a record's ref. False refuses the write
+   * and reports it, with where it was called from, so the next bad ref names
+   * its caller rather than being found a day later in a failed build.
+   */
+  private acceptRef(
+    record: CollabRecordKind,
+    id: string,
+    ref: string,
+    operation: string,
+  ): boolean {
+    if (isValidRef(ref)) return true;
+    this.violate({
+      kind: "invalid_ref",
+      record,
+      id,
+      ref,
+      operation,
+      stack: new Error().stack,
+    });
+    return false;
+  }
+
+  /** Every ref in use, across every kind of record: the one namespace a project has. */
+  private takenRefs(): Set<string> {
+    const taken = new Set<string>(this.keyToXmlId.values());
+    getDivisionsMap(this.doc).forEach((entry) => {
+      const xmlId = entry.get("xmlId");
+      if (typeof xmlId === "string") taken.add(xmlId);
+    });
+    const state = this.store.getState();
+    for (const d of state.divisions ?? []) taken.add(d.xmlId);
+    for (const a of state.projectAssets ?? []) if (a.ref) taken.add(a.ref);
+    for (const sn of state.projectSnippets ?? []) taken.add(sn.ref);
+    for (const ex of state.projectExercises ?? []) taken.add(ex.ref);
+    return taken;
+  }
+
+  /**
+   * Settle which of two divisions keeps an xml:id, when the entry `key` is
+   * seen wanting `xmlId` and another entry already holds it. The document
+   * cannot refuse the second of two collaborators who name a division the same
+   * thing before either sees the other's, so by the time it reaches a bridge
+   * both exist — and the editor, which identifies divisions by xml:id, would
+   * show one and silently edit either.
+   *
+   * The entry with the lower record id keeps the xml:id; the other is renamed
+   * in the document to the first free `xmlId-2`, `-3`, … so every peer that
+   * sees the pair reaches the same answer and the renames converge. The loser
+   * keeps its content and shows up as an unplaced division (its placeholder,
+   * if one was written, names the winner), which is where its author can
+   * place it again or remove it.
+   *
+   * @returns the xml:id `key` ends up with — `xmlId` when it won or nothing
+   *   held it, the renamed one when it lost.
+   */
+  private settleXmlId(key: string, xmlId: string): string {
+    const holder = this.xmlIdToKey.get(xmlId);
+    if (holder === undefined || holder === key) return xmlId;
+
+    const loser = key < holder ? holder : key;
+    const renamed = uniqueRef(xmlId, this.takenRefs());
+    const entry = getDivisionsMap(this.doc).get(loser);
+    if (entry) {
+      this.doc.transact(() => entry.set("xmlId", renamed), this.localOrigin);
+    }
+    this.violate({
+      kind: "duplicate_ref",
+      record: "division",
+      id: loser,
+      ref: xmlId,
+      renamedTo: renamed,
+    });
+    if (loser === key) return renamed;
+
+    // The record that held the id moves aside, in the index and in the store;
+    // `key` takes the id over (its own index entries are the caller's to set).
+    this.keyToXmlId.set(holder, renamed);
+    this.xmlIdToKey.set(renamed, holder);
+    this.xmlIdToKey.delete(xmlId);
+    this.store.getState().patchDivision(xmlId, { xmlId: renamed });
+    return xmlId;
   }
 
   attach(): void {
@@ -227,6 +330,7 @@ export class CollabBridge {
     if (this.xmlIdToKey.has(division.xmlId)) return;
     const divisions = getDivisionsMap(this.doc);
     if (divisions.has(division.id)) return;
+    if (!this.acceptRef("division", division.id, division.xmlId, "localDivisionAdd")) return;
     this.doc.transact(() => {
       divisions.set(
         division.id as string,
@@ -266,6 +370,15 @@ export class CollabBridge {
     if (!key) return;
     const entry = getDivisionsMap(this.doc).get(key);
     if (!entry) return;
+    // A rename to a ref the rows would refuse is dropped and the old id stays;
+    // the rest of the edit still lands.
+    if (
+      changes.xmlId != null &&
+      changes.xmlId !== xmlId &&
+      !this.acceptRef("division", key, changes.xmlId, "localDivisionUpdate")
+    ) {
+      changes = { ...changes, xmlId: undefined };
+    }
     this.doc.transact(() => {
       if (changes.xmlId != null && changes.xmlId !== xmlId) {
         entry.set("xmlId", changes.xmlId);
@@ -294,6 +407,7 @@ export class CollabBridge {
    */
   localAssetAdd(asset: Asset): void {
     if (!asset.id) return;
+    if (!this.acceptRef("asset", asset.id, asset.ref ?? "", "localAssetAdd")) return;
     const assets = getAssetsMap(this.doc);
     this.doc.transact(() => {
       const existing = assets.get(asset.id as string);
@@ -315,6 +429,11 @@ export class CollabBridge {
   localAssetUpdate(asset: Asset, previousRef?: string): void {
     const key = asset.id ?? this.assetRefToKey.get(previousRef ?? asset.ref ?? "");
     if (!key) return;
+    // `ref: undefined` leaves the entry's ref alone (see applyField); only a
+    // ref that would be written is checked.
+    if (asset.ref !== undefined && !this.acceptRef("asset", key, asset.ref, "localAssetUpdate")) {
+      return;
+    }
     const assets = getAssetsMap(this.doc);
     this.doc.transact(() => {
       const entry = assets.get(key);
@@ -370,6 +489,7 @@ export class CollabBridge {
    */
   localSnippetAdd(snippet: Snippet): void {
     if (!snippet.id) return;
+    if (!this.acceptRef("snippet", snippet.id, snippet.ref ?? "", "localSnippetAdd")) return;
     const snippets = getSnippetsMap(this.doc);
     this.doc.transact(() => {
       const existing = snippets.get(snippet.id as string);
@@ -391,6 +511,12 @@ export class CollabBridge {
     const key =
       snippet.id ?? this.snippetRefToKey.get(previousRef ?? snippet.ref ?? "");
     if (!key) return;
+    if (
+      snippet.ref !== undefined &&
+      !this.acceptRef("snippet", key, snippet.ref, "localSnippetUpdate")
+    ) {
+      return;
+    }
     const snippets = getSnippetsMap(this.doc);
     this.doc.transact(() => {
       const entry = snippets.get(key);
@@ -437,6 +563,7 @@ export class CollabBridge {
    */
   localExerciseAdd(exercise: Exercise): void {
     if (!exercise.id) return;
+    if (!this.acceptRef("exercise", exercise.id, exercise.ref, "localExerciseAdd")) return;
     const exercises = getExercisesMap(this.doc);
     this.doc.transact(() => {
       const existing = exercises.get(exercise.id as string);
@@ -458,6 +585,12 @@ export class CollabBridge {
     const key =
       exercise.id ?? this.exerciseRefToKey.get(previousRef ?? exercise.ref ?? "");
     if (!key) return;
+    if (
+      exercise.ref !== undefined &&
+      !this.acceptRef("exercise", key, exercise.ref, "localExerciseUpdate")
+    ) {
+      return;
+    }
     const exercises = getExercisesMap(this.doc);
     this.doc.transact(() => {
       const entry = exercises.get(key);
@@ -545,7 +678,10 @@ export class CollabBridge {
     const divisions = getDivisionsMap(this.doc);
 
     divisions.forEach((entry, key) => {
-      const snapshot = entryToSnapshot(key, entry);
+      const read = entryToSnapshot(key, entry);
+      // Two entries with one xml:id (see settleXmlId): the document may have
+      // been holding the pair since before this client joined.
+      const snapshot = { ...read, xmlId: this.settleXmlId(key, read.xmlId) };
       this.keyToXmlId.set(key, snapshot.xmlId);
       this.xmlIdToKey.set(snapshot.xmlId, key);
       const existing = state.divisions?.find((d) => d.xmlId === snapshot.xmlId);
@@ -694,7 +830,10 @@ export class CollabBridge {
           if (change.action === "add") {
             const entry = divisions.get(key);
             if (!entry) return;
-            const snapshot = entryToSnapshot(key, entry);
+            const read = entryToSnapshot(key, entry);
+            // A peer created a division under an xml:id one of ours already
+            // holds: settle it now, so both stay visible (see settleXmlId).
+            const snapshot = { ...read, xmlId: this.settleXmlId(key, read.xmlId) };
             this.keyToXmlId.set(key, snapshot.xmlId);
             this.xmlIdToKey.set(snapshot.xmlId, key);
             state.addDivisionToPool(snapshotToRecord(snapshot));
@@ -735,6 +874,10 @@ export class CollabBridge {
           if (field === "attrs") changes.attrs = snapshot.attrs ?? {};
         });
         if (Object.keys(changes).length === 0) continue;
+        if (changes.xmlId != null && changes.xmlId !== oldXmlId) {
+          // A peer renamed a division onto an xml:id another division holds.
+          changes.xmlId = this.settleXmlId(key, changes.xmlId);
+        }
         state.patchDivision(oldXmlId, changes);
         if (changes.xmlId != null && changes.xmlId !== oldXmlId) {
           this.keyToXmlId.set(key, changes.xmlId);

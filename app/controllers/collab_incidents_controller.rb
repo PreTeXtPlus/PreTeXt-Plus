@@ -22,7 +22,14 @@ class CollabIncidentsController < ApplicationController
   # problem, so mute it in Honeybadger if it turns out to be noisy -- but read it
   # first, because a stall that never recovers means the process stayed wedged,
   # which is the case that needs a restart.
-  KINDS = %w[ join_failed relay_stalled relay_recovered ].freeze
+  #
+  # `malformed_record` and `duplicate_ref` are the editor's write boundary
+  # speaking (the web-editor's CollabBridge, via CollabInvariantViolation): a
+  # write it refused because the ref would not pass REF_REGEX, and a pair of
+  # divisions it found sharing an xml:id and renamed one of. Neither harms the
+  # project any more; both are reported because each one names the code path
+  # that produced it, which is what the November 2026 incidents never had.
+  KINDS = %w[ join_failed relay_stalled relay_recovered malformed_record duplicate_ref ].freeze
 
   # Free text from the browser (an exception message, usually). Bounded because it
   # is written into an error tracker, and an unbounded field pointed at an error

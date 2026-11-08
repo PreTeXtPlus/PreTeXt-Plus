@@ -19,6 +19,11 @@ import { buildImportEngines } from "./importEngines";
 import { buildImportShare } from "./importShare";
 import { CollabOutdatedError, YCableProvider } from "./collab/yCableProvider";
 import { describeProjectionIssue, sameProjectionIssues } from "./collab/projectionIssues";
+import {
+  describeInvariantViolation,
+  incidentDetailFor,
+  incidentKindFor,
+} from "./collab/invariantNotices";
 import { reportCollabIncident } from "./collab/reportIncident";
 import {
   editorDivisionToRails,
@@ -565,6 +570,28 @@ function EditorApp({ config }) {
   useEffect(() => {
     if (projectQuery.data) noteProjectionIssues(projectQuery.data.projectionIssues ?? []);
   }, [projectQuery.data, noteProjectionIssues]);
+
+  // What the editor's write boundary refused or repaired (the web-editor's
+  // CollabInvariantViolation). Every one is reported, because each names the
+  // code path that produced a record the rows would have refused -- the thing
+  // the November 2026 incidents never had. A repair that moved one of the
+  // author's records is also shown to them, since the Contents panel has just
+  // changed under them; a refused write changed nothing they can see.
+  const [invariantNotices, setInvariantNotices] = useState([]);
+  const onInvariantViolation = useCallback(
+    (violation) => {
+      console.warn("Collaborative write boundary:", violation);
+      reportCollabIncident({
+        kind: incidentKindFor(violation),
+        projectId,
+        csrfToken,
+        detail: incidentDetailFor(violation),
+      });
+      const notice = describeInvariantViolation(violation);
+      if (notice) setInvariantNotices((current) => [...current, notice]);
+    },
+    [projectId, csrfToken],
+  );
 
   useEffect(() => {
     const data = projectQuery.data;
@@ -1820,6 +1847,28 @@ function EditorApp({ config }) {
       {/* Same treatment, below the relay notice so both can show. Specific on
           purpose: it names each record and why, since the fix is the author's
           to make (usually a reference ID that isn't valid or is already used). */}
+      {invariantNotices.length > 0 && (
+        <div
+          role="alert"
+          class="fixed top-14 left-1/2 z-50 w-[36rem] max-w-[calc(100vw-2rem)] -translate-x-1/2 rounded-md border border-amber-300 bg-amber-50 px-4 py-2 text-sm text-amber-900 shadow-md"
+        >
+          <div class="flex items-start justify-between gap-3">
+            <ul class="list-disc pl-5">
+              {invariantNotices.map((notice, i) => (
+                <li key={i}>{notice}</li>
+              ))}
+            </ul>
+            <button
+              type="button"
+              class="shrink-0 cursor-pointer leading-none"
+              aria-label="Dismiss"
+              onClick={() => setInvariantNotices([])}
+            >
+              ×
+            </button>
+          </div>
+        </div>
+      )}
       {projectionIssues.length > 0 && !sameProjectionIssues(dismissedIssues, projectionIssues) && (
         <div
           role="alert"
@@ -1863,6 +1912,7 @@ function EditorApp({ config }) {
                 doc: provider.doc,
                 awareness: provider.awareness,
                 user: provider.user,
+                onInvariantViolation,
               }
             : undefined
         }

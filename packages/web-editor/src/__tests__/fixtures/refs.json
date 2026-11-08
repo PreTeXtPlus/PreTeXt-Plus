@@ -1,0 +1,5 @@
+{
+  "comment": "The ref rule, pinned from both sides: the web-editor's isValidRef (sectionUtils.ts) and the Rails app's REF_REGEX (config/initializers/constants.rb) must agree on every entry. Edit both or neither.",
+  "valid": ["a", "_", "sec-chapter-1", "a-2-act-3", "Fig_1", "x9", "sec_chapter--2", "_leading-underscore"],
+  "invalid": ["", " ", "sec-chapter 1", "sec-chapter 1 ", "1st", "-dash-first", ".dot", "a.b", "a b", "ä", "sec/ch", "a:b", "tab\there", "nl\nhere", "é-accent"]
+}
