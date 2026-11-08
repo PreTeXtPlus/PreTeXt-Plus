@@ -90,19 +90,35 @@ class ProjectDocProjection
     true
   end
 
+  # Everything #apply! would decide, without writing any of it: the records it
+  # would write (`candidates`, each with the attributes its row would get), the
+  # rows it would destroy, the issues it would record, and the document's maps
+  # as read. For ProjectDocRepair, whose report has to say what a repair will
+  # do before it does it. nil when there is no document.
+  #
+  # One difference from a real run: a record refused by a validation only its
+  # row knows about (see #write_rows!) is listed here as a candidate, since
+  # finding out means attempting the save.
+  def preview
+    state = ProjectDoc.load_state(ProjectDoc.key_for(@project))
+    return nil if state.nil?
+
+    doc = Y::Doc.new
+    doc.apply_update(state)
+    @issues = []
+    planned = plan(doc)
+    @issues.sort_by! { |issue| [ issue["kind"], issue["id"] ] }
+    planned.merge(issues: @issues)
+  end
+
   private
 
   def write!(doc)
-    meta = read_map(doc, "meta")
-    deleted = read_map(doc, "deleted")
-    existing = existing_rows
-
-    candidates = KINDS.flat_map do |kind, spec|
-      candidates_for(kind, spec, read_map(doc, spec[:map]), deleted, existing)
-    end
-    destroyed = tombstones(deleted, existing)
+    planned = plan(doc)
+    candidates = planned[:candidates]
+    destroyed = planned[:destroyed]
+    existing = planned[:existing]
     destroyed_ids = destroyed.map(&:last).to_set
-    candidates = settle_refs(candidates, existing, destroyed_ids)
 
     # Three phases, because refs are unique per project (the Content validator
     # and index_contents_on_project_id_and_ref, which cannot be deferred) and a
@@ -112,8 +128,22 @@ class ProjectDocProjection
     # one go.
     destroy_rows!(destroyed) if destroyed.any?
     parked = free_refs!(candidates, existing, destroyed_ids)
-    written = write_rows!(meta, candidates)
+    written = write_rows!(planned[:meta], candidates)
     unpark!(parked - written, existing)
+  end
+
+  # Read the document and decide, record by record, what can be written.
+  def plan(doc)
+    maps = %w[ meta deleted divisions snippets exercises assets ].to_h { |name| [ name, read_map(doc, name) ] }
+    existing = existing_rows
+
+    candidates = KINDS.flat_map do |kind, spec|
+      candidates_for(kind, spec, maps[spec[:map]], maps["deleted"], existing)
+    end
+    destroyed = tombstones(maps["deleted"], existing)
+    candidates = settle_refs(candidates, existing, destroyed.map(&:last).to_set)
+
+    { maps: maps, meta: maps["meta"], existing: existing, candidates: candidates, destroyed: destroyed }
   end
 
   # Every row the project has, by id: its ref, and its kind in the document's
