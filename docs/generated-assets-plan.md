@@ -758,6 +758,10 @@ the sageplot copied from the cache rather than generated.
   includes the `<asymptote-preamble>` and `<macros>`. Assemble it with `SourceAssembler`,
   never by hand; the test that compares the two documents' `<docinfo>` is what keeps a
   preview from being a build the full build then repeats.
+- **The one-figure archive must carry every directory its publication file declares.**
+  The CLI refuses a project whose declared `external` directory is missing; the first
+  render against the real build server failed on exactly that. `GenerateArchiveBuilder`
+  writes the brand logo there as `ProjectArchiveBuilder` does.
 - **A sageplot's cache key includes its label.** A placement with an `instance` is a
   different `.sage` file from the preview's; expected, not a bug.
 - **A server render is a build-server job per click.** Nothing may trigger it on a

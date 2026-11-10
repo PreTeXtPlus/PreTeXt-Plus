@@ -36,12 +36,18 @@ class GenerateArchiveBuilderTest < ActiveSupport::TestCase
     assert_match(/<target [^>]*name="web"[^>]*format="html"/, manifest)
   end
 
-  test "the archive has the full build's layout, with the project's publication file" do
+  # The publication file declares an `external` directory, and the CLI refuses a
+  # project without one (the first render against the real build server failed on
+  # exactly that), so the archive carries what a full build's does there: the logo.
+  test "the archive has the full build's layout, with the project's publication file and its external directory" do
     skip_without_bundle
     contents = entries(GenerateArchiveBuilder.new(@project, @asset).build)
 
-    assert_equal %w[ project.ptx publication/publication.ptx publication/web.ptx source/main.ptx ].sort, contents.keys.sort
+    logo = "source/external/#{PublicationFileBuilder::DEFAULT_BRANDLOGO}"
+    assert_equal %W[ project.ptx publication/publication.ptx publication/web.ptx source/main.ptx #{logo} ].sort,
+                 contents.keys.sort
     assert_equal ProjectArchiveBuilder.new(@project).publication_ptx(@project), contents["publication/web.ptx"]
+    assert_equal entries(ProjectArchiveBuilder.new(@project).build)[logo], contents[logo]
   end
 
   test "the document holds the one asset, in its generator's element, with the source as XML text" do

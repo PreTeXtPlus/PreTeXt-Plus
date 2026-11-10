@@ -7,7 +7,10 @@ require "zip"
 # exactly as a build carries it, so that the file lands in the project's asset cache
 # under the key the next full build will look for (see SourceAssembler.single_image).
 #
-# No external files: a generated asset has none, and the picture is the output.
+# The one external file is the brand logo the publication file points at, as in a
+# full build's archive: the publication declares an `external` directory, and the
+# CLI refuses a project whose declared directory is not there. The generated
+# asset itself has no file; the picture is the output.
 class GenerateArchiveBuilder
   # The one target. Its format is what decides which picture format the CLI makes
   # (`ASSET_FORMATS["html"]` in pretext-cli): SVG for a sageplot, an HTML page for an
@@ -45,6 +48,8 @@ class GenerateArchiveBuilder
       zip.write(publication)
       zip.put_next_entry("source/main.ptx")
       zip.write(source)
+      zip.put_next_entry("source/external/#{PublicationFileBuilder::DEFAULT_BRANDLOGO}")
+      zip.write(File.binread(Rails.root.join("public", "icon.svg")))
     end
     buffer.rewind
     buffer
