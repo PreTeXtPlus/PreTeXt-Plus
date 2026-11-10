@@ -33,7 +33,7 @@ const AssetList = ({ canCreate }: AssetListProps) => {
       <div className="overflow-y-auto flex-1 min-h-0">
         {assetView.length === 0 ? (
           <p className="m-0 py-2 px-3 text-slate-400 text-[0.78rem]">
-            No assets in this project yet.{" "}
+            No images in this project yet.{" "}
             {canCreate && (
               <button
                 type="button"
@@ -88,8 +88,8 @@ const AssetList = ({ canCreate }: AssetListProps) => {
                     aria-current={isOpen ? "true" : undefined}
                     title={
                       isUnlinked
-                        ? "No asset for this reference — click to link or create one"
-                        : "Open asset"
+                        ? "Missing — the document uses this image, but it doesn't exist yet. Click to create it."
+                        : "Open image"
                     }
                   >
                     <span
@@ -109,11 +109,10 @@ const AssetList = ({ canCreate }: AssetListProps) => {
                       )}
                     >
                       {isUnlinked
-                        ? `${row.ref} — needs asset`
+                        ? `${row.ref} — missing image`
                         : row.status === "unused"
-                          ? `${row.ref} — not placed`
+                          ? `${row.ref} — not used yet`
                           : row.ref}
-                      {row.asset?.contentType && ` · ${row.asset.contentType}`}
                     </span>
                   </button>
                 </li>

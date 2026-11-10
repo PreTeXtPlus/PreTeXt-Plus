@@ -80,7 +80,7 @@ const SnippetList = ({ canCreate }: SnippetListProps) => {
                     aria-current={isOpen ? "true" : undefined}
                     title={
                       isUnlinked
-                        ? "No snippet for this reference — click to link or create one"
+                        ? "Missing — the document uses this snippet, but it doesn't exist yet. Click to create it."
                         : "Open snippet"
                     }
                   >
@@ -109,9 +109,9 @@ const SnippetList = ({ canCreate }: SnippetListProps) => {
                       )}
                     >
                       {isUnlinked
-                        ? `${row.ref} — needs snippet`
+                        ? `${row.ref} — missing snippet`
                         : row.status === "unused"
-                          ? `${row.ref} — not placed`
+                          ? `${row.ref} — not used yet`
                           : row.ref}
                     </span>
                   </button>

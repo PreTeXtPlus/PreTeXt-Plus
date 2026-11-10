@@ -156,13 +156,13 @@ describe("creating a snippet", () => {
     });
     expect(within(pane()).getByRole("alert")).toHaveTextContent("can't be empty");
 
-    fireEvent.change(within(pane()).getByLabelText("Reference ID"), {
+    fireEvent.change(within(pane()).getByLabelText("ID"), {
       target: { value: "greeting" },
     });
     await act(async () => {
       fireEvent.click(within(pane()).getByText("Create"));
     });
-    expect(within(pane()).getByRole("alert")).toHaveTextContent("already in use");
+    expect(within(pane()).getByRole("alert")).toHaveTextContent("already used in this project");
     expect(createdSnippets).toEqual([]);
   });
 
@@ -171,7 +171,7 @@ describe("creating a snippet", () => {
     showSnippets();
     fireEvent.click(screen.getByTestId("toc-new-snippet-btn"));
 
-    fireEvent.change(within(pane()).getByLabelText("Reference ID"), {
+    fireEvent.change(within(pane()).getByLabelText("ID"), {
       target: { value: "theorem-note" },
     });
     fireEvent.change(within(pane()).getByLabelText("Source format"), {
@@ -194,7 +194,7 @@ describe("creating a snippet", () => {
     fireEvent.change(within(pane()).getByLabelText("Title"), {
       target: { value: "  A useful note " },
     });
-    fireEvent.change(within(pane()).getByLabelText("Reference ID"), {
+    fireEvent.change(within(pane()).getByLabelText("ID"), {
       target: { value: "useful-note" },
     });
     await act(async () => {
@@ -217,8 +217,8 @@ describe("creating a snippet", () => {
       within(screen.getByTestId("snippet-row-missing")).getByRole("button"),
     );
 
-    expect(screen.getByTestId("new-item-heading")).toHaveTextContent("Link snippet");
-    const refField = within(pane()).getByLabelText("Reference ID") as HTMLInputElement;
+    expect(screen.getByTestId("new-item-heading")).toHaveTextContent("Add missing snippet");
+    const refField = within(pane()).getByLabelText("ID") as HTMLInputElement;
     expect(refField.value).toBe("missing");
 
     fireEvent.change(refField, { target: { value: "found" } });
@@ -239,7 +239,7 @@ describe("creating an asset", () => {
     showAssets();
     fireEvent.click(screen.getByTestId("toc-new-asset-btn"));
 
-    expect(screen.getByTestId("new-item-heading")).toHaveTextContent("New asset");
+    expect(screen.getByTestId("new-item-heading")).toHaveTextContent("New image");
     fireEvent.click(within(pane()).getByText("Custom"));
     fireEvent.change(within(pane()).getByLabelText("Title"), {
       target: { value: "My Diagram" },
@@ -316,7 +316,7 @@ describe("creating an asset", () => {
       within(screen.getByTestId("asset-row-nofig")).getByRole("button"),
     );
 
-    expect(screen.getByTestId("new-item-heading")).toHaveTextContent("Link asset");
+    expect(screen.getByTestId("new-item-heading")).toHaveTextContent("Add missing image");
     fireEvent.click(within(pane()).getByText("Custom"));
     // Prefilled from the placeholder's ref.
     const title = within(pane()).getByLabelText("Title") as HTMLInputElement;
@@ -339,7 +339,7 @@ describe("creating an asset", () => {
     fireEvent.click(within(screen.getByTestId("asset-row-fig")).getByRole("button"));
     fireEvent.click(screen.getByText("Replace image…"));
 
-    expect(screen.getByTestId("new-item-heading")).toHaveTextContent("Replace asset");
+    expect(screen.getByTestId("new-item-heading")).toHaveTextContent("Replace image");
     expect(within(pane()).getByText("Upload")).toBeInTheDocument();
     expect(within(pane()).queryByText("Custom")).toBeNull();
     // The asset's always-open settings go with the editor pane the form hides.
@@ -365,7 +365,7 @@ describe("the clipboard", () => {
     renderEditors();
     showSnippets();
     fireEvent.click(screen.getByTestId("toc-new-snippet-btn"));
-    fireEvent.change(within(pane()).getByLabelText("Reference ID"), {
+    fireEvent.change(within(pane()).getByLabelText("ID"), {
       target: { value: "note" },
     });
     await act(async () => {
@@ -382,7 +382,7 @@ describe("the clipboard", () => {
     renderEditors({ projectExercises: [] });
     fireEvent.click(screen.getByTestId("explorer-tab-exercises"));
     fireEvent.click(screen.getByTestId("toc-new-exercise-btn"));
-    fireEvent.change(within(pane()).getByLabelText("Reference ID"), {
+    fireEvent.change(within(pane()).getByLabelText("ID"), {
       target: { value: "drill" },
     });
     await act(async () => {
@@ -565,7 +565,7 @@ describe("while an upload is in flight", () => {
 
 describe("the new asset form's title and Reference ID", () => {
   const titleField = () => within(pane()).getByLabelText("Title") as HTMLInputElement;
-  const refField = () => within(pane()).getByLabelText("Reference ID") as HTMLInputElement;
+  const refField = () => within(pane()).getByLabelText("ID") as HTMLInputElement;
   const pick = (name: string) =>
     fireEvent.change(pane().querySelector('input[type="file"]') as HTMLInputElement, {
       target: { files: [new File(["png"], name, { type: "image/png" })] },
@@ -638,11 +638,11 @@ describe("the new asset form's title and Reference ID", () => {
 
     fireEvent.change(refField(), { target: { value: "" } });
     await create();
-    expect(within(pane()).getByRole("alert")).toHaveTextContent("Reference ID can't be empty");
+    expect(within(pane()).getByRole("alert")).toHaveTextContent("ID can't be empty");
 
     fireEvent.change(refField(), { target: { value: "fig" } });
     await create();
-    expect(within(pane()).getByRole("alert")).toHaveTextContent("already in use");
+    expect(within(pane()).getByRole("alert")).toHaveTextContent("already used in this project");
     expect(upload).not.toHaveBeenCalled();
   });
 
@@ -682,7 +682,7 @@ describe("the new asset form's title and Reference ID", () => {
     fireEvent.click(within(screen.getByTestId("asset-row-fig")).getByRole("button"));
     fireEvent.click(screen.getByText("Replace image…"));
 
-    expect(within(pane()).queryByLabelText("Reference ID")).toBeNull();
+    expect(within(pane()).queryByLabelText("ID")).toBeNull();
     pick("new.png");
     await act(async () => {
       fireEvent.click(within(pane()).getByText("Replace"));
@@ -693,16 +693,16 @@ describe("the new asset form's title and Reference ID", () => {
 
 describe("every creation form's title and Reference ID", () => {
   it.each([
-    ["division", "My Division", "my-division", () => fireEvent.click(screen.getAllByTestId("toc-add-child")[0])],
-    ["snippet", "My Snippet", "my-snippet", () => {
+    ["division", "My division", "my-division", () => fireEvent.click(screen.getAllByTestId("toc-add-child")[0])],
+    ["snippet", "My snippet", "my-snippet", () => {
       showSnippets();
       fireEvent.click(screen.getByTestId("toc-new-snippet-btn"));
     }],
-    ["exercise", "My Exercise", "my-exercise", () => {
+    ["exercise", "My exercise", "my-exercise", () => {
       fireEvent.click(screen.getByTestId("explorer-tab-exercises"));
       fireEvent.click(screen.getByTestId("toc-new-exercise-btn"));
     }],
-    ["asset", "My Asset", "my-asset", () => {
+    ["asset", "My image", "my-image", () => {
       showAssets();
       fireEvent.click(screen.getByTestId("toc-new-asset-btn"));
     }],
@@ -710,7 +710,7 @@ describe("every creation form's title and Reference ID", () => {
     renderEditors({ projectExercises: [] });
     open();
     expect(within(pane()).getByLabelText("Title")).toHaveAttribute("placeholder", title);
-    expect(within(pane()).getByLabelText("Reference ID")).toHaveAttribute("placeholder", ref);
+    expect(within(pane()).getByLabelText("ID")).toHaveAttribute("placeholder", ref);
   });
 
   it.each([
@@ -739,7 +739,7 @@ describe("every creation form's title and Reference ID", () => {
     }],
   ])("the %s form's suggested Reference ID", (_kind, open) => {
     const titleField = () => within(pane()).getByLabelText("Title") as HTMLInputElement;
-    const refField = () => within(pane()).getByLabelText("Reference ID") as HTMLInputElement;
+    const refField = () => within(pane()).getByLabelText("ID") as HTMLInputElement;
 
     it("follows the title, avoiding every ref in the project", () => {
       renderEditors({ projectExercises: [] });

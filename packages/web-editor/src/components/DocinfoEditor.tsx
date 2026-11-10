@@ -155,8 +155,8 @@ const buildDocinfo = (
 
 const TAB_LABELS: Record<DocinfoTab, string> = {
   macros: "LaTeX Macros",
-  preamble: "Image Macros",
-  other: "Other Elements",
+  preamble: "Image macros",
+  other: "Other elements",
 };
 
 const TAB_DESCRIPTIONS: Record<DocinfoTab, string> = {

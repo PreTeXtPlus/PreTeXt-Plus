@@ -107,7 +107,7 @@ describe("ImportDialog", () => {
     fireEvent.click(screen.getByRole("button", { name: "Convert" }));
     fireEvent.change(outputBox(), { target: { value: "<p>Edited.</p>" } });
 
-    fireEvent.click(screen.getByRole("button", { name: "Copy and Close" }));
+    fireEvent.click(screen.getByRole("button", { name: "Copy and close" }));
 
     await waitFor(() => expect(onClose).toHaveBeenCalled());
     expect(writeText).toHaveBeenCalledWith("<p>Edited.</p>");
@@ -170,7 +170,7 @@ describe("ImportDialog", () => {
     expect(await screen.findByRole("alert")).toHaveTextContent(
       "Pandoc could not read this file.",
     );
-    expect(screen.getByRole("button", { name: "Copy and Close" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Copy and close" })).toBeDisabled();
   });
 
   // A remote engine can take tens of seconds; an author who gives up and

@@ -129,7 +129,7 @@ describe("CodeEditorMenu", () => {
     it("opens Monaco's find widget", async () => {
       render(<CodeEditorMenu {...baseProps()} sourceFormat="pretext" />);
       const user = await openMenu("Edit");
-      await user.click(menuItem(/^Find in current editor…/));
+      await user.click(menuItem(/^Find in Current Editor…/));
       expect(actions.runCommand).toHaveBeenCalledWith(MONACO_COMMANDS.find.id);
     });
 
@@ -242,10 +242,10 @@ describe("CodeEditorMenu", () => {
       render(<CodeEditorMenu {...baseProps()} sourceFormat="pretext" />);
       const user = await openCategory("Interactive Exercises");
 
-      for (const name of ["True/false", "Multiple choice", "Matching", "Drag and drop"]) {
+      for (const name of ["True/False", "Multiple Choice", "Matching", "Drag and Drop"]) {
         expect(menuItem(name)).toBeInTheDocument();
       }
-      await user.click(menuItem("Drag and drop"));
+      await user.click(menuItem("Drag and Drop"));
       expect(insertedBody()).toContain("<cardsort>");
     });
 
@@ -267,7 +267,7 @@ describe("CodeEditorMenu", () => {
       // Markdown can't write a table or a figure today, which leaves Figures &
       // Code a code listing alone, offered directly.
       expect(queryMenuItem(/^Figures & Code/)).not.toBeInTheDocument();
-      expect(menuItem("Code listing")).toBeInTheDocument();
+      expect(menuItem("Code Listing")).toBeInTheDocument();
       expect(queryMenuItem("Table")).not.toBeInTheDocument();
     });
   });
@@ -295,7 +295,7 @@ describe("CodeEditorMenu", () => {
       );
       await openMenu("Tools");
 
-      expect(menuItem("Clean up LaTeX…")).toBeInTheDocument();
+      expect(menuItem("Clean Up LaTeX…")).toBeInTheDocument();
       expect(menuItem("Edit Preamble…")).toBeInTheDocument();
       expect(queryMenuItem("Format PreTeXt")).not.toBeInTheDocument();
       expect(queryMenuItem("Import…")).not.toBeInTheDocument();
@@ -321,7 +321,7 @@ describe("CodeEditorMenu", () => {
         />,
       );
       await openMenu("Tools");
-      expect(queryMenuItem("New Asset…")).not.toBeInTheDocument();
+      expect(queryMenuItem("New Image…")).not.toBeInTheDocument();
     });
   });
 
@@ -349,8 +349,8 @@ describe("CodeEditorMenu", () => {
         expect(queryMenuItem("Format PreTeXt")).not.toBeInTheDocument();
         expect(queryMenuItem("Edit Macros…")).not.toBeInTheDocument();
         expect(queryMenuItem("Edit Preamble…")).not.toBeInTheDocument();
-        expect(queryMenuItem("Clean up LaTeX…")).not.toBeInTheDocument();
-        expect(queryMenuItem("New Asset…")).not.toBeInTheDocument();
+        expect(queryMenuItem("Clean Up LaTeX…")).not.toBeInTheDocument();
+        expect(queryMenuItem("New Image…")).not.toBeInTheDocument();
         expect(queryMenuItem("Convert to PreTeXt")).not.toBeInTheDocument();
       },
     );
@@ -362,7 +362,7 @@ describe("CodeEditorMenu", () => {
       await openMenu("Edit");
 
       expect(menuItem(/^Copy/)).toBeInTheDocument();
-      expect(menuItem(/^Find in current editor…/)).toBeInTheDocument();
+      expect(menuItem(/^Find in Current Editor…/)).toBeInTheDocument();
       expect(queryMenuItem(/^Undo/)).not.toBeInTheDocument();
       expect(queryMenuItem(/^Paste/)).not.toBeInTheDocument();
       expect(queryMenuItem(/^Wrap Selection/)).not.toBeInTheDocument();
@@ -438,7 +438,7 @@ describe("CodeEditorMenu", () => {
       expect(menuItem(/^Redo/)).toHaveFocus();
       await user.keyboard("{ArrowUp}{ArrowUp}");
       // Wrapped past the top to the last item.
-      expect(menuItem(/^Replace in current editor…/)).toHaveFocus();
+      expect(menuItem(/^Replace in Current Editor…/)).toHaveFocus();
     });
 
     it("skips disabled items", async () => {

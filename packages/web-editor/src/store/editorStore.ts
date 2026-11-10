@@ -30,6 +30,7 @@ import type { Asset, Exercise, FeedbackSubmission, Snippet, SourceFormat } from 
 import type { Division, DivisionType } from "../types/sections";
 import type { EditDraft } from "../components/toc/types";
 import { sanitizeXmlId } from "../sectionUtils";
+import { ID_REQUIRED_MESSAGE, idTakenMessage, projectRefs } from "../idRules";
 
 // ── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -37,20 +38,18 @@ import { sanitizeXmlId } from "../sectionUtils";
  * Why `candidate` can't be a division's `xml:id`, or `null` when it can. The
  * id is structural identity — the target of every `<plus:* ref="..."/>`
  * placeholder — so it must be a non-empty NCName (after sanitizing) that no
- * other division uses. `selfXmlId` is the division being renamed, which may of
- * course keep the id it already has; `null` for a division not created yet.
+ * other record in the project uses (refs are one namespace, `projectRefs`).
+ * `selfXmlId` is the division being renamed, which may of course keep the id
+ * it already has; `null` for a division not created yet.
  */
 function xmlIdError(
   sanitized: string,
   selfXmlId: string | null,
-  divisions: Division[],
+  pools: Parameters<typeof projectRefs>[0],
 ): string | null {
-  if (!sanitized) {
-    return "Reference ID can't be empty.";
-  }
-  if (divisions.some((d) => d.xmlId !== selfXmlId && d.xmlId === sanitized)) {
-    return `"${sanitized}" is already used by another division. Choose a unique Reference ID.`;
-  }
+  if (!sanitized) return ID_REQUIRED_MESSAGE;
+  if (sanitized === selfXmlId) return null;
+  if (projectRefs(pools).has(sanitized)) return idTakenMessage(sanitized);
   return null;
 }
 
@@ -1122,7 +1121,7 @@ export function createEditorStore(init: EditorStoreInit): EditorStoreHandle {
     updateDivisionProperties: (xmlId, changes) => {
       if (changes.xmlId !== undefined && changes.xmlId !== null) {
         const sanitized = sanitizeXmlId(changes.xmlId);
-        const error = xmlIdError(sanitized, xmlId, get().divisions ?? []);
+        const error = xmlIdError(sanitized, xmlId, get());
         if (error) return error;
         changes = { ...changes, xmlId: sanitized };
       }
@@ -1168,7 +1167,7 @@ export function createEditorStore(init: EditorStoreInit): EditorStoreHandle {
     toggleTocOrphansCollapsed: () =>
       set((s) => ({ isTocOrphansCollapsed: !s.isTocOrphansCollapsed })),
     commitSectionEdit: () => {
-      const { editDraft, divisions, creating } = get();
+      const { editDraft, creating } = get();
       if (!editDraft || creating?.kind !== "division") return;
 
       // Saving a draft is where a new division is created — the first moment
@@ -1177,7 +1176,7 @@ export function createEditorStore(init: EditorStoreInit): EditorStoreHandle {
       // placeholder is written once, already pointing at the right id. An
       // invalid id keeps the form open.
       const xmlId = sanitizeXmlId(editDraft.xmlId);
-      const error = xmlIdError(xmlId, null, divisions ?? []);
+      const error = xmlIdError(xmlId, null, get());
       if (error) {
         window.alert(error);
         return;

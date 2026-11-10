@@ -53,7 +53,7 @@ function TryItApp({ config }) {
 
   const logo = (
     <a href={rootPath} className="flex items-center">
-      <img src="/icon.svg" className="h-14" alt="PreTeXtPlus Logo" />
+      <img src="/icon.svg" className="h-14" alt="PreTeXt.Plus" />
     </a>
   );
 
@@ -102,7 +102,7 @@ function TryItApp({ config }) {
         ),
         helpMenu: () => buildHelpMenu(),
         toolsEntries: TOOLS_ENTRIES,
-        titleOverride: "Try PreTeXt in Your Browser!",
+        titleOverride: "Try PreTeXt in your browser!",
       }}
     />
   );

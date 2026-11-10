@@ -4,7 +4,7 @@
     <title>PreTeXt.Plus<% if content_for(:title).present? %> | <%= content_for(:title) %><% end %></title>
     <meta name="viewport" content="width=device-width,initial-scale=1">
     <meta name="apple-mobile-web-app-capable" content="yes">
-    <meta name="application-name" content="Pretext Plus">
+    <meta name="application-name" content="PreTeXt.Plus">
     <meta name="mobile-web-app-capable" content="yes">
     <%# Almost every page requires log-in and shows account-specific content -- disable
         Turbo's client-side snapshot cache so switching accounts (log out, log in as
@@ -36,7 +36,7 @@
             <div class="flex justify-between items-center">
                 <div class="flex items-center">
                   <%= link_to :root, class: "flex items-center" do %>
-                      <img src="/icon.svg" class="h-9 mr-3" alt="PreTeXtPlus Logo">
+                      <img src="/icon.svg" class="h-9 mr-3" alt="PreTeXt.Plus">
                       <span class="inline-block self-center text-xl font-semibold whitespace-nowrap">PreTeXt.Plus</span>
                   <% end %>
                 </div>
@@ -105,16 +105,16 @@
                       Manage Subscriptions
                     <% end %>
                     <%= link_to destroy_user_session_path, data: { turbo_method: :delete }, class: "block px-4 py-2 text-red-700 hover:bg-red-50 hover:text-red-800" do %>
-                      Log out
+                      Log Out
                     <% end %>
                   <% end %>
                 <% else %>
                   <%= render layout: "layouts/nav_dropdown", locals: { toggle_id: "accountMenu", label: "Account ▾".html_safe } do %>
                     <%= link_to new_user_path, class: "block px-4 py-2 text-gray-800 hover:bg-blue-50 hover:text-blue-500" do %>
-                      Create account
+                      Create Account
                     <% end %>
                     <%= link_to new_user_session_path, class: "block px-4 py-2 text-gray-800 hover:bg-blue-50 hover:text-blue-500" do %>
-                      Log in
+                      Log In
                     <% end %>
                   <% end %>
                   <%= link_to tryit_path, class: "my-1 text-gray-800 hover:text-blue-500 lg:mx-4 lg:my-0", data: { turbo: false } do %>

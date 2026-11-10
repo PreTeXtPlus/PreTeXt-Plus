@@ -24,7 +24,7 @@ export function incidentDetailFor(violation) {
 export function describeInvariantViolation(violation) {
   if (violation.kind !== "duplicate_ref") return null;
   return (
-    `Two sections were given the reference ID “${violation.ref}” at the same time. ` +
+    `Two sections were given the ID “${violation.ref}” at the same time. ` +
     `The one created second was renamed to “${violation.renamedTo}” and is listed under ` +
     "Unplaced divisions, where you can place it or remove it."
   );

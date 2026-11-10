@@ -3,7 +3,8 @@ import type { Asset, SourceFormat } from "../../types/editor";
 import { assetEmbedCode, sanitizeXmlId } from "../../sectionUtils";
 import { buildProjectAssetView } from "../../assetView";
 import { generatorFor } from "../../generators";
-import { useEditorStore } from "../../store/hooks";
+import { useEditorStore, useTakenRefs } from "../../store/hooks";
+import { ID_REQUIRED_MESSAGE, idTakenMessage } from "../../idRules";
 import {
   CommitField,
   EmbedCode,
@@ -42,6 +43,7 @@ const AssetSettings = ({
 }: AssetSettingsProps) => {
   const divisions = useEditorStore((s) => s.divisions);
   const projectAssets = useEditorStore((s) => s.projectAssets) ?? [];
+  const takenRefs = useTakenRefs();
   const hasAssetDuplicate = useEditorStore((s) => s.hasAssetDuplicate);
   const duplicateAsset = useEditorStore((s) => s.duplicateAsset);
   const removeAsset = useEditorStore((s) => s.removeAsset);
@@ -65,13 +67,13 @@ const AssetSettings = ({
   const commitRef = async (next: string): Promise<string | void> => {
     const nextRef = sanitizeXmlId(next);
     if (!nextRef) {
-      return "Reference ID can't be empty.";
+      return ID_REQUIRED_MESSAGE;
     }
     if (nextRef === ref) return;
     // A ref must stay unique project-wide: it's the key every
     // `<plus:image ref="..."/>` placeholder resolves against.
-    if (projectAssets.some((a) => a.ref === nextRef)) {
-      return `"${nextRef}" is already used by another asset. Choose a unique Reference ID.`;
+    if (takenRefs.has(nextRef)) {
+      return idTakenMessage(nextRef);
     }
     await onSave({ ...asset, ref: nextRef }, ref);
   };
@@ -87,7 +89,7 @@ const AssetSettings = ({
       // On success the copy is opened, which unmounts this panel.
       await duplicateAsset(asset);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to duplicate asset.");
+      setError(err instanceof Error ? err.message : "Failed to duplicate image.");
     } finally {
       setIsDuplicating(false);
     }
@@ -133,7 +135,7 @@ const AssetSettings = ({
             label: isDuplicating ? "Duplicating…" : "Duplicate",
             onClick: handleDuplicate,
             disabled: isDuplicating,
-            title: "Create a copy of this asset under a new id",
+            title: "Make a copy of this image with a new ID",
           },
         ]
         : []),
@@ -147,16 +149,16 @@ const AssetSettings = ({
       <SettingsField label="Title" htmlFor="asset-settings-title">
         <CommitField
           id="asset-settings-title"
-          placeholder="My Asset"
+          placeholder="My image"
           value={asset.title}
           onCommit={commitTitle}
           disabled={readOnly}
         />
       </SettingsField>
-      <SettingsField label="Reference ID" htmlFor="asset-settings-ref">
+      <SettingsField label="ID" htmlFor="asset-settings-ref">
         <CommitField
           id="asset-settings-ref"
-          placeholder="my-asset"
+          placeholder="my-image"
           value={ref}
           onCommit={commitRef}
           disabled={readOnly}

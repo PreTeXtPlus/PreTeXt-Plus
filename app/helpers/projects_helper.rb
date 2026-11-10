@@ -47,13 +47,22 @@ module ProjectsHelper
       image_tag "pretext-logo.svg", alt: "PreTeXt logo", class: classes
     end
   end
+  # What the author calls each kind of record a projection issue names -- the same
+  # words as the editor's banner (collab/projectionIssues.js).
+  PROJECTION_ISSUE_KINDS = {
+    "division" => "Division",
+    "asset" => "Image",
+    "snippet" => "Snippet",
+    "exercise" => "Exercise"
+  }.freeze
+
   # One line for an entry of Project#projection_issues, in the author's words:
   # the kind of record and how they know it (its reference ID), then the reason
   # the projection gave. Refs and ids are the author's own text, escaped by the
   # view.
   def projection_issue_description(issue)
-    kind = issue["kind"].to_s.humanize
-    name = issue["ref"].present? ? "with reference ID “#{issue['ref']}”" : "(id #{issue['id'].to_s.first(8)}…)"
+    kind = PROJECTION_ISSUE_KINDS.fetch(issue["kind"].to_s, "Record")
+    name = issue["ref"].present? ? "with ID “#{issue['ref']}”" : "(ID #{issue['id'].to_s.first(8)}…)"
     "#{kind} #{name}: #{issue['reason']}."
   end
 end

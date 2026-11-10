@@ -29,7 +29,7 @@ const AssetPreview = ({ asset }: AssetPreviewProps) => {
         data-testid="asset-preview"
         className="flex flex-1 h-full items-center justify-center p-6 bg-[#fafafa] text-center text-[0.9rem] text-slate-500"
       >
-        Preview coming soon for authored assets.
+        No preview for this kind of image yet.
       </div>
     );
   }

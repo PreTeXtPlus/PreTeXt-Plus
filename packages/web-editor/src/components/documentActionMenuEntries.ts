@@ -104,7 +104,7 @@ export function buildDocumentActionEntries({
       entries.push({
         kind: "item",
         key: "clean",
-        label: "Clean up LaTeX…",
+        label: "Clean Up LaTeX…",
         title: "Review LaTeX markup that does not belong in PreTeXt, and fix it",
         onSelect: onOpenClean,
       });
@@ -119,8 +119,8 @@ export function buildDocumentActionEntries({
       entries.push({
         kind: "item",
         key: "assets",
-        label: "New Asset…",
-        title: "Add an image or other asset to the project",
+        label: "New Image…",
+        title: "Add an image to the project",
         onSelect: onOpenAssets,
       });
     }

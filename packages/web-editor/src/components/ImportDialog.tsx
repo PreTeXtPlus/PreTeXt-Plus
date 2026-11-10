@@ -84,7 +84,7 @@ interface ImportDialogProps {
   parentType?: DivisionType | null;
   /** Every id the project already uses, so imported ones can be renamed away from them. */
   takenIds: readonly string[];
-  /** Called when the dialog should close (Cancel, Escape, or after "Copy and Close"). */
+  /** Called when the dialog should close (Cancel, Escape, or after "Copy and close"). */
   onClose: () => void;
 }
 
@@ -558,7 +558,7 @@ const ImportDialog = ({
             onClick={handleCopy}
             disabled={isConverting || !output.trim()}
           >
-            Copy and Close
+            Copy and close
           </DialogButton>
         </DialogActions>
       </Dialog>

@@ -102,6 +102,7 @@ import {
 import {
   defaultChildDivisionType,
   deriveXmlId,
+  TYPE_FULL_LABELS,
   type EditDraft,
 } from "./toc/types";
 import { buildProjectAssetView, makeUniqueAssetRef } from "../assetView";
@@ -679,7 +680,7 @@ const Editors = forwardRef(function Editors(
     return createEditorStore({
       source: initActive?.source ?? "",
       sourceFormat: initActive?.sourceFormat ?? "pretext",
-      title: props.title || normalizedRoot?.title || "Document Title",
+      title: props.title || normalizedRoot?.title || "Document title",
       docinfo: props.docinfo ?? "",
       commonDocinfo: props.commonDocinfo ?? "",
       useCommonDocinfo: props.useCommonDocinfo ?? false,
@@ -958,7 +959,7 @@ const EditorsInner = (props: EditorsInnerProps) => {
         ? {
             ...assetWrapperLines(editedAsset),
             hoverMessage:
-              "This markup is generated from the asset — edit it from Asset settings.",
+              "This markup is generated from the image — edit it from Image settings.",
           }
         : undefined,
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -1389,7 +1390,7 @@ const EditorsInner = (props: EditorsInnerProps) => {
     // Start it out as a type the parent actually allows — a `<section>` under a
     // `<book>` is not a valid choice to be offering as the default.
     const type = defaultChildDivisionType(parent?.type ?? null);
-    const title = "New Section";
+    const title = `New ${TYPE_FULL_LABELS[type] ?? "Section"}`;
     startNewDivision(parentXmlId, {
       title,
       type,

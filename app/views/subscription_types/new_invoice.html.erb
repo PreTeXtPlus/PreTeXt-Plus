@@ -1,9 +1,9 @@
-<% content_for :title, "Pay by Invoice" %>
+<% content_for :title, "Pay by invoice" %>
 <% content_for :subscription_notice do %><!-- no subscribe nudge on subscriptions pages --><% end %>
 <% content_for :breadcrumb do %>
   <%= link_to "Subscriptions", subscriptions_path, class: "hover:underline" %> /
 <% end %>
-<% content_for :heading, "Pay by Invoice" %>
+<% content_for :heading, "Pay by invoice" %>
 
 <h3 class="my-3 text-lg font-thin">
   <%= @subscription_type.name %>: <%= @subscription_type.price %>/seat/<%= @subscription_type.recurrence %>.

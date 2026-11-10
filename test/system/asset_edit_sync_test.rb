@@ -54,7 +54,7 @@ class AssetEditSyncTest < ApplicationSystemTestCase
     click_button "Replace image…"
 
     # The "Replace asset" form takes the editor's place.
-    assert_selector "[data-testid='new-item-pane']", text: "Replace asset", wait: 10
+    assert_selector "[data-testid='new-item-pane']", text: "Replace image", wait: 10
     attach_file(Rails.root.join("test/fixtures/files/test_image.png"), make_visible: true) do
       find("[aria-label='Paste an image, drag and drop to upload, or click to browse files']").click
     end

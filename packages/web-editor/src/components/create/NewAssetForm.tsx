@@ -4,6 +4,7 @@ import type { Asset, GeneratorId } from "../../types/editor";
 import { generatorIds, generators } from "../../generators";
 import { sanitizeXmlId, slugifyTitle, uniqueRef } from "../../sectionUtils";
 import { useTakenRefs } from "../../store/hooks";
+import { ID_REQUIRED_MESSAGE, idTakenMessage } from "../../idRules";
 import { DialogFileInput } from "../Dialog";
 import { DialogTabs } from "../DialogTabs";
 import {
@@ -159,7 +160,7 @@ const NewAssetForm = ({
           if (pasted) {
             e.preventDefault();
             setTab("upload");
-            pickFile(namePastedImageFile(pasted), "Pasted Image");
+            pickFile(namePastedImageFile(pasted), "Pasted image");
           }
           return;
         }
@@ -206,11 +207,11 @@ const NewAssetForm = ({
     if (!isReplace) {
       newRef = sanitizeXmlId(ref);
       if (!newRef) {
-        setError("Reference ID can't be empty.");
+        setError(ID_REQUIRED_MESSAGE);
         return;
       }
       if (takenRefs.has(newRef)) {
-        setError(`Reference ID "${newRef}" is already in use. Choose a unique Reference ID.`);
+        setError(idTakenMessage(newRef));
         return;
       }
     }
@@ -231,9 +232,9 @@ const NewAssetForm = ({
         });
       }
     } else if (tab === "authored" && onCreateAuthored) {
-      void run(() => onCreateAuthored(trimmedTitle, newRef), "Failed to create asset.");
+      void run(() => onCreateAuthored(trimmedTitle, newRef), "Failed to create image.");
     } else if (generatorTab && onCreateGenerated) {
-      void run(() => onCreateGenerated(generatorTab, trimmedTitle, newRef), "Failed to create asset.");
+      void run(() => onCreateGenerated(generatorTab, trimmedTitle, newRef), "Failed to create image.");
     }
   };
 
@@ -340,7 +341,7 @@ const NewAssetForm = ({
           id={`${fieldId}-title`}
           type="text"
           className={FIELD_CONTROL_CLASSES}
-          placeholder="My Asset"
+          placeholder="My image"
           value={title}
           onChange={(e) => setEditedTitle(e.target.value)}
           onKeyDown={(e) => { if (e.key === "Enter") handleSubmit(); }}
@@ -350,12 +351,12 @@ const NewAssetForm = ({
       </SettingsField>
 
       {!isReplace && (
-        <SettingsField label="Reference ID" htmlFor={`${fieldId}-ref`}>
+        <SettingsField label="ID" htmlFor={`${fieldId}-ref`}>
           <input
             id={`${fieldId}-ref`}
             type="text"
             className={clsx(FIELD_CONTROL_CLASSES, "font-mono")}
-            placeholder="my-asset"
+            placeholder="my-image"
             value={ref}
             onChange={(e) => setEditedRef(e.target.value)}
             onKeyDown={(e) => { if (e.key === "Enter") handleSubmit(); }}

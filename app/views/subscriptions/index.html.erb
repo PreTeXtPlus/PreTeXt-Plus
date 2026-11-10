@@ -1,6 +1,6 @@
-<% content_for :title, "Manage Subscription Plans" %>
+<% content_for :title, "Manage subscription plans" %>
 <% content_for :subscription_notice do %><!-- no subscribe nudge on subscriptions pages --><% end %>
-<% content_for :heading, "Manage Subscription Plans" %>
+<% content_for :heading, "Manage subscription plans" %>
 
 <% if current_user.owns_remindable_subscription? %>
   <%= render "subscriptions/reminders_status" %>
@@ -8,7 +8,7 @@
 <% content_for :actions do %>
   <%= link_to "mailto:requestdemo@pretext.plus?subject=PreTeXt.Plus%20Demonstration%20Request",
         class: "#{button_classes(color: "gray", outlined: true)} inline-flex select-none items-center gap-2 ml-1 px-4 py-2 my-1 text-sm" do %>
-    Request a Demo
+    Request a demo
   <% end %>
   <% if @subscriptions.any? %>
     <%= link_to current_user.payment_processor.billing_portal.url, class: "#{button_classes(color: "gray", outlined: true)} inline-flex select-none items-center gap-2 ml-1 px-4 py-2 my-1 text-sm" do %>
@@ -18,7 +18,7 @@
   <% if current_user.confirmed? %>
   <span class="relative">
     <label for="subscribe-toggle" class="<%= button_classes(color: "gray", outlined: true) %> inline-flex select-none items-center gap-2 ml-1 px-4 py-2 my-1 text-sm">
-      New Subscription Plan&nbsp;&#9662;
+      New subscription plan&nbsp;&#9662;
     </label>
     <input type="checkbox" id="subscribe-toggle" class="navbarMenuToggle sr-only">
     <span class="navbarMenu absolute z-40 my-1 right-0 w-48 bg-white rounded-md shadow-lg border border-gray-200 md:left-auto md:right-0">
@@ -56,19 +56,19 @@
   <% end %>
 <% end %>
 
-<h2 class="text-xl mb-2">Subscription Status</h2>
+<h2 class="text-xl mb-2">Subscription status</h2>
 
 <%= render "subscriptions/status", user: current_user %>
 
 <% if current_user.confirmed? && current_user.student_benefits_available? %>
-  <h2 class="text-xl mb-2 mt-8">Student Benefits</h2>
+  <h2 class="text-xl mb-2 mt-8">Student benefits</h2>
   <p>
     Full-time students get many of our subscriber benefits for free.
     <%= link_to "Claim student benefits", new_student_benefits_path, class: "text-blue-500 hover:underline" %>.
   </p>
 <% end %>
 
-<h2 class="text-xl mb-2 mt-8">Purchased Subscriptions</h2>
+<h2 class="text-xl mb-2 mt-8">Purchased subscriptions</h2>
 
 <% if @subscriptions.present? %>
   <div class="grid grid-cols-1 gap-4 lg:grid-cols-3 lg:gap-8">

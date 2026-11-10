@@ -440,7 +440,7 @@ const CodeEditorMenu: React.FC<CodeEditorMenuProps> = ({
             key: "convert-to-pretext",
             label: "Convert to PreTeXt",
             title:
-              "Convert this division to use PreTeXt XML",
+              "Make a PreTeXt copy of this division (the original is kept)",
             disabled: canConvertToPretext === false,
             onSelect: onConvertToPretext,
           } as MenuEntry,

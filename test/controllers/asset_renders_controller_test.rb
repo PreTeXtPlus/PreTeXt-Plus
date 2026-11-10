@@ -74,10 +74,10 @@ class AssetRendersControllerTest < ActionDispatch::IntegrationTest
     assert_response :unprocessable_entity
   end
 
-  test "a render the build server refuses is a bad gateway with the reason" do
+  test "a render the build server refuses is a bad gateway with a plain-language message" do
     AssetRenderer.stub(:submit, ->(*) { raise AssetRenderer::Error, "HTTP 401" }) { create_render }
     assert_response :bad_gateway
-    assert_equal "HTTP 401", response.parsed_body["error"]
+    assert_equal AssetRendersController::UNAVAILABLE, response.parsed_body["error"]
   end
 
   test "a source that will not assemble is a bad gateway too, not a crash" do

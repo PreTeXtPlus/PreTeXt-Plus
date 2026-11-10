@@ -1116,7 +1116,7 @@ function EditorApp({ config }) {
 
   const onAssetUpload = useCallback(
     async (file, title, chosenRef) => {
-      title = title || "New Asset";
+      title = title || "New image";
       // A Duplicate or a Replace names no ref; the form always does.
       const ref = chosenRef ?? uniqueRef(slugifyRef(title.replace(/\.[^.]+$/, "")));
       const json = await patchProjectAssetUpload({ ref, kind: "file_asset", title, file });
@@ -1316,7 +1316,7 @@ function EditorApp({ config }) {
         .catch((error) => {
           console.error("Error removing asset:", error);
           if (!providerRef.current) {
-            alert("An error occurred while removing the asset.");
+            alert("An error occurred while removing the image.");
           }
         });
     },
@@ -1616,7 +1616,7 @@ function EditorApp({ config }) {
 
   const logo = (
     <a href={rootPath} className="flex items-center" onClick={onLogoClick}>
-      <img src="/icon.svg" className="h-14" alt="PreTeXtPlus Logo" />
+      <img src="/icon.svg" className="h-14" alt="PreTeXt.Plus" />
     </a>
   );
 
@@ -1771,7 +1771,7 @@ function EditorApp({ config }) {
         body: JSON.stringify({ ref, source }),
       });
       const started = await submitted.json().catch(() => ({}));
-      if (!submitted.ok) throw new Error(started.error || `The render could not be started (HTTP ${submitted.status}).`);
+      if (!submitted.ok) throw new Error(started.error || "The preview couldn't be started. Please try again.");
 
       const startedAt = Date.now();
       // Past the build server's own job limit (120 s) plus a generous queue wait.
@@ -1780,11 +1780,11 @@ function EditorApp({ config }) {
         await new Promise((resolve) => setTimeout(resolve, attempt < 10 ? 1500 : 3000));
         const polled = await fetch(started.poll_url, { headers });
         const data = await polled.json().catch(() => ({}));
-        if (!polled.ok) throw new Error(data.error || `The render's status could not be read (HTTP ${polled.status}).`);
+        if (!polled.ok) throw new Error(data.error || "We lost track of this preview. Please try again.");
         if (data.status === "success") return { svg: data.svg };
-        if (data.status === "failed") throw new GeneratorRenderError(data.message || "The render failed.", data.log);
-        onProgress?.(data.message === "queued" ? "Queued on the build server…" : "Rendering on the build server…");
-        if (Date.now() - startedAt > giveUpAfterMs) throw new Error("The build server did not finish the render in time.");
+        if (data.status === "failed") throw new GeneratorRenderError(data.message || "The preview couldn't be made.", data.log);
+        onProgress?.(data.message === "queued" ? "Waiting in line…" : "Making preview…");
+        if (Date.now() - startedAt > giveUpAfterMs) throw new Error("This preview took too long to make. Please try again.");
       }
     },
     [assetRenderUrl, csrfToken],

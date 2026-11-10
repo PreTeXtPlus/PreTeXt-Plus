@@ -4,7 +4,7 @@
 <% assets = project.assets.order(:ref).with_attached_files %>
 
 <h2 class="mt-8 font-mono text-xs font-semibold uppercase tracking-widest text-gray-500">
-  Assets
+  Images
   (<%= assets.size %>)
 </h2>
 
@@ -22,17 +22,14 @@
             <div class="flex h-16 w-16 items-center justify-center rounded bg-gray-50 text-2xl" aria-hidden="true">📄</div>
           <% end %>
         <% end %>
-        <%= tag.span class: "w-full truncate text-xs text-gray-700" do %>
-          <%= asset.title %><br><span class="font-mono"><%= asset.ref %></span>
-          <% if asset.file_attached? %>
-            <br><span class="font-mono text-gray-400"><%= asset.file_content_type %></span>
-          <% end %>
-        <% end %>
+        <%= tag.span asset.title.presence || asset.ref,
+              class: "w-full truncate text-xs text-gray-700",
+              title: "ID: #{asset.ref}" %>
       </li>
     <% end %>
   </ul>
 <% else %>
   <p class="mt-3 rounded-lg border border-dashed border-gray-300 p-6 text-center text-gray-600">
-    This project has no assets yet. Add images from the editor's asset manager.
+    No images yet. Add them from the editor's Images panel.
   </p>
 <% end %>

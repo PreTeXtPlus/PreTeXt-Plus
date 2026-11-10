@@ -27,7 +27,7 @@
   </div>
 
   <div class="my-5">
-    <%= form.label :stripe_price_id do %>Stripe Price ID<% end %>
+    <%= form.label :stripe_price_id do %>Stripe price ID<% end %>
     <%= form.text_field :stripe_price_id, class: ["block shadow-sm rounded-md border px-3 py-2 mt-2 w-full", {"border-gray-400 focus:outline-blue-600": subscription_type.errors[:stripe_price_id].none?, "border-red-400 focus:outline-red-600": subscription_type.errors[:stripe_price_id].any?}] %>
   </div>
 

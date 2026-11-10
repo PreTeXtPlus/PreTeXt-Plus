@@ -33,7 +33,7 @@ const KIND_LABELS: Record<EditorTarget["kind"], string> = {
   division: "Division",
   snippet: "Snippet",
   exercise: "Exercise",
-  asset: "Asset",
+  asset: "Image",
 };
 
 /** The explorer rail's icons, drawn at bar size. */
@@ -145,22 +145,22 @@ const EditorTargetBar = ({
       divisionDisplayTitle(division) ||
       `Untitled ${(TYPE_FULL_LABELS[division.type] ?? "division").toLowerCase()}`;
     id = division.xmlId;
-    if (notPlaced) status = "not placed";
+    if (notPlaced) status = "not used yet";
   } else if (target.kind === "snippet") {
     const { snippet } = target;
     title = snippet.title || snippet.ref;
     id = snippet.ref;
-    if (notPlaced) status = "not placed";
+    if (notPlaced) status = "not used yet";
   } else if (target.kind === "exercise") {
     const { exercise } = target;
     title = exercise.title || exercise.ref;
     id = exercise.ref;
-    if (notPlaced) status = "not placed";
+    if (notPlaced) status = "not used yet";
   } else {
     const { asset } = target;
-    title = asset.title || asset.ref || "Untitled asset";
+    title = asset.title || asset.ref || "Untitled image";
     id = asset.ref ?? "";
-    if (notPlaced) status = "not placed";
+    if (notPlaced) status = "not used yet";
     else if (!asset.shortDescription?.trim()) status = "missing short description";
   }
 

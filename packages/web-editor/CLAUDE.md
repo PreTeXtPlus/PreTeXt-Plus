@@ -334,7 +334,7 @@ build input.
   figure it makes also lands in the project's cache there, so the next full
   build copies it rather than running `asy` or `sage` again. Each render is a
   job on a shared queue, so these generators have `renderTrigger: "manual"`
-  (PreFigure and TikZ are `"live"`): the pane renders on its Render button or
+  (PreFigure and TikZ are `"live"`): the pane renders on its Preview (later Refresh) button or
   Ctrl+Enter, never on a debounce. Asymptote's buffer is the `asymptote`
   `EditorLanguage` (a small Monarch grammar, `editorConfigs/asymptoteConfig.ts`),
   Sage's is Monaco's own `python`; `isSourceFormat` tells the prose formats from
@@ -342,7 +342,7 @@ build input.
   runtime uses too.
 - `GeneratedAssetPreview.tsx` replaces `AssetPreview` for a generated asset:
   the stored picture and whether it matches the current source, live renders a
-  second after typing stops (or, for a `manual` generator, on Render — with the
+  second after typing stops (or, for a `manual` generator, on Preview/Refresh — with the
   server's progress and elapsed seconds — which `Editors` also triggers from
   Ctrl+Enter through the pane's `GeneratedAssetPreviewHandle`), and
   `onAssetOutput` to the host with the SVG and the digest of exactly the source

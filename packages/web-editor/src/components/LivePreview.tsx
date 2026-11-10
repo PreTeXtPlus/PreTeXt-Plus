@@ -478,7 +478,7 @@ const LivePreview = forwardRef<LivePreviewHandle, LivePreviewProps>(
 
     const preview = useCallback(() => {
       const source = content;
-      const previewTitle = title || "Document Title";
+      const previewTitle = title || "Document title";
       lastRequestedContent.current = source;
 
       // Save scroll position before rebuilding so the author keeps their place
@@ -844,7 +844,7 @@ const LivePreview = forwardRef<LivePreviewHandle, LivePreviewProps>(
       <div className="flex flex-col w-full h-full">
         <div className="relative flex items-center justify-left p-2 bg-[#f3f3f3] border-b border-[#dde0e6]">
           <p className="text-base font-medium m-0">
-            {printoutId ? "Print Preview" : "Live Preview"}
+            {printoutId ? "Print preview" : "Live preview"}
           </p>
           <div className="absolute right-2 flex items-center gap-1.5">
             {/*
@@ -1053,8 +1053,7 @@ const LivePreview = forwardRef<LivePreviewHandle, LivePreviewProps>(
               aria-live="polite"
             >
               <span className="flex-1">
-                Tip: Previews refresh much faster, handle assets better, and have two-way sync in
-                Chromium-based browsers like Chrome or Edge.
+                Tip: The preview is faster and shows images better in Chrome or Edge.
               </span>
             </div>
           )}

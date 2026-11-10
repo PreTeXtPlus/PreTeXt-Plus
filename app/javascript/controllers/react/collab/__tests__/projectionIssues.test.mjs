@@ -2,16 +2,16 @@ import { describe, it, expect } from "vitest";
 import { describeProjectionIssue, sameProjectionIssues } from "../projectionIssues.js";
 
 describe("describeProjectionIssue", () => {
-  it("names the record by its reference ID and gives the reason", () => {
+  it("names the record by its ID and gives the reason", () => {
     expect(
       describeProjectionIssue({ kind: "division", id: "abc", ref: "sec-chapter 1 ", reason: 'ref "sec-chapter 1 " is invalid' }),
-    ).toBe('Section with reference ID “sec-chapter 1 ”: ref "sec-chapter 1 " is invalid.');
+    ).toBe('Division with ID “sec-chapter 1 ”: ref "sec-chapter 1 " is invalid.');
   });
 
   it("falls back to the id when the record has no ref at all", () => {
     expect(
       describeProjectionIssue({ kind: "asset", id: "88888888-8888-4888-8888-888888888888", ref: null, reason: "ref is missing" }),
-    ).toBe("Asset (id 88888888…): ref is missing.");
+    ).toBe("Image (ID 88888888…): ref is missing.");
   });
 });
 

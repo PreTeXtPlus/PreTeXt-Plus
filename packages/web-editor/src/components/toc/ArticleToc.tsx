@@ -251,7 +251,7 @@ const ArticleToc = ({ readOnly }: { readOnly?: boolean }) => {
               <ChevronIcon open={!isOrphansCollapsed} />
             </span>
             <span className="text-[0.7rem] font-bold uppercase tracking-[0.06em]">
-              Unplaced divisions
+              Unused divisions
             </span>
             <span className="ml-1 text-[0.68rem] font-semibold text-white bg-amber-600/70 rounded-full px-[5px] py-0 leading-[1.4] shrink-0">
               {orphanTrees.length}

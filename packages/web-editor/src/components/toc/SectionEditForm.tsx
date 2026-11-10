@@ -66,7 +66,7 @@ const SectionEditForm = ({
         <input
           id={`${fieldId}-title`}
           ref={titleRef}
-          placeholder="My Division"
+          placeholder="My division"
           className={FIELD_CONTROL_CLASSES}
           type="text"
           value={draft.title}
@@ -132,7 +132,7 @@ const SectionEditForm = ({
       </SettingsField>
       {/* xml:id applies to every format — for LaTeX it's written as the
           `\section`'s `\label`. */}
-      <SettingsField label="Reference ID" htmlFor={`${fieldId}-id`}>
+      <SettingsField label="ID" htmlFor={`${fieldId}-id`}>
         <input
           id={`${fieldId}-id`}
           className={clsx(FIELD_CONTROL_CLASSES, "font-mono")}

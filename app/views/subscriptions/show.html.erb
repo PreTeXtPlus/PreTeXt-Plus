@@ -1,10 +1,10 @@
-<% content_for :title, "Manage Subscription Plan" %>
+<% content_for :title, "Manage subscription plan" %>
 <% content_for :subscription_notice do %><!-- no subscribe nudge on subscriptions pages --><% end %>
 <% content_for :breadcrumb do %>
   <%= link_to "Subscriptions", subscriptions_path, class: "hover:underline" %> /
 <% end %>
 <% content_for :heading do %>
-  <span class="text-violet-800"><%= @subscription.type.name %></span> Plan
+  <span class="text-violet-800"><%= @subscription.type.name %></span> plan
 <% end %>
 <% content_for :actions do %>
   <%= link_to "Manage plan",

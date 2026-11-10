@@ -95,12 +95,12 @@ describe("TopBar", () => {
     ]);
 
     expect(
-      screen.queryByText("Provide Feedback or Request Support"),
+      screen.queryByText("Send feedback or get help"),
     ).not.toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "Help & Feedback" }));
     await user.click(screen.getByRole("menuitem", { name: "Support / Feedback" }));
     expect(
-      screen.getByText("Provide Feedback or Request Support"),
+      screen.getByText("Send feedback or get help"),
     ).toBeInTheDocument();
   });
 

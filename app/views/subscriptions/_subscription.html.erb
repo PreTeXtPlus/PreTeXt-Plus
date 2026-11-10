@@ -32,7 +32,7 @@
             <span class="font-semibold">Free trial ends:</span>
             <%= local_time_tag(subscription.trial_ends_at, date_only: true) %>
             <% if subscription.canceled? %>
-                <span class="text-yellow-600">(cancelled &mdash; you will not be charged)</span>
+                <span class="text-yellow-600">(canceled &mdash; you will not be charged)</span>
             <% else %>
                 (your card will be charged then unless you cancel)
             <% end %>

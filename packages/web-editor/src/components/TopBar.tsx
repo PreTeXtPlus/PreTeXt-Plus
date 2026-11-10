@@ -93,7 +93,7 @@ export interface TopBarProps {
   primaryAction?: TopBarPrimaryAction;
 
   // ── File menu ──────────────────────────────────────────────────────────
-  /** If provided, a "Save & Close" row is shown in the File menu. */
+  /** If provided, a "Save & close" row is shown in the File menu. */
   onSaveAndClose?: () => void;
   /** Label for the Save & Close row. Defaults to `"Save & Close"`. */
   saveAndCloseLabel?: string;

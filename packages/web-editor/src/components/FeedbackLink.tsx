@@ -153,7 +153,7 @@ const FeedbackLink = ({
           >
             <DialogHeader>
               <div>
-                <DialogTitle id={titleId}>Provide Feedback or Request Support</DialogTitle>
+                <DialogTitle id={titleId}>Send feedback or get help</DialogTitle>
               </div>
               <DialogClose
                 onClick={closeDialog}

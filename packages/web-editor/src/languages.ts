@@ -25,8 +25,8 @@ export const LANGUAGES: readonly LanguageOption[] = [
   { code: "fr-FR", label: "French (France)" },
   { code: "hu-HU", label: "Hungarian (Hungary)" },
   { code: "it-IT", label: "Italian (Italy)" },
-  { code: "pt-BR", label: "Portugese (Brazil)" },
-  { code: "pt-PT", label: "Portugese (Portugal)" },
+  { code: "pt-BR", label: "Portuguese (Brazil)" },
+  { code: "pt-PT", label: "Portuguese (Portugal)" },
 ];
 
 export const DEFAULT_LANGUAGE = "en-US";

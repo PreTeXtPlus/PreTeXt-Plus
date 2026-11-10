@@ -1,5 +1,5 @@
 <% content_for(:title, 'Account') %>
-<% content_for(:heading, "Account Profile (#{@user.email})") %>
+<% content_for(:heading, "Account profile (#{@user.email})") %>
 
 <%= form_with model: @user, class: "my-4" do |form| %>
   <%= render "users/fields_for", form: form %>
@@ -22,6 +22,6 @@
       data: { turbo_frame: "modal" },
       class: "#{button_classes(color: "gray", outlined: true)} mt-3 inline-block px-3.5 py-2" %>
 
-<h2 class="text-2xl font-semibold mb-2 mt-20">Subscription Status</h2>
+<h2 class="text-2xl font-semibold mb-2 mt-20">Subscription status</h2>
 
 <%= render "subscriptions/status", user: @user %>

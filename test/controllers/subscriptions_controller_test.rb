@@ -8,7 +8,7 @@ class SubscriptionsControllerTest < ActionDispatch::IntegrationTest
     get_index
 
     assert_response :success
-    assert_includes response.body, "New Subscription Plan"
+    assert_includes response.body, "New subscription plan"
     assert_not_includes response.body, "day free trial"
   end
 
@@ -69,7 +69,7 @@ class SubscriptionsControllerTest < ActionDispatch::IntegrationTest
 
     assert_response :success
     assert_includes response.body, "Confirm your email address to subscribe."
-    assert_not_includes response.body, "New Subscription Plan"
+    assert_not_includes response.body, "New subscription plan"
   end
 
   test "a trialing subscription shows when the trial ends" do

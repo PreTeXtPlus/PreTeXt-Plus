@@ -264,7 +264,7 @@ async function convertWithEngine(
     images > 0
       ? [
           `${images === 1 ? "1 image" : `${images} images`} in this file could ` +
-            "not be copied along with the text. Add them under Assets, then " +
+            "not be copied along with the text. Add them under Images, then " +
             "embed them where they belong.",
         ]
       : [];
