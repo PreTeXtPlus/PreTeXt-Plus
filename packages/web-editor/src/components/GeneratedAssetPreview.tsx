@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from "react";
 import type { Asset } from "../types/editor";
 import { PREVIEW_IMAGE_CLASS } from "./AssetPreview";
 import {
@@ -7,6 +7,7 @@ import {
   generatorFor,
   renderInputFor,
   sha256Hex,
+  type DocinfoInputs,
   type GeneratorRuntime,
   type GeneratorRuntimeStatus,
 } from "../generators";
@@ -23,7 +24,7 @@ export interface GeneratedAssetPreviewProps {
   asset: Asset;
   /** The docinfo in force, parts of which are the render's input (`docinfoInputElements`). */
   docinfo: string;
-  /** The generator's browser engine, or undefined when the host configured none. */
+  /** The generator's engine, or undefined when the host configured none. */
   runtime: GeneratorRuntime | undefined;
   /**
    * A render of the current source, for the host to store. Rejecting means it
@@ -35,6 +36,12 @@ export interface GeneratedAssetPreviewProps {
   readOnly?: boolean;
   /** How long typing must settle before a render; tests shorten it. */
   debounceMs?: number;
+}
+
+/** What `Editors` can ask of the pane: a render, for a generator rendered on request. */
+export interface GeneratedAssetPreviewHandle {
+  /** Render the source as it is now. Nothing happens for a generator that renders live. */
+  render(): void;
 }
 
 /** Typing settles for this long before the engine is asked to render. */
@@ -50,100 +57,121 @@ const useRuntimeStatus = (runtime: GeneratorRuntime | undefined) => {
   };
 };
 
+/** Whole seconds since `startedAt`, ticking while it is set; 0 when it is null. */
+const useElapsedSeconds = (startedAt: number | null) => {
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    if (startedAt === null) return;
+    const timer = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(timer);
+  }, [startedAt]);
+  return startedAt === null ? 0 : Math.max(0, Math.round((now - startedAt) / 1000));
+};
+
 /**
  * The preview panel while a generated asset is open. The engine is started as
  * soon as the pane mounts with one (it is a few megabytes, fetched once per
  * page); until it is up, the stored picture shows with a line saying whether it
- * matches the current source. Then the engine renders a second after typing
- * stops, the previous picture staying up and an engine error showing beneath
- * it (with its whole transcript folded away, for an engine that keeps one), and
- * each fresh picture goes to the host through `onOutput` with the digest
- * of exactly the source rendered — so a keystroke that lands mid-render leaves
- * the stored picture honestly stale rather than wrongly current. A picture the
- * host fails to store is reported beneath it, with a retry. The picture on
- * screen, fresh or stored, can be downloaded as `<ref>.svg`.
+ * matches the current source. Then the engine renders — a second after typing
+ * stops for an engine in the browser (`renderTrigger: "live"`), or on the
+ * author's Render for one on a build server (`"manual"`), where each render is
+ * a job on a shared queue. The previous picture stays up and an engine error
+ * shows beneath it (with its whole transcript folded away, for an engine that
+ * keeps one), and each fresh picture goes to the host through `onOutput` with
+ * the digest of exactly the source rendered — so a keystroke that lands
+ * mid-render leaves the stored picture honestly stale rather than wrongly
+ * current. A picture the host fails to store is reported beneath it, with a
+ * retry. The picture on screen, fresh or stored, can be downloaded as
+ * `<ref>.svg`.
  *
  * Holds the picture of one asset, so `Editors` gives each asset its own pane.
  */
-const GeneratedAssetPreview = ({
-  asset,
-  docinfo,
-  runtime,
-  onOutput,
-  downloadUrlFor,
-  readOnly,
-  debounceMs = RENDER_DEBOUNCE_MS,
-}: GeneratedAssetPreviewProps) => {
-  const generator = generatorFor(asset.sourceFormat);
-  const { status, progress, error: loadError } = useRuntimeStatus(runtime);
-  const source = asset.source ?? "";
+const GeneratedAssetPreview = forwardRef<GeneratedAssetPreviewHandle, GeneratedAssetPreviewProps>(
+  function GeneratedAssetPreview(
+    { asset, docinfo, runtime, onOutput, downloadUrlFor, readOnly, debounceMs = RENDER_DEBOUNCE_MS },
+    ref,
+  ) {
+    const generator = generatorFor(asset.sourceFormat);
+    const manual = generator?.renderTrigger === "manual";
+    const { status, progress, error: loadError } = useRuntimeStatus(runtime);
+    const source = asset.source ?? "";
 
-  // The digest of what the buffer holds now, for the "current / out of date" line.
-  const [currentDigest, setCurrentDigest] = useState<string | null>(null);
-  useEffect(() => {
-    if (!generator) return;
-    let live = true;
-    void sha256Hex(renderInputFor(generator, source, docinfo)).then((hex) => {
-      if (live) setCurrentDigest(hex);
+    // The digest of what the buffer holds now, for the "current / out of date" line.
+    const [currentDigest, setCurrentDigest] = useState<string | null>(null);
+    useEffect(() => {
+      if (!generator) return;
+      let live = true;
+      void sha256Hex(renderInputFor(generator, source, docinfo)).then((hex) => {
+        if (live) setCurrentDigest(hex);
+      });
+      return () => {
+        live = false;
+      };
+    }, [generator, source, docinfo]);
+
+    // Start the engine once there is something to render with it. A read-only
+    // view has nothing to re-render: the stored picture is the picture.
+    useEffect(() => {
+      if (runtime && status === "idle" && generator && !readOnly) void runtime.load().catch(() => {});
+    }, [runtime, status, generator, readOnly]);
+
+    const [rendered, setRendered] = useState<{ url: string; digest: string } | null>(null);
+    const [isRendering, setIsRendering] = useState(false);
+    const [renderProgress, setRenderProgress] = useState<string | null>(null);
+    // When the render under way began, for the seconds beside a server render's progress.
+    const [renderStartedAt, setRenderStartedAt] = useState<number | null>(null);
+    const elapsed = useElapsedSeconds(manual ? renderStartedAt : null);
+    const [renderError, setRenderError] = useState<{ message: string; log?: string } | null>(null);
+    const [failedUrl, setFailedUrl] = useState<string | null>(null);
+    const [saveFailure, setSaveFailure] = useState<{ message: string; output: GeneratedAssetOutput } | null>(null);
+    // What the host has been handed this session, so the same render is not sent twice.
+    const sentDigests = useRef(new Set<string>());
+    // The props as of the latest render. A render is awaited across keystrokes,
+    // and its closure's `source` is by definition the one it rendered, so whether
+    // typing has overtaken it — and which asset to hand the host — is read here.
+    const latest = useRef({ asset, source, docinfo, onOutput });
+    useEffect(() => {
+      latest.current = { asset, source, docinfo, onOutput };
     });
-    return () => {
-      live = false;
-    };
-  }, [generator, source, docinfo]);
 
-  // Start the engine once there is something to render with it. A read-only
-  // view has nothing to re-render: the stored picture is the picture.
-  useEffect(() => {
-    if (runtime && status === "idle" && generator && !readOnly) void runtime.load().catch(() => {});
-  }, [runtime, status, generator, readOnly]);
-
-  const [rendered, setRendered] = useState<{ url: string; digest: string } | null>(null);
-  const [isRendering, setIsRendering] = useState(false);
-  const [renderError, setRenderError] = useState<{ message: string; log?: string } | null>(null);
-  const [failedUrl, setFailedUrl] = useState<string | null>(null);
-  const [saveFailure, setSaveFailure] = useState<{ message: string; output: GeneratedAssetOutput } | null>(null);
-  // What the host has been handed this session, so the same render is not sent twice.
-  const sentDigests = useRef(new Set<string>());
-  // The props as of the latest render. A render is awaited across keystrokes,
-  // and its closure's `source` is by definition the one it rendered, so whether
-  // typing has overtaken it — and which asset to hand the host — is read here.
-  const latest = useRef({ asset, source, docinfo, onOutput });
-  useEffect(() => {
-    latest.current = { asset, source, docinfo, onOutput };
-  });
-
-  // Hand the host a render to store. A failure forgets the digest, so a retry —
-  // or the same source rendered again — can send it anew.
-  const store = async (output: GeneratedAssetOutput) => {
-    const { asset: current, onOutput: send } = latest.current;
-    if (!send) return;
-    sentDigests.current.add(output.previewInputDigest);
-    setSaveFailure(null);
-    try {
-      await send(current, output);
-    } catch (cause) {
-      sentDigests.current.delete(output.previewInputDigest);
-      setSaveFailure({ message: cause instanceof Error ? cause.message : String(cause), output });
-    }
-  };
-
-  useEffect(() => () => void (rendered && URL.revokeObjectURL(rendered.url)), [rendered]);
-
-  // Render on a debounce whenever the source (or docinfo) change while the engine is up.
-  useEffect(() => {
-    if (!runtime || status !== "ready" || !generator || !asset.ref || readOnly) return;
-    const timer = setTimeout(async () => {
-      setIsRendering(true);
+    // Hand the host a render to store. A failure forgets the digest, so a retry —
+    // or the same source rendered again — can send it anew.
+    const store = async (output: GeneratedAssetOutput) => {
+      const { asset: current, onOutput: send } = latest.current;
+      if (!send) return;
+      sentDigests.current.add(output.previewInputDigest);
+      setSaveFailure(null);
       try {
-        const result = await runtime.render(source, { docinfo: docinfoInputsFor(generator, docinfo) });
-        const digest = await sha256Hex(renderInputFor(generator, result.source, docinfo));
+        await send(current, output);
+      } catch (cause) {
+        sentDigests.current.delete(output.previewInputDigest);
+        setSaveFailure({ message: cause instanceof Error ? cause.message : String(cause), output });
+      }
+    };
+
+    useEffect(() => () => void (rendered && URL.revokeObjectURL(rendered.url)), [rendered]);
+
+    // Render `source` against `docinfo`: show the picture, and hand the host
+    // only a render of the source as it is *now* — one that typing has
+    // overtaken is shown but not stored.
+    const runRender = async (renderSource: string, renderDocinfo: string) => {
+      if (!runtime || !generator) return;
+      const inputs: DocinfoInputs = docinfoInputsFor(generator, renderDocinfo);
+      setIsRendering(true);
+      setRenderProgress(null);
+      setRenderStartedAt(Date.now());
+      try {
+        const result = await runtime.render(renderSource, {
+          docinfo: inputs,
+          ref: latest.current.asset.ref,
+          onProgress: (message) => setRenderProgress(message),
+        });
+        const digest = await sha256Hex(renderInputFor(generator, result.source, renderDocinfo));
         setRenderError(null);
         setRendered((previous) => {
           if (previous) URL.revokeObjectURL(previous.url);
           return { url: URL.createObjectURL(new Blob([result.svg], { type: "image/svg+xml" })), digest };
         });
-        // Hand the host only a render of the source as it is *now*; one that
-        // typing has overtaken is shown but not stored.
         const now = latest.current;
         const liveDigest = await sha256Hex(renderInputFor(generator, now.source, now.docinfo));
         if (digest === liveDigest && digest !== now.asset.previewInputDigest && !sentDigests.current.has(digest)) {
@@ -156,123 +184,165 @@ const GeneratedAssetPreview = ({
         });
       } finally {
         setIsRendering(false);
+        setRenderProgress(null);
+        setRenderStartedAt(null);
       }
-    }, debounceMs);
-    return () => clearTimeout(timer);
-  }, [runtime, status, generator, asset.ref, source, docinfo, readOnly, debounceMs]);
+    };
+    // Read by the debounce's timeout and the button, both after render, so the
+    // ref is written where `latest` is.
+    const runRenderRef = useRef(runRender);
+    useEffect(() => {
+      runRenderRef.current = runRender;
+    });
 
-  if (!generator) {
+    const canRender = !!runtime && status === "ready" && !!generator && !!asset.ref && !readOnly;
+
+    // A live engine renders on a debounce whenever the source (or docinfo)
+    // change; a manual one only when asked.
+    useEffect(() => {
+      if (manual || !canRender) return;
+      const timer = setTimeout(() => void runRenderRef.current(source, docinfo), debounceMs);
+      return () => clearTimeout(timer);
+    }, [manual, canRender, source, docinfo, debounceMs]);
+
+    const renderNow = () => {
+      if (!manual || !canRender || isRendering) return;
+      void runRenderRef.current(latest.current.source, latest.current.docinfo);
+    };
+    useImperativeHandle(ref, () => ({ render: renderNow }));
+
+    if (!generator) {
+      return (
+        <div data-testid="asset-preview" className="flex flex-1 h-full items-center justify-center p-6 bg-[#fafafa] text-[0.9rem] text-slate-500">
+          Unknown generator “{asset.sourceFormat}”.
+        </div>
+      );
+    }
+
+    const storedIsCurrent = !!asset.url && !!currentDigest && asset.previewInputDigest === currentDigest;
+    const showingFresh = rendered && rendered.digest === currentDigest;
+    const imageUrl = rendered?.url ?? asset.url;
+    // A render is already here as a blob. The stored file may be a redirect to
+    // another origin, where `download` is ignored, so the host says how to ask for
+    // it as an attachment; a new tab keeps the editor if a host hasn't.
+    const downloadUrl = rendered?.url ?? downloadUrlFor?.(asset) ?? asset.url;
+
+    const rendering = `${renderProgress ?? "Rendering…"}${manual && elapsed > 0 ? ` (${elapsed}s)` : ""}`;
+    let statusLine: string;
+    if (isRendering) statusLine = rendering;
+    else if (showingFresh) statusLine = "Rendered from the current source.";
+    else if (rendered) statusLine = "Source changed since this was rendered.";
+    else if (!asset.url) statusLine = manual && canRender ? "Not rendered yet. Render makes the picture." : "Not rendered yet.";
+    else if (storedIsCurrent) statusLine = "Stored picture matches the current source.";
+    else statusLine = "Source changed since the stored picture was rendered.";
+
     return (
-      <div data-testid="asset-preview" className="flex flex-1 h-full items-center justify-center p-6 bg-[#fafafa] text-[0.9rem] text-slate-500">
-        Unknown generator “{asset.sourceFormat}”.
+      <div
+        data-testid="asset-preview"
+        className="flex flex-1 h-full min-h-0 flex-col items-center justify-center gap-3 p-6 bg-[#fafafa]"
+      >
+        {imageUrl && failedUrl !== imageUrl ? (
+          <img
+            src={imageUrl}
+            alt={asset.shortDescription || asset.title}
+            className={PREVIEW_IMAGE_CLASS}
+            onError={() => setFailedUrl(imageUrl)}
+          />
+        ) : imageUrl ? (
+          <div className="text-[0.9rem] text-slate-500">The picture couldn't be loaded.</div>
+        ) : (
+          <div className="text-[0.9rem] text-slate-500">No picture yet.</div>
+        )}
+        <div data-testid="generated-asset-status" className="text-[0.8rem] text-slate-500 text-center">
+          {statusLine}
+        </div>
+        {manual && runtime && (
+          <button
+            type="button"
+            data-testid="render-generated-asset"
+            disabled={!canRender || isRendering}
+            title={`Render this ${generator.label} figure on the build server (Ctrl+Enter)`}
+            className="rounded border border-blue-700 bg-blue-600 px-3 py-1 text-[0.8rem] font-medium text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:border-blue-200 disabled:bg-blue-300"
+            onClick={renderNow}
+          >
+            {isRendering ? "Rendering…" : "Render"}
+          </button>
+        )}
+        {renderError && (
+          <pre
+            data-testid="generated-asset-error"
+            className="max-w-full max-h-48 flex-none overflow-auto whitespace-pre-wrap rounded border border-red-200 bg-red-50 px-3 py-2 text-[0.75rem] text-red-800"
+          >
+            {renderError.message}
+          </pre>
+        )}
+        {renderError?.log && (
+          <details data-testid="generated-asset-log" className="max-w-full flex-none text-[0.75rem] text-slate-600">
+            <summary className="cursor-pointer text-center">Full log</summary>
+            <pre className="mt-1 max-h-64 overflow-auto whitespace-pre-wrap rounded border border-slate-200 bg-white px-3 py-2 text-[0.7rem]">
+              {renderError.log}
+            </pre>
+          </details>
+        )}
+        {saveFailure && (
+          <div className="flex flex-col items-center gap-1">
+            <div data-testid="generated-asset-save-error" className="text-[0.75rem] text-red-700 text-center">
+              The picture couldn't be saved: {saveFailure.message}
+            </div>
+            <button
+              type="button"
+              data-testid="retry-generated-asset-save"
+              className="rounded border border-slate-300 bg-white px-3 py-1 text-[0.8rem] text-slate-800 hover:bg-slate-100"
+              onClick={() => void store(saveFailure.output)}
+            >
+              Try again
+            </button>
+          </div>
+        )}
+        {!runtime ? (
+          <div className="text-[0.75rem] text-slate-400 text-center">
+            {manual
+              ? "Rendering on the build server isn't available here; builds generate this figure."
+              : "Live rendering isn't available here; builds generate this diagram."}
+          </div>
+        ) : status === "loading" ? (
+          <div data-testid="generated-asset-loading" className="text-[0.8rem] text-slate-500 text-center">
+            {progress ?? "Loading the engine…"}
+          </div>
+        ) : status === "failed" ? (
+          <div className="flex flex-col items-center gap-1">
+            <div data-testid="generated-asset-load-error" className="text-[0.75rem] text-red-700 text-center">
+              The {generator.label} engine couldn't be loaded{loadError ? `: ${loadError}` : "."}
+            </div>
+            <button
+              type="button"
+              data-testid="retry-generator-engine"
+              className="rounded border border-slate-300 bg-white px-3 py-1 text-[0.8rem] text-slate-800 hover:bg-slate-100"
+              onClick={() => void runtime.load().catch(() => {})}
+            >
+              Try again
+            </button>
+          </div>
+        ) : manual ? (
+          <div className="text-[0.75rem] text-slate-400 text-center">
+            Rendered on the build server, which keeps the picture for the next build.
+          </div>
+        ) : null}
+        {downloadUrl && failedUrl !== imageUrl && (
+          <a
+            data-testid="download-generated-asset"
+            href={downloadUrl}
+            download={`${asset.ref}.svg`}
+            target="_blank"
+            rel="noreferrer"
+            className="rounded border border-slate-300 bg-white px-3 py-1 text-[0.8rem] text-slate-800 no-underline hover:bg-slate-100"
+          >
+            Download SVG
+          </a>
+        )}
       </div>
     );
-  }
-
-  const storedIsCurrent = !!asset.url && !!currentDigest && asset.previewInputDigest === currentDigest;
-  const showingFresh = rendered && rendered.digest === currentDigest;
-  const imageUrl = rendered?.url ?? asset.url;
-  // A render is already here as a blob. The stored file may be a redirect to
-  // another origin, where `download` is ignored, so the host says how to ask for
-  // it as an attachment; a new tab keeps the editor if a host hasn't.
-  const downloadUrl = rendered?.url ?? downloadUrlFor?.(asset) ?? asset.url;
-
-  let statusLine: string;
-  if (showingFresh) statusLine = isRendering ? "Rendering…" : "Rendered from the current source.";
-  else if (isRendering) statusLine = "Rendering…";
-  else if (rendered) statusLine = "Source changed since this was rendered.";
-  else if (!asset.url) statusLine = "Not rendered yet.";
-  else if (storedIsCurrent) statusLine = "Stored picture matches the current source.";
-  else statusLine = "Source changed since the stored picture was rendered.";
-
-  return (
-    <div
-      data-testid="asset-preview"
-      className="flex flex-1 h-full min-h-0 flex-col items-center justify-center gap-3 p-6 bg-[#fafafa]"
-    >
-      {imageUrl && failedUrl !== imageUrl ? (
-        <img
-          src={imageUrl}
-          alt={asset.shortDescription || asset.title}
-          className={PREVIEW_IMAGE_CLASS}
-          onError={() => setFailedUrl(imageUrl)}
-        />
-      ) : imageUrl ? (
-        <div className="text-[0.9rem] text-slate-500">The picture couldn't be loaded.</div>
-      ) : (
-        <div className="text-[0.9rem] text-slate-500">No picture yet.</div>
-      )}
-      <div data-testid="generated-asset-status" className="text-[0.8rem] text-slate-500 text-center">
-        {statusLine}
-      </div>
-      {renderError && (
-        <pre
-          data-testid="generated-asset-error"
-          className="max-w-full max-h-48 flex-none overflow-auto whitespace-pre-wrap rounded border border-red-200 bg-red-50 px-3 py-2 text-[0.75rem] text-red-800"
-        >
-          {renderError.message}
-        </pre>
-      )}
-      {renderError?.log && (
-        <details data-testid="generated-asset-log" className="max-w-full flex-none text-[0.75rem] text-slate-600">
-          <summary className="cursor-pointer text-center">Full log</summary>
-          <pre className="mt-1 max-h-64 overflow-auto whitespace-pre-wrap rounded border border-slate-200 bg-white px-3 py-2 text-[0.7rem]">
-            {renderError.log}
-          </pre>
-        </details>
-      )}
-      {saveFailure && (
-        <div className="flex flex-col items-center gap-1">
-          <div data-testid="generated-asset-save-error" className="text-[0.75rem] text-red-700 text-center">
-            The picture couldn't be saved: {saveFailure.message}
-          </div>
-          <button
-            type="button"
-            data-testid="retry-generated-asset-save"
-            className="rounded border border-slate-300 bg-white px-3 py-1 text-[0.8rem] text-slate-800 hover:bg-slate-100"
-            onClick={() => void store(saveFailure.output)}
-          >
-            Try again
-          </button>
-        </div>
-      )}
-      {!runtime ? (
-        <div className="text-[0.75rem] text-slate-400 text-center">
-          Live rendering isn't available here; builds generate this diagram.
-        </div>
-      ) : status === "loading" ? (
-        <div data-testid="generated-asset-loading" className="text-[0.8rem] text-slate-500 text-center">
-          {progress ?? "Loading the engine…"}
-        </div>
-      ) : status === "failed" ? (
-        <div className="flex flex-col items-center gap-1">
-          <div data-testid="generated-asset-load-error" className="text-[0.75rem] text-red-700 text-center">
-            The {generator.label} engine couldn't be loaded{loadError ? `: ${loadError}` : "."}
-          </div>
-          <button
-            type="button"
-            data-testid="retry-generator-engine"
-            className="rounded border border-slate-300 bg-white px-3 py-1 text-[0.8rem] text-slate-800 hover:bg-slate-100"
-            onClick={() => void runtime.load().catch(() => {})}
-          >
-            Try again
-          </button>
-        </div>
-      ) : null}
-      {downloadUrl && failedUrl !== imageUrl && (
-        <a
-          data-testid="download-generated-asset"
-          href={downloadUrl}
-          download={`${asset.ref}.svg`}
-          target="_blank"
-          rel="noreferrer"
-          className="rounded border border-slate-300 bg-white px-3 py-1 text-[0.8rem] text-slate-800 no-underline hover:bg-slate-100"
-        >
-          Download SVG
-        </a>
-      )}
-    </div>
-  );
-};
+  },
+);
 
 export default GeneratedAssetPreview;

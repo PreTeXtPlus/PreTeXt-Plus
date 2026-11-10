@@ -145,6 +145,13 @@ Rails.application.routes.draw do
       # Builds are always attempts at a target, so that is where they are created.
       resources :builds, only: [ :create ]
     end
+    # The editor's server-side render of a generated asset the browser cannot draw
+    # (AssetRendersController): submit, then poll with the signed claim it returns.
+    resources :asset_renders, only: [ :create ] do
+      collection do
+        get "status" => "asset_renders#status", as: "status"
+      end
+    end
     # Kept nested under project rather than target: full_callback's absolute URL is
     # baked into in-flight submissions by FullBuildJob, so moving it would drop the
     # webhook for every build already running at deploy time.

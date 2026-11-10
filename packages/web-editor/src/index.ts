@@ -136,12 +136,14 @@ export type { CollabSession, CollabUser } from "./collab/types";
 // configuration it passes as `generatorRuntimes`, and the output it receives
 // through `onAssetOutput`. The workers a host bundles are the
 // `./prefigure-worker` and `./tikz-worker` exports.
-export { generators, generatorIds } from "./generators";
+export { generators, generatorIds, GeneratorRenderError } from "./generators";
 export type {
   AssetGenerator,
   GeneratorRuntimeConfigs,
   GeneratorRuntimeOptions,
   RenderResult,
+  ServerRender,
+  ServerRenderRequest,
 } from "./generators";
 export type { GeneratedAssetOutput } from "./components/GeneratedAssetPreview";
 

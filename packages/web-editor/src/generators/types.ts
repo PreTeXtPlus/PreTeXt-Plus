@@ -30,7 +30,33 @@ export type DocinfoInputs = Readonly<Record<string, string>>;
 
 export interface RenderOptions {
   docinfo?: DocinfoInputs;
+  /**
+   * The asset's ref — its `@label`, the output's basename. A server render
+   * needs it to name the figure in the document it ships; a browser engine
+   * has no use for it.
+   */
+  ref?: string;
+  /** Word from the engine while the render is under way ("Queued on the build server…"). */
+  onProgress?: (message: string) => void;
 }
+
+/** What a host's server render is asked for: one figure, from the source as typed. */
+export interface ServerRenderRequest {
+  generator: GeneratorId;
+  /** The asset's ref, which the figure's `@label` will be. */
+  ref: string;
+  source: string;
+  /** The docinfo pieces the generator reads (`docinfoInputElements`), raw. Informational: the host has the docinfo. */
+  docinfo: DocinfoInputs;
+  onProgress?: (message: string) => void;
+}
+
+/**
+ * A host's render of a figure on its build server (see `createServerRuntime`):
+ * resolves the picture, or rejects — with a `GeneratorRenderError` carrying the
+ * CLI's log when there is one — when the server could not make it.
+ */
+export type ServerRender = (request: ServerRenderRequest) => Promise<{ svg: string }>;
 
 export type GeneratorRuntimeStatus = "idle" | "loading" | "ready" | "failed";
 
@@ -59,10 +85,14 @@ export interface GeneratorRuntime {
   subscribe(listener: () => void): () => void;
 }
 
-/** What a host must provide for a generator's browser runtime to exist. */
+/**
+ * What a host must provide for a generator's runtime to exist: for an engine in
+ * the browser, its worker and files; for one on the host's build server, the
+ * `render` call. A generator with neither renders nothing live.
+ */
 export interface GeneratorRuntimeOptions {
   /** The bundled worker (`@pretextbook/web-editor/<generator>-worker`), as an ES module. */
-  workerUrl: string;
+  workerUrl?: string;
   /**
    * The URL of each of the generator's own runtime files, keyed by filename —
    * for PreFigure the wasm engine and its JS glue (the names in
@@ -77,6 +107,12 @@ export interface GeneratorRuntimeOptions {
    * directory is versioned, which does for it what digests do for `assetUrls`.
    */
   baseUrl?: string;
+  /**
+   * For a generator no browser runs (Asymptote, Sage): the host's render on its
+   * build server. The runtime built on it renders only when asked
+   * (`renderTrigger: "manual"`), never on a debounce.
+   */
+  render?: ServerRender;
 }
 
 /** Per-generator runtime configuration a host passes to `Editors`. */
@@ -107,6 +143,12 @@ export interface AssetGenerator {
    * order. Mirrors the Rails `Content::GeneratedAssetBehavior::DOCINFO_INPUT_ELEMENTS` entry.
    */
   docinfoInputElements: readonly string[];
-  /** Absent when the generator has no browser runtime. */
+  /**
+   * When the preview pane renders: `live`, a second after typing stops, for an
+   * engine in the browser; `manual`, on the author's Render, for one that costs
+   * a job on a build server.
+   */
+  renderTrigger: "live" | "manual";
+  /** Absent when the generator has no runtime, in the browser or on a server. */
   createRuntime?(options: GeneratorRuntimeOptions): GeneratorRuntime;
 }

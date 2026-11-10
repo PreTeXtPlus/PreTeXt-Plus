@@ -29,7 +29,10 @@ export function createTikzRuntime(
     label: "TikZ",
     createWorker:
       deps.createWorker ??
-      (() => new Worker(options.workerUrl, { type: "module", name: "tikz" }) as TikzWorkerLike),
+      (() => {
+        if (!options.workerUrl) throw new Error("The host gave no URL for the TikZ worker");
+        return new Worker(options.workerUrl, { type: "module", name: "tikz" }) as TikzWorkerLike;
+      }),
     loadRequest: () => {
       if (!options.baseUrl) throw new Error("The host gave no URL for the TikZ engine");
       const directory = options.baseUrl.endsWith("/") ? options.baseUrl : `${options.baseUrl}/`;

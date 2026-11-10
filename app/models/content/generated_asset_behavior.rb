@@ -17,19 +17,32 @@ module Content::GeneratedAssetBehavior
 
   # Each generator's format, and the PreTeXt element its source is wrapped in --
   # also the directory under `generated/` a renderer puts the picture in.
-  ELEMENTS = { "prefigure" => "prefigure", "tikz" => "latex-image" }.freeze
+  ELEMENTS = {
+    "prefigure" => "prefigure",
+    "tikz" => "latex-image",
+    "asymptote" => "asymptote",
+    "sageplot" => "sageplot"
+  }.freeze
+
+  # The generators no browser runs, whose preview is rendered by the full build
+  # server's `/generate` on the author's request (AssetRendersController). The
+  # editor's registry says the same thing by giving these a server runtime.
+  SERVER_RENDERED_FORMATS = %w[ asymptote sageplot ].freeze
 
   # The docinfo elements each generator's render depends on, besides the asset's own
   # source. Core writes these into the generator's publication file or the image's
-  # LaTeX document for a real build (extract-prefigure.xsl, extract-latex-image.xsl), so
-  # a change to them is a change to the picture.
+  # LaTeX document for a real build (extract-prefigure.xsl, extract-latex-image.xsl,
+  # extract-asymptote.xsl), so a change to them is a change to the picture. A
+  # sageplot's extraction reads nothing from the docinfo (extract-sageplot.xsl).
   #
   # Mirrored in packages/web-editor/src/generators/renderInput.ts; the two must digest
   # byte-identical strings, which test/models/content_test.rb and the web-editor's
   # generators test both pin to one fixture hex.
   DOCINFO_INPUT_ELEMENTS = {
     "prefigure" => %w[ macros prefigure-preamble ],
-    "tikz" => %w[ macros latex-image-preamble ]
+    "tikz" => %w[ macros latex-image-preamble ],
+    "asymptote" => %w[ macros asymptote-preamble ],
+    "sageplot" => %w[]
   }.freeze
   RENDER_INPUT_SEPARATOR = "\n\u0000\n".freeze
 

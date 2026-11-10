@@ -766,6 +766,8 @@ const BODIES: Record<EditorLanguage, Record<string, string>> = {
   markdown: MARKDOWN_BODIES,
   // Drawing code: the catalog is document constructs, none of which it can hold.
   tex: {},
+  asymptote: {},
+  python: {},
 };
 
 /**

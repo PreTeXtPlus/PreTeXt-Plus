@@ -29,5 +29,6 @@ export const tikz: AssetGenerator = {
   wrapSource: (source, ref) => `<latex-image label="${ref}">\n${escapeText(source)}\n</latex-image>`,
   // Mirrors Content::GeneratedAssetBehavior::DOCINFO_INPUT_ELEMENTS["tikz"].
   docinfoInputElements: ["macros", "latex-image-preamble"],
+  renderTrigger: "live",
   createRuntime: createTikzRuntime,
 };

@@ -15,6 +15,7 @@ import type {
   RenderResult,
 } from "./types";
 import type { GeneratorWorkerResponse } from "./workerProtocol";
+import { createRenderQueue } from "./renderQueue";
 
 /** A render the engine refused, with its transcript when it keeps one. */
 export class GeneratorRenderError extends Error {
@@ -60,8 +61,6 @@ type Pending = {
   reject: (error: Error) => void;
   onProgress?: (message: string) => void;
 };
-
-type Settle = { resolve: (value: RenderResult) => void; reject: (error: Error) => void };
 
 export function createWorkerRuntime<Request>(config: WorkerRuntimeConfig<Request>): GeneratorRuntime {
   const { label, watchdog } = config;
@@ -211,11 +210,8 @@ export function createWorkerRuntime<Request>(config: WorkerRuntimeConfig<Request
     };
   };
 
-  // Latest-wins queue: at most one render on the worker, at most one waiting.
-  let inFlight: Promise<void> | null = null;
-  let waiting: { source: string; docinfo: DocinfoInputs; settle: Settle[] } | null = null;
-
-  const renderNow = async (source: string, docinfo: DocinfoInputs): Promise<RenderResult> => {
+  // At most one render on the worker, at most one waiting (see renderQueue.ts).
+  const enqueue = createRenderQueue(async ({ source, docinfo }: { source: string; docinfo: DocinfoInputs }) => {
     // The watchdog may have stopped the worker since this job was queued.
     await ensureWorker();
     const unwatch = watchRender();
@@ -227,33 +223,11 @@ export function createWorkerRuntime<Request>(config: WorkerRuntimeConfig<Request
     } finally {
       unwatch();
     }
-  };
-
-  const drain = async () => {
-    while (waiting) {
-      const job = waiting;
-      waiting = null;
-      try {
-        const result = await renderNow(job.source, job.docinfo);
-        job.settle.forEach((p) => p.resolve(result));
-      } catch (cause) {
-        job.settle.forEach((p) => p.reject(cause instanceof Error ? cause : new Error(String(cause))));
-      }
-    }
-    inFlight = null;
-  };
+  });
 
   const render = async (source: string, renderOptions: RenderOptions = {}): Promise<RenderResult> => {
     await ensureWorker();
-    const docinfo = renderOptions.docinfo ?? {};
-    return new Promise<RenderResult>((resolve, reject) => {
-      const settle = { resolve, reject };
-      // A newer request supersedes the one waiting; both get the newer result.
-      waiting = waiting
-        ? { source, docinfo, settle: [...waiting.settle, settle] }
-        : { source, docinfo, settle: [settle] };
-      inFlight ??= drain();
-    });
+    return enqueue({ source, docinfo: renderOptions.docinfo ?? {} });
   };
 
   return {

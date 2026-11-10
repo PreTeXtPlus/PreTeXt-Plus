@@ -7,8 +7,10 @@ import type { AssetSourceFormat, GeneratorId } from "../types/editor";
 import type { AssetGenerator, GeneratorRuntime, GeneratorRuntimeConfigs } from "./types";
 import { prefigure } from "./prefigure/definition";
 import { tikz } from "./tikz/definition";
+import { asymptote } from "./asymptote/definition";
+import { sageplot } from "./sageplot/definition";
 
-export const generators: Record<GeneratorId, AssetGenerator> = { prefigure, tikz };
+export const generators: Record<GeneratorId, AssetGenerator> = { prefigure, tikz, asymptote, sageplot };
 
 export const generatorIds = Object.keys(generators) as GeneratorId[];
 
@@ -54,4 +56,5 @@ export {
   RENDER_INPUT_SEPARATOR,
 } from "./renderInput";
 export { GeneratorRenderError } from "./workerRuntime";
+export { createServerRuntime } from "./serverRuntime";
 export type * from "./types";

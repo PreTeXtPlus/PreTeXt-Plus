@@ -61,9 +61,9 @@ export const SCOPE_ELEMENTS: Record<
   displayMath: ["me", "men", "md", "mdn"],
   inlineCode: ["c"],
   blockCode: ["program", "sage", "pre"],
-  // A PreFigure diagram is the same kind of thing as a latex-image: drawing
-  // code, not prose, so the one setting governs both.
-  latexImage: ["latex-image", "prefigure"],
+  // A PreFigure diagram, an Asymptote figure or a Sage plot is the same kind of
+  // thing as a latex-image: drawing code, not prose, so the one setting governs all.
+  latexImage: ["latex-image", "prefigure", "asymptote", "sageplot"],
 };
 
 /**

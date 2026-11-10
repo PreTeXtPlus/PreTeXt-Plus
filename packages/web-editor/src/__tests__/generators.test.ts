@@ -41,6 +41,33 @@ describe("renderInput", () => {
     );
   });
 
+  // The build server renders these; the render input is what the CLI's extraction
+  // reads (extract-asymptote.xsl: the docinfo preamble and macros; extract-sageplot.xsl:
+  // nothing but the source). Rails pins the same hexes in content_test.rb.
+  it("digests an Asymptote asset's preamble and macros to the fixture Rails pins", async () => {
+    const source = "size(3cm);\ndraw(unitcircle);";
+    const docinfo = [
+      "<docinfo>",
+      "  <macros>\\newcommand{\\R}{\\mathbb{R}}</macros>",
+      "  <asymptote-preamble>import graph;</asymptote-preamble>",
+      "</docinfo>",
+    ].join("\n");
+    const input = renderInputFor(generators.asymptote, source, docinfo);
+    expect(input).toBe([source, "\\newcommand{\\R}{\\mathbb{R}}", "import graph;"].join(SEPARATOR));
+    expect(await sha256Hex(input)).toBe(
+      "6066681f03b50dfc917762b7f5aad03be21274f67d48a9c25a93a430a3daf232",
+    );
+  });
+
+  it("digests a Sage asset's source alone to the fixture Rails pins", async () => {
+    const source = "plot(sin(x), (x, -pi, pi))";
+    const input = renderInputFor(generators.sageplot, source, "<docinfo><macros>\\newcommand{\\R}{\\mathbb{R}}</macros></docinfo>");
+    expect(input).toBe(source);
+    expect(await sha256Hex(input)).toBe(
+      "176424de06d07455db94876da218db0124132c91ecbbe6878145c44fa21a17fb",
+    );
+  });
+
   it("reads an element's raw inner text, tolerating attributes, and is empty when absent", () => {
     expect(
       docinfoElementInner('<docinfo><macros xml:space="preserve"> a &amp; b </macros></docinfo>', "macros"),
@@ -80,6 +107,25 @@ describe("registry", () => {
 
   it("every generator's language is one the code editor has", () => {
     for (const id of generatorIds) expect(editorConfigs[generators[id].language]).toBeDefined();
+  });
+
+  // Asymptote and Sage are code with `<` and `&` in it, written as typed.
+  it("asymptote and sageplot wrap their source as XML text of their own element", () => {
+    expect(generators.asymptote.wrapSource("if (a < b && c > d) draw(p);", "fig")).toBe(
+      '<asymptote label="fig">\nif (a &lt; b &amp;&amp; c &gt; d) draw(p);\n</asymptote>',
+    );
+    expect(generators.sageplot.wrapSource("plot(x, (x, 0, 1)) if 1 < 2 else 0", "fig")).toBe(
+      '<sageplot label="fig">\nplot(x, (x, 0, 1)) if 1 &lt; 2 else 0\n</sageplot>',
+    );
+  });
+
+  // A browser engine renders as the author types; a build-server render is a job
+  // per click, so it must never be asked for on a debounce.
+  it("browser engines render live and server-rendered generators only on request", () => {
+    expect(generators.prefigure.renderTrigger).toBe("live");
+    expect(generators.tikz.renderTrigger).toBe("live");
+    expect(generators.asymptote.renderTrigger).toBe("manual");
+    expect(generators.sageplot.renderTrigger).toBe("manual");
   });
 
   it("prefigure wraps in the PreFigure namespace", () => {

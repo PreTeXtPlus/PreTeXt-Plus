@@ -15,7 +15,9 @@ input. **The browser render is a preview.** Revised again 2026-10-29: a generate
 is no longer a kind of its own but an authored asset whose `source_format` is a
 generator's (Decision 1). Extended 2026-10-29 with TikZ as the second generator with a
 browser preview (Part 7), after a survey of browser TeX engines. Built 2026-10-30, all but
-its spike: see "Where the spike stands" in 7.3.
+its spike: see "Where the spike stands" in 7.3. Extended 2026-11-10 with Asymptote and
+Sage (Part 8), the first generators rendered by the build server's `/generate` rather than
+in the browser.
 
 ## What exists (2026-10-27)
 
@@ -34,6 +36,7 @@ author types, the SVG is stored with the asset and the server reads it as curren
 | 5 browser-rendered save | Done, as a multipart PATCH per render (`onAssetOutput`): the SVG as `file` + the digest. |
 | 6 `latex-image` via `/generate` | Not started. |
 | 7 TikZ | Built. The maintainer tried it in a browser on 2026-10-30 and it worked well; the spike's checks are still owed (7.3). |
+| 8 Asymptote, Sage via `/generate` | Built 2026-11-10 for 2D (8.3.1–11). Not yet tried against the real build server: the first end-to-end check in 8.3 is owed. |
 
 ## Context
 
@@ -489,6 +492,209 @@ missing file, and as an explicit action.
 
 ---
 
+## Part 8 — Asymptote and Sage, rendered by the build server
+
+Two generators no browser runs: `<asymptote>` (the `asy` executable, 2–3 s a figure) and
+`<sageplot>` (a Sage process, under a second once the container is up). Parts 1–5 carry
+over as they did for TikZ; what is new is a `GeneratorRuntime` whose engine is the full
+build server's `/generate`, reached through this app. This is Part 6's design, built for
+these two first because TikZ covers the `latex-image` case in the browser.
+
+### 8.1 What the build server does today (read 2026-11-10)
+
+- `POST /generate` (multipart: `archive`, `target` default `web`, `assets` repeatable,
+  `project_id`, `callback_url`; bearer token) runs `pretext generate <assets> -t <target>`
+  in the warm image on the `generate` queue (its own worker, 1 CPU / 1 GB / 120 s), with
+  **no network**: `asy` and `sage` are local, and the warm-image smoke test generates one
+  asymptote and one sageplot before an image is promoted.
+- The artifact is the CLI's cache, `.cache/<type>/<md5>.<ext>`, listed in `files` on
+  `GET /generate/:id` and in the callback; one file is fetched with
+  `GET /generate/:id/files/<path>`. With a `project_id` the files are **harvested into
+  that project's persistent cache**, which a later `/builds` job for the same `project_id`
+  bind-mounts, so the build copies the figure instead of running `asy` or `sage` again.
+- For `target=web` (`ASSET_FORMATS["html"]` in the CLI): asymptote makes **`.html`** — for
+  a 2D figure, a page whose body is one inline `<svg>` (pretext-html reads
+  `html/body/svg:svg` off it for the aspect ratio); for a 3D one, a `<canvas>` with WebGL
+  — and sageplot makes **`.svg`** for a 2D plot or `.html` (three.js, from a CDN) for
+  `@variant="3d"`, never both, since the extraction writes only the legal combination.
+- **The cache key is the md5 of the extracted source file**, which for asymptote is
+  `usepackage("amsmath");` + the docinfo `<asymptote-preamble>` + `texpreamble("<macros>")`
+  + the body, and for sageplot is the body split at its last line into preamble and plot,
+  plus `<plot>.save('<label>.<format>')`. So the key depends on the docinfo for asymptote
+  and not for sageplot, and **on the `@label` for sageplot** and not for asymptote
+  (extract-sageplot.xsl writes `$filebase` into the file; extract-asymptote.xsl does not).
+
+### 8.2 Decisions
+
+1. **A preview render is the full build's render, so the build never repeats it.** The
+   worry that every asset is built twice — once for the pane, once for the build — is
+   answered by the build server already: a `/generate` job sent with the `project_id`
+   leaves its file in the project's cache, and the build copies it. That holds exactly
+   when the extracted source is byte-identical, which is a property of *our archive*: the
+   one-figure document must carry the docinfo the full build's document carries, down to
+   the byte. It is therefore assembled by the same code (8.3.2), and a test compares the
+   two docinfos. The one gap is sageplot under a named placement: `graph-ch3` is a
+   different `.sage` file from `graph`, so that copy is a cache miss the build pays for;
+   not worth working around (it is one Sage call per extra placement).
+2. **The client asks for a render of the source it holds, and stores the result itself.**
+   The runtime contract is `render(source, { docinfo }) → RenderResult`, the same as
+   PreFigure's and TikZ's, so `GeneratedAssetPreview`, `onAssetOutput`, the digest over
+   exactly the source rendered, the collab doc's `previewInputDigest`, Download SVG and the
+   document preview's rewrite all work unchanged. The server render is stateless with
+   respect to the row: it takes the generator, the ref (which is the label) and the source
+   as typed, and renders that against the project's docinfo as it is now. The alternative —
+   the job attaching the file to the row itself — saves one upload of the picture and costs
+   new plumbing on every side (a second path onto the pool, a server write that peers learn
+   of out of band, a digest computed at enqueue from a row that may lag the buffer).
+3. **Explicit, not on a debounce.** A browser engine renders a second after typing stops; a
+   server render starts a container and occupies the one `generate` worker for seconds, so
+   the pane renders on a **Render** button (and Ctrl+Enter while the asset is open, the
+   preview's own rebuild key), never on its own, not even for an asset with no picture yet.
+   `AssetGenerator` says which with `renderTrigger: "live" | "manual"`; the status line
+   says what is on screen and whether it is current, as it does today.
+4. **One job per render, one figure per job.** The README's advice: with one asset in the
+   archive, the single file under `<element>/` *is* the result, and nothing has to
+   recompute the CLI's md5 to find it.
+5. **The Rails side is a thin, polled proxy, not a job.** `POST` builds the archive and
+   submits it (an upload of a few KB; the build server answers 202 at once), returning a
+   poll URL; `GET` relays the build server's status and, on success, fetches the one file
+   and returns the picture inline, or the CLI's log on failure. No Solid Queue job, no
+   callback, no table: a signed token (`message_verifier`) carries the build server's job
+   id, the project id, the element and the extension, so a poll can only read the job the
+   project started. A row (history, per-user quotas) can come later if the traffic
+   warrants it; `BuildsController` already rate-limits builds per user and this endpoint
+   gets the same treatment.
+6. **2D first; 3D is its own part.** A 2D asymptote's picture is the `<svg>` taken out of
+   its `.html` (Nokogiri, on the server, so the client contract stays "a render is SVG");
+   a 2D sageplot's is the `.svg`. Both go through TikZ's `sanitizeSvg` on the main thread
+   before they are shown or stored — `asy` writes the SVG from user code too. A 3D figure
+   (asymptote with `import three`, `<sageplot variant="3d">`) is an HTML page with
+   JavaScript, which an `<img>` cannot show and this app should not serve inline from its
+   origin: it needs the stored picture to be allowed to be HTML (`preview_is_svg`, the
+   `generated_file` route's `format: "svg"`, `previewImages.ts`'s `.svg` pattern), an
+   iframe with a sandbox in the pane and in the document preview, and storage that serves
+   `text/html` inline from another origin. Phase 1 renders a 3D source as far as the build
+   server will and reports the result it cannot show ("This is a 3D figure; the build
+   makes it"), rather than guessing from the source whether it is 3D.
+7. **No `attrs` yet.** `@variant` and `@aspect` on `<sageplot>`, `@aspect` on
+   `<asymptote>`, belong on the placement or the record, not in the source. Assets have an
+   `attrs` column (unused for them so far) — the right home when 3D arrives; until then the
+   wrapper writes only `@label`.
+8. **The docinfo elements are the ones the extraction reads.** `asymptote` →
+   `macros asymptote-preamble`; `sageplot` → none (its render input is the source alone).
+   Rails and the registry each pin a fixture hex, as for PreFigure and TikZ.
+9. **The editor languages are stand-ins.** Sage is Python: Monaco's built-in `python`
+   tokenizer. Asymptote is C-like with no Monaco grammar: a small Monarch grammar of our
+   own (`asy` keywords, `//` and `/* */` comments, strings, numbers, brackets) beats
+   borrowing `cpp`, which would colour `int`, `string` and `path` but also flag things
+   that are fine in Asymptote. Neither gets completions.
+
+### 8.3 Work
+
+1. **Rails model.** `source_format` gains `asymptote: 5, sageplot: 6`; `ELEMENTS` gains
+   both (element = format name, which is also the `generated/` directory);
+   `DOCINFO_INPUT_ELEMENTS` per 8.2.8; `content_test.rb` flips its "asymptote is invalid"
+   assertion to the opposite and adds the two fixture hexes. The JSON partial and
+   `generated_file` already serve any element.
+2. **The one-figure archive.** `GenerateArchiveBuilder` (or a mode of
+   `ProjectArchiveBuilder`): `project.ptx` with one `web` target (`format="html"`, the
+   same `generated`/`output-dir` attributes as a real one); the project's publication file
+   from `ProjectArchiveBuilder#publication_ptx` (it decides the `generated` directory and
+   nothing else the extraction reads, but a real one keeps the key honest); `source/main.ptx`
+   from `SourceAssembler` run on a **synthetic payload**: the project's `docinfo`,
+   `common_docinfo`, `use_common_docinfo` and `language` as they are, `document_type:
+   "article"`, one root division whose body is `<p><plus:image ref="<ref>"/></p>`, and the
+   one asset with the source the client sent in place of the row's. That is what makes the
+   docinfo — `withDefaultLatexImagePreamble`, the common-docinfo substitution, whatever the
+   assembler does next — identical to a build's without a second implementation of any of
+   it. `GenerateArchiveBuilderTest` asserts the `<docinfo>` of this document equals the
+   `<docinfo>` of `ProjectArchiveBuilder`'s for the same project, and that the `<image>`
+   holds `<asymptote label="ref">` with the source as XML text.
+3. **`FullBuildServer.post_form(path, fields)`** for multipart, which `FullBuildJob` can
+   then use instead of its own `Net::HTTP`; `/generate` is submitted with `archive`,
+   `target=web`, `assets=<element>`, `project_id` and no callback.
+4. **`AssetRendersController`** under the project, `authorize! :update`, rate-limited like
+   builds. `create` takes `source_format`, `ref`, `source`; refuses a format that is not a
+   server-rendered generator (`createRuntime` is the editor's word for it; Rails keeps its
+   own list, `SERVER_RENDERED_FORMATS`) or a ref that is not one of the project's; builds
+   the archive, submits, and answers `{ poll_url }` with the signed token. `show` verifies
+   the token, `GET`s the build server's status: `queued`/`started` → `{ status }`;
+   `failed` → `{ status: "failed", message, log }`, the log from `log_url` when the tail
+   is truncated; `success` → the one `files` entry under `<element>/` with the expected
+   extension (`.html` for asymptote, `.svg` for sageplot; none → "no picture", a 3D
+   `.html` from sageplot likewise), fetched via `/files/`, asymptote's `<svg>` lifted out
+   of the page with Nokogiri (a body with `<canvas>` instead is the 3D case of 8.2.6), and
+   `{ status: "success", svg }`. Tests with WebMock against the build server's shapes
+   (status JSON, a 2D asymptote `.html`, a failed job's log); the controller never calls
+   `SourceAssembler` in tests that do not need it (stub the builder).
+5. **Registry.** `GeneratorId` gains `"asymptote" | "sageplot"`; `generators/asymptote/`
+   and `generators/sageplot/` definitions: labels "Asymptote" and "Sage"; starters (a unit
+   circle with axes and a TeX label; `plot(sin(x), (x, -pi, pi))` with a second curve);
+   `wrapSource` escapes `&`, `<`, `>` as TikZ's does (both are code, not XML);
+   `docinfoInputElements`; `renderTrigger: "manual"`; `createRuntime` →
+   `createServerRuntime`. `generators.test.ts` gets the wraps and the fixture hexes.
+6. **`serverRuntime.ts`.** A `GeneratorRuntime` over a host function: `load()` resolves at
+   once (status `ready`); `render` is latest-wins like the worker queue's — lift that queue
+   out of `workerRuntime.ts` into a shared helper rather than copying it — calls
+   `options.render({ generator, ref, source, docinfo })`, runs `finishSvg` (`sanitizeSvg`)
+   and resolves a `RenderResult`; a rejection carries the CLI's log as
+   `GeneratorRenderError.log`. `GeneratorRuntimeOptions` becomes a union: the worker shape
+   it has now, or `{ render }` for a server runtime — a host that passes neither for a
+   generator gets today's "Live rendering isn't available here". `RenderOptions` grows
+   `onProgress?(message)` so the pane can say "Queued on the build server…" / "Rendering…"
+   from the poll; `GeneratorRuntime.progress` stays a load-time thing.
+7. **Pane.** `GeneratedAssetPreview` reads `generator.renderTrigger`: `manual` replaces the
+   debounce effect with a Render button (disabled while a render is in flight or read-only,
+   labelled with the generator), elapsed seconds beside the progress message, and the
+   render-overtaken-by-typing rule unchanged. Ctrl+Enter in the asset's editor triggers it
+   (`Editors` already owns that key for the preview). The failed-render strip and folded
+   log already fit a CLI log. Tests: the button renders and stores; typing does not; a
+   failure shows the log.
+8. **Editor languages.** `EditorLanguage` gains `"python" | "asymptote"`; `editorConfigs`
+   gets `pythonConfig` (Monaco's built-in id, no registration) and `asymptoteConfig`
+   (Monarch grammar, `registerMonacoExtensions`); `FORMAT_LABELS`, `snippets.ts`'s
+   `BODIES` and `insertContext.ts` follow the `Record<EditorLanguage, …>` types.
+   `documentActionMenuEntries.ts` maps any non-prose language to the `pretext` docinfo
+   actions the way it maps `tex` today — make that `isProseFormat(language)` rather than
+   a second `=== "tex"`. The spell checker's `latexImage` scope gains `asymptote` and
+   `sageplot`; `VERBATIM_SOURCES` and `OPAQUE_ELEMENTS` already list both.
+9. **Host.** `editor.jsx`'s `generatorRuntimes` gains `asymptote` and `sageplot` entries
+   with one `render` function: `POST` to `asset_renders`, then poll `poll_url` every 1.5 s
+   (then 3 s after the first 15) until a terminal status, up to the server's 120 s limit
+   plus queueing, reporting `onProgress`; resolve the SVG or throw with the log. Both
+   entries exist only when the page carries `data-editor-asset-render-url-value`, which
+   the view sets only when `FullBuildServer.host` is configured, so a development machine
+   without credentials shows the stored picture and the "not available here" line.
+10. **Assembly.** `transformImageAsset` already emits `wrapSource` for any generator; the
+    `SourceAssemblerTest` gets one case per new generator mirroring the TikZ one (source as
+    XML text under the right element).
+11. **Docs.** The web-editor `CLAUDE.md`'s "Generated assets" section gains the server
+    runtime and `renderTrigger`; this doc's status table; the README's line about what the
+    browser renderer cannot generate.
+
+Order: 1 → 2 → 3 → 4 (Rails, testable with WebMock and a real `SourceAssembler`), then
+5 → 6 → 7 → 8 (editor, testable in Vitest), then 9 → 10 → 11. First end-to-end check:
+a Sage plot rendered from the pane, then a full build of the same project whose log shows
+the sageplot copied from the cache rather than generated.
+
+### 8.4 Later
+
+- **3D** (8.2.6): HTML pictures, sandboxed iframes, `attrs` for `@variant`/`@aspect`.
+- **TikZ on the server** (7.4) is this runtime with `assets=latex-image`, `.svg` as the
+  file, and `renderTrigger: "live"` kept for the browser engine: the pane offers the
+  server render as a second button when the browser's fails.
+- **Mermaid** is not this shape. For HTML output core emits `<pre class="mermaid">` and
+  loads mermaid.js from a CDN in the page, so the document preview already renders it live
+  and a build generates nothing for the web; only `pdf`/`latex` run `pretext generate
+  mermaid` (to PNG, via mermaid-cli, which the warm image may not have). As a generated
+  asset it would be a browser-runtime generator like PreFigure — mermaid.js needs a DOM,
+  so an offscreen iframe or the main thread, not a worker — whose stored picture nothing
+  in the HTML build references (no `generated/mermaid/<label>.svg` to serve or rewrite),
+  the picture serving only the asset list and a build's print output. Worth doing, small,
+  and separate from this part.
+
+---
+
 ## Open questions
 
 | Question | Blocks | Suggested answer |
@@ -503,6 +709,8 @@ missing file, and as an explicit action.
 | Commit the mp-tikz-wasm release, or fetch it at build? | — | Decided: a pinned version with a checksum (`config/tikz_engine.json`), fetched by its own script, not by the build (7.1.6). |
 | Load `lmodern` in the preview to match xelatex's text font? | — | Decide from the spike's side-by-side; it is one line in the worker's document. |
 | Is a separate `latex_image` format (Part 6) still wanted? | 6 | Only for non-TikZ LaTeX pictures no browser engine runs; `tikz` covers the common case. |
+| Should a server render be limited per user, and how? | 8 | Start with `rate_limit` on the controller, as builds are; a table with per-user counts only if the one `generate` worker proves contended. Scaling the worker (`--scale generate-worker=N`) is the build server's knob. |
+| Does the warm image's `asy` write 2D output as an inline `<svg>`, as pretext-html expects? | 8 | Check on the first real render; pretext-html's `image[asymptote]` reads `html/body/svg:svg`, so a build would already be degraded if not. |
 
 ## Traps
 
@@ -545,3 +753,15 @@ missing file, and as an explicit action.
   on a bundle the fetch script left out; `tikzDocument.test.ts` compares the two.
 - **`index.js` under `public/engines` is how Rails knows the engine is there.** A file left
   at that path makes every TikZ asset try to load it.
+- **The one-figure archive's docinfo must be the build's docinfo, byte for byte.** The
+  build server's cache key is the md5 of the extracted source, and for asymptote that
+  includes the `<asymptote-preamble>` and `<macros>`. Assemble it with `SourceAssembler`,
+  never by hand; the test that compares the two documents' `<docinfo>` is what keeps a
+  preview from being a build the full build then repeats.
+- **A sageplot's cache key includes its label.** A placement with an `instance` is a
+  different `.sage` file from the preview's; expected, not a bug.
+- **A server render is a build-server job per click.** Nothing may trigger it on a
+  debounce, on open, or on a docinfo change; `renderTrigger: "manual"` is the rule, and the
+  pane's debounce effect must not run for such a generator.
+- **An asymptote `.html` is not always a picture.** A 3D figure's page has a `<canvas>`,
+  not an `<svg>`; the server reports that rather than storing the page (8.2.6).

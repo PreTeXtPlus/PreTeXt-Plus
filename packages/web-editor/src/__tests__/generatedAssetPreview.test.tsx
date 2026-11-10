@@ -175,9 +175,10 @@ describe("GeneratedAssetPreview", () => {
     );
 
     await waitFor(() => expect(onOutput).toHaveBeenCalledTimes(1));
-    expect(runtime.render).toHaveBeenCalledWith("<diagram/>", {
-      docinfo: { macros: "\\newcommand{\\R}{\\mathbb{R}}", "prefigure-preamble": "" },
-    });
+    expect(runtime.render).toHaveBeenCalledWith(
+      "<diagram/>",
+      expect.objectContaining({ docinfo: { macros: "\\newcommand{\\R}{\\mathbb{R}}", "prefigure-preamble": "" } }),
+    );
     const [, output] = onOutput.mock.calls[0];
     expect(output.svg).toBe(SVG);
     expect(output.previewInputDigest).toBe(
@@ -196,9 +197,10 @@ describe("GeneratedAssetPreview", () => {
     render(<GeneratedAssetPreview asset={tikz} docinfo={docinfo} runtime={runtime} debounceMs={0} />);
 
     await waitFor(() => expect(runtime.render).toHaveBeenCalledTimes(1));
-    expect(runtime.render).toHaveBeenCalledWith("\\tikz\\draw (0,0);", {
-      docinfo: { macros: "\\def\\a{1}", "latex-image-preamble": "\\usepackage{tikz-cd}" },
-    });
+    expect(runtime.render).toHaveBeenCalledWith(
+      "\\tikz\\draw (0,0);",
+      expect.objectContaining({ docinfo: { macros: "\\def\\a{1}", "latex-image-preamble": "\\usepackage{tikz-cd}" } }),
+    );
   });
 
   it("shows the excerpt of a failed render, with the whole transcript folded under it", async () => {
@@ -266,5 +268,74 @@ describe("GeneratedAssetPreview", () => {
     (runtime.render as ReturnType<typeof vi.fn>).mockRejectedValueOnce(new Error("ValueError: not well-formed"));
     render(<GeneratedAssetPreview asset={asset} docinfo="" runtime={runtime} debounceMs={0} />);
     expect(await screen.findByTestId("generated-asset-error")).toHaveTextContent("not well-formed");
+  });
+
+  // A generator rendered on the build server: each render is a job on a shared
+  // queue, so nothing but the author asks for one.
+  describe("a generator rendered on request", () => {
+    const sage: Asset = { ...asset, ref: "sine", sourceFormat: "sageplot", source: "plot(sin(x), (x, 0, 1))" };
+
+    it("never renders on its own, and says what the button does", async () => {
+      const runtime = fakeRuntime("ready");
+      render(<GeneratedAssetPreview asset={sage} docinfo="" runtime={runtime} debounceMs={0} />);
+      expect(screen.getByTestId("generated-asset-status")).toHaveTextContent("Render makes the picture");
+      await new Promise((resolve) => setTimeout(resolve, 20));
+      expect(runtime.render).not.toHaveBeenCalled();
+      expect(screen.getByTestId("render-generated-asset")).toBeEnabled();
+    });
+
+    it("renders on Render, with the asset's ref, and hands the host the picture with its digest", async () => {
+      const runtime = fakeRuntime("ready");
+      const onOutput = vi.fn();
+      render(<GeneratedAssetPreview asset={sage} docinfo="" runtime={runtime} onOutput={onOutput} debounceMs={0} />);
+
+      fireEvent.click(screen.getByTestId("render-generated-asset"));
+
+      await waitFor(() => expect(onOutput).toHaveBeenCalledTimes(1));
+      expect(runtime.render).toHaveBeenCalledWith(sage.source, expect.objectContaining({ ref: "sine", docinfo: {} }));
+      expect(onOutput.mock.calls[0][1].previewInputDigest).toBe(
+        await sha256Hex(renderInputFor(generators.sageplot, sage.source!, "")),
+      );
+      expect(screen.getByTestId("generated-asset-status")).toHaveTextContent("Rendered from the current source");
+    });
+
+    it("shows the server's progress while a render is under way, and disables the button", async () => {
+      const runtime = fakeRuntime("ready");
+      let release!: () => void;
+      (runtime.render as ReturnType<typeof vi.fn>).mockImplementationOnce(
+        (source: string, options: { onProgress?: (m: string) => void }) =>
+          new Promise<RenderResult>((resolve) => {
+            options.onProgress?.("Queued on the build server…");
+            release = () => resolve({ svg: SVG, annotations: null, source });
+          }),
+      );
+      render(<GeneratedAssetPreview asset={sage} docinfo="" runtime={runtime} debounceMs={0} />);
+
+      fireEvent.click(screen.getByTestId("render-generated-asset"));
+      await waitFor(() => expect(screen.getByTestId("generated-asset-status")).toHaveTextContent("Queued on the build server"));
+      expect(screen.getByTestId("render-generated-asset")).toBeDisabled();
+
+      release();
+      await waitFor(() => expect(screen.getByTestId("render-generated-asset")).toBeEnabled());
+    });
+
+    it("does not render a read-only view, and says when the server isn't available", () => {
+      const { rerender } = render(<GeneratedAssetPreview asset={sage} docinfo="" runtime={fakeRuntime("ready")} readOnly />);
+      expect(screen.getByTestId("render-generated-asset")).toBeDisabled();
+      rerender(<GeneratedAssetPreview asset={sage} docinfo="" runtime={undefined} />);
+      expect(screen.queryByTestId("render-generated-asset")).not.toBeInTheDocument();
+      expect(screen.getByTestId("asset-preview")).toHaveTextContent("Rendering on the build server isn't available here");
+    });
+
+    it("shows a failed render's message with the server's log folded under it", async () => {
+      const runtime = fakeRuntime("ready");
+      (runtime.render as ReturnType<typeof vi.fn>).mockRejectedValueOnce(
+        new GeneratorRenderError("The build server could not make the picture.", "Failed to generate sageplot sine.sage"),
+      );
+      render(<GeneratedAssetPreview asset={sage} docinfo="" runtime={runtime} debounceMs={0} />);
+      fireEvent.click(screen.getByTestId("render-generated-asset"));
+      expect(await screen.findByTestId("generated-asset-error")).toHaveTextContent("could not make the picture");
+      expect(screen.getByTestId("generated-asset-log")).toHaveTextContent("sine.sage");
+    });
   });
 });

@@ -38,7 +38,8 @@ import {
  * @property {string} [ref]
  * @property {"file_asset"|"authored_asset"} kind
  * @property {string} [source_format] - "pretext", or for a generated asset (an authored
- *   one written in a generator's language) the generator's id ("prefigure", "tikz"), which
+ *   one written in a generator's language) the generator's id ("prefigure", "tikz",
+ *   "asymptote", "sageplot"), which
  *   decides how the editor treats the source and the element the assembled `<image>`
  *   wraps it in.
  * @property {string} [preview_input_digest] - For a generated asset, the sha256 of the
