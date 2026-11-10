@@ -33,6 +33,7 @@ import type { CleanFinding } from "../cleanFindings";
 import ConvertToPretextDialog from "./ConvertToPretextDialog";
 import DocinfoEditor from "./DocinfoEditor";
 import FullSourceModal from "./FullSourceModal";
+import { DialogHostContext } from "./dialogHost";
 import NewItemPane from "./create/NewItemPane";
 import EditorTargetBar from "./EditorTargetBar";
 import EditorTabs, { type EditorTab } from "./EditorTabs";
@@ -845,6 +846,9 @@ const EditorsInner = (props: EditorsInnerProps) => {
   // outside the code-editor panel. Null until CodeEditor's first report.
   const [codeEditorMenuState, setCodeEditorMenuState] =
     useState<CodeEditorMenuState | null>(null);
+  // The root element below, where a dialog opened from the top bar portals
+  // its overlay so it covers the whole editor (see `DialogHostContext`).
+  const [dialogHost, setDialogHost] = useState<HTMLDivElement | null>(null);
 
   /**
    * Settle the code editor's debounced buffer into the pool, then read the pool
@@ -2997,7 +3001,9 @@ const EditorsInner = (props: EditorsInnerProps) => {
   }
 
   return (
+    <DialogHostContext.Provider value={dialogHost}>
     <div
+      ref={setDialogHost}
       className="flex flex-col w-full h-full flex-1 min-h-0 relative overflow-x-hidden"
       onKeyDown={handleKeyDown}
     >
@@ -3113,6 +3119,7 @@ const EditorsInner = (props: EditorsInnerProps) => {
         ) : null}
       </div>
     </div>
+    </DialogHostContext.Provider>
   );
 };
 
