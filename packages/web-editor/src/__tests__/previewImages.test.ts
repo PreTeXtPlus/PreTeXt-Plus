@@ -11,6 +11,8 @@ const assets: Asset[] = [
   { ref: "graph-two", title: "Graph two", sourceFormat: "prefigure", url: "/p/external/graph-two.svg" },
   { ref: "unrendered", title: "Not yet", sourceFormat: "prefigure" },
   { ref: "photo", title: "Photo", url: "/p/external/photo.png" },
+  { ref: "circle", title: "Circle", sourceFormat: "asymptote", url: "/p/external/circle.svg", previewInputDigest: "fedcba9876543210fedc" },
+  { ref: "knot", title: "Knot", sourceFormat: "asymptote" },
 ];
 const resolve = generatedImageResolver(assets);
 
@@ -43,5 +45,27 @@ describe("rewriteGeneratedImages", () => {
         '<img src="generated/prefigure/unrendered.svg">' +
         '<img src="external/photo.png">',
     );
+  });
+
+  // pretext-html puts an Asymptote figure in an iframe onto the .html page asy
+  // makes, which the preview never has; its stored picture is that page's SVG.
+  it("turns an Asymptote figure's iframe box into an img of the stored picture", () => {
+    const html = [
+      '<div class="asymptote-box" style="padding-top: 100%">',
+      '  <iframe src="generated/asymptote/circle-ch2.html" class="asymptote" title="A unit circle"></iframe>',
+      "</div>",
+    ].join("\n");
+    expect(rewriteGeneratedImages(html, resolve)).toBe(
+      '<img src="/p/external/circle.svg?v=fedcba9876543210" role="img" class="contained" alt="A unit circle">',
+    );
+    // A self-closed iframe, no title.
+    expect(
+      rewriteGeneratedImages('<div class="asymptote-box"><iframe src="generated/asymptote/circle.html" class="asymptote"/></div>', resolve),
+    ).toBe('<img src="/p/external/circle.svg?v=fedcba9876543210" role="img" class="contained">');
+  });
+
+  it("leaves an Asymptote figure with no stored picture as it is", () => {
+    const html = '<div class="asymptote-box"><iframe src="generated/asymptote/knot.html" class="asymptote"></iframe></div>';
+    expect(rewriteGeneratedImages(html, resolve)).toBe(html);
   });
 });

@@ -762,6 +762,11 @@ the sageplot copied from the cache rather than generated.
   The CLI refuses a project whose declared `external` directory is missing; the first
   render against the real build server failed on exactly that. `GenerateArchiveBuilder`
   writes the brand logo there as `ProjectArchiveBuilder` does.
+- **pretext-html embeds an Asymptote figure as an iframe, not an `<img>`.** The page
+  refers to `generated/asymptote/<label>.html` inside a `div.asymptote-box`, which the
+  `.svg` rewrite never sees; `previewImages.ts` rewrites the whole box to an `<img>` of
+  the stored SVG. The first end-to-end test found this: the pane and the full build were
+  right and the document preview showed nothing.
 - **A sageplot's cache key includes its label.** A placement with an `instance` is a
   different `.sage` file from the preview's; expected, not a bug.
 - **A server render is a build-server job per click.** Nothing may trigger it on a

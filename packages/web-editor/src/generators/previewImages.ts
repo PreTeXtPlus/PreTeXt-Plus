@@ -18,12 +18,33 @@ export type GeneratedImageResolver = (element: string, label: string) => string 
 
 const GENERATED_IMAGE_PATH = /(=\s*["'])generated\/([A-Za-z0-9_-]+)\/([A-Za-z0-9_-]+)\.svg(["'])/g;
 
-/** `html` with every generated-image path `resolve` knows replaced by its URL. */
+/**
+ * An Asymptote figure as pretext-html writes it: not an `<img>` but an iframe
+ * onto the `.html` page `asy` makes, in a box whose padding keeps the aspect
+ * ratio read off that page (`image[asymptote]` in pretext-html.xsl). The
+ * preview has no such page — the stored picture is the SVG lifted out of it —
+ * so the whole box becomes the `<img>` a sageplot gets. Tolerant of the
+ * serializer's whitespace and of a self-closed iframe.
+ */
+const ASYMPTOTE_BOX =
+  /<div class="asymptote-box"[^>]*>\s*<iframe\b([^>]*?)\s*\/?>(?:\s*<\/iframe>)?\s*<\/div>/g;
+const ASYMPTOTE_SRC = /\bsrc=["']generated\/asymptote\/([A-Za-z0-9_-]+)\.html["']/;
+const IFRAME_TITLE = /\btitle=("[^"]*"|'[^']*')/;
+
+/** `html` with every generated-image reference `resolve` knows replaced by its URL. */
 export function rewriteGeneratedImages(html: string, resolve: GeneratedImageResolver): string {
-  return html.replace(GENERATED_IMAGE_PATH, (whole, open: string, element: string, label: string, close: string) => {
-    const url = resolve(element, label);
-    return url ? `${open}${url}${close}` : whole;
-  });
+  return html
+    .replace(ASYMPTOTE_BOX, (whole, attributes: string) => {
+      const label = ASYMPTOTE_SRC.exec(attributes)?.[1];
+      const url = label && resolve("asymptote", label);
+      if (!url) return whole;
+      const title = IFRAME_TITLE.exec(attributes)?.[1];
+      return `<img src="${url}" role="img" class="contained"${title ? ` alt=${title}` : ""}>`;
+    })
+    .replace(GENERATED_IMAGE_PATH, (whole, open: string, element: string, label: string, close: string) => {
+      const url = resolve(element, label);
+      return url ? `${open}${url}${close}` : whole;
+    });
 }
 
 /**

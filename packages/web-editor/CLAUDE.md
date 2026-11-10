@@ -356,7 +356,7 @@ build input.
   nothing until the host has stored the picture, then lays only the stored
   picture's fields onto the asset as it is *now* (after flushing the debounce),
   never the record the render started from — that would undo the typing.
-- The document preview's `generated/<element>/<label>.svg` references are rewritten to the asset's stored picture, versioned by its digest (`generators/previewImages.ts`, applied in `LivePreview`'s `pageHtml`), under a placement's qualified label as well as the plain one.
+- The document preview's `generated/<element>/<label>.svg` references are rewritten to the asset's stored picture, versioned by its digest (`generators/previewImages.ts`, applied in `LivePreview`'s `pageHtml`), under a placement's qualified label as well as the plain one. An Asymptote figure is not an `<img>` in pretext-html's output but an iframe onto the `.html` page `asy` makes, in an `.asymptote-box`; the preview has no such page, so that whole box is rewritten to an `<img>` of the stored SVG.
 - `NewAssetForm` grows one tab per registry entry → `onCreateGenerated`.
   `VERBATIM_SOURCES` and the spell checker's `latexImage` scope both list
   `prefigure`. The collab doc carries `sourceFormat` and `previewInputDigest`
