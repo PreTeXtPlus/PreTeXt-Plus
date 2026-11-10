@@ -241,6 +241,8 @@ const FORMAT_LABELS: Record<EditorLanguage, string> = {
   latex: "LaTeX",
   markdown: "Markdown",
   tex: "TeX",
+  asymptote: "Asymptote",
+  python: "Sage",
 };
 
 const CONVERT_BUTTON_CLASSES =

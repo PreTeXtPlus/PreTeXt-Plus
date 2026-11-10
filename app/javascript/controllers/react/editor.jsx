@@ -14,6 +14,7 @@ import {
   DEFAULT_LANGUAGE,
   COLLAB_SCHEMA_VERSION,
   generators,
+  GeneratorRenderError,
 } from "@pretextbook/web-editor";
 import { buildImportEngines } from "./importEngines";
 import { buildImportShare } from "./importShare";
@@ -403,6 +404,10 @@ function editorStateToCollabSeed(state) {
  * @property {string} [previewWorkerUrl] - Where the preview render worker bundle
  *   (app/javascript/preview_worker.js) is served from; previews render off the
  *   main thread when set.
+ * @property {string} [assetRenderUrl] - Where a generated asset no browser renders
+ *   (Asymptote, Sage) is rendered on the full build server (AssetRendersController).
+ *   Omitted -- no build server configured -- those assets show their stored picture
+ *   and offer no render.
  */
 
 /**
@@ -427,6 +432,7 @@ function EditorApp({ config }) {
     prefigureAssetUrls,
     tikzWorkerUrl,
     tikzEngineUrl,
+    assetRenderUrl,
   } = config;
 
   // Rails routes the React side needs.  Kept here (rather than in many data
@@ -1147,7 +1153,7 @@ function EditorApp({ config }) {
     [uniqueRef, patchProjectJson, invalidateAssetQueries, recordCreated],
   );
 
-  // A generated asset (a PreFigure diagram, a TikZ picture): an authored asset
+  // A generated asset (a PreFigure diagram, a TikZ picture, an Asymptote figure, a Sage plot): an authored asset
   // whose source format is the generator's, created with the generator's starter source so a
   // peer or a reload opens the same diagram and there is something for the first
   // render's digest to be current against.
@@ -1749,9 +1755,45 @@ function EditorApp({ config }) {
     [projectQuery.data],
   );
 
-  // Browser engines for generated assets, keyed by generator, each only when the
-  // page was given its worker and engine files; without them that generator's
-  // assets show their stored picture and render nothing live.
+  // A generated asset no browser renders (Asymptote, Sage), rendered on the full
+  // build server through AssetRendersController: submit the source as typed, then
+  // poll the signed URL it answers with until the job is done. The server is
+  // asynchronous (a container starts per render), so the poll begins quickly and
+  // slows down; the editor shows each status word as progress. The result is the
+  // picture, which the editor stores through onAssetOutput like a browser render;
+  // a failure carries the CLI's log for the pane to fold under the message.
+  const renderAssetOnServer = useCallback(
+    async ({ ref, source, onProgress }) => {
+      const headers = { Accept: "application/json", "X-CSRF-Token": csrfToken };
+      const submitted = await fetch(assetRenderUrl, {
+        method: "POST",
+        headers: { ...headers, "Content-Type": "application/json" },
+        body: JSON.stringify({ ref, source }),
+      });
+      const started = await submitted.json().catch(() => ({}));
+      if (!submitted.ok) throw new Error(started.error || `The render could not be started (HTTP ${submitted.status}).`);
+
+      const startedAt = Date.now();
+      // Past the build server's own job limit (120 s) plus a generous queue wait.
+      const giveUpAfterMs = 5 * 60 * 1000;
+      for (let attempt = 0; ; attempt += 1) {
+        await new Promise((resolve) => setTimeout(resolve, attempt < 10 ? 1500 : 3000));
+        const polled = await fetch(started.poll_url, { headers });
+        const data = await polled.json().catch(() => ({}));
+        if (!polled.ok) throw new Error(data.error || `The render's status could not be read (HTTP ${polled.status}).`);
+        if (data.status === "success") return { svg: data.svg };
+        if (data.status === "failed") throw new GeneratorRenderError(data.message || "The render failed.", data.log);
+        onProgress?.(data.message === "queued" ? "Queued on the build server…" : "Rendering on the build server…");
+        if (Date.now() - startedAt > giveUpAfterMs) throw new Error("The build server did not finish the render in time.");
+      }
+    },
+    [assetRenderUrl, csrfToken],
+  );
+
+  // Engines for generated assets, keyed by generator: in the browser, each only
+  // when the page was given its worker and engine files; on the build server,
+  // only when the page was given the render endpoint. Without one, that
+  // generator's assets show their stored picture and render nothing.
   const generatorRuntimes = useMemo(
     () => ({
       ...(prefigureWorkerUrl && prefigureAssetUrls && Object.keys(prefigureAssetUrls).length
@@ -1760,8 +1802,11 @@ function EditorApp({ config }) {
       ...(tikzWorkerUrl && tikzEngineUrl
         ? { tikz: { workerUrl: tikzWorkerUrl, baseUrl: tikzEngineUrl } }
         : {}),
+      ...(assetRenderUrl
+        ? { asymptote: { render: renderAssetOnServer }, sageplot: { render: renderAssetOnServer } }
+        : {}),
     }),
-    [prefigureWorkerUrl, prefigureAssetUrls, tikzWorkerUrl, tikzEngineUrl],
+    [prefigureWorkerUrl, prefigureAssetUrls, tikzWorkerUrl, tikzEngineUrl, assetRenderUrl, renderAssetOnServer],
   );
 
   // ----- Render ------------------------------------------------------------

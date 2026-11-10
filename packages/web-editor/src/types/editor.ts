@@ -2,19 +2,25 @@
 export type SourceFormat = "pretext" | "latex" | "markdown";
 
 /**
- * What the code editor treats a buffer as: a prose {@link SourceFormat}, or
- * plain TeX, the language of a generated asset whose source is not PreTeXt.
- * Only the code editor and its menus deal in this; everything else is about a
- * record's format.
+ * What the code editor treats a buffer as: a prose {@link SourceFormat}, or a
+ * drawing language — TeX, Asymptote, Python (Sage) — of a generated asset whose
+ * source is not PreTeXt. Only the code editor and its menus deal in this;
+ * everything else is about a record's format.
  */
-export type EditorLanguage = SourceFormat | "tex";
+export type EditorLanguage = SourceFormat | "tex" | "asymptote" | "python";
+
+export const SOURCE_FORMATS: readonly SourceFormat[] = ["pretext", "latex", "markdown"];
+
+/** Whether a buffer's language is a prose format, as against a generator's drawing code. */
+export const isSourceFormat = (language: EditorLanguage): language is SourceFormat =>
+  (SOURCE_FORMATS as readonly string[]).includes(language);
 
 /**
  * A tool that turns an asset's authored `source` into a picture — see
  * `src/generators`. One id per registry entry. The id is also the asset's
  * {@link AssetSourceFormat}: the language its source is in.
  */
-export type GeneratorId = "prefigure" | "tikz";
+export type GeneratorId = "prefigure" | "tikz" | "asymptote" | "sageplot";
 
 /**
  * The format of an asset's `source`: PreTeXt (the inside of its `<image>`), or

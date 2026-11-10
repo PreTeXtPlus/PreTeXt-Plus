@@ -40,10 +40,20 @@ module FullBuildServer
     request(Net::HTTP::Post, path, **timeouts)
   end
 
+  # A multipart POST, the shape `/builds` and `/generate` take: `fields` as
+  # Net::HTTPHeader#set_form takes them, so a file part is
+  # `[ "archive", io, { filename:, content_type: } ]`.
+  def post_form(path, fields, **timeouts)
+    request(Net::HTTP::Post, path, **timeouts) do |http_request|
+      http_request.set_form(fields, "multipart/form-data")
+    end
+  end
+
   def request(request_class, path, **timeouts)
     uri = URI.parse(url_for(path))
     http_request = request_class.new(uri)
     http_request["Authorization"] = "Bearer #{token}"
+    yield http_request if block_given?
 
     Net::HTTP.start(uri.host, uri.port, use_ssl: uri.scheme == "https",
                     **TIMEOUTS.merge(timeouts)) do |http|

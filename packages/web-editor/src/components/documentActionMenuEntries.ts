@@ -1,5 +1,5 @@
 import { formatPretext } from "@pretextbook/format";
-import type { EditorLanguage, SourceFormat } from "../types/editor";
+import { isSourceFormat, type EditorLanguage, type SourceFormat } from "../types/editor";
 import type { MenuEntry } from "./MenuDropdown";
 
 /**
@@ -55,7 +55,8 @@ export interface DocumentActionEntriesArgs {
 export function buildDocumentActionEntries({
   content,
   sourceFormat,
-  docinfoFormat = sourceFormat === "tex" ? "pretext" : sourceFormat,
+  // A drawing language (TeX, Asymptote, Python) is an asset's; the project is PreTeXt.
+  docinfoFormat = isSourceFormat(sourceFormat) ? sourceFormat : "pretext",
   readOnly,
   onContentChange,
   onOpenImport,

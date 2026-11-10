@@ -46,6 +46,45 @@ class SourceAssembler
     @project = project
   end
 
+  # An assembler for a document holding one image and nothing else: the project's
+  # docinfo as a build would get it, around an article whose body is one
+  # `<plus:image ref/>` placing `asset` -- a Content that need not be saved, so a
+  # caller can hand over the source as typed rather than as the row has it.
+  #
+  # This is what a server-side render of a generated asset (AssetRendersController)
+  # ships to the build server's `/generate`. The build server caches each generated
+  # figure by the md5 of its extracted source, which for an Asymptote figure includes
+  # the docinfo's preamble and macros; a preview whose docinfo matched the build's
+  # only approximately would be a figure the full build then generates again. Going
+  # through the same assembler -- the common-docinfo substitution, the default
+  # latex-image preamble, whatever it does next -- is what makes the two identical.
+  def self.single_image(project, asset)
+    SingleImage.new(project, asset)
+  end
+
+  class SingleImage < SourceAssembler
+    ROOT_ID = "single-image-root".freeze
+
+    def initialize(project, asset)
+      super(project)
+      @asset = asset
+    end
+
+    def payload
+      super.merge(
+        document_type: "article",
+        divisions: [ {
+          id: ROOT_ID, ref: ROOT_ID, source_format: "pretext", is_root: true, division_type: "article",
+          title: @asset.title.to_s, attrs: {},
+          source: %(<p><plus:image ref="#{@asset.ref}"/></p>)
+        } ],
+        assets: [ asset_json(@asset) ],
+        snippets: [],
+        exercises: []
+      )
+    end
+  end
+
   # @return [String] the assembled document, or "" for a project with no root
   #   division -- which is what the editor's own save path produced for one, and
   #   what the column held.

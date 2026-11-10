@@ -29,7 +29,10 @@ export function createPrefigureRuntime(
     label: "PreFigure",
     createWorker:
       deps.createWorker ??
-      (() => new Worker(options.workerUrl, { type: "module", name: "prefigure" }) as PrefigureWorkerLike),
+      (() => {
+        if (!options.workerUrl) throw new Error("The host gave no URL for the PreFigure worker");
+        return new Worker(options.workerUrl, { type: "module", name: "prefigure" }) as PrefigureWorkerLike;
+      }),
     loadRequest: () => ({ type: "load", glueUrl: urlOf(PREFIG_WASM_GLUE), wasmUrl: urlOf(PREFIG_WASM_BINARY) }),
     renderRequest: (source, docinfo) => ({ type: "render", source, macros: docinfo.macros ?? "" }),
   });

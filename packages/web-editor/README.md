@@ -321,8 +321,10 @@ browsers ship and some others do not. The editor feature-detects it:
 
 Keep `onPreviewRebuild` wired if you need to support non-Chromium browsers, or
 if you want authoritative builds from the real PreTeXt toolchain — the WASM
-renderer cannot generate `latex-image`/`sageplot` assets, which require the
-Python toolchain.
+renderer cannot generate `latex-image`/`asymptote`/`sageplot` assets, which
+require the Python toolchain. (A generated asset's own preview is another
+matter: see `generatorRuntimes`, which renders PreFigure and TikZ in the
+browser and hands Asymptote and Sage to a host's build server.)
 
 When a render fails (most often because the document is not yet well-formed
 mid-edit), the last successful preview stays on screen and a dismissible

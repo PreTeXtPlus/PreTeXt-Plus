@@ -4,7 +4,8 @@ import type { Asset, GeneratorId } from "../../types/editor";
 import { generatorIds, generators } from "../../generators";
 import { sanitizeXmlId, slugifyTitle, uniqueRef } from "../../sectionUtils";
 import { useTakenRefs } from "../../store/hooks";
-import { DialogFileInput, DialogTab, DialogTabBar } from "../Dialog";
+import { DialogFileInput } from "../Dialog";
+import { DialogTabs } from "../DialogTabs";
 import {
   FIELD_CONTROL_CLASSES,
   SettingsButton,
@@ -246,26 +247,18 @@ const NewAssetForm = ({
 
   return (
     <div className="flex flex-col gap-3" data-testid="new-asset-form">
-      <DialogTabBar className="border-b-slate-200">
-        {onUpload && (
-          <DialogTab active={tab === "upload"} onClick={() => setTab("upload")}>
-            Upload
-          </DialogTab>
-        )}
-        <DialogTab active={tab === "url"} onClick={() => setTab("url")}>
-          External URL
-        </DialogTab>
-        {canAuthor && (
-          <DialogTab active={tab === "authored"} onClick={() => setTab("authored")}>
-            Custom
-          </DialogTab>
-        )}
-        {generatorTabs.map((id) => (
-          <DialogTab key={id} active={tab === id} onClick={() => setTab(id)}>
-            {generators[id].label}
-          </DialogTab>
-        ))}
-      </DialogTabBar>
+      {/* One tab per source; the ones a narrow pane cannot fit go under "More". */}
+      <DialogTabs<SourceTab>
+        className="border-b-slate-200"
+        active={tab}
+        onSelect={setTab}
+        tabs={[
+          ...(onUpload ? [{ id: "upload" as const, label: "Upload" }] : []),
+          { id: "url" as const, label: "External URL" },
+          ...(canAuthor ? [{ id: "authored" as const, label: "Custom" }] : []),
+          ...generatorTabs.map((id) => ({ id, label: generators[id].label })),
+        ]}
+      />
 
       {tab === "upload" && onUpload && (
         file ? (

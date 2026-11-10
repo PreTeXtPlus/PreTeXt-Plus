@@ -29,5 +29,6 @@ export const prefigure: AssetGenerator = {
     `<prefigure xmlns="${PREFIGURE_NAMESPACE}" label="${ref}">\n${source}\n</prefigure>`,
   // Mirrors Content::GeneratedAssetBehavior::DOCINFO_INPUT_ELEMENTS["prefigure"].
   docinfoInputElements: ["macros", "prefigure-preamble"],
+  renderTrigger: "live",
   createRuntime: createPrefigureRuntime,
 };

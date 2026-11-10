@@ -16,6 +16,14 @@ module ProjectsHelper
     "/#{directory}" if Rails.public_path.join(directory, "index.js").exist?
   end
 
+  # Where the editor renders a generated asset no browser draws (Asymptote, Sage):
+  # AssetRendersController, which hands the work to the full build server. Nil when
+  # no build server is configured, so the editor offers no render for those assets
+  # and shows their stored picture.
+  def asset_render_url(project)
+    project_asset_renders_path(project) if FullBuildServer.host.present?
+  end
+
   def project_visibility_pill(project)
     label, classes = VISIBILITY_PILL.fetch(project.visibility)
     tag.span(label, class: "inline-flex items-center rounded-full px-2.5 py-1 text-xs font-semibold #{classes}")

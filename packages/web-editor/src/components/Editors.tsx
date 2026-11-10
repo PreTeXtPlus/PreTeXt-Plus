@@ -37,7 +37,10 @@ import NewItemPane from "./create/NewItemPane";
 import EditorTargetBar from "./EditorTargetBar";
 import EditorTabs, { type EditorTab } from "./EditorTabs";
 import AssetPreview from "./AssetPreview";
-import GeneratedAssetPreview, { type GeneratedAssetOutput } from "./GeneratedAssetPreview";
+import GeneratedAssetPreview, {
+  type GeneratedAssetOutput,
+  type GeneratedAssetPreviewHandle,
+} from "./GeneratedAssetPreview";
 import { generatorFor, runtimeFor, type GeneratorRuntimeConfigs } from "../generators";
 import { editorConfigs } from "./editorConfigs";
 import {
@@ -828,6 +831,7 @@ const EditorsInner = (props: EditorsInnerProps) => {
   const startNewDivision = useEditorStore((s) => s.startNewDivision);
 
   const livePreviewRef = useRef<LivePreviewHandle>(null);
+  const generatedPreviewRef = useRef<GeneratedAssetPreviewHandle>(null);
   const codeEditorRef = useRef<CodeEditorHandle>(null);
   useImperativeHandle(
     props.handleRef,
@@ -2550,15 +2554,23 @@ const EditorsInner = (props: EditorsInnerProps) => {
     applyDivisionSelect(targetId);
   };
 
-  const triggerRebuild = () => livePreviewRef.current?.rebuild();
+  // A generated asset rendered on request (Asymptote, Sage): Ctrl+Enter and the
+  // rebuild key render it, as they rebuild a division's preview.
+  const manualAssetOpen =
+    editorTarget?.kind === "asset" &&
+    generatorFor(editorTarget.asset.sourceFormat)?.renderTrigger === "manual";
+  const triggerRebuild = () => {
+    if (manualAssetOpen) generatedPreviewRef.current?.render();
+    else livePreviewRef.current?.rebuild();
+  };
   const triggerSaveAndRebuild = () => {
     props.onSave?.();
-    livePreviewRef.current?.rebuild();
+    triggerRebuild();
   };
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
     const isCtrl = e.ctrlKey || e.metaKey;
-    if (isCtrl && e.key === "Enter" && canPreview) {
+    if (isCtrl && e.key === "Enter" && (canPreview || manualAssetOpen)) {
       e.preventDefault();
       triggerRebuild();
     } else if (isCtrl && e.key === "s") {
@@ -2687,7 +2699,7 @@ const EditorsInner = (props: EditorsInnerProps) => {
       }
       onChange={handleEditorChange}
       onRebuild={
-        canPreview && (isDivisionOpen || activeSnippet)
+        (canPreview && (isDivisionOpen || activeSnippet)) || manualAssetOpen
           ? triggerRebuild
           : undefined
       }
@@ -2785,6 +2797,7 @@ const EditorsInner = (props: EditorsInnerProps) => {
     preview = (
       <GeneratedAssetPreview
         key={editorKey}
+        ref={generatedPreviewRef}
         asset={editorTarget.asset}
         docinfo={effectiveDocinfo ?? ""}
         runtime={runtimeFor(assetGenerator.id, props.generatorRuntimes)}

@@ -447,7 +447,6 @@ class ContentTest < ActiveSupport::TestCase
   test "only an authored asset may take a generator's format, and no asset a prose one" do
     assert_not generated_asset(source_format: "latex").valid?
     assert_not generated_asset(source_format: "markdown").valid?
-    assert_not generated_asset(source_format: "asymptote").valid?
 
     file = contents(:image_one)
     file.source_format = "prefigure"
@@ -486,6 +485,39 @@ class ContentTest < ActiveSupport::TestCase
     assert_equal [ source, "\\newcommand{\\R}{\\mathbb{R}}", "\\usetikzlibrary{calc}" ].join("\n\u0000\n"),
                  asset.render_input(docinfo)
     assert_equal "9cbc7d80acb18afb7b3fb96cdab13750344d897c4fe2d55d98be4e3dfdcfa711",
+                 Digest::SHA256.hexdigest(asset.render_input(docinfo))
+  end
+
+  # The build server renders these; their render input is what the CLI's extraction
+  # reads (extract-asymptote.xsl: the docinfo preamble and macros; extract-sageplot.xsl:
+  # nothing but the source).
+  test "an Asymptote asset is wrapped in asymptote and digests to the fixture the web-editor pins" do
+    source = "size(3cm);\ndraw(unitcircle);"
+    asset = generated_asset(source: source, source_format: "asymptote")
+    docinfo = <<~XML
+      <docinfo>
+        <macros>\\newcommand{\\R}{\\mathbb{R}}</macros>
+        <asymptote-preamble>import graph;</asymptote-preamble>
+      </docinfo>
+    XML
+
+    assert asset.valid?, asset.errors.full_messages.inspect
+    assert_equal "asymptote", asset.generated_element
+    assert_equal [ source, "\\newcommand{\\R}{\\mathbb{R}}", "import graph;" ].join("\n\u0000\n"),
+                 asset.render_input(docinfo)
+    assert_equal "6066681f03b50dfc917762b7f5aad03be21274f67d48a9c25a93a430a3daf232",
+                 Digest::SHA256.hexdigest(asset.render_input(docinfo))
+  end
+
+  test "a Sage asset's render input is its source alone, and digests to the fixture the web-editor pins" do
+    source = "plot(sin(x), (x, -pi, pi))"
+    asset = generated_asset(source: source, source_format: "sageplot")
+    docinfo = "<docinfo><macros>\\newcommand{\\R}{\\mathbb{R}}</macros></docinfo>"
+
+    assert asset.valid?, asset.errors.full_messages.inspect
+    assert_equal "sageplot", asset.generated_element
+    assert_equal source, asset.render_input(docinfo)
+    assert_equal "176424de06d07455db94876da218db0124132c91ecbbe6878145c44fa21a17fb",
                  Digest::SHA256.hexdigest(asset.render_input(docinfo))
   end
 

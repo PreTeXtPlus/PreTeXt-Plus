@@ -129,43 +129,41 @@ export function DialogClose({
   );
 }
 
-export function DialogTabBar({
-  className,
-  ...rest
-}: HTMLAttributes<HTMLDivElement>) {
-  return (
-    <div
-      className={clsx(
-        "flex gap-0 border-b-2 border-slate-200 shrink-0",
-        className
-      )}
-      {...rest}
-    />
-  );
-}
+export const DialogTabBar = forwardRef<HTMLDivElement, HTMLAttributes<HTMLDivElement>>(
+  function DialogTabBar({ className, ...rest }, ref) {
+    return (
+      <div
+        ref={ref}
+        className={clsx(
+          "flex gap-0 border-b-2 border-slate-200 shrink-0",
+          className
+        )}
+        {...rest}
+      />
+    );
+  }
+);
 
 interface DialogTabProps extends ButtonHTMLAttributes<HTMLButtonElement> {
   active?: boolean;
 }
 
-export function DialogTab({
-  className,
-  active,
-  type = "button",
-  ...rest
-}: DialogTabProps) {
-  return (
-    <button
-      type={type}
-      className={clsx(
-        "px-4 py-1.5 border-none border-b-2 border-transparent -mb-0.5 bg-transparent text-slate-500 cursor-pointer text-[0.9rem] font-medium hover:text-slate-900",
-        active && "text-[#0e639c] border-b-[#0e639c] font-semibold",
-        className
-      )}
-      {...rest}
-    />
-  );
-}
+export const DialogTab = forwardRef<HTMLButtonElement, DialogTabProps>(
+  function DialogTab({ className, active, type = "button", ...rest }, ref) {
+    return (
+      <button
+        ref={ref}
+        type={type}
+        className={clsx(
+          "px-4 py-1.5 border-none border-b-2 border-transparent -mb-0.5 bg-transparent text-slate-500 cursor-pointer text-[0.9rem] font-medium hover:text-slate-900",
+          active && "text-[#0e639c] border-b-[#0e639c] font-semibold",
+          className
+        )}
+        {...rest}
+      />
+    );
+  }
+);
 
 export function DialogSection({
   className,

@@ -278,8 +278,8 @@ a peer removing the open item does not (`openItemState`'s `byAuthor`).
 
 A *generated* asset is an authored asset whose `sourceFormat` is a generator's
 id (`AssetSourceFormat` = `"pretext"` or a `GeneratorId`; the Rails host's
-`source_format`) — source that a generator turns into a picture, PreFigure or
-TikZ. The format is chosen when the asset is created and never inferred from
+`source_format`) — source that a generator turns into a picture: PreFigure or TikZ in the browser,
+Asymptote or Sage on the host's build server. The format is chosen when the asset is created and never inferred from
 the source: it decides the preview engine and, in time, the editor tooling, so
 it must not flicker as the author types. `generatorFor(asset.sourceFormat)` is
 the one test for "is this a generated asset". The registry
@@ -325,10 +325,28 @@ build input.
   put any markup in the SVG, so `tikz/sanitizeSvg.ts` (DOMPurify, on the main thread)
   runs on every picture before anything shows or stores it. `__tests__/tikzEngine.test.ts`
   is the real engine, opt-in with `RUN_TIKZ_ENGINE=1`; see the plan on what it owes.
+- `asymptote/` and `sageplot/` are generators no browser runs: their runtime is
+  `serverRuntime.ts`, a `GeneratorRuntime` over the host's `render` call
+  (`GeneratorRuntimeOptions.render`, a `ServerRender`), ready at once, one host
+  call per render, the picture through TikZ's `sanitizeSvg`. The Rails host's
+  render posts the source to its `asset_renders` endpoint, which ships a
+  one-figure archive to the full build server's `/generate` and polls it; the
+  figure it makes also lands in the project's cache there, so the next full
+  build copies it rather than running `asy` or `sage` again. Each render is a
+  job on a shared queue, so these generators have `renderTrigger: "manual"`
+  (PreFigure and TikZ are `"live"`): the pane renders on its Render button or
+  Ctrl+Enter, never on a debounce. Asymptote's buffer is the `asymptote`
+  `EditorLanguage` (a small Monarch grammar, `editorConfigs/asymptoteConfig.ts`),
+  Sage's is Monaco's own `python`; `isSourceFormat` tells the prose formats from
+  these. Both runtimes share `renderQueue.ts`, the latest-wins queue the worker
+  runtime uses too.
 - `GeneratedAssetPreview.tsx` replaces `AssetPreview` for a generated asset:
   the stored picture and whether it matches the current source, live renders a
-  second after typing stops, and `onAssetOutput` to the host with the SVG and
-  the digest of exactly the source rendered. A render that typing overtook is
+  second after typing stops (or, for a `manual` generator, on Render — with the
+  server's progress and elapsed seconds — which `Editors` also triggers from
+  Ctrl+Enter through the pane's `GeneratedAssetPreviewHandle`), and
+  `onAssetOutput` to the host with the SVG and the digest of exactly the source
+  rendered. A render that typing overtook is
   shown but not sent; a failed store is shown with a retry. A failed render
   shows its message, with any transcript folded under it. The picture on screen
   can be downloaded as `<ref>.svg`: a render from its blob, a stored picture from
@@ -338,7 +356,7 @@ build input.
   nothing until the host has stored the picture, then lays only the stored
   picture's fields onto the asset as it is *now* (after flushing the debounce),
   never the record the render started from — that would undo the typing.
-- The document preview's `generated/<element>/<label>.svg` references are rewritten to the asset's stored picture, versioned by its digest (`generators/previewImages.ts`, applied in `LivePreview`'s `pageHtml`), under a placement's qualified label as well as the plain one.
+- The document preview's `generated/<element>/<label>.svg` references are rewritten to the asset's stored picture, versioned by its digest (`generators/previewImages.ts`, applied in `LivePreview`'s `pageHtml`), under a placement's qualified label as well as the plain one. An Asymptote figure is not an `<img>` in pretext-html's output but an iframe onto the `.html` page `asy` makes, in an `.asymptote-box`; the preview has no such page, so that whole box is rewritten to an `<img>` of the stored SVG.
 - `NewAssetForm` grows one tab per registry entry → `onCreateGenerated`.
   `VERBATIM_SOURCES` and the spell checker's `latexImage` scope both list
   `prefigure`. The collab doc carries `sourceFormat` and `previewInputDigest`
