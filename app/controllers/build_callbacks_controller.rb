@@ -24,21 +24,18 @@ class BuildCallbacksController < ApplicationController
     build = Build.find(params[:id])
     payload = JSON.parse(body) rescue {}
 
-    # Only a build still waiting on an answer can use one. A cancel that landed first
-    # is the original reason for this, but BuildStatusChecker#check! claims a build
-    # the same way this does -- it polls the same server this callback describes, and
-    # can win the race to an answer if a build finishes fast enough (it guards itself
-    # symmetrically, reloading before it acts on the server's response). Whichever
-    # gets there first wins; letting the loser through here too would import the same
-    # artifact twice, which collides on BuildFile's unique index and mark! this build
-    # failed right after the winner marked it succeeded.
-    return head(:ok) unless %w[ pending in_progress sent_to_server ].include?(build.reload.status)
-
+    # Only a build still waiting on an answer can use one, and every branch below records
+    # it through record_answer, which refuses once anything else has. A cancel that
+    # landed first is one reason. The other is BuildStatusChecker, which polls the same
+    # server this callback describes: a poll that arrives while this request is in
+    # flight sees the same "success", and the two used to both claim the build and import
+    # it twice. Whichever records its answer first now wins, and the loser does nothing.
     case payload["status"]
     when "success"
-      build.mark!(:received_from_server, log: inline_log(payload))
-      import_artifact(build, payload)
-      fetch_full_log_later(build, payload)
+      if record_answer(build, :received_from_server, payload)
+        import_artifact(build, payload)
+        fetch_full_log_later(build, payload)
+      end
     when "failed"
       # A failed build that still produced output. The server zips whatever landed in
       # output/ whatever the exit code was, and sends `artifact_url` whenever that zip
@@ -47,15 +44,16 @@ class BuildCallbacksController < ApplicationController
       # dashboard, the drawer and the log page can warn that what an author is about to
       # preview (or publish) came out of a build that reported errors.
       if payload["artifact_url"].present?
-        build.mark!(:received_from_server, log: inline_log(payload), completed_with_errors: true)
-        import_artifact(build, payload)
-        Rails.logger.warn("Build #{build.id} exited #{payload["exit_code"].inspect} on the build " \
-                          "server but produced output -- importing it and flagging the build.")
-      else
-        build.mark!(:failed, log: inline_log(payload))
+        if record_answer(build, :received_from_server, payload, completed_with_errors: true)
+          import_artifact(build, payload)
+          fetch_full_log_later(build, payload)
+          Rails.logger.warn("Build #{build.id} exited #{payload["exit_code"].inspect} on the build " \
+                            "server but produced output -- importing it and flagging the build.")
+        end
+      elsif record_answer(build, :failed, payload)
+        fetch_full_log_later(build, payload)
         Rails.logger.error("Build #{build.id} failed on build server: #{payload["log_tail"] || body}")
       end
-      fetch_full_log_later(build, payload)
     else
       # Nothing recorded and nothing broadcast, so the row goes on saying Building: the
       # symptom of a status word drifting apart from the two this understands is a build
@@ -70,6 +68,12 @@ class BuildCallbacksController < ApplicationController
   end
 
   private
+
+    # The server's answer, recorded only if nothing has answered for this build yet.
+    # Returns whether this request was the one that did.
+    def record_answer(build, status, payload, **attrs)
+      build.transition!(from: Build::AWAITING_ANSWER, to: status, log: inline_log(payload), **attrs)
+    end
 
     # artifact_url from the build server is a path relative to itself (e.g.
     # "/builds/<id>/artifact"), not an absolute URL -- resolve it against the

@@ -94,11 +94,13 @@ class BuildRecheckJob < ApplicationJob
     # still calls mark!(:success) when it finishes, and the row corrects itself.
     def fail_stalled_import(build)
       return unless last_progress_at(build) < STALL_AFTER.ago
-      # Re-read first: the import may well have landed while this job was being picked up,
-      # and a build that just succeeded must not be marked failed behind it.
-      return unless build.reload.received_from_server?
 
-      build.mark!(:failed, log: [ build.log, STALLED_LOG ].compact_blank.join("\n\n"))
+      # Conditional rather than a re-read followed by mark!: the import may land its own
+      # mark!(:success) at any moment, including between the two, and a build that just
+      # succeeded must not be marked failed behind it.
+      log = [ build.reload.log, STALLED_LOG ].compact_blank.join("\n\n")
+      return unless build.transition!(from: :received_from_server, to: :failed, log: log)
+
       Rails.logger.error("Build #{build.id} stalled in received_from_server -- no import " \
                          "progress since #{last_progress_at(build)}. Marked failed.")
     end

@@ -88,6 +88,45 @@ class BuildStatusCheckerTest < ActiveJob::TestCase
     assert_no_enqueued_jobs(only: FullBuildArtifactJob)
   end
 
+  # The status GET, with something else settling the build while it is on the wire. The
+  # change is made to the database only, so the checker's own copy still looks waiting,
+  # which is exactly what it saw in production.
+  def stub_status_meanwhile(payload, meanwhile, &blk)
+    response = http_response(Net::HTTPOK, "200", payload.to_json)
+    Net::HTTP.stub(:start, ->(*_args, **_kw) { meanwhile.call; response }, &blk)
+  end
+
+  def settle_in_database(status)
+    -> { Build.where(id: build.id).update_all(status: Build.statuses.fetch(status)) }
+  end
+
+  # The webhook claimed the build and its import finished, all before this poll's answer
+  # came back. Only checking for received_from_server let this through: the poll moved
+  # a finished build back and queued a second import of it.
+  test "a build whose import finished while this was in flight is not imported again" do
+    result = stub_status_meanwhile({ "status" => "success", "log" => "the whole build log",
+                                     "artifact_url" => "/builds/job-123/artifact" },
+                                   settle_in_database("success")) do
+      BuildStatusChecker.new(build).check!
+    end
+
+    assert result.ok?
+    assert_equal "Build was successful!", result.message
+    assert build.reload.success?
+    assert_no_enqueued_jobs(only: FullBuildArtifactJob)
+  end
+
+  test "a build canceled while this was in flight stays canceled" do
+    result = stub_status_meanwhile({ "status" => "failed", "log" => "ERROR boom" },
+                                   settle_in_database("canceled")) do
+      BuildStatusChecker.new(build).check!
+    end
+
+    assert_not result.ok?
+    assert_equal "This build was canceled.", result.message
+    assert build.reload.canceled?
+  end
+
   test "a build still running is reported, not moved" do
     result = stub_status("status" => "running") { BuildStatusChecker.new(build).check! }
 

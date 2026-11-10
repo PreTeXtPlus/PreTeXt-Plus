@@ -72,6 +72,53 @@ class BuildTest < ActiveSupport::TestCase
     assert_raises(KeyError) { builds(:one).mark!(:exploded) }
   end
 
+  test "transition! moves a build that is in the expected status" do
+    build = builds(:in_progress)
+
+    assert build.transition!(from: Build::AWAITING_ANSWER, to: :received_from_server,
+                             log: "\e[32mSuccess!\e[0m", completed_with_errors: true)
+
+    assert build.received_from_server?
+    assert build.completed_with_errors?
+    assert_equal "Success!", build.log
+  end
+
+  test "transition! leaves a build that already moved on alone" do
+    build = builds(:in_progress)
+    build.mark!(:success, log: "imported")
+
+    assert_not build.transition!(from: Build::AWAITING_ANSWER, to: :received_from_server, log: "late")
+
+    assert build.success?
+    assert_equal "imported", build.reload.log
+  end
+
+  # The production race: the webhook and a status poll each load the build while it is
+  # still waiting, then both try to record the server's answer. Each loaded copy believes
+  # it is free to move. Only the database can say which one got there first.
+  test "of two stale copies racing to claim a build, exactly one wins" do
+    webhook_copy = Build.find(builds(:in_progress).id)
+    poll_copy = Build.find(builds(:in_progress).id)
+    assert webhook_copy.in_progress?
+    assert poll_copy.in_progress?
+
+    first = webhook_copy.transition!(from: Build::AWAITING_ANSWER, to: :received_from_server)
+    second = poll_copy.transition!(from: Build::AWAITING_ANSWER, to: :received_from_server)
+
+    assert first
+    assert_not second
+    assert poll_copy.received_from_server?, "the loser should see the status that won"
+  end
+
+  test "transition! promotes and broadcasts only when it moved the build" do
+    build = builds(:in_progress)
+    build.mark!(:canceled)
+
+    build.target.stub(:broadcast_row, -> { flunk "a refused transition should not broadcast" }) do
+      assert_not build.transition!(from: Build::AWAITING_ANSWER, to: :failed)
+    end
+  end
+
   test "mark!(:success) promotes the build on its target" do
     build = builds(:one)
     assert_nil build.target.current_build_id

@@ -24,21 +24,11 @@ class BuildStatusChecker
     @build = build
   end
 
+  IMPORTING = "Build server reports success -- importing files now.".freeze
+
   def check!
-    if @build.success?
-      return Result.new(ok: true, message: AWAITING_REVIEW) if @build.awaiting_review?
-      return Result.new(ok: true, message: BUILT_WITH_ERRORS) if @build.completed_with_errors?
-
-      return Result.new(ok: true, message: "Build was successful!")
-    end
-
-    if @build.failed?
-      return Result.new(ok: false, message: "The build failed.")
-    end
-
-    if @build.canceled?
-      return Result.new(ok: false, message: "This build was canceled.")
-    end
+    settled = settled_result
+    return settled if settled
 
     unless @build.remote_status_url.present?
       return Result.new(ok: false, message: "No status URL on record for this build yet -- it may not have finished submitting.")
@@ -50,42 +40,42 @@ class BuildStatusChecker
       return Result.new(ok: false, message: "Build server returned HTTP #{response.code}: #{response.body.to_s.truncate(300)}")
     end
 
-    # Reload before acting on any of this: the webhook this same response describes
-    # may have landed while that request was in flight, and it moves a build to
-    # received_from_server the same way the branches below do. Racing it means
-    # importing the same artifact twice, which collides on BuildFile's unique index --
-    # and the loser calls mark!(:failed) on a build that actually succeeded (see
-    # FullBuildArtifactJob). The webhook got there first, so there is nothing left here
-    # to do but say so the way the branch below would have.
-    if @build.reload.received_from_server?
-      return Result.new(ok: true, message: "Build server reports success -- importing files now.")
-    end
-
+    # Every answer below is recorded through record_answer, which refuses once anything
+    # else has answered. The webhook this same response describes is usually on its way
+    # too, since the server marks a build finished just before it sends the callback, and
+    # the recheck schedule polls at the moments small builds finish. Both used to claim
+    # the build and queue an import each. The second import collided with the first on
+    # BuildFile's unique index and marked a build that had succeeded failed. Whatever
+    # this request was waiting on can also have finished outright in the meantime (an
+    # import that completed, a cancel), and this must not undo that either.
     data = JSON.parse(response.body)
     case data["status"]
     when "success"
-      # Reaching here means the build was still `in_progress` locally (see the
-      # early-return above) even though the server considers it done -- the
-      # webhook callback never arrived (e.g. swallowed by a redirect). Warn so
-      # a silently dropped callback shows up in logs instead of only being
-      # noticed when someone happens to click "check status".
+      return answered_elsewhere unless record_answer(:received_from_server, data)
+
+      # Reaching here means the build was still waiting locally even though the server
+      # considers it done -- the webhook callback never arrived (e.g. swallowed by a
+      # redirect) or has not arrived yet. Warn so a silently dropped callback shows up in
+      # logs instead of only being noticed when someone happens to click "check status".
       Rails.logger.warn("Build #{@build.id} was in_progress locally but build server already reports success -- full_callback was likely never received.")
-      @build.mark!(:received_from_server, log: remote_log(data))
       FullBuildArtifactJob.perform_later(@build, FullBuildServer.url_for(data["artifact_url"]))
-      Result.new(ok: true, message: "Build server reports success -- importing files now.")
+      Result.new(ok: true, message: IMPORTING)
     when "failed"
-      Rails.logger.warn("Build #{@build.id} was in_progress locally but build server already reports failure -- full_callback was likely never received.")
       # Same rule as the webhook: the server offers `artifact_url` whenever the build
       # left an output.zip behind, failure or not, so that -- not the status word -- is
       # what says whether there is output to import. See BuildCallbacksController.
       if data["artifact_url"].present?
-        @build.mark!(:received_from_server, log: remote_log(data), completed_with_errors: true)
+        return answered_elsewhere unless record_answer(:received_from_server, data, completed_with_errors: true)
+
+        Rails.logger.warn("Build #{@build.id} was in_progress locally but build server already reports failure -- full_callback was likely never received.")
         FullBuildArtifactJob.perform_later(@build, FullBuildServer.url_for(data["artifact_url"]))
         return Result.new(ok: true, message: "The build reported errors but still produced output -- " \
                                              "importing it now. It won't go live until you choose to use it.")
       end
 
-      @build.mark!(:failed, log: remote_log(data))
+      return answered_elsewhere unless record_answer(:failed, data)
+
+      Rails.logger.warn("Build #{@build.id} was in_progress locally but build server already reports failure -- full_callback was likely never received.")
       Result.new(ok: false, message: "Build server reports failure: #{remote_log(data).truncate(300)}")
     else
       Result.new(ok: true, message: "Build server reports status: #{data["status"]}.")
@@ -95,6 +85,31 @@ class BuildStatusChecker
   end
 
   private
+
+    # What a build that already has its answer says, or nil while it is still waiting.
+    def settled_result
+      if @build.success?
+        return Result.new(ok: true, message: AWAITING_REVIEW) if @build.awaiting_review?
+        return Result.new(ok: true, message: BUILT_WITH_ERRORS) if @build.completed_with_errors?
+
+        return Result.new(ok: true, message: "Build was successful!")
+      end
+
+      return Result.new(ok: false, message: "The build failed.") if @build.failed?
+      Result.new(ok: false, message: "This build was canceled.") if @build.canceled?
+    end
+
+    # The server's answer, recorded only if nothing has answered for this build yet.
+    # transition! reloads @build either way, so a caller that lost can describe the winner.
+    def record_answer(status, data, **attrs)
+      @build.transition!(from: Build::AWAITING_ANSWER, to: status, log: remote_log(data), **attrs)
+    end
+
+    # The webhook or a cancel answered while this request was in flight. Said the way
+    # this would have said it had the build already been in that state when asked.
+    def answered_elsewhere
+      settled_result || Result.new(ok: true, message: IMPORTING)
+    end
 
     # GET /builds/<job> returns the server's whole job record, so unlike the webhook
     # payload -- which carries only a truncated tail and a URL for the rest -- `log` here
