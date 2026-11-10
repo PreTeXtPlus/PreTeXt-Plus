@@ -41,12 +41,14 @@ module AssetRenderer
   # @raise [Error, SourceAssembler::AssemblyError]
   def submit(project, asset)
     archive = GenerateArchiveBuilder.new(project, asset).build
-    response = FullBuildServer.post_form("/generate", [
-      [ "archive", archive, { filename: "project.zip", content_type: "application/zip" } ],
-      [ "target", GenerateArchiveBuilder::TARGET ],
-      [ "assets", asset.generated_element ],
-      [ "project_id", project.id ]
-    ])
+    response = reaching("submit the render") do
+      FullBuildServer.post_form("/generate", [
+        [ "archive", archive, { filename: "project.zip", content_type: "application/zip" } ],
+        [ "target", GenerateArchiveBuilder::TARGET ],
+        [ "assets", asset.generated_element ],
+        [ "project_id", project.id ]
+      ])
+    end
     unless response.is_a?(Net::HTTPSuccess)
       raise Error, "The build server refused the render (HTTP #{response.code}): #{response.body.to_s.truncate(300)}"
     end
@@ -80,7 +82,7 @@ module AssetRenderer
       return Result.new(status: "failed", message: message, log: log_of(data))
     end
 
-    body = fetch("#{status_url}/files/#{path}").body
+    body = utf8(fetch("#{status_url}/files/#{path}").body)
     svg = extension == "html" ? svg_from_page(body) : body
     return Result.new(status: "success", svg: svg) if svg
 
@@ -111,18 +113,40 @@ module AssetRenderer
     log = data["log"].presence
     return log if log || data["log_url"].blank?
 
-    response = FullBuildServer.get(data["log_url"])
-    response.is_a?(Net::HTTPSuccess) ? response.body.presence : nil
+    response = reaching("read the log") { FullBuildServer.get(data["log_url"]) }
+    response.is_a?(Net::HTTPSuccess) ? utf8(response.body).presence : nil
+  end
+
+  # What going wrong on the wire looks like, as opposed to an answer we did not
+  # like: a connection refused or timing out, a name that does not resolve, TLS.
+  NETWORK_ERRORS = [ SystemCallError, SocketError, Net::OpenTimeout, Net::ReadTimeout, OpenSSL::SSL::SSLError ].freeze
+
+  # Run `block`, a call to the build server, turning a failure to reach it into an
+  # Error that names what was being attempted -- so the editor shows "the build
+  # server could not be reached" rather than a bare 500.
+  def reaching(attempt)
+    yield
+  rescue *NETWORK_ERRORS => e
+    raise Error, "The build server could not be reached to #{attempt}: #{e.class.name.demodulize} (#{e.message})"
   end
 
   def fetch_json(path)
-    JSON.parse(fetch(path).body)
+    JSON.parse(utf8(fetch(path).body))
   rescue JSON::ParserError
     raise Error, "The build server answered with something other than JSON"
   end
 
+  # Net::HTTP hands a body back as binary (ASCII-8BIT) unless the response named
+  # a charset, and the build server's files do not. A Sage plot's SVG has UTF-8
+  # text in it (matplotlib's minus sign, for one), and the picture goes out again
+  # as JSON, which cannot encode binary: the first real render failed exactly
+  # there. Read as UTF-8, with any byte that is not valid UTF-8 replaced.
+  def utf8(body)
+    body.to_s.dup.force_encoding(Encoding::UTF_8).scrub
+  end
+
   def fetch(path)
-    response = FullBuildServer.get(path)
+    response = reaching("read #{path}") { FullBuildServer.get(path) }
     unless response.is_a?(Net::HTTPSuccess)
       raise Error, "The build server returned HTTP #{response.code} for #{path}"
     end

@@ -85,6 +85,25 @@ class AssetRendererTest < ActiveSupport::TestCase
     end
   end
 
+  # Net::HTTP gives a body back as binary; a Sage plot's SVG has UTF-8 text in it
+  # (matplotlib writes a real minus sign), and the picture goes out again as JSON,
+  # which the first real render failed to encode.
+  test "a picture that arrives as binary with UTF-8 text in it is read as UTF-8, and goes out as JSON" do
+    svg = "<svg xmlns=\"http://www.w3.org/2000/svg\"><text>−1</text></svg>".b
+    assert_equal Encoding::ASCII_8BIT, svg.encoding
+    pages = {
+      STATUS_URL => status("files" => [ "sageplot/0123456789abcdef0123456789abcdef.svg" ]).b,
+      "#{STATUS_URL}/files/sageplot/0123456789abcdef0123456789abcdef.svg" => svg
+    }
+    with_server(pages) do
+      result = AssetRenderer.poll(STATUS_URL, "sageplot")
+      assert_equal "success", result.status
+      assert_equal Encoding::UTF_8, result.svg.encoding
+      assert_includes result.svg, "−1"
+      assert_includes result.to_h.compact.to_json, "−1"
+    end
+  end
+
   # pretext-html reads the aspect ratio off this same inline svg, so it is what a
   # 2D figure's page holds. viewBox must survive: the HTML4 parser would lowercase it.
   test "an asymptote's picture is the inline svg lifted out of its HTML page, as XML" do
@@ -154,6 +173,22 @@ class AssetRendererTest < ActiveSupport::TestCase
   test "a build server that cannot be read raises" do
     with_server(STATUS_URL => [ 502, "bad gateway" ]) do
       assert_raises(AssetRenderer::Error) { AssetRenderer.poll(STATUS_URL, "asymptote") }
+    end
+  end
+
+  # A timeout or a refused connection is the renderer's error too, so the
+  # controller answers with the reason instead of a bare 500.
+  test "a build server that cannot be reached raises the renderer's own error, naming the attempt" do
+    FullBuildServer.stub(:get, ->(*, **) { raise Net::ReadTimeout }) do
+      error = assert_raises(AssetRenderer::Error) { AssetRenderer.poll(STATUS_URL, "sageplot") }
+      assert_match(/could not be reached to read .*ReadTimeout/, error.message)
+    end
+    builder = Struct.new(:build).new(StringIO.new("zip"))
+    GenerateArchiveBuilder.stub(:new, ->(_p, _a) { builder }) do
+      FullBuildServer.stub(:post_form, ->(*, **) { raise Errno::ECONNREFUSED }) do
+        error = assert_raises(AssetRenderer::Error) { AssetRenderer.submit(@project, @asset) }
+        assert_match(/could not be reached to submit/, error.message)
+      end
     end
   end
 end
