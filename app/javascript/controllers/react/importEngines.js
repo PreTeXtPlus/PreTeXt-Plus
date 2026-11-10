@@ -137,8 +137,7 @@ function buildPandocEngine({ pandocUrl, csrfToken }) {
     // needed" is aimed at the VS Code extension.
     label: "Pandoc",
     description:
-      "A different parser for this file. Sometimes preserves markup the " +
-      "built-in converter drops, such as raw TeX.",
+      "A different converter. Sometimes keeps formatting the built-in one misses.",
   });
 
   return {
@@ -149,9 +148,7 @@ function buildPandocEngine({ pandocUrl, csrfToken }) {
     // formats rather than "files pandoc reads" because pandoc reads .tex and
     // .md too, yet those go to the built-in converter.
     experimentalNotice:
-      "Conversion from docx, epub, html, and other formats other than tex " +
-      "and md uses Pandoc and is still experimental and might not produce " +
-      "good results.",
+      "Importing Word, EPUB and web pages is experimental. Check the result carefully.",
     // Same split rule as the built-in engine, reached differently.
     // `importSplitToSubsections` can afford to convert twice because its second
     // pass is local; here the conversion is a file upload and up to 25s of

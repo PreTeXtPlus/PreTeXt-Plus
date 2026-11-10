@@ -16,7 +16,7 @@
   <% if @projects.any? %>
     <%= render partial: "card", collection: @projects, as: :project, locals: { shared: true } %>
   <% else %>
-    <p class="text-center my-10">No projects found.</p>
+    <p class="text-center my-10">No one has shared a project with you yet.</p>
   <% end %>
 
   <%= paginate @projects %>

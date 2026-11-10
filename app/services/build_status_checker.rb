@@ -15,29 +15,34 @@ class BuildStatusChecker
   end
 
   # Both ok: true, because the output is there. What differs is whose move it is.
-  AWAITING_REVIEW = "The build reported errors. Its output is imported and ready to " \
-                    "preview, but readers do not see it until you choose to use it.".freeze
-  BUILT_WITH_ERRORS = "The build reported errors. You chose to use its output, so it is " \
+  AWAITING_REVIEW = "The build reported errors. You can preview it, but readers won't " \
+                    "see it until you choose to use it.".freeze
+  BUILT_WITH_ERRORS = "The build reported errors. You chose to use it, so it is " \
                       "what readers see.".freeze
+
+  # Whatever went wrong asking (an HTTP error, a timeout) is logged, not shown.
+  UNAVAILABLE = "We couldn't check on this build right now. Try again in a minute.".freeze
 
   def initialize(build)
     @build = build
   end
 
-  IMPORTING = "Build server reports success -- importing files now.".freeze
+  IMPORTING = "The build finished. It will be ready in a moment.".freeze
 
   def check!
     settled = settled_result
     return settled if settled
 
     unless @build.remote_status_url.present?
-      return Result.new(ok: false, message: "No status URL on record for this build yet -- it may not have finished submitting.")
+      Rails.logger.info("Build #{@build.id} has no remote_status_url yet; it may not have finished submitting.")
+      return Result.new(ok: false, message: "This build is still starting. Try again in a minute.")
     end
 
     response = FullBuildServer.get(@build.remote_status_url)
 
     unless response.is_a?(Net::HTTPSuccess)
-      return Result.new(ok: false, message: "Build server returned HTTP #{response.code}: #{response.body.to_s.truncate(300)}")
+      Rails.logger.warn("Status check for build #{@build.id} got HTTP #{response.code}: #{response.body.to_s.truncate(300)}")
+      return Result.new(ok: false, message: UNAVAILABLE)
     end
 
     # Every answer below is recorded through record_answer, which refuses once anything
@@ -69,19 +74,21 @@ class BuildStatusChecker
 
         Rails.logger.warn("Build #{@build.id} was in_progress locally but build server already reports failure -- full_callback was likely never received.")
         FullBuildArtifactJob.perform_later(@build, FullBuildServer.url_for(data["artifact_url"]))
-        return Result.new(ok: true, message: "The build reported errors but still produced output -- " \
-                                             "importing it now. It won't go live until you choose to use it.")
+        return Result.new(ok: true, message: "The build reported errors but still produced output. " \
+                                             "Readers won't see it until you choose to use it.")
       end
 
       return answered_elsewhere unless record_answer(:failed, data)
 
       Rails.logger.warn("Build #{@build.id} was in_progress locally but build server already reports failure -- full_callback was likely never received.")
-      Result.new(ok: false, message: "Build server reports failure: #{remote_log(data).truncate(300)}")
+      Result.new(ok: false, message: "The build failed. Its log says what went wrong.")
     else
-      Result.new(ok: true, message: "Build server reports status: #{data["status"]}.")
+      Rails.logger.info("Status check for build #{@build.id}: build server reports #{data['status'].inspect}")
+      Result.new(ok: true, message: "This build is still running.")
     end
   rescue => e
-    Result.new(ok: false, message: "Couldn't reach the build server: #{e.class}: #{e.message}")
+    Rails.logger.warn("Status check for build #{@build.id} failed: #{e.class}: #{e.message}")
+    Result.new(ok: false, message: UNAVAILABLE)
   end
 
   private

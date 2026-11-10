@@ -111,7 +111,7 @@ class BuildsControllerTest < ActionDispatch::IntegrationTest
 
     assert_redirected_to project_url(@project)
     assert @target.reload.latest_build.queued?
-    assert_match(/queued/i, flash[:notice])
+    assert_match(/will start building shortly/, flash[:notice])
   end
 
   test "the concurrency cap counts only the current user's builds" do
@@ -157,7 +157,7 @@ class BuildsControllerTest < ActionDispatch::IntegrationTest
 
     assert_redirected_to project_url(@project)
     assert_match(/Started 1 build now/, flash[:notice])
-    assert_match(/1 more is queued/, flash[:notice])
+    assert_match(/1 more will start shortly/, flash[:notice])
     assert targets(:one_instructor).reload.latest_build.pending?
     assert targets(:one_print).reload.latest_build.queued?
   end

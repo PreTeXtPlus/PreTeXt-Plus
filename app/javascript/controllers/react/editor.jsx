@@ -735,9 +735,8 @@ function EditorApp({ config }) {
             const { error } = await res.json().catch(() => ({}));
             console.error("Flush refused:", error);
             return window.confirm(
-              `${error || "The saved copy of this project could not be updated."}\n\n` +
-                "Your edits are safe in the shared document, but the project page and any " +
-                "copy or build will show the last version that was saved. Continue anyway?",
+              "Your latest edits are safe, but haven't reached the project page yet. " +
+                "Builds and copies will use the older version. Continue anyway?",
             );
           }
           if (!res.ok) throw new Error(`Flush failed: ${res.status}`);
@@ -746,7 +745,7 @@ function EditorApp({ config }) {
           return true;
         } catch (error) {
           console.error("Error saving:", error);
-          alert("An error occurred while saving.");
+          alert("We couldn't save your latest changes. Check your connection and try again.");
           return false;
         }
       }
@@ -773,7 +772,7 @@ function EditorApp({ config }) {
       } catch (error) {
         console.error("Error saving:", error);
         setSaveStatus("error");
-        if (hard) alert("An error occurred while saving.");
+        if (hard) alert("We couldn't save your latest changes. Check your connection and try again.");
         return false;
       } finally {
         if (inFlightSave.current === request) inFlightSave.current = null;
@@ -1015,7 +1014,7 @@ function EditorApp({ config }) {
           // or build -- re-sends the destroy. Only a solo editor is left with
           // nothing to fall back on and needs telling.
           if (!providerRef.current) {
-            alert("An error occurred while removing the section.");
+            alert("We couldn't remove this division. Please try again.");
           }
         });
     },
@@ -1224,7 +1223,10 @@ function EditorApp({ config }) {
       let blob;
       if (sameOrigin) {
         const res = await fetch(absolute, { credentials: "same-origin" });
-        if (!res.ok) throw new Error(`Could not fetch image: ${res.status}`);
+        if (!res.ok) {
+          console.error(`Fetching image ${absolute} failed: ${res.status}`);
+          throw new Error("We couldn't download that image.");
+        }
         blob = await res.blob();
       } else {
         const res = await fetch(assetFetchUrl, {
@@ -1237,7 +1239,8 @@ function EditorApp({ config }) {
           body: JSON.stringify({ url }),
         });
         if (!res.ok) {
-          let message = `Could not fetch image: ${res.status}`;
+          console.error(`Fetching image ${url} failed: ${res.status}`);
+          let message = "We couldn't download that image.";
           try {
             const err = await res.json();
             message = err.error || message;
@@ -1316,7 +1319,7 @@ function EditorApp({ config }) {
         .catch((error) => {
           console.error("Error removing asset:", error);
           if (!providerRef.current) {
-            alert("An error occurred while removing the image.");
+            alert("We couldn't remove this image. Please try again.");
           }
         });
     },
@@ -1405,7 +1408,7 @@ function EditorApp({ config }) {
         .catch((error) => {
           console.error("Error removing snippet:", error);
           if (!providerRef.current) {
-            alert("An error occurred while removing the snippet.");
+            alert("We couldn't remove this snippet. Please try again.");
           }
         });
     },
@@ -1467,7 +1470,7 @@ function EditorApp({ config }) {
         .catch((error) => {
           console.error("Error removing exercise:", error);
           if (!providerRef.current) {
-            alert("An error occurred while removing the exercise.");
+            alert("We couldn't remove this exercise. Please try again.");
           }
         });
     },
@@ -1659,13 +1662,13 @@ function EditorApp({ config }) {
       });
       if (!res.ok) {
         const error = await res.json();
-        throw new Error(error.error || `Failed to create converted copy: ${res.status}`);
+        throw new Error(error.error || `Converted copy failed: ${res.status}`);
       }
       const result = await res.json();
       window.location.href = result.project_url;
     } catch (error) {
       console.error("Error creating converted copy:", error);
-      alert(`Failed to create converted copy:\n${error.message}`);
+      alert("We couldn't make the converted copy. Please try again.");
     }
   }, [save, copyUrl, csrfToken]);
 
@@ -1696,7 +1699,7 @@ function EditorApp({ config }) {
         }
       } catch (error) {
         console.error("Error submitting feedback:", error);
-        alert(`Failed to submit feedback: ${error.message}`);
+        alert("We couldn't send your feedback. Please try again.");
       }
     },
     [feedbackUrl, csrfToken],
@@ -1863,13 +1866,13 @@ function EditorApp({ config }) {
     if (collabStatus === "error") {
       return (
         <div class="flex h-full items-center justify-center"><div class="mx-5 text-center">
-          Could not join the collaborative editing session. Please reload the page.
+          We couldn't connect to the shared editing session. Please reload the page.
         </div></div>
       );
     }
     return (
       <div class="flex h-full items-center justify-center"><div class="mx-5 text-center">
-        Connecting to collaborative session…
+        Connecting…
       </div></div>
     );
   }
@@ -1922,8 +1925,8 @@ function EditorApp({ config }) {
           <div class="flex items-start justify-between gap-3">
             <p class="font-semibold">
               {projectionIssues.length === 1
-                ? "One record can't be saved to the project, so builds and copies will leave it out."
-                : `${projectionIssues.length} records can't be saved to the project, so builds and copies will leave them out.`}
+                ? "1 item can't be saved, so it'll be missing from builds, copies and downloads."
+                : `${projectionIssues.length} items can't be saved, so they'll be missing from builds, copies and downloads.`}
             </p>
             <button
               type="button"
@@ -1939,6 +1942,9 @@ function EditorApp({ config }) {
               <li key={`${issue.kind}:${issue.id}`}>{describeProjectionIssue(issue)}</li>
             ))}
           </ul>
+          <p class="mt-1 text-amber-800">
+            To fix this, open each one and correct it — usually by giving it a unique ID.
+          </p>
         </div>
       )}
       <Editors
@@ -1984,7 +1990,7 @@ function EditorApp({ config }) {
           saveStatus,
           primaryAction: {
             label: "Manage project",
-            title: "Save, then open the project page to manage its outputs, collaborators and settings",
+            title: "Save and go to the project page",
             icon: <DashboardIcon />,
             onSelect: openProjectPage,
           },

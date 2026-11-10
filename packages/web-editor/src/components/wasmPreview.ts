@@ -572,17 +572,17 @@ export function findWellformednessErrorLine(source: string): number | undefined 
 export function describePreviewError(error: unknown, line?: number): string {
   if (line !== undefined) {
     return (
-      `Could not build the preview: the document is not well-formed XML ` +
-      `(near line ${line}) — check for an unclosed or mismatched tag.`
+      `The preview is paused: there's a tag problem near line ${line}. ` +
+      `Check for a tag that isn't closed, or closing tags that don't match.`
     );
   }
   const message =
     error instanceof Error ? error.message : String(error ?? "Unknown error");
   if (/transform failed/i.test(message)) {
     return (
-      "Could not build the preview. This usually means the PreTeXt is not " +
-      "yet well-formed — check for an unclosed tag."
+      "The preview is paused. This usually means a tag isn't closed yet — " +
+      "check the source for one."
     );
   }
-  return message;
+  return `The preview is paused. Details: ${message}`;
 }

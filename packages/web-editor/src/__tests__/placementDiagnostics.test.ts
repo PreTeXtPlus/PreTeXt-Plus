@@ -41,7 +41,7 @@ describe("findPlacementProblems", () => {
     ]);
     const [problem] = findPlacementProblems('<p/><plus:image ref="graph"/>', input({ elsewhere }));
     expect(problem).toMatchObject({ index: 4, length: 25, severity: "warning", suggestedInstance: "sec-intro" });
-    expect(problem.message).toContain('"graph" is placed here and in Methods without an instance name');
+    expect(problem.message).toContain('"graph" is used here and in Methods. Give every copy but one');
   });
 
   it("flags both unnamed placements in one buffer", () => {
@@ -71,7 +71,7 @@ describe("findPlacementProblems", () => {
       { name: "Other", source: '<plus:image ref="graph" instance="again"/>', sourceFormat: "pretext" },
     ]);
     const [problem] = findPlacementProblems('<plus:image ref="graph" instance="again"/>', input({ elsewhere }));
-    expect(problem.message).toContain('instance name "again" more than once');
+    expect(problem.message).toContain('share the instance name "again"');
   });
 
   it("flags an instance whose labels would be another record's ref, and a malformed name", () => {
@@ -79,7 +79,7 @@ describe("findPlacementProblems", () => {
       '<plus:image ref="graph" instance="two"/>',
       input({ knownRefs: new Set(["graph", "graph-two"]) }),
     );
-    expect(collision.message).toContain('"graph-two", which is already the id of something else');
+    expect(collision.message).toContain('"graph-two", which is already the ID of something else');
 
     const [malformed] = findPlacementProblems('<plus:image ref="graph" instance="a b"/>', input());
     expect(malformed.severity).toBe("error");

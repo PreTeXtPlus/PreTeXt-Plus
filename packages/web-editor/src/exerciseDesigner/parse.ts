@@ -296,7 +296,7 @@ function parseBody(
     case "fillin": {
       const statement = child(ex, "statement");
       const evaluation = child(ex, "evaluation");
-      if (child(ex, "setup")) warn("Dynamic fill-ins (<setup>) are not supported; the setup was dropped.");
+      if (child(ex, "setup")) warn("Dynamic fill-ins (<setup>) can't be edited here, so the setup was removed.");
       const evaluates = evaluation ? elements(evaluation, "evaluate") : [];
       const fillins = statement ? Array.from(statement.getElementsByTagName("fillin")) : [];
       const blanks = fillins.map((f, i): Blank => {
@@ -304,7 +304,7 @@ function parseBody(
         const evaluate = (name && evaluates.find((e) => e.getAttribute("name") === name)) || evaluates[i];
         const tests = evaluate ? elements(evaluate, "test") : [];
         if (tests.some((t) => !child(t, "strcmp") && !child(t, "numcmp"))) {
-          warn("Only <strcmp> and <numcmp> tests are supported; other comparisons were reset.");
+          warn("Only text and number comparisons can be edited here; other comparisons were reset.");
         }
         return {
           id: newItemId(),
@@ -320,7 +320,7 @@ function parseBody(
     case "coding": {
       const program = child(ex, "program")!;
       const tests = child(program, "tests");
-      if (tests && child(tests, "iotest")) warn("Input/output tests are not supported and were dropped.");
+      if (tests && child(tests, "iotest")) warn("Input/output tests can't be edited here and were removed.");
       return {
         body: {
           kind,
@@ -387,8 +387,8 @@ export function designFromSource(
   const { body, tags } = parseBody(ex, kind, warn);
   const known = [...COMMON_TAGS, ...tags];
   for (const e of elements(ex)) {
-    if (!known.includes(e.tagName)) warn(`Dropped unsupported <${e.tagName}> element.`);
+    if (!known.includes(e.tagName)) warn(`Removed <${e.tagName}>, which can't be edited here.`);
   }
-  if (child(ex, "title")) warn("The exercise's <title> is set in its settings, not in its source.");
+  if (child(ex, "title")) warn("An exercise's title is set in its settings (⚙), not in its source.");
   return { design: { common, body }, warnings };
 }

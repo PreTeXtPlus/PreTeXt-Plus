@@ -49,7 +49,7 @@ describe("ProjectExplorer", () => {
     renderExplorer();
     expect(tab("toc")).toHaveAttribute("aria-pressed", "true");
     expect(screen.getByText("A section")).toBeInTheDocument();
-    expect(screen.getByText("Divisions not used yet")).toBeInTheDocument();
+    expect(screen.getByText("Unused divisions")).toBeInTheDocument();
     expect(screen.getByText("Unplaced thing")).toBeInTheDocument();
   });
 
@@ -127,7 +127,7 @@ describe("ProjectExplorer", () => {
     expect(visibleTitles()).toContain("A subsection");
     toggleRow("A section");
     toggleRow("Another section");
-    fireEvent.click(screen.getByText("Divisions not used yet"));
+    fireEvent.click(screen.getByText("Unused divisions"));
     const shape = [
       "Document",
       "A section",
@@ -140,7 +140,7 @@ describe("ProjectExplorer", () => {
     fireEvent.click(tab("toc"));
     expect(visibleTitles()).toEqual(shape);
     expect(
-      screen.getByText("Divisions not used yet").closest("button"),
+      screen.getByText("Unused divisions").closest("button"),
     ).toHaveAttribute("aria-expanded", "false");
   });
 

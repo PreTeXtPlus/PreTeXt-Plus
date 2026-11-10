@@ -152,7 +152,7 @@ class BuildStatusCheckerTest < ActiveJob::TestCase
     end
 
     assert_not result.ok?
-    assert_match(/Couldn't reach the build server/, result.message)
+    assert_match(/couldn't check on this build/, result.message)
     assert build.reload.in_progress?
   end
 end

@@ -286,9 +286,9 @@ const CodeEditorMenu: React.FC<CodeEditorMenuProps> = ({
             kind: "item",
             key: "paste-auto-convert",
             label: "Convert Pasted LaTeX & Markdown",
-            title: `When on, LaTeX or Markdown pasted into this division is converted to PreTeXt as it arrives. ${formatShortcut(
+            title: `Convert LaTeX or Markdown to PreTeXt when you paste it. Use ${formatShortcut(
               "Mod+Shift+V",
-            )} pastes as plain text without converting.`,
+            )} to paste without converting.`,
             checked: !!pasteAutoConvert,
             onSelect: onTogglePasteAutoConvert,
           },
@@ -303,7 +303,7 @@ const CodeEditorMenu: React.FC<CodeEditorMenuProps> = ({
       ? [
           separator("wrap"),
           commandEntry(MONACO_COMMANDS.wrapSelection, run, {
-            title: "Wrap the selection in an element, typing its name into both tags at once",
+            title: "Put a tag around the selected text",
             disabled: !hasSelection,
           }),
         ]
@@ -315,7 +315,7 @@ const CodeEditorMenu: React.FC<CodeEditorMenuProps> = ({
           kind: "item",
           key: "find-in-project",
           label: "Find/Replace in Project…",
-          title: "Search and replace across every division",
+          title: "Search and replace across the whole project",
           shortcut: formatShortcut("Mod+Shift+F"),
           onSelect: onOpenFindInProject,
         },

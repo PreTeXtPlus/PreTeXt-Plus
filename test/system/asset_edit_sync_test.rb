@@ -85,7 +85,7 @@ class AssetEditSyncTest < ApplicationSystemTestCase
 
     # The "New asset" form takes the editor's place.
     within("[data-testid='new-item-pane']", wait: 10) do
-      click_button "Custom"
+      click_button "Write PreTeXt"
       fill_in "Title", with: "Authored Diagram"
       click_button "Create"
     end

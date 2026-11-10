@@ -24,6 +24,8 @@ class BuildCanceller
   # wonder what went wrong.
   CANCEL_LOG = "Build canceled.".freeze
 
+  COULD_NOT_STOP = "We couldn't stop this build. It may still be running.".freeze
+
   def initialize(build)
     @build = build
   end
@@ -50,11 +52,13 @@ class BuildCanceller
       # Nothing left there to cancel: the job finished, or aged out of the server's
       # store. Either way this build is not coming back, so it stops waiting.
       @build.mark!(:canceled, log: CANCEL_LOG)
-      Result.new(ok: true, message: "That build had already finished on the build server. Marked it canceled here.")
+      Result.new(ok: true, message: "That build had already finished, so it's now marked canceled.")
     else
-      Result.new(ok: false, message: "Build server wouldn't cancel it (HTTP #{response.code}). It may still be running.")
+      Rails.logger.warn("Cancel of build #{@build.id} got HTTP #{response.code}: #{response.body.to_s.truncate(300)}")
+      Result.new(ok: false, message: COULD_NOT_STOP)
     end
   rescue => e
-    Result.new(ok: false, message: "Couldn't reach the build server to cancel: #{e.class}: #{e.message}")
+    Rails.logger.warn("Cancel of build #{@build.id} failed: #{e.class}: #{e.message}")
+    Result.new(ok: false, message: COULD_NOT_STOP)
   end
 end

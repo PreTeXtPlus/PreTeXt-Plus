@@ -48,7 +48,7 @@ class BuildsController < ApplicationController
   def accept
     unless @build.awaiting_review?
       return redirect_to project_target_path(@project, @build.target),
-                         alert: "That build isn't waiting to be reviewed -- it may have been " \
+                         alert: "That build isn't waiting to be reviewed. It may have been " \
                                 "replaced by a newer one."
     end
 
@@ -89,7 +89,7 @@ class BuildsController < ApplicationController
       end
       format.html do
         message = @build.pending? ? "Building #{@target.name}." :
-                    "#{@target.name} is queued -- it will start once a build slot frees up."
+                    "#{@target.name} will start building shortly."
         redirect_to project_path(@project), notice: message
       end
     end
@@ -115,7 +115,7 @@ class BuildsController < ApplicationController
     waiting = results.size - started
 
     message = +"Started #{started} #{"build".pluralize(started)} now."
-    message << " #{waiting} more #{waiting == 1 ? "is" : "are"} queued and will start as slots free up." if waiting.positive?
+    message << " #{waiting} more will start shortly." if waiting.positive?
 
     redirect_to project_path(@project), notice: message
   end

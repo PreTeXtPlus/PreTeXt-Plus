@@ -353,7 +353,7 @@ describe("import from the sample book", () => {
   it("true/false", () => {
     const { body, warnings } = importBody("truefalse", "truefalse");
     expect(body.correct).toBe(false);
-    expect(warnings).toEqual(["Dropped unsupported <idx> element."]);
+    expect(warnings).toEqual(["Removed <idx>, which can't be edited here."]);
   });
 
   it("multiple choice with checkboxes", () => {

@@ -12,9 +12,9 @@ class ApplicationController < ActionController::Base
 
   rescue_from CanCan::AccessDenied do |exception|
     if request.format.json?
-      render json: { errors: [ exception.message ] }, status: :forbidden
+      render json: { errors: [ "You don't have access to that page." ] }, status: :forbidden
     else
-      redirect_to projects_path, alert: exception.message
+      redirect_to projects_path, alert: "You don't have access to that page."
     end
   end
 

@@ -31,7 +31,7 @@ class TargetsController < ApplicationController
 
   def update
     if @target.update(target_params)
-      redirect_to project_path(@project), notice: "Saved."
+      redirect_to project_path(@project), notice: @target.saved_change_to_name? ? "Output renamed." : "Saved."
     else
       redirect_to project_target_path(@project, @target), alert: @target.errors.full_messages.to_sentence
     end

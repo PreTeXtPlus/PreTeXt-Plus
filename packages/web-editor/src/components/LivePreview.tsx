@@ -864,7 +864,7 @@ const LivePreview = forwardRef<LivePreviewHandle, LivePreviewProps>(
                   )}
                   aria-pressed={scope === "cursor"}
                   onClick={() => onScopeChange("cursor")}
-                  title="Preview the division around the cursor, numbered as in the whole document. Much faster on a long document; a division that holds divisions is shown as a summary page."
+                  title="Show just the division you're working in (faster on long documents)"
                 >
                   At cursor
                 </button>
@@ -875,7 +875,7 @@ const LivePreview = forwardRef<LivePreviewHandle, LivePreviewProps>(
                   )}
                   aria-pressed={scope === "editor"}
                   onClick={() => onScopeChange("editor")}
-                  title="Preview everything in the editor: the open division whole, every division inside it included."
+                  title="Show the whole open division, including everything inside it"
                 >
                   Everything
                 </button>
@@ -899,7 +899,7 @@ const LivePreview = forwardRef<LivePreviewHandle, LivePreviewProps>(
                 // data-driven pattern the other preview controls below use.
                 data-layout={printoutId ?? ""}
                 aria-label="Preview layout"
-                title="Lay a worksheet or handout out for print, with each workspace at the height the author asked for"
+                title="See how this worksheet or handout will look on paper"
                 value={printoutId ?? ""}
                 onChange={(event) => {
                   const chosen = event.target.value || null;
@@ -1022,7 +1022,7 @@ const LivePreview = forwardRef<LivePreviewHandle, LivePreviewProps>(
                 <div className="bg-white rounded-lg py-8 px-12 shadow-[0_10px_25px_rgba(0,0,0,0.3)] flex flex-col items-center gap-4">
                   <div className="w-10 h-10 border-4 border-gray-200 border-t-emerald-500 rounded-full animate-[spin_0.8s_linear_infinite]"></div>
                   <p className="m-0 text-lg font-medium text-gray-800">
-                    {renderLocally ? "Preparing preview..." : "Rebuilding..."}
+                    {renderLocally ? "Preparing preview…" : "Updating preview…"}
                   </p>
                 </div>
               </div>

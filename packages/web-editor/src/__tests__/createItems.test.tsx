@@ -240,7 +240,7 @@ describe("creating an asset", () => {
     fireEvent.click(screen.getByTestId("toc-new-asset-btn"));
 
     expect(screen.getByTestId("new-item-heading")).toHaveTextContent("New image");
-    fireEvent.click(within(pane()).getByText("Custom"));
+    fireEvent.click(within(pane()).getByText("Write PreTeXt"));
     fireEvent.change(within(pane()).getByLabelText("Title"), {
       target: { value: "My Diagram" },
     });
@@ -317,7 +317,7 @@ describe("creating an asset", () => {
     );
 
     expect(screen.getByTestId("new-item-heading")).toHaveTextContent("Add missing image");
-    fireEvent.click(within(pane()).getByText("Custom"));
+    fireEvent.click(within(pane()).getByText("Write PreTeXt"));
     // Prefilled from the placeholder's ref.
     const title = within(pane()).getByLabelText("Title") as HTMLInputElement;
     expect(title.value).toBe("nofig");
@@ -341,7 +341,7 @@ describe("creating an asset", () => {
 
     expect(screen.getByTestId("new-item-heading")).toHaveTextContent("Replace image");
     expect(within(pane()).getByText("Upload")).toBeInTheDocument();
-    expect(within(pane()).queryByText("Custom")).toBeNull();
+    expect(within(pane()).queryByText("Write PreTeXt")).toBeNull();
     // The asset's always-open settings go with the editor pane the form hides.
     expect(screen.getByTestId("editor-pane-main")).toHaveClass("hidden");
   });
@@ -399,7 +399,7 @@ describe("the clipboard", () => {
     renderEditors();
     showAssets();
     fireEvent.click(screen.getByTestId("toc-new-asset-btn"));
-    fireEvent.click(within(pane()).getByText("Custom"));
+    fireEvent.click(within(pane()).getByText("Write PreTeXt"));
     fireEvent.change(within(pane()).getByLabelText("Title"), {
       target: { value: "My Diagram" },
     });
@@ -653,7 +653,7 @@ describe("the new asset form's title and Reference ID", () => {
       onAssetFetchUrl: async () => new File(["png"], "x.png", { type: "image/png" }),
     });
     open();
-    fireEvent.click(within(pane()).getByText("External URL"));
+    fireEvent.click(within(pane()).getByText("From the web"));
     fireEvent.change(within(pane()).getByLabelText("Image URL"), {
       target: { value: "https://example.com/a/road%20map.png?size=2" },
     });
@@ -668,7 +668,7 @@ describe("the new asset form's title and Reference ID", () => {
     renderEditors();
     showAssets();
     fireEvent.click(within(screen.getByTestId("asset-row-nofig")).getByRole("button"));
-    fireEvent.click(within(pane()).getByText("Custom"));
+    fireEvent.click(within(pane()).getByText("Write PreTeXt"));
     expect(refField().value).toBe("nofig");
 
     fireEvent.change(titleField(), { target: { value: "New figure" } });
@@ -768,7 +768,7 @@ describe("every creation form's title and Reference ID", () => {
     showAssets();
     fireEvent.click(screen.getByTestId("toc-new-asset-btn"));
     expect(within(pane()).queryByText("Optional.")).toBeNull();
-    fireEvent.click(within(pane()).getByText("Custom"));
+    fireEvent.click(within(pane()).getByText("Write PreTeXt"));
     expect(within(pane()).queryByText(/in the editor next/)).toBeNull();
   });
 });

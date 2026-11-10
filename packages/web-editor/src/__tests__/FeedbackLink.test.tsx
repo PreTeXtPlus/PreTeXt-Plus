@@ -85,7 +85,7 @@ describe("FeedbackLink", () => {
     ).not.toBeInTheDocument();
 
     await user.type(screen.getByLabelText("Message"), "It broke.");
-    await user.click(screen.getByRole("button", { name: "Submit" }));
+    await user.click(screen.getByRole("button", { name: "Send" }));
 
     expect(onSubmit).toHaveBeenCalledWith(
       expect.objectContaining({ email: "steven@example.com" }),

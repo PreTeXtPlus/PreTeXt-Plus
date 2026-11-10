@@ -50,6 +50,16 @@ class ProjectDocProjection
     "tmp_#{id.to_s.delete('-').first(8)}"
   end
 
+  # How a projection issue's reason names the record that already holds an ID.
+  ISSUE_KIND_NAMES = {
+    "division" => "division",
+    "asset" => "image",
+    "snippet" => "snippet",
+    "exercise" => "exercise"
+  }.freeze
+
+  INVALID_REF_REASON = "Its ID isn't valid. IDs start with a letter and use only letters, numbers, - and _"
+
   Candidate = Struct.new(:kind, :id, :ref, :attributes, keyword_init: true)
 
   # What this projection left out, as `{kind, id, ref, reason}` hashes, sorted
@@ -171,17 +181,18 @@ class ProjectDocProjection
       # out of nothing.
       next if kind == "asset" && row.nil?
       if row && row[:kind] != kind
-        issue!(kind, id, nil, "id belongs to a #{row[:kind]}")
+        issue!(kind, id, nil, "It clashes with another item in this project. Please email support@pretext.plus",
+               detail: "id belongs to a #{row[:kind]}")
         next
       end
 
       ref = entry[spec[:ref_key]].to_s
       if ref.empty?
-        issue!(kind, id, nil, "ref is missing")
+        issue!(kind, id, nil, "It needs an ID", detail: "ref is missing")
         next
       end
       unless REF_REGEX.match?(ref)
-        issue!(kind, id, ref, "ref #{ref.truncate(60).inspect} is invalid")
+        issue!(kind, id, ref, INVALID_REF_REASON, detail: "ref #{ref.truncate(60).inspect} is invalid")
         next
       end
 
@@ -213,7 +224,10 @@ class ProjectDocProjection
 
     candidates.group_by(&:ref).flat_map do |ref, group|
       if (holder = held[ref])
-        group.each { |c| issue!(c.kind, c.id, ref, "ref is already used by #{existing[holder][:kind]} #{holder}") }
+        group.each do |c|
+          issue!(c.kind, c.id, ref, ref_taken_reason(existing[holder][:kind]),
+                 detail: "ref is already used by #{existing[holder][:kind]} #{holder}")
+        end
         next []
       end
       next group if group.one?
@@ -221,7 +235,9 @@ class ProjectDocProjection
       winner = group.min_by do |c|
         [ existing.dig(c.id, :ref) == ref ? 0 : 1, existing.key?(c.id) ? 0 : 1, c.id ]
       end
-      (group - [ winner ]).each { |c| issue!(c.kind, c.id, ref, "ref is already used by #{winner.kind} #{winner.id}") }
+      (group - [ winner ]).each do |c|
+        issue!(c.kind, c.id, ref, ref_taken_reason(winner.kind), detail: "ref is already used by #{winner.kind} #{winner.id}")
+      end
       [ winner ]
     end
   end
@@ -274,7 +290,8 @@ class ProjectDocProjection
       raise if invalid.empty? # the project itself, not one of its records
 
       invalid.each do |record|
-        issue!(document_kind(record), record.id.to_s, record.ref, record.errors.full_messages.to_sentence)
+        issue!(document_kind(record), record.id.to_s, record.ref, validation_reason(record),
+               detail: record.errors.full_messages.to_sentence)
       end
       refused = invalid.map { |record| record.id.to_s }.to_set
       candidates = candidates.reject { |c| refused.include?(c.id) }
@@ -310,7 +327,7 @@ class ProjectDocProjection
   # A parked row that was then refused by #write_rows! must not be left at its
   # parking ref. Its old ref is given back if it is free again (the record
   # that wanted it was refused too, or renamed elsewhere); if not, it stays
-  # parked and its issue says where it is, for the repair task to settle.
+  # parked and its issue's detail says where it is, for the repair task to settle.
   def unpark!(parked, existing)
     return if parked.empty?
 
@@ -319,7 +336,7 @@ class ProjectDocProjection
       original = existing[id][:ref]
       if taken.include?(original)
         issue = @issues.find { |i| i["id"] == id }
-        issue["reason"] = "#{issue['reason']} (parked at #{self.class.parking_ref(id)})" if issue
+        issue["detail"] = "#{issue['detail']} (parked at #{self.class.parking_ref(id)})" if issue
       else
         Content.where(id: id).update_all(ref: original)
         taken << original
@@ -327,8 +344,25 @@ class ProjectDocProjection
     end
   end
 
-  def issue!(kind, id, ref, reason)
-    @issues << { "kind" => kind, "id" => id, "ref" => ref, "reason" => reason }
+  # `reason` is for the author, who sees it under the project page's and the
+  # editor's warning; `detail` keeps the internals (row ids, parking refs) for
+  # the log, Honeybadger and the repair report.
+  def issue!(kind, id, ref, reason, detail: reason)
+    @issues << { "kind" => kind, "id" => id, "ref" => ref, "reason" => reason, "detail" => detail }
+  end
+
+  def ref_taken_reason(kind)
+    "This ID is already used by another #{ISSUE_KIND_NAMES.fetch(kind.to_s, 'item')}"
+  end
+
+  # A row's own validations, in the author's words where the refusal is about
+  # its ID, and in the validator's otherwise.
+  def validation_reason(record)
+    errors = record.errors
+    return ref_taken_reason("item") if errors.of_kind?(:ref, :taken)
+    return INVALID_REF_REASON if errors.attribute_names == [ :ref ]
+
+    "It can't be saved: #{errors.full_messages.to_sentence}"
   end
 
   def report_issues

@@ -124,7 +124,7 @@ const FeedbackLink = ({
       const text =
         submitError instanceof Error
           ? submitError.message
-          : "Could not submit feedback.";
+          : "Couldn't send your message. Check your connection and try again.";
       setError(text);
     } finally {
       setIsSubmitting(false);
@@ -222,11 +222,7 @@ const FeedbackLink = ({
                 <p className="m-0 text-slate-500 text-[0.8rem]">
                   Project link <a href={resolvedProjectUrl}>{resolvedProjectUrl}</a> will be included.
                 </p>
-              ) : (
-                <p className="m-0 text-slate-500 text-[0.8rem]">
-                  No project link is currently available.
-                </p>
-              )}
+              ) : null}
 
               {error ? (
                 <p className="m-0 text-red-700 text-[0.85rem] font-semibold">
@@ -246,7 +242,7 @@ const FeedbackLink = ({
                   type="submit"
                   disabled={isSubmitting || !message.trim()}
                 >
-                  {isSubmitting ? "Submitting..." : "Submit"}
+                  {isSubmitting ? "Sending…" : "Send"}
                 </DialogButton>
               </DialogActions>
             </form>

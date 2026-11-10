@@ -92,7 +92,7 @@
       <% end %>
 
       <p class="border-t border-gray-200 px-5 py-4 text-xs text-gray-500">
-        These settings are saved to the publication file. Rebuild output to see the changes.
+        Changes apply the next time you build.
       </p>
     <% else %>
       <%# Nothing reaches this today: General offers exercise-component visibility whatever
@@ -100,10 +100,7 @@
           It stays as the guard against a catalog change that empties a level again --
           a dialog with a heading and a Save button and nothing between them reads as a
           bug, and this is a sentence. %>
-      <p class="p-5 text-sm text-gray-600">
-        There are no build settings to choose for this
-        <%= settings.owner.is_a?(Target) ? "output" : "document type" %> yet.
-      </p>
+      <p class="p-5 text-sm text-gray-600">Nothing to set here yet.</p>
     <% end %>
   </div>
 </div>

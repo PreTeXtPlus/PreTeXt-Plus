@@ -104,7 +104,20 @@ module TargetsHelper
     STATE_STRIPE.fetch(state, STATE_STRIPE[:never])
   end
 
-  # A row in the drawer's history table. "Live" and "Superseded" are distinctions that
+  # The drawer's "Last try", in the words the history pills use. "Succeeded" alone
+  # would be a lie about a build the CLI exited nonzero on -- the output imported, the
+  # build still reported errors.
+  def build_outcome_words(build)
+    if build.failed? then "failed"
+    elsif build.canceled? then "canceled"
+    elsif build.queued? then "queued"
+    elsif build.unresolved? then "building"
+    elsif build.built_with_errors? then "built, with errors"
+    else "built"
+    end
+  end
+
+  # A row in the drawer's history table. "Live" and "Older build" are distinctions that
   # only exist relative to the target, which is why this is not Build#state.
   def build_history_pill(build, target)
     label, classes =
@@ -113,18 +126,18 @@ module TargetsHelper
       elsif build.queued? then [ "Queued", "bg-sky-50 text-sky-700" ]
       elsif build.unresolved? then [ "Building", "bg-sky-100 text-sky-800" ]
       # Imported, previewable, and serving nobody until the author accepts it. Ahead of
-      # the current_build check because it is emphatically *not* that, and "Superseded"
+      # the current_build check because it is emphatically *not* that, and "Older build"
       # -- what it would otherwise read as -- is the opposite of true: it is the newest
       # build there is.
-      elsif build.awaiting_review? then [ "Not live · errors", "bg-orange-100 text-orange-900" ]
+      elsif build.awaiting_review? then [ "Not published · errors", "bg-orange-100 text-orange-900" ]
       # The errors belong on the row for the attempt that had them, not only on the
       # target: a history where the live build reads plain "Live" gives an author no way
       # to tell which of two builds is the one whose log they were told to read.
       elsif build.id == target.current_build_id
         build.built_with_errors? ? [ "Live · errors", "bg-orange-100 text-orange-900" ] :
                                    [ "Live", "bg-green-100 text-green-800" ]
-      elsif build.built_with_errors? then [ "Superseded · errors", "bg-gray-100 text-gray-700" ]
-      else [ "Superseded", "bg-gray-100 text-gray-700" ]
+      elsif build.built_with_errors? then [ "Older build · errors", "bg-gray-100 text-gray-700" ]
+      else [ "Older build", "bg-gray-100 text-gray-700" ]
       end
 
     tag.span(label,
@@ -135,7 +148,7 @@ module TargetsHelper
   # what readers are actually seeing.
   def target_timing(target)
     if target.current_build.nil?
-      return tag.span("Waiting for a build slot") if target.state == :queued
+      return tag.span("Waiting to start") if target.state == :queued
       # Nothing live, but something built: the first build of this output came back
       # flagged, so there is output waiting on the author rather than nothing at all.
       if target.state == :needs_review
@@ -150,11 +163,11 @@ module TargetsHelper
     when :needs_review
       tag.span("Readers see the build from #{time_ago_in_words(target.last_built_at)} ago") + review_prompt
     when :warned
-      built + tag.span("The build reported errors — check the log", class: "block text-orange-700")
+      built + tag.span("Built with problems — see details", class: "block text-orange-700")
     when :stale
-      built + tag.span("Source has changed since", class: "block text-amber-700")
+      built + tag.span("Changed since", class: "block text-amber-700")
     when :queued
-      built + tag.span("Waiting for a build slot", class: "block text-gray-500")
+      built + tag.span("Waiting to start", class: "block text-gray-500")
     when :failed
       tag.span("Readers see the build from #{time_ago_in_words(target.last_built_at)} ago") +
         tag.span("The most recent build failed", class: "block text-red-700")
@@ -181,6 +194,6 @@ module TargetsHelper
     candidates = Target.bulk_build_candidates(targets)
     return nil if candidates.empty?
 
-    candidates.first.state == :never ? "Build all" : "Rebuild outdated"
+    candidates.first.state == :never ? "Build all" : "Rebuild changed outputs"
   end
 end

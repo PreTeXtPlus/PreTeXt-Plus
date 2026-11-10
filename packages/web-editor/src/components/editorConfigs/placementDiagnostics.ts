@@ -119,9 +119,8 @@ export function findPlacementProblems(text: string, input: PlacementCheckInput):
         length,
         severity: "warning",
         message:
-          `The ${kind} "${ref}" is placed ${where} without an instance name, so its labels would ` +
-          `repeat, and PreTeXt requires them to be unique. Name all but one placement ` +
-          `(instance="…") to keep them apart.`,
+          `The ${kind} "${ref}" is used ${where}. Give every copy but one its own ` +
+          `instance name (instance="…") so PreTeXt can tell them apart — the quick fix adds one.`,
         suggestedInstance: suggestInstance(tag, ref, all, input),
       });
     } else if (!INSTANCE_NAME.test(instance)) {
@@ -136,7 +135,7 @@ export function findPlacementProblems(text: string, input: PlacementCheckInput):
         index,
         length,
         severity: "warning",
-        message: `The ${kind} "${ref}" is placed under the instance name "${instance}" more than once; each placement needs its own.`,
+        message: `Two copies of the ${kind} "${ref}" share the instance name "${instance}". Give each a different one.`,
         suggestedInstance: suggestInstance(tag, ref, all, input),
       });
     } else if (input.knownRefs.has(qualifiedIdentifier(ref, instance))) {
@@ -145,8 +144,8 @@ export function findPlacementProblems(text: string, input: PlacementCheckInput):
         length,
         severity: "warning",
         message:
-          `This placement's labels would be "${qualifiedIdentifier(ref, instance)}", which is already the ` +
-          `id of something else in the project. Choose another instance name.`,
+          `This copy's ID would be "${qualifiedIdentifier(ref, instance)}", which is already the ` +
+          `ID of something else in the project. Choose another instance name.`,
       });
     }
   }

@@ -64,7 +64,7 @@ const ExerciseSettings = ({ exercise, embedFormat, onSave, readOnly }: ExerciseS
     if (
       !window.confirm(
         inDocument
-          ? `Remove exercise "${exercise.ref}" from the project? This also deletes its references from the document.`
+          ? `Remove exercise "${exercise.ref}" from the project? It will also be taken out of every place the document uses it.`
           : `Remove exercise "${exercise.ref}" from the project?`,
       )
     ) {

@@ -166,7 +166,7 @@ class PublicationSettingsControllerTest < ActionDispatch::IntegrationTest
 
     assert_equal({ "worksheet_margin" => "0.25in", "worksheet_left" => "1in",
                    "worksheet_right" => "0.5cm" }, @project.reload.publication_settings)
-    assert_equal "Saved.", flash[:notice]
+    assert_equal "Settings saved.", flash[:notice]
   end
 
   # Components are separated by spaces because that is what PreTeXt splits on, but a list
@@ -177,7 +177,7 @@ class PublicationSettingsControllerTest < ActionDispatch::IntegrationTest
       params: { publication_settings: { version: " instructor,  solutions " } }
 
     assert_equal "instructor solutions", @target.reload.publication_settings["version"]
-    assert_equal "Saved.", flash[:notice]
+    assert_equal "Settings saved.", flash[:notice]
   end
 
   # A name carrying a space or a "|" would break PreTeXt's fencing, so the pattern is a

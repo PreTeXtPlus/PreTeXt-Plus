@@ -78,7 +78,7 @@ export function usePlacementDiagnostics(
               const start = model.getPositionAt(fix.index);
               const end = model.getPositionAt(fix.index + fix.length);
               actions.push({
-                title: `Name this placement "${fix.instance}"`,
+                title: `Name this copy "${fix.instance}"`,
                 kind: "quickfix",
                 isPreferred: true,
                 diagnostics: [marker],

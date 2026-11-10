@@ -30,19 +30,26 @@ class SafeUrlFetcher
     @url = url
   end
 
+  # FetchError messages are shown to the author as they are, so the details behind
+  # one (a status code, a socket error) go to the log rather than into the message.
+  # An UnsafeUrlError keeps the ssrf_filter gem's own wording; AssetFetchesController
+  # logs that and shows its own sentence.
   def call
     body = +""
     content_type = nil
 
     SsrfFilter.get(@url, http_options: HTTP_OPTIONS) do |response|
-      raise FetchError, "Request failed (#{response.code})" unless response.is_a?(Net::HTTPSuccess)
+      unless response.is_a?(Net::HTTPSuccess)
+        Rails.logger.info("[SafeUrlFetcher] #{@url} answered HTTP #{response.code}")
+        raise FetchError, "We couldn't download that image."
+      end
 
       content_type = response.content_type.to_s
-      raise FetchError, "URL does not point to an image" unless content_type.start_with?("image/")
+      raise FetchError, "That address isn't an image." unless content_type.start_with?("image/")
 
       response.read_body do |chunk|
         body << chunk
-        raise FetchError, "Image too large" if body.bytesize > MAX_BYTES
+        raise FetchError, "That image is too large (max #{MAX_BYTES / 1.megabyte} MB)." if body.bytesize > MAX_BYTES
       end
     end
 
@@ -50,6 +57,7 @@ class SafeUrlFetcher
   rescue *UNSAFE_URL_ERRORS => e
     raise UnsafeUrlError, e.message
   rescue SocketError, SystemCallError, Net::OpenTimeout, Net::ReadTimeout, IOError, OpenSSL::SSL::SSLError => e
-    raise FetchError, "Could not fetch URL: #{e.message}"
+    Rails.logger.info("[SafeUrlFetcher] #{@url}: #{e.class}: #{e.message}")
+    raise FetchError, "We couldn't reach that address."
   end
 end

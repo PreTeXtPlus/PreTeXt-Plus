@@ -57,12 +57,12 @@ module ProjectsHelper
   }.freeze
 
   # One line for an entry of Project#projection_issues, in the author's words:
-  # the kind of record and how they know it (its reference ID), then the reason
-  # the projection gave. Refs and ids are the author's own text, escaped by the
+  # the kind of record and how they know it (its ID, when it has one), then the
+  # reason the projection gave. Refs are the author's own text, escaped by the
   # view.
   def projection_issue_description(issue)
-    kind = PROJECTION_ISSUE_KINDS.fetch(issue["kind"].to_s, "Record")
-    name = issue["ref"].present? ? "with ID “#{issue['ref']}”" : "(ID #{issue['id'].to_s.first(8)}…)"
-    "#{kind} #{name}: #{issue['reason']}."
+    kind = PROJECTION_ISSUE_KINDS.fetch(issue["kind"].to_s, "Item")
+    name = issue["ref"].present? ? "#{kind} “#{issue['ref']}”" : "#{kind} with no ID"
+    "#{name}: #{issue['reason']}."
   end
 end

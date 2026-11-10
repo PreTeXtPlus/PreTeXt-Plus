@@ -48,8 +48,8 @@ export interface ExerciseDesignerProps {
 // this package without React's JSX runtime, so nothing may render at import.
 const MarkupHelp = () => (
   <>
-    Plain text becomes paragraphs (separate them with a blank line). PreTeXt markup like{" "}
-    <code>&lt;m&gt;x^2&lt;/m&gt;</code> or <code>&lt;c&gt;code&lt;/c&gt;</code> is allowed.
+    Leave a blank line between paragraphs. PreTeXt markup works too, like{" "}
+    <code>&lt;m&gt;x^2&lt;/m&gt;</code> for math.
   </>
 );
 
@@ -122,11 +122,13 @@ export default function ExerciseDesigner({
     return (
       <div className="flex flex-col gap-3 p-4" data-testid="exercise-designer">
         <p className="m-0 rounded bg-[#fde8e8] px-3 py-2 text-[0.8rem] text-red-700">
-          This exercise's source can't be read by the designer. {state.error}
+          This exercise can't be opened in the form because its source has a mistake. Fix it in
+          the source, or start over.
+          <span className="mt-1 block text-[0.72rem] opacity-80">Details: {state.error}</span>
         </p>
         {!readOnly && (
           <div>
-            <SettingsButton onClick={() => startOver(emptyDesign())}>Start a new exercise</SettingsButton>
+            <SettingsButton onClick={() => startOver(emptyDesign())}>Start over (clears this exercise)</SettingsButton>
           </div>
         )}
       </div>

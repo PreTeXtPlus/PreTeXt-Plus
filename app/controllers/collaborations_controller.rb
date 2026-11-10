@@ -60,7 +60,7 @@ class CollaborationsController < ApplicationController
       elsif invite(collaboration)
         invited += 1
       else
-        failures[collaboration.errors.full_messages.to_sentence] << email
+        failures[invite_failure_reason(collaboration)] << email
       end
     end
 
@@ -97,7 +97,7 @@ class CollaborationsController < ApplicationController
 
     new_owner = collaboration.user
     if new_owner.nil?
-      redirect_to @project, alert: "Can't transfer ownership to a pending invitation." and return
+      redirect_to @project, alert: "They need to accept the invitation before you can make them the owner." and return
     end
 
     previous_owner = current_user
@@ -105,7 +105,7 @@ class CollaborationsController < ApplicationController
       CollaborationMailer.ownership_transferred(@project, previous_owner).deliver_later
       redirect_to @project, notice: "Ownership transferred to #{new_owner.name_with_email}. You are now a collaborator on this project."
     else
-      redirect_to @project, alert: "Couldn't transfer ownership."
+      redirect_to @project, alert: "Couldn't transfer ownership. Please try again."
     end
   end
 
@@ -113,6 +113,19 @@ class CollaborationsController < ApplicationController
 
   def set_project
     @project = Project.find(params[:project_id])
+  end
+
+  # A few words per refused address for the bulk-invite summary, which lists many of
+  # them in one sentence -- the validators' own sentences would each repeat the
+  # attribute name ("Invited email ...").
+  def invite_failure_reason(collaboration)
+    errors = collaboration.errors
+    if errors.of_kind?(:invited_email, :invalid) then "not a valid email"
+    elsif errors.of_kind?(:invited_email, :taken) then "already invited"
+    elsif errors.added?(:invited_email, "already owns this project") then "already the owner"
+    elsif errors[:base].any? { |message| message.start_with?("Collaborator limit") } then "collaborator limit reached"
+    else errors.full_messages.to_sentence
+    end
   end
 
   def enforce_invite_limit

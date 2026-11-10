@@ -255,8 +255,8 @@ const NewAssetForm = ({
         onSelect={setTab}
         tabs={[
           ...(onUpload ? [{ id: "upload" as const, label: "Upload" }] : []),
-          { id: "url" as const, label: "External URL" },
-          ...(canAuthor ? [{ id: "authored" as const, label: "Custom" }] : []),
+          { id: "url" as const, label: "From the web" },
+          ...(canAuthor ? [{ id: "authored" as const, label: "Write PreTeXt" }] : []),
           ...generatorTabs.map((id) => ({ id, label: generators[id].label })),
         ]}
       />

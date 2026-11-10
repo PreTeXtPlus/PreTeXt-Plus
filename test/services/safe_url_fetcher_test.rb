@@ -60,7 +60,7 @@ class SafeUrlFetcherTest < ActiveSupport::TestCase
   test "rejects an unsuccessful response" do
     stub_fetch(fake_response(success: false)) do
       error = assert_raises(SafeUrlFetcher::FetchError) { SafeUrlFetcher.call("http://example.com/missing.png") }
-      assert_match(/404/, error.message)
+      assert_match(/couldn't download/, error.message)
     end
   end
 

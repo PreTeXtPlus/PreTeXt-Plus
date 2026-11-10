@@ -318,15 +318,15 @@ describe("opening an asset", () => {
     expect(barTitle()).toHaveTextContent("A figure");
     expect(editor().value).toBe("<latex-image>x</latex-image>");
     expect(editor().dataset.format).toBe("pretext");
-    expect(screen.getByText("missing short description")).toBeInTheDocument();
+    expect(screen.getByText("needs alt text")).toBeInTheDocument();
 
-    const alt = screen.getByLabelText("Short description") as HTMLInputElement;
+    const alt = screen.getByLabelText("Alt text") as HTMLInputElement;
     fireEvent.change(alt, { target: { value: "A plot" } });
     await act(async () => {
       fireEvent.blur(alt);
     });
     expect(assetUpdates[assetUpdates.length - 1]).toMatchObject({ ref: "fig", shortDescription: "A plot" });
-    expect(screen.queryByText("missing short description")).toBeNull();
+    expect(screen.queryByText("needs alt text")).toBeNull();
   });
 
   it("reports source edits as the asset's content", () => {

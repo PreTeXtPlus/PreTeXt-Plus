@@ -75,7 +75,7 @@ describe("usePlacementDiagnostics", () => {
       markers: [...markers, { ...markers[0], source: "spelling" }],
     });
     expect(actions).toHaveLength(1);
-    expect(actions[0].title).toBe('Name this placement "sec-intro"');
+    expect(actions[0].title).toBe('Name this copy "sec-intro"');
     expect(actions[0].edit.edits[0].textEdit.text).toBe('<plus:image ref="graph" instance="sec-intro"/>');
 
     unmount();

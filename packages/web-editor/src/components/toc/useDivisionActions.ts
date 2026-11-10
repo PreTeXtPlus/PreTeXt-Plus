@@ -56,7 +56,7 @@ export function useDivisionActions() {
   const handleDelete = (division: Division, parentXmlId: string | null) => {
     if (
       !window.confirm(
-        `Delete "${division.title || "Untitled"}"? This permanently removes the division.`,
+        `Delete "${division.title || "Untitled"}"? This can't be undone.`,
       )
     )
       return;

@@ -102,7 +102,7 @@ class ProjectDocsControllerTest < ActionDispatch::IntegrationTest
     assert_response :success
     issues = response.parsed_body["projection_issues"]
     assert_includes issues.map { |i| i["ref"] }, "sec-chapter 1 "
-    assert issues.all? { |i| i.keys.sort == %w[ id kind reason ref ] }
+    assert issues.all? { |i| i.keys.sort == %w[ detail id kind reason ref ] }
     assert_equal "Issues", @project.reload.title, "the rest of the document was still written"
   end
 

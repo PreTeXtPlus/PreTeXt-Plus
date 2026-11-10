@@ -17,10 +17,10 @@
 
 <% if @build.unresolved? %>
   <div class="mt-4 flex flex-wrap items-center gap-3 rounded-lg border border-sky-200 bg-sky-50 p-3 text-sm text-sky-900">
-    <span><%= @build.queued? ? "This build is queued, waiting for a free slot." : "This build is still running." %></span>
+    <span><%= @build.queued? ? "This build is waiting to start." : "This build is still running." %></span>
     <%# Nothing to check on the server for a build that was never sent there. %>
     <% unless @build.queued? %>
-      <%= button_to "Check server", check_status_project_build_path(@project, @build),
+      <%= button_to "Refresh status", check_status_project_build_path(@project, @build),
             class: "#{button_classes(color: "sky", outlined: true)} px-2 py-1 text-xs" %>
     <% end %>
     <%= button_to "Cancel", cancel_project_build_path(@project, @build),
@@ -35,7 +35,7 @@
       output -- reading the log is half of reviewing it, looking at the result is the
       other half. %>
   <div class="mt-4 rounded-lg border border-orange-200 bg-orange-50 p-3 text-sm text-orange-900">
-    This build reported errors but still produced output, which has been imported.
+    This build reported errors but still produced output.
     <strong>It is not live:</strong> readers keep seeing the previous build until you
     choose to use this one, in
     <%= link_to "this output's details", project_target_path(@project, @build.target),
@@ -51,9 +51,12 @@
 <% end %>
 
 <% if @build.log.present? %>
-  <pre class="mt-4 overflow-auto rounded-lg bg-gray-900 p-4 text-xs text-gray-100 whitespace-pre-wrap"><%= @build.log %></pre>
+  <p class="mt-4 text-sm text-gray-600">
+    Technical details. If something went wrong, look for lines containing “error”, or send this page to support.
+  </p>
+  <pre class="mt-2 overflow-auto rounded-lg bg-gray-900 p-4 text-xs text-gray-100 whitespace-pre-wrap"><%= @build.log %></pre>
 <% else %>
-  <p class="mt-4 text-gray-600">No log was returned for this build.</p>
+  <p class="mt-4 text-gray-600">No details are available for this build.</p>
 <% end %>
 
 <div class="mt-6 flex flex-wrap items-center gap-3 border-t border-gray-200 pt-5">

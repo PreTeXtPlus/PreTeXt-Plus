@@ -32,7 +32,7 @@ class PublicationSettingsController < ApplicationController
     elsif refused.any?
       redirect_to return_path, alert: refused_alert(refused)
     else
-      redirect_to return_path, notice: "Saved."
+      redirect_to return_path, notice: "Settings saved."
     end
   end
 

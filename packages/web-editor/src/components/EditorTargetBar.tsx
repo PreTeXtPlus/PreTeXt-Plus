@@ -161,7 +161,7 @@ const EditorTargetBar = ({
     title = asset.title || asset.ref || "Untitled image";
     id = asset.ref ?? "";
     if (notPlaced) status = "not used yet";
-    else if (!asset.shortDescription?.trim()) status = "missing short description";
+    else if (!asset.shortDescription?.trim()) status = "needs alt text";
   }
 
   return (

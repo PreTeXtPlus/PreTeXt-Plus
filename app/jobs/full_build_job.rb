@@ -34,7 +34,7 @@ class FullBuildJob < ApplicationJob
     # The project page and the build drawer show the same list to the author
     # (Project#projection_issues); this is the operator's copy.
     projection.issues.each do |issue|
-      Rails.logger.warn("FullBuildJob build #{build.id} skipped #{issue['kind']} #{issue['id']}: #{issue['reason']}")
+      Rails.logger.warn("FullBuildJob build #{build.id} skipped #{issue['kind']} #{issue['id']}: #{issue['detail'] || issue['reason']}")
     end
 
     archive = ProjectArchiveBuilder.new(build.project.reload).build

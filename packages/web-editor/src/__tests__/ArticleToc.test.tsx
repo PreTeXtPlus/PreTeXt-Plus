@@ -336,7 +336,7 @@ describe("ArticleToc expand/collapse", () => {
   ];
 
   const unplacedHeader = () =>
-    screen.getByText("Divisions not used yet").closest("button")!;
+    screen.getByText("Unused divisions").closest("button")!;
 
   it("opens showing only the root's children", () => {
     renderToc(false, bookDivisions);

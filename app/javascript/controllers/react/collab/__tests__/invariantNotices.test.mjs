@@ -45,7 +45,7 @@ describe("describeInvariantViolation", () => {
   it("tells the author about a renamed division", () => {
     expect(describeInvariantViolation(repaired)).toContain("“offline-test”");
     expect(describeInvariantViolation(repaired)).toContain("“offline-test-2”");
-    expect(describeInvariantViolation(repaired)).toContain("Unplaced divisions");
+    expect(describeInvariantViolation(repaired)).toContain("unused divisions");
   });
 
   it("says nothing about a refused write, which changed nothing the author sees", () => {

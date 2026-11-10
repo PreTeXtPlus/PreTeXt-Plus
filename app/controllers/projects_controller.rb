@@ -171,7 +171,7 @@ class ProjectsController < ApplicationController
     respond_to do |format|
       if @project.update(project_params)
         format.json { render :show, status: :ok, location: @project }
-        format.html { redirect_to @project, notice: "Project was successfully updated." }
+        format.html { redirect_to @project, notice: "Saved." }
       else
         format.json { render json: @project.errors, status: :unprocessable_entity }
         format.html { redirect_to @project, alert: @project.errors.full_messages.to_sentence }
@@ -184,7 +184,8 @@ class ProjectsController < ApplicationController
     # its own uuids -- so an id belonging elsewhere reaches the database as a
     # primary-key conflict. It cannot read or touch that other row, but it can
     # raise here, so answer it as the bad request it is rather than a 500.
-    render json: { error: "A record id in this request belongs to another project." },
+    Rails.logger.warn("[projects#update] project #{@project.id}: a nested record id belongs to another project")
+    render json: { error: "Something went wrong saving. Please reload the page." },
            status: :unprocessable_entity
   end
 
@@ -193,7 +194,7 @@ class ProjectsController < ApplicationController
     @project.destroy!
 
     respond_to do |format|
-      format.html { redirect_to projects_path, notice: "Project was successfully destroyed.", status: :see_other }
+      format.html { redirect_to projects_path, notice: "Project deleted.", status: :see_other }
     end
   end
 
@@ -314,7 +315,7 @@ class ProjectsController < ApplicationController
     if restored.save
       redirect_to restored, notice: "Backup restored as a new project."
     else
-      alert = restored.errors.full_messages.to_sentence.presence || "Restore failed."
+      alert = restored.errors.full_messages.to_sentence.presence || "Restore failed. Please try again, or email support@pretext.plus."
       redirect_to @project, alert: alert
     end
   end
@@ -329,7 +330,7 @@ class ProjectsController < ApplicationController
     if project_copy.save
         redirect_to project_copy
     else
-      alert = project_copy.errors.full_messages.to_sentence.presence || "Copy failed."
+      alert = project_copy.errors.full_messages.to_sentence.presence || "Copy failed. Please try again, or email support@pretext.plus."
       redirect_to projects_path, alert: alert
     end
   end
@@ -361,10 +362,12 @@ class ProjectsController < ApplicationController
       http.request(request)
     end
     render html: response.body.html_safe, status: response.code
-  rescue Net::OpenTimeout, Net::ReadTimeout
-    render plain: "Preview build timed out", status: :gateway_timeout
-  rescue SocketError, EOFError, IOError, Errno::ECONNREFUSED, Errno::EHOSTUNREACH, SystemCallError
-    render plain: "Preview build failed", status: :bad_gateway
+  rescue Net::OpenTimeout, Net::ReadTimeout => e
+    Rails.logger.error("[preview] #{e.class}: #{e.message}")
+    render plain: "The preview took too long. Please try again.", status: :gateway_timeout
+  rescue SocketError, EOFError, IOError, Errno::ECONNREFUSED, Errno::EHOSTUNREACH, SystemCallError => e
+    Rails.logger.error("[preview] #{e.class}: #{e.message}")
+    render plain: "The preview couldn't be made. Please try again.", status: :bad_gateway
   end
 
 
@@ -380,7 +383,7 @@ class ProjectsController < ApplicationController
   # its `token` option is documented "omit when proxying" -- so the client sends
   # only the file and the credential is added here (see react/import.jsx).
   #
-  # Statuses are forwarded verbatim, because the wizard words each one
+  # Statuses are forwarded verbatim (a failure's body is not -- see below), because the wizard words each one
   # differently for the author (`describeRemotePandocFailure`): a 422 carries
   # pandoc's own stderr inside a <pre>, a 504 means the file outran the server's
   # conversion budget, and 401/403/404 say plainly that the fault is this
@@ -392,17 +395,17 @@ class ProjectsController < ApplicationController
 
     upload = params[:file]
     unless upload.respond_to?(:tempfile)
-      return render plain: "No file provided", status: :bad_request
+      return render plain: "Choose a file to upload.", status: :bad_request
     end
     if upload.size > PANDOC_MAX_UPLOAD_BYTES
-      return render plain: "That file is larger than the #{PANDOC_MAX_UPLOAD_BYTES / 1.megabyte}MB conversion limit.",
+      return render plain: "That file is too large (max #{PANDOC_MAX_UPLOAD_BYTES / 1.megabyte} MB).",
                     status: :content_too_large
     end
 
     host = Rails.application.credentials.dig(:preview_build, :host)
     if host.blank?
       Rails.logger.error("[pandoc] no preview_build host configured; check credentials")
-      return render plain: "The conversion service is not configured.", status: :bad_gateway
+      return render plain: "Importing this kind of file isn't available right now.", status: :bad_gateway
     end
     uri = URI.parse("https://#{host}/pandoc/")
 
@@ -444,16 +447,23 @@ class ProjectsController < ApplicationController
       "in #{pandoc_elapsed(started)}s"
     )
 
-    # text/plain whatever the body turns out to be: a 422's body is a fragment
-    # of the build server's HTML, and it must reach the wizard as characters to
-    # parse rather than as markup a browser might render on this origin.
-    render plain: response.body, status: response.code.to_i
+    # A failure's body is the build server's own (a 422's is pandoc's stderr in a
+    # fragment of HTML), which the wizard would quote to the author verbatim. It
+    # goes to the log instead, and the wizard words the status on its own.
+    # text/plain either way: a converted document must reach the wizard as
+    # characters to parse rather than as markup a browser might render here.
+    status = response.code.to_i
+    if status >= 400
+      Rails.logger.warn("[pandoc] #{status} body: #{response.body.to_s.truncate(2000)}")
+      return render plain: "", status: status
+    end
+    render plain: response.body, status: status
   rescue Net::OpenTimeout, Net::ReadTimeout => e
     Rails.logger.error("[pandoc] #{e.class} after #{pandoc_elapsed(started)}s (read timeout is #{PANDOC_READ_TIMEOUT}s)")
-    render plain: "The conversion service did not respond in time.", status: :gateway_timeout
+    render plain: "That file took too long to convert.", status: :gateway_timeout
   rescue SocketError, EOFError, IOError, Errno::ECONNREFUSED, Errno::EHOSTUNREACH, SystemCallError => e
     Rails.logger.error("[pandoc] #{e.class}: #{e.message} after #{pandoc_elapsed(started)}s")
-    render plain: "Could not reach the conversion service.", status: :bad_gateway
+    render plain: "We couldn't reach the converter. Please try again later.", status: :bad_gateway
   end
 
   # GET /tryit
@@ -477,7 +487,7 @@ class ProjectsController < ApplicationController
     render json: { status: "success" }, status: :accepted
   rescue StandardError => e
     Rails.logger.error("Feedback submission error: #{e.message}")
-    render json: { error: "Failed to submit feedback" }, status: :internal_server_error
+    render json: { error: "We couldn't send your feedback. Please try again." }, status: :internal_server_error
   end
 
   # A pandoc conversion an author shared, from the new-project wizard or the
@@ -489,7 +499,7 @@ class ProjectsController < ApplicationController
   def import_share
     upload = params[:file]
     unless upload.respond_to?(:tempfile)
-      return render json: { error: "No file provided" }, status: :bad_request
+      return render json: { error: "Choose a file to upload." }, status: :bad_request
     end
 
     pretext = params[:pretext].to_s
@@ -524,7 +534,8 @@ class ProjectsController < ApplicationController
       true
     rescue StandardError => e
       Honeybadger.notify(e, context: { project_id: @project.id, action: action_name })
-      redirect_to @project, alert: "The saved copy of this project could not be updated: #{e.message}"
+      Rails.logger.error("[rows_current] project #{@project.id} #{action_name}: #{e.class}: #{e.message}")
+      redirect_to @project, alert: "We couldn't get your latest changes ready. Please try again in a minute."
       false
     end
 
