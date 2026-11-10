@@ -110,6 +110,21 @@ export const GearIcon = () => (
   </SvgIcon>
 );
 
+/**
+ * The settings drawer's open/close caret: points down while the drawer is
+ * shut (it opens downward) and up once it is open (it folds back up).
+ */
+export const CaretIcon = ({ up }: { up: boolean }) => (
+  <SvgIcon
+    size={14}
+    strokeWidth={1.75}
+    viewBox="0 0 16 16"
+    className={clsx("transition-transform duration-100", up && "rotate-180")}
+  >
+    <path d="M4 6L8 10L12 6" />
+  </SvgIcon>
+);
+
 /** The × on an editor tab. */
 export const CloseIcon = () => (
   <SvgIcon size={14} strokeWidth={1.5} viewBox="0 0 16 16">

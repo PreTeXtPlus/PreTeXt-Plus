@@ -408,6 +408,18 @@ describe("the settings drawer", () => {
     expect(screen.queryByTestId("settings-drawer")).toBeNull();
   });
 
+  it("closes from the Hide settings bar along its bottom", () => {
+    renderEditors();
+    openSnippetRow("greeting");
+    const toggle = screen.getByTestId("settings-drawer-toggle");
+    expect(toggle).toHaveAttribute("aria-expanded", "true");
+    fireEvent.click(
+      within(screen.getByTestId("settings-drawer")).getByRole("button", { name: /Hide settings/ }),
+    );
+    expect(screen.queryByTestId("settings-drawer")).toBeNull();
+    expect(toggle).toHaveAttribute("aria-expanded", "false");
+  });
+
   it("closes when another item opens", () => {
     renderEditors();
     fireEvent.click(screen.getByTestId("settings-drawer-toggle"));
