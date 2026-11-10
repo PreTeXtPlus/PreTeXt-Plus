@@ -72,7 +72,7 @@ describe("GeneratedAssetPreview", () => {
   it("with no engine configured, shows the stored picture and says so", () => {
     render(<GeneratedAssetPreview asset={{ ...asset, url: "/graph.svg" }} docinfo="" runtime={undefined} />);
     expect(screen.getByRole("img")).toHaveAttribute("src", "/graph.svg");
-    expect(screen.getByTestId("asset-preview")).toHaveTextContent("Live rendering isn't available here");
+    expect(screen.getByTestId("asset-preview")).toHaveTextContent("Live previews aren't available here");
   });
 
   describe("downloading the picture", () => {
@@ -134,7 +134,7 @@ describe("GeneratedAssetPreview", () => {
         runtime={fakeRuntime()}
       />,
     );
-    expect(await screen.findByText(/matches the current source/)).toBeInTheDocument();
+    expect(await screen.findByText(/Up to date/)).toBeInTheDocument();
 
     rerender(
       <GeneratedAssetPreview
@@ -143,13 +143,13 @@ describe("GeneratedAssetPreview", () => {
         runtime={fakeRuntime()}
       />,
     );
-    expect(await screen.findByText(/Source changed since the stored picture/)).toBeInTheDocument();
+    expect(await screen.findByText(/source has changed since this preview/)).toBeInTheDocument();
   });
 
   it("starts the engine on its own, but not for a read-only view", async () => {
     const runtime = fakeRuntime();
     render(<GeneratedAssetPreview asset={asset} docinfo="" runtime={runtime} />);
-    expect(screen.getByTestId("generated-asset-status")).toHaveTextContent("Not rendered yet");
+    expect(screen.getByTestId("generated-asset-status")).toHaveTextContent("No preview yet");
     await waitFor(() => expect(runtime.load).toHaveBeenCalledTimes(1));
 
     const idle = fakeRuntime();
@@ -161,7 +161,7 @@ describe("GeneratedAssetPreview", () => {
   it("says when the engine could not be loaded and offers a retry", async () => {
     const runtime = fakeRuntime("failed");
     render(<GeneratedAssetPreview asset={asset} docinfo="" runtime={runtime} />);
-    expect(screen.getByTestId("generated-asset-load-error")).toHaveTextContent("couldn't be loaded");
+    expect(screen.getByTestId("generated-asset-load-error")).toHaveTextContent("preview couldn't start");
     fireEvent.click(screen.getByTestId("retry-generator-engine"));
     expect(runtime.load).toHaveBeenCalledTimes(1);
   });
@@ -185,7 +185,7 @@ describe("GeneratedAssetPreview", () => {
       await sha256Hex(renderInputFor(generators.prefigure, "<diagram/>", docinfo)),
     );
     await waitFor(() =>
-      expect(screen.getByTestId("generated-asset-status")).toHaveTextContent("Rendered from the current source"),
+      expect(screen.getByTestId("generated-asset-status")).toHaveTextContent("Up to date"),
     );
   });
 
@@ -278,7 +278,8 @@ describe("GeneratedAssetPreview", () => {
     it("never renders on its own, and says what the button does", async () => {
       const runtime = fakeRuntime("ready");
       render(<GeneratedAssetPreview asset={sage} docinfo="" runtime={runtime} debounceMs={0} />);
-      expect(screen.getByTestId("generated-asset-status")).toHaveTextContent("Render makes the picture");
+      expect(screen.getByTestId("generated-asset-status")).toHaveTextContent("Click Preview to see the image");
+      expect(screen.getByTestId("render-generated-asset")).toHaveTextContent("Preview");
       await new Promise((resolve) => setTimeout(resolve, 20));
       expect(runtime.render).not.toHaveBeenCalled();
       expect(screen.getByTestId("render-generated-asset")).toBeEnabled();
@@ -296,7 +297,8 @@ describe("GeneratedAssetPreview", () => {
       expect(onOutput.mock.calls[0][1].previewInputDigest).toBe(
         await sha256Hex(renderInputFor(generators.sageplot, sage.source!, "")),
       );
-      expect(screen.getByTestId("generated-asset-status")).toHaveTextContent("Rendered from the current source");
+      expect(screen.getByTestId("generated-asset-status")).toHaveTextContent("Up to date");
+      expect(screen.getByTestId("render-generated-asset")).toHaveTextContent("Refresh");
     });
 
     it("shows the server's progress while a render is under way, and disables the button", async () => {
@@ -324,7 +326,7 @@ describe("GeneratedAssetPreview", () => {
       expect(screen.getByTestId("render-generated-asset")).toBeDisabled();
       rerender(<GeneratedAssetPreview asset={sage} docinfo="" runtime={undefined} />);
       expect(screen.queryByTestId("render-generated-asset")).not.toBeInTheDocument();
-      expect(screen.getByTestId("asset-preview")).toHaveTextContent("Rendering on the build server isn't available here");
+      expect(screen.getByTestId("asset-preview")).toHaveTextContent("Previews aren't available here");
     });
 
     it("shows a failed render's message with the server's log folded under it", async () => {

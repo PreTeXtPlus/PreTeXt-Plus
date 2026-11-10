@@ -4,13 +4,13 @@ import { emptyInlineBlock, type HorizontalParsons } from "../model";
 
 const HELP: Record<string, string> = {
   natural: "Blocks are words or short phrases, and may use inline markup.",
-  math: "Blocks are LaTeX, typeset as math (each is wrapped in <m>).",
+  math: "Blocks are LaTeX, shown as math.",
 };
 
 export default function HorizontalParsonsForm(props: FormProps<HorizontalParsons>) {
   const { body } = props;
   const set = patcher(props);
-  const help = HELP[body.language] ?? "Blocks are code tokens (each is wrapped in <c>).";
+  const help = HELP[body.language] ?? "Blocks are pieces of code.";
   return (
     <Section title="Blocks">
       <div className="flex flex-wrap items-end gap-4">

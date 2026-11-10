@@ -3,6 +3,7 @@ import clsx from "clsx";
 import type { Exercise } from "../../types/editor";
 import { sanitizeXmlId, slugifyTitle, uniqueRef } from "../../sectionUtils";
 import { useTakenRefs } from "../../store/hooks";
+import { ID_REQUIRED_MESSAGE, idTakenMessage } from "../../idRules";
 import {
   EXERCISE_KINDS,
   EXERCISE_KIND_LABELS,
@@ -76,11 +77,11 @@ const NewExerciseForm = ({
     if (isCreating) return;
     const sanitized = sanitizeXmlId(ref);
     if (!sanitized) {
-      setError("Reference ID can't be empty.");
+      setError(ID_REQUIRED_MESSAGE);
       return;
     }
     if (takenRefs.has(sanitized)) {
-      setError(`Reference ID "${sanitized}" is already in use. Choose a unique Reference ID.`);
+      setError(idTakenMessage(sanitized));
       return;
     }
     setError(null);
@@ -114,14 +115,14 @@ const NewExerciseForm = ({
           className={FIELD_CONTROL_CLASSES}
           type="text"
           value={title}
-          placeholder="My Exercise"
+          placeholder="My exercise"
           onChange={(e) => setTitle(e.target.value)}
           onKeyDown={handleKeyDown}
           disabled={isCreating}
           autoFocus
         />
       </SettingsField>
-      <SettingsField label="Reference ID" htmlFor={`${fieldId}-ref`}>
+      <SettingsField label="ID" htmlFor={`${fieldId}-ref`}>
         <input
           id={`${fieldId}-ref`}
           className={clsx(FIELD_CONTROL_CLASSES, "font-mono")}
@@ -134,9 +135,9 @@ const NewExerciseForm = ({
         />
         {resolveRef && (
           <SettingsNote>
-            Placeholders for <code>{resolveRef}</code> will point at this
-            exercise{ref.trim() && sanitizeXmlId(ref) !== resolveRef
-              ? `, renamed to ${sanitizeXmlId(ref)}`
+            Every place the document uses <code>{resolveRef}</code> will use
+            this exercise{ref.trim() && sanitizeXmlId(ref) !== resolveRef
+              ? ` (renamed to ${sanitizeXmlId(ref)})`
               : ""}.
           </SettingsNote>
         )}

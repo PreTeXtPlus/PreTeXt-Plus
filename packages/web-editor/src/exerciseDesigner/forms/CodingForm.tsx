@@ -21,7 +21,7 @@ export default function CodingForm(props: FormProps<Coding>) {
         rows={8}
         value={body.code}
         onChange={(code) => set({ code })}
-        help="What the reader sees in the ActiveCode editor."
+        help="The code readers start with."
       />
       <MarkupField
         label="Unit tests (optional)"

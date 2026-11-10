@@ -126,7 +126,7 @@ class CollaborationsControllerTest < ActionDispatch::IntegrationTest
     assert_no_difference("Collaboration.count") do
       post bulk_project_collaborations_url(@project), params: { emails: "a@example.com b@example.com" }
     end
-    assert_match "a@example.com b@example.com (Invited email is not a valid email address)", flash[:alert]
+    assert_match "a@example.com b@example.com (not a valid email)", flash[:alert]
   end
 
   test "bulk add invites the good addresses and names the ones it couldn't" do
@@ -140,9 +140,9 @@ class CollaborationsControllerTest < ActionDispatch::IntegrationTest
     assert_redirected_to @project
     assert_nil flash[:notice], "the layout hides an alert behind a notice"
     assert_match "Invited 1 person.", flash[:alert]
-    assert_match "not-an-email (Invited email is not a valid email address)", flash[:alert]
-    assert_match "#{pending} (Invited email has already been invited)", flash[:alert]
-    assert_match "#{@owner.email} (Invited email already owns this project)", flash[:alert]
+    assert_match "not-an-email (not a valid email)", flash[:alert]
+    assert_match "#{pending} (already invited)", flash[:alert]
+    assert_match "#{@owner.email} (already the owner)", flash[:alert]
   end
 
   test "a free owner cannot bulk add, even during the collaboration preview" do
@@ -275,18 +275,18 @@ class CollaborationsControllerTest < ActionDispatch::IntegrationTest
     assert_response :success
     assert_match "Leave this project", response.body
     assert_no_match "Invite", response.body
-    assert_no_match "Bulk add", response.body
+    assert_no_match "Invite several people", response.body
 
     sign_in users(:one)
     get project_url(projects(:one))
     assert_response :success
     assert_match users(:two).email, response.body
-    assert_no_match "Bulk add", response.body
+    assert_no_match "Invite several people", response.body
 
     sign_in @owner
     get project_url(@project)
     assert_response :success
-    assert_match "Bulk add", response.body
+    assert_match "Invite several people", response.body
   end
 
   test "collaborator cannot destroy the shared project" do
@@ -323,7 +323,7 @@ class CollaborationsControllerTest < ActionDispatch::IntegrationTest
     patch transfer_ownership_project_collaboration_url(projects(:team), collaborations(:pending))
 
     assert_redirected_to projects(:team)
-    assert_match(/pending invitation/, flash[:alert])
+    assert_match(/accept the invitation/, flash[:alert])
     assert_equal users(:subscribed), projects(:team).reload.user
   end
 

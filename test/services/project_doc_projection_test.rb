@@ -301,7 +301,8 @@ class ProjectDocProjectionTest < ActiveSupport::TestCase
     assert_equal "<latex-image>s</latex-image>", asset.source
     assert_equal "kept", asset.short_description
     issue = projection.issues.find { |i| i["id"] == ASSET_ID }
-    assert_equal({ "kind" => "asset", "id" => ASSET_ID, "ref" => nil, "reason" => "ref is missing" }, issue)
+    assert_equal({ "kind" => "asset", "id" => ASSET_ID, "ref" => nil, "reason" => "It needs an ID",
+                   "detail" => "ref is missing" }, issue)
   end
 
   test "a division whose xml:id is not a valid ref is skipped and listed" do
@@ -313,7 +314,8 @@ class ProjectDocProjectionTest < ActiveSupport::TestCase
     issue = projection.issues.find { |i| i["id"] == SPACED_ID }
     assert_equal "division", issue["kind"]
     assert_equal "sec-chapter 1 ", issue["ref"]
-    assert_match(/invalid/, issue["reason"])
+    assert_match(/isn't valid/, issue["reason"])
+    assert_match(/invalid/, issue["detail"])
   end
 
   test "the rest of the document still projects around the bad entries" do
@@ -335,7 +337,8 @@ class ProjectDocProjectionTest < ActiveSupport::TestCase
     assert_equal "twins", Content.find(TWIN_LOW_ID).ref
     assert_not Content.exists?(TWIN_HIGH_ID)
     issue = projection.issues.find { |i| i["id"] == TWIN_HIGH_ID }
-    assert_equal "ref is already used by division #{TWIN_LOW_ID}", issue["reason"]
+    assert_equal "This ID is already used by another division", issue["reason"]
+    assert_equal "ref is already used by division #{TWIN_LOW_ID}", issue["detail"]
   end
 
   test "a new record wanting an existing row's ref: the row keeps it, the newcomer is listed" do
@@ -358,7 +361,8 @@ class ProjectDocProjectionTest < ActiveSupport::TestCase
 
     assert_not Content.exists?(WANTS_ASSET_REF_ID)
     issue = projection.issues.find { |i| i["id"] == WANTS_ASSET_REF_ID }
-    assert_equal "ref is already used by asset #{ASSET_ID}", issue["reason"]
+    assert_equal "This ID is already used by another image", issue["reason"]
+    assert_equal "ref is already used by asset #{ASSET_ID}", issue["detail"]
   end
 
   test "the outcome is recorded on the project, and is the same on every run" do
@@ -485,6 +489,7 @@ class ProjectDocProjectionTest < ActiveSupport::TestCase
     assert_equal ProjectDocProjection.parking_ref(CHAIN_B_ID), Content.find(CHAIN_B_ID).ref
     issue = projection.issues.find { |i| i["id"] == CHAIN_B_ID }
     assert_match(/root element/, issue["reason"])
-    assert_match(/parked at tmp_16161616/, issue["reason"])
+    assert_match(/parked at tmp_16161616/, issue["detail"])
+    assert_no_match(/parked/, issue["reason"], "the author is not told about parking refs")
   end
 end

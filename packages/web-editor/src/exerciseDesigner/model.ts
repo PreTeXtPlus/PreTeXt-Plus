@@ -28,16 +28,16 @@ export type ExerciseKind = (typeof EXERCISE_KINDS)[number];
 export const HIDDEN_EXERCISE_KINDS: readonly ExerciseKind[] = ["shortanswer"];
 
 export const EXERCISE_KIND_LABELS: Record<ExerciseKind, string> = {
-  truefalse: "True/False",
-  multiplechoice: "Multiple Choice",
+  truefalse: "True/false",
+  multiplechoice: "Multiple choice",
   parsons: "Parsons",
   horizontalparsons: "Horizontal Parsons",
-  cardsort: "Card Sort",
+  cardsort: "Card sort",
   matching: "Matching",
-  clickable: "Clickable Area",
-  fillin: "Fill-in-the-Blanks",
+  clickable: "Clickable area",
+  fillin: "Fill in the blanks",
   coding: "Coding",
-  shortanswer: "Free Response",
+  shortanswer: "Free response",
 };
 
 /** Programming languages Runestone can run or highlight in an exercise. */

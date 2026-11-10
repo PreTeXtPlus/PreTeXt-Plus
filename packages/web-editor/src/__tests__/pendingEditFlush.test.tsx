@@ -138,7 +138,7 @@ function saveForm(title: string): string {
     .querySelector("input") as HTMLInputElement;
   fireEvent.change(input, { target: { value: title } });
   const xmlId = (
-    within(row).getByLabelText("Reference ID") as HTMLInputElement
+    within(row).getByLabelText("ID") as HTMLInputElement
   ).value;
   fireEvent.click(within(row).getByText("Create"));
   return xmlId;

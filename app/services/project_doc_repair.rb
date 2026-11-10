@@ -80,7 +80,7 @@ class ProjectDocRepair
     lines = [ "Project #{project.id} (#{project.title.inspect})" ]
     lines << ""
     lines << "Issues (#{report[:issues].size}):"
-    report[:issues].each { |i| lines << "  #{i['kind']} #{i['id']} ref=#{i['ref'].inspect}: #{i['reason']}" }
+    report[:issues].each { |i| lines << "  #{i['kind']} #{i['id']} ref=#{i['ref'].inspect}: #{i['detail'] || i['reason']}" }
     lines << "  none" if report[:issues].empty?
     lines << ""
     lines << "Rows that differ from the document (#{report[:differing_rows].size}):"

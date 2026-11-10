@@ -71,7 +71,7 @@ describe("buildImportShare", () => {
     const conversion = { file, engineId: "pandoc-remote", engineLabel: "Pandoc" };
 
     await expect(limited(conversion)).rejects.toThrow(/try again in a few minutes/);
-    await expect(broken(conversion)).rejects.toThrow("error 500");
+    await expect(broken(conversion)).rejects.toThrow("Sharing didn't work");
   });
 });
 
@@ -82,6 +82,6 @@ describe("buildImportEngines", () => {
     const [builtin, pandoc] = buildImportEngines({ pandocUrl: "/projects/pandoc" });
 
     expect(builtin.experimentalNotice).toBeUndefined();
-    expect(pandoc.experimentalNotice).toMatch(/uses Pandoc and is still experimental/);
+    expect(pandoc.experimentalNotice).toMatch(/is experimental/);
   });
 });

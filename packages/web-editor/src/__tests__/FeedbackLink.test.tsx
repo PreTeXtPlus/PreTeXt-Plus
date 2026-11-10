@@ -13,12 +13,12 @@ describe("FeedbackLink", () => {
 
     expect(screen.getByRole("button", { name: "Give feedback" })).toBeInTheDocument();
     expect(
-      screen.queryByText("Provide Feedback or Request Support"),
+      screen.queryByText("Send feedback or get help"),
     ).not.toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: "Give feedback" }));
     expect(
-      screen.getByText("Provide Feedback or Request Support"),
+      screen.getByText("Send feedback or get help"),
     ).toBeInTheDocument();
   });
 
@@ -35,7 +35,7 @@ describe("FeedbackLink", () => {
       screen.queryByRole("button", { name: "Give feedback" }),
     ).not.toBeInTheDocument();
     expect(
-      screen.queryByText("Provide Feedback or Request Support"),
+      screen.queryByText("Send feedback or get help"),
     ).not.toBeInTheDocument();
 
     rerender(
@@ -47,7 +47,7 @@ describe("FeedbackLink", () => {
       />,
     );
     expect(
-      screen.getByText("Provide Feedback or Request Support"),
+      screen.getByText("Send feedback or get help"),
     ).toBeInTheDocument();
   });
 
@@ -85,7 +85,7 @@ describe("FeedbackLink", () => {
     ).not.toBeInTheDocument();
 
     await user.type(screen.getByLabelText("Message"), "It broke.");
-    await user.click(screen.getByRole("button", { name: "Submit" }));
+    await user.click(screen.getByRole("button", { name: "Send" }));
 
     expect(onSubmit).toHaveBeenCalledWith(
       expect.objectContaining({ email: "steven@example.com" }),

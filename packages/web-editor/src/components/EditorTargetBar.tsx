@@ -6,7 +6,7 @@ import { buildProjectSnippetView } from "../snippetView";
 import { buildProjectExerciseView } from "../exerciseView";
 import { useEditorStore } from "../store/hooks";
 import type { EditorTarget } from "./editorTarget";
-import { AssetsIcon, ExercisesIcon, GearIcon, SnippetsIcon, TocIcon } from "./icons";
+import { AssetsIcon, CaretIcon, ExercisesIcon, GearIcon, SnippetsIcon, TocIcon } from "./icons";
 import { divisionDisplayTitle, TYPE_FULL_LABELS } from "./toc/types";
 import { useDivisionActions } from "./toc/useDivisionActions";
 import { findDivisionPlacement } from "./toc/divisionActions";
@@ -33,7 +33,7 @@ const KIND_LABELS: Record<EditorTarget["kind"], string> = {
   division: "Division",
   snippet: "Snippet",
   exercise: "Exercise",
-  asset: "Asset",
+  asset: "Image",
 };
 
 /** The explorer rail's icons, drawn at bar size. */
@@ -145,23 +145,23 @@ const EditorTargetBar = ({
       divisionDisplayTitle(division) ||
       `Untitled ${(TYPE_FULL_LABELS[division.type] ?? "division").toLowerCase()}`;
     id = division.xmlId;
-    if (notPlaced) status = "not placed";
+    if (notPlaced) status = "not used yet";
   } else if (target.kind === "snippet") {
     const { snippet } = target;
     title = snippet.title || snippet.ref;
     id = snippet.ref;
-    if (notPlaced) status = "not placed";
+    if (notPlaced) status = "not used yet";
   } else if (target.kind === "exercise") {
     const { exercise } = target;
     title = exercise.title || exercise.ref;
     id = exercise.ref;
-    if (notPlaced) status = "not placed";
+    if (notPlaced) status = "not used yet";
   } else {
     const { asset } = target;
-    title = asset.title || asset.ref || "Untitled asset";
+    title = asset.title || asset.ref || "Untitled image";
     id = asset.ref ?? "";
-    if (notPlaced) status = "not placed";
-    else if (!asset.shortDescription?.trim()) status = "missing short description";
+    if (notPlaced) status = "not used yet";
+    else if (!asset.shortDescription?.trim()) status = "needs alt text";
   }
 
   return (
@@ -194,18 +194,19 @@ const EditorTargetBar = ({
             type="button"
             data-testid="settings-drawer-toggle"
             className={clsx(
-              "flex items-center justify-center w-8 h-7 p-0 border-none rounded-[3px] cursor-pointer",
+              "flex items-center gap-0.5 h-7 pl-1.5 pr-1 border rounded-[3px] cursor-pointer",
               isOpen
-                ? "text-slate-800 bg-slate-300"
-                : "text-slate-600 bg-transparent hover:bg-slate-200",
+                ? "text-slate-800 bg-slate-200 border-slate-300"
+                : "text-slate-600 bg-white border-slate-300 hover:bg-slate-100",
             )}
             onClick={toggle}
             aria-expanded={isOpen}
             aria-controls="editor-settings-drawer"
             aria-label={isOpen ? "Close settings" : `${KIND_LABELS[target.kind]} settings`}
-            title={isOpen ? "Close settings" : `${KIND_LABELS[target.kind]} settings`}
+            title={isOpen ? "Hide settings (Esc)" : `Show ${KIND_LABELS[target.kind].toLowerCase()} settings`}
           >
             <GearIcon />
+            <CaretIcon up={isOpen} />
           </button>
         )}
       </div>
@@ -216,8 +217,9 @@ const EditorTargetBar = ({
           data-testid="settings-drawer"
           role="region"
           aria-label={`${KIND_LABELS[target.kind]} settings`}
-          className="max-h-[60vh] overflow-y-auto bg-white border-b border-[#dde0e6] py-3 px-3"
+          className="flex flex-col max-h-[60vh] bg-[#e9ecf1] border-b border-slate-300 shadow-[inset_0_2px_4px_rgba(15,23,42,0.06)]"
         >
+          <div className="min-h-0 overflow-y-auto pt-3 pb-2 px-3">
           <div className="max-w-[640px]">
             {target.kind === "division" && (
               <DivisionSettings
@@ -262,6 +264,17 @@ const EditorTargetBar = ({
               />
             )}
           </div>
+          </div>
+          <button
+            type="button"
+            data-testid="settings-drawer-close"
+            className="flex items-center justify-center gap-1 w-full h-6 shrink-0 border-0 border-t border-slate-300 bg-[#dfe3ea] text-[0.72rem] text-slate-600 cursor-pointer hover:bg-slate-300 hover:text-slate-800"
+            onClick={() => setSettingsDrawerOpen(false)}
+            title="Hide settings (Esc)"
+          >
+            Hide
+            <CaretIcon up />
+          </button>
         </div>
       )}
     </div>

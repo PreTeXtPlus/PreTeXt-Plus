@@ -98,7 +98,7 @@ export default function ParsonsForm(props: FormProps<Parsons>) {
         List the blocks in a correct order. Distractors are left out of the solution and can go
         anywhere.
         {body.partialOrder &&
-          " With multiple valid orders, name the blocks and say which ones each block must come after; any order that respects those dependencies is accepted."}
+          " Give each block a name, then list the blocks that must come before it. Any order that respects those is accepted."}
       </p>
       <ListEditor
         items={body.blocks}

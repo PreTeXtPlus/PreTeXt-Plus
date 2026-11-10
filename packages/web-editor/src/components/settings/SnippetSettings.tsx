@@ -3,7 +3,8 @@ import clsx from "clsx";
 import type { Snippet, SourceFormat } from "../../types/editor";
 import { sanitizeXmlId, snippetEmbedCode } from "../../sectionUtils";
 import { buildProjectSnippetView } from "../../snippetView";
-import { useEditorStore } from "../../store/hooks";
+import { useEditorStore, useTakenRefs } from "../../store/hooks";
+import { ID_REQUIRED_MESSAGE, idTakenMessage } from "../../idRules";
 import { SOURCE_FORMAT_LABELS } from "../toc/types";
 import {
   CommitField,
@@ -42,6 +43,7 @@ const SnippetSettings = ({
 }: SnippetSettingsProps) => {
   const divisions = useEditorStore((s) => s.divisions);
   const projectSnippets = useEditorStore((s) => s.projectSnippets) ?? [];
+  const takenRefs = useTakenRefs();
   const hasSnippetDuplicate = useEditorStore((s) => s.hasSnippetDuplicate);
   const duplicateSnippet = useEditorStore((s) => s.duplicateSnippet);
   const removeSnippet = useEditorStore((s) => s.removeSnippet);
@@ -66,11 +68,11 @@ const SnippetSettings = ({
   const commitRef = async (next: string): Promise<string | void> => {
     const ref = sanitizeXmlId(next);
     if (!ref) {
-      return "Reference ID can't be empty.";
+      return ID_REQUIRED_MESSAGE;
     }
     if (ref === snippet.ref) return;
-    if (projectSnippets.some((s) => s.ref === ref)) {
-      return `"${ref}" is already used by another snippet. Choose a unique Reference ID.`;
+    if (takenRefs.has(ref)) {
+      return idTakenMessage(ref);
     }
     await onSave({ ...snippet, ref }, snippet.ref);
   };
@@ -101,7 +103,7 @@ const SnippetSettings = ({
     if (
       !window.confirm(
         inDocument
-          ? `Remove snippet "${snippet.ref}" from the project? This also deletes its references from the document.`
+          ? `Remove snippet "${snippet.ref}" from the project? It will also be taken out of every place the document uses it.`
           : `Remove snippet "${snippet.ref}" from the project?`,
       )
     ) {
@@ -120,7 +122,7 @@ const SnippetSettings = ({
             label: isDuplicating ? "Duplicating…" : "Duplicate",
             onClick: handleDuplicate,
             disabled: isDuplicating,
-            title: "Create a copy of this snippet under a new id",
+            title: "Make a copy of this snippet with a new ID",
           },
         ]
         : []),
@@ -135,10 +137,10 @@ const SnippetSettings = ({
           value={snippet.title ?? ""}
           onCommit={commitTitle}
           disabled={readOnly}
-          placeholder="My Snippet"
+          placeholder="My snippet"
         />
       </SettingsField>
-      <SettingsField label="Reference ID" htmlFor="snippet-settings-ref">
+      <SettingsField label="ID" htmlFor="snippet-settings-ref">
         <CommitField
           id="snippet-settings-ref"
           placeholder="my-snippet"
@@ -169,7 +171,7 @@ const SnippetSettings = ({
       />
       {!inDocument && (
         <SettingsNote tone="warning">
-          This snippet isn't placed in the document yet. Paste its embed code
+          This snippet isn't used in the document yet. Paste its embed code
           where it should appear.
         </SettingsNote>
       )}

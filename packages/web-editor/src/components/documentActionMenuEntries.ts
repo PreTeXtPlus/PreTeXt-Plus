@@ -77,13 +77,13 @@ export function buildDocumentActionEntries({
         kind: "item",
         key: "format",
         label: "Format PreTeXt",
-        title: "Re-indent the PreTeXt source",
+        title: "Tidy the indentation so the source is easier to read",
         onSelect: () => {
           try {
             onContentChange(formatPretext(content));
           } catch (error) {
             console.error("Error formatting:", error);
-            alert("Error formatting XML");
+            alert("Couldn't format this source. Check for a tag that isn't closed, then try again.");
           }
         },
       });
@@ -95,7 +95,7 @@ export function buildDocumentActionEntries({
           key: "import",
           label: "Import…",
           title:
-            "Convert LaTeX, Markdown or another document to PreTeXt for this division",
+            "Bring in text from LaTeX, Markdown, Word or another document",
           onSelect: onOpenImport,
         });
       }
@@ -104,8 +104,8 @@ export function buildDocumentActionEntries({
       entries.push({
         kind: "item",
         key: "clean",
-        label: "Clean up LaTeX…",
-        title: "Review LaTeX markup that does not belong in PreTeXt, and fix it",
+        label: "Clean Up LaTeX…",
+        title: "Find and fix LaTeX commands that won't carry over",
         onSelect: onOpenClean,
       });
     }
@@ -119,8 +119,8 @@ export function buildDocumentActionEntries({
       entries.push({
         kind: "item",
         key: "assets",
-        label: "New Asset…",
-        title: "Add an image or other asset to the project",
+        label: "New Image…",
+        title: "Add an image to the project",
         onSelect: onOpenAssets,
       });
     }
@@ -129,7 +129,7 @@ export function buildDocumentActionEntries({
         kind: "item",
         key: "snippets",
         label: "New Snippet…",
-        title: "Add a reusable source snippet to the project",
+        title: "Add a block of text you can reuse in several places",
         onSelect: onOpenSnippets,
       });
     }
@@ -147,7 +147,7 @@ export function buildDocumentActionEntries({
     kind: "item",
     key: "full-source",
     label: "Display Full Source",
-    title: "Show the full assembled PreTeXt source for the project",
+    title: "Show the source of the whole project in one place",
     onSelect: onShowFullSource,
   });
   return entries;

@@ -25,11 +25,11 @@ const EXPLORER_VIEWS: {
   label: string;
   icon: () => ReactNode;
 }[] = [
-  { view: "toc", label: "Table of Contents", icon: TocIcon },
+  { view: "toc", label: "Table of contents", icon: TocIcon },
   { view: "snippets", label: "Snippets", icon: SnippetsIcon },
   { view: "exercises", label: "Exercises", icon: ExercisesIcon },
-  { view: "assets", label: "Assets", icon: AssetsIcon },
-  { view: "find", label: "Find in Project", icon: FindIcon },
+  { view: "assets", label: "Images", icon: AssetsIcon },
+  { view: "find", label: "Find in project", icon: FindIcon },
 ];
 
 export interface ProjectExplorerProps {

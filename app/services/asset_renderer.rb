@@ -29,9 +29,9 @@ module AssetRenderer
 
   SVG_NAMESPACE = "http://www.w3.org/2000/svg".freeze
 
-  THREE_D = "This is a 3D figure. The editor cannot show it yet; a build makes it.".freeze
-  NO_PICTURE = "The build server made no picture from this source.".freeze
-  FAILED = "The build server could not make the picture.".freeze
+  THREE_D = "3D figures can't be previewed in the editor yet. Build the output to see it.".freeze
+  NO_PICTURE = "This code didn't make an image. Check it for mistakes.".freeze
+  FAILED = "We couldn't make this image. Check its code for mistakes.".freeze
 
   module_function
 

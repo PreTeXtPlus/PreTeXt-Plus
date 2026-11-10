@@ -19,7 +19,7 @@ export default class extends Controller {
     // select by hand, so failing quietly beats an alert.
     navigator.clipboard?.writeText(text).then(
       () => this.#confirm("Copied"),  // success
-      () => this.#confirm("Press ⌘C")  // failure
+      () => this.#confirm(/Mac|iPhone|iPad/.test(navigator.userAgent) ? "Press ⌘C" : "Press Ctrl+C")  // failure
     )
   }
 

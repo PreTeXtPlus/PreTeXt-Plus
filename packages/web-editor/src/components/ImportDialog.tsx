@@ -84,7 +84,7 @@ interface ImportDialogProps {
   parentType?: DivisionType | null;
   /** Every id the project already uses, so imported ones can be renamed away from them. */
   takenIds: readonly string[];
-  /** Called when the dialog should close (Cancel, Escape, or after "Copy and Close"). */
+  /** Called when the dialog should close (Cancel, Escape, or after "Copy and close"). */
   onClose: () => void;
 }
 
@@ -117,7 +117,7 @@ const editorOptions = {
 const errorMessage = (error: unknown) =>
   error instanceof Error && error.message.trim()
     ? error.message.trim()
-    : "Could not convert this to PreTeXt.";
+    : "Couldn't convert this to PreTeXt. Try a smaller piece, or a different format.";
 
 const ImportDialog = ({
   engines,
@@ -244,7 +244,7 @@ const ImportDialog = ({
       setOutput(fitted.source);
       setFindings(converted.findings);
       setNotes([...converted.notes, ...fitted.notes]);
-      if (!fitted.source) setError("The conversion came back empty.");
+      if (!fitted.source) setError("Nothing came out of the conversion. Check that the file has text in it.");
     } catch (caught) {
       if (source && shareEngine) {
         share({
@@ -274,7 +274,7 @@ const ImportDialog = ({
     } catch (caught) {
       console.error("Error copying converted PreTeXt:", caught);
       setCopyStatus("error");
-      alert("Could not copy to clipboard");
+      alert("Couldn't copy. Select the result and copy it with Ctrl+C (⌘C on a Mac) instead.");
     }
   };
 
@@ -305,7 +305,7 @@ const ImportDialog = ({
       setFormatChoice(route.format === "pretext" ? "auto" : route.format);
       inputEditorRef.current?.focus();
     };
-    reader.onerror = () => alert("Could not read file");
+    reader.onerror = () => alert("Couldn't open that file. Try saving it again, or choose another.");
     reader.readAsText(picked);
   };
 
@@ -354,8 +354,8 @@ const ImportDialog = ({
           <div>
             <DialogTitle id="pretext-plus-import-dialog-title">Import</DialogTitle>
             <DialogCopy>
-              Convert LaTeX, Markdown or another document to PreTeXt that fits
-              this division, then copy the result.
+              Paste or open a document to convert it to PreTeXt. Then copy the
+              result and paste it where you want it.
             </DialogCopy>
             <div className="mt-[0.45rem]">
               <StoreFeedbackLink
@@ -412,7 +412,7 @@ const ImportDialog = ({
                   {file.name}
                 </p>
                 <DialogHelperCopy as="p">
-                  Converted from the file directly — there is no source to show.
+                  This file is converted directly.
                 </DialogHelperCopy>
                 <DialogLinkButton
                   onClick={() => {
@@ -558,7 +558,7 @@ const ImportDialog = ({
             onClick={handleCopy}
             disabled={isConverting || !output.trim()}
           >
-            Copy and Close
+            Copy and close
           </DialogButton>
         </DialogActions>
       </Dialog>

@@ -3,7 +3,8 @@ import type { Asset, SourceFormat } from "../../types/editor";
 import { assetEmbedCode, sanitizeXmlId } from "../../sectionUtils";
 import { buildProjectAssetView } from "../../assetView";
 import { generatorFor } from "../../generators";
-import { useEditorStore } from "../../store/hooks";
+import { useEditorStore, useTakenRefs } from "../../store/hooks";
+import { ID_REQUIRED_MESSAGE, idTakenMessage } from "../../idRules";
 import {
   CommitField,
   EmbedCode,
@@ -42,6 +43,7 @@ const AssetSettings = ({
 }: AssetSettingsProps) => {
   const divisions = useEditorStore((s) => s.divisions);
   const projectAssets = useEditorStore((s) => s.projectAssets) ?? [];
+  const takenRefs = useTakenRefs();
   const hasAssetDuplicate = useEditorStore((s) => s.hasAssetDuplicate);
   const duplicateAsset = useEditorStore((s) => s.duplicateAsset);
   const removeAsset = useEditorStore((s) => s.removeAsset);
@@ -65,13 +67,13 @@ const AssetSettings = ({
   const commitRef = async (next: string): Promise<string | void> => {
     const nextRef = sanitizeXmlId(next);
     if (!nextRef) {
-      return "Reference ID can't be empty.";
+      return ID_REQUIRED_MESSAGE;
     }
     if (nextRef === ref) return;
     // A ref must stay unique project-wide: it's the key every
     // `<plus:image ref="..."/>` placeholder resolves against.
-    if (projectAssets.some((a) => a.ref === nextRef)) {
-      return `"${nextRef}" is already used by another asset. Choose a unique Reference ID.`;
+    if (takenRefs.has(nextRef)) {
+      return idTakenMessage(nextRef);
     }
     await onSave({ ...asset, ref: nextRef }, ref);
   };
@@ -87,7 +89,7 @@ const AssetSettings = ({
       // On success the copy is opened, which unmounts this panel.
       await duplicateAsset(asset);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to duplicate asset.");
+      setError(err instanceof Error ? err.message : "Failed to duplicate image.");
     } finally {
       setIsDuplicating(false);
     }
@@ -101,7 +103,7 @@ const AssetSettings = ({
     if (
       !window.confirm(
         inDocument
-          ? `Remove "${asset.title}" from the project? This also deletes its references from the document.`
+          ? `Remove "${asset.title}" from the project? It will also be taken out of every place the document uses it.`
           : `Remove "${asset.title}" from the project?`,
       )
     ) {
@@ -133,7 +135,7 @@ const AssetSettings = ({
             label: isDuplicating ? "Duplicating…" : "Duplicate",
             onClick: handleDuplicate,
             disabled: isDuplicating,
-            title: "Create a copy of this asset under a new id",
+            title: "Make a copy of this image with a new ID",
           },
         ]
         : []),
@@ -147,16 +149,16 @@ const AssetSettings = ({
       <SettingsField label="Title" htmlFor="asset-settings-title">
         <CommitField
           id="asset-settings-title"
-          placeholder="My Asset"
+          placeholder="My image"
           value={asset.title}
           onCommit={commitTitle}
           disabled={readOnly}
         />
       </SettingsField>
-      <SettingsField label="Reference ID" htmlFor="asset-settings-ref">
+      <SettingsField label="ID" htmlFor="asset-settings-ref">
         <CommitField
           id="asset-settings-ref"
-          placeholder="my-asset"
+          placeholder="my-image"
           value={ref}
           onCommit={commitRef}
           disabled={readOnly}
@@ -164,7 +166,7 @@ const AssetSettings = ({
         />
       </SettingsField>
       <SettingsField
-        label="Short description"
+        label="Alt text"
         htmlFor="asset-settings-short-description"
       >
         <CommitField
@@ -172,16 +174,15 @@ const AssetSettings = ({
           value={shortDescription}
           onCommit={commitShortDescription}
           disabled={readOnly}
-          placeholder="Alt text"
+          placeholder="A short description of the image"
         />
         {shortDescription.trim() ? (
           <SettingsNote>
-            A brief plaintext description of the image for accessibility,
-            inserted as a PreTeXt <code>&lt;shortdescription/&gt;</code>.
+            Describes the image for readers who can't see it.
           </SettingsNote>
         ) : (
           <SettingsNote tone="warning">
-            ⚠ A short description is required for accessibility.
+            ⚠ Alt text is required, for readers who can't see the image.
           </SettingsNote>
         )}
       </SettingsField>
@@ -190,33 +191,27 @@ const AssetSettings = ({
         defaultFormat={embedFormat}
       />
       {generator && (
-        <SettingsField label="Generator">
+        <SettingsField label="Made with">
           <div data-testid="asset-settings-generator" className="text-[0.85rem] text-slate-700">
             {generator.label}
           </div>
         </SettingsField>
       )}
-      <SettingsNote>
-        {generator ? (
-          <>
-            The editor holds the {generator.label} source of this diagram; the
-            document carries it inside <code>{"<image>"}</code>, and builds generate
-            the picture from it. The picture rendered here is kept as the preview.
-          </>
-        ) : asset.isFile ? (
-          <>
-            The editor holds additional PreTeXt source, inserted verbatim inside
-            the generated <code>{"<image>"}</code> element — e.g.{" "}
-            <code>{"<description>…</description>"}</code>.
-          </>
-        ) : (
-          <>
-            The editor holds the PreTeXt this asset resolves to, inserted
-            verbatim inside the generated <code>{"<image>"}</code> element —
-            e.g. <code>{"<latex-image>…</latex-image>"}</code>.
-          </>
-        )}
-      </SettingsNote>
+      {!generator && (
+        <SettingsNote>
+          {asset.isFile ? (
+            <>
+              Optional: the editor below can hold extra PreTeXt for this image,
+              like a <code>{"<description>"}</code>.
+            </>
+          ) : (
+            <>
+              Write this image's PreTeXt in the editor below, like a{" "}
+              <code>{"<latex-image>"}</code>.
+            </>
+          )}
+        </SettingsNote>
+      )}
       {error && <SettingsNote tone="error">{error}</SettingsNote>}
       <SettingsActions actions={actions} />
     </div>

@@ -82,7 +82,7 @@ const DivisionSettings = ({ division, embedFormat }: DivisionSettingsProps) => {
       <SettingsField label="Title" htmlFor="division-settings-title">
         <CommitField
           id="division-settings-title"
-          placeholder="My Division"
+          placeholder="My division"
           value={division.title}
           onCommit={commitTitle}
           autoSelect
@@ -116,7 +116,7 @@ const DivisionSettings = ({ division, embedFormat }: DivisionSettingsProps) => {
       </SettingsField>
       {/* xml:id applies to every format — for LaTeX it's written as the
           header's `\label` — and is the division's PreTeXt @label too. */}
-      <SettingsField label="Reference ID" htmlFor="division-settings-id">
+      <SettingsField label="ID" htmlFor="division-settings-id">
         <CommitField
           id="division-settings-id"
           value={division.xmlId}
@@ -135,9 +135,9 @@ const DivisionSettings = ({ division, embedFormat }: DivisionSettingsProps) => {
       )}
       {placement.kind === "unplaced" && (
         <SettingsNote tone="warning">
-          This division isn't part of the document yet.
+          This division isn't used in the document yet.
           {placement.parentXmlId === null &&
-            " Place it at the end of the document, or paste its embed code where it belongs."}
+            " Add it at the end of the document, or paste its embed code where it belongs."}
         </SettingsNote>
       )}
       <SettingsActions actions={actions} />

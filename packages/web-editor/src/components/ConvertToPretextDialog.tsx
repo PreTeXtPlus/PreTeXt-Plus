@@ -90,7 +90,7 @@ const ConvertToPretextDialog = ({
         <DialogHeader>
           <div>
             <DialogTitle id="pretext-plus-editor-convert-dialog-title">
-              Convert Division to PreTeXt
+              Convert division to PreTeXt
             </DialogTitle>
             <DialogCopy>
               Add a new PreTeXt division using the converted source below. Your
@@ -105,7 +105,7 @@ const ConvertToPretextDialog = ({
         <DialogContent>
           <DialogSection>
             <DialogLabelRow>
-              <DialogLabel>Current {sourceLabel} Source</DialogLabel>
+              <DialogLabel>Current {sourceLabel} source</DialogLabel>
             </DialogLabelRow>
             <DialogEditorPane>
               <Editor
@@ -136,8 +136,8 @@ const ConvertToPretextDialog = ({
           <DialogButton variant="secondary" onClick={onClose}>
             Cancel
           </DialogButton>
-          <DialogButton variant="danger" onClick={handleConfirm}>
-            Create PreTeXt Division
+          <DialogButton variant="primary" onClick={handleConfirm}>
+            Create PreTeXt copy
           </DialogButton>
         </DialogActions>
       </Dialog>

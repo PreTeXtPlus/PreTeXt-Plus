@@ -1068,7 +1068,7 @@ const CodeEditor = forwardRef<CodeEditorHandle, CodeEditorProps>(({
               className={CONVERT_BUTTON_CLASSES}
               onClick={onConvertToPretext}
               disabled={canConvertToPretext === false}
-              title="Convert this division to use PreTeXt XML"
+              title="Make a PreTeXt copy of this division (the original is kept)"
             >
               Convert to PreTeXt
             </button>

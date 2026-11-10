@@ -1,7 +1,8 @@
 import type { Exercise, SourceFormat } from "../../types/editor";
 import { exerciseEmbedCode, sanitizeXmlId } from "../../sectionUtils";
 import { buildProjectExerciseView } from "../../exerciseView";
-import { useEditorStore } from "../../store/hooks";
+import { useEditorStore, useTakenRefs } from "../../store/hooks";
+import { ID_REQUIRED_MESSAGE, idTakenMessage } from "../../idRules";
 import {
   CommitField,
   EmbedCode,
@@ -32,8 +33,7 @@ export interface ExerciseSettingsProps {
 const ExerciseSettings = ({ exercise, embedFormat, onSave, readOnly }: ExerciseSettingsProps) => {
   const divisions = useEditorStore((s) => s.divisions);
   const projectExercises = useEditorStore((s) => s.projectExercises) ?? [];
-  const projectSnippets = useEditorStore((s) => s.projectSnippets) ?? [];
-  const projectAssets = useEditorStore((s) => s.projectAssets) ?? [];
+  const takenRefs = useTakenRefs();
   const removeExercise = useEditorStore((s) => s.removeExercise);
   const removeExerciseRefFromDocument = useEditorStore((s) => s.removeExerciseRefFromDocument);
 
@@ -51,17 +51,11 @@ const ExerciseSettings = ({ exercise, embedFormat, onSave, readOnly }: ExerciseS
   const commitRef = async (next: string): Promise<string | void> => {
     const ref = sanitizeXmlId(next);
     if (!ref) {
-      return "Reference ID can't be empty.";
+      return ID_REQUIRED_MESSAGE;
     }
     if (ref === exercise.ref) return;
-    const taken = [
-      ...(divisions ?? []).map((d) => d.xmlId),
-      ...projectSnippets.map((s) => s.ref),
-      ...projectAssets.map((a) => a.ref),
-      ...projectExercises.map((e) => e.ref),
-    ];
-    if (taken.includes(ref)) {
-      return `"${ref}" is already used in this project. Choose a unique Reference ID.`;
+    if (takenRefs.has(ref)) {
+      return idTakenMessage(ref);
     }
     await onSave({ ...exercise, ref }, exercise.ref);
   };
@@ -70,7 +64,7 @@ const ExerciseSettings = ({ exercise, embedFormat, onSave, readOnly }: ExerciseS
     if (
       !window.confirm(
         inDocument
-          ? `Remove exercise "${exercise.ref}" from the project? This also deletes its references from the document.`
+          ? `Remove exercise "${exercise.ref}" from the project? It will also be taken out of every place the document uses it.`
           : `Remove exercise "${exercise.ref}" from the project?`,
       )
     ) {
@@ -92,10 +86,10 @@ const ExerciseSettings = ({ exercise, embedFormat, onSave, readOnly }: ExerciseS
           value={exercise.title ?? ""}
           onCommit={commitTitle}
           disabled={readOnly}
-          placeholder="My Exercise"
+          placeholder="My exercise"
         />
       </SettingsField>
-      <SettingsField label="Reference ID" htmlFor="exercise-settings-ref">
+      <SettingsField label="ID" htmlFor="exercise-settings-ref">
         <CommitField
           id="exercise-settings-ref"
           placeholder="my-exercise"
@@ -111,7 +105,7 @@ const ExerciseSettings = ({ exercise, embedFormat, onSave, readOnly }: ExerciseS
       />
       {!inDocument && (
         <SettingsNote tone="warning">
-          This exercise isn't placed in the document yet. Paste its embed code
+          This exercise isn't used in the document yet. Paste its embed code
           where it should appear.
         </SettingsNote>
       )}

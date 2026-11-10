@@ -222,19 +222,18 @@ const GeneratedAssetPreview = forwardRef<GeneratedAssetPreviewHandle, GeneratedA
     const storedIsCurrent = !!asset.url && !!currentDigest && asset.previewInputDigest === currentDigest;
     const showingFresh = rendered && rendered.digest === currentDigest;
     const imageUrl = rendered?.url ?? asset.url;
+    const hasPicture = !!imageUrl;
     // A render is already here as a blob. The stored file may be a redirect to
     // another origin, where `download` is ignored, so the host says how to ask for
     // it as an attachment; a new tab keeps the editor if a host hasn't.
     const downloadUrl = rendered?.url ?? downloadUrlFor?.(asset) ?? asset.url;
 
-    const rendering = `${renderProgress ?? "Rendering…"}${manual && elapsed > 0 ? ` (${elapsed}s)` : ""}`;
+    const rendering = `${renderProgress ?? "Making preview…"}${manual && elapsed > 0 ? ` (${elapsed}s)` : ""}`;
     let statusLine: string;
     if (isRendering) statusLine = rendering;
-    else if (showingFresh) statusLine = "Rendered from the current source.";
-    else if (rendered) statusLine = "Source changed since this was rendered.";
-    else if (!asset.url) statusLine = manual && canRender ? "Not rendered yet. Render makes the picture." : "Not rendered yet.";
-    else if (storedIsCurrent) statusLine = "Stored picture matches the current source.";
-    else statusLine = "Source changed since the stored picture was rendered.";
+    else if (showingFresh || (!rendered && storedIsCurrent)) statusLine = "Up to date.";
+    else if (rendered || asset.url) statusLine = "The source has changed since this preview.";
+    else statusLine = manual && canRender ? "Click Preview to see the image." : "No preview yet.";
 
     return (
       <div
@@ -261,11 +260,11 @@ const GeneratedAssetPreview = forwardRef<GeneratedAssetPreviewHandle, GeneratedA
             type="button"
             data-testid="render-generated-asset"
             disabled={!canRender || isRendering}
-            title={`Render this ${generator.label} figure on the build server (Ctrl+Enter)`}
+            title="Update the preview (Ctrl+Enter)"
             className="rounded border border-blue-700 bg-blue-600 px-3 py-1 text-[0.8rem] font-medium text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:border-blue-200 disabled:bg-blue-300"
             onClick={renderNow}
           >
-            {isRendering ? "Rendering…" : "Render"}
+            {isRendering ? "Making preview…" : hasPicture ? "Refresh" : "Preview"}
           </button>
         )}
         {renderError && (
@@ -278,7 +277,7 @@ const GeneratedAssetPreview = forwardRef<GeneratedAssetPreviewHandle, GeneratedA
         )}
         {renderError?.log && (
           <details data-testid="generated-asset-log" className="max-w-full flex-none text-[0.75rem] text-slate-600">
-            <summary className="cursor-pointer text-center">Full log</summary>
+            <summary className="cursor-pointer text-center">Details</summary>
             <pre className="mt-1 max-h-64 overflow-auto whitespace-pre-wrap rounded border border-slate-200 bg-white px-3 py-2 text-[0.7rem]">
               {renderError.log}
             </pre>
@@ -302,17 +301,17 @@ const GeneratedAssetPreview = forwardRef<GeneratedAssetPreviewHandle, GeneratedA
         {!runtime ? (
           <div className="text-[0.75rem] text-slate-400 text-center">
             {manual
-              ? "Rendering on the build server isn't available here; builds generate this figure."
-              : "Live rendering isn't available here; builds generate this diagram."}
+              ? "Previews aren't available here. The image will appear when you build."
+              : "Live previews aren't available here. The image will appear when you build."}
           </div>
         ) : status === "loading" ? (
           <div data-testid="generated-asset-loading" className="text-[0.8rem] text-slate-500 text-center">
-            {progress ?? "Loading the engine…"}
+            {progress ?? "Getting ready…"}
           </div>
         ) : status === "failed" ? (
           <div className="flex flex-col items-center gap-1">
             <div data-testid="generated-asset-load-error" className="text-[0.75rem] text-red-700 text-center">
-              The {generator.label} engine couldn't be loaded{loadError ? `: ${loadError}` : "."}
+              The {generator.label} preview couldn't start{loadError ? `: ${loadError}` : "."}
             </div>
             <button
               type="button"
@@ -322,10 +321,6 @@ const GeneratedAssetPreview = forwardRef<GeneratedAssetPreviewHandle, GeneratedA
             >
               Try again
             </button>
-          </div>
-        ) : manual ? (
-          <div className="text-[0.75rem] text-slate-400 text-center">
-            Rendered on the build server, which keeps the picture for the next build.
           </div>
         ) : null}
         {downloadUrl && failedUrl !== imageUrl && (

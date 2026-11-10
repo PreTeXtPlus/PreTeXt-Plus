@@ -1,5 +1,7 @@
-import { useId, useMemo, useState, type FormEvent } from "react";
+import { useContext, useId, useMemo, useState, type FormEvent } from "react";
+import { createPortal } from "react-dom";
 import type { FeedbackSubmission, SourceFormat } from "../types/editor";
+import { DialogHostContext } from "./dialogHost";
 import {
   DialogOverlay,
   Dialog,
@@ -124,12 +126,123 @@ const FeedbackLink = ({
       const text =
         submitError instanceof Error
           ? submitError.message
-          : "Could not submit feedback.";
+          : "Couldn't send your message. Check your connection and try again.";
       setError(text);
     } finally {
       setIsSubmitting(false);
     }
   };
+
+  // Opened from the top bar (or inside another dialog), the overlay would only
+  // cover that; the editor's root is where it belongs.
+  const dialogHost = useContext(DialogHostContext);
+  const overlay = isOpen ? (
+    <DialogOverlay onClick={closeDialog}>
+      <Dialog
+        className="w-[min(96%,560px)] h-auto max-h-[min(90%,640px)]"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby={titleId}
+        onClick={(event) => event.stopPropagation()}
+      >
+        <DialogHeader>
+          <div>
+            <DialogTitle id={titleId}>Send feedback or get help</DialogTitle>
+          </div>
+          <DialogClose
+            onClick={closeDialog}
+            aria-label="Close feedback dialog"
+            disabled={isSubmitting}
+          >
+            Close
+          </DialogClose>
+        </DialogHeader>
+
+        <form
+          className="flex flex-col gap-[0.6rem] flex-1 min-h-0 overflow-y-auto"
+          onSubmit={handleSubmit}
+        >
+          {!userEmail && (
+            <>
+              <label
+                className="text-slate-700 text-[0.85rem] font-semibold"
+                htmlFor={emailId}
+              >
+                Email (optional)
+              </label>
+              <input
+                id={emailId}
+                type="email"
+                className="w-full border border-slate-300 rounded-[2px] py-2 px-[0.6rem] text-slate-900 bg-white focus:outline focus:outline-2 focus:outline-blue-300 focus:outline-offset-1"
+                value={email}
+                onChange={(event) => setEmail(event.target.value)}
+                placeholder="name@example.com"
+                autoComplete="email"
+              />
+            </>
+          )}
+
+          <label
+            className="text-slate-700 text-[0.85rem] font-semibold"
+            htmlFor={messageId}
+          >
+            Message
+          </label>
+          <textarea
+            id={messageId}
+            className="w-full border border-slate-300 rounded-[2px] py-2 px-[0.6rem] text-slate-900 bg-white focus:outline focus:outline-2 focus:outline-blue-300 focus:outline-offset-1 resize-y min-h-[110px]"
+            value={message}
+            onChange={(event) => setMessage(event.target.value)}
+            rows={5}
+            required
+          />
+
+          <label
+            className="inline-flex items-center gap-2 text-gray-800 text-[0.9rem]"
+            htmlFor={sourceId}
+          >
+            <input
+              id={sourceId}
+              type="checkbox"
+              checked={includeCurrentSource}
+              onChange={(event) =>
+                setIncludeCurrentSource(event.target.checked)
+              }
+            />
+            Include current source
+          </label>
+
+          {resolvedProjectUrl ? (
+            <p className="m-0 text-slate-500 text-[0.8rem]">
+              Project link <a href={resolvedProjectUrl}>{resolvedProjectUrl}</a> will be included.
+            </p>
+          ) : null}
+
+          {error ? (
+            <p className="m-0 text-red-700 text-[0.85rem] font-semibold">
+              {error}
+            </p>
+          ) : null}
+
+          <DialogActions>
+            <DialogButton
+              variant="secondary"
+              onClick={closeDialog}
+              disabled={isSubmitting}
+            >
+              Cancel
+            </DialogButton>
+            <DialogButton
+              type="submit"
+              disabled={isSubmitting || !message.trim()}
+            >
+              {isSubmitting ? "Sending…" : "Send"}
+            </DialogButton>
+          </DialogActions>
+        </form>
+      </Dialog>
+    </DialogOverlay>
+  ) : null;
 
   return (
     <>
@@ -142,117 +255,7 @@ const FeedbackLink = ({
           {label}
         </button>
       )}
-      {isOpen ? (
-        <DialogOverlay onClick={closeDialog}>
-          <Dialog
-            className="w-[min(96%,560px)] h-auto max-h-[min(90%,640px)]"
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby={titleId}
-            onClick={(event) => event.stopPropagation()}
-          >
-            <DialogHeader>
-              <div>
-                <DialogTitle id={titleId}>Provide Feedback or Request Support</DialogTitle>
-              </div>
-              <DialogClose
-                onClick={closeDialog}
-                aria-label="Close feedback dialog"
-                disabled={isSubmitting}
-              >
-                Close
-              </DialogClose>
-            </DialogHeader>
-
-            <form
-              className="flex flex-col gap-[0.6rem] flex-1 min-h-0 overflow-y-auto"
-              onSubmit={handleSubmit}
-            >
-              {!userEmail && (
-                <>
-                  <label
-                    className="text-slate-700 text-[0.85rem] font-semibold"
-                    htmlFor={emailId}
-                  >
-                    Email (optional)
-                  </label>
-                  <input
-                    id={emailId}
-                    type="email"
-                    className="w-full border border-slate-300 rounded-[2px] py-2 px-[0.6rem] text-slate-900 bg-white focus:outline focus:outline-2 focus:outline-blue-300 focus:outline-offset-1"
-                    value={email}
-                    onChange={(event) => setEmail(event.target.value)}
-                    placeholder="name@example.com"
-                    autoComplete="email"
-                  />
-                </>
-              )}
-
-              <label
-                className="text-slate-700 text-[0.85rem] font-semibold"
-                htmlFor={messageId}
-              >
-                Message
-              </label>
-              <textarea
-                id={messageId}
-                className="w-full border border-slate-300 rounded-[2px] py-2 px-[0.6rem] text-slate-900 bg-white focus:outline focus:outline-2 focus:outline-blue-300 focus:outline-offset-1 resize-y min-h-[110px]"
-                value={message}
-                onChange={(event) => setMessage(event.target.value)}
-                rows={5}
-                required
-              />
-
-              <label
-                className="inline-flex items-center gap-2 text-gray-800 text-[0.9rem]"
-                htmlFor={sourceId}
-              >
-                <input
-                  id={sourceId}
-                  type="checkbox"
-                  checked={includeCurrentSource}
-                  onChange={(event) =>
-                    setIncludeCurrentSource(event.target.checked)
-                  }
-                />
-                Include current source
-              </label>
-
-              {resolvedProjectUrl ? (
-                <p className="m-0 text-slate-500 text-[0.8rem]">
-                  Project link <a href={resolvedProjectUrl}>{resolvedProjectUrl}</a> will be included.
-                </p>
-              ) : (
-                <p className="m-0 text-slate-500 text-[0.8rem]">
-                  No project link is currently available.
-                </p>
-              )}
-
-              {error ? (
-                <p className="m-0 text-red-700 text-[0.85rem] font-semibold">
-                  {error}
-                </p>
-              ) : null}
-
-              <DialogActions>
-                <DialogButton
-                  variant="secondary"
-                  onClick={closeDialog}
-                  disabled={isSubmitting}
-                >
-                  Cancel
-                </DialogButton>
-                <DialogButton
-                  type="submit"
-                  disabled={isSubmitting || !message.trim()}
-                >
-                  {isSubmitting ? "Submitting..." : "Submit"}
-                </DialogButton>
-              </DialogActions>
-            </form>
-          </Dialog>
-        </DialogOverlay>
-      ) : null}
+      {overlay && (dialogHost ? createPortal(overlay, dialogHost) : overlay)}
     </>
   );
 };

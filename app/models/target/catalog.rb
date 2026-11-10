@@ -73,7 +73,7 @@ class Target
       # kind for it was one more output to name, build and publish for a file the first
       # one already gives you. Removed in AbsorbWebsiteZipTargets, which converted the
       # rows that had it.
-      Kind.build(:scorm, label: "SCORM package (for an LMS)",
+      Kind.build(:scorm, label: "Course package for an LMS (SCORM)",
         emits: { "format" => "html", "compression" => "scorm" },
         extensions: %w[ .zip ]),
 
@@ -93,12 +93,12 @@ class Target
         emits: { "format" => "braille" },
         extensions: %w[ .brf .txt ]),
 
-      Kind.build(:revealjs, label: "Slides (reveal.js)",
+      Kind.build(:revealjs, label: "Slides (web)",
         emits: { "format" => "revealjs" },
         viewable: true, filename_ext: "html", extensions: %w[ .html ],
         document_types: %i[ slideshow ]),
 
-      Kind.build(:beamer, label: "Slides (Beamer PDF)",
+      Kind.build(:beamer, label: "Slides (PDF)",
         emits: { "format" => "beamer" },
         viewable: true, extensions: %w[ .pdf ], document_types: %i[ slideshow ]),
 

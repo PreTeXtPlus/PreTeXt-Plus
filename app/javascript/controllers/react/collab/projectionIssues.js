@@ -5,17 +5,17 @@
 // the answer to every flush. Empty means every record reached the saved copy.
 
 const KIND_LABELS = {
-  division: "Section",
-  asset: "Asset",
+  division: "Division",
+  asset: "Image",
   snippet: "Snippet",
   exercise: "Exercise",
 };
 
 /** One sentence for an issue, in the author's words. */
 export function describeProjectionIssue(issue) {
-  const kind = KIND_LABELS[issue.kind] ?? "Record";
-  const name = issue.ref ? `with reference ID “${issue.ref}”` : `(id ${String(issue.id).slice(0, 8)}…)`;
-  return `${kind} ${name}: ${issue.reason}.`;
+  const kind = KIND_LABELS[issue.kind] ?? "Item";
+  const name = issue.ref ? `${kind} “${issue.ref}”` : `${kind} with no ID`;
+  return `${name}: ${issue.reason}.`;
 }
 
 /**

@@ -30,7 +30,7 @@ const editorTabLabel = (target: EditorTarget): string => {
   }
   if (target.kind === "snippet") return target.snippet.title || target.snippet.ref;
   if (target.kind === "exercise") return target.exercise.title || target.exercise.ref;
-  return target.asset.title || target.asset.ref || "Untitled asset";
+  return target.asset.title || target.asset.ref || "Untitled image";
 };
 
 /**

@@ -40,6 +40,7 @@
       <% if backups.any? %>
         New automatic backups are paused while this account has no subscription.
       <% else %>
+        Automatic backups are a subscriber feature.
       <% end %>
       <%= link_to "Subscribe", subscriptions_path, class: "text-blue-600 hover:underline" %>
       to <%= backups.any? ? "resume them" : "turn them on" %>.

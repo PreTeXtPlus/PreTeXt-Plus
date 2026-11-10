@@ -56,20 +56,20 @@ describe('findWellformednessErrorLine', () => {
 describe('describePreviewError', () => {
   it('names the line when one is given', () => {
     expect(describePreviewError(new Error('whatever'), 4)).toBe(
-      'Could not build the preview: the document is not well-formed XML ' +
-        '(near line 4) — check for an unclosed or mismatched tag.',
+      "The preview is paused: there's a tag problem near line 4. " +
+        "Check for a tag that isn't closed, or closing tags that don't match.",
     )
   })
 
   it('falls back to the transform-failure message with no line', () => {
     expect(describePreviewError(new Error('PreTeXt XSLT transform failed'))).toBe(
-      'Could not build the preview. This usually means the PreTeXt is not ' +
-        'yet well-formed — check for an unclosed tag.',
+      "The preview is paused. This usually means a tag isn't closed yet — " +
+        'check the source for one.',
     )
   })
 
-  it('falls back to the raw message for anything else with no line', () => {
-    expect(describePreviewError(new Error('boom'))).toBe('boom')
+  it('falls back to the raw message, introduced, for anything else with no line', () => {
+    expect(describePreviewError(new Error('boom'))).toBe('The preview is paused. Details: boom')
   })
 })
 

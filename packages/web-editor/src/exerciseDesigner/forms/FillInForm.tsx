@@ -49,7 +49,7 @@ function TestFields({
               mono
               value={test.pattern}
               onChange={(pattern) => update({ pattern })}
-              help="A string or regular expression that must match the whole response."
+              help="Text the whole answer must match. A regular expression also works."
             />
           )}
           <div className="flex flex-wrap gap-4">
@@ -60,7 +60,7 @@ function TestFields({
             />
             {!test.useAnswer && (
               <Checkbox
-                label="Literal (not a regex)"
+                label="Match exactly (not a regular expression)"
                 checked={test.literal}
                 onChange={(literal) => update({ literal })}
               />
@@ -144,8 +144,8 @@ export default function FillInForm({
       }
     >
       <p className="text-[0.78rem] text-slate-600">
-        Each <code>&lt;fillin/&gt;</code> in the statement is a blank. They are matched with the
-        blanks below in order.
+        Each <code>&lt;fillin/&gt;</code> in the statement is a blank, matched in order with the
+        blanks below.
       </p>
       {inStatement !== body.blanks.length && (
         <p className="text-[0.78rem] text-amber-700">

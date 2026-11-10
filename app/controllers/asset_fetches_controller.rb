@@ -6,11 +6,17 @@ class AssetFetchesController < ApplicationController
   # asset (Content) and ActiveStorage records.
   def create
     url = params[:url].presence
-    return render_error("URL is required") unless url
+    return render_error("Paste a web address for the image.") unless url
 
     body, content_type = SafeUrlFetcher.call(url)
     send_data body, type: content_type, disposition: "inline"
-  rescue SafeUrlFetcher::UnsafeUrlError, SafeUrlFetcher::FetchError => e
+  rescue SafeUrlFetcher::UnsafeUrlError => e
+    # Refused before anything was fetched: not a web address, or one that leads somewhere
+    # this server won't go (a private network, too many redirects). The gem's reason is
+    # for the log.
+    Rails.logger.info("[asset_fetches] refused #{url}: #{e.message}")
+    render_error("We can't download images from that address.")
+  rescue SafeUrlFetcher::FetchError => e
     render_error(e.message)
   end
 

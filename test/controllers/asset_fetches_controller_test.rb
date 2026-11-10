@@ -27,7 +27,7 @@ class AssetFetchesControllerTest < ActionDispatch::IntegrationTest
     end
 
     assert_response :unprocessable_entity
-    assert_equal "URL points to a disallowed address", response.parsed_body["error"]
+    assert_equal "We can't download images from that address.", response.parsed_body["error"]
   end
 
   test "create requires a url" do

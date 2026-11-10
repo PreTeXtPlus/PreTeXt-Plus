@@ -222,9 +222,9 @@ describe("opening a snippet", () => {
     const spare: Snippet = { id: "s2", ref: "spare", source: "", sourceFormat: "pretext" };
     renderEditors({ projectSnippets: [snippet, spare] });
     openSnippetRow("greeting");
-    expect(screen.getByTestId("editor-target-bar")).not.toHaveTextContent("not placed");
+    expect(screen.getByTestId("editor-target-bar")).not.toHaveTextContent("not used yet");
     fireEvent.click(within(screen.getByTestId("snippet-row-spare")).getByRole("button"));
-    expect(screen.getByTestId("editor-target-bar")).toHaveTextContent("not placed");
+    expect(screen.getByTestId("editor-target-bar")).toHaveTextContent("not used yet");
   });
 
   it("keeps the open snippet's typing when the host resets the pool", () => {
@@ -263,7 +263,7 @@ describe("opening a snippet", () => {
     const { changes, snippetUpdates } = renderEditors();
     openSnippetRow("greeting");
 
-    const idField = screen.getByLabelText("Reference ID") as HTMLInputElement;
+    const idField = screen.getByLabelText("ID") as HTMLInputElement;
     fireEvent.change(idField, { target: { value: "salutation" } });
     await act(async () => {
       fireEvent.keyDown(idField, { key: "Enter" });
@@ -278,6 +278,24 @@ describe("opening a snippet", () => {
     expect(barTitle()).toHaveTextContent("salutation");
     expect(within(screen.getByTestId("settings-drawer")).getByTestId("settings-embed-code"))
       .toHaveTextContent('<plus:snippet ref="salutation"/>');
+  });
+
+  // Refs are one namespace across divisions, snippets, exercises and assets,
+  // so a snippet can't take a division's id any more than another snippet's.
+  it("refuses an id a record of another kind already uses, and saves nothing", async () => {
+    const { snippetUpdates } = renderEditors();
+    openSnippetRow("greeting");
+
+    const idField = screen.getByLabelText("ID") as HTMLInputElement;
+    fireEvent.change(idField, { target: { value: "doc" } });
+    await act(async () => {
+      fireEvent.keyDown(idField, { key: "Enter" });
+    });
+
+    expect(
+      within(screen.getByTestId("settings-drawer")).getByText(/"doc" is already used in this project/),
+    ).toBeInTheDocument();
+    expect(snippetUpdates).toHaveLength(0);
   });
 
   it("returns to a division, and its preview, when one is selected", () => {
@@ -300,15 +318,15 @@ describe("opening an asset", () => {
     expect(barTitle()).toHaveTextContent("A figure");
     expect(editor().value).toBe("<latex-image>x</latex-image>");
     expect(editor().dataset.format).toBe("pretext");
-    expect(screen.getByText("missing short description")).toBeInTheDocument();
+    expect(screen.getByText("needs alt text")).toBeInTheDocument();
 
-    const alt = screen.getByLabelText("Short description") as HTMLInputElement;
+    const alt = screen.getByLabelText("Alt text") as HTMLInputElement;
     fireEvent.change(alt, { target: { value: "A plot" } });
     await act(async () => {
       fireEvent.blur(alt);
     });
     expect(assetUpdates[assetUpdates.length - 1]).toMatchObject({ ref: "fig", shortDescription: "A plot" });
-    expect(screen.queryByText("missing short description")).toBeNull();
+    expect(screen.queryByText("needs alt text")).toBeNull();
   });
 
   it("reports source edits as the asset's content", () => {
@@ -371,7 +389,7 @@ describe("opening an asset", () => {
     renderEditors();
     openAssetRow("fig");
     expect(screen.getByTestId("asset-preview")).toHaveTextContent(
-      "Preview coming soon for authored assets.",
+      "No preview for this kind of image yet.",
     );
     expect(screen.queryByTestId("live-preview")).toBeNull();
   });
@@ -388,6 +406,18 @@ describe("the settings drawer", () => {
     ).toBeInTheDocument();
     fireEvent.keyDown(window, { key: "Escape" });
     expect(screen.queryByTestId("settings-drawer")).toBeNull();
+  });
+
+  it("closes from the Hide bar along its bottom", () => {
+    renderEditors();
+    openSnippetRow("greeting");
+    const toggle = screen.getByTestId("settings-drawer-toggle");
+    expect(toggle).toHaveAttribute("aria-expanded", "true");
+    fireEvent.click(
+      within(screen.getByTestId("settings-drawer")).getByRole("button", { name: /^Hide/ }),
+    );
+    expect(screen.queryByTestId("settings-drawer")).toBeNull();
+    expect(toggle).toHaveAttribute("aria-expanded", "false");
   });
 
   it("closes when another item opens", () => {

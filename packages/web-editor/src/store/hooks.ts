@@ -1,6 +1,7 @@
 import { createContext, useContext, useMemo } from "react";
 import { useStore } from "zustand";
 import type { EditorStoreInstance, EditorStoreState } from "./editorStore";
+import { projectRefs } from "../idRules";
 
 export const EditorStoreContext = createContext<EditorStoreInstance | null>(null);
 
@@ -40,12 +41,12 @@ export function useTakenRefs(): ReadonlySet<string> {
   const exercises = useEditorStore((s) => s.projectExercises);
   return useMemo(
     () =>
-      new Set<string>([
-        ...(divisions ?? []).map((d) => d.xmlId),
-        ...(assets ?? []).flatMap((a) => (a.ref ? [a.ref] : [])),
-        ...(snippets ?? []).map((s) => s.ref),
-        ...(exercises ?? []).map((e) => e.ref),
-      ]),
+      projectRefs({
+        divisions,
+        projectAssets: assets,
+        projectSnippets: snippets,
+        projectExercises: exercises,
+      }),
     [divisions, assets, snippets, exercises],
   );
 }

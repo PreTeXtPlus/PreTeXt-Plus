@@ -154,18 +154,18 @@ const buildDocinfo = (
 };
 
 const TAB_LABELS: Record<DocinfoTab, string> = {
-  macros: "LaTeX Macros",
-  preamble: "Image Macros",
-  other: "Other Elements",
+  macros: "Math macros",
+  preamble: "Image preamble",
+  other: "Advanced",
 };
 
 const TAB_DESCRIPTIONS: Record<DocinfoTab, string> = {
   macros:
-    "LaTeX macros available throughout the document. Stored in <macros> inside <docinfo>. Use \\newcommand to define new macros (avoid using \\def).",
+    "Shortcuts for math you use often, available everywhere in the document. Define each with \\newcommand (not \\def).",
   preamble:
-    `LaTeX macros for rendering TikZ/LaTeX images. Stored in <latex-image-preamble> inside <docinfo>. Every build loads ${DEFAULT_LATEX_IMAGE_PREAMBLE} before these, so there is no need to add it.`,
+    `Extra LaTeX setup for TikZ and other LaTeX images. ${DEFAULT_LATEX_IMAGE_PREAMBLE} is already included.`,
   other:
-    "Any additional <docinfo> child elements (e.g. <cross-references>, <rename>). Edit as raw XML — one element per line.",
+    "Other PreTeXt document settings, such as <rename> or <cross-references>, written as XML.",
 };
 
 /**
@@ -277,7 +277,7 @@ const DocinfoEditor = ({
         <DialogHeader>
           <div>
             <DialogTitle id="pretext-plus-editor-docinfo-dialog-title">
-              Edit docinfo/preamble elements
+              Macros and preamble
             </DialogTitle>
             <DialogCopy>{TAB_DESCRIPTIONS[activeTab]}</DialogCopy>
             {showCommonDocinfoControls ? (
@@ -289,7 +289,7 @@ const DocinfoEditor = ({
                     setUseCommonDocinfo(event.currentTarget.checked)
                   }
                 />
-                <span>Use my common docinfo/preamble.</span>
+                <span>Use my shared macros and preamble (the same in all my projects)</span>
               </DialogCheckboxRow>
             ) : null}
             {showCommonDocinfoControls && !useCommonDocinfo ? (
@@ -298,14 +298,14 @@ const DocinfoEditor = ({
                   onClick={handleImportCommonDocinfo}
                   disabled={!canImportCommonDocinfo}
                 >
-                  Import common docinfo
+                  Copy in my shared macros and preamble
                 </DialogLinkButton>
               </div>
             ) : null}
           </div>
           <DialogClose
             onClick={() => onClose(undefined)}
-            aria-label="Close docinfo editor"
+            aria-label="Close macros and preamble"
           >
             Close
           </DialogClose>
@@ -313,8 +313,8 @@ const DocinfoEditor = ({
 
         {isEditingCommonDocinfo ? (
           <DialogCommonModeBanner>
-            You are editing your shared common docinfo/preamble. These values
-            will apply to all projects that use this option.
+            You're editing your shared macros and preamble. Changes apply to
+            every project that uses them.
           </DialogCommonModeBanner>
         ) : null}
 

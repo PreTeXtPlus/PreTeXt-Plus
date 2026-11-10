@@ -263,9 +263,10 @@ async function convertWithEngine(
   const notes =
     images > 0
       ? [
-          `${images === 1 ? "1 image" : `${images} images`} in this file could ` +
-            "not be copied along with the text. Add them under Assets, then " +
-            "embed them where they belong.",
+          `${images === 1 ? "1 image" : `${images} images`} in this file ` +
+            `${images === 1 ? "wasn't" : "weren't"} brought in. Add ` +
+            `${images === 1 ? "it" : "them"} with File → New Image…, then ` +
+            "insert them where they belong.",
         ]
       : [];
   return { pretext: result.pretextSource, findings: [], notes };
@@ -389,15 +390,16 @@ export function fitImportForDivision(
   const retargeted = retargetFragmentToDepth(body, importTargetDepth(parentType));
   if (retargeted.delta !== 0 && retargeted.topTag && parentType) {
     notes.push(
-      `${tag(retargeted.topTag)} became ` +
-        `${tag(shiftLadderTag(retargeted.topTag, retargeted.delta))} to fit ` +
-        `inside this ${tag(parentType)}; deeper divisions moved with it.`,
+      `Headings were moved to fit inside this ${tag(parentType)}: ` +
+        `${tag(retargeted.topTag)} became ` +
+        `${tag(shiftLadderTag(retargeted.topTag, retargeted.delta))}, and ` +
+        "the ones below it moved too.",
     );
   }
   if (retargeted.overflowed.length > 0) {
     notes.push(
-      `${retargeted.overflowed.map(tag).join(", ")} ran out of levels below ` +
-        "<subsubsection> and became <paragraphs>.",
+      `Some deeply nested headings (${retargeted.overflowed.map(tag).join(", ")}) ` +
+        "became <paragraphs>, since there's no level below <subsubsection>.",
     );
   }
 
@@ -407,7 +409,7 @@ export function fitImportForDivision(
   if (deduped.renamed.length > 0) {
     const count = deduped.renamed.length;
     notes.push(
-      `Renamed ${count === 1 ? "an id" : `${count} ids`} this project already ` +
+      `Renamed ${count === 1 ? "an ID" : `${count} IDs`} this project already ` +
         `uses: ${deduped.renamed.map((r) => `${r.from} → ${r.to}`).join(", ")}.`,
     );
   }

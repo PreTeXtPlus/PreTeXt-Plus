@@ -6,6 +6,7 @@
  *
  * @vitest-environment jsdom
  */
+import type { ComponentProps } from "react";
 import { describe, it, expect, vi } from "vitest";
 import { render, screen, within, fireEvent } from "@testing-library/react";
 import Editors from "../components/Editors";
@@ -66,7 +67,7 @@ const divisions: Division[] = legacyDivisions([
   },
 ]);
 
-function renderEditors() {
+function renderEditors(extra: Partial<ComponentProps<typeof Editors>> = {}) {
   const changes: EditorContentChange[] = [];
   const updates: { xmlId: string; changes: DivisionChanges }[] = [];
   render(
@@ -78,6 +79,7 @@ function renderEditors() {
       topBar={{}}
       onContentChange={(c) => changes.push(c)}
       onDivisionUpdate={(xmlId, c) => updates.push({ xmlId, changes: c })}
+      {...extra}
     />,
   );
   /** The last source emitted for `xmlId`, or undefined if it never changed. */
@@ -147,11 +149,26 @@ describe("an existing division's settings", () => {
   it("refuses an id another division already uses, and saves nothing", async () => {
     const { sourceOf, fieldsOf } = renderEditors();
     const drawer = openSettings("Getting started");
-    const id = field(drawer, "Reference ID");
+    const id = field(drawer, "ID");
     fireEvent.change(id, { target: { value: "other" } });
     fireEvent.blur(id);
     expect(
-      await within(drawer).findByText(/already used by another division/),
+      await within(drawer).findByText(/already used in this project/),
+    ).toBeInTheDocument();
+    expect(fieldsOf("intro-sec")).toBeUndefined();
+    expect(sourceOf("doc")).toBeUndefined();
+  });
+
+  it("refuses an id a snippet already uses, and saves nothing", async () => {
+    const { sourceOf, fieldsOf } = renderEditors({
+      projectSnippets: [{ id: "s1", ref: "greeting", sourceFormat: "pretext", source: "<p>Hi</p>" }],
+    });
+    const drawer = openSettings("Getting started");
+    const id = field(drawer, "ID");
+    fireEvent.change(id, { target: { value: "greeting" } });
+    fireEvent.blur(id);
+    expect(
+      await within(drawer).findByText(/"greeting" is already used in this project/),
     ).toBeInTheDocument();
     expect(fieldsOf("intro-sec")).toBeUndefined();
     expect(sourceOf("doc")).toBeUndefined();
@@ -160,7 +177,7 @@ describe("an existing division's settings", () => {
   it("renames the id everywhere on Enter", () => {
     const { sourceOf, fieldsOf } = renderEditors();
     const drawer = openSettings("Getting started");
-    const id = field(drawer, "Reference ID");
+    const id = field(drawer, "ID");
     fireEvent.change(id, { target: { value: "welcome" } });
     fireEvent.keyDown(id, { key: "Enter" });
     expect(fieldsOf("intro-sec")?.xmlId).toBe("welcome");

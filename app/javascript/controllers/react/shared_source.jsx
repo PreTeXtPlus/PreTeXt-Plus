@@ -91,14 +91,14 @@ function SharedSourceApp({ config }) {
   if (query.isError) {
     return (
       <div className="flex h-full items-center justify-center">
-        <div className="mx-5 text-center">Error loading document. Please reload the page.</div>
+        <div className="mx-5 text-center">We couldn't load this project. Please reload the page.</div>
       </div>
     );
   }
 
   const logo = (
     <a href={rootPath} className="flex items-center">
-      <img src="/icon.svg" className="h-14" alt="PreTeXtPlus Logo" />
+      <img src="/icon.svg" className="h-14" alt="PreTeXt.Plus" />
     </a>
   );
 

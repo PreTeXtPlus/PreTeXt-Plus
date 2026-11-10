@@ -7,7 +7,7 @@
     the "Make owner" button on an accepted collaborator's own row below.
 
     Owner: the rest of the roster gets a Remove button, plus an invite form
-    (with a "Bulk add" list form tucked under it for subscribers) and the cap.
+    (with a "Invite several people" list form tucked under it for subscribers) and the cap.
     Each accepted collaborator's row also gets a "Make owner" button, since only
     an accepted collaborator (one with a user account attached) is a valid
     transfer target.
@@ -92,7 +92,7 @@
       <% end %>
       <% if can?(:bulk_create, Collaboration.new(project: project)) %>
         <details class="mt-2">
-          <summary class="cursor-pointer text-sm text-blue-600 hover:underline">Bulk add</summary>
+          <summary class="cursor-pointer text-sm text-blue-600 hover:underline">Invite several people</summary>
           <%= form_with url: bulk_project_collaborations_path(project), method: :post,
                 class: "mt-2 flex flex-col items-start gap-2" do |form| %>
             <%= form.label :emails, "Emails separated by commas, semicolons, or new lines (up to #{CollaborationsController::SUBSCRIBER_INVITES_PER_HOUR} at a time)",

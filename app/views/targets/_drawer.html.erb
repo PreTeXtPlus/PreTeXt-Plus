@@ -26,7 +26,7 @@
     <div class="flex items-start justify-between gap-4 border-b border-gray-200 p-5">
       <div>
         <h2 class="text-lg font-semibold"><%= target.name %></h2>
-        <p class="text-xs text-gray-500"><%= target.kind_label %> · <span class="font-mono"><%= target.slug %></span></p>
+        <p class="text-xs text-gray-500"><%= target.kind_label %></p>
       </div>
       <div class="flex items-center gap-2">
         <%# The one action the header offers, whichever way round it is: start the build
@@ -108,11 +108,9 @@
       <div class="flex gap-3">
         <span class="w-28 shrink-0 font-mono text-xs uppercase tracking-wider text-gray-500">Last try</span>
         <span>
-          <%# "success" alone would be a lie about a build the CLI exited nonzero on --
-              the output imported, the build still reported errors. %>
           <% if (last = target.latest_build) %>
             <%= last.created_at.to_fs(:long) %> —
-            <%= last.built_with_errors? ? "success, with errors" : last.status.humanize.downcase %>
+            <%= build_outcome_words(last) %>
           <% else %>
             —
           <% end %>
@@ -153,8 +151,7 @@
           </div>
         </div>
         <p class="mt-2 text-xs text-gray-500">
-          Anyone with this link can read it. It always serves the most recent successful
-          build, so a failed rebuild leaves it untouched. Unpublishing breaks it immediately.
+          Anyone with this link can read it. It always shows your latest successful build.
         </p>
         <%= button_to "Unpublish", publish_project_target_path(project, target),
               method: :patch, params: { published: false },
@@ -167,7 +164,7 @@
               method: :patch, params: { published: true }, form: { data: { turbo_frame: "_top" } },
               class: "#{button_classes(color: "gray", outlined: true)} mt-2 px-3 py-2 text-sm",
               data: publish_confirm(target) %>
-        <p class="mt-2 text-xs text-gray-500">Publishing does not start a build — it exposes the one already built.</p>
+        <p class="mt-2 text-xs text-gray-500">Publishing shares the version you last built.</p>
       <% elsif target.build_awaiting_review %>
         <%# There *is* output -- it is just not live yet, and publishing exposes what is
             live. Saying "build this output" here would send an author to rebuild
@@ -248,9 +245,7 @@
       <%# The slug is fixed at creation on purpose, and this is the one place an author
           can find out that renaming is safe. %>
       <p class="mt-2 text-xs text-gray-500">
-        Renaming changes only what you see here. This output stays
-        <span class="font-mono"><%= target.slug %></span> in the public link and in
-        <code>project.ptx</code>, so a link you have already shared keeps working.
+        Renaming won't change the public link, so links you've shared keep working.
       </p>
 
             <%# Opens over the drawer -- the modal's frame is in the layout, not in here, so
@@ -259,10 +254,6 @@
             edit_project_target_publication_settings_path(project, target),
             data: { turbo_frame: "modal" },
             class: "#{button_classes(color: "gray", outlined: true)} mt-2 inline-block px-3 py-2 text-sm" %>
-      <p class="mt-2 text-xs text-gray-500">
-        Anything set here applies to just this output, overriding the project's settings
-        and your account defaults. Settings take effect on the next build.
-      </p>
 
       <%= button_to "Remove this output", project_target_path(project, target), method: :delete,
             form: { data: { turbo_frame: "_top" } },

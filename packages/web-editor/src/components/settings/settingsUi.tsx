@@ -93,7 +93,7 @@ export const SettingsButton = ({
 /** The row of action buttons at the bottom of a panel. */
 export const SettingsActions = ({ actions }: { actions: SettingsAction[] }) =>
   actions.length === 0 ? null : (
-    <div className="flex flex-wrap gap-1.5 pt-2 border-t border-slate-200">
+    <div className="flex flex-wrap gap-1.5 pt-2 border-t border-slate-300">
       {actions.map((action) => (
         <SettingsButton
           key={action.label}
@@ -150,7 +150,7 @@ export const EmbedCode = ({
       <div className="flex items-start gap-1.5 min-w-0">
         <code
           data-testid="settings-embed-code"
-          className="flex-1 min-w-0 font-mono text-[0.75rem] text-slate-900 bg-slate-100 border border-slate-200 rounded py-1 px-2 whitespace-pre-wrap break-all"
+          className="flex-1 min-w-0 font-mono text-[0.75rem] text-slate-900 bg-white border border-slate-200 rounded py-1 px-2 whitespace-pre-wrap break-all"
         >
           {code}
         </code>

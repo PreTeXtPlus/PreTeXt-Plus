@@ -80,7 +80,7 @@ const ExerciseList = ({ canCreate }: ExerciseListProps) => {
                     aria-current={isOpen ? "true" : undefined}
                     title={
                       isUnlinked
-                        ? "No exercise for this reference — click to link or create one"
+                        ? "Missing — the document uses this exercise, but it doesn't exist yet. Click to create it."
                         : "Open exercise"
                     }
                   >
@@ -109,9 +109,9 @@ const ExerciseList = ({ canCreate }: ExerciseListProps) => {
                       )}
                     >
                       {isUnlinked
-                        ? `${row.ref} — needs exercise`
+                        ? `${row.ref} — missing exercise`
                         : row.status === "unused"
-                          ? `${row.ref} — not placed`
+                          ? `${row.ref} — not used yet`
                           : row.ref}
                     </span>
                   </button>

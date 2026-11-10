@@ -17,15 +17,19 @@ class AssetRendersController < ApplicationController
   # Each render starts a container on the build server's one generate worker, so the
   # cost is real. Generous for an author iterating on a figure, tight against a loop.
   rate_limit to: 30, within: 10.minutes, only: :create,
-             with: -> { render json: { error: "You've asked for a lot of renders recently. Please wait a few minutes and try again." }, status: :too_many_requests }
+             with: -> { render json: { error: "You've refreshed a lot of previews recently. Please wait a few minutes and try again." }, status: :too_many_requests }
 
   CLAIM_TTL = 1.hour
+
+  # What the author sees when the build server cannot be reached or answers badly; the
+  # reason itself, full of HTTP codes and exception names, goes to the log.
+  UNAVAILABLE = "We couldn't make this preview right now. Please try again in a few minutes.".freeze
 
   # POST /projects/:project_id/asset_renders  { ref, source }
   def create
     asset = @project.assets.find_by(kind: :authored_asset, ref: params[:ref].to_s)
     unless asset && Content::GeneratedAssetBehavior::SERVER_RENDERED_FORMATS.include?(asset.source_format)
-      return render json: { error: "That asset is not one the build server renders." }, status: :unprocessable_entity
+      return render json: { error: "This image can't be previewed here." }, status: :unprocessable_entity
     end
 
     # The source as the editor holds it, which may be newer than the row's; never saved.
@@ -37,7 +41,7 @@ class AssetRendersController < ApplicationController
     render json: { poll_url: status_project_asset_renders_path(@project, token: claim) }, status: :accepted
   rescue SourceAssembler::AssemblyError, AssetRenderer::Error => e
     Rails.logger.error("AssetRendersController could not submit a render for project #{@project.id}: #{e.message}")
-    render json: { error: e.message }, status: :bad_gateway
+    render json: { error: UNAVAILABLE }, status: :bad_gateway
   end
 
   # GET /projects/:project_id/asset_renders/status?token=…
@@ -47,7 +51,8 @@ class AssetRendersController < ApplicationController
 
     render json: AssetRenderer.poll(claim["status_url"], claim["element"]).to_h.compact
   rescue AssetRenderer::Error => e
-    render json: { error: e.message }, status: :bad_gateway
+    Rails.logger.error("AssetRendersController could not poll a render for project #{@project.id}: #{e.message}")
+    render json: { error: UNAVAILABLE }, status: :bad_gateway
   end
 
   private

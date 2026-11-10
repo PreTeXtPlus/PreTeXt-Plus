@@ -84,7 +84,7 @@ export default function CleanFindingsList({
               // knows whether a `\textbf` stood for emphasis, a term, or a
               // warning, so guessing would put wrong semantics into the source.
               <p className="mt-1.5 m-0 text-slate-500 text-[0.8rem] italic">
-                Needs your judgement — not changed automatically.
+                Check this one yourself — it wasn't changed.
               </p>
             )}
           </div>

@@ -16,7 +16,7 @@ class SubscriptionsController < ApplicationController
     random_password = SecureRandom.alphanumeric 8
     emails = params[:emails].to_s.split(/[\s,]+/).map(&:strip).reject(&:empty?).uniq
     if emails.size > @subscription.quantity
-      return redirect_to subscription_path(@subscription), alert: "Failed to update. You only have #{@subscription.quantity} seats, but you entered #{emails.size} emails."
+      return redirect_to subscription_path(@subscription), alert: "This plan has #{@subscription.quantity} seats but you entered #{emails.size} addresses. Remove some, or add seats under Manage plan."
     end
     new_users = false
     old_seat_ids = SubscriptionSeat.where(subscription: @subscription).pluck(:id)

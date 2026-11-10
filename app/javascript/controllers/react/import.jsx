@@ -110,7 +110,10 @@ function ImportApp({ config }) {
         window.location.href = project_url;
       } catch (error) {
         console.error("Error importing project:", error);
-        alert(`Failed to import project:\n${error.message}`);
+        alert(
+          "We couldn't create a project from this file. Please try again, " +
+            "or email support@pretext.plus with the file.",
+        );
       }
     },
     [createUrl, csrfToken],

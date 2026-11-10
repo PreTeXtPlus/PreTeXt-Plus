@@ -205,7 +205,7 @@ class ProjectsControllerTest < ActionDispatch::IntegrationTest
 
     assert_response :success
     assert_no_match "Build all", response.body
-    assert_no_match "Rebuild outdated", response.body
+    assert_no_match "Rebuild changed outputs", response.body
   end
 
   test "show carries a Shared pill for a collaborator, not for the owner" do
@@ -295,7 +295,7 @@ class ProjectsControllerTest < ActionDispatch::IntegrationTest
     end
 
     assert_redirected_to project_url(@project)
-    assert_match(/could not be updated/, flash[:alert])
+    assert_match(/couldn't get your latest changes ready/, flash[:alert])
   end
 
   test "show lists the records the last projection had to leave out" do
@@ -1465,16 +1465,17 @@ class ProjectsControllerTest < ActionDispatch::IntegrationTest
   end
 
   # The wizard words every failure differently for the author
-  # (`describeRemotePandocFailure`), and a 422's body carries pandoc's own
-  # stderr, so neither the status nor the body may be flattened on the way back.
-  test "pandoc passes a conversion failure through with its status and stderr" do
+  # (`describeRemotePandocFailure`), so the status may not be flattened on the
+  # way back. The body -- pandoc's own stderr, for a 422 -- goes to the log
+  # instead, since the wizard would quote it to the author verbatim.
+  test "pandoc passes a conversion failure's status through, and logs its stderr" do
     stderr = "<h2>Pandoc conversion failed</h2><pre>Could not parse line 3</pre>"
     stub_pandoc_server(body: stderr, code: "422") do
       post pandoc_projects_url, params: { file: pandoc_upload }
     end
 
     assert_response :unprocessable_entity
-    assert_includes response.body, "Could not parse line 3"
+    assert_empty response.body
   end
 
   test "pandoc passes a missing-writer failure through as 503" do

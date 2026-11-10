@@ -41,10 +41,11 @@ export function buildImportShare({ context, csrfToken, projectUrl, fetchImpl }) 
       body,
     });
     if (res.ok) return;
+    if (res.status !== 429) console.error(`Sharing a conversion failed: ${res.status}`);
     throw new Error(
       res.status === 429
         ? "Too many conversions shared in a short time. Please try again in a few minutes."
-        : `The server could not take it (error ${res.status}).`,
+        : "Sharing didn't work. Please try again later.",
     );
   };
 }

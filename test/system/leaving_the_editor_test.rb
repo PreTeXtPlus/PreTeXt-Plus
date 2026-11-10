@@ -22,7 +22,7 @@ class LeavingTheEditorTest < ApplicationSystemTestCase
     open_editor(project, as: users(:two))
 
     type_into_editor("Hello world", "ZZLOGOZZ")
-    find("img[alt='PreTeXtPlus Logo']").click
+    find("img[alt='PreTeXt.Plus']").click
 
     assert_current_path projects_path, wait: 10
     assert_includes project.root_division.reload.source, "ZZLOGOZZ"

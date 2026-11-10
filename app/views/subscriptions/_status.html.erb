@@ -7,9 +7,9 @@
       You are subscribed until <%= local_time_tag(user.subscribed_until, date_only: true) %>.
     <% end %>
     <% if user.subscription_seats.first.subscription.user != user %>
-      Your subscription is managed by <code><%= user.subscription_seats.first.subscription.user.email %></code>.
+      Your subscription is managed by <%= user.subscription_seats.first.subscription.user.email %>.
     <% else %>
-      View your subscription plan: <%= link_to "Manage", subscription_path(user.subscription_seats.first.subscription), class: "text-blue-500 hover:underline" %>.
+      <%= link_to "Manage your plan", subscription_path(user.subscription_seats.first.subscription), class: "text-blue-500 hover:underline" %>.
     <% end %>
 
   <% elsif user.student_benefits? %>

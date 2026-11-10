@@ -34,15 +34,15 @@ const heading = (request: CreateRequest): string => {
     case "division":
       return "New division";
     case "snippet":
-      return request.resolveRef ? "Link snippet" : "New snippet";
+      return request.resolveRef ? "Add missing snippet" : "New snippet";
     case "exercise":
-      return request.resolveRef ? "Link exercise" : "New exercise";
+      return request.resolveRef ? "Add missing exercise" : "New exercise";
     case "asset":
       return request.replaceRef
-        ? "Replace asset"
+        ? "Replace image"
         : request.resolveRef
-          ? "Link asset"
-          : "New asset";
+          ? "Add missing image"
+          : "New image";
   }
 };
 
@@ -140,7 +140,7 @@ const NewItemPane = ({
               Inside <strong>{divisionDisplayTitle(parent) || parent.xmlId}</strong>.{" "}
             </>
           ) : (
-            "Not placed in the document. "
+            "Not used in the document yet. "
           )}
           Nothing is created until you save.
         </SettingsNote>
@@ -158,7 +158,7 @@ const NewItemPane = ({
       <>
         {creating.resolveRef && (
           <SettingsNote>
-            The document refers to a snippet <code>{creating.resolveRef}</code>{" "}
+            The document uses a snippet <code>{creating.resolveRef}</code>{" "}
             that doesn't exist yet. Create it here.
           </SettingsNote>
         )}
@@ -177,7 +177,7 @@ const NewItemPane = ({
       <>
         {creating.resolveRef && (
           <SettingsNote>
-            The document refers to an exercise <code>{creating.resolveRef}</code>{" "}
+            The document uses an exercise <code>{creating.resolveRef}</code>{" "}
             that doesn't exist yet. Create it here.
           </SettingsNote>
         )}
@@ -201,9 +201,8 @@ const NewItemPane = ({
           </SettingsNote>
         ) : creating.resolveRef ? (
           <SettingsNote>
-            The document refers to an asset <code>{creating.resolveRef}</code>{" "}
-            that doesn't exist yet. Create it here — the reference in the
-            document is updated to match.
+            The document uses an image <code>{creating.resolveRef}</code>{" "}
+            that doesn't exist yet. Create it here.
           </SettingsNote>
         ) : null}
         <NewAssetForm

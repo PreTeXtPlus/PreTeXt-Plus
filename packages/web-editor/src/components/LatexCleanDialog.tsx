@@ -69,7 +69,7 @@ export default function LatexCleanDialog({
             </DialogTitle>
             <DialogCopy>
               {findings.length === 0
-                ? "This division has no LaTeX left to clean up."
+                ? "Nothing to clean up in this division."
                 : summarize(fixable, flagged)}
             </DialogCopy>
           </div>
@@ -82,7 +82,7 @@ export default function LatexCleanDialog({
           <CleanFindingsList
             findings={findings}
             onApplyRule={onApplyRule}
-            emptyMessage="Nothing to clean up — this division is already free of legacy LaTeX markup."
+            emptyMessage="Nothing to clean up in this division."
           />
         </DialogContent>
 
@@ -108,7 +108,7 @@ function summarize(fixable: number, flagged: number): string {
     parts.push(`${fixable} ${fixable === 1 ? "change" : "changes"} the editor can make for you`);
   }
   if (flagged > 0) {
-    parts.push(`${flagged} ${flagged === 1 ? "finding" : "findings"} that need your judgement`);
+    parts.push(`${flagged} ${flagged === 1 ? "item" : "items"} to check yourself`);
   }
   return `${parts.join(", and ")}.`;
 }
