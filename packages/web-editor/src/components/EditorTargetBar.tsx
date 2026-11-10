@@ -194,7 +194,7 @@ const EditorTargetBar = ({
             type="button"
             data-testid="settings-drawer-toggle"
             className={clsx(
-              "flex items-center gap-1 h-7 pl-1.5 pr-1 border rounded-[3px] cursor-pointer text-[0.78rem] font-medium",
+              "flex items-center gap-0.5 h-7 pl-1.5 pr-1 border rounded-[3px] cursor-pointer",
               isOpen
                 ? "text-slate-800 bg-slate-200 border-slate-300"
                 : "text-slate-600 bg-white border-slate-300 hover:bg-slate-100",
@@ -206,7 +206,6 @@ const EditorTargetBar = ({
             title={isOpen ? "Hide settings (Esc)" : `Show ${KIND_LABELS[target.kind].toLowerCase()} settings`}
           >
             <GearIcon />
-            <span className="max-[30rem]:sr-only">Settings</span>
             <CaretIcon up={isOpen} />
           </button>
         )}
@@ -273,7 +272,7 @@ const EditorTargetBar = ({
             onClick={() => setSettingsDrawerOpen(false)}
             title="Hide settings (Esc)"
           >
-            Hide settings
+            Hide
             <CaretIcon up />
           </button>
         </div>
