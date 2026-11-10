@@ -1,6 +1,7 @@
 /**
  * Keeps the open buffer's placement markers (see `placementDiagnostics.ts`) in
- * step with its text, and offers the quick fix that names a placement.
+ * step with its text, and offers the quick fixes that name a placement or
+ * change a placeholder's tag.
  *
  * Unlike the schema linter this reads the model's live text, not the
  * assembled document: the check is a scan of placeholders, cheap enough to run
@@ -14,6 +15,7 @@ import {
   PLACEMENT_MARKER_SOURCE,
   placementFix,
   placementMarkers,
+  placementTagFixes,
   type PlacementCheckInput,
 } from "./placementDiagnostics";
 
@@ -73,28 +75,37 @@ export function usePlacementDiagnostics(
           if (input && model === editorRef.current?.getModel?.()) {
             for (const marker of context?.markers ?? []) {
               if (marker.source !== PLACEMENT_MARKER_SOURCE) continue;
-              const fix = placementFix(model, input, marker);
-              if (!fix) continue;
-              const start = model.getPositionAt(fix.index);
-              const end = model.getPositionAt(fix.index + fix.length);
-              actions.push({
-                title: `Name this placement "${fix.instance}"`,
-                kind: "quickfix",
-                isPreferred: true,
-                diagnostics: [marker],
-                edit: {
-                  edits: [
-                    {
-                      resource: model.uri,
-                      versionId: model.getVersionId(),
-                      textEdit: {
-                        range: new monaco.Range(start.lineNumber, start.column, end.lineNumber, end.column),
-                        text: fix.text,
+              const rewrite = (
+                title: string,
+                isPreferred: boolean,
+                fix: { index: number; length: number; text: string },
+              ) => {
+                const start = model.getPositionAt(fix.index);
+                const end = model.getPositionAt(fix.index + fix.length);
+                actions.push({
+                  title,
+                  kind: "quickfix",
+                  isPreferred,
+                  diagnostics: [marker],
+                  edit: {
+                    edits: [
+                      {
+                        resource: model.uri,
+                        versionId: model.getVersionId(),
+                        textEdit: {
+                          range: new monaco.Range(start.lineNumber, start.column, end.lineNumber, end.column),
+                          text: fix.text,
+                        },
                       },
-                    },
-                  ],
-                },
-              });
+                    ],
+                  },
+                });
+              };
+              const fix = placementFix(model, input, marker);
+              if (fix) rewrite(`Name this placement "${fix.instance}"`, true, fix);
+              placementTagFixes(model, input, marker).forEach((tagFix, i) =>
+                rewrite(tagFix.title, i === 0, tagFix),
+              );
             }
           }
           return { actions, dispose: () => {} };

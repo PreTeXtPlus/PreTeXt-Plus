@@ -19,6 +19,8 @@ import {
   renameDivisionRef,
   findDivisionParent,
   wrapDivisionSource,
+  assembleFullProjectSource,
+  checkPlaceholderTag,
 } from '../sectionUtils'
 import type { Division } from '../types/sections'
 
@@ -525,5 +527,80 @@ describe('latex \\plus optional argument', () => {
     expect(divisionRefTag('section', 'x', 'latex')).toBe('\\plus{section}{x}')
     expect(assetEmbedCode('x', 'latex')).toBe('\\plus{image}{x}')
     expect(snippetEmbedCode('x', 'latex')).toBe('\\plus{snippet}{x}')
+  })
+})
+
+describe('what a placeholder embeds', () => {
+  const division = (xmlId: string, type: Division['type'], source: string): Division => ({
+    xmlId,
+    type,
+    title: xmlId,
+    source,
+    sourceFormat: 'pretext',
+  })
+  const assemble = (placeholder: string) =>
+    assembleFullProjectSource(
+      [
+        division('root', 'article', placeholder),
+        division('sec', 'section', '<p>section body</p>'),
+      ],
+      'root',
+      '',
+      [{ ref: 'pic', isFile: true, fileRef: 'pic.png' } as never],
+      undefined,
+      [{ ref: 'bit', source: '<p>snippet body</p>', sourceFormat: 'pretext' }],
+      [{ ref: 'ex', source: '<statement><p>exercise body</p></statement>' }],
+    )
+
+  it.each([
+    ['section', 'bit'],
+    ['section', 'ex'],
+    ['section', 'pic'],
+    ['image', 'sec'],
+    ['image', 'bit'],
+    ['snippet', 'sec'],
+    ['snippet', 'ex'],
+    ['exercise', 'sec'],
+    ['task', 'bit'],
+    ['project', 'pic'],
+    ['division', 'bit'],
+    ['foo', 'sec'],
+    ['foo', 'nothing'],
+  ])('plus:%s on %s embeds nothing, leaving a comment', (tag, ref) => {
+    const xml = assemble(`<plus:${tag} ref="${ref}"/>`)
+    expect(xml).toContain(`<!-- incompatible placeholder: plus:${tag} cannot place ${ref} -->`)
+    expect(xml).not.toMatch(/body<\/p>|<image/)
+  })
+
+  it('never writes an invalid comment, whatever the tag or ref holds', () => {
+    expect(assemble('<plus:a--b ref="c--d"/>')).toContain('<!-- incompatible placeholder: plus:a-b cannot place c-d -->')
+  })
+
+  it('a division under another type embeds as its own element, attributes included', () => {
+    const xml = assemble('<plus:chapter ref="sec" component="a"/>')
+    expect(xml).toMatch(/<section [^>]*xml:id="sec"[^>]*component="a"/)
+    expect(xml).toContain('section body')
+    expect(xml).not.toContain('<chapter')
+  })
+
+  it('the generic alias embeds any division', () => {
+    expect(assemble('<plus:division ref="sec"/>')).toMatch(/<section [^>]*xml:id="sec"/)
+  })
+
+  it('a ref with no record is still reported as missing', () => {
+    expect(assemble('<plus:section ref="nothing"/>')).toContain('<!-- missing division: nothing -->')
+    expect(assemble('<plus:task ref="nothing"/>')).toContain('<!-- missing exercise: nothing -->')
+  })
+
+  it('the rule reads the same from every side', () => {
+    const section = { kind: 'division', divisionType: 'section' } as const
+    expect(checkPlaceholderTag('section', section).status).toBe('ok')
+    expect(checkPlaceholderTag('division', section).status).toBe('ok')
+    expect(checkPlaceholderTag('chapter', section)).toEqual({
+      status: 'mismatch',
+      suggestedTags: ['section', 'division'],
+    })
+    expect(checkPlaceholderTag('section', undefined).status).toBe('ok')
+    expect(checkPlaceholderTag('foo', undefined)).toEqual({ status: 'incompatible', suggestedTags: [] })
   })
 })

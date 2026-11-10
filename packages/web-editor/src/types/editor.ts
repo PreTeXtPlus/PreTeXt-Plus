@@ -169,12 +169,13 @@ export interface Snippet {
 
 /**
  * An interactive exercise owned by a single project, placed wherever it's
- * referenced by `<plus:exercise ref="..."/>`. Stored like a {@link Division}:
- * `source` is the exercise's *body* -- the children of its `<exercise>` -- and
- * the element itself is built from the record's fields when the project is
- * assembled (`ref` as its `xml:id` and `label`, `title` as its `<title>`,
- * `attrs` as its other attributes). Edited with the exercise designer, never
- * as text, so its source is always PreTeXt.
+ * referenced by `<plus:exercise ref="..."/>`, `<plus:task>` or `<plus:project>`.
+ * Stored like a {@link Division}: `source` is the exercise's *body* -- the
+ * children of its element -- and the element itself is built from the record's
+ * fields when the project is assembled (`ref` as its `xml:id` and `label`,
+ * `title` as its `<title>`, `attrs` as its other attributes). Which element that
+ * is belongs to each placement, not the record. Edited with the exercise
+ * designer, never as text, so its source is always PreTeXt.
  */
 export interface Exercise {
   /** Stable server-assigned identifier; see {@link Snippet.id}. */
@@ -187,10 +188,10 @@ export interface Exercise {
   ref: string;
   /** The exercise's `<title>`, as PreTeXt inline markup. Empty means untitled. */
   title?: string;
-  /** The children of the exercise's `<exercise>` element, as PreTeXt. */
+  /** The children of the exercise's element, as PreTeXt. */
   source: string;
   /**
-   * The `<exercise>` element's attributes other than `xml:id` and `label`
+   * The exercise element's attributes other than `xml:id` and `label`
    * (a Parsons problem's `language`, a free response's `attachment`, ...).
    */
   attrs?: Record<string, string>;

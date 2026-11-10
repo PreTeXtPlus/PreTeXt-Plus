@@ -77,6 +77,7 @@ import {
   createNewSection,
   createDivisionContent,
   parseDivisionRefsWithTypes,
+  placeholderTargets,
   createDivisionWithId,
   insertDivisionRef,
   wrapDivisionForPreview,
@@ -1218,16 +1219,6 @@ const EditorsInner = (props: EditorsInnerProps) => {
     props.onDivisionRemove?.(xmlId);
   };
 
-  // Push a type named by a parent's `<plus:TYPE ref="..."/>` placeholder onto
-  // the division it points at. The mirror of `syncParentDivisionRef`, for when
-  // the author edited the placeholder rather than the child. No recursion is
-  // possible between the two: this only ever writes to a division other than
-  // the one being edited, and the child→parent sync runs only for the division
-  // whose editor produced the change.
-  const applyDivisionRetype = (division: Division, type: DivisionType) => {
-    applyDivisionUpdate(division.xmlId, { type });
-  };
-
   const applyDivisionSelect = (xmlId: string) => {
     openDivision(xmlId);
     props.onDivisionSelect?.(xmlId);
@@ -1332,36 +1323,24 @@ const EditorsInner = (props: EditorsInnerProps) => {
     if (body === activeDivision.source) return;
     emitContentChange(activeDivision.xmlId, body, activeDivisionFormat);
 
-    // Reconcile this division's child placeholders against the pool: a
-    // `<plus:TYPE ref="id"/>` naming a division that doesn't exist yet creates
-    // it, and one naming a type its target disagrees with retypes the target.
-    // The placeholder's tag is a mirror of the child's own type — the assembled
-    // document ignores it entirely and uses the child's own element — so the two
-    // must be kept equal from whichever side the author edited.
-    const pool = new Map(divisions.map((d) => [d.xmlId, d]));
-    for (const { xmlId, type, generic } of parseDivisionRefsWithTypes(
+    // A `<plus:TYPE ref="id"/>` naming a division that doesn't exist yet creates
+    // it, unless the ref already names a record of another kind, which the
+    // placement lint flags instead. A placeholder never changes an existing
+    // division: the record decides its own element, and a tag that disagrees is
+    // warned about (see placementDiagnostics.ts).
+    const pool = new Set(divisions.map((d) => d.xmlId));
+    const otherRecords = placeholderTargets({
+      snippets: projectSnippets,
+      assets: projectAssets,
+      exercises: projectExercises,
+    });
+    for (const { xmlId, type } of parseDivisionRefsWithTypes(
       body,
       activeDivisionFormat,
     )) {
-      const child = pool.get(xmlId);
-      if (!child) {
-        const created = createDivisionWithId(xmlId, type, activeDivisionFormat);
-        applyDivisionAdd(created);
-        pool.set(xmlId, created); // prevent duplicates within the same edit
-        continue;
-      }
-      // `generic` means the author wrote the untyped `division` alias, so `type`
-      // is a default rather than a choice — never push it onto the child.
-      if (generic || child.type === type) continue;
-      // A placeholder pointing at the division that holds it is malformed
-      // markup, not a placement (the assembler renders it as a circular
-      // reference); acting on it would retype the division from a line inside
-      // its own body. The root is likewise never retyped from a placeholder —
-      // an `<article>` demoted to `<section>` has no valid document left.
-      if (xmlId === activeDivision.xmlId) continue;
-      if (rootDivision && xmlId === rootDivision.xmlId) continue;
-      applyDivisionRetype(child, type);
-      pool.set(xmlId, { ...child, type });
+      if (pool.has(xmlId) || otherRecords.has(xmlId)) continue;
+      applyDivisionAdd(createDivisionWithId(xmlId, type, activeDivisionFormat));
+      pool.add(xmlId); // prevent duplicates within the same edit
     }
   };
 
@@ -2376,13 +2355,20 @@ const EditorsInner = (props: EditorsInnerProps) => {
         .filter((sn) => !isOpen("snippet", sn.ref))
         .map((sn) => ({ name: sn.title?.trim() || sn.ref, source: sn.source ?? "", sourceFormat: sn.sourceFormat })),
     ]);
-    const knownRefs = new Set<string>([
-      ...divisions.map((d) => d.xmlId),
-      ...(projectSnippets ?? []).map((sn) => sn.ref),
-      ...(projectExercises ?? []).map((ex) => ex.ref),
-      ...(projectAssets ?? []).flatMap((a) => (a.ref ? [a.ref] : [])),
-    ]);
-    return { sourceFormat: placementTarget.format, recordRef: placementTarget.ref, elsewhere, knownRefs };
+    const knownRefs = placeholderTargets({
+      divisions,
+      snippets: projectSnippets,
+      exercises: projectExercises,
+      assets: projectAssets,
+    });
+    return {
+      sourceFormat: placementTarget.format,
+      recordRef: placementTarget.ref,
+      elsewhere,
+      knownRefs,
+      // A snippet goes wherever it is placed, so what surrounds it isn't known.
+      outerHolder: placementTarget.kind === "division" ? "outside" : "unknown",
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [placementTarget?.kind, placementTarget?.ref, placementTarget?.format, divisions, projectSnippets, projectExercises, projectAssets]);
 

@@ -2,15 +2,18 @@ import { describe, it, expect } from 'vitest'
 import {
   assembleExercisePreviewSource,
   assembleFullProjectSource,
+  EXERCISE_REF_TAGS,
   exerciseEmbedCode,
+  isInsideTaskHolder,
   parseExerciseRefs,
   parsePlacements,
+  placedExerciseElement,
   removeExerciseRef,
   renameExerciseRef,
   wrapExerciseSource,
 } from '../sectionUtils'
 import { derivePretextContent } from '../contentConversion'
-import type { Exercise } from '../types/editor'
+import type { Exercise, Snippet } from '../types/editor'
 import type { Division } from '../types/sections'
 
 const exercise: Exercise = {
@@ -111,5 +114,97 @@ describe('assembleExercisePreviewSource', () => {
     )
     expect(doc).toMatch(/^<pretext[^>]*>/)
     expect(doc).toContain('<title>exercise preview</title>\n<exercise xml:id="ex-stop"')
+  })
+})
+
+describe('the element an exercise is placed as', () => {
+  const assemble = (source: string, more: Partial<{ exercises: Exercise[]; snippets: Snippet[] }> = {}) =>
+    assembleFullProjectSource(
+      [root(source)],
+      'root',
+      '',
+      [],
+      undefined,
+      more.snippets ?? [],
+      more.exercises ?? [exercise],
+    )
+  const opening = (xml: string) => /<(exercise|task|project) xml:id="ex-stop"/.exec(xml)?.[1]
+
+  it.each([
+    ['exercise', 'exercise'],
+    ['project', 'project'],
+    ['task', 'exercise'],
+  ])('outside a holder, plus:%s is an <%s>', (tag, element) => {
+    expect(opening(assemble(`<plus:${tag} ref="ex-stop"/>`))).toBe(element)
+  })
+
+  it.each(['exercise', 'project', 'activity', 'exploration', 'investigation', 'task'])(
+    'inside <%s>, every tag is a <task>',
+    (holder) => {
+      for (const tag of EXERCISE_REF_TAGS) {
+        expect(opening(assemble(`<${holder}><plus:${tag} ref="ex-stop"/></${holder}>`)), tag).toBe('task')
+      }
+    },
+  )
+
+  it('closes the element it opened, keeping attributes and the instance name', () => {
+    const xml = assemble('<plus:project ref="ex-stop" instance="a" component="b"/>')
+    expect(xml).toContain('<project xml:id="ex-stop-a" label="ex-stop-a"')
+    expect(xml).toContain('component="b"')
+    expect(xml).toContain('</project>')
+  })
+
+  it('an exercise placed in another exercise record is a task of it', () => {
+    const outer: Exercise = { ref: 'outer', source: '<plus:exercise ref="ex-stop"/>' }
+    const xml = assemble('<plus:project ref="outer"/>', { exercises: [outer, exercise] })
+    expect(xml).toContain('<project xml:id="outer"')
+    expect(opening(xml)).toBe('task')
+  })
+
+  it('a snippet carries the place it was put into its own placeholders', () => {
+    const snippets: Snippet[] = [{ ref: 'bit', source: '<plus:exercise ref="ex-stop"/>', sourceFormat: 'pretext' }]
+    expect(opening(assemble('<project><plus:snippet ref="bit"/></project>', { snippets }))).toBe('task')
+    expect(opening(assemble('<plus:snippet ref="bit"/>', { snippets }))).toBe('exercise')
+  })
+
+  it('a holder named in a comment, a verbatim span or already closed does not count', () => {
+    for (const before of ['<!-- <project> -->', '<pre><project></pre>', '<project/>', '<project></project>']) {
+      expect(opening(assemble(`${before}<plus:task ref="ex-stop"/>`)), before).toBe('exercise')
+    }
+  })
+
+  it('the embed code names the chosen tag in each format', () => {
+    expect(exerciseEmbedCode('a', 'pretext', 'task')).toBe('<plus:task ref="a"/>')
+    expect(exerciseEmbedCode('a', 'markdown', 'project')).toBe('::project{ref="a"}')
+    expect(exerciseEmbedCode('a', 'latex', 'task')).toBe('\\plus{task}{a}')
+  })
+
+  it('finds, renames and removes the placeholders of every tag, keeping each tag', () => {
+    const source = '<plus:exercise ref="a"/><plus:task ref="a"/><plus:project ref="a"/>'
+    expect(parseExerciseRefs(source, 'pretext')).toEqual([{ ref: 'a' }, { ref: 'a' }, { ref: 'a' }])
+    expect(renameExerciseRef(source, 'a', 'b')).toBe('<plus:exercise ref="b"/><plus:task ref="b"/><plus:project ref="b"/>')
+    expect(removeExerciseRef(source, 'a')).toBe('')
+    expect(parsePlacements(source, 'pretext').map((p) => p.tag)).toEqual(['exercise', 'task', 'project'])
+  })
+
+  // The lint reads a holder in the buffer's own syntax and assembly reads it in
+  // the converted XML, so the two have to agree on what a source means.
+  describe.each([
+    ['pretext', (h: string, p: string) => `<${h}>${p}</${h}>`, (t: string) => `<plus:${t} ref="ex-stop"/>`],
+    ['latex', (h: string, p: string) => `\\begin{${h}}\n${p}\n\\end{${h}}`, (t: string) => `\\plus{${t}}{ex-stop}`],
+    ['markdown', (h: string, p: string) => `:::${h}\n${p}\n:::`, (t: string) => `::${t}{ref="ex-stop"}`],
+  ] as const)('in %s', (format, hold, place) => {
+    const verdict = (source: string, tag: 'exercise' | 'task' | 'project') => {
+      const inside = isInsideTaskHolder(source, format, source.indexOf(place(tag)))
+      const division: Division = { ...root(source), sourceFormat: format }
+      const assembled = opening(assembleFullProjectSource([division], 'root', '', [], undefined, [], [exercise]))
+      return { lint: placedExerciseElement(tag, inside), assembled }
+    }
+    it.each(EXERCISE_REF_TAGS)('lint and assembly agree on plus:%s', (tag) => {
+      for (const source of [place(tag), hold('exercise', place(tag)), hold('project', place(tag))]) {
+        const { lint, assembled } = verdict(source, tag)
+        expect(assembled, source).toBe(lint)
+      }
+    })
   })
 })

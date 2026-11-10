@@ -7,14 +7,28 @@ import {
   findPlacementProblems,
   placementFix,
   placementUses,
+  placementTagFixes,
   type PlacementCheckInput,
 } from "../components/editorConfigs/placementDiagnostics";
+import type { PlaceholderTarget } from "../sectionUtils";
+
+/** The project's refs: a fixed few of each kind, and `extra` sections. */
+const refs = (...extra: string[]) =>
+  new Map<string, PlaceholderTarget>([
+    ["doc", { kind: "division", divisionType: "article" }],
+    ["sec-intro", { kind: "division", divisionType: "section" }],
+    ["graph", { kind: "asset" }],
+    ["fact", { kind: "snippet" }],
+    ["ex", { kind: "exercise" }],
+    ...extra.map((ref): [string, PlaceholderTarget] => [ref, { kind: "division", divisionType: "section" }]),
+  ]);
 
 const input = (overrides: Partial<PlacementCheckInput> = {}): PlacementCheckInput => ({
   sourceFormat: "pretext",
   recordRef: "sec-intro",
   elsewhere: [],
-  knownRefs: new Set(["doc", "sec-intro", "graph", "fact"]),
+  knownRefs: refs(),
+  outerHolder: "outside",
   ...overrides,
 });
 
@@ -58,7 +72,7 @@ describe("findPlacementProblems", () => {
     const elsewhere = placementUses([
       { name: "Other", source: '<plus:image ref="graph" instance="sec-intro"/>', sourceFormat: "pretext" },
     ]);
-    const knownRefs = new Set(["graph", "graph-sec-intro-2"]);
+    const knownRefs = refs("graph-sec-intro-2");
     const [problem] = findPlacementProblems(
       '<plus:image ref="graph"/><plus:image ref="graph"/>',
       input({ elsewhere, knownRefs }),
@@ -77,7 +91,7 @@ describe("findPlacementProblems", () => {
   it("flags an instance whose labels would be another record's ref, and a malformed name", () => {
     const [collision] = findPlacementProblems(
       '<plus:image ref="graph" instance="two"/>',
-      input({ knownRefs: new Set(["graph", "graph-two"]) }),
+      input({ knownRefs: refs("graph-two") }),
     );
     expect(collision.message).toContain('"graph-two", which is already the id of something else');
 
@@ -100,5 +114,155 @@ describe("placementFix", () => {
 
   it("offers nothing where no fixable problem starts", () => {
     expect(placementFix(modelOf('<plus:image ref="graph"/>'), input(), { startLineNumber: 1, startColumn: 1 })).toBeUndefined();
+  });
+});
+
+describe("tag checks", () => {
+  it("is quiet for a tag that suits its record, or a ref with no record yet", () => {
+    for (const text of [
+      '<plus:section ref="sec-intro"/>',
+      '<plus:division ref="sec-intro"/>',
+      '<plus:image ref="graph"/>',
+      '<plus:snippet ref="fact"/>',
+      '<plus:exercise ref="ex"/>',
+      '<plus:project ref="ex"/>',
+      '<exercise><plus:task ref="ex"/></exercise>',
+      '<plus:section ref="not-made-yet"/>',
+    ]) {
+      expect(findPlacementProblems(text, input()), text).toEqual([]);
+    }
+  });
+
+  it("is an error, with fixes, for a record of another kind", () => {
+    const [problem] = findPlacementProblems('<plus:section ref="fact"/>', input());
+    expect(problem).toMatchObject({ severity: "error", suggestedTags: ["snippet"] });
+    expect(problem.message).toContain("nothing is embedded");
+    expect(findPlacementProblems('<plus:image ref="ex"/>', input())[0].suggestedTags).toEqual([
+      "exercise",
+      "task",
+      "project",
+    ]);
+  });
+
+  it("does not also report repeated labels on a placeholder that embeds nothing", () => {
+    expect(findPlacementProblems('<plus:image ref="fact"/><plus:image ref="fact"/>', input())).toMatchObject([
+      { severity: "error" },
+      { severity: "error" },
+    ]);
+  });
+
+  it("is an error for a tag that is no placeholder, whatever its ref names", () => {
+    expect(findPlacementProblems('<plus:foo ref="nothing"/>', input())).toMatchObject([
+      { severity: "error", suggestedTags: [] },
+    ]);
+    expect(findPlacementProblems('<plus:foo ref="sec-intro"/>', input())).toMatchObject([
+      { severity: "error", suggestedTags: ["section", "division"] },
+    ]);
+  });
+
+  it("only warns about a division under another type's tag, offering its type and the alias", () => {
+    const [problem] = findPlacementProblems('<plus:chapter ref="sec-intro"/>', input());
+    expect(problem).toMatchObject({ severity: "warning", suggestedTags: ["section", "division"] });
+    expect(problem.message).toContain("embedded as <section>");
+  });
+
+  it("warns about a task outside a holder, and anything else inside one", () => {
+    expect(findPlacementProblems('<plus:task ref="ex"/>', input())).toMatchObject([
+      { severity: "warning", suggestedTags: ["exercise"] },
+    ]);
+    for (const text of [
+      '<project><plus:exercise ref="ex"/></project>',
+      '<exercise><plus:project ref="ex"/></exercise>',
+      '<activity><statement><p/></statement><plus:exercise ref="ex"/></activity>',
+    ]) {
+      expect(findPlacementProblems(text, input()), text).toMatchObject([
+        { severity: "warning", suggestedTags: ["task"] },
+      ]);
+    }
+  });
+
+  it("reads a holder in each format's own syntax", () => {
+    expect(
+      findPlacementProblems("\\begin{project}\n\\plus{exercise}{ex}\n\\end{project}", input({ sourceFormat: "latex" })),
+    ).toMatchObject([{ suggestedTags: ["task"] }]);
+    expect(
+      findPlacementProblems("\\begin{project}\n\\end{project}\n\\plus{exercise}{ex}", input({ sourceFormat: "latex" })),
+    ).toEqual([]);
+    expect(
+      findPlacementProblems(':::project\n::exercise{ref="ex"}\n:::', input({ sourceFormat: "markdown" })),
+    ).toMatchObject([{ suggestedTags: ["task"] }]);
+    expect(
+      findPlacementProblems(':::project\n:::\n::exercise{ref="ex"}', input({ sourceFormat: "markdown" })),
+    ).toEqual([]);
+  });
+
+  it("does not take a holder from a comment, a verbatim span or a closed element", () => {
+    for (const text of [
+      '<!-- <project> --><plus:exercise ref="ex"/>',
+      '<pre><project></pre><plus:exercise ref="ex"/>',
+      '<project/><plus:exercise ref="ex"/>',
+      '<project></project><plus:exercise ref="ex"/>',
+    ]) {
+      expect(findPlacementProblems(text, input()), text).toEqual([]);
+    }
+  });
+
+  it("in a snippet, whose place is unknown, warns only about a holder it can see", () => {
+    const snippet = input({ outerHolder: "unknown" });
+    expect(findPlacementProblems('<plus:task ref="ex"/>', snippet)).toEqual([]);
+    expect(findPlacementProblems('<plus:exercise ref="ex"/>', snippet)).toEqual([]);
+    expect(findPlacementProblems('<project><plus:exercise ref="ex"/></project>', snippet)).toMatchObject([
+      { suggestedTags: ["task"] },
+    ]);
+  });
+
+  it("counts every exercise tag as a placement of the same record", () => {
+    const problems = findPlacementProblems(
+      '<plus:exercise ref="ex"/><plus:project ref="ex"/>',
+      input(),
+    );
+    expect(problems).toHaveLength(2);
+    expect(problems[0].message).toContain('The exercise "ex" is placed more than once here');
+  });
+
+  it("ignores placeholders in verbatim spans, and Markdown directives with no ref", () => {
+    expect(findPlacementProblems('<pre><plus:foo ref="x"/></pre>', input())).toEqual([]);
+    expect(findPlacementProblems('::note{id="y"}', input({ sourceFormat: "markdown" }))).toEqual([]);
+  });
+
+  it("rewrites just the tag, in the buffer's own syntax, keeping everything else", () => {
+    const fixes = (text: string, sourceFormat: PlacementCheckInput["sourceFormat"]) =>
+      placementTagFixes(modelOf(text), input({ sourceFormat }), { startLineNumber: 1, startColumn: 1 }).map(
+        ({ text, title }) => [text, title],
+      );
+    expect(fixes('<plus:chapter ref="sec-intro" component="a"/>', "pretext")).toEqual([
+      ['<plus:section ref="sec-intro" component="a"/>', "Change to <plus:section>"],
+      ['<plus:division ref="sec-intro" component="a"/>', "Change to <plus:division>"],
+    ]);
+    expect(fixes('<plus:chapter ref="sec-intro"></plus:chapter>', "pretext")[0][0]).toBe(
+      '<plus:section ref="sec-intro"></plus:section>',
+    );
+    expect(fixes('::chapter{ref="sec-intro" component="a"}', "markdown")[0]).toEqual([
+      '::section{ref="sec-intro" component="a"}',
+      "Change to ::section",
+    ]);
+    expect(fixes("\\plus[component=a]{chapter}{sec-intro}", "latex")[0]).toEqual([
+      "\\plus[component=a]{section}{sec-intro}",
+      "Change to \\plus{section}",
+    ]);
+  });
+
+  it("offers each fix only on the marker it answers", () => {
+    // A task outside a holder that also repeats a label carries two markers.
+    const text = '<plus:task ref="ex"/><plus:task ref="ex"/>';
+    const problems = findPlacementProblems(text, input()).filter((p) => p.index === 0);
+    expect(problems).toHaveLength(2);
+    const at = (message: string) => ({ startLineNumber: 1, startColumn: 1, message });
+    const tag = problems.find((p) => p.suggestedTags)!;
+    const instance = problems.find((p) => p.suggestedInstance)!;
+    expect(placementTagFixes(modelOf(text), input(), at(tag.message))).toHaveLength(1);
+    expect(placementFix(modelOf(text), input(), at(tag.message))).toBeUndefined();
+    expect(placementTagFixes(modelOf(text), input(), at(instance.message))).toEqual([]);
+    expect(placementFix(modelOf(text), input(), at(instance.message))).toBeDefined();
   });
 });
