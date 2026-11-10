@@ -19,6 +19,14 @@ require "net/http"
 class FullBuildArtifactJob < ApplicationJob
   queue_as :default
 
+  # One import per build at a time, and a second one is dropped rather than queued. Both
+  # callers that enqueue this claim the build first with Build#transition!, so only one
+  # import should ever be queued. This is the backstop if that ever slips: two imports of
+  # one artifact collide on BuildFile's unique relative_path, and the loser marks a build
+  # that succeeded failed. The window outlasts ARTIFACT_READ_TIMEOUT plus the import of
+  # a large site. Only Solid Queue enforces it, so it does nothing in tests.
+  limits_concurrency key: ->(build, _artifact_url) { build }, duration: 15.minutes, on_conflict: :discard
+
   # A whole site's zip, not a status blob, so it gets its own ceiling rather than
   # FullBuildServer's default. Long enough for a large book over a slow link; finite
   # because the alternative is what this constant was added to fix -- a build server that

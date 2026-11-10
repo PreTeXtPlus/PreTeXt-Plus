@@ -77,6 +77,19 @@ class BuildRecheckJobTest < ActiveJob::TestCase
     assert_match(/stopped part way/, build.log)
   end
 
+  # The import's own mark!(:success) can land after this job loaded the build. A build
+  # that just succeeded must not be marked failed behind it.
+  test "an import that finishes just as it is judged stalled is not marked failed" do
+    build.mark!(:received_from_server)
+    build.update_column(:updated_at, (BuildRecheckJob::STALL_AFTER + 1.minute).ago)
+    stale = Build.find(build.id)
+    Build.where(id: build.id).update_all(status: Build.statuses.fetch("success"))
+
+    BuildRecheckJob.new.send(:fail_stalled_import, stale)
+
+    assert build.reload.success?
+  end
+
   # A big site can import for a long while without being stuck. Progress is measured by
   # what the import produces, not by the clock, so a living one is never cut off.
   test "a slow import that is still producing files is left to finish" do

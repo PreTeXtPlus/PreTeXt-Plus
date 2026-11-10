@@ -118,7 +118,7 @@ class Build < ApplicationRecord
     BuildRecheckJob.set(wait: BuildRecheckJob::RECHECK_SCHEDULE.first).perform_later(self)
   end
 
-  # The only way a build's status should ever change.
+  # The only way a build's status should ever change, along with transition! below.
   #
   # Every transition used to be a bare update_column, which skips callbacks -- fine while
   # nothing needed to react, but it means an after_update_commit hook silently never
@@ -128,23 +128,55 @@ class Build < ApplicationRecord
   #
   # Still update_columns underneath: these are called from jobs where bumping the
   # record's own updated_at is the only side effect we want.
-  # Stripping here rather than in the view or at each write site: mark! is the one funnel
-  # every log passes through (callback tail, full log fetched out of band, cancel notice),
-  # so the column holds plain text and anything that reads it later -- drawer, mailer,
-  # console -- gets it clean without repeating the scrub.
+  #
+  # Where two parties can race to make the same move, use transition! instead.
   def mark!(status, **attrs)
-    attrs[:log] = attrs[:log].gsub(ANSI_ESCAPE, "") if attrs[:log].is_a?(String)
-
-    update_columns(attrs.merge(status: Build.statuses.fetch(status.to_s),
-                               updated_at: Time.current))
-    target.sync_from_builds!
-    target.broadcast_row
-    target.broadcast_drawer
-    promote_next_queued_build! unless in_flight?
+    update_columns(transition_columns(status, attrs))
+    after_transition
     self
   end
 
+  # The statuses in which the build server still owes this build an answer. The webhook
+  # and a status poll (BuildStatusChecker) can both bring that answer. Whichever moves the
+  # build out of these first owns it, including the one artifact import it leads to.
+  AWAITING_ANSWER = %w[ pending in_progress sent_to_server ].freeze
+
+  # mark!, but only if the build is still in one of `from`. Returns whether it moved.
+  #
+  # The check and the write are one conditional UPDATE, so when two callers race to make
+  # the same move, exactly one gets true. Reloading the build, checking its status and
+  # then calling mark! cannot promise that: both callers can read before either writes.
+  # That is how the webhook and a recheck poll that arrived together both used to claim
+  # a finished build. Each queued an import, the second import collided with the first
+  # on BuildFile's unique relative_path, and a build that had succeeded was marked
+  # failed until the first import finished.
+  #
+  # The record is reloaded either way, so a caller that lost sees the status that won.
+  def transition!(from:, to:, **attrs)
+    from_values = Array(from).map { |status| Build.statuses.fetch(status.to_s) }
+    moved = Build.unscoped.where(id: id, status: from_values)
+                 .update_all(transition_columns(to, attrs)) == 1
+    reload
+    after_transition if moved
+    moved
+  end
+
   private
+
+    # Stripping here rather than in the view or at each write site: every log passes
+    # through mark! or transition!, so the column holds plain text and anything that reads
+    # it later -- drawer, mailer, console -- gets it clean without repeating the scrub.
+    def transition_columns(status, attrs)
+      attrs = attrs.merge(log: attrs[:log].gsub(ANSI_ESCAPE, "")) if attrs[:log].is_a?(String)
+      attrs.merge(status: Build.statuses.fetch(status.to_s), updated_at: Time.current)
+    end
+
+    def after_transition
+      target.sync_from_builds!
+      target.broadcast_row
+      target.broadcast_drawer
+      promote_next_queued_build! unless in_flight?
+    end
 
     def inherit_project_from_target
       self.project ||= target&.project

@@ -163,6 +163,29 @@ class BuildCallbacksControllerTest < ActionDispatch::IntegrationTest
     assert @build.reload.canceled?
   end
 
+  # The poll claimed the build and its import already finished before this callback
+  # arrived. A late callback must not move it back and import it again.
+  test "a callback for a build that is already imported changes nothing" do
+    @build.mark!(:success, log: "the whole build log")
+
+    assert_no_enqueued_jobs(only: [ FullBuildArtifactJob, FullBuildLogJob ]) do
+      post_callback(success_payload("log_truncated" => true))
+    end
+
+    assert_response :success
+    assert @build.reload.success?
+    assert_equal "the whole build log", @build.log
+  end
+
+  test "a failure callback for a build that is already imported does not fail it" do
+    @build.mark!(:success)
+
+    post_callback(failure_payload)
+
+    assert_response :success
+    assert @build.reload.success?
+  end
+
   test "a callback signed with the wrong secret is rejected" do
     post_callback(failure_payload, sign_with: "not-the-secret")
 
