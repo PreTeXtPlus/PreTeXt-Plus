@@ -122,6 +122,9 @@ const INTERACTIVE: Record<string, RegExp> = {
   "clickable-area": /<areas[ >]/,
   "fill-in": /<fillin answer=/,
   "short-answer": /<response\/>/,
+  // Served by another system; WeBWorK's `$` must reach the buffer literally.
+  myopenmath: /<myopenmath problem="/,
+  webwork: /<webwork>[\s\S]*\$a = random\(2, 9\);[\s\S]*<var name="\$answer" width="5"\/>/,
 };
 
 /** What is framed in from another site, and the attribute or child that names it. */
@@ -132,7 +135,6 @@ const MEDIA: Record<string, RegExp> = {
   calcplot3d: /<interactive calcplot3d="[^"]+" variant="application"/,
   youtube: /<video youtube="video-id"/,
   iframe: /<interactive iframe="https:/,
-  myopenmath: /<myopenmath problem="/,
 };
 
 /**

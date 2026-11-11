@@ -142,11 +142,12 @@ JSXGraph and D3 (PreTeXt takes their scripts only from `@source`), a GeoGebra `.
 ## Phase 4 — authoring
 
 1. **Done.** Insert → "Interactives & Media": Desmos, GeoGebra, CalcPlot3D (always
-   writing `@variant`), YouTube, a generic iframe ("Web Page"), MyOpenMath. PreTeXt
+   writing `@variant`), YouTube and a generic iframe ("Web Page"). MyOpenMath and
+   WeBWorK problems are exercises, so they sit under "Interactive Exercises" — the
+   WeBWorK one ahead of any preview of it, its description saying so. PreTeXt
    only, unless the LaTeX and Markdown converters gain a spelling. Every body passes the
    schema in `__tests__/snippets.test.ts`. Seen in the editor: the menu, and the
-   CalcPlot3D default drawing its surface. The MyOpenMath body was rendered (an iframe
-   to `embedq2.php`) but not watched in a browser.
+   CalcPlot3D default drawing its surface.
 2. **Done.** A paste that is nothing but a link to a Desmos graph, a GeoGebra material
    or a YouTube video arrives as the element, id extracted (and a YouTube `t=` as
    `@start`): `mediaUrls.ts`, called from `pasteConvert.ts`. Not an offer but the

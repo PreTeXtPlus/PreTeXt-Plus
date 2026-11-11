@@ -313,6 +313,10 @@ const CATALOG: SnippetSpec[] = [
     { key: "clickable-area", label: "Clickable Area", detail: "Text in which the reader clicks the parts that are correct." },
     { key: "fill-in", label: "Fill in the Blank", detail: "A sentence with a blank the reader fills in." },
     { key: "short-answer", label: "Short Answer", detail: "A question the reader answers in their own words." },
+    // Served by another system rather than Runestone. A WeBWorK problem is
+    // drawn only by a full build: the live preview has no WeBWorK server.
+    { key: "myopenmath", label: "MyOpenMath Problem", detail: "An exercise served by MyOpenMath, by its problem number." },
+    { key: "webwork", label: "WeBWorK Problem", detail: "A randomized WeBWorK problem. Shown in full builds, not in the live preview." },
   ]),
   {
     key: "figure",
@@ -344,7 +348,6 @@ const CATALOG: SnippetSpec[] = [
     { key: "calcplot3d", label: "CalcPlot3D", detail: "A 3D plot drawn by CalcPlot3D." },
     { key: "youtube", label: "YouTube Video", detail: "A YouTube video, by the id in its address." },
     { key: "iframe", label: "Web Page", detail: "Another web page, shown in a frame." },
-    { key: "myopenmath", label: "MyOpenMath Problem", detail: "An exercise served by MyOpenMath, by its problem number." },
   ]),
 ];
 
@@ -669,6 +672,25 @@ const PRETEXT_BODIES: Record<string, string> = {
   myopenmath: lines(
     '<exercise xml:id="${2:exercise-name}">',
     '\t<myopenmath problem="${1:problem-number}"/>',
+    "</exercise>",
+  ),
+  // The smallest problem that randomizes and checks an answer. `\$` is a
+  // literal dollar: PG's variables would otherwise read as tab stops.
+  webwork: lines(
+    '<exercise xml:id="${1:exercise-name}">',
+    "\t<webwork>",
+    "\t\t<pg-code>",
+    `\t\t\t${DOLLAR}a = random(2, 9);`,
+    `\t\t\t${DOLLAR}b = random(2, 9);`,
+    `\t\t\t${DOLLAR}answer = Compute(${DOLLAR}a + ${DOLLAR}b);`,
+    "\t\t</pg-code>",
+    "\t\t<statement>",
+    `\t\t\t<p>\${2:Compute <m><var name="${DOLLAR}a"/> + <var name="${DOLLAR}b"/></m>.} <var name="${DOLLAR}answer" width="5"/></p>`,
+    "\t\t</statement>",
+    "\t\t<solution>",
+    `\t\t\t<p>\${0:The sum is <m><var name="${DOLLAR}answer"/></m>.}</p>`,
+    "\t\t</solution>",
+    "\t</webwork>",
     "</exercise>",
   ),
 };
