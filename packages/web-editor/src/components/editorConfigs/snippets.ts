@@ -670,14 +670,14 @@ const PRETEXT_BODIES: Record<string, string> = {
   iframe:
     '<interactive iframe="${1:https://example.org/}" xml:id="${2:interactive-name}" width="80%" aspect="4:3"/>',
   myopenmath: lines(
-    '<exercise xml:id="${2:exercise-name}">',
+    '<exercise label="${2:exercise-name}">',
     '\t<myopenmath problem="${1:problem-number}"/>',
     "</exercise>",
   ),
   // A problem the WeBWorK server already has — the Open Problem Library's,
   // by its path there — as MyOpenMath's is named by its number.
   webwork: lines(
-    '<exercise xml:id="${2:exercise-name}">',
+    '<exercise label="${2:exercise-name}">',
     '\t<webwork source="${1:Library/PCC/BasicAlgebra/Exponents/exponentsMultiplication0.pg}"/>',
     "</exercise>",
   ),
