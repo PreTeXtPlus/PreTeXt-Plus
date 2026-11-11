@@ -10,7 +10,9 @@ const PRETEXT_MONACO_LANGUAGE_ID = "xml";
 export const pretextConfig: FormatEditorConfig = {
   language: PRETEXT_MONACO_LANGUAGE_ID,
   registerMonacoExtensions: (monaco, editor, context) => {
-    const completions = registerCodeEditorCompletions(monaco);
+    // The division's start tag lives in the wrapper, not the buffer, so the
+    // completions read it from there to know which element they're inside.
+    const completions = registerCodeEditorCompletions(monaco, editor, context);
     // No auto-closing `<` (it would hide the element snippets), and the
     // surrounding pairs that wrap a selection.
     const languageConfiguration = registerPretextLanguageConfiguration(

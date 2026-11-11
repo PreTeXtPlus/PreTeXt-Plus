@@ -55,6 +55,13 @@ export interface MonacoExtensionContext {
    * Read lazily: the binding comes and goes after registration.
    */
   isRemoteChange: () => boolean;
+  /**
+   * The locked lines drawn above the buffer (`VirtualWrapper.before`) — a
+   * division's start tag and title, an asset's `<image>` — which the model
+   * doesn't hold. Context-sensitive features read them to know which element
+   * the buffer sits in. Read lazily: the wrapper changes with the open buffer.
+   */
+  getWrapperBefore: () => string[];
 }
 
 /** Per-format Monaco editor configuration. */
