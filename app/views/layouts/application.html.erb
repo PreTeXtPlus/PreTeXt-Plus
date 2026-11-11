@@ -164,7 +164,7 @@
                       <div class="rounded-lg border border-blue-200 bg-blue-50 px-4 py-2 text-sm text-blue-800">
                         ℹ Your email address has not yet been confirmed. Please
                         <%= link_to "confirm your email", new_user_confirmation_path, class: "font-semibold hover:underline" %>
-                        within three days to maintain access.
+                        within three days to maintain access. Unconfirmed accounts with no projects are deleted after <%= User::UNCONFIRMED_RETENTION.in_days.to_i %> days.
                       </div>
                     </div>
                   <% end %>

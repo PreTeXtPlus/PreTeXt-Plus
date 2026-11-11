@@ -31,6 +31,28 @@ class User < ApplicationRecord
 
   scope :due_for_purge, -> { where(deletion_requested_at: ..DELETION_GRACE_PERIOD.ago) }
 
+  # How long a sign-up may sit without its email address being confirmed before
+  # UnconfirmedAccountCleanupJob removes it. Devise stops letting an unconfirmed account
+  # sign in after allow_unconfirmed_access_for (3 days), so by now it is already unusable.
+  UNCONFIRMED_RETENTION = 7.days
+
+  # Sign-ups nobody ever claimed: the address was never confirmed and the account holds
+  # nothing. Mostly bots filling in the form with other people's addresses, which we
+  # have no business keeping. Anything that suggests a real person is behind the
+  # account keeps it out: a project (backups included, hence raw SQL rather than the
+  # default-scoped association), a place on someone else's project (an unconfirmed
+  # account can be added as a collaborator -- see CollaborationsController#invite), a
+  # subscription seat, or a billing record.
+  scope :stale_unconfirmed, -> {
+    where(confirmed_at: nil, deletion_requested_at: nil)
+      .where(admin: [ false, nil ])
+      .where(created_at: ..UNCONFIRMED_RETENTION.ago)
+      .where("NOT EXISTS (SELECT 1 FROM projects WHERE projects.user_id = users.id)")
+      .where("NOT EXISTS (SELECT 1 FROM collaborations WHERE collaborations.user_id = users.id)")
+      .where("NOT EXISTS (SELECT 1 FROM subscription_seats WHERE subscription_seats.user_id = users.id)")
+      .where("NOT EXISTS (SELECT 1 FROM pay_customers WHERE pay_customers.owner_type = 'User' AND pay_customers.owner_id = users.id)")
+  }
+
   normalizes :email, with: ->(e) { e.strip.downcase }
   # Casing is kept (a vanity name is part of the point) -- blank -> nil rather than
   # "": an empty string would still trip the uniqueness index the moment a second

@@ -19,6 +19,28 @@ class UsersControllerTest < ActionDispatch::IntegrationTest
     assert_redirected_to projects_path
   end
 
+  test "create tells the new user that unconfirmed, empty accounts are deleted" do
+    post users_path, params: { user: { email: "new@example.com", password: "secret123", name: "New User" } }
+    assert_match(/deleted after 7 days/, flash[:notice])
+  end
+
+  test "new hides a honeypot field" do
+    get new_user_path
+    assert_select "input[name=company_website][tabindex='-1']"
+  end
+
+  test "create with the honeypot filled in creates nothing and sends no email" do
+    assert_no_difference("User.count") do
+      assert_no_enqueued_emails do
+        post users_path, params: {
+          company_website: "https://spam.example",
+          user: { email: "bot@example.com", password: "secret123", name: "user5x4gdddz432ds" }
+        }
+      end
+    end
+    assert_redirected_to new_user_path
+  end
+
   test "create with invalid params re-renders form" do
     assert_no_difference("User.count") do
       post users_path, params: { user: { email: "valid@example.com", password: "" } }
