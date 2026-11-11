@@ -5,7 +5,9 @@ Plan for robust support of content that comes from outside the document: PreTeXt
 local files), and exercises served by another system (WeBWorK, STACK, MyOpenMath).
 
 **Status:** Phases 1 and 2 are done (2026-11-11): pretext-html 0.20.0 returns the iframe
-pages and the live preview shows them, sandboxed. Phase 4 (Insert entries, pasting a link, lint) is done too. Next: Phases 3 and 5.
+pages and the live preview shows them, sandboxed. Phase 4 (Insert entries, pasting a link, lint) is done too, and MyOpenMath is checked.
+Phase 3 is deferred by decision. What is left is WeBWorK (Phase 5) and static outputs
+(Phase 6), neither of which starts in this repository.
 
 ## What the live preview did before Phase 2 (measured 2026-11-11)
 
@@ -112,7 +114,19 @@ Not done, and why:
 - The "open in new tab" link under an interactive needed nothing: the renderer already
   emits it with no `href`, as it does every link that leaves the page.
 
-## Phase 3 — file assets that are not images
+## Phase 3 — file assets that are not images — deferred
+
+**Decided 2026-11-11: not now.** Only externally hosted interactives are supported for
+the time being — the kinds another site serves (Desmos, GeoGebra materials, CalcPlot3D,
+YouTube, a framed page, MyOpenMath). No new file types are accepted, and multi-file
+applets are out of scope. Interactives an author writes themselves are expected to
+arrive later as authored assets, in an explorer tab of their own beside images,
+snippets and exercises, rather than as uploaded files; the steps below are kept as
+notes for that design, not as a plan of record.
+
+Until then, everything that needs a local file stays unavailable in the editor:
+JSXGraph and D3 (PreTeXt takes their scripts only from `@source`), a GeoGebra `.ggb`,
+`interactive @iframe="local.html"`, `video @source`, and STACK's question file.
 
 1. Teach `Content::AttachedFiles` the types interactives need, each with an extension:
    `.js`, `.css`, `.ggb`, `.html`, `.mp4`, `.webm`, `.vtt`, and STACK's `.xml`.
@@ -150,15 +164,21 @@ Not done, and why:
 
 ## Phase 5 — external exercises
 
-- **MyOpenMath:** an Insert entry and a browser check.
-- **STACK:** `stack-server` in the publication catalog; confirm upstream's `stack-js`
+- **MyOpenMath: done.** The Insert entry is in (Phase 4), and a problem was seen in the
+  live preview: the question drawn, with its answer box and Submit button, the frame
+  sized to it.
+- **STACK:** waits on Phase 3 for its question file. `stack-server` in the publication catalog; confirm upstream's `stack-js`
   reaches the single-page preview; the question file comes from Phase 3.
 - **WeBWorK**, in three steps:
   1. The server setting in the publication catalog, and one real build of a WeBWorK
      problem through the build server's proxy.
   2. In the preview, replace the error with a placeholder ("WeBWorK problem — rendered
      in full builds") around the authored statement, and make a `@source`-only problem
-     say what it is instead of rendering empty.
+     say what it is instead of rendering empty. **This belongs in pretext-html's preview
+     stylesheets (pretext-tools), like Phase 1**: the page the renderer returns has
+     nothing marking a WeBWorK problem to rewrite here. Measured on 0.20.0: an authored
+     problem shows its `pg-code` as loose text above a statement whose math still holds
+     the Perl variables (`$a + $b`), and a `@source`-only one is an empty box.
   3. Live preview: have `/generate` produce the representation files
      (`generated/webwork/<id>.xml`) and hand them to the renderer through its virtual
      mount — assembly loads them with `document()`, which the fetch shim serves. Depends
@@ -187,9 +207,12 @@ the page. Either shrinks Phase 1 to a few lines. Nothing here waits on it.
 - Do Sage cells and DoenetML survive `sandbox="allow-scripts"`? JavaScript does;
   GeoGebra does not.
 - Do the interactives' iframes resolve in the server-rendered fallback preview?
-- Multi-file local applets: flat files, folders, or out of scope?
 
 ## Order
 
-Phases 1, 2 and 4 are done. Next Phase 3, which opens with decisions about how
-scripts and HTML are served, then Phase 5.
+Phases 1, 2 and 4 are done, and Phase 3 is deferred. Next, in this order:
+
+1. WeBWorK's preview placeholder, in pretext-tools (Phase 5, step 2).
+2. One real WeBWorK build through the build server, and the server setting in the
+   publication catalog (Phase 5, step 1) — needs the build server.
+3. Phase 6, which starts with finding out what the build server does today.
