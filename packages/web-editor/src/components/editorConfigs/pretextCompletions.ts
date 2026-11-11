@@ -1,4 +1,5 @@
 import { getPretextCompletions } from "@pretextbook/completions";
+import type { MonacoExtensionContext } from "./types";
 
 /** The LSP-shaped values the completer returns, derived so this module needs
  * no direct dependency on `vscode-languageserver-types`. */
@@ -43,10 +44,32 @@ const isInsideOpenTag = (text: string, lineNumber: number, column: number) => {
   return lastOpen > lastClose;
 };
 
-export const registerCodeEditorCompletions = (monaco: any) => {
+/**
+ * Completions for PreTeXt buffers.
+ *
+ * `@pretextbook/completions` decides which element the caret is in by scanning
+ * the text before it for start and end tags. A division's buffer holds only its
+ * body — its start tag and title are drawn around it as locked lines
+ * (`virtualWrapper`) — so the completer is handed those lines in front of the
+ * buffer, and a `<worksheet>`'s body is offered `<page>`. Every edit range the
+ * package returns lies on the caret's line, so shifting it back by the number
+ * of prepended lines maps it onto the model.
+ *
+ * Completion providers are global per language id, so each editor's provider
+ * answers only for its own model; for any other it would read the wrong
+ * wrapper.
+ */
+export const registerCodeEditorCompletions = (
+  monaco: any,
+  editor: any,
+  extensionContext: Pick<MonacoExtensionContext, "getWrapperBefore">,
+) => {
   return monaco.languages.registerCompletionItemProvider("xml", {
     triggerCharacters: ["<", "@"],
     provideCompletionItems: async (model: any, position: any, context: any) => {
+      if (model !== editor.getModel()) {
+        return { suggestions: [] };
+      }
       const text = model.getValue();
 
       // Only trigger attribute completions when typing @ inside an open tag.
@@ -55,10 +78,12 @@ export const registerCodeEditorCompletions = (monaco: any) => {
         return { suggestions: [] };
       }
 
+      const before = extensionContext.getWrapperBefore();
+      const offset = before.length;
       const items = await getPretextCompletions({
-        text,
+        text: offset ? `${before.join("\n")}\n${text}` : text,
         position: {
-          line: position.lineNumber - 1,
+          line: position.lineNumber - 1 + offset,
           character: position.column - 1,
         },
       });
@@ -77,9 +102,9 @@ export const registerCodeEditorCompletions = (monaco: any) => {
         // edit just that tag's name.
         const range = editRange
           ? new monaco.Range(
-              editRange.start.line + 1,
+              editRange.start.line + 1 - offset,
               editRange.start.character + 1,
-              editRange.end.line + 1,
+              editRange.end.line + 1 - offset,
               editRange.end.character + 1,
             )
           : undefined;

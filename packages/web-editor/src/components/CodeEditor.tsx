@@ -325,6 +325,8 @@ const CodeEditor = forwardRef<CodeEditorHandle, CodeEditorProps>(({
   // lazily, since the binding is created (and replaced) after they register.
   const extensionContextRef = useRef<MonacoExtensionContext>({
     isRemoteChange: () => collabBindingRef.current?.isApplyingRemote ?? false,
+    // `virtualWrapperRef` is declared below; this runs only at completion time.
+    getWrapperBefore: () => virtualWrapperRef.current?.before ?? [],
   });
   // The live source format, read from inside mount-time closures.
   const sourceFormatRef = useRef(sourceFormat);
