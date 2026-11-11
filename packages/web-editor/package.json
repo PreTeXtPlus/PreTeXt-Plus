@@ -44,7 +44,7 @@
     "@pretextbook/latex-pretext": "^0.4.0",
     "@pretextbook/latex-style-pretext": "^0.6.0",
     "@pretextbook/markdown-style-pretext": "^0.1.5",
-    "@pretextbook/pretext-html": "^0.19.1",
+    "@pretextbook/pretext-html": "^0.20.0",
     "@pretextbook/remark-pretext": "^0.3.0",
     "@pretextbook/schema": "^0.7.3",
     "@pretextbook/typing-shortcuts": "^0.4.1",
