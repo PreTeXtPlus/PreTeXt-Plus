@@ -18,6 +18,8 @@ import { summarizeCleanFixes, type CleanFinding } from "../cleanFindings";
 import { usePretextDiagnostics } from "./editorConfigs/usePretextDiagnostics";
 import { usePlacementDiagnostics } from "./editorConfigs/usePlacementDiagnostics";
 import type { PlacementCheckInput } from "./editorConfigs/placementDiagnostics";
+import { useInteractiveDiagnostics } from "./editorConfigs/useInteractiveDiagnostics";
+import type { InteractiveCheckInput } from "./editorConfigs/interactiveDiagnostics";
 import type { PretextValidationInput } from "./editorConfigs/pretextDiagnostics";
 import { MonacoCollabBinding } from "../collab/monacoBinding";
 import { planSnippetInsertion } from "./editorConfigs/insertContext";
@@ -135,6 +137,11 @@ interface CodeEditorProps {
    * (see `editorConfigs/placementDiagnostics.ts`). Memoize it, as above.
    */
   placementCheck?: PlacementCheckInput;
+  /**
+   * What a PreTeXt buffer's `<interactive>`s are checked against (see
+   * `editorConfigs/interactiveDiagnostics.ts`). Memoize it, as above.
+   */
+  interactiveCheck?: InteractiveCheckInput;
   /**
    * Collaborator presence indicator (avatar chips), when collaboration is on.
    * Rendered floating over the editor's lower-right corner, next to the
@@ -308,6 +315,7 @@ const CodeEditor = forwardRef<CodeEditorHandle, CodeEditorProps>(({
   onMenuStateChange,
   pretextValidation,
   placementCheck,
+  interactiveCheck,
   collab,
   presence,
   onConvertToPretext,
@@ -591,6 +599,14 @@ const CodeEditor = forwardRef<CodeEditorHandle, CodeEditorProps>(({
     placementCheck?.sourceFormat === sourceFormat ? placementCheck : undefined,
     isEditorMounted,
     PLACEMENT_LANGUAGE_IDS,
+  );
+
+  useInteractiveDiagnostics(
+    monacoRef,
+    editorRef,
+    sourceFormat === "pretext" ? interactiveCheck : undefined,
+    isEditorMounted,
+    editorConfigs.pretext.language,
   );
 
   useEffect(() => {

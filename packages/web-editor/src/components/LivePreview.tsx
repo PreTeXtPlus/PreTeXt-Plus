@@ -33,6 +33,16 @@ import type { PreviewScope } from "../store/editorStore";
 import { inlinePreviewRenderer, type PreviewRenderer } from "./previewRenderer";
 import type { PtxSourceMap, SourceMapEntry } from "@pretextbook/pretext-html";
 import { rewriteGeneratedImages, type GeneratedImageResolver } from "../generators/previewImages";
+import {
+  deliverIframePages,
+  markIframePages,
+  prepareIframePages,
+  type DeliveredIframePages,
+  type IframePages,
+} from "./iframePages";
+
+/** No interactives: one object, so a render without any never looks like a change. */
+const NO_IFRAME_PAGES: IframePages = {};
 
 interface LivePreviewProps {
   /**
@@ -407,6 +417,14 @@ const LivePreview = forwardRef<LivePreviewHandle, LivePreviewProps>(
     // The last render that succeeded. Kept across failures so a transient
     // typo does not blank the panel and lose the author's place.
     const [previewHtml, setPreviewHtml] = useState<string | null>(null);
+    // The pages of that render's interactives (see iframePages.ts). Held apart
+    // from the HTML: editing an interactive's script changes only its page.
+    const [previewPages, setPreviewPages] = useState<IframePages>(NO_IFRAME_PAGES);
+    // What each iframe on the page was last given, so only a changed page
+    // reloads; and the pages as of the latest delivery, for a document that
+    // finishes loading later.
+    const deliveredPages = useRef<DeliveredIframePages>(new WeakMap());
+    const iframePagesRef = useRef<IframePages>(NO_IFRAME_PAGES);
     // Which conversion produced it: "slides" unlocks the deck controls.
     const [renderTarget, setRenderTarget] = useState<"html" | "slides">("html");
     const [error, setError] = useState<string | null>(null);
@@ -525,7 +543,7 @@ const LivePreview = forwardRef<LivePreviewHandle, LivePreviewProps>(
           bannerMessage,
           subtree,
           })
-          .then(({ html, sourceMap, target, printouts, rootPrintout, subtree }) => {
+          .then(({ html, sourceMap, target, printouts, rootPrintout, subtree, iframePages }) => {
             if (token !== renderToken.current) {
               return;
             }
@@ -567,6 +585,11 @@ const LivePreview = forwardRef<LivePreviewHandle, LivePreviewProps>(
               );
             }
             setPreviewHtml(html);
+            setPreviewPages(
+              iframePages && Object.keys(iframePages).length > 0
+                ? iframePages
+                : NO_IFRAME_PAGES,
+            );
             setError(null);
           })
           .catch((err) => {
@@ -626,7 +649,11 @@ const LivePreview = forwardRef<LivePreviewHandle, LivePreviewProps>(
     // a second of waiting.
     const pageHtml = useMemo(() => {
       if (previewHtml === null) return null;
-      const rendered = generatedImageUrl ? rewriteGeneratedImages(previewHtml, generatedImageUrl) : previewHtml;
+      const images = generatedImageUrl ? rewriteGeneratedImages(previewHtml, generatedImageUrl) : previewHtml;
+      // An interactive's iframe names a page that exists nowhere: take the
+      // `src` off and sandbox it here, before anything can request it. The
+      // page itself is set on the live iframe (see the delivery effect).
+      const rendered = markIframePages(images, previewPages);
       const page =
         renderTarget === "slides"
           ? applyRevealView(rendered, revealView, revealZoom)
@@ -635,7 +662,29 @@ const LivePreview = forwardRef<LivePreviewHandle, LivePreviewProps>(
       // a window property, so a page delivered without one would inherit
       // whatever the previous delivery said.
       return applyPrintPreview(page, printoutId ?? undefined);
-    }, [previewHtml, renderTarget, revealView, revealZoom, printoutId, generatedImageUrl]);
+    }, [previewHtml, previewPages, renderTarget, revealView, revealZoom, printoutId, generatedImageUrl]);
+
+    // The interactives' pages as their iframes get them: `external/…` resolved
+    // against the editor's page, as the main page's are, and generated images
+    // pointed at their stored pictures.
+    const iframePages = useMemo(
+      () =>
+        prepareIframePages(previewPages, {
+          baseUrl: typeof document === "undefined" ? undefined : document.baseURI,
+          generatedImageUrl,
+        }),
+      [previewPages, generatedImageUrl],
+    );
+
+    /** Give the page on screen its interactives; a no-op for those unchanged. */
+    const deliverPages = useCallback(() => {
+      try {
+        const doc = iframeRef.current?.contentDocument;
+        if (doc) deliverIframePages(doc, iframePagesRef.current, deliveredPages.current);
+      } catch {
+        // A server-built preview is cross-origin, and has real pages anyway.
+      }
+    }, []);
 
     // Put the page on screen. A re-render of the page already there is patched
     // into it (see patchPreviewPage): only the blocks that changed are replaced
@@ -652,7 +701,13 @@ const LivePreview = forwardRef<LivePreviewHandle, LivePreviewProps>(
       const iframe = iframeRef.current;
       if (!renderLocally || pageHtml === null || !iframe) return;
       const shown = shownPage.current;
-      if (shown?.html === pageHtml) return;
+      iframePagesRef.current = iframePages;
+      if (shown?.html === pageHtml) {
+        // Same page, but an interactive's own page may have changed — an edit
+        // to its script appears nowhere in the HTML that frames it.
+        if (shown.loaded) deliverPages();
+        return;
+      }
       const patchKey =
         renderTarget === "html" && printoutId === null
           ? `division:${renderedDivision.current ?? ""}` +
@@ -666,12 +721,14 @@ const LivePreview = forwardRef<LivePreviewHandle, LivePreviewProps>(
           shownPage.current = { html: pageHtml, doc: next, patchKey, loaded: true };
           // No load follows to consume it, and the page never lost its place.
           savedScrollPosition.current = null;
+          // The interactives the patch inserted, or whose pages changed.
+          deliverPages();
           return;
         }
       }
       shownPage.current = { html: pageHtml, doc: null, patchKey, loaded: false };
       iframe.srcdoc = pageHtml;
-    }, [pageHtml, renderTarget, printoutId, renderLocally]);
+    }, [pageHtml, iframePages, deliverPages, renderTarget, printoutId, renderLocally]);
 
     /** Scroll the page to whatever was rendered from `assembledLine`, if anything. */
     const scrollToAssembledLine = useCallback(async (assembledLine: number) => {
@@ -696,6 +753,7 @@ const LivePreview = forwardRef<LivePreviewHandle, LivePreviewProps>(
     const wireRenderedDocument = useCallback(() => {
       const doc = iframeRef.current?.contentDocument;
       if (!doc) return;
+      deliverPages();
       doc.addEventListener("click", (event) => {
         // A link to a division not on this page goes nowhere here (see
         // linkedDivisionForClick). Treat a click on one as "take me there":
@@ -738,7 +796,7 @@ const LivePreview = forwardRef<LivePreviewHandle, LivePreviewProps>(
         }
         savedScrollPosition.current = null;
       }
-    }, [scrollToAssembledLine]);
+    }, [scrollToAssembledLine, deliverPages]);
 
     // Follow the host's theme without re-rendering. Only meaningful when the
     // host drives the theme at all — otherwise no bridge was injected and the

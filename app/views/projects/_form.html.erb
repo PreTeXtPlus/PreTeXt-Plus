@@ -16,6 +16,7 @@
     data-editor-tikz-worker-url-value="<%= asset_path("tikz_worker.js") %>"
     data-editor-tikz-engine-url-value="<%= tikz_engine_url %>"
     data-editor-asset-render-url-value="<%= asset_render_url(project) %>"
+    data-editor-has-static-output-value="<%= project.targets.exists?(kind: Target::Catalog.static_slugs) %>"
     data-turbo="false">
   <div data-editor-target="root" class="w-full flex-1 min-h-0">
     <div class="flex h-full items-center justify-center">

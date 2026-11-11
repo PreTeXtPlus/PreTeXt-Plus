@@ -101,6 +101,8 @@ const GROUPS = [
   { key: "exercises", label: "Exercises", section: "exercises" },
   { key: "interactive", label: "Interactive Exercises", section: "exercises" },
   { key: "figures", label: "Figures & Code", section: "figures" },
+  // Content that lives somewhere else and is framed into the page.
+  { key: "media", label: "Interactives & Media", section: "figures" },
 ] as const;
 
 type GroupKey = (typeof GROUPS)[number]["key"];
@@ -311,6 +313,10 @@ const CATALOG: SnippetSpec[] = [
     { key: "clickable-area", label: "Clickable Area", detail: "Text in which the reader clicks the parts that are correct." },
     { key: "fill-in", label: "Fill in the Blank", detail: "A sentence with a blank the reader fills in." },
     { key: "short-answer", label: "Short Answer", detail: "A question the reader answers in their own words." },
+    // Served by another system rather than Runestone. A WeBWorK problem is
+    // drawn only by a full build: the live preview has no WeBWorK server.
+    { key: "myopenmath", label: "MyOpenMath Problem", detail: "An exercise served by MyOpenMath, by its problem number." },
+    { key: "webwork", label: "WeBWorK Problem", detail: "A problem from WeBWorK's Open Problem Library, by its path. Shown in full builds, not in the live preview." },
   ]),
   {
     key: "figure",
@@ -333,6 +339,16 @@ const CATALOG: SnippetSpec[] = [
     group: "figures",
     placement: "block",
   },
+  // Things another site serves, which PreTeXt frames straight from it — the
+  // kinds the live preview shows (see docs/interactives-plan.md). Only PreTeXt
+  // has bodies: neither converter has a spelling for any.
+  ...blocks("media", [
+    { key: "desmos", label: "Desmos Graph", detail: "A saved Desmos graph, by the id in its share link." },
+    { key: "geogebra", label: "GeoGebra Applet", detail: "A GeoGebra activity, by the id in its share link." },
+    { key: "calcplot3d", label: "CalcPlot3D", detail: "A 3D plot drawn by CalcPlot3D." },
+    { key: "youtube", label: "YouTube Video", detail: "A YouTube video, by the id in its address." },
+    { key: "iframe", label: "Web Page", detail: "Another web page, shown in a frame." },
+  ]),
 ];
 
 /** A family's bodies in one format: `write(element, suggestedId)` per member. */
@@ -639,6 +655,31 @@ const PRETEXT_BODIES: Record<string, string> = {
     "$0",
     "\t</code>",
     "</program>",
+  ),
+  // An id is what the author has to supply, so it is the first stop; the
+  // `xml:id` — which also names the interactive's page in a build — is second.
+  desmos:
+    '<interactive desmos="${1:graph-id}" xml:id="${2:interactive-name}" width="80%" aspect="4:3"/>',
+  geogebra:
+    '<interactive geogebra="${1:material-id}" xml:id="${2:interactive-name}" width="80%" aspect="4:3"/>',
+  // Always with a `@variant`: without one PreTeXt writes a URL that is only
+  // the query string, and CalcPlot3D shows nothing. `&` must be `&amp;` here.
+  calcplot3d:
+    '<interactive calcplot3d="${1:type=z;z=x^2-y^2;umin=-2;umax=2;vmin=-2;vmax=2}" variant="${2|application,controls,minimal|}" xml:id="${3:interactive-name}" width="80%" aspect="1:1"/>',
+  youtube: '<video youtube="${1:video-id}" xml:id="${2:video-name}" width="80%"/>',
+  iframe:
+    '<interactive iframe="${1:https://example.org/}" xml:id="${2:interactive-name}" width="80%" aspect="4:3"/>',
+  myopenmath: lines(
+    '<exercise label="${2:exercise-name}">',
+    '\t<myopenmath problem="${1:problem-number}"/>',
+    "</exercise>",
+  ),
+  // A problem the WeBWorK server already has — the Open Problem Library's,
+  // by its path there — as MyOpenMath's is named by its number.
+  webwork: lines(
+    '<exercise label="${2:exercise-name}">',
+    '\t<webwork source="${1:Library/PCC/BasicAlgebra/Exponents/exponentsMultiplication0.pg}"/>',
+    "</exercise>",
   ),
 };
 

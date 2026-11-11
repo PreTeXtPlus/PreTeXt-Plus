@@ -401,6 +401,8 @@ function editorStateToCollabSeed(state) {
  * @property {string} [tikzEngineUrl] - The directory the TikZ engine is served from
  *   (public/engines, filled by script/fetch-tikz-engine.js). Omitted, or without the
  *   worker, TikZ assets show their stored picture and render nothing live.
+ * @property {boolean} [hasStaticOutput] - The project has a target that is not a web
+ *   page (PDF, EPUB, ...), so the editor notes interactives with no static picture.
  * @property {string} [previewWorkerUrl] - Where the preview render worker bundle
  *   (app/javascript/preview_worker.js) is served from; previews render off the
  *   main thread when set.
@@ -428,6 +430,7 @@ function EditorApp({ config }) {
     subscriptionsPath,
     signOutPath,
     previewWorkerUrl,
+    hasStaticOutput,
     prefigureWorkerUrl,
     prefigureAssetUrls,
     tikzWorkerUrl,
@@ -2030,6 +2033,7 @@ function EditorApp({ config }) {
         saveAndCloseLabel="Manage Project"
         onPreviewRebuild={onPreviewRebuild}
         previewWorkerUrl={previewWorkerUrl}
+        hasStaticOutput={hasStaticOutput}
         onCreatePretextProjectCopy={onCreatePretextProjectCopy}
         onFeedbackSubmit={onFeedbackSubmit}
       />

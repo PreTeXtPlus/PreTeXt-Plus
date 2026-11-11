@@ -114,6 +114,10 @@ class TargetTest < ActiveSupport::TestCase
     assert_equal "pdf", projects(:one).targets.create!(name: "★", kind: "pdf").slug
   end
 
+  test "the static kinds are the ones that are not web pages" do
+    assert_equal %w[ pdf epub kindle braille beamer latex ], Target::Catalog.static_slugs
+  end
+
   test "two names that slug alike get distinct slugs rather than an error" do
     first = projects(:one).targets.create!(name: "Print PDF", kind: "pdf")
     second = projects(:one).targets.create!(name: "Print (PDF)", kind: "pdf")

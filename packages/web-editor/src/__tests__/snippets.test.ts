@@ -122,6 +122,19 @@ const INTERACTIVE: Record<string, RegExp> = {
   "clickable-area": /<areas[ >]/,
   "fill-in": /<fillin answer=/,
   "short-answer": /<response\/>/,
+  // Served by another system, and named by where the problem lives there.
+  myopenmath: /<myopenmath problem="/,
+  webwork: /<webwork source="Library\/[^"]+\.pg"\/>/,
+};
+
+/** What is framed in from another site, and the attribute or child that names it. */
+const MEDIA: Record<string, RegExp> = {
+  desmos: /<interactive desmos="graph-id"/,
+  geogebra: /<interactive geogebra="material-id"/,
+  // Never without a variant: PreTeXt's URL is then only a query string.
+  calcplot3d: /<interactive calcplot3d="[^"]+" variant="application"/,
+  youtube: /<video youtube="video-id"/,
+  iframe: /<interactive iframe="https:/,
 };
 
 /**
@@ -151,6 +164,7 @@ const EXPECTED_ELEMENT: Record<string, RegExp> = {
   figure: /<figure[ >]/,
   table: /<table[ >]/,
   program: /<program[ >]/,
+  ...MEDIA,
   slide: /<slide[ >]/,
 };
 
@@ -177,6 +191,7 @@ describe("the shared catalog", () => {
       "exercises",
       "interactive",
       "figures",
+      "media",
     ];
     for (const format of ["pretext", "latex", "markdown"] as const) {
       const groups = snippetGroupsFor(format).map((group) => group.key);
@@ -217,6 +232,14 @@ describe("the shared catalog", () => {
     // Neither converter has a spelling for any of them.
     for (const format of ["latex", "markdown"] as const) {
       expect(snippetGroupsFor(format).map((g) => g.key)).not.toContain("interactive");
+    }
+  });
+
+  it("offers interactives and media in PreTeXt, and only there", () => {
+    const media = snippetGroupsFor("pretext").find((g) => g.key === "media");
+    expect(media?.snippets.map((s) => s.key)).toEqual(Object.keys(MEDIA));
+    for (const format of ["latex", "markdown"] as const) {
+      expect(snippetGroupsFor(format).map((g) => g.key)).not.toContain("media");
     }
   });
 

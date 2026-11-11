@@ -184,3 +184,29 @@ describe("a paste landing inside a paragraph", () => {
     },
   );
 });
+
+// A lone link to something PreTeXt can frame arrives as the element that
+// frames it (see mediaUrls.ts).
+const MEDIA_LINKS: [name: string, link: string, element: RegExp][] = [
+  ["a Desmos graph", "https://www.desmos.com/calculator/jvnxfq0n4e", /^<interactive desmos="jvnxfq0n4e"/],
+  ["a GeoGebra material", "https://www.geogebra.org/m/jybewqhg", /^<interactive geogebra="jybewqhg"/],
+  ["a YouTube video", "https://youtu.be/M7lc1UVf-VE?t=90", /^<video youtube="M7lc1UVf-VE" start="90"/],
+];
+
+describe("a pasted link to an interactive or a video", () => {
+  it.each(MEDIA_LINKS)("becomes valid PreTeXt between blocks: %s", async (_name, link, element) => {
+    const { markup } = pasted(link, BETWEEN_BLOCKS);
+    expect(markup.trim()).toMatch(element);
+    expect(await validatePretextDocument(asDocument(markup))).toEqual([]);
+  });
+
+  it.each(MEDIA_LINKS)("stays a link inside a paragraph: %s", (_name, link) => {
+    expect(convertPastedSnippet(link, modelFor(DIVISION), INSIDE_PARAGRAPH)).toBeUndefined();
+  });
+
+  it("stays a link when it is not one this knows", () => {
+    expect(
+      convertPastedSnippet("https://example.org/page", modelFor(DIVISION), BETWEEN_BLOCKS),
+    ).toBeUndefined();
+  });
+});
