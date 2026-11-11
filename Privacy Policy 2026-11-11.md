@@ -131,6 +131,14 @@ We retain personal information only as long as reasonably necessary for the purp
 
 Retention periods vary by data type. When deletion is requested or accounts are closed, we delete or de-identify data subject to legal obligations and technical backup cycles.
 
+### 10.1 Unconfirmed accounts
+
+When an account is created, we send a confirmation link to the email address provided. If that address is not confirmed within 7 days, and the account contains no projects, we automatically delete the account and the personal information associated with it, including the email address and name. We do this so that we do not keep information about people who did not sign up themselves, for example when someone else has entered their email address.
+
+### 10.2 Account deletion
+
+If you delete your account, it is deactivated immediately and permanently deleted, together with the projects it owns, after a 7-day period during which you can sign in to reactivate it.
+
 ## 11. Security
 
 We use administrative, technical, and organizational safeguards designed to protect personal information, including:

@@ -2,6 +2,16 @@ class UsersController < ApplicationController
   require_unauthenticated_access only: [ :new, :create ]
   allow_unauthenticated_access only: [ :show ]
 
+  # Every sign-up sends a confirmation email to whatever address was typed in, so an
+  # unguarded form lets a bot use us to mail strangers. The limit is per IP address and
+  # deliberately roomy: a workshop or a classroom signs up together from one address.
+  rate_limit to: 30, within: 1.hour, only: :create,
+             with: -> { redirect_to new_user_path, alert: "Too many accounts have been created from your network. Please try again later." }
+  before_action :reject_honeypot, only: :create
+
+  # A field people never see (see users/new) but form-filling bots complete.
+  HONEYPOT_FIELD = :company_website
+
   def new
     @user = User.new
   end
@@ -10,7 +20,9 @@ class UsersController < ApplicationController
     @user = User.new(sign_up_params)
     if @user.save
       sign_in(:user, @user)
-      redirect_to projects_path, notice: "Please check your email to confirm your account."
+      redirect_to projects_path,
+                  notice: "Please check your email to confirm your account. " \
+                          "Accounts that are not confirmed and have no projects are deleted after #{User::UNCONFIRMED_RETENTION.in_days.to_i} days."
     else
       render :new, status: :unprocessable_entity
     end
@@ -48,6 +60,13 @@ class UsersController < ApplicationController
   def profile_visible?(profile_user)
     return false if profile_user.pending_deletion?
     current_user == profile_user || profile_user.has_subscriber_benefits?
+  end
+
+  # Nothing is created and no email is sent. The message is honest rather than a fake
+  # success in case a browser extension, not a bot, filled the field in.
+  def reject_honeypot
+    return if params[HONEYPOT_FIELD].blank?
+    redirect_to new_user_path, alert: "We couldn't create your account. Please try again."
   end
 
   def sign_up_params

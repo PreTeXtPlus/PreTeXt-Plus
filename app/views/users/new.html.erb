@@ -3,6 +3,11 @@
 
 <%= form_with model: @user do |form| %>
   <%= render "fields_for", form: form %>
+  <%# Honeypot: off-screen and out of the tab order, so only a bot fills it in. See UsersController#reject_honeypot. %>
+  <div aria-hidden="true" style="position: absolute; left: -10000px; width: 1px; height: 1px; overflow: hidden;">
+    <%= label_tag UsersController::HONEYPOT_FIELD, "Leave this field empty" %>
+    <%= text_field_tag UsersController::HONEYPOT_FIELD, nil, tabindex: -1, autocomplete: "off" %>
+  </div>
   <div class="col-span-6 sm:flex sm:items-center sm:gap-4">
     <%= form.submit "Register and log in", class: "#{button_classes(color: "green")} w-full sm:w-auto text-center px-3.5 py-2.5 inline-block" %>
     <%= link_to "Log into existing account", new_user_session_path, class: "text-sm text-blue-700 underline hover:no-underline" %>
@@ -14,4 +19,5 @@
   <%= link_to "Terms of Service", tos_path, class: "text-gray-900 hover:text-black hover:underline" %>
   and
   <%= link_to "Privacy Policy", privacy_path, class: "text-gray-900 hover:text-black hover:underline" %>.
+  We will email you a link to confirm your address. Accounts that are not confirmed and have no projects are deleted after <%= User::UNCONFIRMED_RETENTION.in_days.to_i %> days.
 </div>

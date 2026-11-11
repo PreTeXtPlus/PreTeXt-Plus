@@ -14,6 +14,7 @@ By creating an account, accessing, or using the Service, you agree to these Term
 - You are responsible for safeguarding account credentials and for all activity under your account.
 - You must promptly notify us of unauthorized account use or security incidents.
 - We may offer the Service on an invitation-only basis or with limited eligibility.
+- When you create an account, we email you a link to confirm your email address. If the address is not confirmed within 7 days, and the account contains no projects, we may delete the account without further notice. You may register again at any time.
 
 ## 3. The Service
 
@@ -154,6 +155,7 @@ We may suspend or terminate access if:
 - You breach these Terms
 - Your use creates legal, compliance, or security risk
 - It is necessary to protect the Service, users, or third parties
+- Your account was created with an email address that was never confirmed (see Section 2)
 - We are required by law or governmental order
 
 ### 14.3 Effect
