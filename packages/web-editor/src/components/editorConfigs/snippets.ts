@@ -316,7 +316,7 @@ const CATALOG: SnippetSpec[] = [
     // Served by another system rather than Runestone. A WeBWorK problem is
     // drawn only by a full build: the live preview has no WeBWorK server.
     { key: "myopenmath", label: "MyOpenMath Problem", detail: "An exercise served by MyOpenMath, by its problem number." },
-    { key: "webwork", label: "WeBWorK Problem", detail: "A randomized WeBWorK problem. Shown in full builds, not in the live preview." },
+    { key: "webwork", label: "WeBWorK Problem", detail: "A problem from WeBWorK's Open Problem Library, by its path. Shown in full builds, not in the live preview." },
   ]),
   {
     key: "figure",
@@ -674,23 +674,11 @@ const PRETEXT_BODIES: Record<string, string> = {
     '\t<myopenmath problem="${1:problem-number}"/>',
     "</exercise>",
   ),
-  // The smallest problem that randomizes and checks an answer. `\$` is a
-  // literal dollar: PG's variables would otherwise read as tab stops.
+  // A problem the WeBWorK server already has — the Open Problem Library's,
+  // by its path there — as MyOpenMath's is named by its number.
   webwork: lines(
-    '<exercise xml:id="${1:exercise-name}">',
-    "\t<webwork>",
-    "\t\t<pg-code>",
-    `\t\t\t${DOLLAR}a = random(2, 9);`,
-    `\t\t\t${DOLLAR}b = random(2, 9);`,
-    `\t\t\t${DOLLAR}answer = Compute(${DOLLAR}a + ${DOLLAR}b);`,
-    "\t\t</pg-code>",
-    "\t\t<statement>",
-    `\t\t\t<p>\${2:Compute <m><var name="${DOLLAR}a"/> + <var name="${DOLLAR}b"/></m>.} <var name="${DOLLAR}answer" width="5"/></p>`,
-    "\t\t</statement>",
-    "\t\t<solution>",
-    `\t\t\t<p>\${0:The sum is <m><var name="${DOLLAR}answer"/></m>.}</p>`,
-    "\t\t</solution>",
-    "\t</webwork>",
+    '<exercise xml:id="${2:exercise-name}">',
+    '\t<webwork source="${1:Library/PCC/BasicAlgebra/Exponents/exponentsMultiplication0.pg}"/>',
     "</exercise>",
   ),
 };

@@ -144,7 +144,8 @@ JSXGraph and D3 (PreTeXt takes their scripts only from `@source`), a GeoGebra `.
 1. **Done.** Insert → "Interactives & Media": Desmos, GeoGebra, CalcPlot3D (always
    writing `@variant`), YouTube and a generic iframe ("Web Page"). MyOpenMath and
    WeBWorK problems are exercises, so they sit under "Interactive Exercises" — the
-   WeBWorK one ahead of any preview of it, its description saying so. PreTeXt
+   WeBWorK one an Open Problem Library problem by `@source`, external like
+   MyOpenMath's, and offered ahead of any preview of it, its description saying so. PreTeXt
    only, unless the LaTeX and Markdown converters gain a spelling. Every body passes the
    schema in `__tests__/snippets.test.ts`. Seen in the editor: the menu, and the
    CalcPlot3D default drawing its surface.

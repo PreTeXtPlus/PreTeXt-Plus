@@ -122,9 +122,9 @@ const INTERACTIVE: Record<string, RegExp> = {
   "clickable-area": /<areas[ >]/,
   "fill-in": /<fillin answer=/,
   "short-answer": /<response\/>/,
-  // Served by another system; WeBWorK's `$` must reach the buffer literally.
+  // Served by another system, and named by where the problem lives there.
   myopenmath: /<myopenmath problem="/,
-  webwork: /<webwork>[\s\S]*\$a = random\(2, 9\);[\s\S]*<var name="\$answer" width="5"\/>/,
+  webwork: /<webwork source="Library\/[^"]+\.pg"\/>/,
 };
 
 /** What is framed in from another site, and the attribute or child that names it. */
