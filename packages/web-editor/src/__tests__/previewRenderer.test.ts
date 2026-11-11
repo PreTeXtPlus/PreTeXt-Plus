@@ -34,6 +34,7 @@ const page = (html: string): PreviewRender => ({
   sourceMap: [],
   target: "html",
   printouts: [],
+  iframePages: {},
 });
 
 /** A worker whose answers the test writes by hand. */

@@ -34,6 +34,7 @@ const rendered = (subtree: PreviewRender["subtree"]): PreviewRender => ({
   sourceMap: SOURCE_MAP,
   target: "html",
   printouts: [],
+  iframePages: {},
   ...(subtree ? { subtree } : {}),
 });
 
@@ -54,6 +55,7 @@ const settle = () => act(async () => {});
 const worksheet = (): PreviewRender => ({
   ...rendered(undefined),
   printouts: [{ id: "ws-1", type: "Worksheet", number: "1.1", title: "Practice", label: "Worksheet 1.1 Practice" }],
+  iframePages: {},
   rootPrintout: "ws-1",
 });
 

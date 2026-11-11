@@ -180,6 +180,13 @@ export interface PreviewRender {
    */
   printouts: PrintoutInfo[];
   /**
+   * The pages of the document's `<interactive platform="…">`s, by the filename
+   * the matching `<iframe src>` in `html` names — files that exist nowhere.
+   * Empty for a document with none. LivePreview puts them on screen, sandboxed
+   * (see iframePages.ts).
+   */
+  iframePages: Record<string, string>;
+  /**
    * The printout to open on paper by default: set only when the previewed
    * document *is* a printout (editing `worksheet-3.ptx`) rather than merely
    * containing some (a chapter with three worksheets in it, which should open
@@ -257,7 +264,7 @@ export async function renderPreviewHtml(
   options: LocalRenderOptions = {},
 ): Promise<PreviewRender> {
   const { renderHtml } = await loadRenderer();
-  const { html, sourceMap, target, printouts, rootPrintout, subtree } = await renderHtml({
+  const { html, sourceMap, target, printouts, rootPrintout, subtree, iframePages } = await renderHtml({
     cssTheme: "default-modern",
     sourcePath: PREVIEW_SOURCE_PATH,
     projectDir: "/source",
@@ -299,6 +306,7 @@ export async function renderPreviewHtml(
     sourceMap: subtreeSourceMap(sourceMap ?? [], options.divisionId),
     target,
     printouts,
+    iframePages: iframePages ?? {},
     rootPrintout,
     ...(subtree ? { subtree } : {}),
   };

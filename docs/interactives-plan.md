@@ -4,10 +4,15 @@ Plan for robust support of content that comes from outside the document: PreTeXt
 `<interactive>` (GeoGebra, Desmos, CalcPlot3D, JSXGraph, …), `<video>` (YouTube and
 local files), and exercises served by another system (WeBWorK, STACK, MyOpenMath).
 
-**Status:** sketched 2026-11-11. Phase 1 is written and waiting on a pretext-tools PR;
-nothing in this repository has changed yet.
+**Status:** Phases 1 and 2 are done (2026-11-11): pretext-html 0.20.0 returns the iframe
+pages and the live preview shows them, sandboxed. Phase 4's Insert entries are in too. Next:
+the rest of Phase 4 (paste, lint), then Phases 3 and 5.
 
-## What the live preview does today (measured 2026-11-11)
+## What the live preview did before Phase 2 (measured 2026-11-11)
+
+The table is the starting point, kept for the rows later phases still owe. After Phase 2
+the `@geogebra` and `@platform` rows work as described under Phase 2, and the YouTube
+row has been seen loading its player in the real editor.
 
 Found by rendering one document holding every kind through `@pretextbook/pretext-html`
 0.19.1 and reading the HTML. Only the JSXGraph row has been watched working in a
@@ -51,10 +56,7 @@ Things that shape the rest of the plan:
 - **The publication catalog has no WeBWorK or STACK settings**
   (`app/models/publication/catalog.rb`).
 
-## Phase 1 — iframe pages in pretext-html — written, PR pending
-
-In `PreTeXtBook/pretext-tools`, branch `pretext-html-iframe-pages`, with a minor
-changeset for `@pretextbook/pretext-html`.
+## Phase 1 — iframe pages in pretext-html — done, released in 0.20.0
 
 - Both preview wrappers carry a copy of upstream's `create-iframe-page` with the
   `exsl:document` swapped for an inert `<template data-ptx-iframe-page="NAME">`,
@@ -62,37 +64,54 @@ changeset for `@pretextbook/pretext-html`.
 - The renderer lifts those out and returns `RenderResult.iframePages`, a map from
   filename (`<id>-if.html`) to a complete HTML document. The iframes in `html` are left
   as PreTeXt emits them.
-- `embedIframePages(html, pages, { sandbox })` gives each iframe that names a page that
-  page as its `srcdoc`, moving the filename to `data-ptx-iframe-page`. Also exported
-  from the `./iframe-pages` subpath, which does not import the WASM renderer.
-- The CLI inlines the pages itself.
+- `embedIframePages(html, pages, { sandbox })` inlines each page as its iframe's
+  `srcdoc`; also exported from the `./iframe-pages` subpath, which does not import the
+  WASM renderer. The editor does not use it (see Phase 2) but the CLI does.
 
-Checked: the package suite passes with twelve new tests that render real interactives,
-and the CLI's output drew a JSXGraph board from an author's `@source` script in headless
-Chromium. **Not checked:** GeoGebra with a real material id (the test used a made-up
-one, so the applet's fetch failed for that reason), and the VS Code extension's Instant
-Preview, which is not wired up.
+## Phase 2 — deliver the pages in LivePreview — done
 
-## Phase 2 — deliver the pages in LivePreview
+`packages/web-editor/src/components/iframePages.ts`, wired into `LivePreview.tsx`.
 
-Starts once the pretext-html release is out: `npm run update:pretextbook`.
+- `iframePages` rides along on `PreviewRender`, through the worker and the inline path.
+- On the HTML string, before delivery (`markIframePages`): an iframe naming a page loses
+  its `src`, so nothing requests a file that does not exist, and gains
+  `data-ptx-iframe-page` and `sandbox="allow-scripts"`. The page text stays out of the
+  HTML, so the live patcher sees an unchanged iframe and leaves it running.
+- On the live DOM, after each load or patch (`deliverIframePages`): each marked iframe
+  gets its page as `srcdoc`, only when the text differs from what that element last got.
+- Each page gets a `<base href>` to the editor's page and the same `generated/…`
+  rewriting as the main page (`prepareIframePages`).
 
-1. Carry `iframePages` from the render (worker and inline paths in
-   `previewRenderer.ts` / `wasmPreview.ts`) to `LivePreview`.
-2. After each delivery or patch, set `srcdoc` on every iframe whose `src` names a page.
-   Do it on the live DOM rather than with `embedIframePages` on the HTML string, so a
-   page that has not changed is not reloaded: keep the last page text per iframe id and
-   reset `srcdoc` only when it differs. Check first what `live-patch` does to an
-   unchanged iframe node between keystrokes.
-3. **Sandbox them: `sandbox="allow-scripts"`, no `allow-same-origin`.** Then confirm
-   each platform still works from an opaque origin — GeoGebra and DoenetML are the ones
-   likely to want storage or same-origin requests. If one cannot, the alternative is to
-   serve pages from a separate origin, not to drop the sandbox.
-4. Give each page a `<base href>` to the project URL so `external/…` resolves, and apply
-   the same `generated/…` rewriting the main page gets (`generators/previewImages.ts`).
-5. The server-rendered fallback (no JSPI) posts to the build server, which builds real
-   pages; confirm the iframes resolve there.
-6. Leave "open in new tab" inert.
+Checked in the real editor (headless Chromium, `/tryit`):
+
+- An author's `<script>` in a `platform="javascript"` interactive runs and draws, from
+  origin `null`: reading `document.cookie`, `parent.document` and `localStorage` all
+  throw.
+- Editing a paragraph beside the interactives reloads none of them. Editing one
+  interactive's script reloads that one and not its neighbour.
+- Desmos and a YouTube embed load. YouTube showed its player, not the no-referrer
+  refusal.
+
+**GeoGebra does not run in the sandbox.** Its loader (GWT) writes into a child frame's
+document, which an opaque origin may not do; the applet stays on its loading picture.
+So a page that is nothing but one GeoGebra material — what `<interactive geogebra="ID"/>`
+makes — is framed from `https://www.geogebra.org/material/iframe/id/ID` instead
+(`geogebraMaterialUrl`), which was seen drawing the applet. That URL answers with status
+410 and a working page, so it logs one failed request; if GeoGebra ever makes the 410
+real, this stops working and the sandboxed page is all that is left.
+
+Not done, and why:
+
+- **GeoGebra with more than a material** (a local `.ggb`, an `appletOnLoad` script, more
+  than one applet) keeps its sandboxed page and does not load. It needs pages served
+  from a separate origin; that is infrastructure, and is now an open question below.
+- **JSXGraph, D3, Sage and DoenetML were not watched.** PreTeXt takes a JSXGraph or D3
+  script only from `@source`, a file, which needs Phase 3. Whether Sage cells and
+  DoenetML survive an opaque origin is unknown.
+- **The server-rendered fallback (no JSPI)** was not exercised. It posts to the build
+  server, which builds real pages; nothing in this phase touches that path.
+- The "open in new tab" link under an interactive needed nothing: the renderer already
+  emits it with no `href`, as it does every link that leaves the page.
 
 ## Phase 3 — file assets that are not images
 
@@ -109,10 +128,12 @@ Starts once the pretext-html release is out: `npm run update:pretextbook`.
 
 ## Phase 4 — authoring
 
-1. Insert menu group "Interactives and media": Desmos, GeoGebra, CalcPlot3D (always
-   writing `@variant`), YouTube, a generic iframe, MyOpenMath. PreTeXt only, unless the
-   LaTeX and Markdown converters gain a spelling. Every body goes through
-   `__tests__/snippets.test.ts` like the rest of the catalog.
+1. **Done.** Insert → "Interactives & Media": Desmos, GeoGebra, CalcPlot3D (always
+   writing `@variant`), YouTube, a generic iframe ("Web Page"), MyOpenMath. PreTeXt
+   only, unless the LaTeX and Markdown converters gain a spelling. Every body passes the
+   schema in `__tests__/snippets.test.ts`. Seen in the editor: the menu, and the
+   CalcPlot3D default drawing its surface. The MyOpenMath body was rendered (an iframe
+   to `embedq2.php`) but not watched in a browser.
 2. Paste a Desmos, GeoGebra or YouTube URL and be offered the element with the id
    extracted (`pasteConvert.ts`).
 3. Lint: `@calcplot3d` without `@variant`; an interactive with neither `@preview` nor a
@@ -150,12 +171,16 @@ the page. Either shrinks Phase 1 to a few lines. Nothing here waits on it.
 ## Open questions
 
 - Does `/generate` reach the WeBWorK proxy the build queue uses?
-- Does a YouTube embed play inside a `srcdoc` frame? YouTube refuses embeds that send no
-  referrer; check in the real editor before calling the row above working.
-- Which platforms survive `sandbox="allow-scripts"` without `allow-same-origin`?
+- A separate origin for iframe pages, so GeoGebra beyond a bare material (and whatever
+  else turns out to need same-origin access to its own frames) can run with
+  `allow-same-origin` and still reach nothing of the app's. Could be the `pub`-style
+  origin of `docs/build-targets.md`.
+- Do Sage cells and DoenetML survive `sandbox="allow-scripts"`? JavaScript does;
+  GeoGebra does not.
+- Do the interactives' iframes resolve in the server-rendered fallback preview?
 - Multi-file local applets: flat files, folders, or out of scope?
 
 ## Order
 
-Phase 2 next, since with Phase 1 it fixes the largest group of broken elements. Then
-the Phase 4 Insert entries for the kinds that already work, then Phases 3 and 5.
+Phases 1 and 2 and the Phase 4 Insert entries are done. Next the rest of Phase 4
+(paste a URL, lint), then Phases 3 and 5.

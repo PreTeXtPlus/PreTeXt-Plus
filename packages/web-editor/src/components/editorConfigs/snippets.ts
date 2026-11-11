@@ -101,6 +101,8 @@ const GROUPS = [
   { key: "exercises", label: "Exercises", section: "exercises" },
   { key: "interactive", label: "Interactive Exercises", section: "exercises" },
   { key: "figures", label: "Figures & Code", section: "figures" },
+  // Content that lives somewhere else and is framed into the page.
+  { key: "media", label: "Interactives & Media", section: "figures" },
 ] as const;
 
 type GroupKey = (typeof GROUPS)[number]["key"];
@@ -333,6 +335,17 @@ const CATALOG: SnippetSpec[] = [
     group: "figures",
     placement: "block",
   },
+  // Things another site serves, which PreTeXt frames straight from it — the
+  // kinds the live preview shows (see docs/interactives-plan.md). Only PreTeXt
+  // has bodies: neither converter has a spelling for any.
+  ...blocks("media", [
+    { key: "desmos", label: "Desmos Graph", detail: "A saved Desmos graph, by the id in its share link." },
+    { key: "geogebra", label: "GeoGebra Applet", detail: "A GeoGebra activity, by the id in its share link." },
+    { key: "calcplot3d", label: "CalcPlot3D", detail: "A 3D plot drawn by CalcPlot3D." },
+    { key: "youtube", label: "YouTube Video", detail: "A YouTube video, by the id in its address." },
+    { key: "iframe", label: "Web Page", detail: "Another web page, shown in a frame." },
+    { key: "myopenmath", label: "MyOpenMath Problem", detail: "An exercise served by MyOpenMath, by its problem number." },
+  ]),
 ];
 
 /** A family's bodies in one format: `write(element, suggestedId)` per member. */
@@ -639,6 +652,24 @@ const PRETEXT_BODIES: Record<string, string> = {
     "$0",
     "\t</code>",
     "</program>",
+  ),
+  // An id is what the author has to supply, so it is the first stop; the
+  // `xml:id` — which also names the interactive's page in a build — is second.
+  desmos:
+    '<interactive desmos="${1:graph-id}" xml:id="${2:interactive-name}" width="80%" aspect="4:3"/>',
+  geogebra:
+    '<interactive geogebra="${1:material-id}" xml:id="${2:interactive-name}" width="80%" aspect="4:3"/>',
+  // Always with a `@variant`: without one PreTeXt writes a URL that is only
+  // the query string, and CalcPlot3D shows nothing. `&` must be `&amp;` here.
+  calcplot3d:
+    '<interactive calcplot3d="${1:type=z;z=x^2-y^2;umin=-2;umax=2;vmin=-2;vmax=2}" variant="${2|application,controls,minimal|}" xml:id="${3:interactive-name}" width="80%" aspect="1:1"/>',
+  youtube: '<video youtube="${1:video-id}" xml:id="${2:video-name}" width="80%"/>',
+  iframe:
+    '<interactive iframe="${1:https://example.org/}" xml:id="${2:interactive-name}" width="80%" aspect="4:3"/>',
+  myopenmath: lines(
+    '<exercise xml:id="${2:exercise-name}">',
+    '\t<myopenmath problem="${1:problem-number}"/>',
+    "</exercise>",
   ),
 };
 

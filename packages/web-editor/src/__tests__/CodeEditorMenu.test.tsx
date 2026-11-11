@@ -215,6 +215,7 @@ describe("CodeEditorMenu", () => {
         "Project-like",
         "Interactive Exercises",
         "Figures & Code",
+        "Interactives & Media",
       ]);
       // A rule between each run of related categories.
       expect(insert.getAllByRole("separator")).toHaveLength(3);
