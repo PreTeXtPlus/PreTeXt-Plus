@@ -5,8 +5,7 @@ Plan for robust support of content that comes from outside the document: PreTeXt
 local files), and exercises served by another system (WeBWorK, STACK, MyOpenMath).
 
 **Status:** Phases 1 and 2 are done (2026-11-11): pretext-html 0.20.0 returns the iframe
-pages and the live preview shows them, sandboxed. Phase 4's Insert entries are in too. Next:
-the rest of Phase 4 (paste, lint), then Phases 3 and 5.
+pages and the live preview shows them, sandboxed. Phase 4 (Insert entries, pasting a link, lint) is done too. Next: Phases 3 and 5.
 
 ## What the live preview did before Phase 2 (measured 2026-11-11)
 
@@ -134,10 +133,20 @@ Not done, and why:
    schema in `__tests__/snippets.test.ts`. Seen in the editor: the menu, and the
    CalcPlot3D default drawing its surface. The MyOpenMath body was rendered (an iframe
    to `embedq2.php`) but not watched in a browser.
-2. Paste a Desmos, GeoGebra or YouTube URL and be offered the element with the id
-   extracted (`pasteConvert.ts`).
-3. Lint: `@calcplot3d` without `@variant`; an interactive with neither `@preview` nor a
-   `<static>` when the project has a print target.
+2. **Done.** A paste that is nothing but a link to a Desmos graph, a GeoGebra material
+   or a YouTube video arrives as the element, id extracted (and a YouTube `t=` as
+   `@start`): `mediaUrls.ts`, called from `pasteConvert.ts`. Not an offer but the
+   convention LaTeX pastes already follow — converted where a block belongs, left as a
+   link inside a paragraph, off with the Edit menu's paste toggle, and Ctrl+Shift+V
+   pastes the link itself. The element carries no `xml:id`, which could collide.
+   Desmos's 3D calculator and YouTube playlists are left as links: `@desmos` frames
+   only `/calculator/`.
+3. **Done.** `editorConfigs/interactiveDiagnostics.ts`: a warning, with a quick fix, on
+   `@calcplot3d` without `@variant`; and a note on an interactive with neither
+   `@preview` nor a `<static>`, only when the project has a target that is not a web
+   page (`Target::Catalog.static_slugs`, passed to the editor as `hasStaticOutput`).
+   Seen in the editor: the warning, and the paste both ways. The static note was only
+   unit-tested, since no development project has a PDF target.
 
 ## Phase 5 — external exercises
 
@@ -182,5 +191,5 @@ the page. Either shrinks Phase 1 to a few lines. Nothing here waits on it.
 
 ## Order
 
-Phases 1 and 2 and the Phase 4 Insert entries are done. Next the rest of Phase 4
-(paste a URL, lint), then Phases 3 and 5.
+Phases 1, 2 and 4 are done. Next Phase 3, which opens with decisions about how
+scripts and HTML are served, then Phase 5.

@@ -63,6 +63,9 @@ class Target
     # PreTeXt's schema also has `webwork` and `custom` formats. Neither is a coherent
     # author-facing choice on its own -- `custom` means nothing without an @xsl -- so
     # neither is in the catalog.
+    # The formats that are web pages, and so can run an interactive.
+    WEB_FORMATS = %w[ html revealjs ].freeze
+
     KINDS = [
       Kind.build(:website, label: "Website",
         emits: { "format" => "html" },
@@ -120,6 +123,13 @@ class Target
       # raise. The inclusion validation on Target is what keeps unknown slugs out.
       def find(slug)
         KINDS[slug.to_s]
+      end
+
+      # The kinds whose output is not a web page -- a PDF, an EPUB, braille, LaTeX --
+      # where an <interactive> can only appear as a picture. The editor notes an
+      # interactive that has none for a project with such a target.
+      def static_slugs
+        all.reject { |kind| WEB_FORMATS.include?(kind.emits["format"]) }.map(&:slug)
       end
 
       # The kinds a project of this document type may add, in catalog order.

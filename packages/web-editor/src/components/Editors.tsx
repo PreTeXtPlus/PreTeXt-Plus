@@ -129,6 +129,7 @@ import { CollabBridge } from "../collab/bridge";
 import type { CollabSession } from "../collab/types";
 import PresenceAvatars from "../collab/PresenceAvatars";
 import { placementUses, type PlacementCheckInput } from "./editorConfigs/placementDiagnostics";
+import type { InteractiveCheckInput } from "./editorConfigs/interactiveDiagnostics";
 import { generatedImageResolver } from "../generators/previewImages";
 
 /**
@@ -260,6 +261,13 @@ export interface editorProps {
    * render on the main thread.
    */
   previewWorkerUrl?: string;
+  /**
+   * Whether the project builds an output that is not a web page — a PDF, an
+   * EPUB, braille, LaTeX — where an `<interactive>` can only be a picture.
+   * When true, an interactive with no `@preview` and no `<static>` is noted
+   * in the code editor. Omit for a host with no notion of outputs.
+   */
+  hasStaticOutput?: boolean;
   /**
    * The tag name of this project's root element: `"article"` (default),
    * `"book"` or `"slideshow"`. When `"book"`, the TOC shows a chapter list that
@@ -2368,6 +2376,10 @@ const EditorsInner = (props: EditorsInnerProps) => {
       : editorTarget?.kind === "snippet"
         ? { kind: "snippet" as const, ref: editorTarget.snippet.ref, format: editorTarget.snippet.sourceFormat }
         : null;
+  const interactiveCheck = useMemo(
+    (): InteractiveCheckInput => ({ hasStaticOutput: props.hasStaticOutput === true }),
+    [props.hasStaticOutput],
+  );
   const placementCheck = useMemo((): PlacementCheckInput | undefined => {
     if (!placementTarget) return undefined;
     const isOpen = (kind: "division" | "snippet", ref: string | undefined) =>
@@ -2686,6 +2698,7 @@ const EditorsInner = (props: EditorsInnerProps) => {
       // the assembled document, which a snippet or asset fragment isn't.
       pretextValidation={isDivisionOpen ? pretextValidation : undefined}
       placementCheck={placementCheck}
+      interactiveCheck={interactiveCheck}
       virtualWrapper={assetWrapper ?? divisionWrapper}
       collab={
         props.collaboration && bridge && activeCollabText && editorKey

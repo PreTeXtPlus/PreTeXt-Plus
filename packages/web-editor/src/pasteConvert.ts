@@ -46,6 +46,7 @@ import {
   type PlacementContext,
 } from "@pretextbook/import";
 import { derivePretextContent } from "./contentConversion";
+import { mediaElement, parseMediaLink } from "./mediaUrls";
 
 /** The slice of Monaco's text model this module needs (kept tiny so it's testable). */
 export interface PasteContextModel {
@@ -124,6 +125,11 @@ export function placementContextAt(
  * author move it. PreTeXt divisions are schema-validated as you type
  * (`usePretextDiagnostics`), so the misplacement is already marked in the
  * gutter; the string is returned for callers that want to say more.
+ *
+ * One kind of paste is not LaTeX or Markdown at all: a lone link to a Desmos
+ * graph, a GeoGebra material or a YouTube video, which arrives as the element
+ * that frames it (`mediaUrls.ts`) — but only where a block belongs. In running
+ * text a link is a link, and an interactive is not legal there anyway.
  */
 export function convertPastedSnippet(
   text: string,
@@ -132,6 +138,15 @@ export function convertPastedSnippet(
 ): PlacedMarkup | undefined {
   const target = pasteTargetIn(model, position);
   if (target.literal) return undefined;
+
+  const media = parseMediaLink(text);
+  if (media) {
+    if (target.inline) return undefined;
+    return placeConvertedMarkup(
+      mediaElement(media),
+      placementContextAt(model, position, target),
+    );
+  }
 
   const format = detectSnippetFormat(text);
   if (!format) return undefined;
