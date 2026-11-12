@@ -57,14 +57,17 @@ class Content < ApplicationRecord
   # styles. An asset's source is the inside of its <image>: PreTeXt, except that
   # an authored asset may instead be written in a generator's own language, which
   # makes it a generated asset (Content::GeneratedAssetBehavior::FORMATS). A key
-  # added for a generator is the web-editor's id for it.
-  enum :source_format, { pretext: 0, latex: 1, markdown: 2, prefigure: 3, tikz: 4, asymptote: 5, sageplot: 6 },
+  # added for a generator is the web-editor's id for it. A snippet may also be
+  # `raw`: verbatim text, inserted into the assembled document as CDATA.
+  enum :source_format, { pretext: 0, latex: 1, markdown: 2, prefigure: 3, tikz: 4, asymptote: 5, sageplot: 6, raw: 7 },
     default: :pretext, suffix: true, validate: true
 
   PROSE_FORMATS = %w[ pretext latex markdown ].freeze
+  SNIPPET_FORMATS = [ *PROSE_FORMATS, "raw" ].freeze
 
   validates :ref, format: REF_REGEX, presence: true, uniqueness: { scope: :project_id }
-  validates :source_format, inclusion: { in: PROSE_FORMATS }, if: -> { division? || snippet? }
+  validates :source_format, inclusion: { in: PROSE_FORMATS }, if: :division?
+  validates :source_format, inclusion: { in: SNIPPET_FORMATS }, if: :snippet?
   validates :source_format, inclusion: { in: %w[ pretext ] }, if: :file_asset?
   # An exercise is stored like a division: `source` is its body -- the children
   # of its <exercise> -- and the element itself (xml:id and label from `ref`,

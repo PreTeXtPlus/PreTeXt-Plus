@@ -53,7 +53,7 @@
  */
 import * as Y from "yjs";
 import type { DivisionType } from "../types/sections";
-import type { Asset, Exercise, Snippet, SourceFormat } from "../types/editor";
+import type { Asset, Exercise, Snippet, SnippetSourceFormat, SourceFormat } from "../types/editor";
 
 /**
  * The version of the layout above. Bump it whenever a change means a client
@@ -389,7 +389,7 @@ export const snippetEntryToSnapshot = (
   ref: String(entry.get("ref") ?? ""),
   title: entry.get("title") as string | undefined,
   source: getEntryText(entry)?.toString() ?? "",
-  sourceFormat: (entry.get("sourceFormat") ?? "pretext") as SourceFormat,
+  sourceFormat: (entry.get("sourceFormat") ?? "pretext") as SnippetSourceFormat,
 });
 
 /** Read one exercises-map entry back into plain data. */

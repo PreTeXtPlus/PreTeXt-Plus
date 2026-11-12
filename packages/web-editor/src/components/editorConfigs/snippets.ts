@@ -809,6 +809,8 @@ const BODIES: Record<EditorLanguage, Record<string, string>> = {
   tex: {},
   asymptote: {},
   python: {},
+  // Verbatim text: nothing in it is markup, so there is nothing to insert.
+  raw: {},
 };
 
 /**

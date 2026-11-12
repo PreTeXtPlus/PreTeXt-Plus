@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import type { Asset, Exercise, GeneratorId, Snippet, SourceFormat } from "../../types/editor";
+import type { Asset, Exercise, GeneratorId, Snippet, SnippetSourceFormat } from "../../types/editor";
 import { useEditorStore } from "../../store/hooks";
 import type { CreateRequest } from "../../store/editorStore";
 import { KindIcon } from "../EditorTargetBar";
@@ -13,7 +13,7 @@ import NewExerciseForm from "./NewExerciseForm";
 
 export interface NewItemPaneProps {
   /** Persist a new snippet — see `NewSnippetForm`. */
-  onCreateSnippet?: (ref: string, sourceFormat: SourceFormat, title: string) => Promise<Snippet>;
+  onCreateSnippet?: (ref: string, sourceFormat: SnippetSourceFormat, title: string) => Promise<Snippet>;
   /** Persist a new exercise — see `NewExerciseForm`. */
   onCreateExercise?: (exercise: Exercise) => Promise<Exercise>;
   onUploadAsset?: (file: File, title?: string, ref?: string) => Promise<Asset>;

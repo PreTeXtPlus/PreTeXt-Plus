@@ -567,6 +567,16 @@ class ContentTest < ActiveSupport::TestCase
     assert asset.thumbnailable?
   end
 
+  # ---- raw snippets --------------------------------------------------------
+
+  test "a snippet may be raw text, but a division may not" do
+    assert projects(:one).snippets.build(ref: "listing", source: "a < b && c", source_format: :raw).valid?
+
+    division = projects(:one).divisions.build(ref: "raw_division", source_format: :raw)
+    assert_not division.valid?
+    assert division.errors[:source_format].any?
+  end
+
   # ---- exercises -----------------------------------------------------------
 
   test "an exercise's source is always PreTeXt" do
