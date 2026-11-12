@@ -1,5 +1,5 @@
 import type { Division, DivisionType } from "../../types/sections";
-import type { SourceFormat } from "../../types/editor";
+import type { SnippetSourceFormat, SourceFormat } from "../../types/editor";
 import { displayTitle, slugifyTitle } from "../../sectionUtils";
 
 /** Draft state for the inline division edit form. */
@@ -14,6 +14,12 @@ export const SOURCE_FORMAT_LABELS: Record<SourceFormat, string> = {
   pretext: "PreTeXt",
   latex: "LaTeX",
   markdown: "Markdown",
+};
+
+/** A snippet's formats: the prose ones, plus verbatim text. */
+export const SNIPPET_FORMAT_LABELS: Record<SnippetSourceFormat, string> = {
+  ...SOURCE_FORMAT_LABELS,
+  raw: "Raw text",
 };
 
 export const TYPE_LABELS: Record<string, string> = {

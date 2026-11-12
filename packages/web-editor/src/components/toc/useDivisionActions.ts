@@ -1,5 +1,5 @@
 import type { Division } from "../../types/sections";
-import type { SourceFormat } from "../../types/editor";
+import { proseFormatOf, type SourceFormat } from "../../types/editor";
 import {
   insertDivisionRef,
   removeDivisionRef,
@@ -39,8 +39,10 @@ export function useDivisionActions() {
         rootDivision?.sourceFormat ??
         "pretext")
       : openItem.kind === "snippet"
-        ? (projectSnippets?.find((s) => s.ref === openItem.ref)?.sourceFormat ??
-          "pretext")
+        ? proseFormatOf(
+          projectSnippets?.find((s) => s.ref === openItem.ref)?.sourceFormat ??
+            "pretext",
+        )
         : "pretext";
 
   const handleUnplace = (xmlId: string, parentXmlId: string) => {

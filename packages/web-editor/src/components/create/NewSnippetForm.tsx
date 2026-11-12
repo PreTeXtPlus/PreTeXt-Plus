@@ -1,10 +1,10 @@
 import { useEffect, useId, useState, type KeyboardEvent } from "react";
 import clsx from "clsx";
-import type { Snippet, SourceFormat } from "../../types/editor";
+import type { Snippet, SnippetSourceFormat } from "../../types/editor";
 import { sanitizeXmlId, slugifyTitle, uniqueRef } from "../../sectionUtils";
 import { useTakenRefs } from "../../store/hooks";
 import { ID_REQUIRED_MESSAGE, idTakenMessage } from "../../idRules";
-import { SOURCE_FORMAT_LABELS } from "../toc/types";
+import { SNIPPET_FORMAT_LABELS } from "../toc/types";
 import {
   FIELD_CONTROL_CLASSES,
   SettingsButton,
@@ -20,7 +20,7 @@ export interface NewSnippetFormProps {
    * has the final say on ref uniqueness. Without one, the snippet is created
    * locally (no-host demos and tests).
    */
-  onCreate?: (ref: string, sourceFormat: SourceFormat, title: string) => Promise<Snippet>;
+  onCreate?: (ref: string, sourceFormat: SnippetSourceFormat, title: string) => Promise<Snippet>;
   /** The snippet now exists — see `NewItemPane`. */
   onCreated: (snippet: Snippet) => void;
   onCancel: () => void;  /** Told when a request to the host starts and settles. */
@@ -55,7 +55,7 @@ const NewSnippetForm = ({
   const [editedRef, setEditedRef] = useState<string | null>(resolveRef ?? null);
   const ref =
     editedRef ?? (title.trim() ? uniqueRef(slugifyTitle(title) || "snippet", takenRefs) : "");
-  const [sourceFormat, setSourceFormat] = useState<SourceFormat>("pretext");
+  const [sourceFormat, setSourceFormat] = useState<SnippetSourceFormat>("pretext");
   const [error, setError] = useState<string | null>(null);
   const [isCreating, setIsCreating] = useState(false);
   const fieldId = useId();
@@ -134,12 +134,12 @@ const NewSnippetForm = ({
           id={`${fieldId}-format`}
           className={clsx(FIELD_CONTROL_CLASSES, "max-w-[200px]")}
           value={sourceFormat}
-          onChange={(e) => setSourceFormat(e.target.value as SourceFormat)}
+          onChange={(e) => setSourceFormat(e.target.value as SnippetSourceFormat)}
           disabled={isCreating}
         >
-          {(Object.keys(SOURCE_FORMAT_LABELS) as SourceFormat[]).map((f) => (
+          {(Object.keys(SNIPPET_FORMAT_LABELS) as SnippetSourceFormat[]).map((f) => (
             <option key={f} value={f}>
-              {SOURCE_FORMAT_LABELS[f]}
+              {SNIPPET_FORMAT_LABELS[f]}
             </option>
           ))}
         </select>

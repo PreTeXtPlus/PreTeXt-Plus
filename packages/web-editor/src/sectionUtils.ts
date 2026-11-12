@@ -3253,6 +3253,11 @@ function expandRefs(
             : tag === "exercise"
               ? resolveExerciseRef(ref, pools, ancestors)
               : resolveDivisionXml(ref, pools, ancestors);
+      // Raw text is CDATA, not elements: there is nothing to qualify or to
+      // copy attributes onto, and the tag scanners would misread its text.
+      if (tag === "snippet" && pools.snippets.find((s) => s.ref === ref)?.sourceFormat === "raw") {
+        return resolved;
+      }
       const instance = placeholderInstance(attrs);
       const placed = instance ? qualifyIdentifiers(resolved, instance) : resolved;
       return applyPlaceholderAttrs(placed, parsePlaceholderAttrs(attrs));
@@ -3290,12 +3295,22 @@ function resolveDivisionXml(
 }
 
 /**
+ * `text` as one XML CDATA section, so it reaches the document verbatim with no
+ * character escaped. A `]]>` inside it would end the section early, so each is
+ * split across two sections (`]]` closes one, `>` opens the next).
+ */
+export function toCdata(text: string): string {
+  return `<![CDATA[${text.split("]]>").join("]]]]><![CDATA[>")}]]>`;
+}
+
+/**
  * Resolve a single `<plus:snippet ref="..."/>` placeholder to its final
  * PreTeXt markup by looking up the matching {@link Snippet} in `snippets`.
  * The snippet's own source is converted to PreTeXt (format-aware, via
  * {@link derivePretextContent}) and then itself scanned for further
  * `<plus:snippet>` / `<plus:image>` refs, so a snippet can embed another
- * snippet or an image. Falls back to an XML comment if no matching snippet
+ * snippet or an image. A `raw` snippet is inserted as CDATA instead, with
+ * nothing converted or expanded. Falls back to an XML comment if no matching snippet
  * is found, its own conversion fails, or it (directly or transitively)
  * references itself.
  */
@@ -3307,6 +3322,9 @@ function resolveSnippetRef(
   const snippet = pools.snippets.find((s) => s.ref === ref);
   if (!snippet) return `<!-- missing snippet: ${ref} -->`;
   if (ancestors.has(ref)) return `<!-- circular reference: ${ref} -->`;
+  // Raw text is never markup: it goes in verbatim, and any placeholder-looking
+  // text inside it stays text.
+  if (snippet.sourceFormat === "raw") return toCdata(snippet.source);
 
   const { pretextSource, pretextError } = derivePretextContent(
     snippet.source,
