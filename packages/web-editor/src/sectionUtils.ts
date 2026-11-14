@@ -21,6 +21,7 @@ import type {
 import { derivePretextContent } from "./contentConversion";
 import { resolveAssetRef } from "./assetTransforms";
 import { escapeAttribute, escapeText, unescapeAttribute } from "./xmlUtils";
+import { DEFAULT_DOENETML_VERSION, docinfoHasDoenetml, escapeDoenetml } from "./doenet";
 import { DEFAULT_LATEX_IMAGE_PREAMBLE } from "./generators/tikz/document";
 
 // ---------------------------------------------------------------------------
@@ -1277,8 +1278,39 @@ export function assetEmbedCode(
 // `<plus:exercise ref="..."/>` placeholder parsing
 // ---------------------------------------------------------------------------
 
-/** The record kinds placed by a `<plus:snippet>`- or `<plus:exercise>`-shaped placeholder. */
-type RecordRefTag = "snippet" | "exercise";
+/**
+ * The placeholder tags that place an exercise record, each naming the PreTeXt
+ * the record is wrapped in: `exercise`, the project-like blocks, or
+ * `interactive` for a Doenet activity placed bare (see `docs/doenet-plan.md`,
+ * Decision 3). A designer exercise resolves only under `exercise`.
+ */
+export const EXERCISE_PLACEMENT_TAGS = [
+  "exercise",
+  "project",
+  "activity",
+  "exploration",
+  "investigation",
+  "interactive",
+] as const;
+
+export type ExercisePlacementTag = (typeof EXERCISE_PLACEMENT_TAGS)[number];
+
+/** The wrapper tags: every exercise placement tag but the bare `interactive`. */
+export const EXERCISE_WRAPPER_TAGS: readonly ExercisePlacementTag[] = EXERCISE_PLACEMENT_TAGS.filter(
+  (tag) => tag !== "interactive",
+);
+
+export const isExercisePlacementTag = (tag: string): tag is ExercisePlacementTag =>
+  (EXERCISE_PLACEMENT_TAGS as readonly string[]).includes(tag);
+
+/** A regex alternation matching any exercise placement tag, for the record-ref helpers. */
+const EXERCISE_TAG_PATTERN = `(?:${EXERCISE_PLACEMENT_TAGS.join("|")})`;
+
+/**
+ * The tag — or a non-capturing alternation of tags — a record-ref helper
+ * matches: `snippet`, or every tag that places an exercise.
+ */
+type RecordRefTagPattern = string;
 
 /** A `<plus:snippet ref="..."/>` snippet placeholder. */
 export interface SnippetRef {
@@ -1289,7 +1321,7 @@ export interface SnippetRef {
 export type ExerciseRef = SnippetRef;
 
 function parseRecordRefs(
-  tag: RecordRefTag,
+  tag: RecordRefTagPattern,
   content: string,
   sourceFormat: SourceFormat,
 ): SnippetRef[] {
@@ -1309,7 +1341,7 @@ function parseRecordRefs(
 }
 
 function renameRecordRef(
-  tag: RecordRefTag,
+  tag: RecordRefTagPattern,
   content: string,
   oldRef: string,
   newRef: string,
@@ -1327,7 +1359,7 @@ function renameRecordRef(
     .replace(latexRe, `$1${newRef}$2`);
 }
 
-function removeRecordRef(tag: RecordRefTag, content: string, ref: string): string {
+function removeRecordRef(tag: RecordRefTagPattern, content: string, ref: string): string {
   const r = escapeRegex(ref);
   const xmlRe = new RegExp(`<plus:${tag}\\b[^>]*?\\bref="${r}"[^>]*/?>`, "g");
   const mdRe = new RegExp(
@@ -1338,7 +1370,7 @@ function removeRecordRef(tag: RecordRefTag, content: string, ref: string): strin
   return content.replace(xmlRe, "").replace(mdRe, "").replace(latexRe, "");
 }
 
-function recordEmbedCode(tag: RecordRefTag, ref: string, sourceFormat: SourceFormat): string {
+function recordEmbedCode(tag: "snippet" | ExercisePlacementTag, ref: string, sourceFormat: SourceFormat): string {
   if (sourceFormat === "markdown") return `::${tag}{ref="${ref}"}`;
   if (sourceFormat === "latex") return `\\plus{${tag}}{${ref}}`;
   return `<plus:${tag} ref="${ref}"/>`;
@@ -1402,44 +1434,55 @@ export function snippetEmbedCode(
 
 /**
  * Every exercise placeholder in `content` — `<plus:exercise ref="..."/>`,
- * `::exercise{ref="..."}` or `\plus{exercise}{...}` — in document order, as
+ * `::exercise{ref="..."}` or `\plus{exercise}{...}`, under any of the
+ * {@link EXERCISE_PLACEMENT_TAGS} — in document order, as
  * {@link parseSnippetRefs} does for snippets.
  */
 export function parseExerciseRefs(
   content: string,
   sourceFormat: SourceFormat,
 ): ExerciseRef[] {
-  return parseRecordRefs("exercise", content, sourceFormat);
+  return parseRecordRefs(EXERCISE_TAG_PATTERN, content, sourceFormat);
 }
 
-/** {@link renameSnippetRef}, for exercise placeholders. */
+/** {@link renameSnippetRef}, for exercise placeholders under every placement tag. */
 export function renameExerciseRef(
   content: string,
   oldRef: string,
   newRef: string,
 ): string {
-  return renameRecordRef("exercise", content, oldRef, newRef);
+  return renameRecordRef(EXERCISE_TAG_PATTERN, content, oldRef, newRef);
 }
 
-/** {@link removeSnippetRef}, for exercise placeholders. */
+/** {@link removeSnippetRef}, for exercise placeholders under every placement tag. */
 export function removeExerciseRef(content: string, ref: string): string {
-  return removeRecordRef("exercise", content, ref);
+  return removeRecordRef(EXERCISE_TAG_PATTERN, content, ref);
 }
 
-/** {@link snippetEmbedCode}, for an exercise. */
+/**
+ * {@link snippetEmbedCode}, for an exercise: the placeholder that places it
+ * under `tag` — `exercise` unless the record is a Doenet activity the author
+ * wants wrapped otherwise, or placed bare.
+ */
 export function exerciseEmbedCode(
   ref: string,
   sourceFormat: SourceFormat = "pretext",
+  tag: ExercisePlacementTag = "exercise",
 ): string {
-  return recordEmbedCode("exercise", ref, sourceFormat);
+  return recordEmbedCode(tag, ref, sourceFormat);
 }
 
 // ---------------------------------------------------------------------------
 // Placements — where an image or snippet is placed, and under which instance
 // ---------------------------------------------------------------------------
 
-/** The kinds of record that may be placed more than once. */
-export type PlacementTag = "image" | "snippet" | "exercise";
+/**
+ * The tags of records that may be placed more than once: an image, a snippet,
+ * or an exercise under any of its {@link EXERCISE_PLACEMENT_TAGS}.
+ */
+export type PlacementTag = "image" | "snippet" | ExercisePlacementTag;
+
+const PLACEMENT_TAG_ALTERNATION = ["image", "snippet", ...EXERCISE_PLACEMENT_TAGS].join("|");
 
 /**
  * One `<plus:image>`/`<plus:snippet>` placeholder in a source: what it places,
@@ -1460,9 +1503,9 @@ export interface Placement {
  * converter turns into the same attribute the other two write directly.
  */
 const PLACEMENT_SOURCE: Record<SourceFormat, string> = {
-  pretext: `<plus:(image|snippet|exercise)\\b([^>]*?)\\/?>`,
-  markdown: `::(image|snippet|exercise)(?:\\[[^\\]]*\\])?\\{([^}]*)\\}`,
-  latex: `\\\\plus(?:\\[([^\\]]*)\\])?\\{(image|snippet|exercise)\\}\\{([^}]+)\\}`,
+  pretext: `<plus:(${PLACEMENT_TAG_ALTERNATION})\\b([^>]*?)\\/?>`,
+  markdown: `::(${PLACEMENT_TAG_ALTERNATION})(?:\\[[^\\]]*\\])?\\{([^}]*)\\}`,
+  latex: `\\\\plus(?:\\[([^\\]]*)\\])?\\{(${PLACEMENT_TAG_ALTERNATION})\\}\\{([^}]+)\\}`,
 };
 
 const quotedAttr = (attrs: string, name: string): string | undefined =>
@@ -3109,6 +3152,8 @@ const OPAQUE_ELEMENTS: ReadonlySet<string> = new Set([
   "sageplot",
   "asymptote",
   "mermaid",
+  // A Doenet activity's slate holds DoenetML as escaped text (see `wrapExerciseSource`).
+  "slate",
 ]);
 
 /** Attributes that give an element an identity PreTeXt requires to be unique. */
@@ -3245,13 +3290,15 @@ function expandRefs(
     /<plus:([a-z-]+)\s([^>]*ref="[^"]+"[^>]*?)(?:\/>|>\s*<\/plus:\1>)/g,
     (_match, tag: string, attrs: string) => {
       const ref = /ref="([^"]+)"/.exec(attrs)?.[1] ?? "";
+      // The exercise tags come before the division fallback, which takes any
+      // tag it is handed as a division placeholder.
       const resolved =
         tag === "image"
           ? resolveAssetRef(ref, pools.assets)
           : tag === "snippet"
             ? resolveSnippetRef(ref, pools, ancestors)
-            : tag === "exercise"
-              ? resolveExerciseRef(ref, pools, ancestors)
+            : isExercisePlacementTag(tag)
+              ? resolveExerciseRef(ref, pools, ancestors, tag)
               : resolveDivisionXml(ref, pools, ancestors);
       const instance = placeholderInstance(attrs);
       const placed = instance ? qualifyIdentifiers(resolved, instance) : resolved;
@@ -3323,32 +3370,67 @@ function resolveSnippetRef(
  * `xml:id` and `label`, the title (already PreTeXt markup) as `<title>`, and
  * every other attribute from `attrs`.
  */
-export function wrapExerciseSource(exercise: Exercise): string {
-  const pairs: [string, string][] = [["xml:id", exercise.ref], ["label", exercise.ref]];
-  for (const [name, value] of Object.entries(exercise.attrs ?? {})) {
-    if (name !== "xml:id" && name !== "label") pairs.push([name, value]);
+export function wrapExerciseSource(
+  exercise: Exercise,
+  tag: ExercisePlacementTag = "exercise",
+): string {
+  if (exercise.sourceFormat === "doenetml") return wrapDoenetActivity(exercise, tag);
+  if (tag !== "exercise") {
+    return `<!-- ${exercise.ref} is not a Doenet activity: place it with <plus:exercise ref="${exercise.ref}"/> -->`;
   }
-  const attrs = pairs.map(([name, value]) => ` ${name}="${escapeAttribute(value)}"`).join("");
+  const attrs = attributePairs(exercise.ref, exercise.attrs);
   const title = exercise.title?.trim() ? `<title>${exercise.title.trim()}</title>\n` : "";
   return `<exercise${attrs}>\n${title}${exercise.source.trim()}\n</exercise>`;
 }
 
+/** The ` xml:id="ref" label="ref"` pair, then `attrs` with those two names ignored. */
+function attributePairs(ref: string, attrs: Record<string, string> | undefined): string {
+  const pairs: [string, string][] = [["xml:id", ref], ["label", ref]];
+  for (const [name, value] of Object.entries(attrs ?? {})) {
+    if (name !== "xml:id" && name !== "label") pairs.push([name, value]);
+  }
+  return pairs.map(([name, value]) => ` ${name}="${escapeAttribute(value)}"`).join("");
+}
+
 /**
- * Resolve a single `<plus:exercise ref="..."/>` placeholder: the matching
- * {@link Exercise}'s element built around its body ({@link wrapExerciseSource}),
- * with any `<plus:image>` or other placeholder inside it expanded in turn.
+ * A Doenet activity as PreTeXt: `<interactive platform="doenetml">` with the
+ * record's `attrs` (its width and aspect) and a `<slate surface="doenetml">`
+ * holding the DoenetML as XML text, which PreTeXt writes raw into the page's
+ * `<script type="text/doenetml">`. Under a wrapper tag the wrapper carries the
+ * record's ref and title and the interactive is named `<ref>-doenet` (a
+ * PreTeXt build names its page after that id); placed bare, the interactive
+ * itself is the ref. See `docs/doenet-plan.md`, Decisions 2–4.
+ */
+function wrapDoenetActivity(exercise: Exercise, tag: ExercisePlacementTag): string {
+  const interactiveRef = tag === "interactive" ? exercise.ref : `${exercise.ref}-doenet`;
+  const attrs = attributePairs(interactiveRef, { platform: "doenetml", ...(exercise.attrs ?? {}) });
+  const interactive =
+    `<interactive${attrs}>\n` +
+    `<slate surface="doenetml">${escapeDoenetml(exercise.source.trim())}</slate>\n` +
+    `</interactive>`;
+  if (tag === "interactive") return interactive;
+  const title = exercise.title?.trim() ? `<title>${exercise.title.trim()}</title>\n` : "";
+  return `<${tag}${attributePairs(exercise.ref, undefined)}>\n${title}${interactive}\n</${tag}>`;
+}
+
+/**
+ * Resolve a single exercise placeholder — `<plus:exercise ref="..."/>` or any
+ * other {@link EXERCISE_PLACEMENT_TAGS} tag — to the matching {@link Exercise}'s
+ * element built around its body ({@link wrapExerciseSource}), with any
+ * `<plus:image>` or other placeholder inside it expanded in turn.
  */
 function resolveExerciseRef(
   ref: string,
   pools: RecordPools,
   ancestors: Set<string>,
+  tag: ExercisePlacementTag = "exercise",
 ): string {
   const exercise = pools.exercises.find((e) => e.ref === ref);
   if (!exercise) return `<!-- missing exercise: ${ref} -->`;
   if (ancestors.has(ref)) return `<!-- circular reference: ${ref} -->`;
 
   const nextAncestors = new Set(ancestors).add(ref);
-  return expandRefs(wrapExerciseSource(exercise), pools, nextAncestors);
+  return expandRefs(wrapExerciseSource(exercise, tag), pools, nextAncestors);
 }
 
 /**
@@ -3450,16 +3532,46 @@ function withDefaultLatexImagePreamble(docinfo: string): string {
   }
 }
 
+const DOENETML_USE_RE = /<interactive\b[^>]*\bplatform\s*=\s*["']doenetml["']/;
+
+/**
+ * `docinfo` with `<doenetml version="…"/>` naming {@link DEFAULT_DOENETML_VERSION}
+ * when `body` uses DoenetML and the docinfo says nothing about it. PreTeXt
+ * would otherwise load `@doenet/standalone@latest`, under which a book's
+ * activities could change without an edit; the editor frame loads the same
+ * version (`effectiveDoenetmlVersion`), so what the author edits against is
+ * what the build runs. A splice before `</docinfo>`, like
+ * {@link withDefaultLatexImagePreamble}: the author's docinfo passes through
+ * otherwise unchanged, and one the scanner cannot read is left alone.
+ */
+function withDefaultDoenetmlVersion(docinfo: string, body: string): string {
+  if (!DOENETML_USE_RE.test(body) || docinfoHasDoenetml(docinfo)) return docinfo;
+  const element = `<doenetml version="${DEFAULT_DOENETML_VERSION}"/>`;
+  if (!docinfo.trim()) return `<docinfo>\n  ${element}\n</docinfo>`;
+  const root = nextTag(docinfo, 0);
+  if (!root || root.closing || root.name !== "docinfo") return docinfo;
+  if (root.selfClosing) {
+    const openTag = `${docinfo.slice(root.open, root.close - 2).trimEnd()}>`;
+    return docinfo.slice(0, root.open) + `${openTag}\n  ${element}\n</docinfo>` + docinfo.slice(root.close);
+  }
+  const close = docinfo.lastIndexOf("</docinfo>");
+  if (close < 0) return docinfo;
+  const lead = docinfo[close - 1] === "\n" ? "" : "\n";
+  return docinfo.slice(0, close) + `${lead}  ${element}\n` + docinfo.slice(close);
+}
+
 /**
  * Wrap a resolved document body in the outer `<pretext>` element with
  * `<docinfo>` inserted as its sibling, matching real PreTeXt document shape.
  * The docinfo always carries {@link DEFAULT_LATEX_IMAGE_PREAMBLE}, so every
- * document a build is handed has one even when the author wrote none.
+ * document a build is handed has one even when the author wrote none, and a
+ * `<doenetml version>` whenever the body has a DoenetML interactive
+ * ({@link withDefaultDoenetmlVersion}).
  * `lang`, when provided (a BCP-47 code like `"en-US"`), is written as
  * `@xml:lang` on the root `<pretext>` element.
  */
 function wrapInPretextDocument(body: string, docinfo: string, lang?: string): string {
-  const docinfoBlock = `${withDefaultLatexImagePreamble(docinfo.trim())}\n`;
+  const docinfoBlock = `${withDefaultDoenetmlVersion(withDefaultLatexImagePreamble(docinfo.trim()), body)}\n`;
   const langAttr = lang ? ` xml:lang="${lang}"` : "";
   return ensureRootLabel(`<pretext${langAttr}>\n${docinfoBlock}${body}\n</pretext>`);
 }

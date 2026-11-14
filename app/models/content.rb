@@ -58,7 +58,7 @@ class Content < ApplicationRecord
   # an authored asset may instead be written in a generator's own language, which
   # makes it a generated asset (Content::GeneratedAssetBehavior::FORMATS). A key
   # added for a generator is the web-editor's id for it.
-  enum :source_format, { pretext: 0, latex: 1, markdown: 2, prefigure: 3, tikz: 4, asymptote: 5, sageplot: 6 },
+  enum :source_format, { pretext: 0, latex: 1, markdown: 2, prefigure: 3, tikz: 4, asymptote: 5, sageplot: 6, doenetml: 7 },
     default: :pretext, suffix: true, validate: true
 
   PROSE_FORMATS = %w[ pretext latex markdown ].freeze
@@ -69,8 +69,11 @@ class Content < ApplicationRecord
   # An exercise is stored like a division: `source` is its body -- the children
   # of its <exercise> -- and the element itself (xml:id and label from `ref`,
   # <title> from `title`, the rest from `attrs`) is built when the project is
-  # assembled. The designer that edits it writes PreTeXt only.
-  validates :source_format, inclusion: { in: %w[ pretext ] }, if: :exercise?
+  # assembled. The designer that edits it writes PreTeXt only. A Doenet
+  # activity (`doenetml`) is DoenetML instead, edited in Doenet's editor, and
+  # its `attrs` are the <interactive>'s (docs/doenet-plan.md).
+  EXERCISE_FORMATS = %w[ pretext doenetml ].freeze
+  validates :source_format, inclusion: { in: EXERCISE_FORMATS }, if: :exercise?
 
   def asset?
     file_asset? || authored_asset?

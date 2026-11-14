@@ -53,7 +53,7 @@
  */
 import * as Y from "yjs";
 import type { DivisionType } from "../types/sections";
-import type { Asset, Exercise, Snippet, SourceFormat } from "../types/editor";
+import type { Asset, Exercise, ExerciseSourceFormat, Snippet, SourceFormat } from "../types/editor";
 
 /**
  * The version of the layout above. Bump it whenever a change means a client
@@ -322,6 +322,7 @@ export const applyExerciseFields = (
 ): void => {
   applyField(entry, "ref", exercise.ref);
   applyField(entry, "title", exercise.title);
+  applyField(entry, "sourceFormat", exercise.sourceFormat);
   // An exercise's attributes are a whole: an empty object means "no
   // attributes", so it clears the field, where only `undefined` leaves it.
   if (exercise.attrs === undefined) return;
@@ -402,6 +403,7 @@ export const exerciseEntryToSnapshot = (
   title: entry.get("title") as string | undefined,
   source: getEntryText(entry)?.toString() ?? "",
   attrs: entry.get("attrs") as Record<string, string> | undefined,
+  sourceFormat: entry.get("sourceFormat") as ExerciseSourceFormat | undefined,
 });
 
 /**
