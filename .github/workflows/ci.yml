@@ -7,7 +7,8 @@ on:
 
 jobs:
   scan_ruby:
-    runs-on: ubuntu-latest
+    # Pinned: ubuntu-latest became 26.04, for which setup-ruby has no Ruby 3.4.7 yet.
+    runs-on: ubuntu-24.04
 
     steps:
       - name: Checkout code
@@ -72,7 +73,8 @@ jobs:
         run: npm test
 
   lint:
-    runs-on: ubuntu-latest
+    # Pinned: ubuntu-latest became 26.04, for which setup-ruby has no Ruby 3.4.7 yet.
+    runs-on: ubuntu-24.04
     env:
       RUBOCOP_CACHE_ROOT: tmp/rubocop
     steps:
@@ -98,7 +100,8 @@ jobs:
         run: bin/rubocop -f github
 
   test:
-    runs-on: ubuntu-latest
+    # Pinned: ubuntu-latest became 26.04, for which setup-ruby has no Ruby 3.4.7 yet.
+    runs-on: ubuntu-24.04
 
     services:
       postgres:
@@ -147,7 +150,8 @@ jobs:
         run: bin/rails test
 
   system-test:
-    runs-on: ubuntu-latest
+    # Pinned: ubuntu-latest became 26.04, for which setup-ruby has no Ruby 3.4.7 yet.
+    runs-on: ubuntu-24.04
     continue-on-error: true
 
     services:
