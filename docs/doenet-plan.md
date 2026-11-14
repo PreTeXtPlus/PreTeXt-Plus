@@ -69,13 +69,26 @@ remains is listed under "Later".
    problem. Placement attributes pass through as they do for everything else
    (`applyPlaceholderAttrs`), so `<plus:interactive ref="x" width="50%"/>` sizes that
    placement, and `instance` qualifies a second placement's identifiers.
-4. **Assembly writes the slate as XML text.** `wrapExerciseSource(exercise, tag)`
+4. **Assembly writes the slate as one CDATA section.** `wrapExerciseSource(exercise, tag)`
    builds `<interactive xml:id="x-doenet" label="x-doenet" platform="doenetml" …>` with
-   a `<slate surface="doenetml">` holding the source with exactly `&`, `<` and `>`
-   escaped (TikZ's rule: the buffer is DoenetML, only the document's copy is XML), and
+   a `<slate surface="doenetml">` holding the source verbatim inside `<![CDATA[ … ]]>`
+   (`doenetmlCdata`), and
    the wrapper around it with the record's ref as its `xml:id` and `label` and its
    title. A bare placement puts the ref on the `<interactive>` itself. `slate` joins
    `OPAQUE_ELEMENTS` so instance qualification never looks inside it.
+   CDATA replaced entity escapes (`&lt;` for every tag) on 2026-11-14: the
+   assembled `main.ptx` is also what an author downloads, and escaped DoenetML
+   there could be neither read nor pasted back into Doenet. To PreTeXt the two
+   are the same text node — pretext-html 0.20.0 was run on both and wrote the
+   same `<script type="text/doenetml">`, byte for byte, including for a source
+   holding `]]>`, a `<section xml:id>` and a bare `<`. The only rewriting left
+   is that a `]]>` in the source is split across two sections. The activity's
+   wrap is not passed through `expandRefs`, so a `<plus:… ref/>` typed into
+   DoenetML stays DoenetML. A separate file per activity pulled in with
+   `<xi:include parse="text"/>` — what PreTeXt authors are told to do — is the
+   better form for a download and belongs to the planned rework of source
+   downloads (see Later); the preview has no filesystem and keeps CDATA either
+   way.
 5. **The document always names a DoenetML version.** `wrapInPretextDocument` adds
    `<doenetml version="…"/>` to the docinfo whenever the body uses
    `platform="doenetml"` and the docinfo has no `<doenetml>` of its own — like
@@ -125,11 +138,11 @@ carries it; `sectionUtils` gains the placement tags (`EXERCISE_PLACEMENT_TAGS`),
 widened `parseExerciseRefs`/`renameExerciseRef`/`removeExerciseRef`/`exerciseEmbedCode`,
 `wrapExerciseSource(exercise, tag)`, the dispatch in `expandRefs`, and
 `withDefaultDoenetmlVersion`; `src/doenet/` holds the version, the starter activity,
-the escape, the docinfo version reader and the editor page; `DoenetEditorPane.tsx`;
+the CDATA wrap, the docinfo version reader and the editor page; `DoenetEditorPane.tsx`;
 `NewExerciseForm`'s type picker; `ExerciseSettings`' width/aspect fields and
 wrapper picker for the embed code; `Editors` renders the pane for a `doenetml` record;
 Insert → Interactives & Media gains a DoenetML activity typed in place. Tests:
-`doenet.test.ts` (wrap, escape, version default, every wrapper through the schema,
+`doenet.test.ts` (wrap, CDATA, version default, every wrapper through the schema,
 the LaTeX and Markdown spellings), `collab.test.ts`, the pane with jsdom.
 
 Host: `railsProjectMapping.js` and `editor.jsx` pass `source_format` both ways.
@@ -153,6 +166,10 @@ Host: `railsProjectMapping.js` and `editor.jsx` pass `source_format` both ways.
 
 ## Later
 
+- **`xi:include` in the downloaded archive.** Each activity as
+  `source/doenet/<ref>.doenet`, included with `parse="text"`, as part of making
+  the download a multi-file project (divisions too). The assembler then returns
+  a set of files rather than one string.
 - **Static outputs.** A PDF needs a `<static>` or `@preview` for every interactive;
   the existing lint notes that when the project has such a target. A Doenet record
   has nowhere to put one yet; a `static` field on the record is the natural home.
@@ -167,8 +184,11 @@ Host: `railsProjectMapping.js` and `editor.jsx` pass `source_format` both ways.
 ## Traps
 
 - **The slate's text is raw in the page.** PreTeXt writes `<script type="text/doenetml">`
-  with the text unescaped, so the escaping in `wrapExerciseSource` is the one place the
-  DoenetML becomes XML; nothing may escape it twice.
+  with the text unescaped, so the CDATA section in `wrapExerciseSource` is the one place
+  the DoenetML becomes XML; nothing may escape it as well.
+- **Text scans of the assembled document see the DoenetML as written.** DoenetML has
+  its own `<section>`, `<title>` and `<exercise>`. `nextTag` skips CDATA, and so must
+  anything new that walks assembled XML; a bare regex over it will find those tags.
 - **`attrs` mean different things by format** (Decision 2). `wrapExerciseSource`
   reads the format before deciding which element gets them.
 - **Never widen the editor frame's sandbox.** It runs a collaborator's DoenetML on the

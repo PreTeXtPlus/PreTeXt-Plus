@@ -672,11 +672,12 @@ const PRETEXT_BODIES: Record<string, string> = {
   youtube: '<video youtube="${1:video-id}" xml:id="${2:video-name}" width="80%"/>',
   iframe:
     '<interactive iframe="${1:https://example.org/}" xml:id="${2:interactive-name}" width="80%" aspect="4:3"/>',
-  // The slate's text is DoenetML, so its tags are escaped as in any XML text.
+  // The slate's text is DoenetML, kept verbatim in a CDATA section as assembly
+  // writes a Doenet activity's (docs/doenet-plan.md, Decision 4).
   doenetml: lines(
     '<interactive platform="doenetml" xml:id="${1:interactive-name}" width="100%" aspect="4:3">',
     '\t<slate surface="doenetml">',
-    "\t\t&lt;p&gt;What is &lt;m&gt;2 + 2&lt;/m&gt;? &lt;answer&gt;${2:4}&lt;/answer&gt;&lt;/p&gt;",
+    "\t\t<![CDATA[<p>What is <m>2 + 2</m>? <answer>${2:4}</answer></p>]]>",
     "\t</slate>",
     "</interactive>",
   ),

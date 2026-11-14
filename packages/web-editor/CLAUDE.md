@@ -387,8 +387,10 @@ holds DoenetML in `source`, and its `attrs` are the `<interactive>`'s (`width`,
   `ExerciseSettings` offers the tag in a "Place as" picker, with width and aspect.
 - **Assembly** (`wrapExerciseSource(exercise, tag)`): `<interactive platform="doenetml">`
   named `<ref>-doenet` under a wrapper (the ref itself when bare), with a
-  `<slate surface="doenetml">` holding the source with exactly `&`, `<`, `>`
-  escaped — PreTeXt writes it back raw into the page's `<script type="text/doenetml">`.
+  `<slate surface="doenetml">` holding the source verbatim in a CDATA section
+  (`doenetmlCdata`; a `]]>` in the source is split across two sections) — PreTeXt
+  writes it back raw into the page's `<script type="text/doenetml">`. The activity's
+  wrap is never run through `expandRefs`: nothing inside the CDATA is a placeholder.
   `slate` is in `OPAQUE_ELEMENTS`. `wrapInPretextDocument` adds
   `<doenetml version="DEFAULT_DOENETML_VERSION"/>` to the docinfo whenever the body
   has a DoenetML interactive and the docinfo names none, so a build never runs

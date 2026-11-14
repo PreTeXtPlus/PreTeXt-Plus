@@ -30,7 +30,7 @@ import {
   DOENET_STARTER,
   docinfoDoenetmlVersion,
   effectiveDoenetmlVersion,
-  escapeDoenetml,
+  doenetmlCdata,
 } from "../doenet";
 import { doenetEditorPage, DOENET_EDITOR_SANDBOX } from "../doenet/editorPage";
 import { derivePretextContent } from "../contentConversion";
@@ -86,11 +86,11 @@ const assemble = (source: string, docinfo = "") =>
   assembleFullProjectSource([root(source)], "root", docinfo, [], undefined, [], [doenet, designer]);
 
 describe("wrapExerciseSource for a Doenet activity", () => {
-  it("wraps the escaped DoenetML in an <interactive> inside an <exercise>", () => {
+  it("wraps the DoenetML, verbatim in CDATA, in an <interactive> inside an <exercise>", () => {
     expect(wrapExerciseSource(doenet)).toBe(
       '<exercise xml:id="drag" label="drag">\n<title>Drag <m>P</m></title>\n' +
         '<interactive xml:id="drag-doenet" label="drag-doenet" platform="doenetml" width="100%" aspect="4:3">\n' +
-        '<slate surface="doenetml">&lt;p&gt;What is &lt;m&gt;2 &amp;amp; 2&lt;/m&gt;? &lt;answer name="a"&gt;4&lt;/answer&gt;&lt;/p&gt;</slate>\n' +
+        '<slate surface="doenetml"><![CDATA[<p>What is <m>2 &amp; 2</m>? <answer name="a">4</answer></p>]]></slate>\n' +
         "</interactive>\n</exercise>",
     );
   });
@@ -114,8 +114,16 @@ describe("wrapExerciseSource for a Doenet activity", () => {
     expect(xml.match(/platform=/g)).toHaveLength(1);
   });
 
-  it("escapes exactly &, < and >", () => {
-    expect(escapeDoenetml('<m a="1">x &amp; "y"</m>')).toBe('&lt;m a="1"&gt;x &amp;amp; "y"&lt;/m&gt;');
+  it("keeps the source verbatim in one CDATA section", () => {
+    expect(doenetmlCdata('<m a="1">x &amp; "y"</m>')).toBe('<![CDATA[<m a="1">x &amp; "y"</m>]]>');
+  });
+
+  it("splits a CDATA terminator in the source across two sections", () => {
+    const source = "<text>a]]>b]]>c</text>";
+    const cdata = doenetmlCdata(source);
+    expect(cdata).toBe("<![CDATA[<text>a]]]]><![CDATA[>b]]]]><![CDATA[>c</text>]]>");
+    // What an XML parser reads back: the sections' contents, joined.
+    expect([...cdata.matchAll(/<!\[CDATA\[([\s\S]*?)\]\]>/g)].map((m) => m[1]).join("")).toBe(source);
   });
 
   it("leaves a comment when a designer exercise is placed under another tag", () => {
@@ -144,7 +152,26 @@ describe("placement tags", () => {
     const doc = assemble('<plus:interactive ref="drag" width="50%" instance="two"/>');
     expect(doc).toContain('<interactive xml:id="drag-two" label="drag-two" platform="doenetml" width="50%"');
     // The DoenetML inside the slate is text: nothing in it is qualified.
-    expect(doc).toContain('&lt;answer name="a"&gt;');
+    expect(doc).toContain('<![CDATA[<p>What is <m>2 &amp; 2</m>? <answer name="a">4</answer></p>]]>');
+  });
+
+  it("leaves DoenetML that looks like PreTeXt, or like a placeholder, alone", async () => {
+    // DoenetML has its own <section>, <title> and <exercise>, and nothing
+    // stops an author typing an xml:id or a placeholder into it.
+    const source =
+      '<section xml:id="drag"><title>Inside</title><exercise label="quiz"><p>x ]]> y</p></exercise></section>\n' +
+      '<plus:exercise ref="quiz"/><plus:image ref="nope"/>';
+    const tricky: Exercise = { ...doenet, ref: "tricky", source };
+    const doc = assembleFullProjectSource(
+      [root('<plus:project ref="tricky"/><plus:interactive ref="tricky" instance="two" width="50%"/>')],
+      "root", "", [], undefined, [], [tricky, designer],
+    );
+    const slates = [...doc.matchAll(/<slate surface="doenetml">([\s\S]*?)<\/slate>/g)].map((m) =>
+      [...m[1].matchAll(/<!\[CDATA\[([\s\S]*?)\]\]>/g)].map((c) => c[1]).join(""),
+    );
+    expect(slates).toEqual([source, source]);
+    expect(doc).toContain('<interactive xml:id="tricky-two" label="tricky-two" platform="doenetml" width="50%"');
+    expect(await validatePretextDocument(doc)).toEqual([]);
   });
 
   it("is found, renamed and removed under every tag, in all three syntaxes", () => {

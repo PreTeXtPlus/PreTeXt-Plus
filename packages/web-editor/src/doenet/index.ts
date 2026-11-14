@@ -37,13 +37,18 @@ export const DOENET_STARTER = `<p>Drag the point to change <m>x</m>.</p>
 export const DOENET_DEFAULT_ATTRS: Readonly<Record<string, string>> = { width: "100%", aspect: "4:3" };
 
 /**
- * DoenetML as the text of a `<slate surface="doenetml">`: exactly `&`, `<` and
- * `>` escaped, as TikZ's `wrapSource` does for TeX. The buffer is DoenetML;
- * only the document's copy is XML, and PreTeXt writes it back raw into the
- * page's `<script type="text/doenetml">`.
+ * DoenetML as the content of a `<slate surface="doenetml">`: one CDATA
+ * section holding the source verbatim, so the assembled document an author
+ * downloads shows the DoenetML they wrote rather than a wall of `&lt;`. To an
+ * XML parser it is the same text node entity escapes would give, which
+ * PreTeXt writes back raw into the page's `<script type="text/doenetml">`.
+ *
+ * The one sequence a CDATA section cannot hold is its own terminator; a
+ * `]]>` in the source ends the section after `]]` and opens the next one
+ * before `>`.
  */
-export const escapeDoenetml = (source: string): string =>
-  source.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+export const doenetmlCdata = (source: string): string =>
+  `<![CDATA[${source.replace(/\]\]>/g, "]]]]><![CDATA[>")}]]>`;
 
 const DOCINFO_DOENETML_VERSION_RE = /<doenetml\b[^>]*\bversion\s*=\s*(?:"([^"]*)"|'([^']*)')/;
 

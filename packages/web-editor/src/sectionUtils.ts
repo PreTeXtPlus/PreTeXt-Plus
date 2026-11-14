@@ -21,7 +21,7 @@ import type {
 import { derivePretextContent } from "./contentConversion";
 import { resolveAssetRef } from "./assetTransforms";
 import { escapeAttribute, escapeText, unescapeAttribute } from "./xmlUtils";
-import { DEFAULT_DOENETML_VERSION, docinfoHasDoenetml, escapeDoenetml } from "./doenet";
+import { DEFAULT_DOENETML_VERSION, docinfoHasDoenetml, doenetmlCdata } from "./doenet";
 import { DEFAULT_LATEX_IMAGE_PREAMBLE } from "./generators/tikz/document";
 
 // ---------------------------------------------------------------------------
@@ -3395,8 +3395,8 @@ function attributePairs(ref: string, attrs: Record<string, string> | undefined):
 /**
  * A Doenet activity as PreTeXt: `<interactive platform="doenetml">` with the
  * record's `attrs` (its width and aspect) and a `<slate surface="doenetml">`
- * holding the DoenetML as XML text, which PreTeXt writes raw into the page's
- * `<script type="text/doenetml">`. Under a wrapper tag the wrapper carries the
+ * holding the DoenetML verbatim in a CDATA section, which PreTeXt writes raw
+ * into the page's `<script type="text/doenetml">`. Under a wrapper tag the wrapper carries the
  * record's ref and title and the interactive is named `<ref>-doenet` (a
  * PreTeXt build names its page after that id); placed bare, the interactive
  * itself is the ref. See `docs/doenet-plan.md`, Decisions 2–4.
@@ -3406,7 +3406,7 @@ function wrapDoenetActivity(exercise: Exercise, tag: ExercisePlacementTag): stri
   const attrs = attributePairs(interactiveRef, { platform: "doenetml", ...(exercise.attrs ?? {}) });
   const interactive =
     `<interactive${attrs}>\n` +
-    `<slate surface="doenetml">${escapeDoenetml(exercise.source.trim())}</slate>\n` +
+    `<slate surface="doenetml">${doenetmlCdata(exercise.source.trim())}</slate>\n` +
     `</interactive>`;
   if (tag === "interactive") return interactive;
   const title = exercise.title?.trim() ? `<title>${exercise.title.trim()}</title>\n` : "";
@@ -3428,6 +3428,10 @@ function resolveExerciseRef(
   const exercise = pools.exercises.find((e) => e.ref === ref);
   if (!exercise) return `<!-- missing exercise: ${ref} -->`;
   if (ancestors.has(ref)) return `<!-- circular reference: ${ref} -->`;
+
+  // A Doenet activity's source is DoenetML sitting verbatim in a CDATA
+  // section: nothing in it is a placeholder, whatever it looks like.
+  if (exercise.sourceFormat === "doenetml") return wrapExerciseSource(exercise, tag);
 
   const nextAncestors = new Set(ancestors).add(ref);
   return expandRefs(wrapExerciseSource(exercise, tag), pools, nextAncestors);
