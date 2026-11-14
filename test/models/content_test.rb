@@ -569,11 +569,18 @@ class ContentTest < ActiveSupport::TestCase
 
   # ---- exercises -----------------------------------------------------------
 
-  test "an exercise's source is always PreTeXt" do
+  test "an exercise's source is PreTeXt or DoenetML, never a prose format" do
     assert projects(:one).exercises.build(ref: "quiz", source: "<statement><p>Q</p></statement>").valid?
+    assert projects(:one).exercises.build(ref: "drag", source_format: :doenetml, source: "<p>Hi</p>").valid?
 
     exercise = projects(:one).exercises.build(ref: "quiz", source_format: :latex)
     assert_not exercise.valid?
     assert exercise.errors[:source_format].any?
+  end
+
+  test "only an exercise may be DoenetML" do
+    assert_not projects(:one).divisions.build(ref: "d", division_type: "section", source_format: :doenetml).valid?
+    assert_not projects(:one).snippets.build(ref: "s", source_format: :doenetml).valid?
+    assert_not projects(:one).assets.build(ref: "a", kind: :authored_asset, source_format: :doenetml).valid?
   end
 end

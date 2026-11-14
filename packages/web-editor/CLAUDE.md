@@ -369,6 +369,51 @@ build input.
   (the sha256 of the render input the stored preview was built from); bytes
   stay with the host.
 
+### Doenet activities (`src/doenet/`, `DoenetEditorPane.tsx`)
+
+An exercise record whose `sourceFormat` is `"doenetml"` (`ExerciseSourceFormat`;
+absent means `"pretext"`, so every older record and collab entry reads as before)
+holds DoenetML in `source`, and its `attrs` are the `<interactive>`'s (`width`,
+`aspect`), not an `<exercise>`'s. See `docs/doenet-plan.md`.
+
+- **Placement names the wrapper.** `EXERCISE_PLACEMENT_TAGS`: `<plus:exercise>`,
+  `<plus:project>`/`activity`/`exploration`/`investigation` wrap the activity in
+  that element; `<plus:interactive>` emits the bare `<interactive>` (for a figure,
+  or a `<task>` the author writes). `parseExerciseRefs`/`renameExerciseRef`/
+  `removeExerciseRef` and `parsePlacements` see every tag; `expandRefs` dispatches
+  them before its division fallback, which would otherwise read `plus:project` as
+  a division. A designer exercise resolves only under `exercise` (a comment
+  otherwise). `exerciseEmbedCode(ref, format, tag)` writes the three syntaxes;
+  `ExerciseSettings` offers the tag in a "Place as" picker, with width and aspect.
+- **Assembly** (`wrapExerciseSource(exercise, tag)`): `<interactive platform="doenetml">`
+  named `<ref>-doenet` under a wrapper (the ref itself when bare), with a
+  `<slate surface="doenetml">` holding the source with exactly `&`, `<`, `>`
+  escaped — PreTeXt writes it back raw into the page's `<script type="text/doenetml">`.
+  `slate` is in `OPAQUE_ELEMENTS`. `wrapInPretextDocument` adds
+  `<doenetml version="DEFAULT_DOENETML_VERSION"/>` to the docinfo whenever the body
+  has a DoenetML interactive and the docinfo names none, so a build never runs
+  `@latest`; the editor frame loads the same version (`effectiveDoenetmlVersion`).
+- **Editing** is Doenet's own editor in a sandboxed iframe (`allow-scripts` only,
+  never widened: a collaborator's DoenetML runs there), shown in place of the code
+  editor as the designer is. `doenet/editorPage.ts` builds the page (the standalone
+  package from jsdelivr at the document's version) and its `postMessage` bridge:
+  ready, change (Doenet's debounced callback), set (an outside change, applied by
+  re-creating the editor, since its `doenetML` prop is initial only). The pane
+  accepts only messages from its own frame's window, and sends a set only for a
+  source the frame did not itself report. Edits reach the project through
+  `applyRecordSourceChange` (working copy, collab `diffReplace`, autosave), never
+  the designer's per-edit `onExerciseUpdate`. While an activity is open the
+  preview panel is withdrawn in both layouts (`isDoenetOpen` in `Editors`) —
+  Doenet's editor has its own viewer — and the editor pane takes the width. The
+  frame's light/dark mode is the host's `previewTheme`, light by default (Doenet's
+  `ThemeSetting` has the same values; its editor would otherwise follow the
+  browser). A placed activity still previews from its division: pretext-html
+  0.20.0 returns the interactive's page and `iframePages.ts` frames it — Doenet's
+  viewer runs in that sandbox (measured).
+- `NewExerciseForm`'s type picker has "Doenet activity" (`DOENET_STARTER`,
+  `DOENET_DEFAULT_ATTRS`); Insert → Interactives & Media has a DoenetML activity
+  typed in place. `__tests__/doenet.test.ts` runs every wrapper through the schema.
+
 ### Collaboration (`src/collab/`)
 
 Optional real-time co-editing via Yjs, activated by passing a `collaboration` prop (`{ doc, awareness, user }`) to `Editors`. The **host owns the transport** — it creates, seeds (`seedDocFromState`), and syncs the `Y.Doc` with its server; the editor only binds to it. `yjs` and `y-protocols` are **peer dependencies** so host and editor share one instance.

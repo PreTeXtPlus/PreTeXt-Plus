@@ -72,7 +72,17 @@ export function placementUses(records: readonly PlacementSourceRecord[]): Placem
 }
 
 const INSTANCE_NAME = /^[A-Za-z0-9_-]+$/;
-const KIND_NAME: Record<PlacementTag, string> = { image: "image", snippet: "snippet", exercise: "exercise" };
+/** How a placement's record is named in messages: every exercise placement tag places an exercise. */
+const KIND_NAME: Record<PlacementTag, string> = {
+  image: "image",
+  snippet: "snippet",
+  exercise: "exercise",
+  project: "exercise",
+  activity: "exercise",
+  exploration: "exercise",
+  investigation: "exercise",
+  interactive: "exercise",
+};
 
 /** An instance name for a placement of `tag`/`ref` that nothing else uses. */
 function suggestInstance(

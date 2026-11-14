@@ -206,8 +206,9 @@ the page. Either shrinks Phase 1 to a few lines. Nothing here waits on it.
   else turns out to need same-origin access to its own frames) can run with
   `allow-same-origin` and still reach nothing of the app's. Could be the `pub`-style
   origin of `docs/build-targets.md`.
-- Do Sage cells and DoenetML survive `sandbox="allow-scripts"`? JavaScript does;
-  GeoGebra does not.
+- Do Sage cells survive `sandbox="allow-scripts"`? JavaScript does; GeoGebra does
+  not. **DoenetML does** (measured 2026-11-14, viewer and editor both; see
+  `docs/doenet-plan.md`).
 - Do the interactives' iframes resolve in the server-rendered fallback preview?
 
 ## Order

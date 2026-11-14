@@ -110,6 +110,8 @@ import { buildProjectAssetView, makeUniqueAssetRef } from "../assetView";
 import { assetWrapperLines } from "../assetTransforms";
 import { buildProjectSnippetView, makeUniqueSnippetRef } from "../snippetView";
 import ExerciseDesigner, { type ExerciseSourceValue } from "../exerciseDesigner/ExerciseDesigner";
+import DoenetEditorPane from "./DoenetEditorPane";
+import { effectiveDoenetmlVersion } from "../doenet";
 import { newRecordId } from "../recordId";
 import type { ConversionShare, ImportEngine } from "@pretextbook/import/react";
 import { takenImportIds } from "../importConvert";
@@ -2434,12 +2436,15 @@ const EditorsInner = (props: EditorsInnerProps) => {
   );
 
   // An exercise previews the same way: placed on its own in a plain article
-  // (see `assembleExercisePreviewSource`).
+  // (see `assembleExercisePreviewSource`). Not a Doenet activity, though:
+  // Doenet's editor shows its own viewer, and the preview panel is withdrawn
+  // while one is open (see the layout below).
   const activeExercise =
     editorTarget?.kind === "exercise" ? editorTarget.exercise : null;
+  const isDoenetOpen = activeExercise?.sourceFormat === "doenetml";
   const exercisePreviewContent = useMemo(
     () =>
-      showLivePreview && activeExercise
+      showLivePreview && activeExercise && !isDoenetOpen
         ? assembleExercisePreviewSource(
             activeExercise.ref,
             {
@@ -2455,6 +2460,7 @@ const EditorsInner = (props: EditorsInnerProps) => {
     [
       showLivePreview,
       activeExercise,
+      isDoenetOpen,
       divisions,
       projectSnippets,
       projectAssets,
@@ -2787,18 +2793,29 @@ const EditorsInner = (props: EditorsInnerProps) => {
           onSaveAsset={(asset, prevRef) => saveRecord("asset", asset, prevRef)}
           canReplaceAsset={canReplaceAsset}
         />
-        {/* An exercise is edited in the designer, not as text. The code
-            editor stays mounted (hidden) beneath it, as under a creation
-            form, so returning to a division finds its buffer intact. */}
-        {activeExercise && (
-          <ExerciseDesigner
-            key={editorKey}
-            exerciseRef={activeExercise.ref}
-            value={{ source: activeExercise.source, attrs: activeExercise.attrs ?? {} }}
-            onChange={(next) => applyExerciseDesignChange(activeExercise.ref, next)}
-            readOnly={props.readOnly}
-          />
-        )}
+        {/* An exercise is edited in the designer, not as text — or, for a
+            Doenet activity, in Doenet's own editor. The code editor stays
+            mounted (hidden) beneath it, as under a creation form, so
+            returning to a division finds its buffer intact. */}
+        {activeExercise &&
+          (activeExercise.sourceFormat === "doenetml" ? (
+            <DoenetEditorPane
+              key={editorKey}
+              source={activeExercise.source}
+              version={effectiveDoenetmlVersion(effectiveDocinfo ?? "")}
+              onChange={(source) => applyRecordSourceChange("exercise", activeExercise.ref, source)}
+              readOnly={props.readOnly}
+              theme={props.previewTheme ?? "light"}
+            />
+          ) : (
+            <ExerciseDesigner
+              key={editorKey}
+              exerciseRef={activeExercise.ref}
+              value={{ source: activeExercise.source, attrs: activeExercise.attrs ?? {} }}
+              onChange={(next) => applyExerciseDesignChange(activeExercise.ref, next)}
+              readOnly={props.readOnly}
+            />
+          ))}
         <div className={clsx("flex flex-col flex-1 min-h-0 relative", activeExercise && "hidden")}>
           {codeEditor}
         </div>
@@ -2932,7 +2949,18 @@ const EditorsInner = (props: EditorsInnerProps) => {
   const tabPanelId = "pretext-plus-tabpanel";
 
   let editorDisplays: ReactNode;
-  if (isNarrowScreen) {
+  if (isDoenetOpen) {
+    // A Doenet activity is edited in Doenet's editor, which has a viewer of
+    // its own; a second rendering of it in the preview panel would only
+    // compete with that one, so the panel is withdrawn and the editor pane
+    // takes the width, in both layouts.
+    editorDisplays = (
+      <div className="h-full w-full flex flex-row overflow-hidden isolate" data-testid="doenet-layout">
+        {explorerSidebar}
+        <div className="flex flex-col flex-1 min-w-0 h-full relative z-[1]">{editorPane}</div>
+      </div>
+    );
+  } else if (isNarrowScreen) {
     // `isolate` keeps every z-index in the workspace (the editor title bar and
     // drawer, the preview's overlays) below TopBar's open menus.
     editorDisplays = (

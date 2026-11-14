@@ -1,16 +1,35 @@
+import { useState } from "react";
+import clsx from "clsx";
 import type { Exercise, SourceFormat } from "../../types/editor";
-import { exerciseEmbedCode, sanitizeXmlId } from "../../sectionUtils";
+import {
+  EXERCISE_PLACEMENT_TAGS,
+  exerciseEmbedCode,
+  sanitizeXmlId,
+  type ExercisePlacementTag,
+} from "../../sectionUtils";
+import { effectiveDoenetmlVersion } from "../../doenet";
 import { buildProjectExerciseView } from "../../exerciseView";
 import { useEditorStore, useTakenRefs } from "../../store/hooks";
 import { ID_REQUIRED_MESSAGE, idTakenMessage } from "../../idRules";
 import {
   CommitField,
   EmbedCode,
+  FIELD_CONTROL_CLASSES,
   SettingsActions,
   SettingsField,
   SettingsNote,
   type SettingsAction,
 } from "./settingsUi";
+
+/** How each placement tag is offered in the embed-code picker of a Doenet activity. */
+const PLACEMENT_LABELS: Record<ExercisePlacementTag, string> = {
+  exercise: "Exercise",
+  project: "Project",
+  activity: "Activity",
+  exploration: "Exploration",
+  investigation: "Investigation",
+  interactive: "Interactive only (no wrapper)",
+};
 
 export interface ExerciseSettingsProps {
   exercise: Exercise;
@@ -33,6 +52,10 @@ export interface ExerciseSettingsProps {
 const ExerciseSettings = ({ exercise, embedFormat, onSave, readOnly }: ExerciseSettingsProps) => {
   const divisions = useEditorStore((s) => s.divisions);
   const projectExercises = useEditorStore((s) => s.projectExercises) ?? [];
+  const docinfo = useEditorStore((s) => (s.useCommonDocinfo ? s.commonDocinfo : s.docinfo));
+  const isDoenet = exercise.sourceFormat === "doenetml";
+  // A Doenet activity's embed code names the PreTeXt it is wrapped in.
+  const [placementTag, setPlacementTag] = useState<ExercisePlacementTag>("exercise");
   const takenRefs = useTakenRefs();
   const removeExercise = useEditorStore((s) => s.removeExercise);
   const removeExerciseRefFromDocument = useEditorStore((s) => s.removeExerciseRefFromDocument);
@@ -58,6 +81,16 @@ const ExerciseSettings = ({ exercise, embedFormat, onSave, readOnly }: ExerciseS
       return idTakenMessage(ref);
     }
     await onSave({ ...exercise, ref }, exercise.ref);
+  };
+
+  /** A Doenet activity's `<interactive>` attribute (its width or aspect); blank removes it. */
+  const commitAttr = (name: string) => async (next: string): Promise<void> => {
+    const value = next.trim();
+    const attrs = { ...(exercise.attrs ?? {}) };
+    if ((attrs[name] ?? "") === value) return;
+    if (value) attrs[name] = value;
+    else delete attrs[name];
+    await onSave({ ...exercise, attrs }, exercise.ref);
   };
 
   const handleRemove = () => {
@@ -99,8 +132,55 @@ const ExerciseSettings = ({ exercise, embedFormat, onSave, readOnly }: ExerciseS
           mono
         />
       </SettingsField>
+      {isDoenet && (
+        <>
+          <SettingsField label="Width" htmlFor="exercise-settings-width">
+            <CommitField
+              id="exercise-settings-width"
+              placeholder="100%"
+              value={exercise.attrs?.width ?? ""}
+              onCommit={commitAttr("width")}
+              disabled={readOnly}
+              mono
+            />
+          </SettingsField>
+          <SettingsField label="Aspect" htmlFor="exercise-settings-aspect">
+            <CommitField
+              id="exercise-settings-aspect"
+              placeholder="4:3"
+              value={exercise.attrs?.aspect ?? ""}
+              onCommit={commitAttr("aspect")}
+              disabled={readOnly}
+              mono
+            />
+            <SettingsNote>
+              The frame's width and shape in the page, as PreTeXt's <code>width</code> and{" "}
+              <code>aspect</code>. DoenetML {effectiveDoenetmlVersion(docinfo ?? "")}
+              {docinfo && /<doenetml\b/.test(docinfo) ? ", from the docinfo." : ", the default."}
+            </SettingsNote>
+          </SettingsField>
+          <SettingsField label="Place as" htmlFor="exercise-settings-placement">
+            <select
+              id="exercise-settings-placement"
+              className={clsx(FIELD_CONTROL_CLASSES, "max-w-[260px]")}
+              value={placementTag}
+              onChange={(e) => setPlacementTag(e.target.value as ExercisePlacementTag)}
+            >
+              {EXERCISE_PLACEMENT_TAGS.map((tag) => (
+                <option key={tag} value={tag}>
+                  {PLACEMENT_LABELS[tag]}
+                </option>
+              ))}
+            </select>
+            <SettingsNote>
+              What surrounds the activity where it is placed. "Interactive only" fits a figure, or a
+              task inside an exercise you write yourself.
+            </SettingsNote>
+          </SettingsField>
+        </>
+      )}
       <EmbedCode
-        codeFor={(format) => exerciseEmbedCode(exercise.ref, format)}
+        codeFor={(format) => exerciseEmbedCode(exercise.ref, format, isDoenet ? placementTag : "exercise")}
         defaultFormat={embedFormat}
       />
       {!inDocument && (

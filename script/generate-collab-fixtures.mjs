@@ -136,6 +136,15 @@ seedDocFromState(records, {
       attrs: { language: "python" },
       source: "<statement><p>Order the lines.</p></statement>",
     },
+    // A Doenet activity: DoenetML in `source`, the <interactive>'s attributes in `attrs`.
+    {
+      id: "dddddddd-dddd-4ddd-8ddd-dddddddddddd",
+      ref: "projected-drag",
+      title: "A Projected Activity",
+      sourceFormat: "doenetml",
+      attrs: { width: "100%", aspect: "4:3" },
+      source: "<p>What is <m>2+2</m>? <answer>4</answer></p>",
+    },
   ],
   assets: [
     {

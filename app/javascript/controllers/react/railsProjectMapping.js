@@ -76,6 +76,7 @@ import {
  * @property {string} [ref]
  * @property {string} [title]
  * @property {string} [source]
+ * @property {string} [source_format] - "pretext" (a designer exercise) or "doenetml" (a Doenet activity).
  * @property {Object<string, string>} [attrs]
  */
 
@@ -303,6 +304,8 @@ export function railsExerciseToEditor(e) {
     title: e.title ?? "",
     source: e.source ?? "",
     attrs: e.attrs ?? {},
+    // "pretext" for a designer exercise, "doenetml" for a Doenet activity.
+    sourceFormat: e.source_format ?? "pretext",
   };
 }
 
@@ -319,6 +322,7 @@ export function toEditorExercise(rec) {
     title: rec.title,
     source: rec.source,
     attrs: rec.attrs,
+    sourceFormat: rec.sourceFormat,
   };
 }
 

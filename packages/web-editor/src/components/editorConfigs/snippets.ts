@@ -348,6 +348,9 @@ const CATALOG: SnippetSpec[] = [
     { key: "calcplot3d", label: "CalcPlot3D", detail: "A 3D plot drawn by CalcPlot3D." },
     { key: "youtube", label: "YouTube Video", detail: "A YouTube video, by the id in its address." },
     { key: "iframe", label: "Web Page", detail: "Another web page, shown in a frame." },
+    // Typed in place; an activity kept as a record of its own, edited in
+    // Doenet's editor, is created from New Exercise… instead.
+    { key: "doenetml", label: "DoenetML Activity", detail: "An activity written in DoenetML, right here." },
   ]),
 ];
 
@@ -669,6 +672,14 @@ const PRETEXT_BODIES: Record<string, string> = {
   youtube: '<video youtube="${1:video-id}" xml:id="${2:video-name}" width="80%"/>',
   iframe:
     '<interactive iframe="${1:https://example.org/}" xml:id="${2:interactive-name}" width="80%" aspect="4:3"/>',
+  // The slate's text is DoenetML, so its tags are escaped as in any XML text.
+  doenetml: lines(
+    '<interactive platform="doenetml" xml:id="${1:interactive-name}" width="100%" aspect="4:3">',
+    '\t<slate surface="doenetml">',
+    "\t\t&lt;p&gt;What is &lt;m&gt;2 + 2&lt;/m&gt;? &lt;answer&gt;${2:4}&lt;/answer&gt;&lt;/p&gt;",
+    "\t</slate>",
+    "</interactive>",
+  ),
   myopenmath: lines(
     '<exercise label="${2:exercise-name}">',
     '\t<myopenmath problem="${1:problem-number}"/>',

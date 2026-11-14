@@ -615,6 +615,24 @@ class ProjectsControllerTest < ActionDispatch::IntegrationTest
     assert_not Content.exists?(exercise.id)
   end
 
+  test "update creates a Doenet activity, whose format the JSON carries" do
+    patch project_url(@project),
+      params: { project: { exercises_attributes: [ {
+        ref: "drag", title: "Drag it", source: "<p>What is <m>2+2</m>? <answer>4</answer></p>",
+        source_format: "doenetml", attrs: { width: "100%", aspect: "4:3" }
+      } ] } },
+      as: :json
+
+    assert_response :success
+    exercise = @project.exercises.find_by!(ref: "drag")
+    assert exercise.doenetml_source_format?
+    json = response.parsed_body["exercises"].find { |e| e["ref"] == "drag" }
+    assert_equal "doenetml", json["source_format"]
+    assert_equal "4:3", json["attrs"]["aspect"]
+    # A designer exercise reads as PreTeXt, as every record stored before the field did.
+    assert_equal "pretext", response.parsed_body["exercises"].find { |e| e["ref"] != "drag" }&.dig("source_format") || "pretext"
+  end
+
   # --- Visibility ---
 
   test "update changes project visibility via a plain HTML form post" do

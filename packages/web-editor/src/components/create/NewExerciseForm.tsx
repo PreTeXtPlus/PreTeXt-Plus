@@ -12,6 +12,7 @@ import {
   type ExerciseKind,
 } from "../../exerciseDesigner/model";
 import { sourceFromDesign } from "../../exerciseDesigner/serialize";
+import { DOENET_DEFAULT_ATTRS, DOENET_STARTER } from "../../doenet";
 import {
   FIELD_CONTROL_CLASSES,
   SettingsButton,
@@ -45,6 +46,21 @@ function localExerciseId(): string {
 }
 
 /**
+ * What the type picker offers: a designer exercise type, or a Doenet activity
+ * — a record of a different `sourceFormat`, edited in Doenet's editor rather
+ * than the designer (see `src/doenet/`).
+ */
+type NewExerciseType = ExerciseKind | "doenetml";
+
+/** The record a new exercise of `type` starts as, before its ref and title. */
+function newExerciseRecord(type: NewExerciseType, ref: string): Omit<Exercise, "ref"> {
+  if (type === "doenetml") {
+    return { sourceFormat: "doenetml", source: DOENET_STARTER, attrs: { ...DOENET_DEFAULT_ATTRS } };
+  }
+  return sourceFromDesign(emptyDesign(type), ref);
+}
+
+/**
  * The creation form for a project exercise: its title (optional), reference
  * id and type. The new exercise is a blank one of that type, filled in
  * afterwards in the exercise designer it opens in.
@@ -64,7 +80,7 @@ const NewExerciseForm = ({
   const [editedRef, setEditedRef] = useState<string | null>(resolveRef ?? null);
   const ref =
     editedRef ?? (title.trim() ? uniqueRef(slugifyTitle(title) || "exercise", takenRefs) : "");
-  const [kind, setKind] = useState<ExerciseKind>("multiplechoice");
+  const [kind, setKind] = useState<NewExerciseType>("multiplechoice");
   const [error, setError] = useState<string | null>(null);
   const [isCreating, setIsCreating] = useState(false);
   const fieldId = useId();
@@ -88,7 +104,7 @@ const NewExerciseForm = ({
     const exercise: Exercise = {
       ref: sanitized,
       title: title.trim(),
-      ...sourceFromDesign(emptyDesign(kind), sanitized),
+      ...newExerciseRecord(kind, sanitized),
     };
     if (!onCreate) {
       onCreated({ id: localExerciseId(), ...exercise });
@@ -147,7 +163,7 @@ const NewExerciseForm = ({
           id={`${fieldId}-kind`}
           className={clsx(FIELD_CONTROL_CLASSES, "max-w-[200px]")}
           value={kind}
-          onChange={(e) => setKind(e.target.value as ExerciseKind)}
+          onChange={(e) => setKind(e.target.value as NewExerciseType)}
           disabled={isCreating}
         >
           {EXERCISE_KINDS.filter((k) => !HIDDEN_EXERCISE_KINDS.includes(k)).map((k) => (
@@ -155,8 +171,13 @@ const NewExerciseForm = ({
               {EXERCISE_KIND_LABELS[k]}
             </option>
           ))}
+          <option value="doenetml">Doenet activity</option>
         </select>
-        <SettingsNote>You can change the type later in the designer.</SettingsNote>
+        <SettingsNote>
+          {kind === "doenetml"
+            ? "Written in DoenetML, in Doenet's editor. It can be placed as an exercise, a project or a bare interactive."
+            : "You can change the type later in the designer."}
+        </SettingsNote>
       </SettingsField>
       {error && (
         <div role="alert">
