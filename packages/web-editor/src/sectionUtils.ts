@@ -19,7 +19,7 @@ import type {
   RootDivisionType,
 } from "./types/sections";
 import { derivePretextContent } from "./contentConversion";
-import { resolveAssetRef } from "./assetTransforms";
+import { resolveAssetRef, type GeneratedSourceIncluder } from "./assetTransforms";
 import { escapeAttribute, escapeText, unescapeAttribute } from "./xmlUtils";
 import { DEFAULT_DOENETML_VERSION, docinfoHasDoenetml, doenetmlCdata } from "./doenet";
 import { DEFAULT_LATEX_IMAGE_PREAMBLE } from "./generators/tikz/document";
@@ -3285,6 +3285,7 @@ function expandRefs(
   xml: string,
   pools: RecordPools,
   ancestors: Set<string>,
+  sink?: SourceFileSink,
 ): string {
   return xml.replace(
     /<plus:([a-z-]+)\s([^>]*ref="[^"]+"[^>]*?)(?:\/>|>\s*<\/plus:\1>)/g,
@@ -3292,17 +3293,25 @@ function expandRefs(
       const ref = /ref="([^"]+)"/.exec(attrs)?.[1] ?? "";
       // The exercise tags come before the division fallback, which takes any
       // tag it is handed as a division placeholder.
+      const instance = placeholderInstance(attrs);
+      // A placement that names its instance has every identifier beneath it
+      // rewritten, which cannot reach into a file included from there: below
+      // it, divisions stay inline and the placement is one file (or none).
+      const inner = sink && instance ? { ...sink, divisions: false } : sink;
+      const isDivision = tag !== "image" && tag !== "snippet" && !isExercisePlacementTag(tag);
       const resolved =
         tag === "image"
-          ? resolveAssetRef(ref, pools.assets)
+          ? resolveAssetRef(ref, pools.assets, sink && generatedSourceIncluder(sink))
           : tag === "snippet"
-            ? resolveSnippetRef(ref, pools, ancestors)
+            ? resolveSnippetRef(ref, pools, ancestors, inner)
             : isExercisePlacementTag(tag)
-              ? resolveExerciseRef(ref, pools, ancestors, tag)
-              : resolveDivisionXml(ref, pools, ancestors);
-      const instance = placeholderInstance(attrs);
+              ? resolveExerciseRef(ref, pools, ancestors, tag, inner)
+              : resolveDivisionXml(ref, pools, ancestors, inner);
       const placed = instance ? qualifyIdentifiers(resolved, instance) : resolved;
-      return applyPlaceholderAttrs(placed, parsePlaceholderAttrs(attrs));
+      const finished = applyPlaceholderAttrs(placed, parsePlaceholderAttrs(attrs));
+      return sink?.divisions && isDivision
+        ? includeDivisionFile(sink, ref, instance, finished)
+        : finished;
     },
   );
 }
@@ -3326,6 +3335,7 @@ function resolveDivisionXml(
   xmlId: string,
   pools: RecordPools,
   ancestors: Set<string>,
+  sink?: SourceFileSink,
 ): string {
   const division = pools.divisions.find((d) => d.xmlId === xmlId);
   if (!division) return `<!-- missing division: ${xmlId} -->`;
@@ -3333,7 +3343,7 @@ function resolveDivisionXml(
 
   const xml = divisionToPretext(division);
   const nextAncestors = new Set(ancestors).add(xmlId);
-  return expandRefs(xml, pools, nextAncestors);
+  return expandRefs(xml, pools, nextAncestors, sink);
 }
 
 /**
@@ -3350,6 +3360,7 @@ function resolveSnippetRef(
   ref: string,
   pools: RecordPools,
   ancestors: Set<string>,
+  sink?: SourceFileSink,
 ): string {
   const snippet = pools.snippets.find((s) => s.ref === ref);
   if (!snippet) return `<!-- missing snippet: ${ref} -->`;
@@ -3361,7 +3372,7 @@ function resolveSnippetRef(
   );
   const xml = pretextSource ?? `<!-- conversion error: ${pretextError} -->`;
   const nextAncestors = new Set(ancestors).add(ref);
-  return expandRefs(xml, pools, nextAncestors);
+  return expandRefs(xml, pools, nextAncestors, sink);
 }
 
 /**
@@ -3373,8 +3384,9 @@ function resolveSnippetRef(
 export function wrapExerciseSource(
   exercise: Exercise,
   tag: ExercisePlacementTag = "exercise",
+  slateContent?: string,
 ): string {
-  if (exercise.sourceFormat === "doenetml") return wrapDoenetActivity(exercise, tag);
+  if (exercise.sourceFormat === "doenetml") return wrapDoenetActivity(exercise, tag, slateContent);
   if (tag !== "exercise") {
     return `<!-- ${exercise.ref} is not a Doenet activity: place it with <plus:exercise ref="${exercise.ref}"/> -->`;
   }
@@ -3400,13 +3412,20 @@ function attributePairs(ref: string, attrs: Record<string, string> | undefined):
  * record's ref and title and the interactive is named `<ref>-doenet` (a
  * PreTeXt build names its page after that id); placed bare, the interactive
  * itself is the ref. See `docs/doenet-plan.md`, Decisions 2–4.
+ *
+ * `slateContent` replaces the CDATA section with something that stands for the
+ * same text — the `<xi:include parse="text"/>` a multi-file project uses.
  */
-function wrapDoenetActivity(exercise: Exercise, tag: ExercisePlacementTag): string {
+function wrapDoenetActivity(
+  exercise: Exercise,
+  tag: ExercisePlacementTag,
+  slateContent: string = doenetmlCdata(exercise.source.trim()),
+): string {
   const interactiveRef = tag === "interactive" ? exercise.ref : `${exercise.ref}-doenet`;
   const attrs = attributePairs(interactiveRef, { platform: "doenetml", ...(exercise.attrs ?? {}) });
   const interactive =
     `<interactive${attrs}>\n` +
-    `<slate surface="doenetml">${doenetmlCdata(exercise.source.trim())}</slate>\n` +
+    `<slate surface="doenetml">${slateContent}</slate>\n` +
     `</interactive>`;
   if (tag === "interactive") return interactive;
   const title = exercise.title?.trim() ? `<title>${exercise.title.trim()}</title>\n` : "";
@@ -3424,6 +3443,7 @@ function resolveExerciseRef(
   pools: RecordPools,
   ancestors: Set<string>,
   tag: ExercisePlacementTag = "exercise",
+  sink?: SourceFileSink,
 ): string {
   const exercise = pools.exercises.find((e) => e.ref === ref);
   if (!exercise) return `<!-- missing exercise: ${ref} -->`;
@@ -3431,10 +3451,12 @@ function resolveExerciseRef(
 
   // A Doenet activity's source is DoenetML sitting verbatim in a CDATA
   // section: nothing in it is a placeholder, whatever it looks like.
-  if (exercise.sourceFormat === "doenetml") return wrapExerciseSource(exercise, tag);
+  if (exercise.sourceFormat === "doenetml") {
+    return wrapExerciseSource(exercise, tag, sink && includeDoenetFile(sink, exercise));
+  }
 
   const nextAncestors = new Set(ancestors).add(ref);
-  return expandRefs(wrapExerciseSource(exercise, tag), pools, nextAncestors);
+  return expandRefs(wrapExerciseSource(exercise, tag), pools, nextAncestors, sink);
 }
 
 /**
@@ -3550,7 +3572,37 @@ const DOENETML_USE_RE = /<interactive\b[^>]*\bplatform\s*=\s*["']doenetml["']/;
  */
 function withDefaultDoenetmlVersion(docinfo: string, body: string): string {
   if (!DOENETML_USE_RE.test(body) || docinfoHasDoenetml(docinfo)) return docinfo;
-  const element = `<doenetml version="${DEFAULT_DOENETML_VERSION}"/>`;
+  return appendToDocinfo(docinfo, `<doenetml version="${DEFAULT_DOENETML_VERSION}"/>`);
+}
+
+/**
+ * `docinfo` declaring `directory` as the project's external directory —
+ * `<directories external="…"/>`, where PreTeXt has read it from since
+ * 2026-07-30 (the publication file's `source/directories/@external` is
+ * deprecated). The path is relative to the main source file.
+ *
+ * For a host that decides where uploaded files sit beside the source it hands
+ * a build, which is why this is not part of assembly: the layout is the
+ * host's. Its value replaces one already there, since the host's archive is
+ * what the directory has to match; a `@data` beside it is kept.
+ */
+export function withExternalDirectory(docinfo: string, directory: string): string {
+  const existing = /<directories\b[^>]*>/.exec(docinfo);
+  if (!existing) {
+    return appendToDocinfo(docinfo.trim(), `<directories external="${escapeAttribute(directory)}"/>`);
+  }
+  const startTag = setAttributes(existing[0], existing[0].endsWith("/>"), [
+    { name: "external", value: directory },
+  ]);
+  return docinfo.slice(0, existing.index) + startTag + docinfo.slice(existing.index + existing[0].length);
+}
+
+/**
+ * `docinfo` with `element` as its last child: a splice, so the author's text
+ * passes through otherwise unchanged. An empty docinfo becomes one holding
+ * only `element`; one the scanner cannot read is returned as it came.
+ */
+function appendToDocinfo(docinfo: string, element: string): string {
   if (!docinfo.trim()) return `<docinfo>\n  ${element}\n</docinfo>`;
   const root = nextTag(docinfo, 0);
   if (!root || root.closing || root.name !== "docinfo") return docinfo;
@@ -3565,6 +3617,14 @@ function withDefaultDoenetmlVersion(docinfo: string, body: string): string {
 }
 
 /**
+ * The docinfo a build is handed: the author's, with the default latex-image
+ * preamble and — when `body` uses DoenetML — a DoenetML version spliced in.
+ */
+function effectiveDocinfoXml(docinfo: string, body: string): string {
+  return withDefaultDoenetmlVersion(withDefaultLatexImagePreamble(docinfo.trim()), body);
+}
+
+/**
  * Wrap a resolved document body in the outer `<pretext>` element with
  * `<docinfo>` inserted as its sibling, matching real PreTeXt document shape.
  * The docinfo always carries {@link DEFAULT_LATEX_IMAGE_PREAMBLE}, so every
@@ -3575,7 +3635,7 @@ function withDefaultDoenetmlVersion(docinfo: string, body: string): string {
  * `@xml:lang` on the root `<pretext>` element.
  */
 function wrapInPretextDocument(body: string, docinfo: string, lang?: string): string {
-  const docinfoBlock = `${withDefaultDoenetmlVersion(withDefaultLatexImagePreamble(docinfo.trim()), body)}\n`;
+  const docinfoBlock = `${effectiveDocinfoXml(docinfo, body)}\n`;
   const langAttr = lang ? ` xml:lang="${lang}"` : "";
   return ensureRootLabel(`<pretext${langAttr}>\n${docinfoBlock}${body}\n</pretext>`);
 }
@@ -3605,6 +3665,201 @@ export function assembleFullProjectSource(
 ): string {
   const body = resolveDivisionXml(rootXmlId, { divisions, snippets, assets, exercises }, new Set());
   return wrapInPretextDocument(body, docinfo, lang);
+}
+
+// ---------------------------------------------------------------------------
+// Multi-file assembly: the same document, as a project to edit by hand
+// ---------------------------------------------------------------------------
+
+/** The XInclude namespace, declared as `xi` on every file that includes another. */
+export const XINCLUDE_NAMESPACE = "http://www.w3.org/2001/XInclude";
+
+/** Where the root file and the docinfo go; a division is never given either name. */
+export const MAIN_SOURCE_FILE = "main.ptx";
+export const DOCINFO_SOURCE_FILE = "docinfo.ptx";
+
+/** The directory (beside the main file) holding one `.doenet` file per activity. */
+export const DOENET_SOURCE_DIR = "doenet";
+
+const XML_FILE_DECLARATION = `<?xml version="1.0" encoding="UTF-8"?>\n`;
+
+/** One file of a multi-file project; `path` is relative to the source directory. */
+export interface SourceFile {
+  path: string;
+  content: string;
+}
+
+/**
+ * Where multi-file assembly collects the files it cuts out of the document.
+ * `divisions` is false beneath a placement that names an `instance`, where a
+ * division must stay inline (see {@link expandRefs}); Doenet and generator
+ * source files are written either way, since nothing inside a slate or a
+ * generator's element is ever qualified.
+ */
+interface SourceFileSink {
+  files: Map<string, string>;
+  divisions: boolean;
+}
+
+/**
+ * True when `xml` is exactly one element, with nothing beside it but
+ * whitespace and comments — what a file must be for `<xi:include>` to parse it.
+ * A resolution failure (a bare comment) and a snippet-like run of siblings
+ * both fail this and stay inline.
+ */
+function isSoleElement(xml: string): boolean {
+  const first = nextTag(xml, 0);
+  if (!first || first.closing) return false;
+  const end = first.selfClosing ? first.close : matchingCloseTag(xml, first.close)?.close;
+  if (end === undefined) return false;
+  const outside = xml.slice(0, first.open) + xml.slice(end);
+  return outside.replace(XML_COMMENT_RE, "").trim() === "";
+}
+
+/** `xml` as a file of its own: declared, and with `xmlns:xi` on its element if it includes anything. */
+function asSourceFile(xml: string): string {
+  const body = xml.trim();
+  const root = nextTag(body, 0);
+  if (!root || !body.includes("<xi:include")) return `${XML_FILE_DECLARATION}${body}\n`;
+  const startTag = setAttributes(body.slice(root.open, root.close), root.selfClosing, [
+    { name: "xmlns:xi", value: XINCLUDE_NAMESPACE },
+  ]);
+  return `${XML_FILE_DECLARATION}${body.slice(0, root.open)}${startTag}${body.slice(root.close)}\n`;
+}
+
+/**
+ * Write `content` at `path` unless a different file is already there. Returns
+ * whether `path` now holds `content` — false means the caller keeps it inline.
+ */
+function writeSourceFile(sink: SourceFileSink, path: string, content: string): boolean {
+  const existing = sink.files.get(path);
+  if (existing !== undefined) return existing === content;
+  sink.files.set(path, content);
+  return true;
+}
+
+/**
+ * Put one resolved division placement in a file of its own and return the
+ * `<xi:include>` that stands for it — or the markup unchanged when it cannot
+ * be a file: a resolution failure, a ref that is no filename, or a name
+ * another, different, placement already took.
+ *
+ * The file is the *placement*, not the record: the placeholder's attributes
+ * (`@component`) are already on the element, and a placement with an
+ * `instance` — qualified identifiers and all — is `<ref>-<instance>.ptx`.
+ * Files sit flat beside the main file, which refs being unique project-wide
+ * allows, so an href is the same from wherever it is written.
+ */
+function includeDivisionFile(
+  sink: SourceFileSink,
+  ref: string,
+  instance: string | undefined,
+  xml: string,
+): string {
+  const name = instance ? qualifiedIdentifier(ref, instance) : ref;
+  if (!isValidRef(name) || !isSoleElement(xml)) return xml;
+  const reserved = name === "main" || name === "docinfo";
+  const path = `${reserved ? `${name}-division` : name}.ptx`;
+  return writeSourceFile(sink, path, asSourceFile(xml)) ? `<xi:include href="${path}"/>` : xml;
+}
+
+/**
+ * Put a Doenet activity's DoenetML in `doenet/<ref>.doenet`, exactly as typed,
+ * and return the `<xi:include parse="text"/>` that reads it back as the
+ * slate's text — the form PreTeXt's own documentation recommends, and a file
+ * Doenet's tools open as it stands. Undefined (so the caller writes CDATA)
+ * when the ref is no filename.
+ */
+function includeDoenetFile(sink: SourceFileSink, exercise: Exercise): string | undefined {
+  if (!isValidRef(exercise.ref)) return undefined;
+  const path = `${DOENET_SOURCE_DIR}/${exercise.ref}.doenet`;
+  return writeSourceFile(sink, path, exercise.source.trim())
+    ? `<xi:include href="${path}" parse="text"/>`
+    : undefined;
+}
+
+/**
+ * Put a generated asset's source in `<generator>/<ref>.<ext>` and return the
+ * `<xi:include>` that goes inside the generator's element in its place. A text
+ * source (TikZ, Asymptote, Sage) is the buffer as typed, with none of the
+ * entities the document's copy needs; an XML source (PreFigure) becomes a
+ * document of its own, which it can only be as a single element — anything
+ * else stays inline. Every placement of the asset includes the one file: an
+ * `instance` renames the wrapper's `@label`, never what is inside it.
+ */
+function generatedSourceIncluder(sink: SourceFileSink): GeneratedSourceIncluder {
+  return (generator, ref, source) => {
+    if (!isValidRef(ref)) return undefined;
+    const file = generator.sourceFile;
+    const path = `${generator.id}/${ref}.${file.extension}`;
+    if (file.parse === "text") {
+      return writeSourceFile(sink, path, source)
+        ? `<xi:include href="${path}" parse="text"/>`
+        : undefined;
+    }
+    if (!isSoleElement(source)) return undefined;
+    return writeSourceFile(sink, path, asSourceFile(withDefaultNamespace(source, file.namespace)))
+      ? `<xi:include href="${path}"/>`
+      : undefined;
+  };
+}
+
+/** `xml` with `xmlns="namespace"` on its element, unless it declares one itself. */
+function withDefaultNamespace(xml: string, namespace: string | undefined): string {
+  const root = nextTag(xml, 0);
+  if (!namespace || !root) return xml;
+  const startTag = xml.slice(root.open, root.close);
+  if (/\sxmlns\s*=/.test(startTag)) return xml;
+  return (
+    xml.slice(0, root.open) +
+    setAttributes(startTag, root.selfClosing, [{ name: "xmlns", value: namespace }]) +
+    xml.slice(root.close)
+  );
+}
+
+/**
+ * The project as {@link assembleFullProjectSource} assembles it, cut into the
+ * files a PreTeXt author would keep: `main.ptx` holding `<pretext>` and the
+ * root division, `docinfo.ptx`, one `<ref>.ptx` per placed division, one
+ * `doenet/<ref>.doenet` per Doenet activity and one `<generator>/<ref>.<ext>`
+ * per generated asset (`prefigure/graph.xml`, `tikz/plot.tex`), joined by
+ * `<xi:include>`.
+ * Processing the includes gives back the single-file document — the same
+ * elements, attributes and text — which is what makes this safe to hand an
+ * author as "your project": `__tests__/sourceFiles.test.ts` holds it to that.
+ *
+ * Snippets, designer exercises and an image's own `<image>` element stay
+ * inline where they are placed. The main file is first in the result.
+ */
+export function assembleProjectFiles(
+  divisions: Division[],
+  rootXmlId: string,
+  docinfo: string,
+  assets: Asset[] = [],
+  lang?: string,
+  snippets: Snippet[] = [],
+  exercises: Exercise[] = [],
+): SourceFile[] {
+  const sink: SourceFileSink = { files: new Map(), divisions: true };
+  const body = resolveDivisionXml(rootXmlId, { divisions, snippets, assets, exercises }, new Set(), sink);
+
+  // The docinfo's DoenetML version depends on what the document uses, and the
+  // document is now every file.
+  const everything = [body, ...sink.files.values()].join("\n");
+  const docinfoXml = effectiveDocinfoXml(docinfo, everything);
+  const docinfoBlock =
+    isSoleElement(docinfoXml) && writeSourceFile(sink, DOCINFO_SOURCE_FILE, asSourceFile(docinfoXml))
+      ? `<xi:include href="${DOCINFO_SOURCE_FILE}"/>`
+      : docinfoXml;
+
+  const langAttr = lang ? ` xml:lang="${lang}"` : "";
+  const main = ensureRootLabel(
+    `<pretext${langAttr} xmlns:xi="${XINCLUDE_NAMESPACE}">\n${docinfoBlock}\n${body}\n</pretext>`,
+  );
+  return [
+    { path: MAIN_SOURCE_FILE, content: `${XML_FILE_DECLARATION}${main}\n` },
+    ...Array.from(sink.files, ([path, content]) => ({ path, content })),
+  ];
 }
 
 // ---------------------------------------------------------------------------

@@ -293,7 +293,7 @@ class ProjectsController < ApplicationController
   def download
     return unless rows_current!
 
-    send_data ProjectArchiveBuilder.new(@project).build.read,
+    send_data ProjectArchiveBuilder.new(@project, modular: true).build.read,
               filename: "#{@project.title.parameterize.presence || 'project'}.zip",
               type: "application/zip"
   end

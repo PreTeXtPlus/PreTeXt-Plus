@@ -6,8 +6,10 @@
 
 import {
   assembleFullProjectSource,
+  assembleProjectFiles,
   DEFAULT_LANGUAGE,
   splitDivisionSource,
+  withExternalDirectory,
 } from "@pretextbook/web-editor";
 
 /** @typedef {import("@pretextbook/web-editor").Asset} Asset */
@@ -469,6 +471,47 @@ export function assembleFullPretextSource(state, projectAssets, projectSnippets,
   );
 }
 
+// Where a project archive keeps uploaded files, relative to source/main.ptx:
+// assets/, beside source/ (ProjectArchiveBuilder::EXTERNAL_DIR in Rails).
+export const ARCHIVE_EXTERNAL_DIRECTORY = "../assets";
+
+// The docinfo of a document bound for a project archive -- a build, a download,
+// a generated-asset render: the one in effect, declaring where the archive puts
+// uploaded files. PreTeXt reads the external directory from the docinfo
+// (`directories/@external`, since 2026-07-30), not the publication file. Only
+// the server's assembly adds it; the editor's preview has no directory to name.
+/**
+ * @param {EditorState} state
+ * @returns {string}
+ */
+export function archiveDocinfo(state) {
+  return withExternalDirectory(effectiveDocinfo(state) ?? "", ARCHIVE_EXTERNAL_DIRECTORY);
+}
+
+/**
+ * The same project as {@link assembleFullPretextSource} assembles, as the files
+ * of a PreTeXt project an author can edit by hand: `main.ptx`, `docinfo.ptx`,
+ * a file per placed division and per Doenet activity, joined by `xi:include`
+ * (see `assembleProjectFiles` in the web-editor). Paths are relative to the
+ * source directory. A project with no root division is one empty `main.ptx`.
+ *
+ * @param {RailsProjectJson} json
+ * @returns {{ path: string, content: string }[]}
+ */
+export function assembleProjectJsonFiles(json) {
+  const state = railsToEditorState(json);
+  if (!state.rootDivisionId) return [{ path: "main.ptx", content: "" }];
+  return assembleProjectFiles(
+    state.divisions,
+    state.rootDivisionId,
+    archiveDocinfo(state),
+    state.projectAssets.map(toEditorAsset),
+    state.language,
+    state.projectSnippets.map(toEditorSnippet),
+    state.projectExercises.map(toEditorExercise),
+  );
+}
+
 /**
  * Rails project JSON straight through to the assembled document, for a host
  * that has no editor session to read state from -- the Node assembler. Equal by
@@ -485,7 +528,7 @@ export function assembleFullPretextSource(state, projectAssets, projectSnippets,
 export function assembleProjectJson(json) {
   const state = railsToEditorState(json);
   return assembleFullPretextSource(
-    state,
+    { ...state, docinfo: archiveDocinfo(state), useCommonDocinfo: false },
     state.projectAssets,
     state.projectSnippets,
     state.projectExercises,

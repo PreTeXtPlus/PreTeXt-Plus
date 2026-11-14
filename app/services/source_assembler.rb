@@ -42,6 +42,9 @@ class SourceAssembler
   # half a minute is not going to finish.
   TIMEOUT = 30
 
+  # A file path `files` will accept: ref-shaped names, at most one directory deep.
+  SAFE_PATH = %r{\A(?:[A-Za-z_][A-Za-z0-9_-]*/)?[A-Za-z_][A-Za-z0-9_-]*\.[a-z]+\z}
+
   def initialize(project)
     @project = project
   end
@@ -93,6 +96,31 @@ class SourceAssembler
     NodeScript.new(BUNDLE, timeout: TIMEOUT).call(JSON.generate(payload))
   rescue NodeScript::Error => e
     raise AssemblyError, "assembler: #{e.message}"
+  end
+
+  # The same document as `call`, cut into the files of a PreTeXt project an author
+  # would keep by hand: main.ptx (`<pretext>` and the root division), docinfo.ptx,
+  # one `<ref>.ptx` per placed division and one `doenet/<ref>.doenet` per Doenet
+  # activity, joined by `xi:include`. Processing the includes gives `call`'s
+  # document back; see `assembleProjectFiles` in the web-editor.
+  #
+  # @return [Hash{String => String}] content by path relative to the source
+  #   directory, main.ptx first
+  # @raise [AssemblyError]
+  def files
+    output = NodeScript.new(BUNDLE, timeout: TIMEOUT).call(JSON.generate(payload), args: [ "--files" ])
+    JSON.parse(output).fetch("files").to_h do |file|
+      path = file.fetch("path")
+      # The assembler builds paths from refs it has checked; this is the archive
+      # refusing to take that on trust, since a path is where a zip entry lands.
+      raise AssemblyError, "assembler: unsafe file path #{path.inspect}" unless path.match?(SAFE_PATH)
+
+      [ path, file.fetch("content") ]
+    end
+  rescue NodeScript::Error => e
+    raise AssemblyError, "assembler: #{e.message}"
+  rescue JSON::ParserError, KeyError => e
+    raise AssemblyError, "assembler: unreadable file list (#{e.message})"
   end
 
   # The project as the assembler reads it: the same shape and the same values

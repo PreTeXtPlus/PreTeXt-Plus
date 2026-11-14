@@ -23,6 +23,21 @@ class ProjectArchiveBuilderTest < ActiveSupport::TestCase
     assert_equal "<pretext><article/></pretext>", contents["source/main.ptx"]
   end
 
+  # A download is the same project as files to keep editing; a build takes one file.
+  # Either way the source is whatever SourceAssembler returned, under source/.
+  test "modular writes every source file the assembler returns under source/" do
+    files = { "main.ptx" => "<pretext/>", "docinfo.ptx" => "<docinfo/>", "ch-one.ptx" => "<chapter/>",
+              "doenet/act.doenet" => "<answer>yes</answer>" }
+    assembler = Struct.new(:files).new(files)
+
+    contents = SourceAssembler.stub(:new, ->(_p) { assembler }) do
+      entries(ProjectArchiveBuilder.new(projects(:one), modular: true).build)
+    end
+
+    files.each { |path, content| assert_equal content, contents["source/#{path}"] }
+    assert_includes contents.keys, "project.ptx"
+  end
+
   # A build must not ship a document nobody could assemble: with no column to fall
   # back on, the only safe answer is to fail, and FullBuildJob marks the build
   # failed on the way past.
@@ -178,13 +193,13 @@ class ProjectArchiveBuilderTest < ActiveSupport::TestCase
     assert_match(/theme="salem"/, contents["publication/publication.ptx"])
   end
 
-  test "packs each asset with a file under source/external using its ref" do
+  test "packs each asset with a file under assets using its ref" do
     project = projects(:one)
     asset = contents(:image_one)
 
     contents = entries(ProjectArchiveBuilder.new(project).build)
 
-    path = "source/external/#{asset.ref}.png"
+    path = "assets/#{asset.ref}.png"
     assert_includes contents.keys, path
     assert_equal asset.file.download, contents[path]
   end
@@ -194,7 +209,7 @@ class ProjectArchiveBuilderTest < ActiveSupport::TestCase
   # come from the content type, not the upload -- otherwise the zip's
   # external/ file wouldn't match the extension the assembled document's
   # <image source="ref.ext"> was built with (see assetTransforms.ts).
-  test "packs an asset with an extensionless upload under source/external using its content type" do
+  test "packs an asset with an extensionless upload under assets using its content type" do
     project = projects(:one)
     asset = contents(:image_one)
     asset.attach_file(
@@ -206,7 +221,7 @@ class ProjectArchiveBuilderTest < ActiveSupport::TestCase
 
     contents = entries(ProjectArchiveBuilder.new(project).build)
 
-    path = "source/external/#{asset.ref}.png"
+    path = "assets/#{asset.ref}.png"
     assert_includes contents.keys, path
     assert_equal asset.file.download, contents[path]
   end
@@ -217,7 +232,7 @@ class ProjectArchiveBuilderTest < ActiveSupport::TestCase
     contents = entries(ProjectArchiveBuilder.new(projects(:one)).build)
 
     assert_equal File.binread(Rails.root.join("public", "icon.svg")),
-                 contents["source/external/#{PublicationFileBuilder::DEFAULT_BRANDLOGO}"]
+                 contents["assets/#{PublicationFileBuilder::DEFAULT_BRANDLOGO}"]
   end
 
   test "an asset called icon is packed like any other and leaves the default logo alone" do
@@ -231,8 +246,8 @@ class ProjectArchiveBuilderTest < ActiveSupport::TestCase
 
     contents = entries(ProjectArchiveBuilder.new(project).build)
 
-    assert_equal icon.file.download, contents["source/external/icon.png"]
+    assert_equal icon.file.download, contents["assets/icon.png"]
     assert_equal File.binread(Rails.root.join("public", "icon.svg")),
-                 contents["source/external/pretext-plus/icon.svg"]
+                 contents["assets/pretext-plus/icon.svg"]
   end
 end

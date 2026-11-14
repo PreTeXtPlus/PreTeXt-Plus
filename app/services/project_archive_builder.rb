@@ -18,19 +18,32 @@ require "stringio"
 #                                   with every <plus:* ref/> placeholder resolved),
 #                                   built here and now by SourceAssembler rather
 #                                   than read from a column something else wrote
-#   source/external/<ref>.<ext>  -- each project asset, matching the bare
+#   source/docinfo.ptx           \  only with `modular: true` (a download): main.ptx
+#   source/<ref>.ptx              } then holds <pretext> and the root division, and
+#   source/doenet/<ref>.doenet   /  pulls these in with xi:include
+#   source/<generator>/<ref>.*   /  (prefigure/graph.xml, tikz/plot.tex)
+#   assets/<ref>.<ext>           -- each project asset, matching the bare
 #                                   `<image source="<ref>.<ext>">` the editor emits
 #
-# NOTE: the external-directory placement (source/external) follows PreTeXt's
-# default publication resolution (external dir relative to the main source file).
-# If the full server resolves images elsewhere, this is the one path to adjust.
+# assets/ sits beside source/, the layout PreTeXt's own guide and `pretext new` give a
+# project; the assembled docinfo names it (`<directories external="../assets"/>`, since
+# PreTeXt resolves the directory against the main source file).
 class ProjectArchiveBuilder
   # Where per-target publication files go inside the archive. The directory is PreTeXt's
   # default for <project @publication>, which is why nothing declares it.
   PUBLICATION_DIR = "publication".freeze
 
-  def initialize(project)
+  # Where uploaded assets go inside the archive: PreTeXt's "external" directory.
+  EXTERNAL_DIR = "assets".freeze
+
+  # `modular: true` writes the source as a multi-file project -- main.ptx, docinfo.ptx,
+  # a file per division and per Doenet activity, joined by xi:include -- which is what an
+  # author downloads: something to keep editing, not one long file. A build takes the
+  # single file. The two are the same document (SourceAssembler#files), so what builds
+  # on the server still builds from the download.
+  def initialize(project, modular: false)
     @project = project
+    @modular = modular
   end
 
   # The manifest, listing every target the project has. One archive therefore serves any
@@ -57,7 +70,7 @@ class ProjectArchiveBuilder
     # none. A failure here fails the build, which is the right answer -- there is
     # no stored source to fall back on, and an archive built from source we could
     # not assemble would be an archive of the wrong document.
-    source = assembled_source
+    source_files = assembled_source_files
 
     buffer = Zip::OutputStream.write_buffer do |zip|
       zip.put_next_entry("project.ptx")
@@ -75,20 +88,22 @@ class ProjectArchiveBuilder
         zip.write(publication_ptx(target))
       end
 
-      zip.put_next_entry("source/main.ptx")
-      zip.write(source)
+      source_files.each do |path, content|
+        zip.put_next_entry("source/#{path}")
+        zip.write(content)
+      end
 
       @project.assets.each do |asset|
         next unless asset.file_attached?
 
-        zip.put_next_entry("source/external/#{asset.external_filename}")
+        zip.put_next_entry("#{EXTERNAL_DIR}/#{asset.external_filename}")
         zip.write(asset.file.download)
       end
 
       # The PreTeXt.Plus logo every publication file points at unless a subscriber has
       # chosen their own -- see PublicationFileBuilder::DEFAULT_BRANDLOGO for why it has a
       # directory to itself.
-      zip.put_next_entry("source/external/#{PublicationFileBuilder::DEFAULT_BRANDLOGO}")
+      zip.put_next_entry("#{EXTERNAL_DIR}/#{PublicationFileBuilder::DEFAULT_BRANDLOGO}")
       zip.write(File.binread(Rails.root.join("public", "icon.svg")))
     end
     buffer.rewind
@@ -106,8 +121,13 @@ class ProjectArchiveBuilder
 
     # Memoized so a caller that builds more than one archive from the same
     # instance pays for one Node process rather than one per archive.
-    def assembled_source
-      @assembled_source ||= SourceAssembler.new(@project).call
+    def assembled_source_files
+      @assembled_source_files ||=
+        if @modular
+          SourceAssembler.new(@project).files
+        else
+          { "main.ptx" => SourceAssembler.new(@project).call }
+        end
     end
 
     # The target's publication file, named for the same slug everything else about it is.

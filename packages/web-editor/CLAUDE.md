@@ -116,6 +116,14 @@ Splits and merges PreTeXt documents at section boundaries. Supported section typ
 - LaTeX names it in the optional argument (`\plus[instance=ch3]{image}{graph}`), Markdown in the directive (`::image{ref="graph" instance="ch3"}`); both converters pass it through like any attribute. `parsePlacements`/`addPlacementInstance` read and write all three syntaxes.
 - `editorConfigs/placementDiagnostics.ts` (via `usePlacementDiagnostics` in `CodeEditor`) flags, on the open division's or snippet's live text, a second unnamed placement of the same image or snippet anywhere in the project, a repeated instance name, a malformed one, and one whose qualified label would equal another record's ref — with a quick fix that writes a free instance name (seeded from the open record's ref) in that buffer's syntax. `Editors` supplies every other placement and every ref as `placementCheck`.
 
+**Multi-file assembly** (`assembleProjectFiles`) is the same assembly with a sink threaded through `expandRefs`: a placed division becomes `<ref>.ptx` and an `<xi:include href>` (files flat beside `main.ptx`, so an href reads the same from any file), a Doenet activity's source becomes `doenet/<ref>.doenet` included with `parse="text"`, a generated asset's source becomes `<generator>/<ref>.<ext>` inside its generator's element (`AssetGenerator.sourceFile`: `prefigure/graph.xml` as XML in PreFigure's namespace; `tikz/plot.tex`, `asymptote/*.asy`, `sageplot/*.sage` as text, as typed), and the docinfo is `docinfo.ptx`. It is what the Rails host's project download writes; previews and builds use the single file.
+
+- The invariant is that processing the includes gives back `assembleFullProjectSource`'s document; `__tests__/sourceFiles.test.ts` expands and compares for every case.
+- A file is a *placement*: placeholder attributes are written into it, and a placement with an `instance` is `<ref>-<instance>.ptx` with everything beneath it inline, since `qualifyIdentifiers` cannot reach into an included file.
+- Anything that is not exactly one element (a resolution-failure comment, a snippet's siblings), a ref that is no filename, or a name already holding different content stays inline. Snippets and designer exercises are always inline. Every placement of a generated asset or activity includes the one file, instance or not: only the wrapper is qualified.
+- A file gets `xmlns:xi` on its element only when it includes something.
+- `withExternalDirectory(docinfo, dir)` writes `<directories external>` into a docinfo — where PreTeXt reads the external directory from since 2026-07-30. It is exported for the host and not part of assembly: where uploads sit beside the source is the host's layout (the Rails host adds `../assets` to every document bound for an archive, never to the preview's).
+
 ### Project Explorer (`src/components/ProjectExplorer.tsx` + `src/components/toc/`)
 
 The left sidebar is an always-visible icon rail plus a panel for the selected

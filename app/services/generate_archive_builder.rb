@@ -8,7 +8,7 @@ require "zip"
 # under the key the next full build will look for (see SourceAssembler.single_image).
 #
 # The one external file is the brand logo the publication file points at, as in a
-# full build's archive: the publication declares an `external` directory, and the
+# full build's archive: the docinfo declares an `external` directory, and the
 # CLI refuses a project whose declared directory is not there. The generated
 # asset itself has no file; the picture is the output.
 class GenerateArchiveBuilder
@@ -48,7 +48,7 @@ class GenerateArchiveBuilder
       zip.write(publication)
       zip.put_next_entry("source/main.ptx")
       zip.write(source)
-      zip.put_next_entry("source/external/#{PublicationFileBuilder::DEFAULT_BRANDLOGO}")
+      zip.put_next_entry("#{ProjectArchiveBuilder::EXTERNAL_DIR}/#{PublicationFileBuilder::DEFAULT_BRANDLOGO}")
       zip.write(File.binread(Rails.root.join("public", "icon.svg")))
     end
     buffer.rewind

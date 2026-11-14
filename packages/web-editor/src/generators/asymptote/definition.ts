@@ -30,6 +30,7 @@ export const asymptote: AssetGenerator = {
   // Code, not XML: `a < b` and `&&` go in as typed, and only the document's copy
   // is escaped. Exactly `&`, `<` and `>`, as for TikZ.
   wrapSource: (source, ref) => `<asymptote label="${ref}">\n${escapeText(source)}\n</asymptote>`,
+  sourceFile: { parse: "text", extension: "asy" },
   // Mirrors Content::GeneratedAssetBehavior::DOCINFO_INPUT_ELEMENTS["asymptote"]:
   // extract-asymptote.xsl writes both into the .asy file.
   docinfoInputElements: ["macros", "asymptote-preamble"],
