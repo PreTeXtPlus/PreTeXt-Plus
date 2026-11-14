@@ -32,7 +32,7 @@ gem "solid_cable"
 # behind ProjectDocChannel. Pinned tightly because both are pre-1.0, and what
 # they carry -- the CRDT every collaborative session's text lives in -- is not
 # something to let a minor bump change under us.
-gem "yrby", "~> 0.8.1"
+gem "yrby", "~> 0.9.1"
 gem "yrby-rails", "~> 0.7.0"
 
 # Reduces boot times through caching; required in config/boot.rb
@@ -73,7 +73,9 @@ end
 group :test do
   # Use system testing [https://guides.rubyonrails.org/testing.html#system-testing]
   gem "capybara"
-  gem "minitest", "~> 5.27"
+  gem "minitest", "~> 6.1"
+  # Minitest 6 moved `minitest/mock` (`stub`, `Minitest::Mock`) into its own gem.
+  gem "minitest-mock"
   gem "selenium-webdriver"
 end
 
@@ -89,7 +91,7 @@ gem "pay", "~> 12.2"
 
 gem "commonmarker", "~> 2.10"
 
-gem "aws-sdk-s3", "~> 1.234"
+gem "aws-sdk-s3", "~> 1.240"
 
 gem "cancancan", "~> 3.7"
 
