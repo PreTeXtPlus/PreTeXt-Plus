@@ -416,10 +416,13 @@ class ProjectDocProjection
   end
 
   # An exercise is a snippet whose element, like a division's, is built from its
-  # fields: its `source` is the body, and `attrs` the <exercise>'s attributes.
+  # fields: its `source` is the body, and `attrs` the <exercise>'s attributes
+  # (for a Doenet activity, the <interactive>'s). An entry with no
+  # `sourceFormat` is a PreTeXt one, as every entry was before the field.
   def exercise_attributes(id, entry)
     attributes = { id: id, ref: entry["ref"].to_s, source: entry["source"].to_s }
     attributes[:title] = entry["title"].to_s if entry.key?("title")
+    attributes[:source_format] = entry["sourceFormat"].to_s if entry["sourceFormat"].present?
     attributes[:attrs] = entry["attrs"] if entry["attrs"].is_a?(Hash)
     attributes
   end

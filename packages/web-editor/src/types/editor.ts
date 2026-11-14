@@ -168,6 +168,14 @@ export interface Snippet {
 }
 
 /**
+ * What an exercise record's `source` is written in: PreTeXt (the children of
+ * its `<exercise>`, written by the exercise designer) or DoenetML (a Doenet
+ * activity, edited in Doenet's editor — see `src/doenet/`). Absent means
+ * PreTeXt, so every record stored before the field existed reads as before.
+ */
+export type ExerciseSourceFormat = "pretext" | "doenetml";
+
+/**
  * An interactive exercise owned by a single project, placed wherever it's
  * referenced by `<plus:exercise ref="..."/>`. Stored like a {@link Division}:
  * `source` is the exercise's *body* -- the children of its `<exercise>` -- and
@@ -175,6 +183,13 @@ export interface Snippet {
  * assembled (`ref` as its `xml:id` and `label`, `title` as its `<title>`,
  * `attrs` as its other attributes). Edited with the exercise designer, never
  * as text, so its source is always PreTeXt.
+ *
+ * A Doenet activity (`sourceFormat: "doenetml"`) differs in what `source` and
+ * `attrs` are: `source` is DoenetML, and `attrs` are the attributes of the
+ * `<interactive platform="doenetml">` assembly builds from it (`width`,
+ * `aspect`, …), not of the `<exercise>` — the wrapper the placement chooses
+ * (`<plus:exercise>`, `<plus:project>`, a bare `<plus:interactive>`) needs
+ * nothing of its own beyond the ref and title.
  */
 export interface Exercise {
   /** Stable server-assigned identifier; see {@link Snippet.id}. */
@@ -191,9 +206,12 @@ export interface Exercise {
   source: string;
   /**
    * The `<exercise>` element's attributes other than `xml:id` and `label`
-   * (a Parsons problem's `language`, a free response's `attachment`, ...).
+   * (a Parsons problem's `language`, a free response's `attachment`, ...); for
+   * a Doenet activity, the `<interactive>`'s.
    */
   attrs?: Record<string, string>;
+  /** See {@link ExerciseSourceFormat}; absent means `"pretext"`. */
+  sourceFormat?: ExerciseSourceFormat;
 }
 
 /** Payload emitted when a user submits feedback from the editor UI. */

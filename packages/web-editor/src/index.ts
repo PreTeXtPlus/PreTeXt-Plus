@@ -23,6 +23,7 @@ export type {
   EditorRecordSourceChange,
   RecordKind,
   Exercise,
+  ExerciseSourceFormat,
   FeedbackSubmission,
   Snippet,
   SourceFormat,
@@ -94,7 +95,19 @@ export {
   renameExerciseRef,
   removeExerciseRef,
   exerciseEmbedCode,
+  EXERCISE_PLACEMENT_TAGS,
+  EXERCISE_WRAPPER_TAGS,
+  isExercisePlacementTag,
 } from "./sectionUtils";
+export type { ExercisePlacementTag } from "./sectionUtils";
+// Doenet activities: an exercise written in DoenetML (see docs/doenet-plan.md).
+export {
+  DEFAULT_DOENETML_VERSION,
+  DOENET_STARTER,
+  DOENET_DEFAULT_ATTRS,
+  effectiveDoenetmlVersion,
+  docinfoDoenetmlVersion,
+} from "./doenet";
 export {
   buildProjectSnippetView,
   makeUniqueSnippetRef,

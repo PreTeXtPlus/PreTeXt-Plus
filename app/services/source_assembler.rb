@@ -186,6 +186,7 @@ class SourceAssembler
         ref: exercise.ref,
         title: exercise.title,
         source: exercise.source,
+        source_format: exercise.source_format,
         attrs: exercise.attrs
       }
     end

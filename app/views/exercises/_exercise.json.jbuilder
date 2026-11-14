@@ -1,1 +1,1 @@
-json.extract! exercise, :id, :ref, :title, :source, :attrs
+json.extract! exercise, :id, :ref, :title, :source, :source_format, :attrs

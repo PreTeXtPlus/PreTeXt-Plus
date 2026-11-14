@@ -1430,6 +1430,7 @@ function EditorApp({ config }) {
           ref: exercise.ref,
           title: exercise.title ?? "",
           source: exercise.source ?? "",
+          source_format: exercise.sourceFormat ?? "pretext",
           attrs: exercise.attrs ?? {},
         } ],
       });
@@ -1456,6 +1457,7 @@ function EditorApp({ config }) {
             ref: exercise.ref,
             title: exercise.title ?? "",
             source: exercise.source ?? "",
+            source_format: exercise.sourceFormat ?? "pretext",
             attrs: exercise.attrs ?? {},
           } ],
         }),
