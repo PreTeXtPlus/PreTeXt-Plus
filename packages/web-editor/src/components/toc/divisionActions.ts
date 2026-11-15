@@ -14,30 +14,48 @@ import { canContainDivisions } from "./types";
  * - `placed` — reached from the root through `<plus:* ref/>` placeholders;
  *   `parentXmlId` names the division holding its placeholder.
  * - `unplaced` — not reached from the root. An unplaced division heads its own
- *   dangling subtree (`parentXmlId: null`) or sits inside one.
+ *   dangling subtree (`parentXmlId: null`) or sits inside one. `commented`
+ *   marks one the Contents tree shows in place because its placeholder (or
+ *   one above it) is commented out; `parentXmlId` then names the division
+ *   holding that placeholder.
  */
 export type DivisionPlacement =
   | { kind: "root" }
   | { kind: "placed"; parentXmlId: string }
-  | { kind: "unplaced"; parentXmlId: string | null };
+  | { kind: "unplaced"; parentXmlId: string | null; commented?: boolean };
 
-/** Locate `xmlId` in the document tree rooted at `rootXmlId`. */
+/**
+ * Locate `xmlId` in the document tree rooted at `rootXmlId`, the way the
+ * Contents tree shows it: a commented-out division is found where its
+ * placeholder is, not among the unused divisions.
+ */
 export function findDivisionPlacement(
   divisions: Division[],
   rootXmlId: string | null,
   xmlId: string,
 ): DivisionPlacement {
   if (!rootXmlId || xmlId === rootXmlId) return { kind: "root" };
-  const placed = buildDivisionTree(divisions, rootXmlId).find(
+  const options = { includeCommented: true };
+  const placed = buildDivisionTree(divisions, rootXmlId, options).find(
     (n) => n.division.xmlId === xmlId,
   );
-  if (placed) return { kind: "placed", parentXmlId: placed.parentXmlId };
-  for (const orphan of getOrphanRoots(divisions, rootXmlId)) {
+  if (placed) {
+    return placed.commented
+      ? { kind: "unplaced", parentXmlId: placed.parentXmlId, commented: true }
+      : { kind: "placed", parentXmlId: placed.parentXmlId };
+  }
+  for (const orphan of getOrphanRoots(divisions, rootXmlId, options)) {
     if (orphan.xmlId === xmlId) return { kind: "unplaced", parentXmlId: null };
-    const inside = buildDivisionTree(divisions, orphan.xmlId).find(
+    const inside = buildDivisionTree(divisions, orphan.xmlId, options).find(
       (n) => n.division.xmlId === xmlId,
     );
-    if (inside) return { kind: "unplaced", parentXmlId: inside.parentXmlId };
+    if (inside) {
+      return {
+        kind: "unplaced",
+        parentXmlId: inside.parentXmlId,
+        ...(inside.commented && { commented: true }),
+      };
+    }
   }
   return { kind: "unplaced", parentXmlId: null };
 }

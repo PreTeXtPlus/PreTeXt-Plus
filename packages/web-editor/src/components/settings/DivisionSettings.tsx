@@ -135,9 +135,15 @@ const DivisionSettings = ({ division, embedFormat }: DivisionSettingsProps) => {
       )}
       {placement.kind === "unplaced" && (
         <SettingsNote tone="warning">
-          This division isn't used in the document yet.
-          {placement.parentXmlId === null &&
-            " Add it at the end of the document, or paste its embed code where it belongs."}
+          {placement.commented ? (
+            "Commented out: not in the document yet."
+          ) : (
+            <>
+              This division isn't used in the document yet.
+              {placement.parentXmlId === null &&
+                " Add it at the end of the document, or paste its embed code where it belongs."}
+            </>
+          )}
         </SettingsNote>
       )}
       <SettingsActions actions={actions} />
