@@ -463,3 +463,91 @@ describe("ArticleToc expand/collapse", () => {
     expect(visibleTitles()).toContain("Loose subsection");
   });
 });
+
+describe("ArticleToc commented-out divisions", () => {
+  // The chapter's section is commented out; the section holds a subsection,
+  // which is therefore out of the document too.
+  const withCommented: Division[] = [
+    {
+      id: "1",
+      xmlId: "bk",
+      title: "Book",
+      type: "book",
+      sourceFormat: "pretext",
+      source: '<plus:chapter ref="ch"/>',
+    },
+    {
+      id: "2",
+      xmlId: "ch",
+      title: "Chapter one",
+      type: "chapter",
+      sourceFormat: "pretext",
+      source: '<p>Hi</p>\n<!-- <plus:section ref="later"/> -->\n<plus:section ref="now"/>',
+    },
+    {
+      id: "3",
+      xmlId: "later",
+      title: "Not yet",
+      type: "section",
+      sourceFormat: "pretext",
+      source: '<plus:subsection ref="later-sub"/>',
+    },
+    {
+      id: "4",
+      xmlId: "later-sub",
+      title: "Not yet either",
+      type: "subsection",
+      sourceFormat: "pretext",
+      source: "<p/>",
+    },
+    {
+      id: "5",
+      xmlId: "now",
+      title: "Ready",
+      type: "section",
+      sourceFormat: "pretext",
+      source: "<p/>",
+    },
+  ];
+
+  it("shows a commented-out division where it would go, not among the unused", () => {
+    const { store } = renderToc(false, withCommented);
+    act(() => expandAll(store));
+    expect(visibleTitles()).toEqual([
+      "Book",
+      "Chapter one",
+      "Not yet",
+      "Not yet either",
+      "Ready",
+    ]);
+    expect(screen.queryByTestId("toc-unplaced")).toBeNull();
+  });
+
+  it("marks it, and everything under it, as commented out", () => {
+    const { store } = renderToc(false, withCommented);
+    act(() => expandAll(store));
+    for (const label of ["Not yet", "Not yet either"]) {
+      expect(tocRow(label)).toHaveAttribute("data-commented", "true");
+      expect(within(tocRow(label)).getByTestId("toc-commented")).toHaveTextContent(
+        "commented out",
+      );
+    }
+    expect(tocRow("Ready")).not.toHaveAttribute("data-commented");
+    expect(within(tocRow("Ready")).queryByTestId("toc-commented")).toBeNull();
+  });
+
+  it("still offers [+] on a commented-out row", () => {
+    const { store } = renderToc(false, withCommented);
+    act(() => expandAll(store));
+    expect(within(tocRow("Not yet")).getByTestId("toc-add-child")).toBeInTheDocument();
+  });
+
+  it("notes it in the drawer, and offers no Place in document", () => {
+    const { store } = renderToc(false, withCommented);
+    act(() => expandAll(store));
+    const drawer = openSettings("Not yet");
+    expect(drawer).toHaveTextContent("Commented out: not in the document yet.");
+    expect(within(drawer).queryByText("Place in document")).toBeNull();
+    expect(within(drawer).getByText("Delete from project")).toBeInTheDocument();
+  });
+});

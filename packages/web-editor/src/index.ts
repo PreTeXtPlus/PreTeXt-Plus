@@ -43,6 +43,8 @@ export type {
 } from "./types/sections";
 export type {
   DivisionTreeNode,
+  DivisionRefEntry,
+  TreeOptions,
   DivisionSourceSplit,
   DivisionSplitFallback,
 } from "./sectionUtils";
@@ -53,6 +55,7 @@ export {
   assembleFullProjectSource,
   // Division ref utilities (new architecture)
   parseDivisionRefs,
+  parseDivisionRefEntries,
   divisionRefTag,
   insertDivisionRef,
   removeDivisionRef,

@@ -51,7 +51,9 @@ function ancestorsOf(nodes: DivisionTreeNode[], id: string): string[] | null {
 /**
  * The explorer's Contents view: the document's division tree, from the root
  * down through every placed `<plus:* ref/>`, followed by the divisions the
- * document doesn't reach, each heading its own dangling subtree. Selecting a
+ * document doesn't reach, each heading its own dangling subtree. A division
+ * whose placeholder is commented out stays where it would go, muted and marked
+ * "commented out", rather than joining the unused ones. Selecting a
  * row opens that division; its properties and structural actions live in the
  * settings drawer under the editor's title bar. A placed row's [+] starts a
  * new sub-division of it.
@@ -77,16 +79,20 @@ const ArticleToc = ({ readOnly }: { readOnly?: boolean }) => {
   const { divisions, rootDivision } = useDivisionActions();
 
   // ── Tree structure ──────────────────────────────────────────────────────────
+  // Commented-out placeholders are followed too: a division the author has
+  // commented out is shown where it would go, styled as not in the document,
+  // rather than among the unused ones.
+  const treeOptions = { includeCommented: true };
   const treeNodes =
     rootDivision && divisions
-      ? buildDivisionTree(divisions, rootDivision.xmlId)
+      ? buildDivisionTree(divisions, rootDivision.xmlId, treeOptions)
       : [];
 
   const orphanTrees =
     rootDivision && divisions
-      ? getOrphanRoots(divisions, rootDivision.xmlId).map((orphan) => ({
+      ? getOrphanRoots(divisions, rootDivision.xmlId, treeOptions).map((orphan) => ({
           orphan,
-          subtree: buildDivisionTree(divisions, orphan.xmlId),
+          subtree: buildDivisionTree(divisions, orphan.xmlId, treeOptions),
         }))
       : [];
 
@@ -212,11 +218,14 @@ const ArticleToc = ({ readOnly }: { readOnly?: boolean }) => {
             division={node.division}
             depth={node.depth + 1}
             isActive={activeDivisionId === node.division.xmlId}
+            isCommented={node.commented}
             hasChildren={idsWithChildren.has(node.division.xmlId)}
             isExpanded={isExpanded(node.division.xmlId)}
             onToggleExpand={() => toggleExpand(node.division.xmlId)}
             onSelect={() => selectSection(node.division.xmlId)}
             onAddChild={
+              // A commented-out division can still grow: its child's placeholder
+              // goes in its own source, ready for when it is uncommented.
               !readOnly &&
               canAddChildDivision(node.division, {
                 kind: "placed",
@@ -280,6 +289,7 @@ const ArticleToc = ({ readOnly }: { readOnly?: boolean }) => {
                         division={node.division}
                         depth={node.depth + 1}
                         isActive={activeDivisionId === node.division.xmlId}
+                        isCommented={node.commented}
                         hasChildren={subtreeIdsWithChildren.has(node.division.xmlId)}
                         isExpanded={isExpanded(node.division.xmlId)}
                         onToggleExpand={() => toggleExpand(node.division.xmlId)}

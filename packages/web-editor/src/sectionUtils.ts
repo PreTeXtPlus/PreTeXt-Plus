@@ -1002,7 +1002,7 @@ function divisionRefSourceForFormat(
  * An include shown as documentation inside a Markdown code fence
  * (```` ```\n::section{ref="x"}\n``` ````) or a PreTeXt `<pre>` is an example,
  * not a real child, so it is blanked out before ref-scanning (see
- * {@link blankVerbatim}).
+ * {@link blankInert}).
  *
  * Each entry is an un-anchored source with NO capturing groups (so the
  * alternatives can be safely `|`-joined). Ordering matters: list block-level
@@ -1042,14 +1042,47 @@ const VERBATIM_SOURCES: Record<SourceFormat, string[]> = {
 };
 
 /**
- * Replace every verbatim span (per {@link VERBATIM_SOURCES} for `sourceFormat`)
- * with equal-length whitespace, preserving newlines. Blanking rather than
- * deleting keeps character offsets and document order intact for the caller's
- * subsequent ref scan, and guarantees no placeholder can straddle a blanked
- * boundary.
+ * Regex sources matching a *comment* in each source format. An author comments
+ * out a placeholder to keep a record out of the document until it is ready, so
+ * a placeholder inside one is not placed: assembly leaves it alone (see
+ * {@link expandRefs}), and the ref scans here must agree, or the Contents tree
+ * would show a division the build leaves out.
+ *
+ * A LaTeX `%` escaped as `\%` is a percent sign, not a comment, and so is one
+ * inside a placeholder's optional argument (`\plus[width=50%]{image}{x}`),
+ * which the converter reads as an attribute value. Both converters already
+ * honour these comments — LaTeX's become XML comments, Markdown's are dropped —
+ * so a commented placeholder never reaches assembly as a live one.
  */
-function blankVerbatim(content: string, sourceFormat: SourceFormat): string {
-  const sources = VERBATIM_SOURCES[sourceFormat];
+const COMMENT_SOURCES: Record<SourceFormat, string> = {
+  pretext: "<!--[\\s\\S]*?-->",
+  markdown: "<!--[\\s\\S]*?-->",
+  latex: "(?<!\\\\)(?<!\\\\plus\\[[^\\]\\n]*)%[^\\n]*",
+};
+
+/**
+ * Replace every span a ref scan must not look inside with equal-length
+ * whitespace, preserving newlines: verbatim spans (per {@link VERBATIM_SOURCES})
+ * and, unless `comments` is `false`, comments (per {@link COMMENT_SOURCES}).
+ * Blanking rather than deleting keeps character offsets and document order
+ * intact for the caller's subsequent ref scan, and guarantees no placeholder
+ * can straddle a blanked boundary.
+ *
+ * Both kinds go into one alternation, verbatim first, so whichever span starts
+ * first wins: a `%` inside `\verb|…|` is code, and a `<pre>` inside a comment is
+ * commented out.
+ *
+ * `comments: false` is for rewrites that must reach a commented-out placeholder
+ * too — a renamed division's ref (see {@link renameDivisionRef}), since the
+ * author means to uncomment it later and it should still resolve then.
+ */
+function blankInert(
+  content: string,
+  sourceFormat: SourceFormat,
+  { comments = true }: { comments?: boolean } = {},
+): string {
+  const sources = [...VERBATIM_SOURCES[sourceFormat]];
+  if (comments) sources.push(COMMENT_SOURCES[sourceFormat]);
   if (sources.length === 0) return content;
   const re = new RegExp(sources.join("|"), "g");
   return content.replace(re, (match) => match.replace(/[^\n]/g, " "));
@@ -1072,13 +1105,49 @@ export function parseDivisionRefs(
 ): string[] {
   const refs: string[] = [];
   const re = new RegExp(divisionRefSourceForFormat(sourceFormat, null), "g");
-  const scanned = blankVerbatim(content, sourceFormat);
+  const scanned = blankInert(content, sourceFormat);
   let m: RegExpExecArray | null;
   while ((m = re.exec(scanned)) !== null) {
     // The per-format source has a single capture group: the ref value.
     refs.push(m[1]);
   }
   return refs;
+}
+
+/** A division-ref placeholder, and whether the author has commented it out. */
+export interface DivisionRefEntry {
+  xmlId: string;
+  /** `true` when the placeholder sits inside a comment, so it is not placed. */
+  commented: boolean;
+}
+
+/**
+ * Like {@link parseDivisionRefs}, but also returns the placeholders an author
+ * has commented out, flagged as such, in document order with the live ones.
+ * The Contents tree shows a commented-out division where it would go, rather
+ * than among the unused ones; everything that decides what the document
+ * contains keeps reading {@link parseDivisionRefs}.
+ *
+ * Verbatim spans are still skipped: a placeholder in a code sample is an
+ * example, commented or not.
+ */
+export function parseDivisionRefEntries(
+  content: string,
+  sourceFormat: SourceFormat,
+): DivisionRefEntry[] {
+  const re = new RegExp(divisionRefSourceForFormat(sourceFormat, null), "g");
+  const scanned = blankInert(content, sourceFormat, { comments: false });
+  // The same text with comments blanked too: a placeholder that is blank there
+  // but not here sits inside a comment. Blanking preserves offsets, so the two
+  // copies can be compared position by position.
+  const live = blankInert(content, sourceFormat);
+  const entries: DivisionRefEntry[] = [];
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(scanned)) !== null) {
+    const span = live.slice(m.index, m.index + m[0].length);
+    entries.push({ xmlId: m[1], commented: span !== m[0] });
+  }
+  return entries;
 }
 
 /** A division ref together with the type its tag name names. */
@@ -1127,7 +1196,7 @@ export function parseDivisionRefsWithTypes(
     latex: `\\\\plus(?:\\[[^\\]]*\\])?\\{(${tags})\\}\\{([^}]+)\\}`,
   };
   const re = new RegExp(source[sourceFormat], "g");
-  const scanned = blankVerbatim(content, sourceFormat);
+  const scanned = blankInert(content, sourceFormat);
   let m: RegExpExecArray | null;
   while ((m = re.exec(scanned)) !== null) {
     const tagName = m[1];
@@ -1143,20 +1212,26 @@ export function parseDivisionRefsWithTypes(
  * Locate every division-ref placeholder for `xmlId` in `content`, returning the
  * `[index, length)` span of each within `content` itself.
  *
- * The scan runs against a {@link blankVerbatim} copy of `content` and only in
+ * The scan runs against a {@link blankInert} copy of `content` and only in
  * `sourceFormat`'s own include syntax, so it agrees exactly with
  * {@link parseDivisionRefs} about what counts as a real include. Blanking
  * preserves length, so offsets found in the blanked copy index the original
  * unchanged — which is what lets the rewrite helpers below edit the real text
  * while still ignoring examples inside verbatim spans.
+ *
+ * Commented-out placeholders are skipped too, unless `comments` is `false`:
+ * moving, removing and anchoring an insert act on the document as it will be
+ * built, while a rename must also reach the placeholder an author has
+ * commented out for now (see {@link renameDivisionRef}).
  */
 function locateDivisionRefs(
   content: string,
   xmlId: string,
   sourceFormat: SourceFormat,
+  { comments = true }: { comments?: boolean } = {},
 ): { index: number; length: number }[] {
   const re = new RegExp(divisionRefSourceForFormat(sourceFormat, xmlId), "g");
-  const scanned = blankVerbatim(content, sourceFormat);
+  const scanned = blankInert(content, sourceFormat, { comments });
   const spans: { index: number; length: number }[] = [];
   let m: RegExpExecArray | null;
   while ((m = re.exec(scanned)) !== null) {
@@ -1201,7 +1276,7 @@ export function parseAssetRefs(
     latex: `\\\\plus(?:\\[[^\\]]*\\])?\\{image\\}\\{([^}]+)\\}`,
   };
   const re = new RegExp(source[sourceFormat], "g");
-  const scanned = blankVerbatim(content, sourceFormat);
+  const scanned = blankInert(content, sourceFormat);
   let m: RegExpExecArray | null;
   while ((m = re.exec(scanned)) !== null) {
     refs.push({ ref: m[1] });
@@ -1332,7 +1407,7 @@ function parseRecordRefs(
     latex: `\\\\plus(?:\\[[^\\]]*\\])?\\{${tag}\\}\\{([^}]+)\\}`,
   };
   const re = new RegExp(source[sourceFormat], "g");
-  const scanned = blankVerbatim(content, sourceFormat);
+  const scanned = blankInert(content, sourceFormat);
   let m: RegExpExecArray | null;
   while ((m = re.exec(scanned)) !== null) {
     refs.push({ ref: m[1] });
@@ -1518,7 +1593,7 @@ const quotedAttr = (attrs: string, name: string): string | undefined =>
  */
 export function parsePlacements(content: string, sourceFormat: SourceFormat): Placement[] {
   const re = new RegExp(PLACEMENT_SOURCE[sourceFormat], "g");
-  const scanned = blankVerbatim(content, sourceFormat);
+  const scanned = blankInert(content, sourceFormat);
   const placements: Placement[] = [];
   let m: RegExpExecArray | null;
   while ((m = re.exec(scanned)) !== null) {
@@ -1749,6 +1824,10 @@ export function moveDivisionRef(
  * rewrite is emitted in `sourceFormat`'s own syntax, and placeholders inside
  * verbatim spans are left alone.
  *
+ * A *commented-out* placeholder is rewritten too, unlike everywhere else a
+ * division ref is located: the author commented it out to place the division
+ * later, and uncommenting it then should not produce a missing division.
+ *
  * Returns `content` unchanged if no placeholder for `oldXmlId` is found.
  */
 export function renameDivisionRef(
@@ -1758,7 +1837,7 @@ export function renameDivisionRef(
   newType: DivisionType,
   sourceFormat: SourceFormat = "pretext",
 ): string {
-  const spans = locateDivisionRefs(content, oldXmlId, sourceFormat);
+  const spans = locateDivisionRefs(content, oldXmlId, sourceFormat, { comments: false });
   if (spans.length === 0) return content;
 
   let out = "";
@@ -1891,7 +1970,11 @@ export function reorderDivisionRefs(
  * Returns a `Set<string>` of all `xmlId` values reachable from the root,
  * including the root itself.  Used to identify orphaned divisions.
  */
-function collectReachable(divisions: Division[], rootXmlId: string): Set<string> {
+function collectReachable(
+  divisions: Division[],
+  rootXmlId: string,
+  { includeCommented = false }: TreeOptions = {},
+): Set<string> {
   const seen = new Set<string>();
   const queue = [rootXmlId];
   while (queue.length > 0) {
@@ -1900,8 +1983,8 @@ function collectReachable(divisions: Division[], rootXmlId: string): Set<string>
     seen.add(id);
     const div = divisions.find((d) => d.xmlId === id);
     if (div) {
-      for (const ref of parseDivisionRefs(div.source, div.sourceFormat)) {
-        queue.push(ref);
+      for (const ref of childRefs(div, includeCommented)) {
+        queue.push(ref.xmlId);
       }
     }
   }
@@ -1909,17 +1992,41 @@ function collectReachable(divisions: Division[], rootXmlId: string): Set<string>
 }
 
 /**
+ * How a tree walk treats commented-out placeholders. By default it ignores
+ * them, as assembly does: the walk is the document's structure. With
+ * `includeCommented` it follows them too, flagging what it reaches that way
+ * (see {@link DivisionTreeNode.commented}) — what the Contents tree shows, so
+ * a commented-out division stays where it would go.
+ */
+export interface TreeOptions {
+  includeCommented?: boolean;
+}
+
+/** A division's child placeholders, commented-out ones only when asked for. */
+function childRefs(division: Division, includeCommented: boolean): DivisionRefEntry[] {
+  return includeCommented
+    ? parseDivisionRefEntries(division.source, division.sourceFormat)
+    : parseDivisionRefs(division.source, division.sourceFormat).map((xmlId) => ({
+        xmlId,
+        commented: false,
+      }));
+}
+
+/**
  * Return all divisions in `divisions` that are not reachable from
  * `rootXmlId` (and are not the root itself).
  *
  * Orphaned divisions are shown separately in the TOC so they can be placed
- * inside a parent division.
+ * inside a parent division. With `includeCommented`, a division reached only
+ * through a commented-out placeholder is not an orphan: the TOC shows it in the
+ * tree instead (see {@link TreeOptions}).
  */
 export function getOrphanedDivisions(
   divisions: Division[],
   rootXmlId: string,
+  options: TreeOptions = {},
 ): Division[] {
-  const reachable = collectReachable(divisions, rootXmlId);
+  const reachable = collectReachable(divisions, rootXmlId, options);
   return divisions.filter((d) => !reachable.has(d.xmlId));
 }
 
@@ -1930,6 +2037,12 @@ export interface DivisionTreeNode {
   depth: number;
   /** `xmlId` of the division that references this one. */
   parentXmlId: string;
+  /**
+   * `true` when this division is not in the document because its placeholder,
+   * or one above it, is commented out. Only a walk with `includeCommented`
+   * reaches such a division at all (see {@link TreeOptions}).
+   */
+  commented: boolean;
 }
 
 /**
@@ -1941,26 +2054,38 @@ export interface DivisionTreeNode {
  * skipped defensively.  Rendering the result as a single list with
  * depth-based indentation reproduces the tree visually while keeping a flat
  * structure that a single dnd `SortableContext` can operate over.
+ *
+ * With `includeCommented`, commented-out placeholders are followed too and
+ * their subtrees flagged `commented`. A division that is also placed for real
+ * somewhere under `startXmlId` is shown there, never at its commented-out
+ * spot, so the tree never claims a division is out of the document while the
+ * build includes it.
  */
 export function buildDivisionTree(
   divisions: Division[],
   startXmlId: string,
+  { includeCommented = false }: TreeOptions = {},
 ): DivisionTreeNode[] {
+  const placedForReal = includeCommented
+    ? collectReachable(divisions, startXmlId)
+    : null;
   const out: DivisionTreeNode[] = [];
   const visited = new Set<string>([startXmlId]);
-  const walk = (parentXmlId: string, depth: number) => {
+  const walk = (parentXmlId: string, depth: number, inComment: boolean) => {
     const parent = divisions.find((d) => d.xmlId === parentXmlId);
     if (!parent) return;
-    for (const ref of parseDivisionRefs(parent.source, parent.sourceFormat)) {
-      if (visited.has(ref)) continue;
-      const div = divisions.find((d) => d.xmlId === ref);
+    for (const ref of childRefs(parent, includeCommented)) {
+      const commented = inComment || ref.commented;
+      if (commented && placedForReal?.has(ref.xmlId)) continue;
+      if (visited.has(ref.xmlId)) continue;
+      const div = divisions.find((d) => d.xmlId === ref.xmlId);
       if (!div) continue;
-      visited.add(ref);
-      out.push({ division: div, depth, parentXmlId });
-      walk(ref, depth + 1);
+      visited.add(ref.xmlId);
+      out.push({ division: div, depth, parentXmlId, commented });
+      walk(ref.xmlId, depth + 1, commented);
     }
   };
-  walk(startXmlId, 0);
+  walk(startXmlId, 0, false);
   return out;
 }
 
@@ -1969,17 +2094,22 @@ export function buildDivisionTree(
  * not referenced by any other orphan.  Each orphan root heads its own dangling
  * subtree, so the TOC can render unplaced material as trees rather than a flat
  * jumble of every disconnected descendant.
+ *
+ * `options` is passed through to {@link getOrphanedDivisions}, and the "not
+ * referenced by another orphan" test follows the same placeholders, so a
+ * subtree hanging from an orphan by a commented-out placeholder stays with it.
  */
 export function getOrphanRoots(
   divisions: Division[],
   rootXmlId: string,
+  options: TreeOptions = {},
 ): Division[] {
-  const orphans = getOrphanedDivisions(divisions, rootXmlId);
+  const orphans = getOrphanedDivisions(divisions, rootXmlId, options);
   const orphanIds = new Set(orphans.map((d) => d.xmlId));
   const referenced = new Set<string>();
   for (const o of orphans) {
-    for (const ref of parseDivisionRefs(o.source, o.sourceFormat)) {
-      if (orphanIds.has(ref)) referenced.add(ref);
+    for (const ref of childRefs(o, options.includeCommented ?? false)) {
+      if (orphanIds.has(ref.xmlId)) referenced.add(ref.xmlId);
     }
   }
   return orphans.filter((d) => !referenced.has(d.xmlId));
@@ -3280,6 +3410,14 @@ export interface RecordPools {
  * is a single set of refs shared across all three kinds — Division, Asset,
  * and Snippet refs are unique against each other project-wide, so one set
  * safely guards cycles across all three without risk of collision.
+ *
+ * A placeholder inside an XML comment is commented out, not placed, and is
+ * left as written. Expanding it would also break the document: the resolved
+ * markup's own comments would close the outer one early, and any `--` in it is
+ * illegal inside a comment. The comment is the regex's first alternative, so it
+ * is consumed whole before anything inside it can match as a placeholder.
+ * LaTeX and Markdown comments need nothing here: their converters have already
+ * turned them into XML comments or dropped them.
  */
 function expandRefs(
   xml: string,
@@ -3287,8 +3425,9 @@ function expandRefs(
   ancestors: Set<string>,
 ): string {
   return xml.replace(
-    /<plus:([a-z-]+)\s([^>]*ref="[^"]+"[^>]*?)(?:\/>|>\s*<\/plus:\1>)/g,
-    (_match, tag: string, attrs: string) => {
+    /<!--[\s\S]*?-->|<plus:([a-z-]+)\s([^>]*ref="[^"]+"[^>]*?)(?:\/>|>\s*<\/plus:\1>)/g,
+    (match, tag: string | undefined, attrs: string | undefined) => {
+      if (tag === undefined || attrs === undefined) return match;
       const ref = /ref="([^"]+)"/.exec(attrs)?.[1] ?? "";
       // The exercise tags come before the division fallback, which takes any
       // tag it is handed as a division placeholder.

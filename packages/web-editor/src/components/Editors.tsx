@@ -89,7 +89,6 @@ import {
   divisionToPretext,
   divisionWrapperLines,
   splitDivisionSource,
-  findDivisionParent,
   renameDivisionRef,
   renameAssetRef,
   removeAssetRef,
@@ -1123,17 +1122,21 @@ const EditorsInner = (props: EditorsInnerProps) => {
     props.onDivisionUpdate?.(xmlId, changes);
   };
 
-  // Keep a parent's `<plus:TYPE ref="..."/>` placeholder in sync when the child
-  // it points at changes its own `xml:id` or type, so the child stays placed in
-  // the tree and the placeholder keeps naming what it actually references.
+  // Keep every `<plus:TYPE ref="..."/>` placeholder for a division in sync when
+  // the division changes its own `xml:id` or type, so it stays placed in the
+  // tree and each placeholder keeps naming what it actually references.
   //
-  // The parent is resolved by `findDivisionParent`, which never returns the
-  // child itself and never matches a placeholder inside a verbatim span or
-  // written in another format's syntax. That matters here: a stray
-  // `\plus{handout}{self}` pasted into a child's own body is malformed markup,
-  // not a placement, and rewriting *it* would both miss the real parent and
-  // clobber the child's freshly rewritten header. The rewrite is emitted in the
-  // parent's syntax, which need not match the child's.
+  // Every division but the renamed one is rewritten, not just its parent: a
+  // placeholder the author has commented out, to place the division later, has
+  // no parent to find, and `renameDivisionRef` reaches into comments precisely
+  // so that uncommenting it still resolves. A second placement elsewhere is
+  // kept in step the same way. `renameDivisionRef` matches only the holder's own
+  // syntax outside verbatim spans and writes the rewrite in that syntax, which
+  // need not match the child's.
+  //
+  // The renamed division's own body is never touched: a stray
+  // `\plus{handout}{self}` pasted into it is malformed markup, not a placement,
+  // and rewriting it would clobber the child's freshly rewritten header.
   const syncParentDivisionRef = (
     oldXmlId: string,
     newXmlId: string,
@@ -1143,17 +1146,19 @@ const EditorsInner = (props: EditorsInnerProps) => {
     // editor buffer before it started rewriting sources.
     pool: Division[] = divisions,
   ) => {
-    const parent = findDivisionParent(pool, oldXmlId);
-    if (!parent) return;
-    const newParentContent = renameDivisionRef(
-      parent.source,
-      oldXmlId,
-      newXmlId,
-      newType,
-      parent.sourceFormat,
-    );
-    if (newParentContent === parent.source) return;
-    emitContentChange(parent.xmlId, newParentContent, parent.sourceFormat);
+    for (const holder of pool) {
+      if (holder.xmlId === oldXmlId) continue;
+      const newContent = renameDivisionRef(
+        holder.source,
+        oldXmlId,
+        newXmlId,
+        newType,
+        holder.sourceFormat,
+      );
+      if (newContent !== holder.source) {
+        emitContentChange(holder.xmlId, newContent, holder.sourceFormat);
+      }
+    }
   };
 
   // Metadata edits from the settings drawer (and a new division's form). A
