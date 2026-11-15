@@ -193,6 +193,16 @@ peer removing it) closes its tab (see below), and renames carry it along.
   a division lands where the author was; a buffer not seen before starts at the
   top. The map is capped (`MAX_VIEW_STATES`), and a restore reports the cursor
   line so the preview follows it.
+- **Ctrl/Cmd+click on a placeholder** (`editorConfigs/refLinks.ts`,
+  `useRefLinks.ts`) opens what a `<plus:* ref/>` names — division, snippet,
+  exercise or asset, in any of the three syntaxes — as its explorer row would
+  (`handleOpenRef` → `handleTabSelect`). Each placeholder is a Monaco link
+  whose URL is a `command:` URI naming a command the editor registered for
+  itself, so the link runs in the editor that drew it and no global opener is
+  needed. Every live placeholder is a link and the ref is resolved at click
+  time: Monaco recomputes links only when the text changes, so a link withheld
+  from a ref that didn't resolve yet would stay missing after the
+  missing-division quick fix creates its target.
 - `components/editorTarget.ts` resolves `openItem` against the pools.
   `Editors.tsx` derives the buffer from it: a division's body (schema lint,
   preview, Y.Text binding), a snippet's source in its own format, or an

@@ -1394,6 +1394,22 @@ const EditorsInner = (props: EditorsInnerProps) => {
     applyDivisionAdd(createDivisionWithId(xmlId, type, activeDivisionFormat));
   };
 
+  // Ctrl/Cmd+click on a `<plus:* ref/>` placeholder (see
+  // `editorConfigs/refLinks.ts`): open what it names, as its explorer row
+  // would. A ref naming nothing opens nothing; a division's placeholder already
+  // carries the warning and quick fix for that.
+  const handleOpenRef = (kind: OpenItem["kind"], ref: string) => {
+    const exists =
+      kind === "division"
+        ? divisions.some((d) => d.xmlId === ref)
+        : kind === "snippet"
+          ? (projectSnippets ?? []).some((s) => s.ref === ref)
+          : kind === "exercise"
+            ? (projectExercises ?? []).some((e) => e.ref === ref)
+            : (projectAssets ?? []).some((a) => a.ref === ref);
+    if (exists) handleTabSelect({ kind, ref });
+  };
+
   const handleDivisionSelect = (xmlId: string) => {
     applyDivisionSelect(xmlId);
   };
@@ -2737,6 +2753,7 @@ const EditorsInner = (props: EditorsInnerProps) => {
       placementCheck={placementCheck}
       divisionRefCheck={divisionRefCheck}
       onCreateDivisionFromRef={handleCreateDivisionFromRef}
+      onOpenRef={handleOpenRef}
       interactiveCheck={interactiveCheck}
       virtualWrapper={assetWrapper ?? divisionWrapper}
       collab={
