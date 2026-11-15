@@ -130,6 +130,7 @@ import { CollabBridge } from "../collab/bridge";
 import type { CollabSession } from "../collab/types";
 import PresenceAvatars from "../collab/PresenceAvatars";
 import { placementUses, type PlacementCheckInput } from "./editorConfigs/placementDiagnostics";
+import type { DivisionRefCheckInput } from "./editorConfigs/divisionRefDiagnostics";
 import type { InteractiveCheckInput } from "./editorConfigs/interactiveDiagnostics";
 import { generatedImageResolver } from "../generators/previewImages";
 
@@ -1352,8 +1353,8 @@ const EditorsInner = (props: EditorsInnerProps) => {
     emitContentChange(activeDivision.xmlId, body, activeDivisionFormat);
 
     // Reconcile this division's child placeholders against the pool: a
-    // `<plus:TYPE ref="id"/>` naming a division that doesn't exist yet creates
-    // it, and one naming a type its target disagrees with retypes the target.
+    // `<plus:TYPE ref="id"/>` naming a type its target disagrees with retypes
+    // the target.
     // The placeholder's tag is a mirror of the child's own type — the assembled
     // document ignores it entirely and uses the child's own element — so the two
     // must be kept equal from whichever side the author edited.
@@ -1363,12 +1364,11 @@ const EditorsInner = (props: EditorsInnerProps) => {
       activeDivisionFormat,
     )) {
       const child = pool.get(xmlId);
-      if (!child) {
-        const created = createDivisionWithId(xmlId, type, activeDivisionFormat);
-        applyDivisionAdd(created);
-        pool.set(xmlId, created); // prevent duplicates within the same edit
-        continue;
-      }
+      // A placeholder naming no division is only flagged, with a quick fix to
+      // create it (`handleCreateDivisionFromRef`). Creating it here, as the
+      // author typed, made one stray division per keystroke of a ref being
+      // edited to point somewhere else.
+      if (!child) continue;
       // `generic` means the author wrote the untyped `division` alias, so `type`
       // is a default rather than a choice — never push it onto the child.
       if (generic || child.type === type) continue;
@@ -1382,6 +1382,16 @@ const EditorsInner = (props: EditorsInnerProps) => {
       applyDivisionRetype(child, type);
       pool.set(xmlId, { ...child, type });
     }
+  };
+
+  // The quick fix on a placeholder naming no division (see
+  // `editorConfigs/divisionRefDiagnostics.ts`): create it, in the open
+  // division's format, with the type the placeholder's tag names. The
+  // placeholder is already in place, so nothing else is written.
+  const handleCreateDivisionFromRef = (xmlId: string, type: DivisionType) => {
+    if (!activeDivision) return;
+    if (divisions.some((d) => d.xmlId === xmlId)) return;
+    applyDivisionAdd(createDivisionWithId(xmlId, type, activeDivisionFormat));
   };
 
   const handleDivisionSelect = (xmlId: string) => {
@@ -2383,6 +2393,22 @@ const EditorsInner = (props: EditorsInnerProps) => {
       : editorTarget?.kind === "snippet"
         ? { kind: "snippet" as const, ref: editorTarget.snippet.ref, format: editorTarget.snippet.sourceFormat }
         : null;
+  // A division's buffer is checked for placeholders naming no division. Only a
+  // division's: it is the one place a division is placed from.
+  const divisionRefCheck = useMemo((): DivisionRefCheckInput | undefined => {
+    if (editorTarget?.kind !== "division") return undefined;
+    const otherRefs = new Map<string, string>([
+      ...(projectSnippets ?? []).map((sn): [string, string] => [sn.ref, "a snippet"]),
+      ...(projectExercises ?? []).map((ex): [string, string] => [ex.ref, "an exercise"]),
+      ...(projectAssets ?? []).flatMap((a): [string, string][] => (a.ref ? [[a.ref, "an asset"]] : [])),
+    ]);
+    return {
+      sourceFormat: editorTarget.division.sourceFormat,
+      divisionIds: new Set(divisions.map((d) => d.xmlId)),
+      otherRefs,
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [editorTarget?.kind, editorTarget?.kind === "division" ? editorTarget.division.sourceFormat : null, divisions, projectSnippets, projectExercises, projectAssets]);
   const interactiveCheck = useMemo(
     (): InteractiveCheckInput => ({ hasStaticOutput: props.hasStaticOutput === true }),
     [props.hasStaticOutput],
@@ -2709,6 +2735,8 @@ const EditorsInner = (props: EditorsInnerProps) => {
       // the assembled document, which a snippet or asset fragment isn't.
       pretextValidation={isDivisionOpen ? pretextValidation : undefined}
       placementCheck={placementCheck}
+      divisionRefCheck={divisionRefCheck}
+      onCreateDivisionFromRef={handleCreateDivisionFromRef}
       interactiveCheck={interactiveCheck}
       virtualWrapper={assetWrapper ?? divisionWrapper}
       collab={

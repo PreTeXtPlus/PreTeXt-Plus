@@ -18,6 +18,9 @@ import { summarizeCleanFixes, type CleanFinding } from "../cleanFindings";
 import { usePretextDiagnostics } from "./editorConfigs/usePretextDiagnostics";
 import { usePlacementDiagnostics } from "./editorConfigs/usePlacementDiagnostics";
 import type { PlacementCheckInput } from "./editorConfigs/placementDiagnostics";
+import { useDivisionRefDiagnostics } from "./editorConfigs/useDivisionRefDiagnostics";
+import type { DivisionRefCheckInput } from "./editorConfigs/divisionRefDiagnostics";
+import type { DivisionType } from "../types/sections";
 import { useInteractiveDiagnostics } from "./editorConfigs/useInteractiveDiagnostics";
 import type { InteractiveCheckInput } from "./editorConfigs/interactiveDiagnostics";
 import type { PretextValidationInput } from "./editorConfigs/pretextDiagnostics";
@@ -137,6 +140,14 @@ interface CodeEditorProps {
    * (see `editorConfigs/placementDiagnostics.ts`). Memoize it, as above.
    */
   placementCheck?: PlacementCheckInput;
+  /**
+   * The project's refs, against which this buffer's division placeholders are
+   * checked for one naming no division (see
+   * `editorConfigs/divisionRefDiagnostics.ts`). Memoize it, as above.
+   */
+  divisionRefCheck?: DivisionRefCheckInput;
+  /** Create the division a placeholder names: the missing-division quick fix. */
+  onCreateDivisionFromRef?: (xmlId: string, type: DivisionType) => void;
   /**
    * What a PreTeXt buffer's `<interactive>`s are checked against (see
    * `editorConfigs/interactiveDiagnostics.ts`). Memoize it, as above.
@@ -315,6 +326,8 @@ const CodeEditor = forwardRef<CodeEditorHandle, CodeEditorProps>(({
   onMenuStateChange,
   pretextValidation,
   placementCheck,
+  divisionRefCheck,
+  onCreateDivisionFromRef,
   interactiveCheck,
   collab,
   presence,
@@ -600,6 +613,15 @@ const CodeEditor = forwardRef<CodeEditorHandle, CodeEditorProps>(({
     placementCheck?.sourceFormat === sourceFormat ? placementCheck : undefined,
     isEditorMounted,
     PLACEMENT_LANGUAGE_IDS,
+  );
+
+  useDivisionRefDiagnostics(
+    monacoRef,
+    editorRef,
+    divisionRefCheck?.sourceFormat === sourceFormat ? divisionRefCheck : undefined,
+    isEditorMounted,
+    PLACEMENT_LANGUAGE_IDS,
+    onCreateDivisionFromRef,
   );
 
   useInteractiveDiagnostics(

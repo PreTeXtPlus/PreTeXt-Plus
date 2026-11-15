@@ -1172,8 +1172,7 @@ export interface DivisionRefWithType {
 /**
  * Like {@link parseDivisionRefs} but also returns the division type inferred
  * from the tag name (e.g. `<plus:chapter ref="x"/>` → `{ type: "chapter", xmlId: "x" }`).
- * Used to auto-create Division records when new refs appear in edited content,
- * and to push a retyped placeholder onto the division it points at.
+ * Used to push a retyped placeholder onto the division it points at.
  *
  * Only tag names in {@link DIVISION_REF_TAGS} are considered — the asset
  * placeholder (`plus:image`) is not a division and is skipped. The generic
@@ -1185,7 +1184,31 @@ export function parseDivisionRefsWithTypes(
   content: string,
   sourceFormat: SourceFormat,
 ): DivisionRefWithType[] {
-  const refs: DivisionRefWithType[] = [];
+  return parseDivisionRefSpans(content, sourceFormat).map(({ xmlId, type, generic }) => ({
+    xmlId,
+    type,
+    generic,
+  }));
+}
+
+/** A {@link DivisionRefWithType} with where its placeholder sits in the source. */
+export interface DivisionRefSpan extends DivisionRefWithType {
+  index: number;
+  length: number;
+}
+
+/**
+ * {@link parseDivisionRefsWithTypes} with each placeholder's `[index, length)`
+ * in `content`, for marking it in the code editor (see
+ * `editorConfigs/divisionRefDiagnostics.ts`). Commented-out placeholders and
+ * examples in verbatim spans are skipped, as everywhere a ref is read as a
+ * placement.
+ */
+export function parseDivisionRefSpans(
+  content: string,
+  sourceFormat: SourceFormat,
+): DivisionRefSpan[] {
+  const refs: DivisionRefSpan[] = [];
   const tags = DIVISION_REF_TAG_ALTERNATION;
   const closeTag = `(?:${tags})`;
   // One alternative per format, each capturing tag in group 1 and ref in
@@ -1203,7 +1226,7 @@ export function parseDivisionRefsWithTypes(
     const xmlId = m[2];
     const generic = tagName === "division";
     const type: DivisionType = generic ? "section" : (tagName as DivisionType);
-    refs.push({ type, xmlId, generic });
+    refs.push({ type, xmlId, generic, index: m.index, length: m[0].length });
   }
   return refs;
 }
@@ -1640,8 +1663,8 @@ export function addPlacementInstance(
 
 /**
  * Create a minimal Division record for a given `xmlId` and `type`.
- * Used when the user types a new `<plus:TYPE ref="id"/>` placeholder into a
- * division's content and no matching Division exists in the pool yet.
+ * Used by the quick fix on a `<plus:TYPE ref="id"/>` placeholder naming no
+ * division (see `editorConfigs/divisionRefDiagnostics.ts`).
  */
 export function createDivisionWithId(
   xmlId: string,
