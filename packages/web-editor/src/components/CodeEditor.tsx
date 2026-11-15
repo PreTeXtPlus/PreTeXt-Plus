@@ -20,6 +20,8 @@ import { usePlacementDiagnostics } from "./editorConfigs/usePlacementDiagnostics
 import type { PlacementCheckInput } from "./editorConfigs/placementDiagnostics";
 import { useDivisionRefDiagnostics } from "./editorConfigs/useDivisionRefDiagnostics";
 import type { DivisionRefCheckInput } from "./editorConfigs/divisionRefDiagnostics";
+import { useRefLinks } from "./editorConfigs/useRefLinks";
+import type { RefTargetKind } from "./editorConfigs/refLinks";
 import type { DivisionType } from "../types/sections";
 import { useInteractiveDiagnostics } from "./editorConfigs/useInteractiveDiagnostics";
 import type { InteractiveCheckInput } from "./editorConfigs/interactiveDiagnostics";
@@ -148,6 +150,11 @@ interface CodeEditorProps {
   divisionRefCheck?: DivisionRefCheckInput;
   /** Create the division a placeholder names: the missing-division quick fix. */
   onCreateDivisionFromRef?: (xmlId: string, type: DivisionType) => void;
+  /**
+   * Open what a `<plus:* ref/>` placeholder names, on Ctrl/Cmd+click (see
+   * `editorConfigs/refLinks.ts`). Placeholders are links only when it is set.
+   */
+  onOpenRef?: (kind: RefTargetKind, ref: string) => void;
   /**
    * What a PreTeXt buffer's `<interactive>`s are checked against (see
    * `editorConfigs/interactiveDiagnostics.ts`). Memoize it, as above.
@@ -328,6 +335,7 @@ const CodeEditor = forwardRef<CodeEditorHandle, CodeEditorProps>(({
   placementCheck,
   divisionRefCheck,
   onCreateDivisionFromRef,
+  onOpenRef,
   interactiveCheck,
   collab,
   presence,
@@ -623,6 +631,8 @@ const CodeEditor = forwardRef<CodeEditorHandle, CodeEditorProps>(({
     PLACEMENT_LANGUAGE_IDS,
     onCreateDivisionFromRef,
   );
+
+  useRefLinks(monacoRef, editorRef, isEditorMounted, sourceFormat, PLACEMENT_LANGUAGE_IDS, onOpenRef);
 
   useInteractiveDiagnostics(
     monacoRef,
