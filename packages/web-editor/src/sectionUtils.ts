@@ -23,6 +23,7 @@ import { resolveAssetRef } from "./assetTransforms";
 import { escapeAttribute, escapeText, unescapeAttribute } from "./xmlUtils";
 import { DEFAULT_DOENETML_VERSION, docinfoHasDoenetml, doenetmlCdata } from "./doenet";
 import { DEFAULT_LATEX_IMAGE_PREAMBLE } from "./generators/tikz/document";
+import { findTagEnd, isNameStart, readName } from "./components/editorConfigs/xmlTags";
 
 // ---------------------------------------------------------------------------
 // Internal helpers
@@ -1719,8 +1720,8 @@ export function divisionRefTag(
  * Insert a `<plus:TYPE ref="xmlId"/>` placeholder into `content`, written in
  * `sourceFormat`'s own include syntax.
  *
- * - When `afterXmlId` is `null` the ref is appended just before the closing
- *   tag of the outer element (or at the end of the string if none is found).
+ * - When `afterXmlId` is `null` the ref is appended at the end of the body,
+ *   ahead of any placed conclusion or backmatter (see `appendDivisionRef`).
  * - When `afterXmlId` is provided the new ref is inserted immediately after
  *   that ref's placeholder.  If the named ref is not found, falls back to
  *   appending.
@@ -1742,12 +1743,105 @@ export function insertDivisionRef(
     }
   }
 
-  // Append before the last closing tag, otherwise at end.
-  const lastClose = content.lastIndexOf("</");
-  if (lastClose !== -1) {
-    return content.slice(0, lastClose) + tag + "\n" + content.slice(lastClose);
+  return appendDivisionRef(content, tag, type, sourceFormat);
+}
+
+/**
+ * Division types that close their parent: a `<conclusion>` follows every
+ * other division, and a book's `<backmatter>` comes last.
+ */
+const TRAILING_DIVISION_TYPES: ReadonlySet<string> = new Set([
+  "conclusion",
+  "backmatter",
+]);
+
+/**
+ * Where the part of a division's body that must stay last begins: the first
+ * conclusion or backmatter, whether placed as a placeholder or written inline
+ * (`<conclusion>` in PreTeXt, `\begin{conclusion}` in LaTeX), or `-1` if
+ * there is none. Comments and verbatim spans are skipped, and an inline
+ * element counts only at the top level of the body, so the `<conclusion>` of
+ * a `<subsection>` written inline is not mistaken for the body's own.
+ */
+function trailingDivisionStart(
+  content: string,
+  sourceFormat: SourceFormat,
+): number {
+  let first = -1;
+  const consider = (index: number) => {
+    if (first === -1 || index < first) first = index;
+  };
+  const placed = parseDivisionRefSpans(content, sourceFormat).find((r) =>
+    TRAILING_DIVISION_TYPES.has(r.type),
+  );
+  if (placed) consider(placed.index);
+
+  const scanned = blankInert(content, sourceFormat);
+  if (sourceFormat === "pretext") {
+    let depth = 0;
+    let i = scanned.indexOf("<");
+    while (i !== -1 && (first === -1 || i < first)) {
+      const next = scanned[i + 1];
+      if (next === "/") {
+        depth = Math.max(0, depth - 1);
+        i = findTagEnd(scanned, i);
+      } else if (isNameStart(next)) {
+        const name = readName(scanned, i + 1);
+        const end = findTagEnd(scanned, i);
+        if (depth === 0 && TRAILING_DIVISION_TYPES.has(name)) {
+          consider(i);
+          break;
+        }
+        if (scanned[end - 2] !== "/") depth++;
+        i = end;
+      } else {
+        // `<?…?>`, a stray `<`: not an element.
+        i++;
+      }
+      i = scanned.indexOf("<", i);
+    }
+  } else if (sourceFormat === "latex") {
+    const m = /\\begin\{conclusion\}/.exec(scanned);
+    if (m) consider(m.index);
   }
-  return content + "\n" + tag;
+  return first;
+}
+
+/**
+ * Add placeholder `tag` (of division `type`) at the end of `content`, a
+ * division's *body*. The body holds no element of its own (that is built from
+ * the record), so "the end" is the end of the text — never before its last
+ * `</`, which would be the close of whatever element happens to come last,
+ * such as a `<subtitle>` when everything after it is self-closing placeholders.
+ *
+ * A conclusion or backmatter still has to stay last, so the new placeholder
+ * goes on the line before the first of those instead (see
+ * {@link trailingDivisionStart}).
+ */
+function appendDivisionRef(
+  content: string,
+  tag: string,
+  type: DivisionType | "division",
+  sourceFormat: SourceFormat,
+): string {
+  const at = TRAILING_DIVISION_TYPES.has(type)
+    ? -1
+    : trailingDivisionStart(content, sourceFormat);
+  if (at !== -1) {
+    const lineStart = content.lastIndexOf("\n", at - 1) + 1;
+    const before = content.slice(lineStart, at);
+    // On a line of its own, the new placeholder takes that line's indent;
+    // sharing a line with other text, it just goes in front.
+    if (/^[ \t]*$/.test(before)) {
+      return (
+        content.slice(0, lineStart) + before + tag + "\n" + content.slice(lineStart)
+      );
+    }
+    return content.slice(0, at) + tag + "\n" + content.slice(at);
+  }
+  const body = content.replace(/\s+$/, "");
+  const newline = content.length > body.length ? "\n" : "";
+  return body ? body + "\n" + tag + newline : tag + newline;
 }
 
 /**
@@ -1792,7 +1886,8 @@ export function removeDivisionRef(
  * preserves the original tag's element name (e.g. `plus:section` stays
  * `plus:section` rather than being normalised to `plus:division`).
  *
- * - `afterXmlId === null` moves the ref to the end (before the closing tag).
+ * - `afterXmlId === null` moves the ref to the end of the body, ahead of any
+ *   placed conclusion or backmatter.
  * - `afterXmlId` moves it immediately after that ref.
  */
 export function moveDivisionRef(
@@ -1819,16 +1914,10 @@ export function moveDivisionRef(
     }
   }
 
-  const lastClose = withoutRef.lastIndexOf("</");
-  if (lastClose !== -1) {
-    return (
-      withoutRef.slice(0, lastClose) +
-      originalTag +
-      "\n" +
-      withoutRef.slice(lastClose)
-    );
-  }
-  return withoutRef + "\n" + originalTag;
+  const movedType =
+    (span && parseDivisionRefSpans(originalTag, sourceFormat)[0]?.type) ||
+    "division";
+  return appendDivisionRef(withoutRef, originalTag, movedType, sourceFormat);
 }
 
 /**
