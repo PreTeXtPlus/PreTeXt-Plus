@@ -15,6 +15,7 @@ import {
   createDivisionWithId,
   divisionRefTag,
   insertDivisionRef,
+  moveDivisionRef,
   removeDivisionRef,
   renameDivisionRef,
   findDivisionParent,
@@ -465,7 +466,87 @@ describe('insertDivisionRef', () => {
     const source = '\\begin{verbatim}\n\\plus{section}{a}\n\\end{verbatim}\n'
     // No real anchor, so it appends rather than splicing into the example.
     expect(insertDivisionRef(source, 'b', 'worksheet', 'a', 'latex')).toBe(
-      source + '\n\\plus{worksheet}{b}',
+      source + '\\plus{worksheet}{b}\n',
+    )
+  })
+
+  // A division's source is its body, not its element, so the last `</` is
+  // whatever inner element comes last -- appending there put new divisions
+  // inside a <subtitle>, or ahead of every existing child.
+  it('appends at the end of the body, not inside its last element', () => {
+    const source = '<subtitle>Sub</subtitle>\n<plus:section ref="a"/>\n<plus:section ref="b"/>\n'
+    expect(insertDivisionRef(source, 'c', 'section', null, 'pretext')).toBe(
+      source + '<plus:section ref="c"/>\n',
+    )
+  })
+
+  it('appends after trailing prose rather than before its closing tag', () => {
+    expect(insertDivisionRef('<p>Intro</p>', 'c', 'section', null, 'pretext')).toBe(
+      '<p>Intro</p>\n<plus:section ref="c"/>',
+    )
+    expect(insertDivisionRef('', 'c', 'section', null, 'pretext')).toBe('<plus:section ref="c"/>')
+  })
+
+  it('keeps a placed conclusion or backmatter last', () => {
+    const source = '<plus:section ref="a"/>\n  <plus:conclusion ref="z"/>\n'
+    expect(insertDivisionRef(source, 'c', 'section', null, 'pretext')).toBe(
+      '<plus:section ref="a"/>\n  <plus:section ref="c"/>\n  <plus:conclusion ref="z"/>\n',
+    )
+    expect(
+      insertDivisionRef('\\plus{chapter}{a}\n\\plus{backmatter}{bm}', 'c', 'chapter', null, 'latex'),
+    ).toBe('\\plus{chapter}{a}\n\\plus{chapter}{c}\n\\plus{backmatter}{bm}')
+  })
+
+  it('keeps an inline <conclusion> last', () => {
+    const source =
+      '<p>Intro</p>\n<plus:subsection ref="a"/>\n<conclusion>\n  <p>Done</p>\n</conclusion>\n'
+    expect(insertDivisionRef(source, 'c', 'subsection', null, 'pretext')).toBe(
+      '<p>Intro</p>\n<plus:subsection ref="a"/>\n<plus:subsection ref="c"/>\n<conclusion>\n  <p>Done</p>\n</conclusion>\n',
+    )
+  })
+
+  it('keeps an inline \\begin{conclusion} last', () => {
+    const source = '\\plus{subsection}{a}\n\\begin{conclusion}\nDone.\n\\end{conclusion}\n'
+    expect(insertDivisionRef(source, 'c', 'subsection', null, 'latex')).toBe(
+      '\\plus{subsection}{a}\n\\plus{subsection}{c}\n\\begin{conclusion}\nDone.\n\\end{conclusion}\n',
+    )
+  })
+
+  it("ignores the conclusion of a division written inline", () => {
+    const source =
+      '<subsection>\n  <title>A</title>\n  <p/>\n  <conclusion><p/></conclusion>\n</subsection>\n'
+    expect(insertDivisionRef(source, 'c', 'subsection', null, 'pretext')).toBe(
+      source + '<plus:subsection ref="c"/>\n',
+    )
+  })
+
+  it('ignores a conclusion in a comment or a code sample', () => {
+    const source = '<p/>\n<!-- <conclusion/> -->\n<pre><conclusion/></pre>\n'
+    expect(insertDivisionRef(source, 'c', 'section', null, 'pretext')).toBe(
+      source + '<plus:section ref="c"/>\n',
+    )
+  })
+
+  it('ignores a commented-out conclusion when appending', () => {
+    const source = '<plus:section ref="a"/>\n<!-- <plus:conclusion ref="z"/> -->\n'
+    expect(insertDivisionRef(source, 'c', 'section', null, 'pretext')).toBe(
+      source + '<plus:section ref="c"/>\n',
+    )
+  })
+})
+
+describe('moveDivisionRef to the end', () => {
+  it('moves past the last ref, not into the last element', () => {
+    const source = '<subtitle>Sub</subtitle>\n<plus:section ref="a"/>\n<plus:section ref="b"/>\n'
+    expect(moveDivisionRef(source, 'a', null, 'pretext')).toBe(
+      '<subtitle>Sub</subtitle>\n<plus:section ref="b"/>\n<plus:section ref="a"/>\n',
+    )
+  })
+
+  it('moves a conclusion to the very end', () => {
+    const source = '<plus:conclusion ref="z"/>\n<plus:section ref="a"/>\n'
+    expect(moveDivisionRef(source, 'z', null, 'pretext')).toBe(
+      '<plus:section ref="a"/>\n<plus:conclusion ref="z"/>\n',
     )
   })
 })
