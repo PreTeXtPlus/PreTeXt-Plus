@@ -139,6 +139,16 @@ export interface AssetGenerator {
    */
   wrapSource(source: string, ref: string): string;
   /**
+   * How a multi-file project keeps the source: in `<id>/<ref>.<extension>`,
+   * pulled into the wrapper by `xi:include`. `text` is a file holding the
+   * buffer as typed (TeX, Asymptote, Sage), included with `parse="text"`;
+   * `xml` is a document of its own, whose element takes `namespace` when it
+   * declares none, since it no longer inherits the wrapper's.
+   */
+  sourceFile:
+    | { parse: "text"; extension: string }
+    | { parse: "xml"; extension: string; namespace?: string };
+  /**
    * The docinfo elements whose inner text is part of the render input, in
    * order. Mirrors the Rails `Content::GeneratedAssetBehavior::DOCINFO_INPUT_ELEMENTS` entry.
    */

@@ -166,10 +166,20 @@ Host: `railsProjectMapping.js` and `editor.jsx` pass `source_format` both ways.
 
 ## Later
 
-- **`xi:include` in the downloaded archive.** Each activity as
-  `source/doenet/<ref>.doenet`, included with `parse="text"`, as part of making
-  the download a multi-file project (divisions too). The assembler then returns
-  a set of files rather than one string.
+- **`xi:include` in the downloaded archive** — proof of concept in place
+  (2026-11-14). `assembleProjectFiles` returns the document as files: each
+  activity as `source/doenet/<ref>.doenet`, included with `parse="text"`, each
+  placed division as `source/<ref>.ptx`, each generated asset's source as
+  `source/<generator>/<ref>.<ext>`, the docinfo as `source/docinfo.ptx`.
+  Uploads moved to `assets/`, beside `source/`, in every archive, declared in
+  the docinfo (`<directories external="../assets"/>`, added by the server's
+  assembly); the publication file keeps only `generated="../generated-assets"`.
+  `projects#download` uses it (`ProjectArchiveBuilder`'s `modular: true`); a
+  build still takes the single file. Tests expand the includes (libxml2's
+  XInclude, in `SourceAssemblerTest`) and compare with the single file. Not yet
+  done: a real `pretext build` of a downloaded archive, files for snippets and
+  designer exercises, and LaTeX/Markdown divisions in
+  their own format (they are converted to PreTeXt).
 - **Static outputs.** A PDF needs a `<static>` or `@preview` for every interactive;
   the existing lint notes that when the project has such a target. A Doenet record
   has nowhere to put one yet; a `static` field on the record is the natural home.

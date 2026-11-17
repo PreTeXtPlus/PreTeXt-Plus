@@ -16,7 +16,8 @@ module BuildServerHelper
   # Tests that care what the assembler actually produces should not use this --
   # see SourceAssemblerTest, which runs the real bundle.
   def stub_source_assembler(source = "<pretext><article/></pretext>", &block)
-    SourceAssembler.stub(:new, ->(_project) { Struct.new(:call).new(source) }, &block)
+    assembler = Struct.new(:call, :files).new(source, { "main.ptx" => source })
+    SourceAssembler.stub(:new, ->(_project) { assembler }, &block)
   end
 
   # Stubs the Net::HTTP.start-based preview build call used by ProjectsController#preview.

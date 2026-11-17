@@ -22,12 +22,13 @@ class NodeScript
     @timeout = timeout
   end
 
+  # @param args [Array<String>] command-line arguments for the script
   # @return [String] the script's stdout
   # @raise [Error]
-  def call(input)
+  def call(input, args: [])
     raise Error, "bundle missing at #{@bundle} (run `npm run build:assembler`)" unless @bundle.exist?
 
-    out, err, status = run(input)
+    out, err, status = run(input, args)
     raise Error, "#{@bundle.basename} exited #{status.exitstatus}: #{err.strip.truncate(2000)}" unless status.success?
 
     out
@@ -44,8 +45,8 @@ class NodeScript
     # it runs. So: threads to keep the pipes draining (an output larger than
     # the pipe buffer deadlocks otherwise), and a hard kill when the deadline
     # passes.
-    def run(input)
-      Open3.popen3(NODE, @bundle.to_s) do |stdin, stdout, stderr, wait|
+    def run(input, args)
+      Open3.popen3(NODE, @bundle.to_s, *args) do |stdin, stdout, stderr, wait|
         # EPIPE, from either the write or the close of a pipe whose reader has
         # already gone, means the child died before taking its input. Swallowed
         # because the exit status says what happened and says it better: raising

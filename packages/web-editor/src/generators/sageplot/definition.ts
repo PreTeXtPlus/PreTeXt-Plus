@@ -27,6 +27,7 @@ export const sageplot: AssetGenerator = {
   starterSource: SAGEPLOT_STARTER_SOURCE,
   // Code, not XML: `x < 2` goes in as typed; only the document's copy is escaped.
   wrapSource: (source, ref) => `<sageplot label="${ref}">\n${escapeText(source)}\n</sageplot>`,
+  sourceFile: { parse: "text", extension: "sage" },
   // Mirrors Content::GeneratedAssetBehavior::DOCINFO_INPUT_ELEMENTS["sageplot"]:
   // extract-sageplot.xsl reads nothing from the docinfo.
   docinfoInputElements: [],

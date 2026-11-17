@@ -22,6 +22,7 @@
 // Protocol, kept blunt because a build's correctness rides on it:
 //
 //   stdin   one JSON object, the project
+//   argv    `--files` asks for the multi-file project instead (below)
 //   stdout  the assembled document, UTF-8, and nothing else
 //   stderr  diagnostics
 //   exit 0  stdout is the document
@@ -30,7 +31,12 @@
 // Note the empty-document case is a success, not a failure: a project with no
 // root division assembles to "", exactly as the editor's save path produced ""
 // for it. Deciding what to do about that is the caller's business.
-import { assembleProjectJson } from "../app/javascript/controllers/react/railsProjectMapping.js";
+//
+// With `--files`, stdout is instead one JSON object, `{ "files": [{ "path",
+// "content" }, ...] }`: the same document cut into a PreTeXt project's files
+// joined by `xi:include` (see `assembleProjectFiles`), main.ptx first, paths
+// relative to the source directory. This is what an author downloads.
+import { assembleProjectJson, assembleProjectJsonFiles } from "../app/javascript/controllers/react/railsProjectMapping.js";
 
 /** Read all of stdin as a UTF-8 string. */
 async function readStdin() {
@@ -59,6 +65,11 @@ async function main() {
     json = JSON.parse(input);
   } catch (error) {
     throw new Error(`project JSON did not parse: ${error.message}`);
+  }
+
+  if (process.argv.includes("--files")) {
+    await writeStdout(JSON.stringify({ files: assembleProjectJsonFiles(json) }));
+    return;
   }
 
   await writeStdout(assembleProjectJson(json));

@@ -53,6 +53,8 @@ export type { LanguageOption } from "./languages";
 export {
   assembleProjectSource,
   assembleFullProjectSource,
+  assembleProjectFiles,
+  withExternalDirectory,
   // Division ref utilities (new architecture)
   parseDivisionRefs,
   parseDivisionRefEntries,

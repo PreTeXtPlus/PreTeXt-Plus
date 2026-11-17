@@ -11,8 +11,12 @@
 class PublicationFileBuilder
   # The elements the build depends on, as element path => attributes.
   #
-  # source/directories: the archive puts assets in source/external, which is where PreTeXt
-  # resolves `external` relative to the main source file. html/resources: the built site
+  # source/directories: generated images go in generated-assets/, beside source/ -- the
+  # layout PreTeXt authors are told to keep; the path is relative to the main source
+  # file, hence the "../". The *external* directory (assets/, also beside source/) is not
+  # here: PreTeXt reads it from the docinfo now (directories/@external, 2026-07-30), where
+  # the assembler writes it (archiveDocinfo in railsProjectMapping.js), and warns when a
+  # publication file names it too. html/resources: the built site
   # loads its JavaScript and CSS from the PreTeXt CDN rather than carrying its own copy.
   # html/brandlogo: every build gets the PreTeXt.Plus logo, which ProjectArchiveBuilder
   # writes to DEFAULT_BRANDLOGO. It sits in a directory of its own because assets are
@@ -32,7 +36,7 @@ class PublicationFileBuilder
   DEFAULT_BRANDLOGO_URL = "https://pretext.plus".freeze
 
   BASE = {
-    %w[ source directories ] => { "external" => "external", "generated" => "generated" },
+    %w[ source directories ] => { "generated" => "../generated-assets" },
     %w[ html resources ] => { "host" => "cdn" },
     %w[ html brandlogo ] => { "source" => DEFAULT_BRANDLOGO, "url" => DEFAULT_BRANDLOGO_URL }
   }.freeze

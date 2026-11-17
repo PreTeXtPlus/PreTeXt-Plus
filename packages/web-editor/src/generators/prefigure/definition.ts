@@ -27,6 +27,8 @@ export const prefigure: AssetGenerator = {
   starterSource: PREFIGURE_STARTER_SOURCE,
   wrapSource: (source, ref) =>
     `<prefigure xmlns="${PREFIGURE_NAMESPACE}" label="${ref}">\n${source}\n</prefigure>`,
+  // A `<diagram>` in PreFigure's namespace: a file `prefig build` takes as it stands.
+  sourceFile: { parse: "xml", extension: "xml", namespace: PREFIGURE_NAMESPACE },
   // Mirrors Content::GeneratedAssetBehavior::DOCINFO_INPUT_ELEMENTS["prefigure"].
   docinfoInputElements: ["macros", "prefigure-preamble"],
   renderTrigger: "live",

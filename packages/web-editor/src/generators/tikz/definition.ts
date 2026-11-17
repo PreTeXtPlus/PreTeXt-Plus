@@ -27,6 +27,7 @@ export const tikz: AssetGenerator = {
   // TeX and only the document's copy is XML. Exactly `&`, `<` and `>` are escaped,
   // so that unwrapping a `<latex-image>` into an asset round-trips.
   wrapSource: (source, ref) => `<latex-image label="${ref}">\n${escapeText(source)}\n</latex-image>`,
+  sourceFile: { parse: "text", extension: "tex" },
   // Mirrors Content::GeneratedAssetBehavior::DOCINFO_INPUT_ELEMENTS["tikz"].
   docinfoInputElements: ["macros", "latex-image-preamble"],
   renderTrigger: "live",

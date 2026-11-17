@@ -5,6 +5,18 @@
 import { escapeAttribute, escapeText } from "./xmlUtils";
 import type { Asset } from "./types/editor";
 import { generatorFor } from "./generators";
+import type { AssetGenerator } from "./generators/types";
+
+/**
+ * Multi-file assembly's hook: given a generated asset's (trimmed) source,
+ * write it to a file and return the `<xi:include>` standing for it, or
+ * undefined to keep the source inline.
+ */
+export type GeneratedSourceIncluder = (
+  generator: AssetGenerator,
+  ref: string,
+  source: string,
+) => string | undefined;
 
 /**
  * `<image>` markup for an asset.
@@ -37,12 +49,12 @@ import { generatorFor } from "./generators";
  * during assembly, so the same asset can be embedded with different
  * attributes in different places.
  */
-function transformImageAsset(asset: Asset, ref: string): string {
+function transformImageAsset(asset: Asset, ref: string, include?: GeneratedSourceIncluder): string {
   if (asset.isFile && !asset.fileRef && !asset.url) {
     return `<!-- image asset "${ref}" is marked as file-based but has no fileRef or url -->`;
   }
   const sourceAttr = imageSourceAttr(asset, ref);
-  const inner = [ shortDescriptionTag(asset), generatedOrAuthoredSource(asset, ref) ]
+  const inner = [ shortDescriptionTag(asset), generatedOrAuthoredSource(asset, ref, include) ]
     .filter(Boolean)
     .join("\n");
   return inner
@@ -63,10 +75,20 @@ function imageSourceAttr(asset: Asset, ref: string): string {
  * unknown generator falls back to verbatim, which a schema check then reports
  * rather than this silently dropping the diagram.
  */
-function generatedOrAuthoredSource(asset: Asset, ref: string): string | undefined {
+function generatedOrAuthoredSource(
+  asset: Asset,
+  ref: string,
+  include?: GeneratedSourceIncluder,
+): string | undefined {
   const source = asset.source?.trim();
   const generator = generatorFor(asset.sourceFormat);
-  return generator ? generator.wrapSource(source ?? "", ref) : source;
+  if (!generator) return source;
+  const included = include?.(generator, ref, source ?? "");
+  if (included === undefined) return generator.wrapSource(source ?? "", ref);
+  // Wrapped around a marker, as the editor's wrapper lines are: `wrapSource`
+  // escapes a text source, and the include is markup.
+  const marker = "\u0000";
+  return generator.wrapSource(marker, ref).replace(marker, included);
 }
 
 /**
@@ -121,8 +143,12 @@ export function assetWrapperLines(asset: Asset): {
  * back to an XML comment if no matching asset is found, so a stale/typo'd
  * ref fails loudly in the assembled source rather than silently vanishing.
  */
-export function resolveAssetRef(ref: string, assets: Asset[]): string {
+export function resolveAssetRef(
+  ref: string,
+  assets: Asset[],
+  include?: GeneratedSourceIncluder,
+): string {
   const asset = assets.find((a) => a.ref === ref);
   if (!asset) return `<!-- missing asset: ${ref} -->`;
-  return transformImageAsset(asset, ref);
+  return transformImageAsset(asset, ref, include);
 }
