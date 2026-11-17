@@ -27,9 +27,14 @@
     "DB_HOST": "postgres"
   },
 
-  // Use 'forwardPorts' to make a list of ports inside the container available locally.
-  // 5173 is the Vite dev server for packages/web-editor (npm run dev).
-  "forwardPorts": [3000, 5432, 5173],
+  // No 'forwardPorts' on purpose. A port listed there is forwarded when the
+  // Codespace starts, before anything listens on it, and that early forward
+  // never connects: the first `bin/dev` needed the port's visibility toggled in
+  // the Ports panel before the URL would load. Left alone, the "process" scan
+  // below forwards 3000 (Rails) and 5173 (Vite, `npm run dev` in
+  // packages/web-editor) as soon as each starts listening, using the
+  // portsAttributes labels. (5432 was never reachable this way anyway: Postgres
+  // runs in its own compose service, not in this container.)
 
   // Configure tool-specific properties.
   "customizations": {
