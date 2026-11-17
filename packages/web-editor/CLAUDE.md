@@ -116,6 +116,14 @@ Splits and merges PreTeXt documents at section boundaries. Supported section typ
 - LaTeX names it in the optional argument (`\plus[instance=ch3]{image}{graph}`), Markdown in the directive (`::image{ref="graph" instance="ch3"}`); both converters pass it through like any attribute. `parsePlacements`/`addPlacementInstance` read and write all three syntaxes.
 - `editorConfigs/placementDiagnostics.ts` (via `usePlacementDiagnostics` in `CodeEditor`) flags, on the open division's or snippet's live text, a second unnamed placement of the same image or snippet anywhere in the project, a repeated instance name, a malformed one, and one whose qualified label would equal another record's ref — with a quick fix that writes a free instance name (seeded from the open record's ref) in that buffer's syntax. `Editors` supplies every other placement and every ref as `placementCheck`.
 
+**Multi-file assembly** (`assembleProjectFiles`) is the same assembly with a sink threaded through `expandRefs`: a placed division becomes `<ref>.ptx` and an `<xi:include href>` (files flat beside `main.ptx`, so an href reads the same from any file), a Doenet activity's source becomes `doenet/<ref>.doenet` included with `parse="text"`, a generated asset's source becomes `<generator>/<ref>.<ext>` inside its generator's element (`AssetGenerator.sourceFile`: `prefigure/graph.xml` as XML in PreFigure's namespace; `tikz/plot.tex`, `asymptote/*.asy`, `sageplot/*.sage` as text, as typed), and the docinfo is `docinfo.ptx`. It is what the Rails host's project download writes; previews and builds use the single file.
+
+- The invariant is that processing the includes gives back `assembleFullProjectSource`'s document; `__tests__/sourceFiles.test.ts` expands and compares for every case.
+- A file is a *placement*: placeholder attributes are written into it, and a placement with an `instance` is `<ref>-<instance>.ptx` with everything beneath it inline, since `qualifyIdentifiers` cannot reach into an included file.
+- Anything that is not exactly one element (a resolution-failure comment, a snippet's siblings), a ref that is no filename, or a name already holding different content stays inline. Snippets and designer exercises are always inline. Every placement of a generated asset or activity includes the one file, instance or not: only the wrapper is qualified.
+- A file gets `xmlns:xi` on its element only when it includes something.
+- `withExternalDirectory(docinfo, dir)` writes `<directories external>` into a docinfo — where PreTeXt reads the external directory from since 2026-07-30. It is exported for the host and not part of assembly: where uploads sit beside the source is the host's layout (the Rails host adds `../assets` to every document bound for an archive, never to the preview's).
+
 ### Project Explorer (`src/components/ProjectExplorer.tsx` + `src/components/toc/`)
 
 The left sidebar is an always-visible icon rail plus a panel for the selected
@@ -193,6 +201,16 @@ peer removing it) closes its tab (see below), and renames carry it along.
   a division lands where the author was; a buffer not seen before starts at the
   top. The map is capped (`MAX_VIEW_STATES`), and a restore reports the cursor
   line so the preview follows it.
+- **Ctrl/Cmd+click on a placeholder** (`editorConfigs/refLinks.ts`,
+  `useRefLinks.ts`) opens what a `<plus:* ref/>` names — division, snippet,
+  exercise or asset, in any of the three syntaxes — as its explorer row would
+  (`handleOpenRef` → `handleTabSelect`). Each placeholder is a Monaco link
+  whose URL is a `command:` URI naming a command the editor registered for
+  itself, so the link runs in the editor that drew it and no global opener is
+  needed. Every live placeholder is a link and the ref is resolved at click
+  time: Monaco recomputes links only when the text changes, so a link withheld
+  from a ref that didn't resolve yet would stay missing after the
+  missing-division quick fix creates its target.
 - `components/editorTarget.ts` resolves `openItem` against the pools.
   `Editors.tsx` derives the buffer from it: a division's body (schema lint,
   preview, Y.Text binding), a snippet's source in its own format, or an
@@ -368,6 +386,53 @@ build input.
   `prefigure`. The collab doc carries `sourceFormat` and `previewInputDigest`
   (the sha256 of the render input the stored preview was built from); bytes
   stay with the host.
+
+### Doenet activities (`src/doenet/`, `DoenetEditorPane.tsx`)
+
+An exercise record whose `sourceFormat` is `"doenetml"` (`ExerciseSourceFormat`;
+absent means `"pretext"`, so every older record and collab entry reads as before)
+holds DoenetML in `source`, and its `attrs` are the `<interactive>`'s (`width`,
+`aspect`), not an `<exercise>`'s. See `docs/doenet-plan.md`.
+
+- **Placement names the wrapper.** `EXERCISE_PLACEMENT_TAGS`: `<plus:exercise>`,
+  `<plus:project>`/`activity`/`exploration`/`investigation` wrap the activity in
+  that element; `<plus:interactive>` emits the bare `<interactive>` (for a figure,
+  or a `<task>` the author writes). `parseExerciseRefs`/`renameExerciseRef`/
+  `removeExerciseRef` and `parsePlacements` see every tag; `expandRefs` dispatches
+  them before its division fallback, which would otherwise read `plus:project` as
+  a division. A designer exercise resolves only under `exercise` (a comment
+  otherwise). `exerciseEmbedCode(ref, format, tag)` writes the three syntaxes;
+  `ExerciseSettings` offers the tag in a "Place as" picker, with width and aspect.
+- **Assembly** (`wrapExerciseSource(exercise, tag)`): `<interactive platform="doenetml">`
+  named `<ref>-doenet` under a wrapper (the ref itself when bare), with a
+  `<slate surface="doenetml">` holding the source verbatim in a CDATA section
+  (`doenetmlCdata`; a `]]>` in the source is split across two sections) — PreTeXt
+  writes it back raw into the page's `<script type="text/doenetml">`. The activity's
+  wrap is never run through `expandRefs`: nothing inside the CDATA is a placeholder.
+  `slate` is in `OPAQUE_ELEMENTS`. `wrapInPretextDocument` adds
+  `<doenetml version="DEFAULT_DOENETML_VERSION"/>` to the docinfo whenever the body
+  has a DoenetML interactive and the docinfo names none, so a build never runs
+  `@latest`; the editor frame loads the same version (`effectiveDoenetmlVersion`).
+- **Editing** is Doenet's own editor in a sandboxed iframe (`allow-scripts` only,
+  never widened: a collaborator's DoenetML runs there), shown in place of the code
+  editor as the designer is. `doenet/editorPage.ts` builds the page (the standalone
+  package from jsdelivr at the document's version) and its `postMessage` bridge:
+  ready, change (Doenet's debounced callback), set (an outside change, applied by
+  re-creating the editor, since its `doenetML` prop is initial only). The pane
+  accepts only messages from its own frame's window, and sends a set only for a
+  source the frame did not itself report. Edits reach the project through
+  `applyRecordSourceChange` (working copy, collab `diffReplace`, autosave), never
+  the designer's per-edit `onExerciseUpdate`. While an activity is open the
+  preview panel is withdrawn in both layouts (`isDoenetOpen` in `Editors`) —
+  Doenet's editor has its own viewer — and the editor pane takes the width. The
+  frame's light/dark mode is the host's `previewTheme`, light by default (Doenet's
+  `ThemeSetting` has the same values; its editor would otherwise follow the
+  browser). A placed activity still previews from its division: pretext-html
+  0.20.0 returns the interactive's page and `iframePages.ts` frames it — Doenet's
+  viewer runs in that sandbox (measured).
+- `NewExerciseForm`'s type picker has "Doenet activity" (`DOENET_STARTER`,
+  `DOENET_DEFAULT_ATTRS`); Insert → Interactives & Media has a DoenetML activity
+  typed in place. `__tests__/doenet.test.ts` runs every wrapper through the schema.
 
 ### Collaboration (`src/collab/`)
 

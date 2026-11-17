@@ -43,7 +43,7 @@ class GenerateArchiveBuilderTest < ActiveSupport::TestCase
     skip_without_bundle
     contents = entries(GenerateArchiveBuilder.new(@project, @asset).build)
 
-    logo = "source/external/#{PublicationFileBuilder::DEFAULT_BRANDLOGO}"
+    logo = "assets/#{PublicationFileBuilder::DEFAULT_BRANDLOGO}"
     assert_equal %W[ project.ptx publication/publication.ptx publication/web.ptx source/main.ptx #{logo} ].sort,
                  contents.keys.sort
     assert_equal ProjectArchiveBuilder.new(@project).publication_ptx(@project), contents["publication/web.ptx"]

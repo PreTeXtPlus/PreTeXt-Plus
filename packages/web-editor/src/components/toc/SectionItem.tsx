@@ -8,6 +8,11 @@ interface SectionItemProps {
   depth: number;
   /** True while this division is the one open in the code editor. */
   isActive: boolean;
+  /**
+   * True when the division's placeholder, or one above it, is commented out:
+   * the row shows where it would go, muted, since the document leaves it out.
+   */
+  isCommented?: boolean;
   hasChildren: boolean;
   isExpanded: boolean;
   onToggleExpand: () => void;
@@ -25,6 +30,7 @@ const SectionItem = ({
   division,
   depth,
   isActive,
+  isCommented = false,
   hasChildren,
   isExpanded,
   onToggleExpand,
@@ -32,10 +38,12 @@ const SectionItem = ({
   onAddChild,
 }: SectionItemProps) => {
   const title = divisionDisplayTitle(division);
+  const typeLabel = TYPE_FULL_LABELS[division.type] ?? division.type;
 
   return (
     <li
       data-testid={`toc-item-${division.xmlId}`}
+      data-commented={isCommented ? "true" : undefined}
       className={clsx(
         "group relative flex flex-col border-l-[3px] border-transparent cursor-default",
         isActive && "border-l-blue-600",
@@ -63,22 +71,42 @@ const SectionItem = ({
         <button
           type="button"
           className={clsx(
-            "flex-1 min-w-0 bg-transparent border-none cursor-pointer text-left text-[#333] py-1 px-0.5 overflow-hidden",
+            "flex-1 min-w-0 bg-transparent border-none cursor-pointer text-left py-1 px-0.5 overflow-hidden",
+            isCommented ? "text-slate-400" : "text-[#333]",
             isActive && "font-semibold",
           )}
           onClick={onSelect}
           aria-current={isActive ? "true" : undefined}
-          title={TYPE_FULL_LABELS[division.type] ?? division.type}
+          title={
+            isCommented
+              ? `${typeLabel} (commented out)`
+              : typeLabel
+          }
         >
           <span
             data-testid="toc-title"
-            className="block overflow-hidden text-ellipsis whitespace-nowrap text-[0.83rem]"
+            className={clsx(
+              "block overflow-hidden text-ellipsis whitespace-nowrap text-[0.83rem]",
+              isCommented && "italic",
+            )}
           >
             {title || <em>Untitled</em>}
           </span>
-          {division.xmlId && (
-            <span className="block overflow-hidden text-ellipsis whitespace-nowrap text-[0.68rem] font-normal font-mono text-slate-400">
-              {division.xmlId}
+          {(division.xmlId || isCommented) && (
+            <span className="flex items-baseline gap-1.5 overflow-hidden whitespace-nowrap text-[0.68rem] font-normal">
+              {division.xmlId && (
+                <span className="min-w-0 overflow-hidden text-ellipsis font-mono text-slate-400">
+                  {division.xmlId}
+                </span>
+              )}
+              {isCommented && (
+                <span
+                  data-testid="toc-commented"
+                  className="shrink-0 rounded-[3px] border border-dashed border-slate-300 px-1 leading-[1.3] text-slate-500"
+                >
+                  commented out
+                </span>
+              )}
             </span>
           )}
         </button>

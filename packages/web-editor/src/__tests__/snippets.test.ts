@@ -135,6 +135,7 @@ const MEDIA: Record<string, RegExp> = {
   calcplot3d: /<interactive calcplot3d="[^"]+" variant="application"/,
   youtube: /<video youtube="video-id"/,
   iframe: /<interactive iframe="https:/,
+  doenetml: /<interactive platform="doenetml"[^>]*>\s*<slate surface="doenetml">/,
 };
 
 /**

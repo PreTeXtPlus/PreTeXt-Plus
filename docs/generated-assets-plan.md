@@ -44,7 +44,7 @@ A `Content` that is an asset ([content.rb](../app/models/content.rb)) is one of 
 
 | kind | what it is | how it is assembled |
 | --- | --- | --- |
-| `file_asset` | uploaded bytes | `<image source="ref.ext">`; the bytes land in `source/external/ref.ext` |
+| `file_asset` | uploaded bytes | `<image source="ref.ext">`; the bytes land in `assets/ref.ext` |
 | `authored_asset`, `source_format: pretext` | raw PreTeXt in `source` (a hand-written `<latex-image>`, say) | `<image>` + the source, verbatim |
 | `authored_asset`, a generator's `source_format` (`prefigure`) — a *generated asset* | the generator's input in `source`, plus the picture rendered from it as the file | `<image>` + `wrapSource(source, ref)`: `<prefigure label="ref">…</prefigure>` |
 

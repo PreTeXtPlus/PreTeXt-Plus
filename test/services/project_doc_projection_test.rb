@@ -10,6 +10,7 @@ class ProjectDocProjectionTest < ActiveSupport::TestCase
   UNKNOWN_ASSET_ID = "99999999-9999-4999-8999-999999999999".freeze
   GONE_SNIPPET_ID = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa".freeze
   EXERCISE_ID = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb".freeze
+  DOENET_EXERCISE_ID = "dddddddd-dddd-4ddd-8ddd-dddddddddddd".freeze
   GONE_EXERCISE_ID = "cccccccc-cccc-4ccc-8ccc-cccccccccccc".freeze
 
   def fixture(name)
@@ -248,6 +249,21 @@ class ProjectDocProjectionTest < ActiveSupport::TestCase
     assert_equal "A Projected Quiz", exercise.title
     assert_equal "<statement><p>Order the lines.</p></statement>", exercise.source
     assert_equal({ "language" => "python" }, exercise.attrs)
+    # An entry with no sourceFormat is a PreTeXt exercise, as every entry was before the field.
+    assert exercise.pretext_source_format?
+  end
+
+  test "a Doenet activity is written with its format and its interactive's attributes" do
+    ProjectDoc.seed(@project, fixture("projection_records_state"))
+
+    project!
+
+    activity = Content.find(DOENET_EXERCISE_ID)
+    assert activity.exercise?
+    assert activity.doenetml_source_format?
+    assert_equal "projected-drag", activity.ref
+    assert_equal "<p>What is <m>2+2</m>? <answer>4</answer></p>", activity.source
+    assert_equal({ "width" => "100%", "aspect" => "4:3" }, activity.attrs)
   end
 
   test "an exercise tombstone removes the exercise" do

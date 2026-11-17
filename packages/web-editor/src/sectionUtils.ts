@@ -19,9 +19,11 @@ import type {
   RootDivisionType,
 } from "./types/sections";
 import { derivePretextContent } from "./contentConversion";
-import { resolveAssetRef } from "./assetTransforms";
+import { resolveAssetRef, type GeneratedSourceIncluder } from "./assetTransforms";
 import { escapeAttribute, escapeText, unescapeAttribute } from "./xmlUtils";
+import { DEFAULT_DOENETML_VERSION, docinfoHasDoenetml, doenetmlCdata } from "./doenet";
 import { DEFAULT_LATEX_IMAGE_PREAMBLE } from "./generators/tikz/document";
+import { findTagEnd, isNameStart, readName } from "./components/editorConfigs/xmlTags";
 
 // ---------------------------------------------------------------------------
 // Internal helpers
@@ -1001,7 +1003,7 @@ function divisionRefSourceForFormat(
  * An include shown as documentation inside a Markdown code fence
  * (```` ```\n::section{ref="x"}\n``` ````) or a PreTeXt `<pre>` is an example,
  * not a real child, so it is blanked out before ref-scanning (see
- * {@link blankVerbatim}).
+ * {@link blankInert}).
  *
  * Each entry is an un-anchored source with NO capturing groups (so the
  * alternatives can be safely `|`-joined). Ordering matters: list block-level
@@ -1041,14 +1043,47 @@ const VERBATIM_SOURCES: Record<SourceFormat, string[]> = {
 };
 
 /**
- * Replace every verbatim span (per {@link VERBATIM_SOURCES} for `sourceFormat`)
- * with equal-length whitespace, preserving newlines. Blanking rather than
- * deleting keeps character offsets and document order intact for the caller's
- * subsequent ref scan, and guarantees no placeholder can straddle a blanked
- * boundary.
+ * Regex sources matching a *comment* in each source format. An author comments
+ * out a placeholder to keep a record out of the document until it is ready, so
+ * a placeholder inside one is not placed: assembly leaves it alone (see
+ * {@link expandRefs}), and the ref scans here must agree, or the Contents tree
+ * would show a division the build leaves out.
+ *
+ * A LaTeX `%` escaped as `\%` is a percent sign, not a comment, and so is one
+ * inside a placeholder's optional argument (`\plus[width=50%]{image}{x}`),
+ * which the converter reads as an attribute value. Both converters already
+ * honour these comments — LaTeX's become XML comments, Markdown's are dropped —
+ * so a commented placeholder never reaches assembly as a live one.
  */
-function blankVerbatim(content: string, sourceFormat: SourceFormat): string {
-  const sources = VERBATIM_SOURCES[sourceFormat];
+const COMMENT_SOURCES: Record<SourceFormat, string> = {
+  pretext: "<!--[\\s\\S]*?-->",
+  markdown: "<!--[\\s\\S]*?-->",
+  latex: "(?<!\\\\)(?<!\\\\plus\\[[^\\]\\n]*)%[^\\n]*",
+};
+
+/**
+ * Replace every span a ref scan must not look inside with equal-length
+ * whitespace, preserving newlines: verbatim spans (per {@link VERBATIM_SOURCES})
+ * and, unless `comments` is `false`, comments (per {@link COMMENT_SOURCES}).
+ * Blanking rather than deleting keeps character offsets and document order
+ * intact for the caller's subsequent ref scan, and guarantees no placeholder
+ * can straddle a blanked boundary.
+ *
+ * Both kinds go into one alternation, verbatim first, so whichever span starts
+ * first wins: a `%` inside `\verb|…|` is code, and a `<pre>` inside a comment is
+ * commented out.
+ *
+ * `comments: false` is for rewrites that must reach a commented-out placeholder
+ * too — a renamed division's ref (see {@link renameDivisionRef}), since the
+ * author means to uncomment it later and it should still resolve then.
+ */
+function blankInert(
+  content: string,
+  sourceFormat: SourceFormat,
+  { comments = true }: { comments?: boolean } = {},
+): string {
+  const sources = [...VERBATIM_SOURCES[sourceFormat]];
+  if (comments) sources.push(COMMENT_SOURCES[sourceFormat]);
   if (sources.length === 0) return content;
   const re = new RegExp(sources.join("|"), "g");
   return content.replace(re, (match) => match.replace(/[^\n]/g, " "));
@@ -1071,13 +1106,49 @@ export function parseDivisionRefs(
 ): string[] {
   const refs: string[] = [];
   const re = new RegExp(divisionRefSourceForFormat(sourceFormat, null), "g");
-  const scanned = blankVerbatim(content, sourceFormat);
+  const scanned = blankInert(content, sourceFormat);
   let m: RegExpExecArray | null;
   while ((m = re.exec(scanned)) !== null) {
     // The per-format source has a single capture group: the ref value.
     refs.push(m[1]);
   }
   return refs;
+}
+
+/** A division-ref placeholder, and whether the author has commented it out. */
+export interface DivisionRefEntry {
+  xmlId: string;
+  /** `true` when the placeholder sits inside a comment, so it is not placed. */
+  commented: boolean;
+}
+
+/**
+ * Like {@link parseDivisionRefs}, but also returns the placeholders an author
+ * has commented out, flagged as such, in document order with the live ones.
+ * The Contents tree shows a commented-out division where it would go, rather
+ * than among the unused ones; everything that decides what the document
+ * contains keeps reading {@link parseDivisionRefs}.
+ *
+ * Verbatim spans are still skipped: a placeholder in a code sample is an
+ * example, commented or not.
+ */
+export function parseDivisionRefEntries(
+  content: string,
+  sourceFormat: SourceFormat,
+): DivisionRefEntry[] {
+  const re = new RegExp(divisionRefSourceForFormat(sourceFormat, null), "g");
+  const scanned = blankInert(content, sourceFormat, { comments: false });
+  // The same text with comments blanked too: a placeholder that is blank there
+  // but not here sits inside a comment. Blanking preserves offsets, so the two
+  // copies can be compared position by position.
+  const live = blankInert(content, sourceFormat);
+  const entries: DivisionRefEntry[] = [];
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(scanned)) !== null) {
+    const span = live.slice(m.index, m.index + m[0].length);
+    entries.push({ xmlId: m[1], commented: span !== m[0] });
+  }
+  return entries;
 }
 
 /** A division ref together with the type its tag name names. */
@@ -1102,8 +1173,7 @@ export interface DivisionRefWithType {
 /**
  * Like {@link parseDivisionRefs} but also returns the division type inferred
  * from the tag name (e.g. `<plus:chapter ref="x"/>` → `{ type: "chapter", xmlId: "x" }`).
- * Used to auto-create Division records when new refs appear in edited content,
- * and to push a retyped placeholder onto the division it points at.
+ * Used to push a retyped placeholder onto the division it points at.
  *
  * Only tag names in {@link DIVISION_REF_TAGS} are considered — the asset
  * placeholder (`plus:image`) is not a division and is skipped. The generic
@@ -1115,7 +1185,31 @@ export function parseDivisionRefsWithTypes(
   content: string,
   sourceFormat: SourceFormat,
 ): DivisionRefWithType[] {
-  const refs: DivisionRefWithType[] = [];
+  return parseDivisionRefSpans(content, sourceFormat).map(({ xmlId, type, generic }) => ({
+    xmlId,
+    type,
+    generic,
+  }));
+}
+
+/** A {@link DivisionRefWithType} with where its placeholder sits in the source. */
+export interface DivisionRefSpan extends DivisionRefWithType {
+  index: number;
+  length: number;
+}
+
+/**
+ * {@link parseDivisionRefsWithTypes} with each placeholder's `[index, length)`
+ * in `content`, for marking it in the code editor (see
+ * `editorConfigs/divisionRefDiagnostics.ts`). Commented-out placeholders and
+ * examples in verbatim spans are skipped, as everywhere a ref is read as a
+ * placement.
+ */
+export function parseDivisionRefSpans(
+  content: string,
+  sourceFormat: SourceFormat,
+): DivisionRefSpan[] {
+  const refs: DivisionRefSpan[] = [];
   const tags = DIVISION_REF_TAG_ALTERNATION;
   const closeTag = `(?:${tags})`;
   // One alternative per format, each capturing tag in group 1 and ref in
@@ -1126,14 +1220,14 @@ export function parseDivisionRefsWithTypes(
     latex: `\\\\plus(?:\\[[^\\]]*\\])?\\{(${tags})\\}\\{([^}]+)\\}`,
   };
   const re = new RegExp(source[sourceFormat], "g");
-  const scanned = blankVerbatim(content, sourceFormat);
+  const scanned = blankInert(content, sourceFormat);
   let m: RegExpExecArray | null;
   while ((m = re.exec(scanned)) !== null) {
     const tagName = m[1];
     const xmlId = m[2];
     const generic = tagName === "division";
     const type: DivisionType = generic ? "section" : (tagName as DivisionType);
-    refs.push({ type, xmlId, generic });
+    refs.push({ type, xmlId, generic, index: m.index, length: m[0].length });
   }
   return refs;
 }
@@ -1142,20 +1236,26 @@ export function parseDivisionRefsWithTypes(
  * Locate every division-ref placeholder for `xmlId` in `content`, returning the
  * `[index, length)` span of each within `content` itself.
  *
- * The scan runs against a {@link blankVerbatim} copy of `content` and only in
+ * The scan runs against a {@link blankInert} copy of `content` and only in
  * `sourceFormat`'s own include syntax, so it agrees exactly with
  * {@link parseDivisionRefs} about what counts as a real include. Blanking
  * preserves length, so offsets found in the blanked copy index the original
  * unchanged — which is what lets the rewrite helpers below edit the real text
  * while still ignoring examples inside verbatim spans.
+ *
+ * Commented-out placeholders are skipped too, unless `comments` is `false`:
+ * moving, removing and anchoring an insert act on the document as it will be
+ * built, while a rename must also reach the placeholder an author has
+ * commented out for now (see {@link renameDivisionRef}).
  */
 function locateDivisionRefs(
   content: string,
   xmlId: string,
   sourceFormat: SourceFormat,
+  { comments = true }: { comments?: boolean } = {},
 ): { index: number; length: number }[] {
   const re = new RegExp(divisionRefSourceForFormat(sourceFormat, xmlId), "g");
-  const scanned = blankVerbatim(content, sourceFormat);
+  const scanned = blankInert(content, sourceFormat, { comments });
   const spans: { index: number; length: number }[] = [];
   let m: RegExpExecArray | null;
   while ((m = re.exec(scanned)) !== null) {
@@ -1200,7 +1300,7 @@ export function parseAssetRefs(
     latex: `\\\\plus(?:\\[[^\\]]*\\])?\\{image\\}\\{([^}]+)\\}`,
   };
   const re = new RegExp(source[sourceFormat], "g");
-  const scanned = blankVerbatim(content, sourceFormat);
+  const scanned = blankInert(content, sourceFormat);
   let m: RegExpExecArray | null;
   while ((m = re.exec(scanned)) !== null) {
     refs.push({ ref: m[1] });
@@ -1277,8 +1377,39 @@ export function assetEmbedCode(
 // `<plus:exercise ref="..."/>` placeholder parsing
 // ---------------------------------------------------------------------------
 
-/** The record kinds placed by a `<plus:snippet>`- or `<plus:exercise>`-shaped placeholder. */
-type RecordRefTag = "snippet" | "exercise";
+/**
+ * The placeholder tags that place an exercise record, each naming the PreTeXt
+ * the record is wrapped in: `exercise`, the project-like blocks, or
+ * `interactive` for a Doenet activity placed bare (see `docs/doenet-plan.md`,
+ * Decision 3). A designer exercise resolves only under `exercise`.
+ */
+export const EXERCISE_PLACEMENT_TAGS = [
+  "exercise",
+  "project",
+  "activity",
+  "exploration",
+  "investigation",
+  "interactive",
+] as const;
+
+export type ExercisePlacementTag = (typeof EXERCISE_PLACEMENT_TAGS)[number];
+
+/** The wrapper tags: every exercise placement tag but the bare `interactive`. */
+export const EXERCISE_WRAPPER_TAGS: readonly ExercisePlacementTag[] = EXERCISE_PLACEMENT_TAGS.filter(
+  (tag) => tag !== "interactive",
+);
+
+export const isExercisePlacementTag = (tag: string): tag is ExercisePlacementTag =>
+  (EXERCISE_PLACEMENT_TAGS as readonly string[]).includes(tag);
+
+/** A regex alternation matching any exercise placement tag, for the record-ref helpers. */
+const EXERCISE_TAG_PATTERN = `(?:${EXERCISE_PLACEMENT_TAGS.join("|")})`;
+
+/**
+ * The tag — or a non-capturing alternation of tags — a record-ref helper
+ * matches: `snippet`, or every tag that places an exercise.
+ */
+type RecordRefTagPattern = string;
 
 /** A `<plus:snippet ref="..."/>` snippet placeholder. */
 export interface SnippetRef {
@@ -1289,7 +1420,7 @@ export interface SnippetRef {
 export type ExerciseRef = SnippetRef;
 
 function parseRecordRefs(
-  tag: RecordRefTag,
+  tag: RecordRefTagPattern,
   content: string,
   sourceFormat: SourceFormat,
 ): SnippetRef[] {
@@ -1300,7 +1431,7 @@ function parseRecordRefs(
     latex: `\\\\plus(?:\\[[^\\]]*\\])?\\{${tag}\\}\\{([^}]+)\\}`,
   };
   const re = new RegExp(source[sourceFormat], "g");
-  const scanned = blankVerbatim(content, sourceFormat);
+  const scanned = blankInert(content, sourceFormat);
   let m: RegExpExecArray | null;
   while ((m = re.exec(scanned)) !== null) {
     refs.push({ ref: m[1] });
@@ -1309,7 +1440,7 @@ function parseRecordRefs(
 }
 
 function renameRecordRef(
-  tag: RecordRefTag,
+  tag: RecordRefTagPattern,
   content: string,
   oldRef: string,
   newRef: string,
@@ -1327,7 +1458,7 @@ function renameRecordRef(
     .replace(latexRe, `$1${newRef}$2`);
 }
 
-function removeRecordRef(tag: RecordRefTag, content: string, ref: string): string {
+function removeRecordRef(tag: RecordRefTagPattern, content: string, ref: string): string {
   const r = escapeRegex(ref);
   const xmlRe = new RegExp(`<plus:${tag}\\b[^>]*?\\bref="${r}"[^>]*/?>`, "g");
   const mdRe = new RegExp(
@@ -1338,7 +1469,7 @@ function removeRecordRef(tag: RecordRefTag, content: string, ref: string): strin
   return content.replace(xmlRe, "").replace(mdRe, "").replace(latexRe, "");
 }
 
-function recordEmbedCode(tag: RecordRefTag, ref: string, sourceFormat: SourceFormat): string {
+function recordEmbedCode(tag: "snippet" | ExercisePlacementTag, ref: string, sourceFormat: SourceFormat): string {
   if (sourceFormat === "markdown") return `::${tag}{ref="${ref}"}`;
   if (sourceFormat === "latex") return `\\plus{${tag}}{${ref}}`;
   return `<plus:${tag} ref="${ref}"/>`;
@@ -1402,44 +1533,55 @@ export function snippetEmbedCode(
 
 /**
  * Every exercise placeholder in `content` — `<plus:exercise ref="..."/>`,
- * `::exercise{ref="..."}` or `\plus{exercise}{...}` — in document order, as
+ * `::exercise{ref="..."}` or `\plus{exercise}{...}`, under any of the
+ * {@link EXERCISE_PLACEMENT_TAGS} — in document order, as
  * {@link parseSnippetRefs} does for snippets.
  */
 export function parseExerciseRefs(
   content: string,
   sourceFormat: SourceFormat,
 ): ExerciseRef[] {
-  return parseRecordRefs("exercise", content, sourceFormat);
+  return parseRecordRefs(EXERCISE_TAG_PATTERN, content, sourceFormat);
 }
 
-/** {@link renameSnippetRef}, for exercise placeholders. */
+/** {@link renameSnippetRef}, for exercise placeholders under every placement tag. */
 export function renameExerciseRef(
   content: string,
   oldRef: string,
   newRef: string,
 ): string {
-  return renameRecordRef("exercise", content, oldRef, newRef);
+  return renameRecordRef(EXERCISE_TAG_PATTERN, content, oldRef, newRef);
 }
 
-/** {@link removeSnippetRef}, for exercise placeholders. */
+/** {@link removeSnippetRef}, for exercise placeholders under every placement tag. */
 export function removeExerciseRef(content: string, ref: string): string {
-  return removeRecordRef("exercise", content, ref);
+  return removeRecordRef(EXERCISE_TAG_PATTERN, content, ref);
 }
 
-/** {@link snippetEmbedCode}, for an exercise. */
+/**
+ * {@link snippetEmbedCode}, for an exercise: the placeholder that places it
+ * under `tag` — `exercise` unless the record is a Doenet activity the author
+ * wants wrapped otherwise, or placed bare.
+ */
 export function exerciseEmbedCode(
   ref: string,
   sourceFormat: SourceFormat = "pretext",
+  tag: ExercisePlacementTag = "exercise",
 ): string {
-  return recordEmbedCode("exercise", ref, sourceFormat);
+  return recordEmbedCode(tag, ref, sourceFormat);
 }
 
 // ---------------------------------------------------------------------------
 // Placements — where an image or snippet is placed, and under which instance
 // ---------------------------------------------------------------------------
 
-/** The kinds of record that may be placed more than once. */
-export type PlacementTag = "image" | "snippet" | "exercise";
+/**
+ * The tags of records that may be placed more than once: an image, a snippet,
+ * or an exercise under any of its {@link EXERCISE_PLACEMENT_TAGS}.
+ */
+export type PlacementTag = "image" | "snippet" | ExercisePlacementTag;
+
+const PLACEMENT_TAG_ALTERNATION = ["image", "snippet", ...EXERCISE_PLACEMENT_TAGS].join("|");
 
 /**
  * One `<plus:image>`/`<plus:snippet>` placeholder in a source: what it places,
@@ -1460,9 +1602,9 @@ export interface Placement {
  * converter turns into the same attribute the other two write directly.
  */
 const PLACEMENT_SOURCE: Record<SourceFormat, string> = {
-  pretext: `<plus:(image|snippet|exercise)\\b([^>]*?)\\/?>`,
-  markdown: `::(image|snippet|exercise)(?:\\[[^\\]]*\\])?\\{([^}]*)\\}`,
-  latex: `\\\\plus(?:\\[([^\\]]*)\\])?\\{(image|snippet|exercise)\\}\\{([^}]+)\\}`,
+  pretext: `<plus:(${PLACEMENT_TAG_ALTERNATION})\\b([^>]*?)\\/?>`,
+  markdown: `::(${PLACEMENT_TAG_ALTERNATION})(?:\\[[^\\]]*\\])?\\{([^}]*)\\}`,
+  latex: `\\\\plus(?:\\[([^\\]]*)\\])?\\{(${PLACEMENT_TAG_ALTERNATION})\\}\\{([^}]+)\\}`,
 };
 
 const quotedAttr = (attrs: string, name: string): string | undefined =>
@@ -1475,7 +1617,7 @@ const quotedAttr = (attrs: string, name: string): string | undefined =>
  */
 export function parsePlacements(content: string, sourceFormat: SourceFormat): Placement[] {
   const re = new RegExp(PLACEMENT_SOURCE[sourceFormat], "g");
-  const scanned = blankVerbatim(content, sourceFormat);
+  const scanned = blankInert(content, sourceFormat);
   const placements: Placement[] = [];
   let m: RegExpExecArray | null;
   while ((m = re.exec(scanned)) !== null) {
@@ -1522,8 +1664,8 @@ export function addPlacementInstance(
 
 /**
  * Create a minimal Division record for a given `xmlId` and `type`.
- * Used when the user types a new `<plus:TYPE ref="id"/>` placeholder into a
- * division's content and no matching Division exists in the pool yet.
+ * Used by the quick fix on a `<plus:TYPE ref="id"/>` placeholder naming no
+ * division (see `editorConfigs/divisionRefDiagnostics.ts`).
  */
 export function createDivisionWithId(
   xmlId: string,
@@ -1578,8 +1720,8 @@ export function divisionRefTag(
  * Insert a `<plus:TYPE ref="xmlId"/>` placeholder into `content`, written in
  * `sourceFormat`'s own include syntax.
  *
- * - When `afterXmlId` is `null` the ref is appended just before the closing
- *   tag of the outer element (or at the end of the string if none is found).
+ * - When `afterXmlId` is `null` the ref is appended at the end of the body,
+ *   ahead of any placed conclusion or backmatter (see `appendDivisionRef`).
  * - When `afterXmlId` is provided the new ref is inserted immediately after
  *   that ref's placeholder.  If the named ref is not found, falls back to
  *   appending.
@@ -1601,12 +1743,105 @@ export function insertDivisionRef(
     }
   }
 
-  // Append before the last closing tag, otherwise at end.
-  const lastClose = content.lastIndexOf("</");
-  if (lastClose !== -1) {
-    return content.slice(0, lastClose) + tag + "\n" + content.slice(lastClose);
+  return appendDivisionRef(content, tag, type, sourceFormat);
+}
+
+/**
+ * Division types that close their parent: a `<conclusion>` follows every
+ * other division, and a book's `<backmatter>` comes last.
+ */
+const TRAILING_DIVISION_TYPES: ReadonlySet<string> = new Set([
+  "conclusion",
+  "backmatter",
+]);
+
+/**
+ * Where the part of a division's body that must stay last begins: the first
+ * conclusion or backmatter, whether placed as a placeholder or written inline
+ * (`<conclusion>` in PreTeXt, `\begin{conclusion}` in LaTeX), or `-1` if
+ * there is none. Comments and verbatim spans are skipped, and an inline
+ * element counts only at the top level of the body, so the `<conclusion>` of
+ * a `<subsection>` written inline is not mistaken for the body's own.
+ */
+function trailingDivisionStart(
+  content: string,
+  sourceFormat: SourceFormat,
+): number {
+  let first = -1;
+  const consider = (index: number) => {
+    if (first === -1 || index < first) first = index;
+  };
+  const placed = parseDivisionRefSpans(content, sourceFormat).find((r) =>
+    TRAILING_DIVISION_TYPES.has(r.type),
+  );
+  if (placed) consider(placed.index);
+
+  const scanned = blankInert(content, sourceFormat);
+  if (sourceFormat === "pretext") {
+    let depth = 0;
+    let i = scanned.indexOf("<");
+    while (i !== -1 && (first === -1 || i < first)) {
+      const next = scanned[i + 1];
+      if (next === "/") {
+        depth = Math.max(0, depth - 1);
+        i = findTagEnd(scanned, i);
+      } else if (isNameStart(next)) {
+        const name = readName(scanned, i + 1);
+        const end = findTagEnd(scanned, i);
+        if (depth === 0 && TRAILING_DIVISION_TYPES.has(name)) {
+          consider(i);
+          break;
+        }
+        if (scanned[end - 2] !== "/") depth++;
+        i = end;
+      } else {
+        // `<?…?>`, a stray `<`: not an element.
+        i++;
+      }
+      i = scanned.indexOf("<", i);
+    }
+  } else if (sourceFormat === "latex") {
+    const m = /\\begin\{conclusion\}/.exec(scanned);
+    if (m) consider(m.index);
   }
-  return content + "\n" + tag;
+  return first;
+}
+
+/**
+ * Add placeholder `tag` (of division `type`) at the end of `content`, a
+ * division's *body*. The body holds no element of its own (that is built from
+ * the record), so "the end" is the end of the text — never before its last
+ * `</`, which would be the close of whatever element happens to come last,
+ * such as a `<subtitle>` when everything after it is self-closing placeholders.
+ *
+ * A conclusion or backmatter still has to stay last, so the new placeholder
+ * goes on the line before the first of those instead (see
+ * {@link trailingDivisionStart}).
+ */
+function appendDivisionRef(
+  content: string,
+  tag: string,
+  type: DivisionType | "division",
+  sourceFormat: SourceFormat,
+): string {
+  const at = TRAILING_DIVISION_TYPES.has(type)
+    ? -1
+    : trailingDivisionStart(content, sourceFormat);
+  if (at !== -1) {
+    const lineStart = content.lastIndexOf("\n", at - 1) + 1;
+    const before = content.slice(lineStart, at);
+    // On a line of its own, the new placeholder takes that line's indent;
+    // sharing a line with other text, it just goes in front.
+    if (/^[ \t]*$/.test(before)) {
+      return (
+        content.slice(0, lineStart) + before + tag + "\n" + content.slice(lineStart)
+      );
+    }
+    return content.slice(0, at) + tag + "\n" + content.slice(at);
+  }
+  const body = content.replace(/\s+$/, "");
+  const newline = content.length > body.length ? "\n" : "";
+  return body ? body + "\n" + tag + newline : tag + newline;
 }
 
 /**
@@ -1651,7 +1886,8 @@ export function removeDivisionRef(
  * preserves the original tag's element name (e.g. `plus:section` stays
  * `plus:section` rather than being normalised to `plus:division`).
  *
- * - `afterXmlId === null` moves the ref to the end (before the closing tag).
+ * - `afterXmlId === null` moves the ref to the end of the body, ahead of any
+ *   placed conclusion or backmatter.
  * - `afterXmlId` moves it immediately after that ref.
  */
 export function moveDivisionRef(
@@ -1678,16 +1914,10 @@ export function moveDivisionRef(
     }
   }
 
-  const lastClose = withoutRef.lastIndexOf("</");
-  if (lastClose !== -1) {
-    return (
-      withoutRef.slice(0, lastClose) +
-      originalTag +
-      "\n" +
-      withoutRef.slice(lastClose)
-    );
-  }
-  return withoutRef + "\n" + originalTag;
+  const movedType =
+    (span && parseDivisionRefSpans(originalTag, sourceFormat)[0]?.type) ||
+    "division";
+  return appendDivisionRef(withoutRef, originalTag, movedType, sourceFormat);
 }
 
 /**
@@ -1706,6 +1936,10 @@ export function moveDivisionRef(
  * rewrite is emitted in `sourceFormat`'s own syntax, and placeholders inside
  * verbatim spans are left alone.
  *
+ * A *commented-out* placeholder is rewritten too, unlike everywhere else a
+ * division ref is located: the author commented it out to place the division
+ * later, and uncommenting it then should not produce a missing division.
+ *
  * Returns `content` unchanged if no placeholder for `oldXmlId` is found.
  */
 export function renameDivisionRef(
@@ -1715,7 +1949,7 @@ export function renameDivisionRef(
   newType: DivisionType,
   sourceFormat: SourceFormat = "pretext",
 ): string {
-  const spans = locateDivisionRefs(content, oldXmlId, sourceFormat);
+  const spans = locateDivisionRefs(content, oldXmlId, sourceFormat, { comments: false });
   if (spans.length === 0) return content;
 
   let out = "";
@@ -1848,7 +2082,11 @@ export function reorderDivisionRefs(
  * Returns a `Set<string>` of all `xmlId` values reachable from the root,
  * including the root itself.  Used to identify orphaned divisions.
  */
-function collectReachable(divisions: Division[], rootXmlId: string): Set<string> {
+function collectReachable(
+  divisions: Division[],
+  rootXmlId: string,
+  { includeCommented = false }: TreeOptions = {},
+): Set<string> {
   const seen = new Set<string>();
   const queue = [rootXmlId];
   while (queue.length > 0) {
@@ -1857,8 +2095,8 @@ function collectReachable(divisions: Division[], rootXmlId: string): Set<string>
     seen.add(id);
     const div = divisions.find((d) => d.xmlId === id);
     if (div) {
-      for (const ref of parseDivisionRefs(div.source, div.sourceFormat)) {
-        queue.push(ref);
+      for (const ref of childRefs(div, includeCommented)) {
+        queue.push(ref.xmlId);
       }
     }
   }
@@ -1866,17 +2104,41 @@ function collectReachable(divisions: Division[], rootXmlId: string): Set<string>
 }
 
 /**
+ * How a tree walk treats commented-out placeholders. By default it ignores
+ * them, as assembly does: the walk is the document's structure. With
+ * `includeCommented` it follows them too, flagging what it reaches that way
+ * (see {@link DivisionTreeNode.commented}) — what the Contents tree shows, so
+ * a commented-out division stays where it would go.
+ */
+export interface TreeOptions {
+  includeCommented?: boolean;
+}
+
+/** A division's child placeholders, commented-out ones only when asked for. */
+function childRefs(division: Division, includeCommented: boolean): DivisionRefEntry[] {
+  return includeCommented
+    ? parseDivisionRefEntries(division.source, division.sourceFormat)
+    : parseDivisionRefs(division.source, division.sourceFormat).map((xmlId) => ({
+        xmlId,
+        commented: false,
+      }));
+}
+
+/**
  * Return all divisions in `divisions` that are not reachable from
  * `rootXmlId` (and are not the root itself).
  *
  * Orphaned divisions are shown separately in the TOC so they can be placed
- * inside a parent division.
+ * inside a parent division. With `includeCommented`, a division reached only
+ * through a commented-out placeholder is not an orphan: the TOC shows it in the
+ * tree instead (see {@link TreeOptions}).
  */
 export function getOrphanedDivisions(
   divisions: Division[],
   rootXmlId: string,
+  options: TreeOptions = {},
 ): Division[] {
-  const reachable = collectReachable(divisions, rootXmlId);
+  const reachable = collectReachable(divisions, rootXmlId, options);
   return divisions.filter((d) => !reachable.has(d.xmlId));
 }
 
@@ -1887,6 +2149,12 @@ export interface DivisionTreeNode {
   depth: number;
   /** `xmlId` of the division that references this one. */
   parentXmlId: string;
+  /**
+   * `true` when this division is not in the document because its placeholder,
+   * or one above it, is commented out. Only a walk with `includeCommented`
+   * reaches such a division at all (see {@link TreeOptions}).
+   */
+  commented: boolean;
 }
 
 /**
@@ -1898,26 +2166,38 @@ export interface DivisionTreeNode {
  * skipped defensively.  Rendering the result as a single list with
  * depth-based indentation reproduces the tree visually while keeping a flat
  * structure that a single dnd `SortableContext` can operate over.
+ *
+ * With `includeCommented`, commented-out placeholders are followed too and
+ * their subtrees flagged `commented`. A division that is also placed for real
+ * somewhere under `startXmlId` is shown there, never at its commented-out
+ * spot, so the tree never claims a division is out of the document while the
+ * build includes it.
  */
 export function buildDivisionTree(
   divisions: Division[],
   startXmlId: string,
+  { includeCommented = false }: TreeOptions = {},
 ): DivisionTreeNode[] {
+  const placedForReal = includeCommented
+    ? collectReachable(divisions, startXmlId)
+    : null;
   const out: DivisionTreeNode[] = [];
   const visited = new Set<string>([startXmlId]);
-  const walk = (parentXmlId: string, depth: number) => {
+  const walk = (parentXmlId: string, depth: number, inComment: boolean) => {
     const parent = divisions.find((d) => d.xmlId === parentXmlId);
     if (!parent) return;
-    for (const ref of parseDivisionRefs(parent.source, parent.sourceFormat)) {
-      if (visited.has(ref)) continue;
-      const div = divisions.find((d) => d.xmlId === ref);
+    for (const ref of childRefs(parent, includeCommented)) {
+      const commented = inComment || ref.commented;
+      if (commented && placedForReal?.has(ref.xmlId)) continue;
+      if (visited.has(ref.xmlId)) continue;
+      const div = divisions.find((d) => d.xmlId === ref.xmlId);
       if (!div) continue;
-      visited.add(ref);
-      out.push({ division: div, depth, parentXmlId });
-      walk(ref, depth + 1);
+      visited.add(ref.xmlId);
+      out.push({ division: div, depth, parentXmlId, commented });
+      walk(ref.xmlId, depth + 1, commented);
     }
   };
-  walk(startXmlId, 0);
+  walk(startXmlId, 0, false);
   return out;
 }
 
@@ -1926,17 +2206,22 @@ export function buildDivisionTree(
  * not referenced by any other orphan.  Each orphan root heads its own dangling
  * subtree, so the TOC can render unplaced material as trees rather than a flat
  * jumble of every disconnected descendant.
+ *
+ * `options` is passed through to {@link getOrphanedDivisions}, and the "not
+ * referenced by another orphan" test follows the same placeholders, so a
+ * subtree hanging from an orphan by a commented-out placeholder stays with it.
  */
 export function getOrphanRoots(
   divisions: Division[],
   rootXmlId: string,
+  options: TreeOptions = {},
 ): Division[] {
-  const orphans = getOrphanedDivisions(divisions, rootXmlId);
+  const orphans = getOrphanedDivisions(divisions, rootXmlId, options);
   const orphanIds = new Set(orphans.map((d) => d.xmlId));
   const referenced = new Set<string>();
   for (const o of orphans) {
-    for (const ref of parseDivisionRefs(o.source, o.sourceFormat)) {
-      if (orphanIds.has(ref)) referenced.add(ref);
+    for (const ref of childRefs(o, options.includeCommented ?? false)) {
+      if (orphanIds.has(ref.xmlId)) referenced.add(ref.xmlId);
     }
   }
   return orphans.filter((d) => !referenced.has(d.xmlId));
@@ -3109,6 +3394,8 @@ const OPAQUE_ELEMENTS: ReadonlySet<string> = new Set([
   "sageplot",
   "asymptote",
   "mermaid",
+  // A Doenet activity's slate holds DoenetML as escaped text (see `wrapExerciseSource`).
+  "slate",
 ]);
 
 /** Attributes that give an element an identity PreTeXt requires to be unique. */
@@ -3235,32 +3522,52 @@ export interface RecordPools {
  * is a single set of refs shared across all three kinds — Division, Asset,
  * and Snippet refs are unique against each other project-wide, so one set
  * safely guards cycles across all three without risk of collision.
+ *
+ * A placeholder inside an XML comment is commented out, not placed, and is
+ * left as written. Expanding it would also break the document: the resolved
+ * markup's own comments would close the outer one early, and any `--` in it is
+ * illegal inside a comment. The comment is the regex's first alternative, so it
+ * is consumed whole before anything inside it can match as a placeholder.
+ * LaTeX and Markdown comments need nothing here: their converters have already
+ * turned them into XML comments or dropped them.
  */
 function expandRefs(
   xml: string,
   pools: RecordPools,
   ancestors: Set<string>,
+  sink?: SourceFileSink,
 ): string {
   return xml.replace(
-    /<plus:([a-z-]+)\s([^>]*ref="[^"]+"[^>]*?)(?:\/>|>\s*<\/plus:\1>)/g,
-    (_match, tag: string, attrs: string) => {
+    /<!--[\s\S]*?-->|<plus:([a-z-]+)\s([^>]*ref="[^"]+"[^>]*?)(?:\/>|>\s*<\/plus:\1>)/g,
+    (match, tag: string | undefined, attrs: string | undefined) => {
+      if (tag === undefined || attrs === undefined) return match;
       const ref = /ref="([^"]+)"/.exec(attrs)?.[1] ?? "";
+      // The exercise tags come before the division fallback, which takes any
+      // tag it is handed as a division placeholder.
+      const instance = placeholderInstance(attrs);
+      // A placement that names its instance has every identifier beneath it
+      // rewritten, which cannot reach into a file included from there: below
+      // it, divisions stay inline and the placement is one file (or none).
+      const inner = sink && instance ? { ...sink, divisions: false } : sink;
+      const isDivision = tag !== "image" && tag !== "snippet" && !isExercisePlacementTag(tag);
       const resolved =
         tag === "image"
-          ? resolveAssetRef(ref, pools.assets)
+          ? resolveAssetRef(ref, pools.assets, sink && generatedSourceIncluder(sink))
           : tag === "snippet"
-            ? resolveSnippetRef(ref, pools, ancestors)
-            : tag === "exercise"
-              ? resolveExerciseRef(ref, pools, ancestors)
-              : resolveDivisionXml(ref, pools, ancestors);
+            ? resolveSnippetRef(ref, pools, ancestors, inner)
+            : isExercisePlacementTag(tag)
+              ? resolveExerciseRef(ref, pools, ancestors, tag, inner)
+              : resolveDivisionXml(ref, pools, ancestors, inner);
       // Raw text is CDATA, not elements: there is nothing to qualify or to
       // copy attributes onto, and the tag scanners would misread its text.
       if (tag === "snippet" && pools.snippets.find((s) => s.ref === ref)?.sourceFormat === "raw") {
         return resolved;
       }
-      const instance = placeholderInstance(attrs);
       const placed = instance ? qualifyIdentifiers(resolved, instance) : resolved;
-      return applyPlaceholderAttrs(placed, parsePlaceholderAttrs(attrs));
+      const finished = applyPlaceholderAttrs(placed, parsePlaceholderAttrs(attrs));
+      return sink?.divisions && isDivision
+        ? includeDivisionFile(sink, ref, instance, finished)
+        : finished;
     },
   );
 }
@@ -3284,6 +3591,7 @@ function resolveDivisionXml(
   xmlId: string,
   pools: RecordPools,
   ancestors: Set<string>,
+  sink?: SourceFileSink,
 ): string {
   const division = pools.divisions.find((d) => d.xmlId === xmlId);
   if (!division) return `<!-- missing division: ${xmlId} -->`;
@@ -3291,7 +3599,7 @@ function resolveDivisionXml(
 
   const xml = divisionToPretext(division);
   const nextAncestors = new Set(ancestors).add(xmlId);
-  return expandRefs(xml, pools, nextAncestors);
+  return expandRefs(xml, pools, nextAncestors, sink);
 }
 
 /**
@@ -3318,6 +3626,7 @@ function resolveSnippetRef(
   ref: string,
   pools: RecordPools,
   ancestors: Set<string>,
+  sink?: SourceFileSink,
 ): string {
   const snippet = pools.snippets.find((s) => s.ref === ref);
   if (!snippet) return `<!-- missing snippet: ${ref} -->`;
@@ -3332,7 +3641,7 @@ function resolveSnippetRef(
   );
   const xml = pretextSource ?? `<!-- conversion error: ${pretextError} -->`;
   const nextAncestors = new Set(ancestors).add(ref);
-  return expandRefs(xml, pools, nextAncestors);
+  return expandRefs(xml, pools, nextAncestors, sink);
 }
 
 /**
@@ -3341,32 +3650,82 @@ function resolveSnippetRef(
  * `xml:id` and `label`, the title (already PreTeXt markup) as `<title>`, and
  * every other attribute from `attrs`.
  */
-export function wrapExerciseSource(exercise: Exercise): string {
-  const pairs: [string, string][] = [["xml:id", exercise.ref], ["label", exercise.ref]];
-  for (const [name, value] of Object.entries(exercise.attrs ?? {})) {
-    if (name !== "xml:id" && name !== "label") pairs.push([name, value]);
+export function wrapExerciseSource(
+  exercise: Exercise,
+  tag: ExercisePlacementTag = "exercise",
+  slateContent?: string,
+): string {
+  if (exercise.sourceFormat === "doenetml") return wrapDoenetActivity(exercise, tag, slateContent);
+  if (tag !== "exercise") {
+    return `<!-- ${exercise.ref} is not a Doenet activity: place it with <plus:exercise ref="${exercise.ref}"/> -->`;
   }
-  const attrs = pairs.map(([name, value]) => ` ${name}="${escapeAttribute(value)}"`).join("");
+  const attrs = attributePairs(exercise.ref, exercise.attrs);
   const title = exercise.title?.trim() ? `<title>${exercise.title.trim()}</title>\n` : "";
   return `<exercise${attrs}>\n${title}${exercise.source.trim()}\n</exercise>`;
 }
 
+/** The ` xml:id="ref" label="ref"` pair, then `attrs` with those two names ignored. */
+function attributePairs(ref: string, attrs: Record<string, string> | undefined): string {
+  const pairs: [string, string][] = [["xml:id", ref], ["label", ref]];
+  for (const [name, value] of Object.entries(attrs ?? {})) {
+    if (name !== "xml:id" && name !== "label") pairs.push([name, value]);
+  }
+  return pairs.map(([name, value]) => ` ${name}="${escapeAttribute(value)}"`).join("");
+}
+
 /**
- * Resolve a single `<plus:exercise ref="..."/>` placeholder: the matching
- * {@link Exercise}'s element built around its body ({@link wrapExerciseSource}),
- * with any `<plus:image>` or other placeholder inside it expanded in turn.
+ * A Doenet activity as PreTeXt: `<interactive platform="doenetml">` with the
+ * record's `attrs` (its width and aspect) and a `<slate surface="doenetml">`
+ * holding the DoenetML verbatim in a CDATA section, which PreTeXt writes raw
+ * into the page's `<script type="text/doenetml">`. Under a wrapper tag the wrapper carries the
+ * record's ref and title and the interactive is named `<ref>-doenet` (a
+ * PreTeXt build names its page after that id); placed bare, the interactive
+ * itself is the ref. See `docs/doenet-plan.md`, Decisions 2–4.
+ *
+ * `slateContent` replaces the CDATA section with something that stands for the
+ * same text — the `<xi:include parse="text"/>` a multi-file project uses.
+ */
+function wrapDoenetActivity(
+  exercise: Exercise,
+  tag: ExercisePlacementTag,
+  slateContent: string = doenetmlCdata(exercise.source.trim()),
+): string {
+  const interactiveRef = tag === "interactive" ? exercise.ref : `${exercise.ref}-doenet`;
+  const attrs = attributePairs(interactiveRef, { platform: "doenetml", ...(exercise.attrs ?? {}) });
+  const interactive =
+    `<interactive${attrs}>\n` +
+    `<slate surface="doenetml">${slateContent}</slate>\n` +
+    `</interactive>`;
+  if (tag === "interactive") return interactive;
+  const title = exercise.title?.trim() ? `<title>${exercise.title.trim()}</title>\n` : "";
+  return `<${tag}${attributePairs(exercise.ref, undefined)}>\n${title}${interactive}\n</${tag}>`;
+}
+
+/**
+ * Resolve a single exercise placeholder — `<plus:exercise ref="..."/>` or any
+ * other {@link EXERCISE_PLACEMENT_TAGS} tag — to the matching {@link Exercise}'s
+ * element built around its body ({@link wrapExerciseSource}), with any
+ * `<plus:image>` or other placeholder inside it expanded in turn.
  */
 function resolveExerciseRef(
   ref: string,
   pools: RecordPools,
   ancestors: Set<string>,
+  tag: ExercisePlacementTag = "exercise",
+  sink?: SourceFileSink,
 ): string {
   const exercise = pools.exercises.find((e) => e.ref === ref);
   if (!exercise) return `<!-- missing exercise: ${ref} -->`;
   if (ancestors.has(ref)) return `<!-- circular reference: ${ref} -->`;
 
+  // A Doenet activity's source is DoenetML sitting verbatim in a CDATA
+  // section: nothing in it is a placeholder, whatever it looks like.
+  if (exercise.sourceFormat === "doenetml") {
+    return wrapExerciseSource(exercise, tag, sink && includeDoenetFile(sink, exercise));
+  }
+
   const nextAncestors = new Set(ancestors).add(ref);
-  return expandRefs(wrapExerciseSource(exercise), pools, nextAncestors);
+  return expandRefs(wrapExerciseSource(exercise, tag), pools, nextAncestors, sink);
 }
 
 /**
@@ -3468,16 +3827,84 @@ function withDefaultLatexImagePreamble(docinfo: string): string {
   }
 }
 
+const DOENETML_USE_RE = /<interactive\b[^>]*\bplatform\s*=\s*["']doenetml["']/;
+
+/**
+ * `docinfo` with `<doenetml version="…"/>` naming {@link DEFAULT_DOENETML_VERSION}
+ * when `body` uses DoenetML and the docinfo says nothing about it. PreTeXt
+ * would otherwise load `@doenet/standalone@latest`, under which a book's
+ * activities could change without an edit; the editor frame loads the same
+ * version (`effectiveDoenetmlVersion`), so what the author edits against is
+ * what the build runs. A splice before `</docinfo>`, like
+ * {@link withDefaultLatexImagePreamble}: the author's docinfo passes through
+ * otherwise unchanged, and one the scanner cannot read is left alone.
+ */
+function withDefaultDoenetmlVersion(docinfo: string, body: string): string {
+  if (!DOENETML_USE_RE.test(body) || docinfoHasDoenetml(docinfo)) return docinfo;
+  return appendToDocinfo(docinfo, `<doenetml version="${DEFAULT_DOENETML_VERSION}"/>`);
+}
+
+/**
+ * `docinfo` declaring `directory` as the project's external directory —
+ * `<directories external="…"/>`, where PreTeXt has read it from since
+ * 2026-07-30 (the publication file's `source/directories/@external` is
+ * deprecated). The path is relative to the main source file.
+ *
+ * For a host that decides where uploaded files sit beside the source it hands
+ * a build, which is why this is not part of assembly: the layout is the
+ * host's. Its value replaces one already there, since the host's archive is
+ * what the directory has to match; a `@data` beside it is kept.
+ */
+export function withExternalDirectory(docinfo: string, directory: string): string {
+  const existing = /<directories\b[^>]*>/.exec(docinfo);
+  if (!existing) {
+    return appendToDocinfo(docinfo.trim(), `<directories external="${escapeAttribute(directory)}"/>`);
+  }
+  const startTag = setAttributes(existing[0], existing[0].endsWith("/>"), [
+    { name: "external", value: directory },
+  ]);
+  return docinfo.slice(0, existing.index) + startTag + docinfo.slice(existing.index + existing[0].length);
+}
+
+/**
+ * `docinfo` with `element` as its last child: a splice, so the author's text
+ * passes through otherwise unchanged. An empty docinfo becomes one holding
+ * only `element`; one the scanner cannot read is returned as it came.
+ */
+function appendToDocinfo(docinfo: string, element: string): string {
+  if (!docinfo.trim()) return `<docinfo>\n  ${element}\n</docinfo>`;
+  const root = nextTag(docinfo, 0);
+  if (!root || root.closing || root.name !== "docinfo") return docinfo;
+  if (root.selfClosing) {
+    const openTag = `${docinfo.slice(root.open, root.close - 2).trimEnd()}>`;
+    return docinfo.slice(0, root.open) + `${openTag}\n  ${element}\n</docinfo>` + docinfo.slice(root.close);
+  }
+  const close = docinfo.lastIndexOf("</docinfo>");
+  if (close < 0) return docinfo;
+  const lead = docinfo[close - 1] === "\n" ? "" : "\n";
+  return docinfo.slice(0, close) + `${lead}  ${element}\n` + docinfo.slice(close);
+}
+
+/**
+ * The docinfo a build is handed: the author's, with the default latex-image
+ * preamble and — when `body` uses DoenetML — a DoenetML version spliced in.
+ */
+function effectiveDocinfoXml(docinfo: string, body: string): string {
+  return withDefaultDoenetmlVersion(withDefaultLatexImagePreamble(docinfo.trim()), body);
+}
+
 /**
  * Wrap a resolved document body in the outer `<pretext>` element with
  * `<docinfo>` inserted as its sibling, matching real PreTeXt document shape.
  * The docinfo always carries {@link DEFAULT_LATEX_IMAGE_PREAMBLE}, so every
- * document a build is handed has one even when the author wrote none.
+ * document a build is handed has one even when the author wrote none, and a
+ * `<doenetml version>` whenever the body has a DoenetML interactive
+ * ({@link withDefaultDoenetmlVersion}).
  * `lang`, when provided (a BCP-47 code like `"en-US"`), is written as
  * `@xml:lang` on the root `<pretext>` element.
  */
 function wrapInPretextDocument(body: string, docinfo: string, lang?: string): string {
-  const docinfoBlock = `${withDefaultLatexImagePreamble(docinfo.trim())}\n`;
+  const docinfoBlock = `${effectiveDocinfoXml(docinfo, body)}\n`;
   const langAttr = lang ? ` xml:lang="${lang}"` : "";
   return ensureRootLabel(`<pretext${langAttr}>\n${docinfoBlock}${body}\n</pretext>`);
 }
@@ -3507,6 +3934,201 @@ export function assembleFullProjectSource(
 ): string {
   const body = resolveDivisionXml(rootXmlId, { divisions, snippets, assets, exercises }, new Set());
   return wrapInPretextDocument(body, docinfo, lang);
+}
+
+// ---------------------------------------------------------------------------
+// Multi-file assembly: the same document, as a project to edit by hand
+// ---------------------------------------------------------------------------
+
+/** The XInclude namespace, declared as `xi` on every file that includes another. */
+export const XINCLUDE_NAMESPACE = "http://www.w3.org/2001/XInclude";
+
+/** Where the root file and the docinfo go; a division is never given either name. */
+export const MAIN_SOURCE_FILE = "main.ptx";
+export const DOCINFO_SOURCE_FILE = "docinfo.ptx";
+
+/** The directory (beside the main file) holding one `.doenet` file per activity. */
+export const DOENET_SOURCE_DIR = "doenet";
+
+const XML_FILE_DECLARATION = `<?xml version="1.0" encoding="UTF-8"?>\n`;
+
+/** One file of a multi-file project; `path` is relative to the source directory. */
+export interface SourceFile {
+  path: string;
+  content: string;
+}
+
+/**
+ * Where multi-file assembly collects the files it cuts out of the document.
+ * `divisions` is false beneath a placement that names an `instance`, where a
+ * division must stay inline (see {@link expandRefs}); Doenet and generator
+ * source files are written either way, since nothing inside a slate or a
+ * generator's element is ever qualified.
+ */
+interface SourceFileSink {
+  files: Map<string, string>;
+  divisions: boolean;
+}
+
+/**
+ * True when `xml` is exactly one element, with nothing beside it but
+ * whitespace and comments — what a file must be for `<xi:include>` to parse it.
+ * A resolution failure (a bare comment) and a snippet-like run of siblings
+ * both fail this and stay inline.
+ */
+function isSoleElement(xml: string): boolean {
+  const first = nextTag(xml, 0);
+  if (!first || first.closing) return false;
+  const end = first.selfClosing ? first.close : matchingCloseTag(xml, first.close)?.close;
+  if (end === undefined) return false;
+  const outside = xml.slice(0, first.open) + xml.slice(end);
+  return outside.replace(XML_COMMENT_RE, "").trim() === "";
+}
+
+/** `xml` as a file of its own: declared, and with `xmlns:xi` on its element if it includes anything. */
+function asSourceFile(xml: string): string {
+  const body = xml.trim();
+  const root = nextTag(body, 0);
+  if (!root || !body.includes("<xi:include")) return `${XML_FILE_DECLARATION}${body}\n`;
+  const startTag = setAttributes(body.slice(root.open, root.close), root.selfClosing, [
+    { name: "xmlns:xi", value: XINCLUDE_NAMESPACE },
+  ]);
+  return `${XML_FILE_DECLARATION}${body.slice(0, root.open)}${startTag}${body.slice(root.close)}\n`;
+}
+
+/**
+ * Write `content` at `path` unless a different file is already there. Returns
+ * whether `path` now holds `content` — false means the caller keeps it inline.
+ */
+function writeSourceFile(sink: SourceFileSink, path: string, content: string): boolean {
+  const existing = sink.files.get(path);
+  if (existing !== undefined) return existing === content;
+  sink.files.set(path, content);
+  return true;
+}
+
+/**
+ * Put one resolved division placement in a file of its own and return the
+ * `<xi:include>` that stands for it — or the markup unchanged when it cannot
+ * be a file: a resolution failure, a ref that is no filename, or a name
+ * another, different, placement already took.
+ *
+ * The file is the *placement*, not the record: the placeholder's attributes
+ * (`@component`) are already on the element, and a placement with an
+ * `instance` — qualified identifiers and all — is `<ref>-<instance>.ptx`.
+ * Files sit flat beside the main file, which refs being unique project-wide
+ * allows, so an href is the same from wherever it is written.
+ */
+function includeDivisionFile(
+  sink: SourceFileSink,
+  ref: string,
+  instance: string | undefined,
+  xml: string,
+): string {
+  const name = instance ? qualifiedIdentifier(ref, instance) : ref;
+  if (!isValidRef(name) || !isSoleElement(xml)) return xml;
+  const reserved = name === "main" || name === "docinfo";
+  const path = `${reserved ? `${name}-division` : name}.ptx`;
+  return writeSourceFile(sink, path, asSourceFile(xml)) ? `<xi:include href="${path}"/>` : xml;
+}
+
+/**
+ * Put a Doenet activity's DoenetML in `doenet/<ref>.doenet`, exactly as typed,
+ * and return the `<xi:include parse="text"/>` that reads it back as the
+ * slate's text — the form PreTeXt's own documentation recommends, and a file
+ * Doenet's tools open as it stands. Undefined (so the caller writes CDATA)
+ * when the ref is no filename.
+ */
+function includeDoenetFile(sink: SourceFileSink, exercise: Exercise): string | undefined {
+  if (!isValidRef(exercise.ref)) return undefined;
+  const path = `${DOENET_SOURCE_DIR}/${exercise.ref}.doenet`;
+  return writeSourceFile(sink, path, exercise.source.trim())
+    ? `<xi:include href="${path}" parse="text"/>`
+    : undefined;
+}
+
+/**
+ * Put a generated asset's source in `<generator>/<ref>.<ext>` and return the
+ * `<xi:include>` that goes inside the generator's element in its place. A text
+ * source (TikZ, Asymptote, Sage) is the buffer as typed, with none of the
+ * entities the document's copy needs; an XML source (PreFigure) becomes a
+ * document of its own, which it can only be as a single element — anything
+ * else stays inline. Every placement of the asset includes the one file: an
+ * `instance` renames the wrapper's `@label`, never what is inside it.
+ */
+function generatedSourceIncluder(sink: SourceFileSink): GeneratedSourceIncluder {
+  return (generator, ref, source) => {
+    if (!isValidRef(ref)) return undefined;
+    const file = generator.sourceFile;
+    const path = `${generator.id}/${ref}.${file.extension}`;
+    if (file.parse === "text") {
+      return writeSourceFile(sink, path, source)
+        ? `<xi:include href="${path}" parse="text"/>`
+        : undefined;
+    }
+    if (!isSoleElement(source)) return undefined;
+    return writeSourceFile(sink, path, asSourceFile(withDefaultNamespace(source, file.namespace)))
+      ? `<xi:include href="${path}"/>`
+      : undefined;
+  };
+}
+
+/** `xml` with `xmlns="namespace"` on its element, unless it declares one itself. */
+function withDefaultNamespace(xml: string, namespace: string | undefined): string {
+  const root = nextTag(xml, 0);
+  if (!namespace || !root) return xml;
+  const startTag = xml.slice(root.open, root.close);
+  if (/\sxmlns\s*=/.test(startTag)) return xml;
+  return (
+    xml.slice(0, root.open) +
+    setAttributes(startTag, root.selfClosing, [{ name: "xmlns", value: namespace }]) +
+    xml.slice(root.close)
+  );
+}
+
+/**
+ * The project as {@link assembleFullProjectSource} assembles it, cut into the
+ * files a PreTeXt author would keep: `main.ptx` holding `<pretext>` and the
+ * root division, `docinfo.ptx`, one `<ref>.ptx` per placed division, one
+ * `doenet/<ref>.doenet` per Doenet activity and one `<generator>/<ref>.<ext>`
+ * per generated asset (`prefigure/graph.xml`, `tikz/plot.tex`), joined by
+ * `<xi:include>`.
+ * Processing the includes gives back the single-file document — the same
+ * elements, attributes and text — which is what makes this safe to hand an
+ * author as "your project": `__tests__/sourceFiles.test.ts` holds it to that.
+ *
+ * Snippets, designer exercises and an image's own `<image>` element stay
+ * inline where they are placed. The main file is first in the result.
+ */
+export function assembleProjectFiles(
+  divisions: Division[],
+  rootXmlId: string,
+  docinfo: string,
+  assets: Asset[] = [],
+  lang?: string,
+  snippets: Snippet[] = [],
+  exercises: Exercise[] = [],
+): SourceFile[] {
+  const sink: SourceFileSink = { files: new Map(), divisions: true };
+  const body = resolveDivisionXml(rootXmlId, { divisions, snippets, assets, exercises }, new Set(), sink);
+
+  // The docinfo's DoenetML version depends on what the document uses, and the
+  // document is now every file.
+  const everything = [body, ...sink.files.values()].join("\n");
+  const docinfoXml = effectiveDocinfoXml(docinfo, everything);
+  const docinfoBlock =
+    isSoleElement(docinfoXml) && writeSourceFile(sink, DOCINFO_SOURCE_FILE, asSourceFile(docinfoXml))
+      ? `<xi:include href="${DOCINFO_SOURCE_FILE}"/>`
+      : docinfoXml;
+
+  const langAttr = lang ? ` xml:lang="${lang}"` : "";
+  const main = ensureRootLabel(
+    `<pretext${langAttr} xmlns:xi="${XINCLUDE_NAMESPACE}">\n${docinfoBlock}\n${body}\n</pretext>`,
+  );
+  return [
+    { path: MAIN_SOURCE_FILE, content: `${XML_FILE_DECLARATION}${main}\n` },
+    ...Array.from(sink.files, ([path, content]) => ({ path, content })),
+  ];
 }
 
 // ---------------------------------------------------------------------------

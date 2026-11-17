@@ -91,7 +91,6 @@ import {
   divisionToPretext,
   divisionWrapperLines,
   splitDivisionSource,
-  findDivisionParent,
   renameDivisionRef,
   renameAssetRef,
   removeAssetRef,
@@ -112,6 +111,8 @@ import { buildProjectAssetView, makeUniqueAssetRef } from "../assetView";
 import { assetWrapperLines } from "../assetTransforms";
 import { buildProjectSnippetView, makeUniqueSnippetRef } from "../snippetView";
 import ExerciseDesigner, { type ExerciseSourceValue } from "../exerciseDesigner/ExerciseDesigner";
+import DoenetEditorPane from "./DoenetEditorPane";
+import { effectiveDoenetmlVersion } from "../doenet";
 import { newRecordId } from "../recordId";
 import type { ConversionShare, ImportEngine } from "@pretextbook/import/react";
 import { takenImportIds } from "../importConvert";
@@ -131,6 +132,7 @@ import { CollabBridge } from "../collab/bridge";
 import type { CollabSession } from "../collab/types";
 import PresenceAvatars from "../collab/PresenceAvatars";
 import { placementUses, type PlacementCheckInput } from "./editorConfigs/placementDiagnostics";
+import type { DivisionRefCheckInput } from "./editorConfigs/divisionRefDiagnostics";
 import type { InteractiveCheckInput } from "./editorConfigs/interactiveDiagnostics";
 import { generatedImageResolver } from "../generators/previewImages";
 
@@ -1125,17 +1127,21 @@ const EditorsInner = (props: EditorsInnerProps) => {
     props.onDivisionUpdate?.(xmlId, changes);
   };
 
-  // Keep a parent's `<plus:TYPE ref="..."/>` placeholder in sync when the child
-  // it points at changes its own `xml:id` or type, so the child stays placed in
-  // the tree and the placeholder keeps naming what it actually references.
+  // Keep every `<plus:TYPE ref="..."/>` placeholder for a division in sync when
+  // the division changes its own `xml:id` or type, so it stays placed in the
+  // tree and each placeholder keeps naming what it actually references.
   //
-  // The parent is resolved by `findDivisionParent`, which never returns the
-  // child itself and never matches a placeholder inside a verbatim span or
-  // written in another format's syntax. That matters here: a stray
-  // `\plus{handout}{self}` pasted into a child's own body is malformed markup,
-  // not a placement, and rewriting *it* would both miss the real parent and
-  // clobber the child's freshly rewritten header. The rewrite is emitted in the
-  // parent's syntax, which need not match the child's.
+  // Every division but the renamed one is rewritten, not just its parent: a
+  // placeholder the author has commented out, to place the division later, has
+  // no parent to find, and `renameDivisionRef` reaches into comments precisely
+  // so that uncommenting it still resolves. A second placement elsewhere is
+  // kept in step the same way. `renameDivisionRef` matches only the holder's own
+  // syntax outside verbatim spans and writes the rewrite in that syntax, which
+  // need not match the child's.
+  //
+  // The renamed division's own body is never touched: a stray
+  // `\plus{handout}{self}` pasted into it is malformed markup, not a placement,
+  // and rewriting it would clobber the child's freshly rewritten header.
   const syncParentDivisionRef = (
     oldXmlId: string,
     newXmlId: string,
@@ -1145,17 +1151,19 @@ const EditorsInner = (props: EditorsInnerProps) => {
     // editor buffer before it started rewriting sources.
     pool: Division[] = divisions,
   ) => {
-    const parent = findDivisionParent(pool, oldXmlId);
-    if (!parent) return;
-    const newParentContent = renameDivisionRef(
-      parent.source,
-      oldXmlId,
-      newXmlId,
-      newType,
-      parent.sourceFormat,
-    );
-    if (newParentContent === parent.source) return;
-    emitContentChange(parent.xmlId, newParentContent, parent.sourceFormat);
+    for (const holder of pool) {
+      if (holder.xmlId === oldXmlId) continue;
+      const newContent = renameDivisionRef(
+        holder.source,
+        oldXmlId,
+        newXmlId,
+        newType,
+        holder.sourceFormat,
+      );
+      if (newContent !== holder.source) {
+        emitContentChange(holder.xmlId, newContent, holder.sourceFormat);
+      }
+    }
   };
 
   // Metadata edits from the settings drawer (and a new division's form). A
@@ -1349,8 +1357,8 @@ const EditorsInner = (props: EditorsInnerProps) => {
     emitContentChange(activeDivision.xmlId, body, activeDivisionFormat);
 
     // Reconcile this division's child placeholders against the pool: a
-    // `<plus:TYPE ref="id"/>` naming a division that doesn't exist yet creates
-    // it, and one naming a type its target disagrees with retypes the target.
+    // `<plus:TYPE ref="id"/>` naming a type its target disagrees with retypes
+    // the target.
     // The placeholder's tag is a mirror of the child's own type — the assembled
     // document ignores it entirely and uses the child's own element — so the two
     // must be kept equal from whichever side the author edited.
@@ -1360,12 +1368,11 @@ const EditorsInner = (props: EditorsInnerProps) => {
       activeDivisionFormat,
     )) {
       const child = pool.get(xmlId);
-      if (!child) {
-        const created = createDivisionWithId(xmlId, type, activeDivisionFormat);
-        applyDivisionAdd(created);
-        pool.set(xmlId, created); // prevent duplicates within the same edit
-        continue;
-      }
+      // A placeholder naming no division is only flagged, with a quick fix to
+      // create it (`handleCreateDivisionFromRef`). Creating it here, as the
+      // author typed, made one stray division per keystroke of a ref being
+      // edited to point somewhere else.
+      if (!child) continue;
       // `generic` means the author wrote the untyped `division` alias, so `type`
       // is a default rather than a choice — never push it onto the child.
       if (generic || child.type === type) continue;
@@ -1379,6 +1386,32 @@ const EditorsInner = (props: EditorsInnerProps) => {
       applyDivisionRetype(child, type);
       pool.set(xmlId, { ...child, type });
     }
+  };
+
+  // The quick fix on a placeholder naming no division (see
+  // `editorConfigs/divisionRefDiagnostics.ts`): create it, in the open
+  // division's format, with the type the placeholder's tag names. The
+  // placeholder is already in place, so nothing else is written.
+  const handleCreateDivisionFromRef = (xmlId: string, type: DivisionType) => {
+    if (!activeDivision) return;
+    if (divisions.some((d) => d.xmlId === xmlId)) return;
+    applyDivisionAdd(createDivisionWithId(xmlId, type, activeDivisionFormat));
+  };
+
+  // Ctrl/Cmd+click on a `<plus:* ref/>` placeholder (see
+  // `editorConfigs/refLinks.ts`): open what it names, as its explorer row
+  // would. A ref naming nothing opens nothing; a division's placeholder already
+  // carries the warning and quick fix for that.
+  const handleOpenRef = (kind: OpenItem["kind"], ref: string) => {
+    const exists =
+      kind === "division"
+        ? divisions.some((d) => d.xmlId === ref)
+        : kind === "snippet"
+          ? (projectSnippets ?? []).some((s) => s.ref === ref)
+          : kind === "exercise"
+            ? (projectExercises ?? []).some((e) => e.ref === ref)
+            : (projectAssets ?? []).some((a) => a.ref === ref);
+    if (exists) handleTabSelect({ kind, ref });
   };
 
   const handleDivisionSelect = (xmlId: string) => {
@@ -2380,6 +2413,22 @@ const EditorsInner = (props: EditorsInnerProps) => {
       : editorTarget?.kind === "snippet" && editorTarget.snippet.sourceFormat !== "raw"
         ? { kind: "snippet" as const, ref: editorTarget.snippet.ref, format: editorTarget.snippet.sourceFormat }
         : null;
+  // A division's buffer is checked for placeholders naming no division. Only a
+  // division's: it is the one place a division is placed from.
+  const divisionRefCheck = useMemo((): DivisionRefCheckInput | undefined => {
+    if (editorTarget?.kind !== "division") return undefined;
+    const otherRefs = new Map<string, string>([
+      ...(projectSnippets ?? []).map((sn): [string, string] => [sn.ref, "a snippet"]),
+      ...(projectExercises ?? []).map((ex): [string, string] => [ex.ref, "an exercise"]),
+      ...(projectAssets ?? []).flatMap((a): [string, string][] => (a.ref ? [[a.ref, "an asset"]] : [])),
+    ]);
+    return {
+      sourceFormat: editorTarget.division.sourceFormat,
+      divisionIds: new Set(divisions.map((d) => d.xmlId)),
+      otherRefs,
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [editorTarget?.kind, editorTarget?.kind === "division" ? editorTarget.division.sourceFormat : null, divisions, projectSnippets, projectExercises, projectAssets]);
   const interactiveCheck = useMemo(
     (): InteractiveCheckInput => ({ hasStaticOutput: props.hasStaticOutput === true }),
     [props.hasStaticOutput],
@@ -2443,12 +2492,15 @@ const EditorsInner = (props: EditorsInnerProps) => {
   );
 
   // An exercise previews the same way: placed on its own in a plain article
-  // (see `assembleExercisePreviewSource`).
+  // (see `assembleExercisePreviewSource`). Not a Doenet activity, though:
+  // Doenet's editor shows its own viewer, and the preview panel is withdrawn
+  // while one is open (see the layout below).
   const activeExercise =
     editorTarget?.kind === "exercise" ? editorTarget.exercise : null;
+  const isDoenetOpen = activeExercise?.sourceFormat === "doenetml";
   const exercisePreviewContent = useMemo(
     () =>
-      showLivePreview && activeExercise
+      showLivePreview && activeExercise && !isDoenetOpen
         ? assembleExercisePreviewSource(
             activeExercise.ref,
             {
@@ -2464,6 +2516,7 @@ const EditorsInner = (props: EditorsInnerProps) => {
     [
       showLivePreview,
       activeExercise,
+      isDoenetOpen,
       divisions,
       projectSnippets,
       projectAssets,
@@ -2707,6 +2760,9 @@ const EditorsInner = (props: EditorsInnerProps) => {
       // the assembled document, which a snippet or asset fragment isn't.
       pretextValidation={isDivisionOpen ? pretextValidation : undefined}
       placementCheck={placementCheck}
+      divisionRefCheck={divisionRefCheck}
+      onCreateDivisionFromRef={handleCreateDivisionFromRef}
+      onOpenRef={handleOpenRef}
       interactiveCheck={interactiveCheck}
       virtualWrapper={assetWrapper ?? divisionWrapper}
       collab={
@@ -2796,18 +2852,29 @@ const EditorsInner = (props: EditorsInnerProps) => {
           onSaveAsset={(asset, prevRef) => saveRecord("asset", asset, prevRef)}
           canReplaceAsset={canReplaceAsset}
         />
-        {/* An exercise is edited in the designer, not as text. The code
-            editor stays mounted (hidden) beneath it, as under a creation
-            form, so returning to a division finds its buffer intact. */}
-        {activeExercise && (
-          <ExerciseDesigner
-            key={editorKey}
-            exerciseRef={activeExercise.ref}
-            value={{ source: activeExercise.source, attrs: activeExercise.attrs ?? {} }}
-            onChange={(next) => applyExerciseDesignChange(activeExercise.ref, next)}
-            readOnly={props.readOnly}
-          />
-        )}
+        {/* An exercise is edited in the designer, not as text — or, for a
+            Doenet activity, in Doenet's own editor. The code editor stays
+            mounted (hidden) beneath it, as under a creation form, so
+            returning to a division finds its buffer intact. */}
+        {activeExercise &&
+          (activeExercise.sourceFormat === "doenetml" ? (
+            <DoenetEditorPane
+              key={editorKey}
+              source={activeExercise.source}
+              version={effectiveDoenetmlVersion(effectiveDocinfo ?? "")}
+              onChange={(source) => applyRecordSourceChange("exercise", activeExercise.ref, source)}
+              readOnly={props.readOnly}
+              theme={props.previewTheme ?? "light"}
+            />
+          ) : (
+            <ExerciseDesigner
+              key={editorKey}
+              exerciseRef={activeExercise.ref}
+              value={{ source: activeExercise.source, attrs: activeExercise.attrs ?? {} }}
+              onChange={(next) => applyExerciseDesignChange(activeExercise.ref, next)}
+              readOnly={props.readOnly}
+            />
+          ))}
         <div className={clsx("flex flex-col flex-1 min-h-0 relative", activeExercise && "hidden")}>
           {codeEditor}
         </div>
@@ -2941,7 +3008,18 @@ const EditorsInner = (props: EditorsInnerProps) => {
   const tabPanelId = "pretext-plus-tabpanel";
 
   let editorDisplays: ReactNode;
-  if (isNarrowScreen) {
+  if (isDoenetOpen) {
+    // A Doenet activity is edited in Doenet's editor, which has a viewer of
+    // its own; a second rendering of it in the preview panel would only
+    // compete with that one, so the panel is withdrawn and the editor pane
+    // takes the width, in both layouts.
+    editorDisplays = (
+      <div className="h-full w-full flex flex-row overflow-hidden isolate" data-testid="doenet-layout">
+        {explorerSidebar}
+        <div className="flex flex-col flex-1 min-w-0 h-full relative z-[1]">{editorPane}</div>
+      </div>
+    );
+  } else if (isNarrowScreen) {
     // `isolate` keeps every z-index in the workspace (the editor title bar and
     // drawer, the preview's overlays) below TopBar's open menus.
     editorDisplays = (

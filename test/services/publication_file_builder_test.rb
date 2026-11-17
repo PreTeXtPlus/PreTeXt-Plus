@@ -6,12 +6,12 @@ class PublicationFileBuilderTest < ActiveSupport::TestCase
   end
 
   # These elements are not the author's to choose and not the catalog's to offer:
-  # source/directories is where the archive actually puts assets, html/resources is
+  # source/directories is where generated images go, html/resources is
   # what makes a built site load PreTeXt's JavaScript, and html/brandlogo points every
   # build at the archive's icon. A file missing any of these builds wrong.
   test "the elements a build depends on are in every file" do
     [ {}, { "theme" => "salem" } ].each do |settings|
-      assert_match(/<directories external="external" generated="generated"\/>/, xml(settings))
+      assert_match(%r{<directories generated="\.\./generated-assets"/>}, xml(settings))
       assert_match(/<resources host="cdn"\/>/, xml(settings))
       assert_match(%r{<brandlogo source="pretext-plus/icon.svg" url="https://pretext.plus"/>}, xml(settings))
     end
@@ -92,7 +92,7 @@ class PublicationFileBuilderTest < ActiveSupport::TestCase
       <?xml version="1.0" encoding="UTF-8"?>
       <publication>
         <source>
-          <directories external="external" generated="generated"/>
+          <directories generated="../generated-assets"/>
         </source>
         <html embed-button="yes">
           <resources host="cdn"/>

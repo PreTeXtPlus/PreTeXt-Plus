@@ -18,6 +18,11 @@ import { summarizeCleanFixes, type CleanFinding } from "../cleanFindings";
 import { usePretextDiagnostics } from "./editorConfigs/usePretextDiagnostics";
 import { usePlacementDiagnostics } from "./editorConfigs/usePlacementDiagnostics";
 import type { PlacementCheckInput } from "./editorConfigs/placementDiagnostics";
+import { useDivisionRefDiagnostics } from "./editorConfigs/useDivisionRefDiagnostics";
+import type { DivisionRefCheckInput } from "./editorConfigs/divisionRefDiagnostics";
+import { useRefLinks } from "./editorConfigs/useRefLinks";
+import type { RefTargetKind } from "./editorConfigs/refLinks";
+import type { DivisionType } from "../types/sections";
 import { useInteractiveDiagnostics } from "./editorConfigs/useInteractiveDiagnostics";
 import type { InteractiveCheckInput } from "./editorConfigs/interactiveDiagnostics";
 import type { PretextValidationInput } from "./editorConfigs/pretextDiagnostics";
@@ -137,6 +142,19 @@ interface CodeEditorProps {
    * (see `editorConfigs/placementDiagnostics.ts`). Memoize it, as above.
    */
   placementCheck?: PlacementCheckInput;
+  /**
+   * The project's refs, against which this buffer's division placeholders are
+   * checked for one naming no division (see
+   * `editorConfigs/divisionRefDiagnostics.ts`). Memoize it, as above.
+   */
+  divisionRefCheck?: DivisionRefCheckInput;
+  /** Create the division a placeholder names: the missing-division quick fix. */
+  onCreateDivisionFromRef?: (xmlId: string, type: DivisionType) => void;
+  /**
+   * Open what a `<plus:* ref/>` placeholder names, on Ctrl/Cmd+click (see
+   * `editorConfigs/refLinks.ts`). Placeholders are links only when it is set.
+   */
+  onOpenRef?: (kind: RefTargetKind, ref: string) => void;
   /**
    * What a PreTeXt buffer's `<interactive>`s are checked against (see
    * `editorConfigs/interactiveDiagnostics.ts`). Memoize it, as above.
@@ -316,6 +334,9 @@ const CodeEditor = forwardRef<CodeEditorHandle, CodeEditorProps>(({
   onMenuStateChange,
   pretextValidation,
   placementCheck,
+  divisionRefCheck,
+  onCreateDivisionFromRef,
+  onOpenRef,
   interactiveCheck,
   collab,
   presence,
@@ -372,13 +393,14 @@ const CodeEditor = forwardRef<CodeEditorHandle, CodeEditorProps>(({
   const onRequestWrapperEditRef = useRef(onRequestWrapperEdit);
   const virtualWrapperRef = useRef(virtualWrapper);
   virtualWrapperRef.current = virtualWrapper;
-  // The view zones currently drawing `virtualWrapper`, and what they were drawn
-  // for: the wrapper, and the line count the closing zone is anchored below.
+  // The view zones currently drawing `virtualWrapper`, the wrapper they were
+  // drawn for, and the closing zone's id and the object Monaco reads its anchor
+  // line from (see `syncVirtualWrapper`).
   const wrapperZonesRef = useRef<{
     ids: string[];
     wrapper: VirtualWrapper | undefined;
-    lineCount: number;
-  }>({ ids: [], wrapper: undefined, lineCount: 0 });
+    closing: { id: string; zone: { afterLineNumber: number } } | null;
+  }>({ ids: [], wrapper: undefined, closing: null });
   // Per-format Monaco language extensions (completions, diagnostics, syntax),
   // torn down and re-registered whenever the source format changes.
   const languageExtensionsRef = useRef<{ dispose: () => void } | null>(null);
@@ -602,6 +624,17 @@ const CodeEditor = forwardRef<CodeEditorHandle, CodeEditorProps>(({
     PLACEMENT_LANGUAGE_IDS,
   );
 
+  useDivisionRefDiagnostics(
+    monacoRef,
+    editorRef,
+    divisionRefCheck?.sourceFormat === sourceFormat ? divisionRefCheck : undefined,
+    isEditorMounted,
+    PLACEMENT_LANGUAGE_IDS,
+    onCreateDivisionFromRef,
+  );
+
+  useRefLinks(monacoRef, editorRef, isEditorMounted, sourceFormat, PLACEMENT_LANGUAGE_IDS, onOpenRef);
+
   useInteractiveDiagnostics(
     monacoRef,
     editorRef,
@@ -633,10 +666,16 @@ const CodeEditor = forwardRef<CodeEditorHandle, CodeEditorProps>(({
 
   /**
    * Draw `virtualWrapper` as view zones: its `before` lines above line 1 and its
-   * `after` lines below the last line. The closing zone is anchored to a line
-   * number, so it's re-anchored whenever the line count changes — called from
-   * the content listener after every edit, local or remote. Reads only refs, so
-   * the mount-time listener's copy of it is always current.
+   * `after` lines below the last line. Called from the content listener after
+   * every edit, local or remote. Reads only refs, so the mount-time listener's
+   * copy of it is always current.
+   *
+   * The closing zone is re-pinned below the last line after *every* edit, not
+   * only when the line count changes. Monaco's line layout moves a zone itself
+   * when lines around it are deleted and re-inserted, and some edits do that
+   * without changing the count: Alt+Down on the second-to-last line, or
+   * commenting out the last one. Left there, the zone sat above the last line,
+   * so the author's text appeared below the division's closing tag.
    */
   const syncVirtualWrapper = () => {
     const editor = editorRef.current;
@@ -647,7 +686,16 @@ const CodeEditor = forwardRef<CodeEditorHandle, CodeEditorProps>(({
     const zones = wrapperZonesRef.current;
     const wrapper = virtualWrapperRef.current;
     const lineCount = model.getLineCount();
-    if (zones.wrapper === wrapper && zones.lineCount === lineCount) return;
+    if (zones.wrapper === wrapper) {
+      const closing = zones.closing;
+      if (closing) {
+        // `layoutZone` re-reads the anchor from the zone object, wherever the
+        // layout has since moved it.
+        closing.zone.afterLineNumber = lineCount;
+        editor.changeViewZones((accessor: any) => accessor.layoutZone(closing.id));
+      }
+      return;
+    }
 
     const fontInfo = editor.getOption(monaco.editor.EditorOption.fontInfo);
     const makeNode = (lines: string[]) => {
@@ -672,22 +720,23 @@ const CodeEditor = forwardRef<CodeEditorHandle, CodeEditorProps>(({
     editor.changeViewZones((accessor: any) => {
       for (const id of zones.ids) accessor.removeZone(id);
       zones.ids = [];
+      zones.closing = null;
       if (!wrapper) return;
       const add = (afterLineNumber: number, lines: string[]) => {
-        if (lines.length === 0) return;
-        zones.ids.push(
-          accessor.addZone({
-            afterLineNumber,
-            heightInLines: lines.length,
-            domNode: makeNode(lines),
-          }),
-        );
+        if (lines.length === 0) return null;
+        const zone = {
+          afterLineNumber,
+          heightInLines: lines.length,
+          domNode: makeNode(lines),
+        };
+        const id: string = accessor.addZone(zone);
+        zones.ids.push(id);
+        return { id, zone };
       };
       add(0, wrapper.before);
-      add(lineCount, wrapper.after);
+      zones.closing = add(lineCount, wrapper.after);
     });
     zones.wrapper = wrapper;
-    zones.lineCount = lineCount;
   };
 
   const setModelValueSafely = (model: any, nextValue: string) => {

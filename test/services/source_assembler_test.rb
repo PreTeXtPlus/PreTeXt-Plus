@@ -97,6 +97,52 @@ class SourceAssemblerTest < ActionDispatch::IntegrationTest
     assert_not_includes source, "plus:exercise"
   end
 
+  # ---- the multi-file project ---------------------------------------------
+
+  # What an author downloads. The claim that matters is that it is the same
+  # document a build is handed, so this runs libxml2's own XInclude over the
+  # files on disk -- what `pretext build` does -- and compares the result with
+  # the single file, element for element.
+  test "the files are the assembled document, joined by xi:include" do
+    skip_without_bundle
+    @project.exercises.create!(ref: "act", title: "Try it", source_format: "doenetml",
+      attrs: { "width" => "100%" }, source: "<p>Is <m>x < 2</m>?</p>\n<answer>yes</answer>")
+    child = @project.divisions.find_by!(ref: "subdivision")
+    @project.assets.create!(kind: :authored_asset, source_format: "tikz", ref: "plot", title: "Plot",
+                            source: "\\node {$a < b$} \\amp c & d;")
+    @project.assets.create!(kind: :authored_asset, source_format: "prefigure", ref: "graph", title: "Graph",
+                            source: "<diagram dimensions=\"(10,10)\"><grid/></diagram>")
+    child.update!(source: "#{child.source}\n<plus:exercise ref=\"act\"/>\n" \
+                          "<figure><plus:image ref=\"plot\"/></figure>\n<figure><plus:image ref=\"graph\"/></figure>")
+
+    assembler = SourceAssembler.new(@project)
+    files = assembler.files
+
+    assert_equal "main.ptx", files.keys.first
+    assert_equal %w[docinfo.ptx doenet/act.doenet main.ptx prefigure/graph.xml subdivision.ptx tikz/plot.tex],
+                 files.keys.sort
+    assert_includes files["main.ptx"], '<xi:include href="subdivision.ptx"/>'
+    assert_not_includes files["main.ptx"], "Starter content"
+    assert_includes files["subdivision.ptx"], '<xi:include href="doenet/act.doenet" parse="text"/>'
+    # DoenetML as typed: no CDATA wrapper, no entity escapes.
+    assert_equal "<p>Is <m>x < 2</m>?</p>\n<answer>yes</answer>", files["doenet/act.doenet"]
+
+    # TeX as typed, and a PreFigure diagram that is a document in its own namespace.
+    assert_equal "\\node {$a < b$} \\amp c & d;", files["tikz/plot.tex"]
+    assert_includes files["prefigure/graph.xml"], '<diagram dimensions="(10,10)" xmlns="https://prefigure.org">'
+
+    assert_equal canonical(assembler.call), canonical(xincluded(files))
+  end
+
+  test "a file path that could leave the source directory is refused" do
+    listing = JSON.generate(files: [ { path: "../project.ptx", content: "" } ])
+
+    NodeScript.stub(:new, ->(*, **) { Struct.new(:noop) { define_method(:call) { |*, **| listing } }.new }) do
+      error = assert_raises(SourceAssembler::AssemblyError) { SourceAssembler.new(@project).files }
+      assert_match "unsafe file path", error.message
+    end
+  end
+
   # TikZ is TeX: the buffer is not XML, so the document's copy of it is escaped.
   test "a TikZ asset assembles to a latex-image with its source as XML text" do
     skip_without_bundle
@@ -108,6 +154,24 @@ class SourceAssemblerTest < ActionDispatch::IntegrationTest
     source = SourceAssembler.new(@project).call
 
     assert_includes source, %(<latex-image label="plot">\n\\node {$a &lt; b$} \\amp c &amp; d;\n</latex-image>)
+  end
+
+  # PreTeXt reads the external directory from the docinfo (2026-07-30), so every
+  # document bound for an archive names where the archive puts uploads -- beside
+  # whatever else the author's docinfo holds, and whichever docinfo is in effect.
+  test "the docinfo declares the archive's external directory" do
+    skip_without_bundle
+    @project.update!(docinfo: "<docinfo><macros>\\def\\projectown{1}</macros></docinfo>")
+    assembler = SourceAssembler.new(@project)
+
+    assert_includes assembler.call, '<directories external="../assets"/>'
+    assert_includes assembler.call, "\\def\\projectown{1}"
+    assert_includes assembler.files["docinfo.ptx"], '<directories external="../assets"/>'
+
+    @project.user.update!(common_docinfo: "<docinfo><directories data=\"data\" external=\"elsewhere\"/></docinfo>")
+    @project.update!(use_common_docinfo: true)
+
+    assert_includes SourceAssembler.new(@project).call, '<directories data="data" external="../assets"/>'
   end
 
   test "the docinfo in effect is the one that lands in the document" do
@@ -191,6 +255,26 @@ class SourceAssemblerTest < ActionDispatch::IntegrationTest
     # The bundle is a build product (`npm run build:assembler`, which
     # assets:precompile runs), so a checkout that has not built it yet still gets
     # a green Ruby suite rather than a wall of failures about a missing file.
+    # `files` written to disk and read back through libxml2 with XInclude on.
+    def xincluded(files)
+      Dir.mktmpdir do |dir|
+        files.each do |path, content|
+          FileUtils.mkdir_p(File.dirname(File.join(dir, path)))
+          File.write(File.join(dir, path), content)
+        end
+        main = File.join(dir, "main.ptx")
+        Nokogiri::XML(File.read(main), main) { |config| config.strict.xinclude }.to_xml
+      end
+    end
+
+    # A document reduced to what PreTeXt reads: no xml:base (libxml2 records where
+    # an included element came from), no xi namespace declaration, CDATA as text.
+    def canonical(xml)
+      doc = Nokogiri::XML(xml) { |config| config.strict.nocdata }
+      doc.xpath("//@xml:base").each(&:remove)
+      doc.canonicalize.gsub(%( xmlns:xi="http://www.w3.org/2001/XInclude"), "")
+    end
+
     def skip_without_bundle
       return if SourceAssembler::BUNDLE.exist?
 
