@@ -6,6 +6,7 @@ import { markdownConfig } from "./markdownConfig";
 import { texConfig } from "./texConfig";
 import { asymptoteConfig } from "./asymptoteConfig";
 import { pythonConfig } from "./pythonConfig";
+import { rawConfig } from "./rawConfig";
 
 export const editorConfigs: Record<EditorLanguage, FormatEditorConfig> = {
   pretext: pretextConfig,
@@ -14,6 +15,7 @@ export const editorConfigs: Record<EditorLanguage, FormatEditorConfig> = {
   tex: texConfig,
   asymptote: asymptoteConfig,
   python: pythonConfig,
+  raw: rawConfig,
 };
 
 export type { FormatEditorConfig };

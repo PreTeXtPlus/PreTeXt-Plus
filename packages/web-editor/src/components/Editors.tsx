@@ -61,6 +61,7 @@ import { applyReplacements } from "./projectFind";
 import type { ProjectMatch } from "../types/projectScan";
 
 import { DEFAULT_LANGUAGE } from "../languages";
+import { proseFormatOf } from "../types/editor";
 import type {
   EditorContentChange,
   EditorDivisionContentChange,
@@ -71,6 +72,7 @@ import type {
   Exercise,
   Snippet,
   SourceFormat,
+  SnippetSourceFormat,
   EditorLanguage,
 } from "../types/editor";
 import type { Division, DivisionType, RootDivisionType } from "../types/sections";
@@ -488,7 +490,7 @@ export interface editorProps {
    */
   onCreateSnippet?: (
     ref: string,
-    sourceFormat?: SourceFormat,
+    sourceFormat?: SnippetSourceFormat,
     title?: string,
   ) => Promise<Snippet>;
   /**
@@ -1008,14 +1010,16 @@ const EditorsInner = (props: EditorsInnerProps) => {
   );
   const editorFormat: SourceFormat =
     editorTarget?.kind === "snippet"
-      ? editorTarget.snippet.sourceFormat
+      ? proseFormatOf(editorTarget.snippet.sourceFormat)
       : editorTarget?.kind === "asset" || editorTarget?.kind === "exercise"
         ? "pretext"
         : activeDivisionFormat;
   // What the open buffer is written in, for the code editor and its menus. Every
-  // asset counts as PreTeXt to the project, but a generator's source may not be.
+  // asset counts as PreTeXt to the project, but a generator's source may not be;
+  // a raw snippet is plain text.
   const editorLanguage: EditorLanguage =
     (editorTarget?.kind === "asset" ? generatorFor(editorTarget.asset.sourceFormat)?.language : undefined) ??
+    (editorTarget?.kind === "snippet" && editorTarget.snippet.sourceFormat === "raw" ? "raw" : undefined) ??
     editorFormat;
 
   // ── Cross-division preview sync ──────────────────────────────────────────
@@ -2406,7 +2410,7 @@ const EditorsInner = (props: EditorsInnerProps) => {
   const placementTarget =
     editorTarget?.kind === "division"
       ? { kind: "division" as const, ref: editorTarget.division.xmlId, format: editorTarget.division.sourceFormat }
-      : editorTarget?.kind === "snippet"
+      : editorTarget?.kind === "snippet" && editorTarget.snippet.sourceFormat !== "raw"
         ? { kind: "snippet" as const, ref: editorTarget.snippet.ref, format: editorTarget.snippet.sourceFormat }
         : null;
   // A division's buffer is checked for placeholders naming no division. Only a
@@ -2437,9 +2441,14 @@ const EditorsInner = (props: EditorsInnerProps) => {
       ...divisions
         .filter((d) => !isOpen("division", d.xmlId))
         .map((d) => ({ name: d.title?.trim() || d.xmlId, source: d.source ?? "", sourceFormat: d.sourceFormat })),
+      // A raw snippet's text is never markup, so it places nothing.
       ...(projectSnippets ?? [])
         .filter((sn) => !isOpen("snippet", sn.ref))
-        .map((sn) => ({ name: sn.title?.trim() || sn.ref, source: sn.source ?? "", sourceFormat: sn.sourceFormat })),
+        .flatMap((sn) =>
+          sn.sourceFormat === "raw"
+            ? []
+            : [{ name: sn.title?.trim() || sn.ref, source: sn.source ?? "", sourceFormat: sn.sourceFormat }],
+        ),
     ]);
     const knownRefs = new Set<string>([
       ...divisions.map((d) => d.xmlId),

@@ -1,11 +1,11 @@
 import { useState } from "react";
 import clsx from "clsx";
-import type { Snippet, SourceFormat } from "../../types/editor";
+import type { Snippet, SnippetSourceFormat, SourceFormat } from "../../types/editor";
 import { sanitizeXmlId, snippetEmbedCode } from "../../sectionUtils";
 import { buildProjectSnippetView } from "../../snippetView";
 import { useEditorStore, useTakenRefs } from "../../store/hooks";
 import { ID_REQUIRED_MESSAGE, idTakenMessage } from "../../idRules";
-import { SOURCE_FORMAT_LABELS } from "../toc/types";
+import { SNIPPET_FORMAT_LABELS } from "../toc/types";
 import {
   CommitField,
   EmbedCode,
@@ -77,7 +77,7 @@ const SnippetSettings = ({
     await onSave({ ...snippet, ref }, snippet.ref);
   };
 
-  const changeFormat = async (sourceFormat: SourceFormat) => {
+  const changeFormat = async (sourceFormat: SnippetSourceFormat) => {
     setError(null);
     try {
       await onSave({ ...snippet, sourceFormat }, snippet.ref);
@@ -156,11 +156,11 @@ const SnippetSettings = ({
           className={clsx(FIELD_CONTROL_CLASSES, "max-w-[200px]")}
           value={snippet.sourceFormat}
           disabled={readOnly}
-          onChange={(e) => void changeFormat(e.target.value as SourceFormat)}
+          onChange={(e) => void changeFormat(e.target.value as SnippetSourceFormat)}
         >
-          {(Object.keys(SOURCE_FORMAT_LABELS) as SourceFormat[]).map((f) => (
+          {(Object.keys(SNIPPET_FORMAT_LABELS) as SnippetSourceFormat[]).map((f) => (
             <option key={f} value={f}>
-              {SOURCE_FORMAT_LABELS[f]}
+              {SNIPPET_FORMAT_LABELS[f]}
             </option>
           ))}
         </select>

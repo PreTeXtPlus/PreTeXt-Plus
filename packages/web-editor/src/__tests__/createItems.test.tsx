@@ -11,7 +11,7 @@ import { forwardRef, useImperativeHandle } from "react";
 import { act, fireEvent, render, screen, within } from "@testing-library/react";
 import Editors from "../components/Editors";
 import type { Division } from "../types/sections";
-import type { Asset, EditorContentChange, Snippet, SourceFormat } from "../types/editor";
+import type { Asset, EditorContentChange, Snippet, SnippetSourceFormat } from "../types/editor";
 
 /** One entry per `focus()` on the code editor: whether it was visible then. */
 const focusCalls: boolean[] = [];
@@ -86,7 +86,7 @@ const asset: Asset = {
 
 function renderEditors(overrides: Partial<Parameters<typeof Editors>[0]> = {}) {
   const changes: EditorContentChange[] = [];
-  const createdSnippets: { ref: string; sourceFormat?: SourceFormat }[] = [];
+  const createdSnippets: { ref: string; sourceFormat?: SnippetSourceFormat }[] = [];
   const authored: string[] = [];
   render(
     <Editors

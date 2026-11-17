@@ -7,7 +7,22 @@ export type SourceFormat = "pretext" | "latex" | "markdown";
  * source is not PreTeXt. Only the code editor and its menus deal in this;
  * everything else is about a record's format.
  */
-export type EditorLanguage = SourceFormat | "tex" | "asymptote" | "python";
+export type EditorLanguage = SnippetSourceFormat | "tex" | "asymptote" | "python";
+
+/**
+ * The format of a snippet's source: a prose {@link SourceFormat}, or `raw` --
+ * verbatim text with no highlighting, inserted into the assembled document as
+ * CDATA so nothing in it needs escaping. Divisions are never raw.
+ */
+export type SnippetSourceFormat = SourceFormat | "raw";
+
+/**
+ * The prose format to treat a snippet's buffer as wherever one is needed (the
+ * syntax of embed code, menus): its own, or PreTeXt for raw text, which has
+ * none of its own.
+ */
+export const proseFormatOf = (format: SnippetSourceFormat): SourceFormat =>
+  format === "raw" ? "pretext" : format;
 
 export const SOURCE_FORMATS: readonly SourceFormat[] = ["pretext", "latex", "markdown"];
 
@@ -164,7 +179,7 @@ export interface Snippet {
   /** The snippet's own source content, in `sourceFormat`. */
   source: string;
   /** The source format `source` is authored in. */
-  sourceFormat: SourceFormat;
+  sourceFormat: SnippetSourceFormat;
 }
 
 /**

@@ -268,6 +268,7 @@ const FORMAT_LABELS: Record<EditorLanguage, string> = {
   tex: "TeX",
   asymptote: "Asymptote",
   python: "Sage",
+  raw: "Raw text",
 };
 
 const CONVERT_BUTTON_CLASSES =
