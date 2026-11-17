@@ -27,6 +27,11 @@ FileUtils.chdir APP_ROOT do
   puts "\n== Installing JavaScript dependencies =="
   system! "npm install"
 
+  puts "\n== Building the Node assembler =="
+  # lib/assembler/*.mjs is gitignored, and Rails shells out to it for builds,
+  # downloads, and the division-split migration.
+  system! "npm run build:assembler"
+
   puts "\n== Fetching the TikZ engine =="
   # Not fatal: without it TikZ assets show their stored picture and render nothing live.
   system("node script/fetch-tikz-engine.js") || puts("Skipped; run `node script/fetch-tikz-engine.js` to add it.")

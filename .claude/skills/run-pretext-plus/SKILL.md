@@ -128,8 +128,8 @@ lsof -ti:3000 -sTCP:LISTEN | xargs -r kill
 
 ## Run (human path)
 
-`bin/dev` runs foreman on `Procfile.dev`: the server plus esbuild and Tailwind
-watchers, so rebuilds are automatic. It's a foreground process; Ctrl-C stops it.
+`bin/dev` runs foreman on `Procfile.dev`: the server plus esbuild, Tailwind, and
+Node-assembler (`lib/assembler/*.mjs`) watchers, so rebuilds are automatic. It's a foreground process; Ctrl-C stops it.
 
 ## Test
 
