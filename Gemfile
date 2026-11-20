@@ -99,6 +99,6 @@ gem "kaminari", "~> 1.3"
 
 gem "rubyzip", "~> 3.6"
 
-gem "honeybadger", "~> 6.9"
+gem "honeybadger", "~> 6.10"
 
 gem "nokogiri", "~> 1.19"
