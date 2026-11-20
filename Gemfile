@@ -87,7 +87,7 @@ gem "stripe", "~> 20.0"
 
 gem "postmark-rails", "~> 0.22"
 
-gem "pay", "~> 12.2"
+gem "pay", "~> 12.5"
 
 gem "commonmarker", "~> 2.10"
 
