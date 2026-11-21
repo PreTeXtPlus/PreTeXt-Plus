@@ -1958,6 +1958,7 @@ function EditorApp({ config }) {
         docinfo={state.docinfo}
         commonDocinfo={state.commonDocinfo}
         useCommonDocinfo={state.useCommonDocinfo}
+        publication={state.publication || undefined}
         language={state.language}
         projectType={state.projectType}
         divisions={state.divisions}

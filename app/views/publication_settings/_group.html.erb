@@ -76,12 +76,15 @@
     <% else %>
       <div class="mt-2 divide-y divide-gray-100">
         <% options.each do |option| %>
-          <div class="flex items-center justify-between gap-3 py-1.5">
-            <%= form.label option.key, option.label, class: "text-sm text-gray-800" %>
-            <div class="w-48 shrink-0">
-              <%= render "publication_settings/control",
-                    form:, settings:, option:, compact: true %>
+          <div class="py-1.5">
+            <div class="flex items-center justify-between gap-3">
+              <%= form.label option.key, option.label, class: "text-sm text-gray-800" %>
+              <div class="w-48 shrink-0">
+                <%= render "publication_settings/control",
+                      form:, settings:, option:, compact: true %>
+              </div>
             </div>
+            <%= render "publication_settings/unread_note", option:, settings: %>
           </div>
         <% end %>
       </div>

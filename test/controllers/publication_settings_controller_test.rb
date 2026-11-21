@@ -271,7 +271,7 @@ class PublicationSettingsControllerTest < ActionDispatch::IntegrationTest
 
     assert_select "#publication-tab-epub"
     assert_select "select[name='publication_settings[epub_cover]']", false
-    assert_select "#publication-panel-epub", /add an asset/i
+    assert_select "#publication-panel-epub", /upload an image/i
   end
 
   test "the logo picker offers a subscriber the project's own images" do
@@ -309,14 +309,16 @@ class PublicationSettingsControllerTest < ActionDispatch::IntegrationTest
                  @project.reload.publication_settings)
   end
 
-  # One tab is not a choice. The panel and its note still render; only the strip goes.
-  # A reveal.js output is the case: it is in no format family, so General is all it has.
-  test "a level reaching one family gets no tab strip" do
+  # A reveal.js output reaches General and its own slides tab -- never the Beamer tab,
+  # whose options it would not read.
+  test "a reveal.js output gets its own slides tab and not Beamer's" do
     get edit_project_target_publication_settings_url(projects(:slides), targets(:slides_deck)),
       headers: modal_headers
 
-    assert_select "[role=tablist]", false
-    assert_select "[role=tabpanel]", 1
+    assert_select "[role=tab]", 2
+    assert_select "#publication-tab-revealjs"
+    assert_select "#publication-tab-beamer", false
+    assert_select "select[name='publication_settings[revealjs_theme]']"
     assert_select "select[name='publication_settings[exercise_inline_hint]']"
   end
 
@@ -475,5 +477,223 @@ class PublicationSettingsControllerTest < ActionDispatch::IntegrationTest
 
     assert_select "select[name='publication_settings[embed_button]'] option[value='']",
                   text: /PreTeXt\.Plus default \(Offer an embed button\)/
+  end
+
+  # ---- the XML view ----
+
+  # What every view-switching request sends: Turbo aims it at the modal's frame.
+  def switch(url, params)
+    patch url, params:, headers: modal_headers
+  end
+
+  test "the settings view carries the level's XML along, and offers the way to edit it" do
+    @project.update!(publication_xml: %(<publication><latex print="yes"/></publication>))
+    get edit_project_publication_settings_url(@project), headers: modal_headers
+
+    assert_select "input[type=hidden][name=publication_xml_base][value*='latex print']"
+    assert_select "input[name=publication_xml]", false
+    assert_select "textarea[name=publication_xml]", false
+    assert_select "button[name=view][value=xml][formaction=?]", switch_project_publication_settings_path(@project)
+  end
+
+  # One view at a time: the XML replaces the settings rather than sitting beside them.
+  test "switching to the XML shows unsaved settings in it, and saves nothing" do
+    switch switch_project_publication_settings_url(@project),
+      { view: "xml", publication_settings: { theme: "salem" },
+        publication_xml: %(<publication><latex print="yes"/></publication>) }
+
+    assert_response :success
+    assert_select "turbo-frame#modal textarea[name=publication_xml]", text: /css theme="salem".*latex print="yes"|latex print="yes".*css theme="salem"/m
+    assert_select "[role=tab]", false
+    assert_select "select[name='publication_settings[theme]']", false
+    assert_select "#publication-xml-view pre", /<css theme="salem"/
+    assert_select "button[name=view][value=settings]"
+    assert_select "form", /Unsaved changes/
+    assert_nil @project.reload.publication_xml
+  end
+
+  test "switching back shows what was typed into the XML, and saves nothing" do
+    switch switch_project_publication_settings_url(@project),
+      { view: "settings", publication_xml: %(<publication><html><css theme="denver"/></html><latex snapshot="yes"/></publication>) }
+
+    assert_select "select[name='publication_settings[theme]'] option[selected][value=denver]"
+    assert_select "input[type=hidden][name=publication_xml][value*=snapshot]"
+    assert_select "input[name=publication_xml_base]", false, "unsaved XML goes as the XML to save"
+    assert_nil @project.reload.publication_xml
+  end
+
+  # There is no reading settings out of text that does not parse.
+  test "XML that would be refused cannot be left, and is shown again as typed" do
+    switch switch_project_publication_settings_url(@project),
+      { view: "settings", publication_xml: "<publication><latex>" }
+
+    assert_select "textarea[name=publication_xml]", text: "<publication><latex>"
+    assert_select "#publication-xml-issues li", /not well-formed/
+    assert_select "[role=tab]", false
+  end
+
+  test "a value the settings could not carry across is reported in the new view" do
+    switch switch_project_publication_settings_url(@project),
+      { view: "xml", publication_settings: { worksheet_margin: "1 furlong", theme: "salem" } }
+
+    assert_select "[role=alert]", /“1 furlong”/
+    assert_select "textarea[name=publication_xml]", text: /salem/
+  end
+
+  test "switching is held to the same access as the modal" do
+    sign_in users(:subscribed)
+    switch switch_project_publication_settings_url(@project), { view: "xml" }
+
+    assert_redirected_to projects_path
+  end
+
+  test "the XML view can be opened directly, with its warnings" do
+    @project.update!(publication_xml: %(<publication><lateks/></publication>))
+    get edit_project_publication_settings_url(@project, view: "xml"), headers: modal_headers
+
+    assert_select "textarea[name=publication_xml]", text: /lateks/
+    assert_select "#publication-xml-issues li", /lateks/
+    assert_select "form[data-controller=publication-xml][data-publication-xml-url-value=?]",
+                  check_project_publication_settings_path(@project)
+  end
+
+  # A cap on the field would cut a long paste short without a word, leaving XML that no
+  # longer parses. The limit is the server's alone, and roomy: authors comment these files.
+  test "a long, heavily commented file is taken whole" do
+    xml = "<publication>\n#{"  <!-- #{'note ' * 20}-->\n" * 500}  <latex print=\"yes\"/>\n</publication>"
+    get edit_project_publication_settings_url(@project, view: "xml"), headers: modal_headers
+    assert_select "textarea[name=publication_xml][maxlength]", false
+
+    patch project_publication_settings_url(@project), params: { publication_xml: xml }
+
+    assert_operator xml.length, :>, 50_000
+    assert_equal xml, @project.reload.publication_xml
+  end
+
+  test "XML saves with the settings" do
+    patch project_publication_settings_url(@project),
+      params: { publication_settings: { theme: "salem" },
+                publication_xml: %(<publication><latex print="yes"/></publication>) }
+
+    assert_redirected_to project_path(@project)
+    assert_equal "Settings saved.", flash[:notice]
+    assert_equal "salem", @project.reload.publication_settings["theme"]
+    assert_match(/latex print/, @project.publication_xml)
+  end
+
+  test "XML with warnings saves, and the notice says so" do
+    patch project_publication_settings_url(@project),
+      params: { publication_xml: %(<publication><lateks/></publication>) }
+
+    assert_match(/1 warning/, flash[:notice])
+    assert_match(/lateks/, @project.reload.publication_xml)
+  end
+
+  # The same rule as a refused setting: the rest of the visit is saved, and the XML this
+  # level had stays as it was rather than being replaced by something unusable.
+  test "refused XML leaves the old XML in place and saves everything else" do
+    @project.update!(publication_xml: %(<publication><latex print="yes"/></publication>))
+
+    patch project_publication_settings_url(@project),
+      params: { publication_settings: { theme: "salem" }, publication_xml: "<publication><latex>" }
+
+    assert_match(/publication XML is unchanged/i, flash[:alert])
+    assert_equal "salem", @project.reload.publication_settings["theme"]
+    assert_match(/latex print="yes"/, @project.publication_xml)
+  end
+
+  test "an emptied field clears the XML, and a form without the field leaves it alone" do
+    @project.update!(publication_xml: %(<publication><latex print="yes"/></publication>))
+
+    patch project_publication_settings_url(@project), params: { publication_settings: { theme: "salem" } }
+    assert @project.reload.publication_xml.present?
+
+    patch project_publication_settings_url(@project), params: { publication_xml: "" }
+    assert_nil @project.reload.publication_xml
+  end
+
+  test "check reports on XML without saving it" do
+    post check_project_publication_settings_url(@project),
+      params: { publication_xml: "<publication><latex>" }, as: :json
+
+    assert_response :success
+    assert_match(/not well-formed/, response.parsed_body["errors"].first["message"])
+    assert_nil @project.reload.publication_xml
+  end
+
+  # The preview is the file a save would produce -- and check still saves nothing.
+  test "check previews the whole form, unsaved" do
+    post check_project_target_publication_settings_url(@project, @target),
+      params: { publication_settings: { theme: "salem" },
+                publication_xml: %(<publication><html><navigation logic="tree"/></html></publication>) }
+
+    body = response.parsed_body
+    assert_empty body["errors"]
+    assert_match(%r{<css theme="salem"/>}, body["preview"])
+    assert_match(%r{<navigation logic="tree"/>}, body["preview"])
+    assert_empty @target.reload.publication_settings
+    assert_nil @target.publication_xml
+  end
+
+  test "check is held to the same access as the modal" do
+    sign_in users(:subscribed)
+    post check_project_publication_settings_url(@project), params: { publication_xml: "" }, as: :json
+
+    assert_response :forbidden
+  end
+
+  test "what the XML sets is what the other tabs show" do
+    @project.update!(publication_xml: %(<publication><html><css theme="salem"/></html></publication>))
+    get edit_project_publication_settings_url(@project), headers: modal_headers
+
+    assert_select "select[name='publication_settings[theme]'] option[selected][value=salem]"
+  end
+
+  # No field, so nothing is submitted for it and a save cannot blank it out.
+  test "a value the modal does not offer is shown, not offered" do
+    @project.update!(publication_xml: %(<publication><html><css theme="custom"/></html></publication>))
+    get edit_project_publication_settings_url(@project), headers: modal_headers
+
+    assert_select "select[name='publication_settings[theme]']", false
+    assert_select "#publication-panel-html", /“custom”/
+
+    patch project_publication_settings_url(@project), params: { publication_settings: { chunk_level: "1" } }
+    assert_equal({ "theme" => "custom", "chunk_level" => "1" }, @project.reload.publication_settings)
+  end
+
+  # A textarea submits CRLF. Stored as typed, that would make untouched text look edited
+  # on the next visit -- and, worse, look newer than a select changed in the same save.
+  test "the XML is stored with the line endings it was typed with, not the browser's" do
+    patch project_publication_settings_url(@project),
+      params: { publication_xml: "<publication>\r\n  <latex print=\"yes\"/>\r\n</publication>" }
+
+    assert_no_match(/\r/, @project.reload.publication_xml)
+  end
+
+  # Two people with the same modal open: the second save writes the fields its author
+  # changed, and does not put back what the first one replaced.
+  test "a save keeps what someone else saved since the modal opened" do
+    drawn = %(<publication><html><css theme="salem"/></html></publication>)
+    # Saved by a collaborator after this modal was drawn: a new theme, and XML the
+    # settings view has no field for.
+    @project.update!(publication_xml: %(<publication><html><css theme="denver"/></html><latex snapshot="yes"/></publication>))
+
+    patch project_publication_settings_url(@project),
+      params: { publication_xml_base: drawn, publication_settings: { theme: "salem", chunk_level: "1" } }
+
+    settings = @project.reload.publication_settings
+    assert_equal "denver", settings["theme"], "a field left as drawn is not a change"
+    assert_equal "1", settings["chunk_level"]
+    assert_match(/latex snapshot="yes"/, @project.publication_xml)
+  end
+
+  test "a field changed from what was drawn is written over a newer save" do
+    drawn = %(<publication><html><css theme="salem"/></html></publication>)
+    @project.update!(publication_xml: %(<publication><html><css theme="denver"/></html></publication>))
+
+    patch project_publication_settings_url(@project),
+      params: { publication_xml_base: drawn, publication_settings: { theme: "" } }
+
+    assert_nil @project.reload.publication_settings["theme"]
   end
 end

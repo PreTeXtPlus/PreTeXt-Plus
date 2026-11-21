@@ -19,4 +19,6 @@
   <% if option.help.present? %>
     <p class="mt-1 text-xs text-gray-500"><%= option.help %></p>
   <% end %>
+
+  <%= render "publication_settings/unread_note", option:, settings: %>
 </div>

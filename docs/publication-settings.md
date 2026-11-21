@@ -16,11 +16,18 @@ only a theme still inherits the account's chunking level.
 account defaults  →  project  →  output (target)
 ```
 
-Storage is a `publication_settings` jsonb column on `users`, `projects` and `targets`,
-holding only the keys an author actually chose. **"Inherit" is the absence of a key**,
-which is what makes resolution a plain `Hash#merge` and what makes clearing an override
-possible: the form submits an empty value, `HasPublicationSettings` drops it, and the level
-above takes over again. Nothing ever stores a blank.
+Storage is a `publication_xml` text column on `users`, `projects` and `targets`: a fragment
+of a PreTeXt publication file holding only what that level sets. The XML is the source of
+truth, the way an exercise's source is, and the modal is an editor over it.
+**"Inherit" is an attribute that is not there**, which is what makes clearing an override
+possible: the form submits an empty value, the attribute is taken out, and the level above
+takes over again.
+
+`publication_settings` (on the same three models, via `HasPublicationSettings`) is the
+modal's *view* of that XML — our catalog keys, read from the paths the catalog names and
+written back to them by `Publication::Document`. It holds only keys the XML sets, so
+resolving the levels for the modal is still a plain `Hash#merge`. The old jsonb column of
+the same name is ignored and awaits a migration to drop it.
 
 `Publication::Settings` does the resolving. `Publication::Settings.effective_for(owner)` is
 the merged hash a build consumes; the instance methods (`own`, `inherited`,
@@ -44,6 +51,8 @@ outputs they reach. One declaration, because they are the same question: an auth
 | PDF | `pdf`, `latex` |
 | EPUB | `epub`, `kindle` |
 | Braille | `braille` |
+| Slides (web) | `revealjs` |
+| Slides (PDF) | `beamer` |
 
 | Key | Family | Publication path | Values |
 |---|---|---|---|
@@ -59,11 +68,21 @@ outputs they reach. One declaration, because they are the same question: an auth
 | `chunk_level` | HTML | `common/chunking/@level` | book `0`–`3`, article `0`–`2` |
 | `embed_button` | HTML | `html/@embed-button` | `yes` (**our** default), `no` (PreTeXt's) |
 | `knowl_{block}` × 18 | HTML | `html/knowl/@{block}` | `yes`, `no`; PreTeXt's default differs per block |
+| `html_navigation_*`, `html_toc_*`, `html_banner_*` | HTML | `html/navigation`, `html/tableofcontents`, `html/banner` | from the `pi:publisher` table |
+| `html_{calculator,annotation,read_aloud,xref_knowled,video_privacy,interactives_resize}` | HTML | `html/…` | from the `pi:publisher` table |
 | `latex_print` | PDF | `latex/@print` | `no` (PreTeXt's default), `yes` |
 | `latex_sides` | PDF | `latex/@sides` | `one`, `two` |
+| `latex_font_size` | PDF | `latex/@font-size` | `8`–`20` pt, as `validate-font-size` allows (PreTeXt's default 10) |
+| `latex_paper` | PDF | `latex/page/geometry` (text) | geometry paper names: `letterpaper` (PreTeXt's), `a4paper`, … |
+| `latex_page_{margin,top,bottom,inner,outer}` | PDF | `latex/page/geometry` (text) | a length; see *Composed text* below |
+| `latex_right_alignment` | PDF | `latex/page/@right-alignment` | `flush` (PreTeXt's default), `ragged` |
+| `latex_cover_{front,back}` | PDF | `latex/cover/@{front,back}` | the project's own uploaded **PDFs** (`\includepdf`) |
+| `latex_{open_odd,bottom_alignment,crop_marks,link_highlight,pageref,draft,worksheet_formatted}` | PDF | `latex/@…`, `latex/page/@…`, `latex/worksheet/@formatted` | from the `pi:publisher` table |
 | `epub_cover` | EPUB | `epub/cover/@front` | the project's own uploaded images |
 | `braille_page_width` | Braille | `braille/page/@width` | whole number, 1–100 (PreTeXt's default 40) |
 | `braille_page_height` | Braille | `braille/page/@height` | whole number, 1–100 (PreTeXt's default 25) |
+| `revealjs_*` | Slides (web) | `revealjs/appearance`, `/controls`, `/navigation` | slideshows only |
+| `beamer_*` | Slides (PDF) | `beamer/appearance`, `beamer/page` | slideshows only |
 
 The Braille and EPUB tabs show on **any** project, not only ones that have built either —
 an author who does not know PreTeXt.Plus embosses braille will never go looking for the
@@ -244,6 +263,104 @@ Some exclusions and edges:
   default template in the same file. PreTeXt clamps anything deeper and logs
   `PTX:FALLBACK`; not offering it beats explaining that afterwards.
 
+### Shared text
+
+`latex/page/geometry` is PreTeXt's one widely used option carried as element *text*
+(`<geometry>a4paper, top=1in</geometry>`, poured into `\geometry{}`), and several options
+contribute to it. An option with `part:` (and no `attribute:`) is one piece of an element's
+text, and `Catalog::TEXT_CODECS` names what reads and writes it — `Catalog::Geometry`:
+
+- `parse` / `join` are what a level **stores**: only its own parts, as geometry spells them.
+  `parse` is nil for text that is not just those parts — an author's own geometry — which
+  the modal then leaves alone (the fields are empty, with a note saying what is there and
+  that choosing replaces it) and a build passes through as written.
+- `compose` is what a **build** gets, from every level's parts merged, so a project's paper
+  and an output's margin are written together. It is more than a join. PreTeXt writes
+  `\geometry{letterpaper,total={<width>,9in}}` first, sizing the text block for line length,
+  and margins on top of a fixed text block over-constrain the page. So **any margin starts
+  the string with `reset`**, which returns geometry to the class defaults and lets the
+  margins decide the text block — and since reset forgets PreTeXt's `letterpaper`, a margin
+  with no paper chosen writes `letterpaper` back. Paper alone keeps PreTeXt's text block.
+
+Text made only of those parts is composed whoever typed it: `a5paper, margin=2cm` written
+in the XML view builds as `reset, a5paper, margin=2cm`, and the preview there shows so.
+
+## The XML, and the XML view
+
+`Publication::Document` is one level's XML, parsed. Three things use it:
+
+- **The settings view reads through it.** `Document#settings` is the catalog-keyed view
+  behind `publication_settings`. A value the modal could not have written (`theme="custom"`)
+  is shown as text with no control (`Settings#set_elsewhere?`): a control that cannot show a
+  value would submit a blank in its place, and a blank means "take this out".
+- **The settings view writes through it.** `Document.write(xml, changes)` sets or removes
+  each changed option at its path and keeps everything else, comments included (indentation
+  is redone). `HasPublicationSettings#apply_publication_changes` writes **only fields that
+  differ from what the XML already says**: every field submits on every save, and an empty
+  paper-size field written over a hand-made geometry would erase it.
+- **A build merges them.** `Settings#documents` is the chain's documents, account first;
+  `PublicationFileBuilder` merges their trees over BASE, a lower level winning an attribute
+  at a time.
+
+The modal has **two views of the same thing, one at a time**: the settings (tabs of
+controls) and the XML (*Edit as XML*), for anything the catalog does not offer — or to
+paste a `publication.ptx` from a CLI project. Not a tab beside the others: side by side,
+whichever was not being typed into would be showing something already out of date.
+
+`publication_settings#switch` moves between them and takes unsaved work along. The button
+is a submit of the modal's own form (`formaction`, aimed back at the `modal` frame), the
+form is applied to the owner **in memory** exactly as `update` would apply it, and the
+modal is drawn again from that. So a theme picked in the settings is in the XML the author
+is shown, and an attribute typed into the XML is in the select when they come back; nothing
+is saved until Save, and the footer says *Unsaved changes* meanwhile. What makes this work
+with one form is what each view submits: the XML view has the textarea and **no fields**,
+so settings it cannot see cannot undo what was typed; the settings view has the fields and
+the XML in a **hidden field**, so XML edited a moment ago is not lost. XML that would be
+refused cannot be left — there is no reading settings out of text that does not parse — and
+is shown again as typed with its problems.
+
+The text itself never reaches a build — only elements, attributes and leaf text are read
+out, and the builder writes a fresh file — so comments, PIs and anything namespaced stop at
+the parser. What a document does with the rest:
+
+| | What | Outcome |
+|---|---|---|
+| **Refused** | not well formed; a DOCTYPE; any namespace (so `xi:include`); `<publication>` not the root; text beside child elements; a file attribute (`latex/cover`, `epub/cover`, `html/brandlogo/@source`, `common/qrcode/@image`) that is not a bare filename; over 200KB | not saved; the level keeps its old XML |
+| **Managed** | everything in `<source>` but `source/version`; `html/resources`; `webwork/@pg-location`; `html/brandlogo` without subscriber benefits | saved, warned about, left out of every build |
+| **Unknown** | an element, attribute or enumerated value not in `config/pretext_publication_schema.yml` | saved, warned about, passed through |
+
+A value arriving *as a setting* (the modal, `publication_settings=`, the console) is still
+held to the catalog — `Option#permits?` — and refused rather than written. The looser rules
+above are for what an author types as XML, deliberately.
+
+The builder also re-applies `PublicationFileBuilder::MANAGED` (`source/directories`,
+`html/resources`) after every level, as a backstop. Not the logo, which BASE only defaults.
+
+`config/pretext_publication_schema.yml` is generated by `bin/rails
+pretext:publication_schema` from the `pi:publisher` table plus every literal
+`$publication/...` path in the pinned XSL; `Publication::Schema` merges the catalog's own
+paths in (some, like `html/css/@theme`, are read through templates the scan cannot see).
+Unknown is a warning, never a refusal: an author on a newer PreTeXt Guide may know an option
+the pin does not. Regenerate it alongside `pretext:journals` when bumping
+`@pretextbook/pretext-html`.
+
+**Check before save.** `publication_xml_controller.js` (on the modal's form) holds a save
+whose XML changed, posts the form to `publication_settings#check`, and only lets it through
+if nothing would be refused; otherwise the problems are listed under the text. `check`
+applies the form in memory, never saves, and returns `{errors, warnings, preview}` — the
+preview being the file a save would produce. The form's own authenticity token is per-form
+(good for the PATCH only), so the fetch sends the page's meta token instead. A textarea
+submits CRLF; the controller puts LF back so untouched text compares equal to what is
+stored.
+
+**No `maxlength` on the textarea.** The 200KB limit is `Document::MAX_LENGTH` and enforced
+on the server only: a cap on the field enforces itself by silently cutting a paste short,
+leaving XML that no longer parses and no word about why.
+
+**What storing XML costs.** Our keys used to insulate stored data from PreTeXt moving an
+option; now a move is a data migration (the catalog's `element` still localizes the code
+change).
+
 ## In the archive
 
 `ProjectArchiveBuilder` writes one publication file per target, plus the project's own:
@@ -310,17 +427,34 @@ Three things that look like details and are not:
   `Option#select_choices_for` is the single place that flips them; getting it wrong makes
   every option submit its own label, which validation then refuses — a form that looks
   right and cannot be saved.
-- `update` **merges** into the stored hash rather than replacing it. The modal offers only
-  what the level's document type and output format allow, so a replace would silently drop
-  a setting the modal no longer shows (a book converted to an article) for whoever next
-  saved something unrelated.
+- `update` applies **changed fields only** rather than replacing what is stored. The modal
+  offers only what the level's document type and output format allow, so a replace would
+  silently drop a setting the modal no longer shows (a book converted to an article) for
+  whoever next saved something unrelated.
+
+## In the live preview
+
+The editor's live preview renders with the project's build settings. `projects/show.json`
+carries `publication` — the file the account's and the project's levels resolve to
+(`PublicationFileBuilder.for(project, default_logo: false)`; not any one output's, since a
+preview is of the project) — and the editor hands it to `@pretextbook/pretext-html` as
+`publicationPath` plus an in-memory file (`renderPreviewHtml` in `wasmPreview.ts`).
+
+The package respects the file except what a one-page, in-memory render cannot honour, which
+it forces itself: css and js from the CDN, chunk level 0, cross-references as links rather
+than knowls, portable mode off. So numbering, knowls, exercise components and the theme
+show; chunking does not. `default_logo: false` leaves out BASE's PreTeXt.Plus logo, a file
+only a build's archive holds — the preview would otherwise show a broken image.
+
+The file is read when the editor loads the project, so a change to build settings shows in
+the preview the next time the editor is opened.
 
 ## Not covered
 
 - **Staleness is not tracked.** Changing a setting does not flip an output to "Out of
   date"; it takes effect on the next build. The drawer and the modal both say so.
-- The editor's live preview keeps its own styling — it does not honour the theme.
-- No free-form publication file editing.
+- LaTeX fonts (`latex/fonts`) and `latex-style` have no control in the settings view; *Edit as XML*
+  reaches them.
 
 ## Unverified against a real build
 
@@ -328,3 +462,6 @@ The XML is asserted against the XSL that consumes it, and the archive layout aga
 CLI's own path resolution — but **no build has yet run with a non-default publication
 file**. The first `pretext build` on a downloaded project with a theme set is the actual
 proof, and the `publication` attribute's relative path is the most likely thing to be wrong.
+
+The geometry composition (`reset, <paper>, <margins>`) in particular has not been through
+LaTeX: no TeX is installed in the devcontainer. A PDF build with a margin set is the proof.

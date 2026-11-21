@@ -258,6 +258,14 @@ export interface editorProps {
    */
   previewBannerMessage?: string;
   /**
+   * The project's publication file, as XML, for the live preview to render
+   * with: numbering depths, knowls, exercise components and the like then
+   * match what a build produces. The host resolves it (a project's build
+   * settings may come from several places); the editor only passes it on.
+   * Omit to preview with PreTeXt's defaults.
+   */
+  publication?: string;
+  /**
    * URL of the preview render worker, for rendering previews off the main
    * thread so a long division never freezes the editor while it renders.
    * The host bundles this package's `preview-worker` export as an ES-module
@@ -2960,6 +2968,7 @@ const EditorsInner = (props: EditorsInnerProps) => {
         renderer={previewRendererFor(props.previewWorkerUrl)}
         generatedImageUrl={generatedImageUrl}
         docinfo={effectiveDocinfo}
+        publication={props.publication}
         theme={props.previewTheme}
         bannerMessage={
           props.previewBannerMessage ?? DEFAULT_PREVIEW_BANNER_MESSAGE

@@ -28,6 +28,9 @@ application.register("new-project", NewProjectController)
 import ProjectVisibilityController from "./project_visibility_controller"
 application.register("project-visibility", ProjectVisibilityController)
 
+import PublicationXmlController from "./publication_xml_controller"
+application.register("publication-xml", PublicationXmlController)
+
 import SharedSourceController from "./shared_source_controller"
 application.register("shared-source", SharedSourceController)
 

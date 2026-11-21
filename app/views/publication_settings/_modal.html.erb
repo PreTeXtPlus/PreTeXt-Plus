@@ -22,29 +22,70 @@
               class="cursor-pointer rounded-md px-2.5 py-1.5 text-sm text-gray-500 hover:bg-gray-100">✕</button>
     </div>
 
+    <% view = local_assigns.fetch(:view, "settings") %>
+    <% refused = local_assigns.fetch(:refused, []) %>
     <% families = settings.families %>
-    <% if families.any? %>
-      <%# _top for the reason the drawer's own forms use it: the redirect carries a flash,
-          which this frame would otherwise swallow along with the reopened drawer.
+    <%# What the two views have in common. Both submit to the same place, and both carry
+        this level's XML -- the XML view as the text being edited, the settings view as a
+        hidden copy, so that work done in one view and not yet saved survives a visit to
+        the other (see PublicationSettingsController#switch), and so that a save can tell
+        which fields the author changed.
 
-          The tabs live inside the form, not around it: panels are hidden rather than
-          unmounted, so a change made on one tab saves along with a change made on
-          another. %>
-      <%= form_with url: publication_settings_path_for(settings.owner), method: :patch,
-            scope: :publication_settings, data: { turbo_frame: "_top" } do |form| %>
+        _top for the reason the drawer's own forms use it: the redirect carries a flash,
+        which this frame would otherwise swallow along with the reopened drawer. The
+        buttons that switch views aim back at the frame instead.
+
+        publication-xml checks the XML view's text before the form submits, so a typo is
+        reported here, beside what the author typed, rather than in a flash after the
+        modal (and the text) is gone. See publication_xml_controller.js. %>
+    <%= form_with url: publication_settings_path_for(settings.owner), method: :patch,
+          scope: :publication_settings,
+          data: { turbo_frame: "_top", controller: "publication-xml",
+                  action: "submit->publication-xml#guard",
+                  publication_xml_url_value: check_publication_settings_path_for(settings.owner) } do |form| %>
+      <%# A value typed in the settings view that could not be carried into the other
+          view. Said here because the view just changed under the author; the field is
+          back to what it was. %>
+      <% if refused.any? %>
+        <ul role="alert" class="border-b border-amber-200 bg-amber-50 px-5 py-3 text-xs text-amber-800">
+          <% refused.each do |option, value| %>
+            <li><%= option.label %> is unchanged: “<%= value %>” is not <%= option.guidance %>.</li>
+          <% end %>
+        </ul>
+      <% end %>
+
+      <% if view == "xml" %>
+        <%= render "publication_settings/xml", settings:, document: local_assigns[:document] %>
+      <% else %>
+        <%# The XML these fields were drawn from, so a save writes only the fields the
+            author changed, onto whatever is stored by then -- a collaborator's save made
+            while this was open is kept. Except when that XML holds an edit made in the
+            XML view and not yet saved: then it goes as the level's XML, to be saved
+            whole, as the XML view itself would save it. See
+            HasPublicationSettings#apply_publication_changes. %>
+        <% if settings.owner.publication_xml_changed? %>
+          <%= hidden_field_tag "publication_xml", settings.owner.publication_xml, id: nil %>
+        <% else %>
+          <%= hidden_field_tag "publication_xml_base", settings.owner.publication_xml, id: nil %>
+        <% end %>
+
+        <%# The tabs live inside the form, not around it: panels are hidden rather than
+            unmounted, so a change made on one tab saves along with a change made on
+            another. %>
         <div data-controller="tabs">
           <%# One tab is not a choice, so an output that only one family reaches gets its
-              panel and its note without a tab strip above them. %>
+              panel and its note without a tab strip above them. Scrolls sideways rather
+              than wrapping on a narrow window. %>
           <% if families.size > 1 %>
             <div role="tablist" aria-label="Output formats"
-                 class="flex gap-1 border-b border-gray-200 px-5">
+                 class="flex gap-1 overflow-x-auto border-b border-gray-200 px-5">
               <% families.each_with_index do |(family, _options), index| %>
                 <button type="button" role="tab" id="publication-tab-<%= family.key %>"
                         aria-controls="publication-panel-<%= family.key %>"
                         aria-selected="<%= index.zero? %>" tabindex="<%= index.zero? ? 0 : -1 %>"
                         data-tabs-target="tab"
                         data-action="click->tabs#select keydown->tabs#navigate"
-                        class="cursor-pointer border-b-2 border-transparent px-3 py-2 text-sm font-medium
+                        class="shrink-0 cursor-pointer border-b-2 border-transparent px-3 py-2 text-sm font-medium
                                text-gray-500 hover:text-gray-800
                                aria-selected:border-indigo-600 aria-selected:text-indigo-700">
                   <%= family.label %>
@@ -80,27 +121,40 @@
               </div>
             </section>
           <% end %>
-        </div>
 
-        <div class="flex items-center justify-end gap-3 border-t border-gray-200 p-5">
-          <button type="button" data-action="modal#close"
-                  class="cursor-pointer rounded-md px-3 py-2 text-sm text-gray-600 hover:bg-gray-100">
-            Cancel
-          </button>
-          <%= form.submit "Save settings", class: "#{button_classes(color: "indigo")} px-3 py-2 text-sm" %>
+          <%# Nothing reaches this today -- General is never empty -- but a dialog with a
+              heading, a Save button and nothing between them reads as a bug. %>
+          <% if families.empty? %>
+            <p class="p-5 text-sm text-gray-600">Nothing to set here yet.</p>
+          <% end %>
         </div>
       <% end %>
 
-      <p class="border-t border-gray-200 px-5 py-4 text-xs text-gray-500">
-        Changes apply the next time you build.
-      </p>
-    <% else %>
-      <%# Nothing reaches this today: General offers exercise-component visibility whatever
-          the document type and whatever the output, so every level has at least one tab.
-          It stays as the guard against a catalog change that empties a level again --
-          a dialog with a heading and a Save button and nothing between them reads as a
-          bug, and this is a sentence. %>
-      <p class="p-5 text-sm text-gray-600">Nothing to set here yet.</p>
+      <div class="flex items-center gap-3 border-t border-gray-200 p-5">
+        <%# The way to the other view. A submit, so the form's unsaved state goes along; to
+            #switch rather than #update, and back into this frame rather than the page.
+            formnovalidate, because a half-typed number is no reason to be kept here. %>
+        <button type="submit" name="view" value="<%= view == "xml" ? "settings" : "xml" %>"
+                formaction="<%= switch_publication_settings_path_for(settings.owner) %>" formnovalidate
+                data-turbo-frame="modal"
+                class="cursor-pointer rounded-md px-3 py-2 text-sm text-blue-600 hover:bg-gray-100">
+          <%= view == "xml" ? "← Back to settings" : "Edit as XML" %>
+        </button>
+        <%# Switching views saves nothing, so say when there is something to save. %>
+        <% if settings.owner.publication_xml_changed? %>
+          <span class="text-xs text-amber-700">Unsaved changes</span>
+        <% end %>
+
+        <button type="button" data-action="modal#close"
+                class="ml-auto cursor-pointer rounded-md px-3 py-2 text-sm text-gray-600 hover:bg-gray-100">
+          Cancel
+        </button>
+        <%= form.submit "Save settings", class: "#{button_classes(color: "indigo")} px-3 py-2 text-sm" %>
+      </div>
     <% end %>
+
+    <p class="border-t border-gray-200 px-5 py-4 text-xs text-gray-500">
+      Changes apply the next time you build.
+    </p>
   </div>
 </div>
