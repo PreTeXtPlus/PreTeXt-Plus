@@ -391,7 +391,7 @@ class ProjectDocProjection
     attributes = {
       id: id,
       ref: entry["xmlId"].to_s,
-      source: entry["source"].to_s,
+      source: source_of(entry),
       source_format: entry["sourceFormat"].presence || "pretext"
     }
     attributes[:title] = entry["title"].to_s if entry.key?("title")
@@ -407,7 +407,7 @@ class ProjectDocProjection
     attributes = {
       id: id,
       ref: entry["ref"].to_s,
-      source: entry["source"].to_s,
+      source: source_of(entry),
       source_format: entry["sourceFormat"].presence || "pretext"
     }
     # Absent from an entry written before snippets had titles; not a blank one.
@@ -420,7 +420,7 @@ class ProjectDocProjection
   # (for a Doenet activity, the <interactive>'s). An entry with no
   # `sourceFormat` is a PreTeXt one, as every entry was before the field.
   def exercise_attributes(id, entry)
-    attributes = { id: id, ref: entry["ref"].to_s, source: entry["source"].to_s }
+    attributes = { id: id, ref: entry["ref"].to_s, source: source_of(entry) }
     attributes[:title] = entry["title"].to_s if entry.key?("title")
     attributes[:source_format] = entry["sourceFormat"].to_s if entry["sourceFormat"].present?
     attributes[:attrs] = entry["attrs"] if entry["attrs"].is_a?(Hash)
@@ -434,9 +434,18 @@ class ProjectDocProjection
       id: id,
       ref: entry["ref"].to_s,
       title: entry["title"].to_s,
-      source: entry["source"].to_s,
+      source: source_of(entry),
       short_description: entry["shortDescription"].to_s
     }
+  end
+
+  # An entry's source as its row will hold it: with "\n" line endings (see
+  # Content.normalize_line_endings). The row would be normalized on assignment
+  # regardless; it is done here so that the planned attributes are what gets
+  # stored, and ProjectDocRepair does not read a document that still has a
+  # "\r\n" in it -- one no current editor has opened yet -- as rows that lag.
+  def source_of(entry)
+    Content.normalize_line_endings(entry["source"].to_s)
   end
 
   # A root map that has never been written does not exist in the document, and

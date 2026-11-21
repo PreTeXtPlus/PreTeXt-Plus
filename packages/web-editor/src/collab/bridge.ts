@@ -62,7 +62,7 @@ import {
   snippetEntryToSnapshot,
   type CollabDivisionSnapshot,
 } from "./schema";
-import { diffReplace } from "./textDiff";
+import { diffReplace, stripCarriageReturns } from "./textDiff";
 /** Division record derived from a doc entry, for insertion into the store pool. */
 const snapshotToRecord = (snapshot: CollabDivisionSnapshot): Division => ({
   id: snapshot.id,
@@ -241,7 +241,32 @@ export class CollabBridge {
     getSnippetsMap(this.doc).observeDeep(this.onSnippetsEvents);
     getExercisesMap(this.doc).observeDeep(this.onExercisesEvents);
     getMetaMap(this.doc).observe(this.onMetaEvent);
+    this.normalizeLineEndings();
     this.reconcileFromDoc();
+  }
+
+  /**
+   * Take the `\r` out of every `\r\n` the document's texts hold, before the
+   * store is reconciled against them. A document written to before the editor
+   * kept to `\n` (see `lineEndings.ts`) may have any number, and the host
+   * cannot remove them: it reads the document but does not write it. As a
+   * local write, so the observers above leave it to the reconciliation that
+   * follows; peers receive it as the deletions it is.
+   */
+  private normalizeLineEndings(): void {
+    this.doc.transact(() => {
+      for (const map of [
+        getDivisionsMap(this.doc),
+        getAssetsMap(this.doc),
+        getSnippetsMap(this.doc),
+        getExercisesMap(this.doc),
+      ]) {
+        map.forEach((entry) => {
+          const text = getEntryText(entry);
+          if (text) stripCarriageReturns(text);
+        });
+      }
+    }, this.localOrigin);
   }
 
   detach(): void {

@@ -38,6 +38,7 @@ import { latexToPretext } from "@pretextbook/latex-pretext";
 import { markdownToPretext } from "@pretextbook/remark-pretext";
 import type { CleanFinding } from "./cleanFindings";
 import { cleanLatexSource, detectSourceFormat } from "./contentConversion";
+import { normalizeLineEndings } from "./lineEndings";
 import { isRootDivisionType } from "./sectionUtils";
 import type { SourceFormat } from "./types/editor";
 import type { DivisionType } from "./types/sections";
@@ -163,6 +164,9 @@ export function convertImportText(
   format: SourceFormat,
   { clean }: { clean: boolean },
 ): ConvertedImport {
+  // Before any converter sees it: a file saved on Windows arrives with
+  // `\r\n`, which the LaTeX converter reads as a blank line (see `lineEndings.ts`).
+  text = normalizeLineEndings(text);
   if (format === "latex") {
     const cleaned = clean
       ? cleanLatexSource(text)
@@ -223,6 +227,7 @@ export async function convertImportTextWithEngine(
 ): Promise<ConvertedImport> {
   const fileName = TEXT_FILE_NAMES[format];
   if (!fileName) return convertImportText(text, format, { clean });
+  text = normalizeLineEndings(text);
   const cleaned =
     format === "latex" && clean
       ? cleanLatexSource(text)
@@ -269,7 +274,8 @@ async function convertWithEngine(
             "insert them where they belong.",
         ]
       : [];
-  return { pretext: result.pretextSource, findings: [], notes };
+  // An engine writes whatever line endings its platform or the file had.
+  return { pretext: normalizeLineEndings(result.pretextSource), findings: [], notes };
 }
 
 // ── Fitting ──────────────────────────────────────────────────────────────────

@@ -117,7 +117,11 @@ export class MonacoCollabBinding {
   // ── model → ytext ────────────────────────────────────────────────────────
 
   private onLocalChange(event: any): void {
-    if (this.applyingRemote) return;
+    // A change of the model's line ending arrives as one change replacing the
+    // whole text. `CodeEditor` holds the model to `\n`, which the shared text
+    // already is, so there is nothing to write — and writing it would be a
+    // delete-everything + insert that every peer doing the same would repeat.
+    if (this.applyingRemote || event.isEolChange) return;
     const changes = [...event.changes].sort(
       (a: any, b: any) => b.rangeOffset - a.rangeOffset,
     );

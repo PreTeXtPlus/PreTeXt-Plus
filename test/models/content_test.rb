@@ -20,6 +20,16 @@ class ContentTest < ActiveSupport::TestCase
     assert projects(:two).snippets.build(ref: contents(:image_one).ref).valid?
   end
 
+  test "a source is stored with \\n line endings, however it was written" do
+    division = projects(:one).divisions.create!(
+      ref: "windows", source_format: "latex", source: "one\r\ntwo\r\n\r\nthree\rfour\n"
+    )
+    assert_equal "one\ntwo\n\nthree\nfour\n", division.reload.source
+
+    division.update!(source: "a\r\nb")
+    assert_equal "a\nb", division.reload.source
+  end
+
   test "is valid with a unique ref" do
     assert projects(:one).snippets.build(ref: "unique_ref", source: "hello").valid?
   end

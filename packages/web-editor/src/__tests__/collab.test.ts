@@ -881,3 +881,32 @@ describe("CollabBridge write boundary", () => {
     expect(getDivisionsMap(docA).get("id-2")!.get("xmlId")).toBe("dup-3");
   });
 });
+
+describe("CollabBridge line endings", () => {
+  // A document written before the editor kept to `\n`: the CRLF is inserted
+  // straight into the shared text, as a Windows tab's Monaco binding did.
+  it("takes the CR out of a document's CRLFs on attach, for the store and for peers", () => {
+    const docA = new Y.Doc();
+    seedDocFromState(docA, seedState());
+    const body = getDivisionText(docA, "sec-a-id")!;
+    docA.transact(() => {
+      body.delete(0, body.length);
+      body.insert(0, "one\r\ntwo\r\n\r\nthree");
+    });
+    const docB = new Y.Doc();
+    Y.applyUpdate(docB, Y.encodeStateAsUpdate(docA));
+    docA.on("update", (u: Uint8Array) => Y.applyUpdate(docB, u, "relay"));
+
+    const { store } = makeStore();
+    new CollabBridge(
+      { doc: docA, awareness: new Awareness(docA), user: { name: "A", color: "#111" } },
+      store,
+    ).attach();
+
+    expect(body.toString()).toBe("one\ntwo\n\nthree");
+    expect(getDivisionText(docB, "sec-a-id")!.toString()).toBe("one\ntwo\n\nthree");
+    expect(
+      store.getState().divisions?.find((d) => d.xmlId === "sec-a")?.source,
+    ).toBe("one\ntwo\n\nthree");
+  });
+});
