@@ -67,6 +67,13 @@ export const PREVIEW_SOURCE_PATH = "/source/division.ptx";
  */
 export const PREVIEW_CONTEXT_PATH = "/source/main.ptx";
 
+/**
+ * Virtual path the project's publication file is handed to the renderer under
+ * (see {@link LocalRenderOptions.publication}). Outside `/source`, as a real
+ * project keeps it, which is why renders that pass one widen `projectDir`.
+ */
+export const PREVIEW_PUBLICATION_PATH = "/publication/publication.ptx";
+
 /** Options accepted by a local render. Mirrors the subset we actually use. */
 export interface LocalRenderOptions {
   /** Light/dark theme for the rendered page; omit for its native behaviour. */
@@ -104,6 +111,17 @@ export interface LocalRenderOptions {
   divisionId?: string;
   /** `<docinfo>` to give a standalone fragment: LaTeX macros, custom settings. */
   docinfo?: string;
+  /**
+   * The project's publication file, as XML: numbering depths, knowls, which
+   * parts of an exercise show, and the rest of what a build is configured
+   * with. The renderer respects all of it except the few settings a one-page,
+   * in-memory preview cannot honour, which it forces itself (css and js from
+   * the CDN, one chunk, cross-references as links, portable mode off).
+   *
+   * Omit and the preview renders with PreTeXt's defaults, which is what it did
+   * before it knew of the file.
+   */
+  publication?: string;
   /**
    * Render `source` as a fragment (a lone `<section>`, `<chapter>`, ...) that
    * the renderer wraps in a minimal document, rather than as a complete
@@ -265,11 +283,20 @@ export async function renderPreviewHtml(
 ): Promise<PreviewRender> {
   const { renderHtml } = await loadRenderer();
   const { html, sourceMap, target, printouts, rootPrintout, subtree, iframePages } = await renderHtml({
+    // A fallback, not an override: a publication file that names a theme keeps it.
     cssTheme: "default-modern",
     sourcePath: PREVIEW_SOURCE_PATH,
-    projectDir: "/source",
+    // The transform may read only inside projectDir, and the publication file
+    // sits beside /source rather than in it.
+    projectDir: options.publication ? "/" : "/source",
     sourceContent: source,
     sourceMap: true,
+    ...(options.publication
+      ? {
+          publicationPath: PREVIEW_PUBLICATION_PATH,
+          files: { [PREVIEW_PUBLICATION_PATH]: options.publication },
+        }
+      : {}),
     ...(options.fragment ? { fragment: true } : {}),
     ...(options.docinfo ? { docinfo: options.docinfo } : {}),
     // Context mode needs both halves: the document to place the fragment in,

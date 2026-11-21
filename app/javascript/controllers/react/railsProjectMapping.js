@@ -352,6 +352,7 @@ export function toEditorExercise(rec) {
  * @property {string} [docinfo]
  * @property {string} [common_docinfo]
  * @property {boolean} [use_common_docinfo]
+ * @property {string} [publication]
  * @property {string} [document_type]
  * @property {string} [language]
  * @property {RailsDivision[]} [divisions]
@@ -367,6 +368,7 @@ export function toEditorExercise(rec) {
  * @property {string} title
  * @property {string} docinfo
  * @property {string} commonDocinfo
+ * @property {string} publication The project's resolved publication file, for the live preview.
  * @property {boolean} useCommonDocinfo
  * @property {string} language
  * @property {"article"|"book"|"slideshow"} projectType
@@ -403,6 +405,7 @@ export function railsToEditorState(json) {
     docinfo: json.docinfo ?? "",
     commonDocinfo: json.common_docinfo ?? "",
     useCommonDocinfo: json.use_common_docinfo ?? false,
+    publication: json.publication ?? "",
     language: json.language ?? DEFAULT_LANGUAGE,
     projectType,
     divisions: (json.divisions ?? []).map((d) => railsDivisionToEditor(d, projectType)),

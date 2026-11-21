@@ -432,11 +432,27 @@ Three things that look like details and are not:
   silently drop a setting the modal no longer shows (a book converted to an article) for
   whoever next saved something unrelated.
 
+## In the live preview
+
+The editor's live preview renders with the project's build settings. `projects/show.json`
+carries `publication` — the file the account's and the project's levels resolve to
+(`PublicationFileBuilder.for(project, default_logo: false)`; not any one output's, since a
+preview is of the project) — and the editor hands it to `@pretextbook/pretext-html` as
+`publicationPath` plus an in-memory file (`renderPreviewHtml` in `wasmPreview.ts`).
+
+The package respects the file except what a one-page, in-memory render cannot honour, which
+it forces itself: css and js from the CDN, chunk level 0, cross-references as links rather
+than knowls, portable mode off. So numbering, knowls, exercise components and the theme
+show; chunking does not. `default_logo: false` leaves out BASE's PreTeXt.Plus logo, a file
+only a build's archive holds — the preview would otherwise show a broken image.
+
+The file is read when the editor loads the project, so a change to build settings shows in
+the preview the next time the editor is opened.
+
 ## Not covered
 
 - **Staleness is not tracked.** Changing a setting does not flip an output to "Out of
   date"; it takes effect on the next build. The drawer and the modal both say so.
-- The editor's live preview keeps its own styling — it does not honour the theme.
 - LaTeX fonts (`latex/fonts`) and `latex-style` have no control in the settings view; *Edit as XML*
   reaches them.
 

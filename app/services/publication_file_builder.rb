@@ -48,12 +48,18 @@ class PublicationFileBuilder
   # (Publication::Settings#documents); a level that sets nothing may be nil. Callers
   # holding a hash of settings instead -- our keys, as the modal reads them, which is most
   # tests -- may pass that, and it is read as the one level that would store them.
-  def initialize(documents)
+  #
+  # `default_logo: false` leaves out the PreTeXt.Plus logo BASE points every build at. That
+  # file is one ProjectArchiveBuilder writes into a build's archive; anything rendering
+  # without an archive -- the editor's live preview -- would be pointing at an image that
+  # is not there. A logo an author chose is an asset of the project and is unaffected.
+  def initialize(documents, default_logo: true)
     @documents = documents.is_a?(Hash) ? [ self.class.document_for(documents) ] : documents.compact
+    @default_logo = default_logo
   end
 
-  def self.for(owner)
-    new(Publication::Settings.new(owner).documents)
+  def self.for(owner, **options)
+    new(Publication::Settings.new(owner).documents, **options)
   end
 
   def self.document_for(settings)
@@ -123,7 +129,8 @@ class PublicationFileBuilder
     end
 
     def base_nodes
-      BASE.transform_values { |attributes| { attributes: attributes.dup, text: nil } }
+      base = @default_logo ? BASE : BASE.except(%w[ html brandlogo ])
+      base.transform_values { |attributes| { attributes: attributes.dup, text: nil } }
     end
 
     # BASE, plus a value for each option PreTeXt.Plus defaults differently from PreTeXt.

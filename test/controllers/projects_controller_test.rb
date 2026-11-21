@@ -1887,4 +1887,21 @@ class ProjectsControllerTest < ActionDispatch::IntegrationTest
       end
     end
   end
+
+  # The editor's live preview renders with the project's build settings: the account's
+  # and the project's, resolved into the publication file a build would get.
+  test "the editor's project JSON carries the resolved publication file" do
+    user = users(:one)
+    project = projects(:one)
+    sign_in user
+    user.update!(publication_settings: { "knowl_theorem" => "yes" })
+    project.update!(publication_settings: { "division_numbering_level" => "0" })
+
+    get project_url(project, format: :json)
+
+    publication = response.parsed_body["publication"]
+    assert_match(%r{<knowl theorem="yes"/>}, publication)
+    assert_match(%r{<divisions level="0"/>}, publication)
+    assert_no_match(/brandlogo/, publication, "the default logo is a file only a build archive holds")
+  end
 end

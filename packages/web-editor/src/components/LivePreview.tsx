@@ -146,6 +146,11 @@ interface LivePreviewProps {
   /** `<docinfo>` for a standalone fragment: LaTeX macros, custom settings. */
   docinfo?: string;
   /**
+   * The project's publication file, as XML, so the preview numbers, knowls and
+   * shows what a build would. Omit for PreTeXt's defaults.
+   */
+  publication?: string;
+  /**
    * Drive the preview's light/dark mode from the host's own theme.
    *
    * Omit — the default — and the page keeps its native behaviour, deciding
@@ -403,6 +408,7 @@ const LivePreview = forwardRef<LivePreviewHandle, LivePreviewProps>(
       fragment,
       contextSource,
       docinfo,
+      publication,
       theme,
       bannerMessage,
       scope = "editor",
@@ -539,6 +545,7 @@ const LivePreview = forwardRef<LivePreviewHandle, LivePreviewProps>(
           fragment,
           contextSource,
           docinfo,
+          publication,
           theme,
           bannerMessage,
           subtree,
@@ -631,6 +638,7 @@ const LivePreview = forwardRef<LivePreviewHandle, LivePreviewProps>(
       fragment,
       contextSource,
       docinfo,
+      publication,
       theme,
       bannerMessage,
       scope,

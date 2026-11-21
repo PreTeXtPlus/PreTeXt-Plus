@@ -285,4 +285,15 @@ class PublicationFileBuilderTest < ActiveSupport::TestCase
     assert_no_match(/secret|php/, result)
     assert_match(%r{<latex print="yes"/>}, result)
   end
+
+  # The default logo is a file only a build's archive holds, so a render without one --
+  # the live preview -- is given a file that does not point at it.
+  test "the default logo can be left out, and a chosen one stays" do
+    plain = PublicationFileBuilder.new({ "theme" => "salem" }, default_logo: false).to_xml
+    chosen = PublicationFileBuilder.new({ "brandlogo" => "mine.png" }, default_logo: false).to_xml
+
+    assert_no_match(/brandlogo/, plain)
+    assert_match(%r{<css theme="salem"/>}, plain)
+    assert_match(%r{<brandlogo source="mine.png"/>}, chosen)
+  end
 end
