@@ -174,4 +174,115 @@ class PublicationFileBuilderTest < ActiveSupport::TestCase
   test "symbol keys resolve the same as string ones" do
     assert_equal xml("theme" => "salem"), xml(theme: "salem")
   end
+
+  # ---- options written as an element's text ----
+
+  # One level per argument, from the account down: a hash of settings, or XML as written.
+  def layered(*levels)
+    PublicationFileBuilder.new(levels.map do |level|
+      level.is_a?(Hash) ? PublicationFileBuilder.document_for(level) : Publication::Document.new(level)
+    end).to_xml
+  end
+
+  # $latex-page-geometry reads latex/page/geometry's *text*, and pours it into \geometry{}.
+  test "paper size alone keeps PreTeXt's text block and changes the sheet" do
+    assert_match(%r{<page>\s*<geometry>a4paper</geometry>\s*</page>}, xml("latex_paper" => "a4paper"))
+  end
+
+  # PreTeXt sets \geometry{letterpaper,total={...}} first, and margins on top of a fixed
+  # text block over-constrain the page -- so any margin resets geometry, and puts back the
+  # letterpaper the reset forgets.
+  test "a margin resets geometry and writes the paper size back" do
+    assert_match(%r{<geometry>reset, letterpaper, margin=1in, inner=1.25in</geometry>},
+                 xml("latex_page_margin" => "1in", "latex_page_inner" => "1.25in"))
+    assert_match(%r{<geometry>reset, a5paper, top=2cm</geometry>},
+                 xml("latex_paper" => "a5paper", "latex_page_top" => "2cm"))
+  end
+
+  test "geometry parts set at different levels are written together" do
+    assert_match(%r{<geometry>reset, a4paper, top=1in</geometry>},
+                 layered({ "latex_paper" => "a4paper" }, { "latex_page_top" => "1in" }))
+  end
+
+  test "the new PDF options land where PreTeXt reads them" do
+    result = xml("latex_font_size" => "12", "latex_right_alignment" => "ragged",
+                 "latex_bottom_alignment" => "flush", "latex_crop_marks" => "a4",
+                 "latex_open_odd" => "add-blanks", "latex_draft" => "yes",
+                 "latex_link_highlight" => "underline", "latex_pageref" => "no",
+                 "latex_cover_front" => "front.pdf", "latex_cover_back" => "back.pdf",
+                 "latex_worksheet_formatted" => "no")
+
+    assert_match(%r{<latex font-size="12" open-odd="add-blanks" draft="yes" link-highlight="underline" pageref="no">}, result)
+    assert_match(%r{<page right-alignment="ragged" bottom-alignment="flush" crop-marks="a4"/>}, result)
+    assert_match(%r{<cover front="front.pdf" back="back.pdf"/>}, result)
+    assert_match(%r{<worksheet formatted="no"/>}, result)
+  end
+
+  test "the new HTML and slide options land where PreTeXt reads them" do
+    result = xml("html_navigation_logic" => "tree", "html_navigation_upbutton" => "no",
+                 "html_toc_focused" => "yes", "html_calculator" => "geogebra-graphing",
+                 "html_annotation" => "hypothesis", "html_read_aloud" => "no",
+                 "html_xref_knowled" => "never", "html_interactives_resize" => "responsive",
+                 "revealjs_theme" => "night", "revealjs_controls_layout" => "edges",
+                 "beamer_theme" => "Madrid", "beamer_aspect_ratio" => "4:3")
+
+    assert_match(%r{<navigation logic="tree" upbutton="no"/>}, result)
+    assert_match(%r{<tableofcontents focused="yes"/>}, result)
+    assert_match(%r{<calculator model="geogebra-graphing"/>}, result)
+    assert_match(%r{<annotation platform="hypothesis"/>}, result)
+    assert_match(%r{<html [^>]*read-aloud="no"}, result)
+    assert_match(%r{<cross-references knowled="never"/>}, result)
+    assert_match(%r{<interactives resize-behavior="responsive"/>}, result)
+    assert_match(%r{<revealjs>\s*<appearance theme="night"/>\s*<controls layout="edges"/>\s*</revealjs>}, result)
+    assert_match(%r{<beamer>\s*<appearance theme="Madrid"/>\s*<page aspect-ratio="4:3"/>\s*</beamer>}, result)
+  end
+
+  # ---- the levels' XML ----
+
+  test "a lower level wins over a higher one, an attribute at a time" do
+    result = layered(%(<publication><html><css theme="salem" provide-dark-mode="no"/></html></publication>),
+                     { "theme" => "denver" })
+
+    assert_match(%r{<css theme="denver" provide-dark-mode="no"/>}, result)
+  end
+
+  test "XML carries what the modal does not offer, beside what it does" do
+    result = layered(%(<publication><latex print="yes" snapshot="yes"><fonts><main regular="Lato"/></fonts></latex></publication>))
+
+    assert_match(%r{<latex print="yes" snapshot="yes">}, result)
+    assert_match(%r{<fonts>\s*<main regular="Lato"/>\s*</fonts>}, result)
+  end
+
+  # Text made only of paper and margins is the modal's own spelling, whoever typed it, and
+  # is composed like the modal's. Anything else is the author's and goes through as written
+  # -- replacing what the levels above had gathered.
+  test "geometry is composed from parts, and passed through when it is anything else" do
+    assert_match(%r{<geometry>reset, a5paper, margin=2cm</geometry>},
+                 layered(%(<publication><latex><page><geometry>a5paper, margin=2cm</geometry></page></latex></publication>)))
+    assert_match(%r{<geometry>total=\{6in,9in\}</geometry>},
+                 layered({ "latex_paper" => "a4paper" },
+                         %(<publication><latex><page><geometry>total={6in,9in}</geometry></page></latex></publication>)))
+  end
+
+  # The document strips these already; the builder re-asserts them anyway, because they are
+  # what every build depends on.
+  test "nothing a level writes moves the managed paths" do
+    result = layered(%(<publication><html><resources host="local"/></html><source><directories generated="/x"/></source></publication>))
+
+    assert_match(%r{<directories generated="\.\./generated-assets"/>}, result)
+    assert_match(/<resources host="cdn"\/>/, result)
+  end
+
+  # BASE's logo is a default, not a managed path: re-asserting it would undo a
+  # subscriber's own.
+  test "a subscriber's logo survives the managed paths going back on" do
+    assert_match(%r{<brandlogo source="mine.png"}, xml("brandlogo" => "mine.png"))
+  end
+
+  test "comments and processing instructions in a level's XML do not reach the file" do
+    result = layered(%(<publication><!-- secret --><?php x ?><latex print="yes"/></publication>))
+
+    assert_no_match(/secret|php/, result)
+    assert_match(%r{<latex print="yes"/>}, result)
+  end
 end

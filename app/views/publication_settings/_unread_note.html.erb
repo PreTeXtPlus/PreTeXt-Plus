@@ -1,0 +1,9 @@
+<%# Said under a field that is empty although this level does set something there: the
+    XML holds text of the author's own (a LaTeX geometry the paper and margin fields cannot
+    be read back from), and filling the field in replaces it. Only where there is room --
+    the paper size, not each margin cell. See Publication::Settings#unread_text. %>
+<% if (text = settings.unread_text(option)) %>
+  <p class="mt-1 text-xs text-amber-700">
+    The XML sets this to “<%= text %>”. Choosing here replaces it.
+  </p>
+<% end %>

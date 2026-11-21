@@ -117,7 +117,7 @@ class Project < ApplicationRecord
   # Attributes a build actually consumes. Changing any of them makes every built target
   # stale; changing `visibility` or `description` does not. Contents bump the same
   # timestamp from their own `belongs_to ... touch:`.
-  SOURCE_ATTRIBUTES = %w[ title language docinfo use_common_docinfo document_type publication_settings ].freeze
+  SOURCE_ATTRIBUTES = %w[ title language docinfo use_common_docinfo document_type publication_xml ].freeze
 
   # Slug omitted deliberately: Target derives "website" from this name like it does for
   # every other output, so there is one rule rather than one rule and an exception.

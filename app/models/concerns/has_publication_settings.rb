@@ -3,71 +3,144 @@
 # treats the levels identically -- the only difference between a user's settings and a
 # target's is where in the chain they sit.
 #
-# The column holds only keys the author actually chose. "Inherit from the level above" is
-# the *absence* of a key, which is what makes resolution a plain Hash#merge and what makes
-# clearing an override possible: the form submits an empty value and the key goes away.
+# What is stored is publication XML (`publication_xml`): a fragment of a PreTeXt publication
+# file holding only what this level sets. "Inherit from the level above" is an attribute
+# that is not there. The build settings modal is an editor over that XML, the way an
+# exercise's editor is over its source, and `publication_settings` is the modal's view of
+# it -- our catalog keys, read out of the XML and written back into it. See
+# Publication::Document, which does both.
 module HasPublicationSettings
   extend ActiveSupport::Concern
 
   included do
-    # Blank values mean "inherit", and keys the catalog no longer offers mean nothing at
-    # all, so neither is worth storing. What is left is put in the form the option stores it
-    # in, which for a length is what turns a typed ".25" into "0.25in". Doing all of it here
-    # rather than in the controller keeps the column clean whatever writes to it --
-    # including Project#full_dup, which copies attributes wholesale, and the console.
-    normalizes :publication_settings, with: ->(settings) do
+    # Where these lived before they were XML. Unread; a later migration drops it.
+    self.ignored_columns += [ "publication_settings" ]
+
+    # What an author typed, kept as typed, but nil rather than blank so "nothing set here"
+    # has one representation.
+    normalizes :publication_xml, with: ->(xml) { xml.to_s.strip.empty? ? nil : xml.to_s }
+
+    validate :publication_xml_is_usable
+    validate :publication_settings_are_offered
+  end
+
+  # This level's XML, parsed -- or nil when there is none. Memoized on the text, since the
+  # modal asks once per option and the text only changes on assignment.
+  #
+  # `subscriber` is the account's at the top of the chain, not this level's owner's, which
+  # is why it is passed in (Publication::Settings#subscriber?). It decides only what a
+  # build is handed; the default reads everything, which is what the modal shows.
+  def publication_document(subscriber: true)
+    return nil if publication_xml.blank?
+
+    @publication_documents = {} unless @publication_documents_for == publication_xml
+    @publication_documents_for = publication_xml
+    @publication_documents[subscriber] ||= Publication::Document.new(publication_xml, subscriber:)
+  end
+
+  # What this level sets, as the modal sees it: catalog keys => values, read from the XML.
+  # Only keys the XML actually holds, which is what keeps resolution a plain Hash#merge.
+  def publication_settings
+    publication_document&.settings || {}
+  end
+
+  # Makes the modal's options exactly these: each one given is written into the XML, and
+  # any other the XML held is taken out. Everything else in the XML is left alone.
+  #
+  # A value the catalog would not offer is not written, and makes the record invalid
+  # instead -- so nothing that writes through here, the console included, can put a value
+  # in the XML that only the XML view's own rules would have let through.
+  def publication_settings=(settings)
+    wanted = normalize_publication_settings(settings)
+    current = publication_settings
+
+    @unoffered_publication_settings = wanted.reject { |key, value| permitted_setting?(key, value, current) }
+    changes = current.keys.index_with { nil }.merge(wanted.except(*@unoffered_publication_settings.keys))
+    write_publication_settings(changes.reject { |key, value| current[key] == value })
+  end
+
+  # Applies what the modal submitted, without saving, and answers with what it had to
+  # refuse as [option, value] pairs.
+  #
+  # `xml` is this level's XML as the form carried it, when it did and it is usable: the
+  # XML view's text, or the copy the settings view holds so that an edit made in the other
+  # view is not lost. `submitted` is the settings view's fields -- a value sets an option,
+  # a blank takes it out -- and they are applied on top of that XML.
+  #
+  # Only a field that differs from what the XML already says is written. Every field
+  # submits on every save, and writing one that agrees with the XML is at best a no-op and
+  # at worst destroys something: an empty paper-size field over a geometry the author
+  # wrote by hand would otherwise erase it. It is also what lets a value the modal could
+  # not have offered survive a save, since no field is drawn for it.
+  #
+  # The XML view submits no fields at all, which is what keeps settings that view cannot
+  # see from undoing what was typed there.
+  def apply_publication_changes(submitted, xml: nil)
+    self.publication_xml = xml unless xml.nil?
+    current = publication_settings
+
+    changed = normalize_publication_settings(submitted, keep_blank: true)
+                .reject { |key, value| current[key] == value.presence }
+    refused = changed.select { |key, value| value.present? && !Publication::Catalog.find(key).permits?(value) }
+
+    write_publication_settings(changed.except(*refused.keys))
+    refused.map { |key, value| [ Publication::Catalog.find(key), value ] }
+  end
+
+  # The same, saved. An author edits every setting of a level in one modal and saves them
+  # together, so an all-or-nothing write means one mistyped margin costs them the nine
+  # changes they made beside it -- and costs them silently, since the modal is gone by the
+  # time they read why. Each value stands or falls on its own instead: the rest is saved,
+  # and a refused one keeps whatever this level had before.
+  def merge_publication_settings(submitted, xml: nil)
+    refused = apply_publication_changes(submitted, xml:)
+
+    [ save, refused ]
+  end
+
+  private
+
+    def write_publication_settings(changes)
+      return if changes.empty?
+
+      self.publication_xml = Publication::Document.write(publication_xml, changes)
+    end
+
+    # Catalog keys only, each value read the way it was plainly meant -- which for a length
+    # is what turns a typed ".25" into "0.25in". Blanks mean "not set" and are dropped,
+    # unless the caller needs them to mean "take this out".
+    def normalize_publication_settings(settings, keep_blank: false)
       (settings || {}).to_h.stringify_keys.filter_map do |key, value|
         option = Publication::Catalog.find(key)
         next unless option
 
         normalized = option.normalize(value)
-        [ key, normalized ] if normalized.present?
+        [ key, normalized ] if keep_blank || normalized.present?
       end.to_h
     end
 
-    validate :publication_settings_are_offered
-  end
+    # A value already in the XML is the author's, whoever would have offered it.
+    def permitted_setting?(key, value, current)
+      current[key] == value || Publication::Catalog.find(key).permits?(value)
+    end
 
-  # Saves as much of a submitted set of settings as this level can accept, and answers with
-  # what it had to refuse, as [option, value] pairs.
-  #
-  # An author edits every setting of a level in one modal and saves them together, so an
-  # all-or-nothing write means one mistyped margin costs them the nine changes they made
-  # beside it -- and costs them silently, since the modal is gone by the time they read why.
-  # Each value stands or falls on its own instead: the rest is saved, and a refused key
-  # keeps whatever this level had before rather than being cleared by a typo.
-  #
-  # Settings this level already held are checked too, and dropped if they no longer pass.
-  # That only happens when the catalog stops permitting something already stored, and
-  # dropping it is what keeps such a level saveable at all; it is not reported, because the
-  # author did not submit it.
-  def merge_publication_settings(submitted)
-    submitted = submitted.to_h.stringify_keys
-    previous = publication_settings
-    self.publication_settings = previous.merge(submitted)
+    # Only the refusals: warnings are for the author to read, not reasons to lose what they
+    # wrote. Subscriber status does not change what is refused -- only what is ignored -- so
+    # the check does not need to know it.
+    def publication_xml_is_usable
+      document = publication_document
+      return if document.nil? || document.valid?
 
-    accepted = publication_settings.select { |key, value| Publication::Catalog.find(key).permits?(value) }
-    refused = publication_settings.except(*accepted.keys)
-    restored = previous.slice(*refused.keys)
-                       .select { |key, value| Publication::Catalog.find(key).permits?(value) }
+      document.errors.each { |issue| errors.add(:publication_xml, issue.to_s) }
+    end
 
-    self.publication_settings = accepted.merge(restored)
-
-    [ save, refused.slice(*submitted.keys).map { |key, value| [ Publication::Catalog.find(key), value ] } ]
-  end
-
-  private
-
-    # Values are written into a publication file that a build server then runs, so they
-    # are checked against the catalog rather than merely escaped on the way out. The
-    # normalizer has already dropped unknown keys, so anything left has an option to
-    # check against, and Publication::Catalog::Option#permits? owns what each kind of
-    # option will accept -- a list, a number in a range, or a bare filename.
+    # Values are written into a publication file that a build server then runs, so what
+    # arrives as a setting is checked against the catalog rather than merely escaped on the
+    # way out. Publication::Catalog::Option#permits? owns what each kind of option will
+    # accept -- a list, a number in a range, or a bare filename.
     def publication_settings_are_offered
-      publication_settings.each do |key, value|
+      (@unoffered_publication_settings || {}).each do |key, value|
         option = Publication::Catalog.find(key)
-        next if option.permits?(value)
-
         errors.add(:publication_settings, "has no #{option.label.downcase} of “#{value}”")
       end
     end

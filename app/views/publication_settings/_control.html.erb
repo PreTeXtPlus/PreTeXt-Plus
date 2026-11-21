@@ -15,7 +15,15 @@
 <% sizing = compact ? "w-full px-1 py-1 text-xs" : "mt-1 w-full px-2 py-1.5 text-sm" %>
 <% classes = "#{sizing} rounded-md border border-gray-300 bg-white" %>
 
-<% if option.free_number? %>
+<% if settings.set_elsewhere?(option) %>
+  <%# A value the modal could not have written. Shown, not offered: no field means nothing
+      is submitted for it, so saving the rest of the modal leaves it exactly as it is. %>
+  <p class="<%= compact ? "text-xs" : "mt-1 text-sm" %> text-gray-600"
+     title="Set in the XML. Choose Edit as XML to change or remove it.">
+    “<%= settings.own(option.key) %>”
+    <span class="text-gray-400"><%= compact ? "(XML)" : "— set in the XML" %></span>
+  </p>
+<% elsif option.free_number? %>
   <%= form.number_field option.key, value: settings.own(option.key),
         in: option.choices.min..option.choices.max, step: 1,
         placeholder: settings.blank_choice_label(option),

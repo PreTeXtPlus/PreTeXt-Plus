@@ -4,9 +4,10 @@ module Publication
   #   account defaults  ->  project  ->  output (target)
   #
   # Each level overrides the one above it per option, never wholesale: a project that sets
-  # only a theme still inherits the account's chunking level. That is exactly Hash#merge,
-  # and it stays exactly Hash#merge because HasPublicationSettings never stores a blank --
-  # "inherit" is a key that isn't there.
+  # only a theme still inherits the account's chunking level. Each level stores publication
+  # XML (Publication::Document); for the modal that resolves as a Hash#merge of what each
+  # level's XML sets, and it stays exactly Hash#merge because "inherit" is an attribute --
+  # and so a key -- that isn't there. A build merges the XML itself: see #documents.
   #
   # Built around a chain rather than three special cases so that the modal, which edits any
   # one of the three, has one thing to ask: what is set here, and what would it be if it
@@ -43,8 +44,33 @@ module Publication
     # subscription stops reaching the build without discarding what the author chose --
     # subscribing again brings it back.
     def effective
-      @effective ||= chain.reduce({}) { |merged, level| merged.merge(level.publication_settings) }
-                          .reject { |key, _| !subscriber? && Catalog.find(key)&.subscriber_only? }
+      @effective ||= chain.reduce({}) { |merged, level| merged.merge(permitted(level)) }
+    end
+
+    # Each level's publication XML, from the account down: what PublicationFileBuilder
+    # merges into the file a build is handed. Parsed for the account at the top of the
+    # chain, so a logo set without subscriber benefits is left out here as it is above.
+    def documents
+      @documents ||= chain.map { |level| level.publication_document(subscriber: subscriber?) }
+    end
+
+    # Text at one of the paths the modal writes a shared string to (LaTeX page geometry)
+    # that this level wrote itself and the modal cannot read back into its fields -- or nil.
+    # The fields over it are empty, and filling one in replaces it, so the modal says so.
+    def unread_text(option)
+      return nil unless option.text_part?
+
+      text = owner.publication_document&.value_at(option.element, nil)
+      text if text.present? && owner.publication_document.text_parts(option.element).empty?
+    end
+
+    # Whether this level's own value is one the modal could not have written: set in the
+    # XML view, or kept from before the catalog stopped offering it. The modal shows it
+    # rather than a control, because a control that cannot show a value submits a blank in
+    # its place, and a blank means "take this out".
+    def set_elsewhere?(option)
+      value = own(option.key)
+      value.present? && !option.permits?(value)
     end
 
     # What this level itself sets, if anything -- what the form's select should show as
@@ -84,7 +110,7 @@ module Publication
     # modal asks, because two kinds of option cannot answer for themselves: a project's
     # images are not the catalog's to know, and a free number has no list at all.
     def choices_for(option)
-      return project_image_choices if option.project_scoped?
+      return project_file_choices(option.choices) if option.project_scoped?
 
       option.choices_for(document_type)
     end
@@ -148,7 +174,8 @@ module Publication
     def unavailable_note(option)
       return nil unless option.project_scoped? && choices_for(option).empty?
 
-      "Add an asset to this project, and you can choose it here."
+      kind = option.choices == Catalog::PROJECT_PDFS ? "a PDF" : "an image"
+      "Upload #{kind} to this project's assets, and you can choose it here."
     end
 
     # The label an author reads for an inherited value: the option's own wording for it
@@ -274,23 +301,56 @@ module Publication
       placed + anchored.values.flatten
     end
 
+    # Keyed to the account at the top of the chain -- the project's owner, like
+    # Project#collaborator_limit, whoever opened the modal; or the account itself, whose
+    # defaults a subscriber-only option like the logo link can be set among. Public because
+    # a level's XML is read against it too: a logo set there is ignored without it.
+    def subscriber?
+      return @subscriber if defined?(@subscriber)
+
+      @subscriber = chain.first&.has_subscriber_benefits? || false
+    end
+
+    # The file a build at this level is handed -- for the XML view's preview, which is
+    # where an author checks what their output will get.
+    def file_preview
+      PublicationFileBuilder.new(documents).to_xml
+    end
+
+    # This level's own XML, parsed, for the XML view to report on.
+    def own_document
+      owner.publication_document(subscriber: subscriber?)
+    end
+
     private
 
-      # The project's uploaded images, as [filename, title] -- the filename being the
+      # The project's uploaded files of one kind, as [filename, title] -- the filename being the
       # asset's own name in the external directory (Content::AttachedFiles#external_filename), which is
       # what PreTeXt resolves an EPUB cover against, and what ProjectArchiveBuilder writes
       # it as.
       #
       # Empty at the account level, which has no project: the cover is a choice among a
       # particular project's images, so there is nothing to default across projects.
-      def project_image_choices
+      #
+      # `kind` is the option's choices -- PROJECT_IMAGES or PROJECT_PDFS -- which names the
+      # content types to offer. Memoized per kind, since a panel asks once per option and
+      # the PDF tab has two covers.
+      def project_file_choices(kind)
         return [] if project.nil?
 
-        project.assets.with_attached_files.filter_map do |asset|
-          next unless asset.file_attached? && asset.file.content_type.to_s.start_with?("image/")
+        accepts = Catalog::PROJECT_FILE_TYPES.fetch(kind)
+        (@project_file_choices ||= {})[kind] ||=
+          project.assets.with_attached_files.filter_map do |asset|
+            next unless asset.file_attached? && accepts.call(asset.file.content_type.to_s)
 
-          [ asset.external_filename, asset.title.presence || asset.ref ]
-        end
+            [ asset.external_filename, asset.title.presence || asset.ref ]
+          end
+      end
+
+      # This level's own settings, less anything the account at the top of the chain is not
+      # entitled to.
+      def permitted(level)
+        level.publication_settings.reject { |key, _| !subscriber? && Catalog.find(key)&.subscriber_only? }
       end
 
       def project
@@ -300,14 +360,6 @@ module Publication
         end
       end
 
-      # Keyed to the account at the top of the chain -- the project's owner, like
-      # Project#collaborator_limit, whoever opened the modal; or the account itself, whose
-      # defaults a subscriber-only option like the logo link can be set among.
-      def subscriber?
-        return @subscriber if defined?(@subscriber)
-
-        @subscriber = chain.first&.has_subscriber_benefits? || false
-      end
 
     def level_name
       LEVELS[owner.class.name]

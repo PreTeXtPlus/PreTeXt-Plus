@@ -1,6 +1,8 @@
 <%# Answers the "modal" frame every entry point aims at. The frame lives in the layout, so
     this can open over any page -- including over the target drawer, which is where an
-    output's own settings are reached from. %>
+    output's own settings are reached from. Also what #switch renders, to draw the modal
+    again in its other view. %>
 <%= turbo_frame_tag "modal" do %>
-  <%= render "publication_settings/modal", settings: @settings %>
+  <%= render "publication_settings/modal", settings: @settings, view: @view,
+        refused: @refused || [], document: @document %>
 <% end %>

@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_11_10_120000) do
+ActiveRecord::Schema[8.1].define(version: 2026_11_20_120000) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
   enable_extension "pgcrypto"
@@ -278,6 +278,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_11_10_120000) do
     t.datetime "backed_up_at"
     t.jsonb "projection_issues", default: [], null: false
     t.datetime "projection_checked_at"
+    t.text "publication_xml"
     t.index ["backup_of_id", "backup_tier"], name: "index_projects_on_backup_of_id_and_backup_tier", unique: true
     t.index ["is_template"], name: "index_projects_on_is_template"
     t.index ["user_id", "visibility"], name: "index_projects_on_user_id_and_visibility"
@@ -319,6 +320,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_11_10_120000) do
     t.boolean "published", default: false, null: false
     t.string "slug", null: false
     t.datetime "updated_at", null: false
+    t.text "publication_xml"
     t.index ["project_id", "slug"], name: "index_targets_on_project_id_and_slug", unique: true
     t.index ["project_id"], name: "index_targets_on_project_id"
   end
@@ -358,6 +360,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_11_10_120000) do
     t.datetime "updated_at", null: false
     t.string "username"
     t.datetime "student_benefits_until"
+    t.text "publication_xml"
     t.index "lower((username)::text)", name: "index_users_on_lower_username", unique: true
     t.index ["confirmation_token"], name: "index_users_on_confirmation_token", unique: true
     t.index ["deletion_requested_at"], name: "index_users_on_deletion_requested_at", where: "(deletion_requested_at IS NOT NULL)"

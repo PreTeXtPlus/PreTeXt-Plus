@@ -92,7 +92,11 @@ Rails.application.routes.draw do
     # under the user for the same route shape as the project and target versions -- one
     # controller serves all three -- though like users#edit it always edits the signed-in
     # account, whatever id the path carries.
-    resource :publication_settings, only: [ :edit, :update ]
+    resource :publication_settings, only: [ :edit, :update ] do
+      # See the project route below.
+      post :check
+      patch :switch
+    end
   end
   # Deleting your own account (create) and reactivating it within the grace period
   # (destroy). Singular/no id: it always acts on current_user, like users#edit.
@@ -138,13 +142,21 @@ Rails.application.routes.draw do
     resources :dictionary_words, only: [ :create ]
     # Publisher options for every output of this project, overriding the owner's account
     # defaults; the one on a target below overrides these in turn.
-    resource :publication_settings, only: [ :edit, :update ]
+    resource :publication_settings, only: [ :edit, :update ] do
+      # Validates hand-written XML and previews the file it would make, without saving.
+      post :check
+      patch :switch
+    end
     resources :targets, only: [ :show, :create, :update, :destroy ] do
       member do
         patch "publish" => "targets#publish", as: "publish"
         patch "revert" => "targets#revert", as: "revert"
       end
-      resource :publication_settings, only: [ :edit, :update ]
+      resource :publication_settings, only: [ :edit, :update ] do
+        # Validates hand-written XML and previews the file it would make, without saving.
+        post :check
+        patch :switch
+      end
       # Builds are always attempts at a target, so that is where they are created.
       resources :builds, only: [ :create ]
     end

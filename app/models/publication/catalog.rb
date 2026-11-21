@@ -61,7 +61,18 @@ module Publication
 
       Family.build(:braille, label: "Braille",
         note: "Applies to braille outputs.",
-        formats: %w[ braille ])
+        formats: %w[ braille ]),
+
+      # The two slide formats get a tab each rather than sharing one, because they share
+      # no options: reveal.js reads <revealjs>, Beamer reads <beamer>, and a slide deck
+      # built as both would otherwise be shown a theme picker for the wrong one.
+      Family.build(:revealjs, label: "Slides (web)",
+        note: "Applies to reveal.js slide outputs.",
+        formats: %w[ revealjs ]),
+
+      Family.build(:beamer, label: "Slides (PDF)",
+        note: "Applies to Beamer slide outputs.",
+        formats: %w[ beamer ])
     ].index_by(&:key).freeze
 
     # One table inside a group, for the options that really do form a grid -- five kinds of
@@ -263,6 +274,16 @@ module Publication
     # has no project to ask.
     PROJECT_IMAGES = :project_images
 
+    # The same, for a project's uploaded PDFs. A LaTeX cover is placed with \includepdf, so
+    # an image there would fail the build rather than appear.
+    PROJECT_PDFS = :project_pdfs
+
+    # Which content types each project-scoped list draws from.
+    PROJECT_FILE_TYPES = {
+      PROJECT_IMAGES => ->(content_type) { content_type.start_with?("image/") },
+      PROJECT_PDFS => ->(content_type) { content_type == "application/pdf" }
+    }.freeze
+
     # What an asset is called inside the external directory: ProjectArchiveBuilder writes
     # each one as "<ref><ext>", and `ref` is REF_REGEX. Spelled out rather than composed
     # from REF_REGEX so that what it permits is readable where it is enforced -- and
@@ -295,17 +316,28 @@ module Publication
     #                Publication::Settings drops it from what a build is handed otherwise,
     #                so a lapsed subscription falls back to PreTeXt.Plus's own choice
     #                without losing what was set.
+    # `part`      -- for an option written into an element's *text* rather than an
+    #                attribute: its name within that text. `attribute` is nil for these.
+    #                LaTeX page geometry is the case -- one string, "a4paper, top=1in", that
+    #                several options contribute to -- and TEXT_COMPOSERS is what joins
+    #                them, keyed by the element they share.
     Option = Data.define(:key, :label, :help, :element, :attribute, :family, :choices,
                          :default_label, :group, :applied_default, :hint, :empty_label,
-                         :choice_groups, :subscriber_only) do
-      def self.build(key, label:, element:, attribute:, family:, choices:, help: nil,
-                     default_label: nil, group: nil, applied_default: nil, hint: nil,
-                     empty_label: nil, choice_groups: nil, subscriber_only: false)
+                         :choice_groups, :subscriber_only, :part) do
+      def self.build(key, label:, element:, family:, choices:, attribute: nil, part: nil,
+                     help: nil, default_label: nil, group: nil, applied_default: nil,
+                     hint: nil, empty_label: nil, choice_groups: nil, subscriber_only: false)
         new(key: key.to_s, label: label, help: help, element: element.map(&:to_s).freeze,
-            attribute: attribute.to_s, family: family.to_s, choices: choices.freeze,
+            attribute: attribute&.to_s, family: family.to_s, choices: choices.freeze,
             default_label: default_label, group: group&.to_s,
             applied_default: applied_default, hint: hint, empty_label: empty_label,
-            choice_groups: choice_groups&.freeze, subscriber_only: subscriber_only)
+            choice_groups: choice_groups&.freeze, subscriber_only: subscriber_only,
+            part: part&.to_s)
+      end
+
+      # Whether this option is one part of an element's text rather than an attribute.
+      def text_part?
+        !part.nil?
       end
 
       def subscriber_only?
@@ -364,7 +396,7 @@ module Publication
       # A list only a project can supply. Publication::Settings resolves these; everything
       # here would have to guess.
       def project_scoped?
-        choices == PROJECT_IMAGES
+        PROJECT_FILE_TYPES.key?(choices)
       end
 
       def fixed_choices?
@@ -421,7 +453,7 @@ module Publication
         elsif free_text?
           choices.guidance
         elsif project_scoped?
-          "the name of an image uploaded to this project"
+          "the name of #{choices == PROJECT_PDFS ? 'a PDF' : 'an image'} uploaded to this project"
         else
           "one of the offered choices"
         end
@@ -795,6 +827,236 @@ module Publication
       [ "right",  "Right" ]
     ].freeze
 
+
+    # ------------------------------------------------------------------------------------
+    # LaTeX / PDF page setup. Everything below through LATEX_WORKSHEET_FORMATTED is read in
+    # publisher-variables.xsl, most of it from the <pi:publisher> table there.
+
+    # $font-size, which validate-font-size holds to exactly these. Points, written bare:
+    # PreTeXt appends the "pt" itself.
+    LATEX_FONT_SIZES = %w[ 8 9 10 11 12 14 17 20 ].map { |size| [ size, "#{size} pt" ] }.freeze
+
+    # The paper sizes offered for latex/page/geometry. Written as the geometry package's own
+    # paper names, which is the whole of what \geometry{a4paper} needs. US Letter is what
+    # PreTeXt sets when nothing is chosen (\geometry{letterpaper,total={...}} in
+    # pretext-latex-common.xsl), so it leads.
+    LATEX_PAPER_SIZES = [
+      [ "letterpaper",    "US Letter (8.5 × 11 in)" ],
+      [ "a4paper",        "A4 (210 × 297 mm)" ],
+      [ "a5paper",        "A5 (148 × 210 mm)" ],
+      [ "b5paper",        "B5 (176 × 250 mm)" ],
+      [ "legalpaper",     "US Legal (8.5 × 14 in)" ],
+      [ "executivepaper", "Executive (7.25 × 10.5 in)" ]
+    ].freeze
+
+    # latex/page/geometry margins, as [geometry key, column, accessible name, fallback].
+    # Inner and outer rather than left and right because geometry swaps left and right on
+    # the even pages of a two-sided document, and "inside" is what an author binding a
+    # book means; on a one-sided PDF the two are simply left and right.
+    LATEX_MARGINS = [
+      [ "margin", "All sides", "Page margin on all sides", "PreTeXt's line length decides" ],
+      [ "top",    "Top",       "Top page margin",          "whatever “All sides” is" ],
+      [ "bottom", "Bottom",    "Bottom page margin",       "whatever “All sides” is" ],
+      [ "inner",  "Inside",    "Inside page margin",       "whatever “All sides” is" ],
+      [ "outer",  "Outside",   "Outside page margin",      "whatever “All sides” is" ]
+    ].freeze
+
+    # Reads and writes latex/page/geometry, the one element whose *text* several options
+    # share. Three operations, because the text exists in two forms:
+    #
+    #   parse / join -- what a level stores: just the parts it sets, as geometry spells
+    #                   them ("a4paper, top=1in"). parse is nil for text that is not only
+    #                   these parts -- an author's own geometry, which the modal then
+    #                   leaves alone and a build passes through as written.
+    #   compose      -- what a build is handed, from the parts of every level merged.
+    #
+    # compose is not just join. PreTeXt writes \geometry{letterpaper,total={<width>,9in}}
+    # before an author's own geometry, sizing the text block for a comfortable line length.
+    # Margins given on top of that over-constrain the page -- paper, text block and margins
+    # cannot all be fixed at once -- so any margin starts the string with `reset`, which
+    # returns geometry to the class defaults and lets the margins decide the text block.
+    # Paper alone keeps PreTeXt's text block and only changes the sheet around it. Since
+    # reset forgets the letterpaper PreTeXt set, a margin with no paper chosen writes
+    # letterpaper back.
+    module Geometry
+      PART = /\A(#{LATEX_MARGINS.map(&:first).join('|')})\s*=\s*(\S+)\z/
+
+      def self.parse(text)
+        papers = LATEX_PAPER_SIZES.map(&:first)
+
+        parts = text.to_s.split(",").map(&:strip).reject(&:empty?).each_with_object({}) do |token, found|
+          next if token == "reset"
+
+          if papers.include?(token)
+            found["paper"] = token
+          elsif (match = token.match(PART)) && match[2].match?(LENGTH.pattern)
+            found[match[1]] = match[2]
+          else
+            return nil
+          end
+        end
+
+        parts.presence
+      end
+
+      def self.join(parts)
+        [ parts["paper"].presence,
+          *LATEX_MARGINS.filter_map { |key, *| "#{key}=#{parts[key]}" if parts[key].present? } ]
+          .compact.join(", ")
+      end
+
+      def self.compose(parts)
+        margins = LATEX_MARGINS.any? { |key, *| parts[key].present? }
+        paper = parts["paper"].presence || ("letterpaper" if margins)
+
+        [ ("reset" if margins), join(parts.merge("paper" => paper)).presence ].compact.join(", ")
+      end
+    end
+
+    # Element path => what reads and writes that element's shared text.
+    TEXT_CODECS = { %w[ latex page geometry ] => Geometry }.freeze
+
+    # $latex-right-alignment. "flush" is a justified right edge, PreTeXt's default.
+    LATEX_RIGHT_ALIGNMENT = [
+      [ "flush",  "Justified" ],
+      [ "ragged", "Ragged right" ]
+    ].freeze
+
+    # $latex-bottom-alignment: \raggedbottom or \flushbottom.
+    LATEX_BOTTOM_ALIGNMENT = [
+      [ "ragged", "Pages end where the text does" ],
+      [ "flush",  "Stretch to fill every page" ]
+    ].freeze
+
+    # $latex-crop-papersize, which is passed to the crop package as the sheet size. Only the
+    # sizes a printer is likely to hand back; the package knows a few more, and the
+    # XML view is where to ask for them.
+    LATEX_CROP_MARKS = [
+      [ "letter",    "On US Letter" ],
+      [ "legal",     "On US Legal" ],
+      [ "executive", "On Executive" ],
+      [ "a3",        "On A3" ],
+      [ "a4",        "On A4" ],
+      [ "a5",        "On A5" ],
+      [ "b5",        "On B5" ]
+    ].freeze
+
+    # $latex-open-odd. Meaningful only where there are chapters to open, so books only; on
+    # a two-sided PDF chapters already open on the right, which the help text says.
+    LATEX_OPEN_ODD = {
+      "book" => [
+        [ "no",         "On the next page" ],
+        [ "add-blanks", "On a right-hand page, adding a blank page" ],
+        [ "skip-pages", "On a right-hand page, skipping a page number" ]
+      ]
+    }.freeze
+
+    LATEX_DRAFT = [
+      [ "no",  "Final" ],
+      [ "yes", "Draft" ]
+    ].freeze
+
+    LATEX_LINK_HIGHLIGHT = [
+      [ "none",      "Not marked" ],
+      [ "underline", "Underlined" ]
+    ].freeze
+
+    LATEX_PAGEREF = [
+      [ "yes", "Include page numbers" ],
+      [ "no",  "Number only" ]
+    ].freeze
+
+    LATEX_WORKSHEET_FORMATTED = [
+      [ "yes", "Laid out as printouts" ],
+      [ "no",  "Run on like any other division" ]
+    ].freeze
+
+    # ------------------------------------------------------------------------------------
+    # HTML reader features and navigation, from the <html> part of the pi:publisher table.
+
+    HTML_NAV_LOGIC = [
+      [ "linear", "Page to page, like a book" ],
+      [ "tree",   "Within one level, with an Up button" ]
+    ].freeze
+
+    YES_NO = [
+      [ "yes", "Yes" ],
+      [ "no",  "No" ]
+    ].freeze
+
+    SHOW_HIDE = [
+      [ "yes", "Show" ],
+      [ "no",  "Hide" ]
+    ].freeze
+
+    # html/tableofcontents/@preexpanded-levels. Ignored by PreTeXt when the contents are
+    # focused, which the option's help says.
+    HTML_TOC_PREEXPANDED = [
+      [ "0", "None" ],
+      [ "1", "One level" ],
+      [ "2", "Two levels" ],
+      [ "3", "Three levels" ]
+    ].freeze
+
+    HTML_TOC_FOCUSED = [
+      [ "no",  "The whole document" ],
+      [ "yes", "Only around the current page" ]
+    ].freeze
+
+    HTML_CALCULATORS = [
+      [ "none",               "None" ],
+      [ "geogebra-classic",   "GeoGebra Classic" ],
+      [ "geogebra-graphing",  "GeoGebra Graphing" ],
+      [ "geogebra-geometry",  "GeoGebra Geometry" ],
+      [ "geogebra-3d",        "GeoGebra 3D" ]
+    ].freeze
+
+    HTML_ANNOTATION = [
+      [ "none",       "None" ],
+      [ "hypothesis", "Hypothes.is" ]
+    ].freeze
+
+    HTML_KNOWLED_XREFS = [
+      [ "maximum",    "Wherever possible" ],
+      [ "cross-page", "Only when the target is on another page" ],
+      [ "never",      "Never" ]
+    ].freeze
+
+    HTML_RESIZE = [
+      [ "fixed-height", "Fixed height" ],
+      [ "responsive",   "Resize with the page" ]
+    ].freeze
+
+    # ------------------------------------------------------------------------------------
+    # Slides. Keyed by document type so they show only for a slideshow, which is the only
+    # thing PreTeXt can build either format from.
+
+    def self.slideshow_only(choices) = { "slideshow" => choices }.freeze
+
+    # reveal.js's bundled themes. PreTeXt passes the name through to a theme stylesheet,
+    # so anything not bundled is a missing stylesheet rather than an error.
+    REVEAL_THEMES = slideshow_only(%w[ simple white black league beige sky night serif
+                                       solarized blood moon dracula ].map { |t| [ t, t.capitalize ] })
+
+    REVEAL_BACKARROWS = slideshow_only([ [ "faded", "Faded" ], [ "hidden", "Hidden" ],
+                                         [ "visible", "Visible" ] ])
+    REVEAL_CONTROLS_LAYOUT = slideshow_only([ [ "bottom-right", "Bottom right corner" ],
+                                              [ "edges", "At the edges of the screen" ] ])
+    REVEAL_NAVIGATION = slideshow_only([ [ "default", "Left/right between sections, up/down within" ],
+                                         [ "linear", "Every slide in one sequence" ],
+                                         [ "grid", "A strict grid" ] ])
+    SLIDESHOW_YES_NO = slideshow_only(YES_NO)
+    SLIDESHOW_SHOW_HIDE = slideshow_only(SHOW_HIDE)
+
+    # Beamer's standard presentation themes, which every TeX distribution ships.
+    BEAMER_THEMES = slideshow_only(%w[ Boadilla default AnnArbor Antibes Bergen Berkeley
+                                       Berlin CambridgeUS Copenhagen Darmstadt Dresden Frankfurt
+                                       Goettingen Hannover Ilmenau JuanLesPins Luebeck Madrid
+                                       Malmoe Marburg Montpellier PaloAlto Pittsburgh Rochester
+                                       Singapore Szeged Warsaw ].map { |t| [ t, t ] })
+
+    BEAMER_ASPECT_RATIOS = slideshow_only(%w[ 16:9 16:10 4:3 3:2 5:4 14:9 ].map { |r| [ r, r ] })
+
     # Order is the order the disclosures appear in, under whatever loose options their
     # family holds.
     GROUPS = [
@@ -843,7 +1105,37 @@ module Publication
         family: :html,
         note: "A knowl is content hidden behind a link that expands it in place, so a " \
               "reader can look at a proof or an example without leaving their spot. " \
-              "Each kind of block can be shown in full instead.")
+              "Each kind of block can be shown in full instead."),
+
+      Group.build(:html_navigation,
+        label: "Navigation and contents",
+        family: :html),
+
+      Group.build(:html_features,
+        label: "Reader tools",
+        family: :html),
+
+      # Under paper size, because margins are the rest of the same question.
+      Group.build(:latex_margins,
+        label: "Page margins",
+        family: :pdf,
+        after: :latex_paper,
+        grids: [
+          Grid.build(
+            note: "A length with its unit (e.g. 1in, 2.5cm); a number on its own is inches. " \
+                  "Inside is the edge at the binding. Setting any margin lets the margins, " \
+                  "rather than PreTeXt's preferred line length, decide how wide the text is.",
+            key_prefix: :latex_page,
+            columns: LATEX_MARGINS.map { |key, label, _| [ key, label ] })
+        ]),
+
+      Group.build(:latex_more,
+        label: "More PDF options",
+        family: :pdf),
+
+      Group.build(:revealjs_controls,
+        label: "Controls",
+        family: :revealjs)
     ].index_by(&:key).freeze
 
     # Every grid's options come from the grid itself, so a cell of a table and the option
@@ -905,6 +1197,17 @@ module Publication
           family: :general, group: :printout, default_label: "nothing",
           choices: PRINTOUT_TEXT)
       end
+    end.freeze
+
+    # Only the first field carries the format hint, for the reason the printout margins'
+    # does. Each is one part of the geometry string GEOMETRY_COMPOSER joins.
+    LATEX_MARGIN_OPTIONS = LATEX_MARGINS.map do |part, _column, label, fallback|
+      Option.build(grid_of(:latex_margins).cell_key(nil, part),
+        label: label,
+        element: %w[ latex page geometry ], part: part, family: :pdf,
+        group: :latex_margins, default_label: fallback,
+        hint: ("1in" if part == "margin"),
+        choices: LENGTH)
     end.freeze
 
     KNOWL_OPTIONS = KNOWLS.map do |attribute, label, pretext_default|
@@ -1007,6 +1310,69 @@ module Publication
 
       *KNOWL_OPTIONS,
 
+      Option.build(:html_navigation_logic,
+        label: "Previous and Next buttons",
+        element: %w[ html navigation ], attribute: "logic", family: :html,
+        group: :html_navigation, default_label: "Page to page, like a book",
+        choices: HTML_NAV_LOGIC),
+
+      Option.build(:html_navigation_upbutton,
+        label: "Up button",
+        element: %w[ html navigation ], attribute: "upbutton", family: :html,
+        group: :html_navigation, default_label: "Show", choices: SHOW_HIDE),
+
+      Option.build(:html_toc_focused,
+        label: "Sidebar contents show",
+        element: %w[ html tableofcontents ], attribute: "focused", family: :html,
+        group: :html_navigation, default_label: "The whole document",
+        choices: HTML_TOC_FOCUSED),
+
+      Option.build(:html_toc_preexpanded,
+        label: "Sidebar levels open",
+        element: %w[ html tableofcontents ], attribute: "preexpanded-levels", family: :html,
+        group: :html_navigation, default_label: "None", choices: HTML_TOC_PREEXPANDED),
+
+      Option.build(:html_banner_byline,
+        label: "Author names in the banner",
+        element: %w[ html banner ], attribute: "byline", family: :html,
+        group: :html_navigation, default_label: "Show", choices: SHOW_HIDE),
+
+      Option.build(:html_banner_subtitle,
+        label: "Subtitle in the banner",
+        element: %w[ html banner ], attribute: "subtitle", family: :html,
+        group: :html_navigation, default_label: "Show", choices: SHOW_HIDE),
+
+      Option.build(:html_calculator,
+        label: "Calculator",
+        element: %w[ html calculator ], attribute: "model", family: :html,
+        group: :html_features, default_label: "None", choices: HTML_CALCULATORS),
+
+      Option.build(:html_annotation,
+        label: "Reader annotations",
+        element: %w[ html annotation ], attribute: "platform", family: :html,
+        group: :html_features, default_label: "None", choices: HTML_ANNOTATION),
+
+      Option.build(:html_read_aloud,
+        label: "Read-aloud button",
+        element: %w[ html ], attribute: "read-aloud", family: :html,
+        group: :html_features, default_label: "Show", choices: SHOW_HIDE),
+
+      Option.build(:html_xref_knowled,
+        label: "Cross-references open as knowls",
+        element: %w[ html cross-references ], attribute: "knowled", family: :html,
+        group: :html_features, default_label: "Wherever possible",
+        choices: HTML_KNOWLED_XREFS),
+
+      Option.build(:html_video_privacy,
+        label: "Privacy-enhanced YouTube embeds",
+        element: %w[ html video ], attribute: "privacy", family: :html,
+        group: :html_features, default_label: "Yes", choices: YES_NO),
+
+      Option.build(:html_interactives_resize,
+        label: "Interactive height",
+        element: %w[ html interactives ], attribute: "resize-behavior", family: :html,
+        group: :html_features, default_label: "Fixed height", choices: HTML_RESIZE),
+
       # common/journal/@name, which is where $journal-name reads it from -- <common>
       # rather than <latex> despite reaching only the LaTeX conversion, which is why the
       # family is declared rather than derived from the element path.
@@ -1036,6 +1402,80 @@ module Publication
         element: %w[ latex ], attribute: "sides", family: :pdf,
         choices: LATEX_SIDES),
 
+      Option.build(:latex_font_size,
+        label: "Font size",
+        help: "The size of the body text. The width of the text block follows it, so a " \
+              "line holds about the same number of characters at any size.",
+        element: %w[ latex ], attribute: "font-size", family: :pdf,
+        default_label: "10 pt", choices: LATEX_FONT_SIZES),
+
+      Option.build(:latex_paper,
+        label: "Paper size",
+        help: "The size of the PDF's pages.",
+        element: %w[ latex page geometry ], part: "paper", family: :pdf,
+        default_label: "US Letter", choices: LATEX_PAPER_SIZES),
+
+      *LATEX_MARGIN_OPTIONS,
+
+      Option.build(:latex_right_alignment,
+        label: "Right edge of the text",
+        element: %w[ latex page ], attribute: "right-alignment", family: :pdf,
+        default_label: "Justified", choices: LATEX_RIGHT_ALIGNMENT),
+
+      # latex/cover/@front and @back, resolved against the external directory like the EPUB
+      # cover, and placed with \includepdf -- so a PDF, not an image.
+      Option.build(:latex_cover_front,
+        label: "Front cover",
+        help: "A PDF placed as the first page, before the title page. Upload one to this " \
+              "project to choose it.",
+        element: %w[ latex cover ], attribute: "front", family: :pdf,
+        choices: PROJECT_PDFS),
+
+      Option.build(:latex_cover_back,
+        label: "Back cover",
+        help: "A PDF placed as the last page.",
+        element: %w[ latex cover ], attribute: "back", family: :pdf,
+        choices: PROJECT_PDFS),
+
+      Option.build(:latex_open_odd,
+        label: "Chapters start",
+        help: "Where a new chapter begins in a single-sided PDF. A double-sided PDF " \
+              "always starts chapters on a right-hand page.",
+        element: %w[ latex ], attribute: "open-odd", family: :pdf, group: :latex_more,
+        default_label: "On the next page", choices: LATEX_OPEN_ODD),
+
+      Option.build(:latex_bottom_alignment,
+        label: "Bottom of the page",
+        element: %w[ latex page ], attribute: "bottom-alignment", family: :pdf,
+        group: :latex_more, default_label: "Pages end where the text does",
+        choices: LATEX_BOTTOM_ALIGNMENT),
+
+      Option.build(:latex_crop_marks,
+        label: "Crop marks",
+        element: %w[ latex page ], attribute: "crop-marks", family: :pdf,
+        group: :latex_more, default_label: "None", choices: LATEX_CROP_MARKS),
+
+      Option.build(:latex_link_highlight,
+        label: "Links",
+        element: %w[ latex ], attribute: "link-highlight", family: :pdf,
+        group: :latex_more, default_label: "Not marked", choices: LATEX_LINK_HIGHLIGHT),
+
+      Option.build(:latex_pageref,
+        label: "Cross-references",
+        element: %w[ latex ], attribute: "pageref", family: :pdf,
+        group: :latex_more, choices: LATEX_PAGEREF),
+
+      Option.build(:latex_draft,
+        label: "Draft mode",
+        element: %w[ latex ], attribute: "draft", family: :pdf,
+        group: :latex_more, default_label: "Final", choices: LATEX_DRAFT),
+
+      Option.build(:latex_worksheet_formatted,
+        label: "Worksheets",
+        element: %w[ latex worksheet ], attribute: "formatted", family: :pdf,
+        group: :latex_more, default_label: "Laid out as printouts",
+        choices: LATEX_WORKSHEET_FORMATTED),
+
       # $epub-cover-source resolves this against the external directory, which is exactly
       # where ProjectArchiveBuilder writes a project's assets -- so the value is an asset's
       # own "<ref><ext>", and picking one is picking an image already in the project.
@@ -1061,7 +1501,61 @@ module Publication
         help: "How tall your embosser's page is. 25 suits the usual North American sheet.",
         element: %w[ braille page ], attribute: "height", family: :braille,
         default_label: "25 lines",
-        choices: WholeNumber.new(min: 1, max: 100, unit: "lines"))
+        choices: WholeNumber.new(min: 1, max: 100, unit: "lines")),
+
+      Option.build(:revealjs_theme,
+        label: "Theme",
+        help: "One of the themes reveal.js ships with.",
+        element: %w[ revealjs appearance ], attribute: "theme", family: :revealjs,
+        default_label: "Simple", choices: REVEAL_THEMES),
+
+      Option.build(:revealjs_slide_numbering,
+        label: "Slide numbers",
+        element: %w[ revealjs appearance ], attribute: "slide-numbering", family: :revealjs,
+        default_label: "No", choices: SLIDESHOW_YES_NO),
+
+      Option.build(:revealjs_navigation,
+        label: "Navigation",
+        element: %w[ revealjs navigation ], attribute: "mode", family: :revealjs,
+        default_label: "Left/right between sections, up/down within",
+        choices: REVEAL_NAVIGATION),
+
+      Option.build(:revealjs_controls_display,
+        label: "Arrow controls",
+        element: %w[ revealjs controls ], attribute: "display", family: :revealjs,
+        group: :revealjs_controls, default_label: "Show", choices: SLIDESHOW_SHOW_HIDE),
+
+      Option.build(:revealjs_controls_layout,
+        label: "Arrow placement",
+        element: %w[ revealjs controls ], attribute: "layout", family: :revealjs,
+        group: :revealjs_controls, default_label: "Bottom right corner",
+        choices: REVEAL_CONTROLS_LAYOUT),
+
+      Option.build(:revealjs_controls_backarrows,
+        label: "Back arrows",
+        element: %w[ revealjs controls ], attribute: "backarrows", family: :revealjs,
+        group: :revealjs_controls, default_label: "Faded", choices: REVEAL_BACKARROWS),
+
+      Option.build(:revealjs_controls_tutorial,
+        label: "Hint at the arrows on first view",
+        element: %w[ revealjs controls ], attribute: "tutorial", family: :revealjs,
+        group: :revealjs_controls, default_label: "Yes", choices: SLIDESHOW_YES_NO),
+
+      Option.build(:beamer_theme,
+        label: "Theme",
+        help: "One of the presentation themes that ship with Beamer.",
+        element: %w[ beamer appearance ], attribute: "theme", family: :beamer,
+        default_label: "Boadilla", choices: BEAMER_THEMES),
+
+      Option.build(:beamer_slide_numbering,
+        label: "Slide numbers",
+        element: %w[ beamer appearance ], attribute: "slide-numbering", family: :beamer,
+        default_label: "No", choices: SLIDESHOW_YES_NO),
+
+      Option.build(:beamer_aspect_ratio,
+        label: "Slide shape",
+        element: %w[ beamer page ], attribute: "aspect-ratio", family: :beamer,
+        default_label: "16:9", choices: BEAMER_ASPECT_RATIOS)
     ].index_by(&:key).freeze
 
     class << self
@@ -1100,6 +1594,12 @@ module Publication
       # "turn the embed button off" an ordinary option rather than a case in the writer.
       def applied_defaults
         all.filter_map { |option| [ option, option.applied_default ] if option.applied_default.present? }
+      end
+
+      # What reads and writes an element's shared text, or nil for an element whose
+      # text (if any) is nobody's but the author's.
+      def text_codec(element)
+        TEXT_CODECS[element]
       end
 
       # nil for a key the catalog no longer offers, so a setting left behind by a retired

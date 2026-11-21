@@ -114,7 +114,7 @@ class ProjectArchiveBuilder
   # project -> output and rendered as a publication file. Public so the settings modal can
   # show an author exactly what a build will be handed.
   def publication_ptx(owner)
-    PublicationFileBuilder.new(Publication::Settings.effective_for(owner)).to_xml
+    PublicationFileBuilder.for(owner).to_xml
   end
 
   private

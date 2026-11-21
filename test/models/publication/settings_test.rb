@@ -181,9 +181,10 @@ class Publication::SettingsTest < ActiveSupport::TestCase
 
     html = settings.sections(families["html"])
 
-    assert_equal %w[ theme dark_mode brandlogo brandlogo_url chunk_level embed_button knowls ],
+    assert_equal %w[ theme dark_mode brandlogo brandlogo_url chunk_level embed_button knowls
+                     html_navigation html_features ],
                  html.map { |section| section.group? ? section.group.key : section.option.key }
-    assert_equal 18, html.last.options.size
+    assert_equal 18, html.find { |section| section.group&.key == "knowls" }.options.size
 
     general = settings.sections(families["general"]).select(&:group?)
 
@@ -299,13 +300,15 @@ class Publication::SettingsTest < ActiveSupport::TestCase
 
   # The unit is the one guess here -- a bare number takes inches, which is the unit
   # PreTeXt's own 0.75in default is in. A unit the author did write and we cannot use is
-  # not guessed at: it is kept as typed and refused, so the alert quotes what they typed.
-  test "a margin in units neither LaTeX nor CSS shares is kept as typed and refused" do
+  # not guessed at: it is refused as typed, so the message quotes what they typed -- and it
+  # is never written into the XML, where only the Advanced tab's rules would judge it.
+  test "a margin in units neither LaTeX nor CSS shares is refused as typed and not written" do
     %w[ 1px 2rem 1inch -1in ].each do |typed|
       @project.publication_settings = { "worksheet_margin" => typed }
 
-      assert_equal typed, @project.publication_settings["worksheet_margin"]
+      assert_nil @project.publication_settings["worksheet_margin"]
       assert_not @project.valid?, typed
+      assert_match(/“#{Regexp.escape(typed)}”/, @project.errors.full_messages.to_sentence)
     end
   end
 
@@ -315,7 +318,7 @@ class Publication::SettingsTest < ActiveSupport::TestCase
     @project.update!(publication_settings: { "worksheet_margin" => "1in" })
 
     saved, refused = @project.merge_publication_settings(
-      "worksheet_margin" => "1 furlong", "theme" => "salem"
+      { "worksheet_margin" => "1 furlong", "theme" => "salem" }
     )
 
     assert saved
@@ -324,17 +327,92 @@ class Publication::SettingsTest < ActiveSupport::TestCase
                  @project.reload.publication_settings)
   end
 
-  # A setting stored before the catalog stopped permitting it would otherwise make the
-  # level unsaveable: every save would fail on a value the author cannot even see, let
-  # alone fix. It is dropped instead, and not reported -- they did not submit it.
-  test "merging drops a stored value the catalog no longer permits, silently" do
-    @project.update_column(:publication_settings, { "theme" => "brooklyn", "chunk_level" => "1" })
+  # A value the modal could not have written -- typed in the Advanced tab, or kept from
+  # before the catalog stopped offering it -- is the author's, and saving something
+  # unrelated leaves it where they put it: the modal shows no field for it, so nothing is
+  # submitted for it, and only a changed field is ever applied.
+  test "merging leaves alone a value in the XML that the modal does not offer" do
+    @project.update!(publication_xml: %(<publication><html><css theme="brooklyn"/></html><common><chunking level="1"/></common></publication>))
 
-    saved, refused = @project.reload.merge_publication_settings("chunk_level" => "2")
+    saved, refused = @project.reload.merge_publication_settings({ "chunk_level" => "2" })
 
     assert saved
     assert_empty refused
-    assert_equal({ "chunk_level" => "2" }, @project.reload.publication_settings)
+    assert_equal({ "theme" => "brooklyn", "chunk_level" => "2" }, @project.reload.publication_settings)
+    assert Publication::Settings.new(@project).set_elsewhere?(Publication::Catalog.find("theme"))
+  end
+
+  # The settings view carries the XML along and submits its fields over it. A field that
+  # agrees with that XML writes nothing; one that differs is the author's change.
+  test "fields are applied over the XML the form carried, and only where they differ" do
+    @project.update!(publication_settings: { "theme" => "salem", "chunk_level" => "1" })
+
+    @project.merge_publication_settings(
+      { "theme" => "denver", "chunk_level" => "2" },
+      xml: %(<publication><html><css theme="denver"/></html><common><chunking level="1"/></common><latex snapshot="yes"/></publication>)
+    )
+
+    assert_equal({ "theme" => "denver", "chunk_level" => "2" }, @project.reload.publication_settings)
+    assert_match(/snapshot="yes"/, @project.publication_xml)
+  end
+
+  # The XML view submits no fields, which is what keeps settings it cannot see from
+  # undoing what was typed there.
+  test "XML alone replaces the level's XML" do
+    @project.update!(publication_settings: { "theme" => "salem" })
+
+    @project.merge_publication_settings({}, xml: %(<publication><html><css theme="denver"/></html></publication>))
+
+    assert_equal({ "theme" => "denver" }, @project.reload.publication_settings)
+  end
+
+  # ---- stored as XML ----
+
+  test "settings are stored as publication XML, and read back out of it" do
+    @project.update!(publication_settings: { "theme" => "salem", "latex_paper" => "a4paper",
+                                             "latex_page_top" => "1in",
+                                             "version" => Publication::Catalog::EMPTY_MARKER })
+
+    xml = @project.reload.publication_xml
+    assert_match(%r{<css theme="salem"/>}, xml)
+    assert_match(%r{<geometry>a4paper, top=1in</geometry>}, xml)
+    assert_match(%r{<version include=""/>}, xml)
+    assert_equal({ "theme" => "salem", "latex_paper" => "a4paper", "latex_page_top" => "1in",
+                   "version" => Publication::Catalog::EMPTY_MARKER }, @project.publication_settings)
+  end
+
+  test "clearing the last setting leaves no XML behind" do
+    @project.update!(publication_settings: { "theme" => "salem" })
+    @project.update!(publication_settings: {})
+
+    assert_nil @project.reload.publication_xml
+  end
+
+  test "writing a setting keeps the rest of the XML, comments included" do
+    @project.update!(publication_xml: %(<publication><!-- for the printer --><latex snapshot="yes"/></publication>))
+    @project.merge_publication_settings({ "latex_print" => "yes", "theme" => "salem" })
+
+    xml = @project.reload.publication_xml
+    assert_match(/<!-- for the printer -->/, xml)
+    assert_match(%r{<latex snapshot="yes" print="yes"/>}, xml)
+    assert_match(%r{<css theme="salem"/>}, xml)
+  end
+
+  # A geometry the modal did not write cannot be read back into paper and margins, so
+  # those fields are empty, the modal says what is there, and it is built as written.
+  test "geometry an author wrote themselves is left alone until a field replaces it" do
+    @project.update!(publication_xml: %(<publication><latex><page><geometry>total={6in,9in}</geometry></page></latex></publication>))
+    settings = Publication::Settings.new(@project)
+
+    assert_nil @project.publication_settings["latex_paper"]
+    assert_equal "total={6in,9in}", settings.unread_text(Publication::Catalog.find("latex_paper"))
+    assert_match(%r{<geometry>total=\{6in,9in\}</geometry>}, settings.file_preview)
+
+    @project.merge_publication_settings({ "theme" => "salem" })
+    assert_match(/total=\{6in,9in\}/, @project.reload.publication_xml)
+
+    @project.merge_publication_settings({ "latex_paper" => "a5paper" })
+    assert_match(%r{<geometry>a5paper</geometry>}, @project.reload.publication_xml)
   end
 
   # A header is words an author picks, so it is bounded by a shape rather than a list. The
@@ -489,7 +567,7 @@ class Publication::SettingsTest < ActiveSupport::TestCase
 
     assert settings.offers?(option)
     assert_empty settings.choices_for(option)
-    assert_match(/add an asset/i, settings.unavailable_note(option))
+    assert_match(/upload an image/i, settings.unavailable_note(option))
   end
 
   # A cover is a particular image in a particular project, so there is nothing for an
@@ -631,13 +709,13 @@ class Publication::SettingsTest < ActiveSupport::TestCase
     assert_includes general.map(&:key), "exercise_inline_hint"
   end
 
-  # reveal.js is in no format family, so a slides output keeps only General -- which every
-  # output has, because exercise components are read by pretext-common.xsl and so reach
-  # every conversion there is.
-  test "an output in no format family still gets the General tab" do
+  # A reveal.js output gets General -- which every output has, because exercise components
+  # are read by pretext-common.xsl and so reach every conversion there is -- and its own
+  # Slides (web) tab, and nothing for Beamer, which reads a different element entirely.
+  test "a slides output gets General and its own slide format's tab" do
     families = Publication::Settings.new(targets(:slides_deck)).families
 
-    assert_equal %w[ general ], families.map { |family, _| family.key }
+    assert_equal %w[ general revealjs ], families.map { |family, _| family.key }
     loose = families.first.last.reject(&:group).map(&:key)
     assert_equal %w[ version ], loose,
                  "a slideshow numbers no divisions and lists no contents, so both " \
@@ -685,5 +763,53 @@ class Publication::SettingsTest < ActiveSupport::TestCase
     assert_nil settings.document_type
     assert_equal 5, Publication::Catalog.find("division_numbering_level")
       .choices_for(settings.document_type).size
+  end
+
+  # ---- LaTeX covers, which are PDFs ----
+
+  def attach_pdf(asset, filename: "cover.pdf")
+    asset.attach_file(io: StringIO.new("%PDF-1.4\n%%EOF\n"), filename:, content_type: "application/pdf")
+    asset.save!
+    asset
+  end
+
+  # \includepdf places the cover, so an image there fails the build -- and a PDF is no use
+  # as an EPUB cover. Each picker offers only what its format can use.
+  test "the LaTeX covers offer the project's PDFs, and the EPUB cover does not" do
+    image = contents(:image_one)
+    pdf = attach_pdf(@project.assets.create!(kind: :file_asset, ref: "cover", title: "Cover", source: ""))
+    settings = Publication::Settings.new(@project)
+
+    latex = settings.choices_for(Publication::Catalog.find("latex_cover_front")).map(&:first)
+    epub = settings.choices_for(Publication::Catalog.find("epub_cover")).map(&:first)
+
+    assert_equal [ pdf.external_filename ], latex
+    assert_equal [ image.external_filename ], epub
+  end
+
+  test "with no PDFs, a cover says to upload one" do
+    note = Publication::Settings.new(projects(:slides)).unavailable_note(Publication::Catalog.find("latex_cover_front"))
+
+    assert_match(/upload a PDF/i, note)
+  end
+
+  # ---- the three levels' XML ----
+
+  test "a build merges each level's XML, lower levels winning an attribute at a time" do
+    @user.update!(publication_xml: %(<publication><html><css theme="salem" provide-dark-mode="no"/></html></publication>))
+    @target.update!(publication_settings: { "theme" => "denver" })
+
+    assert_equal 3, Publication::Settings.new(@target).documents.size
+    assert_match(%r{<css theme="denver" provide-dark-mode="no"/>},
+                 ProjectArchiveBuilder.new(@project).publication_ptx(@target))
+  end
+
+  test "what the Advanced tab sets is what the other tabs show, at every level" do
+    @user.update!(publication_xml: %(<publication><html><css theme="salem"/></html></publication>))
+    theme = Publication::Catalog.find("theme")
+
+    assert_equal "salem", Publication::Settings.new(@user).own("theme")
+    assert_equal [ "salem", "your account" ], Publication::Settings.new(@project).inherited("theme")
+    assert_match(/Salem \(from your account\)/, Publication::Settings.new(@project).blank_choice_label(theme))
   end
 end

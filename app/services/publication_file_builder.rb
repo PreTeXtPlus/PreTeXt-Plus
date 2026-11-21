@@ -3,11 +3,11 @@
 #
 # Two things go into every file it writes. BASE is what the build has always needed and no
 # author chooses: where external assets and generated assets live, and that HTML resources
-# come from the CDN. On top of that go the author's own choices, each written as an
-# attribute at the path its Publication::Catalog entry names.
+# come from the CDN. On top of that go the author's own choices: each level's publication
+# XML (Publication::Document), merged from the account down.
 #
-# Values are checked against the catalog on write (HasPublicationSettings) and escaped
-# here, so neither an unknown option nor an unexpected value can reach the build server.
+# The file is written fresh from elements, attributes and text read out of those documents,
+# and escaped here, so nothing else an author typed can reach the build server.
 class PublicationFileBuilder
   # The elements the build depends on, as element path => attributes.
   #
@@ -41,9 +41,23 @@ class PublicationFileBuilder
     %w[ html brandlogo ] => { "source" => DEFAULT_BRANDLOGO, "url" => DEFAULT_BRANDLOGO_URL }
   }.freeze
 
-  # `settings` is the merged hash from Publication::Settings -- our own keys, not PreTeXt's.
-  def initialize(settings)
-    @settings = (settings || {}).stringify_keys
+  # The paths of BASE no author may change, in the modal or in the XML.
+  MANAGED = [ %w[ source directories ], %w[ html resources ] ].freeze
+
+  # `documents` is one Publication::Document per level, from the account down
+  # (Publication::Settings#documents); a level that sets nothing may be nil. Callers
+  # holding a hash of settings instead -- our keys, as the modal reads them, which is most
+  # tests -- may pass that, and it is read as the one level that would store them.
+  def initialize(documents)
+    @documents = documents.is_a?(Hash) ? [ self.class.document_for(documents) ] : documents.compact
+  end
+
+  def self.for(owner)
+    new(Publication::Settings.new(owner).documents)
+  end
+
+  def self.document_for(settings)
+    Publication::Document.new(Publication::Document.write(nil, settings))
   end
 
   def to_xml
@@ -53,52 +67,103 @@ class PublicationFileBuilder
 
   private
 
-    attr_reader :settings
+    attr_reader :documents
 
-    # Element path => attributes, with the author's choices merged onto what every file
-    # starts from. Nested rather than flat because two options may share an ancestor (a
-    # theme and a page size both live under <html>), and the file has to nest them under
-    # one element.
-    def attributes_by_path
-      settings.each_with_object(starting_attributes) do |(key, value), paths|
-        option = Publication::Catalog.find(key)
-        next if option.nil?
+    # Element path => { attributes, text }: what every file starts from, then each level's
+    # XML over it, from the account down -- so a level overrides the one above it an
+    # attribute at a time. Keyed by path rather than nested because two settings may share
+    # an ancestor (a theme and a logo both live under <html>), and merging is per element.
+    #
+    # The managed part of BASE goes on last as well as first. First, so it sits where an
+    # author expects it in the file; last, so that nothing a level wrote can move it -- the
+    # document strips these paths already, but they are what a build depends on. Not the
+    # logo, which BASE only defaults and a subscriber's choice is meant to replace.
+    def nodes
+      merged = merge_nodes!({}, starting_nodes)
+      text_parts = {}
 
-        # written_value, not value: an option may be set to "write this attribute empty",
-        # which our storage holds as a marker because a blank setting already means
-        # "inherit". See Publication::Catalog::EMPTY_MARKER.
-        (paths[option.element] ||= {})[option.attribute] = option.written_value(value)
+      documents.each do |document|
+        merge_nodes!(merged, document.paths)
+        compose_shared_text!(merged, document, text_parts)
       end
+
+      merge_nodes!(merged, base_nodes.slice(*MANAGED))
+    end
+
+    def merge_nodes!(into, from)
+      from.each do |path, node|
+        target = (into[path] ||= { attributes: {}, text: nil })
+        target[:attributes].merge!(node[:attributes] || {})
+        target[:text] = node[:text] unless node[:text].nil?
+      end
+      into
+    end
+
+    # Text that several options share (LaTeX page geometry) merges by part, not wholesale:
+    # a margin an output sets is written together with the paper size its project chose.
+    # Each level stores only its own parts; this gathers them and writes the composed
+    # string a build needs -- see Publication::Catalog::Geometry.compose for why that is
+    # more than joining them.
+    #
+    # A level whose text is not made of those parts wrote its own, and that is taken as
+    # written: it stands as the element's text (merge_nodes! put it there) and the parts
+    # gathered so far are forgotten, since it replaced them.
+    def compose_shared_text!(merged, document, text_parts)
+      Publication::Catalog::TEXT_CODECS.each do |element, codec|
+        next if document.value_at(element, nil).nil?
+
+        parts = document.text_parts(element)
+        if parts.empty?
+          text_parts.delete(element)
+        else
+          text_parts[element] = (text_parts[element] || {}).merge(parts)
+          merged[element][:text] = codec.compose(text_parts[element])
+        end
+      end
+    end
+
+    def base_nodes
+      BASE.transform_values { |attributes| { attributes: attributes.dup, text: nil } }
     end
 
     # BASE, plus a value for each option PreTeXt.Plus defaults differently from PreTeXt.
-    # Written as ordinary attributes so the author's settings, merging next, simply
-    # overwrite them -- turning the embed button off is a setting, not a special case.
-    def starting_attributes
-      Publication::Catalog.applied_defaults
-        .each_with_object(BASE.transform_values(&:dup)) do |(option, value), paths|
-          (paths[option.element] ||= {})[option.attribute] = value
-        end
-    end
-
-    # A nested Hash of element name => [children, attributes], so that
-    # `html/css/@theme` and `html/resources/@host` come out as one <html> holding two
-    # elements rather than two <html> elements holding one each -- which PreTeXt reads as
-    # only the first.
-    def tree
-      attributes_by_path.each_with_object({}) do |(path, attributes), root|
-        node = path.reduce(root) { |level, name| level[name] ||= {} }
-        node[:attributes] = (node[:attributes] || {}).merge(attributes)
+    # Written as ordinary attributes so a level's XML, merging next, simply overwrites
+    # them -- turning the embed button off is a setting, not a special case.
+    def starting_nodes
+      Publication::Catalog.applied_defaults.each_with_object(base_nodes) do |(option, value), paths|
+        (paths[option.element] ||= { attributes: {}, text: nil })[:attributes][option.attribute] = value
       end
     end
 
-    # Element names come straight out of the catalog as strings (some hyphenated, like
+    # A nested Hash of element name => children, with :node holding the element's own
+    # attributes and text, so that `html/css/@theme` and `html/resources/@host` come out as
+    # one <html> holding two elements rather than two <html> elements holding one each --
+    # which PreTeXt reads as only the first.
+    def tree
+      nodes.each_with_object({}) do |(path, node), root|
+        level = path.reduce(root) { |parent, name| parent[name] ||= {} }
+        level[:node] = node
+      end
+    end
+
+    # Element names are strings out of parsed XML (some hyphenated, like
     # "first-page-header"), so #send rather than a literal method call -- Builder's own
     # method_missing dispatches either way, and #send is the only one that can carry a
     # name Ruby method syntax can't spell.
-    def build_tree(xml, node)
-      node.except(:attributes).each do |name, child|
-        xml.send(name, child[:attributes] || {}) { build_tree(xml, child) }
+    #
+    # Text is written only on an element with no children: PreTeXt has no mixed content in
+    # a publication file, and Document refuses it on the way in.
+    def build_tree(xml, level)
+      level.except(:node).each do |name, child|
+        node = child[:node] || {}
+        attributes = node[:attributes] || {}
+        children = child.except(:node)
+
+        if children.empty? && node[:text]
+          xml.send(name, node[:text], attributes)
+        else
+          xml.send(name, attributes) { build_tree(xml, child) }
+        end
       end
     end
 end

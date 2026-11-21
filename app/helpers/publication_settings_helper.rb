@@ -17,6 +17,39 @@ module PublicationSettingsHelper
     end
   end
 
+  # Where the XML view sends its text to be checked. See
+  # PublicationSettingsController#check.
+  def check_publication_settings_path_for(owner)
+    case owner
+    when Target then check_project_target_publication_settings_path(owner.project, owner)
+    when Project then check_project_publication_settings_path(owner)
+    else check_user_publication_settings_path(owner)
+    end
+  end
+
+  def switch_publication_settings_path_for(owner)
+    case owner
+    when Target then switch_project_target_publication_settings_path(owner.project, owner)
+    when Project then switch_project_publication_settings_path(owner)
+    else switch_user_publication_settings_path(owner)
+    end
+  end
+
+  # What the XML view calls the thing it is showing, which is what the other tabs
+  # have been editing all along.
+  def publication_xml_scope_note(owner)
+    case owner
+    when Target
+      "This is everything this output sets, on top of the project's settings and your account defaults."
+    when Project
+      "This is everything this project sets, on top of your account defaults. A single " \
+        "output can override any of it."
+    else
+      "This is everything your account sets as a default. Any project, or any single " \
+        "output, can override any of it."
+    end
+  end
+
   # A grid as the table the modal draws it as: [row label, [option per column]]. The cells
   # come from the grid's own row and column lists rather than from the options in hand, so
   # a cell whose option this level does not offer is a nil the table can leave blank --
