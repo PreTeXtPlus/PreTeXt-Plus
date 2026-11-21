@@ -87,6 +87,11 @@ Rails.application.routes.draw do
     passwords: "users/passwords",
     confirmations: "users/confirmations"
   }
+  devise_scope :user do
+    # The emailed link (GET users/confirmation) only shows a button; this is
+    # what it submits. See Users::ConfirmationsController#show.
+    post "users/confirmation/confirm", to: "users/confirmations#confirm", as: :confirm_user_confirmation
+  end
   resources :users, only: [ :new, :create, :edit, :update ] do
     # Publisher options an author sets once and every project of theirs inherits. Nested
     # under the user for the same route shape as the project and target versions -- one
