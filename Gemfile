@@ -33,7 +33,7 @@ gem "solid_cable"
 # they carry -- the CRDT every collaborative session's text lives in -- is not
 # something to let a minor bump change under us.
 gem "yrby", "~> 0.9.1"
-gem "yrby-rails", "~> 0.7.0"
+gem "yrby-rails", "~> 0.9.0"
 
 # Reduces boot times through caching; required in config/boot.rb
 gem "bootsnap", require: false
@@ -83,15 +83,15 @@ gem "tailwindcss-rails", "~> 4.7"
 
 gem "jsbundling-rails", "~> 1.3"
 
-gem "stripe", "~> 20.0"
+gem "stripe", "~> 21.0"
 
 gem "postmark-rails", "~> 0.22"
 
-gem "pay", "~> 12.2"
+gem "pay", "~> 12.5"
 
 gem "commonmarker", "~> 2.10"
 
-gem "aws-sdk-s3", "~> 1.240"
+gem "aws-sdk-s3", "~> 1.243"
 
 gem "cancancan", "~> 3.7"
 
@@ -99,6 +99,6 @@ gem "kaminari", "~> 1.3"
 
 gem "rubyzip", "~> 3.6"
 
-gem "honeybadger", "~> 6.9"
+gem "honeybadger", "~> 6.10"
 
 gem "nokogiri", "~> 1.19"
