@@ -52,6 +52,7 @@
  * for persistence (`docToState`) without duplicating the layout.
  */
 import * as Y from "yjs";
+import { normalizeLineEndings } from "../lineEndings";
 import type { DivisionType } from "../types/sections";
 import type { Asset, Exercise, ExerciseSourceFormat, Snippet, SnippetSourceFormat, SourceFormat } from "../types/editor";
 
@@ -195,9 +196,7 @@ export const makeDivisionEntry = (
   if (snapshot.attrs && Object.keys(snapshot.attrs).length > 0) {
     entry.set("attrs", snapshot.attrs);
   }
-  const text = new Y.Text();
-  if (snapshot.source) text.insert(0, snapshot.source);
-  entry.set("source", text);
+  entry.set("source", makeText(snapshot.source));
   return entry;
 };
 
@@ -224,10 +223,10 @@ const ASSET_FIELDS = [
   "previewInputDigest",
 ] as const;
 
-/** A fresh `Y.Text` holding `source`. */
+/** A fresh `Y.Text` holding `source`, with `\n` line endings (see `lineEndings.ts`). */
 export const makeText = (source: string | undefined): Y.Text => {
   const text = new Y.Text();
-  if (source) text.insert(0, source);
+  if (source) text.insert(0, normalizeLineEndings(source));
   return text;
 };
 

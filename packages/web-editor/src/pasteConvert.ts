@@ -46,6 +46,7 @@ import {
   type PlacementContext,
 } from "@pretextbook/import";
 import { derivePretextContent } from "./contentConversion";
+import { normalizeLineEndings } from "./lineEndings";
 import { mediaElement, parseMediaLink } from "./mediaUrls";
 
 /** The slice of Monaco's text model this module needs (kept tiny so it's testable). */
@@ -139,6 +140,9 @@ export function convertPastedSnippet(
   const target = pasteTargetIn(model, position);
   if (target.literal) return undefined;
 
+  // A Windows clipboard carries `\r\n`, which the LaTeX converter reads as a
+  // blank line (see `lineEndings.ts`).
+  text = normalizeLineEndings(text);
   const media = parseMediaLink(text);
   if (media) {
     if (target.inline) return undefined;

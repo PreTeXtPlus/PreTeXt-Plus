@@ -62,6 +62,22 @@ class Content < ApplicationRecord
   enum :source_format, { pretext: 0, latex: 1, markdown: 2, prefigure: 3, tikz: 4, asymptote: 5, sageplot: 6, doenetml: 7, raw: 8 },
     default: :pretext, suffix: true, validate: true
 
+  # Every line of a source ends in a single "\n", whatever it was written or
+  # imported with. Windows' "\r\n" is not just untidy: the LaTeX converter
+  # counts "\r" and "\n" as a line end each, so a CRLF source came out with a
+  # paragraph per line. XML reads all three endings as "\n" anyway, so nothing
+  # is lost by settling on it here, where every write passes -- the editor's
+  # save, the collaborative document's projection, an import.
+  #
+  # The editor keeps its own buffers to the same rule (the web-editor's
+  # `normalizeLineEndings`); this is what makes it true of the rows no matter
+  # which client, or which version of one, wrote them.
+  def self.normalize_line_endings(text)
+    text.include?("\r") ? text.gsub(/\r\n?/, "\n") : text
+  end
+
+  normalizes :source, with: ->(source) { normalize_line_endings(source) }
+
   PROSE_FORMATS = %w[ pretext latex markdown ].freeze
   SNIPPET_FORMATS = [ *PROSE_FORMATS, "raw" ].freeze
 

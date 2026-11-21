@@ -27,6 +27,7 @@ import { useInteractiveDiagnostics } from "./editorConfigs/useInteractiveDiagnos
 import type { InteractiveCheckInput } from "./editorConfigs/interactiveDiagnostics";
 import type { PretextValidationInput } from "./editorConfigs/pretextDiagnostics";
 import { MonacoCollabBinding } from "../collab/monacoBinding";
+import { stripCarriageReturns } from "../collab/textDiff";
 import { planSnippetInsertion } from "./editorConfigs/insertContext";
 import type { EditorSnippet } from "./editorConfigs/snippets";
 import type { CollabUser } from "../collab/types";
@@ -739,10 +740,26 @@ const CodeEditor = forwardRef<CodeEditorHandle, CodeEditorProps>(({
     zones.wrapper = wrapper;
   };
 
+  /**
+   * Hold the model to `\n` line endings (see `lineEndings.ts`).
+   *
+   * Monaco settles a model's ending whenever its whole value is set: the one
+   * most of its lines use, or — for text with no line break, such as a new,
+   * empty division — the platform's, which on Windows is `\r\n`. Every Enter
+   * typed there then stored a `\r\n`. So this runs at mount and after each
+   * `setValue`. Monaco reports the switch as a content change; the `onChange`
+   * below and the collab binding both ignore it (`isEolChange`).
+   */
+  const ensureLfModel = (model: any) => {
+    if (typeof model.setEOL !== "function" || model.getEOL?.() === "\n") return;
+    model.setEOL(0 /* monaco.editor.EndOfLineSequence.LF */);
+  };
+
   const setModelValueSafely = (model: any, nextValue: string) => {
     if (model.getValue() === nextValue) return;
     isProgrammaticUpdateRef.current = true;
     model.setValue(nextValue);
+    ensureLfModel(model);
     queueMicrotask(() => {
       isProgrammaticUpdateRef.current = false;
     });
@@ -803,6 +820,14 @@ const CodeEditor = forwardRef<CodeEditorHandle, CodeEditorProps>(({
       // what the prop already said, restore it here.
       if (previous) setModelValueSafely(model, contentPropRef.current);
       return;
+    }
+    // A `\r\n` in the shared text — written by a tab that predates the editor
+    // keeping to `\n`, since the bridge cleared the document when it attached —
+    // would leave the model, which reads it as one `\n`, a character short of
+    // the text it is bound to. Not a registered local origin, so the bridge
+    // carries the change to the store like any peer's.
+    if (c.ytext.toString().includes("\r\n")) {
+      c.ytext.doc?.transact(() => stripCarriageReturns(c.ytext));
     }
     // The shared text is authoritative; align the model before binding so the
     // binding never observes a divergent starting state.
@@ -872,6 +897,7 @@ const CodeEditor = forwardRef<CodeEditorHandle, CodeEditorProps>(({
     // collab mode the binding (created below) aligns the model to the shared
     // text instead.
     const model = editor.getModel();
+    if (model) ensureLfModel(model);
     if (!collabRef.current && model && model.getValue() !== contentRef.current) {
       setModelValueSafely(model, contentRef.current);
     }
@@ -1115,7 +1141,7 @@ const CodeEditor = forwardRef<CodeEditorHandle, CodeEditorProps>(({
           defaultValue={content}
           onMount={handleEditorMount}
           onChange={(value, event) => {
-            if (event?.isFlush || isProgrammaticUpdateRef.current) {
+            if (event?.isFlush || event?.isEolChange || isProgrammaticUpdateRef.current) {
               return;
             }
             if (debounceRef.current) clearTimeout(debounceRef.current);
