@@ -1,6 +1,12 @@
 <% content_for :title, "Resend confirmation" %>
 <% content_for :heading, "Resend confirmation email" %>
 
+<% if resource.errors[:confirmation_token].any? %>
+  <div class="my-4 text-red-600">That confirmation link isn't valid. Check that you copied the whole link, or request a new one below.</div>
+<% elsif resource.errors.any? %>
+  <div class="my-4 text-red-600">Error: <%= resource.errors.full_messages.to_sentence %></div>
+<% end %>
+
 <p class="my-4 text-gray-600">Enter the email address you used to register and we'll send you a new confirmation link.</p>
 
 <%= form_with(model: current_user || resource, as: resource_name, url: confirmation_path(resource_name), html: { method: :post }, data: { turbo: false }) do |form| %>

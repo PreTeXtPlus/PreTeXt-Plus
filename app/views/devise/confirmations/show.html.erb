@@ -1,0 +1,13 @@
+<% content_for :title, "Confirm your email" %>
+<% content_for :heading, "Confirm your email" %>
+
+<p class="my-4 text-gray-600">
+  Confirm that
+  <strong class="text-gray-900"><%= resource.pending_reconfirmation? ? resource.unconfirmed_email : resource.email %></strong>
+  is your email address.
+</p>
+
+<%= form_with url: confirm_user_confirmation_path, method: :post, data: { turbo: false } do |form| %>
+  <%= hidden_field_tag :confirmation_token, params[:confirmation_token] %>
+  <%= form.submit "Confirm my email", class: "#{button_classes(color: "blue")} w-full sm:w-auto text-center px-3.5 py-2.5 inline-block" %>
+<% end %>
