@@ -63,24 +63,33 @@ module HasPublicationSettings
   # refuse as [option, value] pairs.
   #
   # `xml` is this level's XML as the form carried it, when it did and it is usable: the
-  # XML view's text, or the copy the settings view holds so that an edit made in the other
-  # view is not lost. `submitted` is the settings view's fields -- a value sets an option,
-  # a blank takes it out -- and they are applied on top of that XML.
+  # XML view's text, or the copy the settings view holds when it is carrying an edit made
+  # in the other view and not yet saved. It replaces the stored XML whole. `submitted` is
+  # the settings view's fields -- a value sets an option, a blank takes it out -- and they
+  # are applied on top of that XML, or of the stored XML when there is none.
   #
-  # Only a field that differs from what the XML already says is written. Every field
-  # submits on every save, and writing one that agrees with the XML is at best a no-op and
-  # at worst destroys something: an empty paper-size field over a geometry the author
-  # wrote by hand would otherwise erase it. It is also what lets a value the modal could
-  # not have offered survive a save, since no field is drawn for it.
+  # Only a field the author changed is written. Every field submits on every save, and
+  # writing one they left alone is at best a no-op and at worst destroys something: an
+  # empty paper-size field over a geometry the author wrote by hand would otherwise erase
+  # it. It is also what lets a value the modal could not have offered survive a save,
+  # since no field is drawn for it.
+  #
+  # "Changed" is against `base`, the XML the fields were drawn from, when the form says
+  # what that was -- not against what is stored now. Someone else may have saved this
+  # level since the modal opened, and a field still showing what it showed then has not
+  # been changed by this author; judged against the stored XML it would look like one
+  # that had, and put the old value back over theirs. The changes then land on the
+  # stored XML, so whatever else was saved meanwhile is kept.
   #
   # The XML view submits no fields at all, which is what keeps settings that view cannot
   # see from undoing what was typed there.
-  def apply_publication_changes(submitted, xml: nil)
+  def apply_publication_changes(submitted, xml: nil, base: nil)
     self.publication_xml = xml unless xml.nil?
     current = publication_settings
+    drawn = base.nil? ? current : Publication::Document.new(base).settings
 
     changed = normalize_publication_settings(submitted, keep_blank: true)
-                .reject { |key, value| current[key] == value.presence }
+                .reject { |key, value| drawn[key] == value.presence || current[key] == value.presence }
     refused = changed.select { |key, value| value.present? && !Publication::Catalog.find(key).permits?(value) }
 
     write_publication_settings(changed.except(*refused.keys))
@@ -92,8 +101,8 @@ module HasPublicationSettings
   # changes they made beside it -- and costs them silently, since the modal is gone by the
   # time they read why. Each value stands or falls on its own instead: the rest is saved,
   # and a refused one keeps whatever this level had before.
-  def merge_publication_settings(submitted, xml: nil)
-    refused = apply_publication_changes(submitted, xml:)
+  def merge_publication_settings(submitted, xml: nil, base: nil)
+    refused = apply_publication_changes(submitted, xml:, base:)
 
     [ save, refused ]
   end

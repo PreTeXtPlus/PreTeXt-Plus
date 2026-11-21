@@ -490,7 +490,8 @@ class PublicationSettingsControllerTest < ActionDispatch::IntegrationTest
     @project.update!(publication_xml: %(<publication><latex print="yes"/></publication>))
     get edit_project_publication_settings_url(@project), headers: modal_headers
 
-    assert_select "input[type=hidden][name=publication_xml][value*='latex print']"
+    assert_select "input[type=hidden][name=publication_xml_base][value*='latex print']"
+    assert_select "input[name=publication_xml]", false
     assert_select "textarea[name=publication_xml]", false
     assert_select "button[name=view][value=xml][formaction=?]", switch_project_publication_settings_path(@project)
   end
@@ -517,6 +518,7 @@ class PublicationSettingsControllerTest < ActionDispatch::IntegrationTest
 
     assert_select "select[name='publication_settings[theme]'] option[selected][value=denver]"
     assert_select "input[type=hidden][name=publication_xml][value*=snapshot]"
+    assert_select "input[name=publication_xml_base]", false, "unsaved XML goes as the XML to save"
     assert_nil @project.reload.publication_xml
   end
 
@@ -666,5 +668,32 @@ class PublicationSettingsControllerTest < ActionDispatch::IntegrationTest
       params: { publication_xml: "<publication>\r\n  <latex print=\"yes\"/>\r\n</publication>" }
 
     assert_no_match(/\r/, @project.reload.publication_xml)
+  end
+
+  # Two people with the same modal open: the second save writes the fields its author
+  # changed, and does not put back what the first one replaced.
+  test "a save keeps what someone else saved since the modal opened" do
+    drawn = %(<publication><html><css theme="salem"/></html></publication>)
+    # Saved by a collaborator after this modal was drawn: a new theme, and XML the
+    # settings view has no field for.
+    @project.update!(publication_xml: %(<publication><html><css theme="denver"/></html><latex snapshot="yes"/></publication>))
+
+    patch project_publication_settings_url(@project),
+      params: { publication_xml_base: drawn, publication_settings: { theme: "salem", chunk_level: "1" } }
+
+    settings = @project.reload.publication_settings
+    assert_equal "denver", settings["theme"], "a field left as drawn is not a change"
+    assert_equal "1", settings["chunk_level"]
+    assert_match(/latex snapshot="yes"/, @project.publication_xml)
+  end
+
+  test "a field changed from what was drawn is written over a newer save" do
+    drawn = %(<publication><html><css theme="salem"/></html></publication>)
+    @project.update!(publication_xml: %(<publication><html><css theme="denver"/></html></publication>))
+
+    patch project_publication_settings_url(@project),
+      params: { publication_xml_base: drawn, publication_settings: { theme: "" } }
+
+    assert_nil @project.reload.publication_settings["theme"]
   end
 end

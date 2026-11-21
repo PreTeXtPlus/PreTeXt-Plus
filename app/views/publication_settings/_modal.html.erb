@@ -28,7 +28,8 @@
     <%# What the two views have in common. Both submit to the same place, and both carry
         this level's XML -- the XML view as the text being edited, the settings view as a
         hidden copy, so that work done in one view and not yet saved survives a visit to
-        the other (see PublicationSettingsController#switch).
+        the other (see PublicationSettingsController#switch), and so that a save can tell
+        which fields the author changed.
 
         _top for the reason the drawer's own forms use it: the redirect carries a flash,
         which this frame would otherwise swallow along with the reopened drawer. The
@@ -56,7 +57,17 @@
       <% if view == "xml" %>
         <%= render "publication_settings/xml", settings:, document: local_assigns[:document] %>
       <% else %>
-        <%= hidden_field_tag "publication_xml", settings.owner.publication_xml, id: nil %>
+        <%# The XML these fields were drawn from, so a save writes only the fields the
+            author changed, onto whatever is stored by then -- a collaborator's save made
+            while this was open is kept. Except when that XML holds an edit made in the
+            XML view and not yet saved: then it goes as the level's XML, to be saved
+            whole, as the XML view itself would save it. See
+            HasPublicationSettings#apply_publication_changes. %>
+        <% if settings.owner.publication_xml_changed? %>
+          <%= hidden_field_tag "publication_xml", settings.owner.publication_xml, id: nil %>
+        <% else %>
+          <%= hidden_field_tag "publication_xml_base", settings.owner.publication_xml, id: nil %>
+        <% end %>
 
         <%# The tabs live inside the form, not around it: panels are hidden rather than
             unmounted, so a change made on one tab saves along with a change made on

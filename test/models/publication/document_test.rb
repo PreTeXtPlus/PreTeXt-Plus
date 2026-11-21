@@ -223,4 +223,17 @@ class Publication::DocumentTest < ActiveSupport::TestCase
   test "text that will not parse is returned as it was" do
     assert_equal "<publication><latex>", Publication::Document.write("<publication><latex>", "theme" => "salem")
   end
+
+  # A pasted publication.ptx usually opens with a comment block; changing one setting in
+  # the modal should not cost the author it.
+  test "comments outside <publication> survive a write" do
+    xml = %(<?xml version="1.0" encoding="UTF-8"?>\n<!-- header -->\n<publication>\n  <!-- inner -->\n  <latex print="no"/>\n</publication>\n<!-- footer -->\n)
+
+    result = Publication::Document.write(xml, "latex_print" => "yes")
+
+    assert_match(/\A<!-- header -->\n<publication>/, result)
+    assert_match(/<!-- inner -->/, result)
+    assert_match(/<!-- footer -->\z/, result)
+    assert_equal "yes", Publication::Document.new(result).settings["latex_print"]
+  end
 end

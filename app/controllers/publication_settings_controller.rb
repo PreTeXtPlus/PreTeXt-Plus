@@ -32,7 +32,9 @@ class PublicationSettingsController < ApplicationController
   # that does not parse, so the author stays in the XML view with the problems listed.
   def switch
     @document = submitted_document
-    @refused = @owner.apply_publication_changes(submitted_settings, xml: (submitted_xml if @document&.valid?))
+    @refused = @owner.apply_publication_changes(
+      submitted_settings, xml: (submitted_xml if @document&.valid?), base: submitted_base
+    )
     @settings = Publication::Settings.new(@owner)
     @view = @document&.errors&.any? ? "xml" : requested_view
 
@@ -51,7 +53,7 @@ class PublicationSettingsController < ApplicationController
     # takes a form that skipped it.
     document = submitted_document
     saved, refused = @owner.merge_publication_settings(
-      submitted_settings, xml: (submitted_xml if document&.valid?)
+      submitted_settings, xml: (submitted_xml if document&.valid?), base: submitted_base
     )
 
     if !saved
@@ -75,7 +77,9 @@ class PublicationSettingsController < ApplicationController
   # HTML tab and not yet saved included -- computed no other way than a build computes it.
   def check
     document = submitted_document
-    @owner.apply_publication_changes(submitted_settings, xml: (submitted_xml if document&.valid?))
+    @owner.apply_publication_changes(
+      submitted_settings, xml: (submitted_xml if document&.valid?), base: submitted_base
+    )
     settings = Publication::Settings.new(@owner)
 
     render json: {
@@ -124,6 +128,14 @@ class PublicationSettingsController < ApplicationController
     # that text nobody edited compares equal to what is stored.
     def submitted_xml
       params[:publication_xml].to_s.gsub("\r\n", "\n") if params.key?(:publication_xml)
+    end
+
+    # The XML the settings view's fields were drawn from, which is what tells a field the
+    # author changed from one that still shows what it was drawn with -- see
+    # HasPublicationSettings#apply_publication_changes. nil when the form did not say,
+    # which compares the fields with the stored XML instead.
+    def submitted_base
+      params[:publication_xml_base].to_s.gsub("\r\n", "\n") if params.key?(:publication_xml_base)
     end
 
     # Which of the modal's two views to draw. Anything but "xml" is the settings.

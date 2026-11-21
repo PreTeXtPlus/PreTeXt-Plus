@@ -163,7 +163,12 @@ module Publication
       end
 
       touched.each { |element| prune(xml, element) }
-      xml.root.children.empty? ? nil : xml.root.to_xml(indent: 2)
+      return nil if xml.root.children.empty?
+
+      # The document's nodes rather than the root alone, so a comment above <publication>
+      # -- a pasted publication.ptx usually opens with one -- is kept too. Not the XML
+      # declaration, which is not a node and says nothing a level needs.
+      xml.children.map { |node| node.to_xml(indent: 2) }.join("\n")
     end
 
     class << self
