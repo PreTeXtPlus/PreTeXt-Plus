@@ -47,7 +47,12 @@ const EditorTabs = ({ tabs, active, onSelect, onClose }: EditorTabsProps) => {
       role="tablist"
       aria-label="Open items"
       data-testid="editor-tabs"
-      className="flex items-stretch shrink-0 h-8 overflow-x-auto bg-[#e9ebef] border-b border-[#dde0e6] select-none"
+      // The rule under the strip is an inset shadow, not a border, so the
+      // active tab can cover it with its own background without reaching
+      // outside the strip: `overflow-x-auto` makes the vertical overflow
+      // scrollable too, and a tab hanging a pixel below (as `-mb-px` did)
+      // gave the strip a vertical scrollbar.
+      className="flex items-stretch shrink-0 h-8 overflow-x-auto overflow-y-hidden bg-[#e9ebef] shadow-[inset_0_-1px_0_#dde0e6] select-none"
     >
       {tabs.map(({ item, target }) => {
         const isActive = sameOpenItem(item, active);
@@ -61,8 +66,8 @@ const EditorTabs = ({ tabs, active, onSelect, onClose }: EditorTabsProps) => {
             className={clsx(
               "group flex items-center gap-1 min-w-0 max-w-[14rem] pl-2 pr-1 border-r border-[#dde0e6] cursor-pointer",
               isActive
-                ? "bg-[#f5f6f8] text-slate-800 -mb-px border-b border-b-[#f5f6f8]"
-                : "text-slate-600 hover:bg-[#f0f1f4]",
+                ? "bg-[#f5f6f8] text-slate-800"
+                : "text-slate-600 hover:bg-[#f0f1f4] shadow-[inset_0_-1px_0_#dde0e6]",
             )}
             onMouseDown={(e) => {
               // Middle-click closes. `onAuxClick` would do, but mousedown is
