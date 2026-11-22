@@ -41,7 +41,7 @@
     "@pretextbook/completions": "^0.6.0",
     "@pretextbook/format": "^0.6.2",
     "@pretextbook/import": "^0.17.4",
-    "@pretextbook/latex-pretext": "^0.4.0",
+    "@pretextbook/latex-pretext": "^0.4.1",
     "@pretextbook/latex-style-pretext": "^0.6.0",
     "@pretextbook/markdown-style-pretext": "^0.2.0",
     "@pretextbook/pretext-html": "^0.21.1",
