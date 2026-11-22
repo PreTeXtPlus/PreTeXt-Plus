@@ -1,8 +1,8 @@
-import { useState } from "react";
 import type { Asset, SourceFormat } from "../../types/editor";
 import { assetEmbedCode, sanitizeXmlId } from "../../sectionUtils";
 import { buildProjectAssetView } from "../../assetView";
 import { generatorFor } from "../../generators";
+import { canDuplicateAsset } from "../../duplicate";
 import { useEditorStore, useTakenRefs } from "../../store/hooks";
 import { ID_REQUIRED_MESSAGE, idTakenMessage } from "../../idRules";
 import {
@@ -44,14 +44,12 @@ const AssetSettings = ({
   const divisions = useEditorStore((s) => s.divisions);
   const projectAssets = useEditorStore((s) => s.projectAssets) ?? [];
   const takenRefs = useTakenRefs();
-  const hasAssetDuplicate = useEditorStore((s) => s.hasAssetDuplicate);
-  const duplicateAsset = useEditorStore((s) => s.duplicateAsset);
+  const duplicateSupport = useEditorStore((s) => s.duplicateSupport);
+  const startDuplicate = useEditorStore((s) => s.startDuplicate);
   const removeAsset = useEditorStore((s) => s.removeAsset);
   const removeAssetRefFromDocument = useEditorStore(
     (s) => s.removeAssetRefFromDocument,
   );
-  const [isDuplicating, setIsDuplicating] = useState(false);
-  const [error, setError] = useState<string | null>(null);
 
   const ref = asset.ref ?? "";
   const generator = generatorFor(asset.sourceFormat);
@@ -82,19 +80,6 @@ const AssetSettings = ({
     await onSave({ ...asset, shortDescription: next.trim() || undefined }, ref);
   };
 
-  const handleDuplicate = async () => {
-    setError(null);
-    setIsDuplicating(true);
-    try {
-      // On success the copy is opened, which unmounts this panel.
-      await duplicateAsset(asset);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to duplicate image.");
-    } finally {
-      setIsDuplicating(false);
-    }
-  };
-
   const handleRemove = () => {
     // Removing the asset alone would leave its placeholders behind (the row
     // would just reappear as "needs asset"), so also strip every
@@ -116,8 +101,8 @@ const AssetSettings = ({
   const actions: SettingsAction[] = readOnly
     ? []
     : [
-      // A generated asset's picture is its source, so replacing or duplicating the
-      // bytes means nothing for it: edit the diagram instead.
+      // A generated asset's picture is its source, so replacing the bytes
+      // means nothing for it: edit the diagram instead.
       ...(onReplace && asset.url && !generator
         ? [
           {
@@ -127,15 +112,14 @@ const AssetSettings = ({
           },
         ]
         : []),
-      // Duplicate re-fetches the file's bytes and re-uploads them, so it means
-      // nothing for an authored asset with no file behind it.
-      ...(hasAssetDuplicate && asset.url && !generator
+      // A file asset's copy re-uploads its bytes; an authored or generated
+      // one's is a new asset of its kind given the same source.
+      ...(canDuplicateAsset(asset, duplicateSupport)
         ? [
           {
-            label: isDuplicating ? "Duplicating…" : "Duplicate",
-            onClick: handleDuplicate,
-            disabled: isDuplicating,
-            title: "Make a copy of this image with a new ID",
+            label: "Duplicate…",
+            onClick: () => startDuplicate({ kind: "asset", ref }),
+            title: "Make a copy of this image with a new title and ID",
           },
         ]
         : []),
@@ -212,7 +196,6 @@ const AssetSettings = ({
           )}
         </SettingsNote>
       )}
-      {error && <SettingsNote tone="error">{error}</SettingsNote>}
       <SettingsActions actions={actions} />
     </div>
   );

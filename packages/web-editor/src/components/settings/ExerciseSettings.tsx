@@ -58,6 +58,8 @@ const ExerciseSettings = ({ exercise, embedFormat, onSave, readOnly }: ExerciseS
   const [placementTag, setPlacementTag] = useState<ExercisePlacementTag>("exercise");
   const takenRefs = useTakenRefs();
   const removeExercise = useEditorStore((s) => s.removeExercise);
+  const canDuplicate = useEditorStore((s) => s.duplicateSupport.exercise);
+  const startDuplicate = useEditorStore((s) => s.startDuplicate);
   const removeExerciseRefFromDocument = useEditorStore((s) => s.removeExerciseRefFromDocument);
 
   const row = buildProjectExerciseView(divisions, projectExercises).find(
@@ -109,7 +111,18 @@ const ExerciseSettings = ({ exercise, embedFormat, onSave, readOnly }: ExerciseS
 
   const actions: SettingsAction[] = readOnly
     ? []
-    : [{ label: "Remove from project", onClick: handleRemove, danger: true }];
+    : [
+      ...(canDuplicate
+        ? [
+          {
+            label: "Duplicate…",
+            onClick: () => startDuplicate({ kind: "exercise", ref: exercise.ref }),
+            title: "Make a copy of this exercise with a new title and ID",
+          },
+        ]
+        : []),
+      { label: "Remove from project", onClick: handleRemove, danger: true },
+    ];
 
   return (
     <div className="flex flex-col gap-2.5">

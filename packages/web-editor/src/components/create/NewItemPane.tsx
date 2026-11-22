@@ -10,6 +10,7 @@ import { SettingsActions, SettingsNote } from "../settings/settingsUi";
 import NewSnippetForm from "./NewSnippetForm";
 import NewAssetForm from "./NewAssetForm";
 import NewExerciseForm from "./NewExerciseForm";
+import DuplicateForm, { type DuplicateFields } from "./DuplicateForm";
 
 export interface NewItemPaneProps {
   /** Persist a new snippet — see `NewSnippetForm`. */
@@ -27,7 +28,22 @@ export interface NewItemPaneProps {
   onSnippetCreated: (snippet: Snippet, request: CreateRequest & { kind: "snippet" }) => void;
   onExerciseCreated: (exercise: Exercise, request: CreateRequest & { kind: "exercise" }) => void;
   onAssetCreated: (asset: Asset, request: CreateRequest & { kind: "asset" }) => void;
+  /**
+   * Make the copy a duplicate request describes — see `DuplicateForm`. Rejects
+   * with the host's error.
+   */
+  onDuplicate: (
+    request: CreateRequest & { kind: "duplicate" },
+    fields: DuplicateFields,
+  ) => Promise<void>;
 }
+
+const KIND_NAMES = {
+  division: "division",
+  snippet: "snippet",
+  exercise: "exercise",
+  asset: "image",
+} as const;
 
 const heading = (request: CreateRequest): string => {
   switch (request.kind) {
@@ -43,6 +59,8 @@ const heading = (request: CreateRequest): string => {
         : request.resolveRef
           ? "Add missing image"
           : "New image";
+    case "duplicate":
+      return `Duplicate ${KIND_NAMES[request.of.kind]}`;
   }
 };
 
@@ -63,6 +81,7 @@ const NewItemPane = ({
   onSnippetCreated,
   onExerciseCreated,
   onAssetCreated,
+  onDuplicate,
 }: NewItemPaneProps) => {
   const creating = useEditorStore((s) => s.creating);
   const cancelCreate = useEditorStore((s) => s.cancelCreate);
@@ -101,7 +120,10 @@ const NewItemPane = ({
 
   // A placeholder with nothing behind it may be one the author no longer
   // wants, rather than one to fill in: offer to drop it instead.
-  const unlinkedRef = creating.kind !== "division" ? creating.resolveRef : undefined;
+  const unlinkedRef =
+    creating.kind === "division" || creating.kind === "duplicate"
+      ? undefined
+      : creating.resolveRef;
   const removeUnlinked = unlinkedRef && (
     <SettingsActions
       actions={[
@@ -125,10 +147,23 @@ const NewItemPane = ({
       ? (creating.replaceRef ?? creating.resolveRef)
       : creating.kind === "snippet" || creating.kind === "exercise"
         ? creating.resolveRef
-        : undefined;
+        : creating.kind === "duplicate"
+          ? creating.of.ref
+          : undefined;
 
   let body;
-  if (creating.kind === "division") {
+  if (creating.kind === "duplicate") {
+    body = (
+      <DuplicateForm
+        // A fresh form per item, so its suggestions are the new original's.
+        key={`${creating.of.kind}:${creating.of.ref}`}
+        of={creating.of}
+        onDuplicate={(fields) => onDuplicate(creating, fields)}
+        onCancel={cancelCreate}
+        onBusyChange={setIsBusy}
+      />
+    );
+  } else if (creating.kind === "division") {
     const parent = creating.parentXmlId
       ? divisions?.find((d) => d.xmlId === creating.parentXmlId)
       : undefined;
@@ -225,7 +260,7 @@ const NewItemPane = ({
   return (
     <div className="flex flex-col flex-1 h-full min-h-0" data-testid="new-item-pane">
       <div className="flex items-center gap-2 h-9 px-2 shrink-0 bg-[#f5f6f8] border-b border-[#dde0e6] select-none">
-        <KindIcon kind={creating.kind} />
+        <KindIcon kind={creating.kind === "duplicate" ? creating.of.kind : creating.kind} />
         <span
           data-testid="new-item-heading"
           className="text-[0.85rem] font-semibold text-slate-800 whitespace-nowrap"

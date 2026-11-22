@@ -12,6 +12,7 @@ import {
   divisionActionEntries,
   findDivisionPlacement,
 } from "../toc/divisionActions";
+import { canDuplicateDivision } from "../../duplicate";
 import {
   CommitField,
   EmbedCode,
@@ -37,6 +38,8 @@ const DivisionSettings = ({ division, embedFormat }: DivisionSettingsProps) => {
   const updateDivisionProperties = useEditorStore(
     (s) => s.updateDivisionProperties,
   );
+  const canDuplicate = useEditorStore((s) => s.duplicateSupport.division);
+  const startDuplicate = useEditorStore((s) => s.startDuplicate);
   const {
     divisions,
     rootDivision,
@@ -71,11 +74,25 @@ const DivisionSettings = ({ division, embedFormat }: DivisionSettingsProps) => {
     }
   };
 
-  const actions = divisionActionEntries(division, placement, {
-    unplace: handleUnplace,
-    remove: handleDelete,
-    placeInDocument: handlePlaceOrphan,
-  });
+  // Only a division with no divisions of its own is copied: a copied body
+  // would place every child a second time (see `canDuplicateDivision`).
+  const duplicate =
+    canDuplicate && canDuplicateDivision(division, placement.kind === "root")
+      ? [
+        {
+          label: "Duplicate…",
+          onClick: () => startDuplicate({ kind: "division", ref: division.xmlId }),
+        },
+      ]
+      : [];
+  const actions = [
+    ...duplicate,
+    ...divisionActionEntries(division, placement, {
+      unplace: handleUnplace,
+      remove: handleDelete,
+      placeInDocument: handlePlaceOrphan,
+    }),
+  ];
 
   return (
     <div className="flex flex-col gap-2.5">

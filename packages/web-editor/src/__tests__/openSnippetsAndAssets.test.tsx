@@ -319,6 +319,9 @@ describe("opening an asset", () => {
     expect(editor().value).toBe("<latex-image>x</latex-image>");
     expect(editor().dataset.format).toBe("pretext");
     expect(screen.getByText("needs alt text")).toBeInTheDocument();
+    // An authored image opens with its drawer shut.
+    expect(screen.queryByTestId("settings-drawer")).toBeNull();
+    fireEvent.click(screen.getByTestId("settings-drawer-toggle"));
 
     const alt = screen.getByLabelText("Alt text") as HTMLInputElement;
     fireEvent.change(alt, { target: { value: "A plot" } });
@@ -427,7 +430,7 @@ describe("the settings drawer", () => {
     expect(screen.queryByDisplayValue("Main")).toBeNull();
   });
 
-  it("opens by default for a snippet or asset, and toggles", () => {
+  it("opens by default for a snippet or file image, and toggles", () => {
     renderEditors();
     openSnippetRow("greeting");
     expect(screen.getByTestId("settings-drawer")).toBeInTheDocument();
@@ -437,9 +440,9 @@ describe("the settings drawer", () => {
     fireEvent.keyDown(window, { key: "Escape" });
     expect(screen.queryByTestId("settings-drawer")).toBeNull();
 
-    // Another record starts open again.
+    // An authored image starts shut: its source is what the author came for.
     openAssetRow("fig");
-    expect(screen.getByTestId("settings-drawer")).toBeInTheDocument();
+    expect(screen.queryByTestId("settings-drawer")).toBeNull();
   });
 
   it("falls back to the root when the open snippet is removed", () => {
