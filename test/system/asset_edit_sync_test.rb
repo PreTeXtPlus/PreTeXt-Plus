@@ -85,7 +85,7 @@ class AssetEditSyncTest < ApplicationSystemTestCase
 
     # The "New asset" form takes the editor's place.
     within("[data-testid='new-item-pane']", wait: 10) do
-      click_button "Write PreTeXt"
+      choose_asset_source "Custom PreTeXt"
       fill_in "Title", with: "Authored Diagram"
       click_button "Create"
     end
@@ -137,6 +137,17 @@ class AssetEditSyncTest < ApplicationSystemTestCase
     def open_asset_settings_for(asset)
       open_asset_for(asset)
       assert_selector "[data-testid='settings-drawer']", wait: 10
+    end
+
+    # The new-asset form's source tabs keep to one row: those that don't fit
+    # the pane go under "More". Pick the source from wherever it landed.
+    def choose_asset_source(label)
+      if has_button?(label, wait: 2)
+        click_button label
+      else
+        click_button "More"
+        find("[role='menuitem']", text: label, exact_text: true).click
+      end
     end
 
     # Drawer fields commit on Enter (or blur), once per edit.
