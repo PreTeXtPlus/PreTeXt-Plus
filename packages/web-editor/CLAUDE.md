@@ -175,7 +175,7 @@ a division's `ref` is its `xmlId`) says which — it replaced `activeDivisionId`
 Read the open division through `selectOpenDivisionId`, which is `null` while a
 snippet or asset is open; the host-facing `activeDivisionId` prop and
 `onDivisionSelect` still speak only of divisions. Opening a different item
-closes the drawer and abandons any creation form; removing the open item (or a
+switches to that item's drawer state (see below) and abandons any creation form; removing the open item (or a
 peer removing it) closes its tab (see below), and renames carry it along.
 
 - **Tabs** (`EditorTabs.tsx`, the store's `openTabs`): the author can step
@@ -237,9 +237,13 @@ peer removing it) closes its tab (see below), and renames carry it along.
   source; solo, that buffer is the only place newer text for it can come from.
 - `EditorTargetBar.tsx` sits above the code editor: kind icon, title, id, a
   status chip, and a gear toggling a settings drawer under it that pushes the
-  editor down (Escape closes it; the store's `isSettingsDrawerOpen`). Opening
-  an item resets the drawer to its default: open for a snippet or asset, closed
-  for a division. The drawer is `settings/DivisionSettings.tsx`,
+  editor down (Escape closes it; the store's `isSettingsDrawerOpen`). Each tab
+  remembers whether its drawer was open (`OpenTab.drawerOpen`, written as the
+  author leaves the tab), so switching back finds it as they left it; an item
+  opened without a tab — or whose tab another division replaced — starts at
+  its kind's default: open for a snippet, exercise or file image; closed for a
+  division or an authored image (PreTeXt or a generator's source), except
+  right after one is created or duplicated, when its embed code is next. A creation form leaves the drawer alone. The drawer is `settings/DivisionSettings.tsx`,
   `settings/SnippetSettings.tsx` or `settings/AssetSettings.tsx`, all built
   from `settings/settingsUi.tsx` and all saving **per field**: a text field
   (`CommitField`) commits on Enter/blur and Escape reverts it (a second Escape
@@ -281,7 +285,7 @@ a peer removing the open item does not (`openItemState`'s `byAuthor`).
   plain-text display name only — it is spliced into its parent with no element
   of its own — so lists and the title bar fall back to the ref without one, and
   its preview article is titled after it (`snippetPreviewTitle`).
-- **Asset** (`create/NewAssetForm.tsx`): Upload / External URL / Custom →
+- **Asset** (`create/NewAssetForm.tsx`): Upload / URL / one tab per generator / Custom PreTeXt →
   `onAssetUpload` / `onAssetFetchUrl` + `onAssetUpload` / `onCreateAuthored`,
   each handed the title and ref. Both are suggested until the author edits
   them: the title from the file or URL's name, the ref from the title
@@ -297,6 +301,18 @@ a peer removing the open item does not (`openItemState`'s `byAuthor`).
   clipboard on their behalf. Entry points: a Contents row's [+], the [+] button in the
   Snippets/Assets panel header, File → New Asset… / New Snippet…, unlinked
   rows, Replace image….
+- **Duplicate** (`create/DuplicateForm.tsx`, `src/duplicate.ts`): "Duplicate…"
+  in a drawer starts a `{ kind: "duplicate", of }` request (`startDuplicate`
+  flushes the code editor's debounce first, so the form copies what was last
+  typed). The form takes only a title and ID; `handleDuplicate` in `Editors.tsx`
+  makes the copy through the kind's ordinary creation hook (a file asset's
+  bytes re-fetched and re-uploaded, a generated asset through
+  `onCreateGenerated`) and gives it the original's source, attributes and alt
+  text. `copySource` renames `xml:id`s inside a PreTeXt source that the project
+  already uses (`dedupeXmlIds`, as Import does), and the form lists them first.
+  A division copy is placed right after the original; anything else is left
+  unused. A division that places other divisions is not offered Duplicate
+  (`canDuplicateDivision`), since its copy would place each child twice.
 
 ### Generated assets (`src/generators/`)
 

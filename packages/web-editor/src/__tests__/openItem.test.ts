@@ -99,9 +99,13 @@ describe("the open item", () => {
     store.getState().openSnippet("greeting");
     expect(store.getState().isSettingsDrawerOpen).toBe(true);
     store.getState().setSettingsDrawerOpen(false);
-    store.getState().openAsset("fig");
+    store.getState().addAssetToPool({ id: "a2", ref: "photo", title: "Photo", isFile: true });
+    store.getState().openAsset("photo");
     expect(store.getState().isSettingsDrawerOpen).toBe(true);
-    // …closed for a division.
+    // …closed for an authored image, whose source is what the author came for…
+    store.getState().openAsset("fig");
+    expect(store.getState().isSettingsDrawerOpen).toBe(false);
+    // …and for a division.
     store.getState().openDivision("sec");
     expect(store.getState().isSettingsDrawerOpen).toBe(false);
   });
@@ -114,11 +118,16 @@ describe("the open item", () => {
     expect(store.getState().isSettingsDrawerOpen).toBe(false);
   });
 
-  it("shows a snippet's drawer again after a creation form is cancelled", () => {
+  it("leaves the drawer as it was when a creation form is cancelled", () => {
     const store = makeStore();
     store.getState().openSnippet("greeting");
     store.getState().setSettingsDrawerOpen(false);
     store.getState().startCreate({ kind: "asset" });
+    store.getState().cancelCreate();
+    expect(store.getState().isSettingsDrawerOpen).toBe(false);
+
+    store.getState().setSettingsDrawerOpen(true);
+    store.getState().startDuplicate({ kind: "snippet", ref: "greeting" });
     store.getState().cancelCreate();
     expect(store.getState().isSettingsDrawerOpen).toBe(true);
   });

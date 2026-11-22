@@ -44,13 +44,12 @@ const SnippetSettings = ({
   const divisions = useEditorStore((s) => s.divisions);
   const projectSnippets = useEditorStore((s) => s.projectSnippets) ?? [];
   const takenRefs = useTakenRefs();
-  const hasSnippetDuplicate = useEditorStore((s) => s.hasSnippetDuplicate);
-  const duplicateSnippet = useEditorStore((s) => s.duplicateSnippet);
+  const canDuplicate = useEditorStore((s) => s.duplicateSupport.snippet);
+  const startDuplicate = useEditorStore((s) => s.startDuplicate);
   const removeSnippet = useEditorStore((s) => s.removeSnippet);
   const removeSnippetRefFromDocument = useEditorStore(
     (s) => s.removeSnippetRefFromDocument,
   );
-  const [isDuplicating, setIsDuplicating] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const row = buildProjectSnippetView(divisions, projectSnippets).find(
@@ -86,19 +85,6 @@ const SnippetSettings = ({
     }
   };
 
-  const handleDuplicate = async () => {
-    setError(null);
-    setIsDuplicating(true);
-    try {
-      // On success the copy is opened, which unmounts this panel.
-      await duplicateSnippet(snippet);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to duplicate snippet.");
-    } finally {
-      setIsDuplicating(false);
-    }
-  };
-
   const handleRemove = () => {
     if (
       !window.confirm(
@@ -116,13 +102,12 @@ const SnippetSettings = ({
   const actions: SettingsAction[] = readOnly
     ? []
     : [
-      ...(hasSnippetDuplicate
+      ...(canDuplicate
         ? [
           {
-            label: isDuplicating ? "Duplicating…" : "Duplicate",
-            onClick: handleDuplicate,
-            disabled: isDuplicating,
-            title: "Make a copy of this snippet with a new ID",
+            label: "Duplicate…",
+            onClick: () => startDuplicate({ kind: "snippet", ref: snippet.ref }),
+            title: "Make a copy of this snippet with a new title and ID",
           },
         ]
         : []),

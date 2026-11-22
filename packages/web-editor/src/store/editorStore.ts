@@ -31,6 +31,7 @@ import type { Division, DivisionType } from "../types/sections";
 import type { EditDraft } from "../components/toc/types";
 import { sanitizeXmlId } from "../sectionUtils";
 import { ID_REQUIRED_MESSAGE, idTakenMessage, projectRefs } from "../idRules";
+import { NO_DUPLICATE_SUPPORT, type DuplicateSupport } from "../duplicate";
 
 // ── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -312,12 +313,15 @@ type ModalKey =
  * - `snippet` / `exercise` / `asset`: a new project record. With `resolveRef`, the record
  *   binds an unlinked `<plus:* ref/>` placeholder; with `replaceRef`, a new
  *   image takes the place of that asset under the same ref.
+ * - `duplicate`: a copy of the existing item `of`, under a ref and title the
+ *   author chooses (`create/DuplicateForm.tsx`).
  */
 export type CreateRequest =
   | { kind: "division"; parentXmlId: string | null }
   | { kind: "snippet"; resolveRef?: string }
   | { kind: "exercise"; resolveRef?: string }
-  | { kind: "asset"; resolveRef?: string; replaceRef?: string };
+  | { kind: "asset"; resolveRef?: string; replaceRef?: string }
+  | { kind: "duplicate"; of: OpenItem };
 
 /**
  * What the code editor has open: a division, a project snippet, a project
@@ -330,6 +334,13 @@ export type OpenItem = {
   kind: "division" | "snippet" | "exercise" | "asset";
   ref: string;
 };
+
+/**
+ * An editor tab: the item it names, and — once the author has stepped away
+ * from it — whether its settings drawer was open, so coming back to the tab
+ * finds the drawer as they left it.
+ */
+export type OpenTab = OpenItem & { drawerOpen?: boolean };
 
 /** The open division's `xmlId`, or `null` while a snippet or asset is open. */
 export const selectOpenDivisionId = (s: {
@@ -372,15 +383,11 @@ export interface EditorCallbacks {
   assetRemove?: (asset: Asset) => void;
   /** Remove every `<plus:image ref/>` placeholder for an unresolved ref from source. */
   assetRefRemove?: (ref: string) => void;
-  /** Duplicate a project asset under a fresh ref (host persists + pool add). */
-  assetDuplicate?: (asset: Asset) => void | Promise<void>;
   snippetInsert: (snippet: Snippet) => void;
   /** Remove a project snippet (optimistic pool drop + host persistence). */
   snippetRemove?: (snippet: Snippet) => void;
   /** Remove every `<plus:snippet ref/>` placeholder for an unresolved ref from source. */
   snippetRefRemove?: (ref: string) => void;
-  /** Duplicate a project snippet under a fresh ref (host persists + pool add). */
-  snippetDuplicate?: (snippet: Snippet) => void | Promise<void>;
   /** Remove a project exercise (optimistic pool drop + host persistence). */
   exerciseRemove?: (exercise: Exercise) => void;
   /** Remove every `<plus:exercise ref/>` placeholder for an unresolved ref from source. */
@@ -389,6 +396,11 @@ export interface EditorCallbacks {
   updateLanguage: (language: string) => void;
   feedbackSubmit?: (feedback: FeedbackSubmission) => void | Promise<void>;
   insertContentAtCursor?: (content: string) => void;
+  /**
+   * Hand over typing the code editor is still holding on its 500 ms debounce,
+   * so the pools are current before something reads a record's source.
+   */
+  flushPendingEdit?: () => void;
 }
 
 export interface EditorStoreState {
@@ -442,9 +454,10 @@ export interface EditorStoreState {
    * The editor's tabs, in strip order — see {@link openTabsAfterOpening}.
    * `openItem` is always one of them: the active tab. A tab is only a name;
    * the code editor and preview are shared by all of them and show the
-   * active one, so a tab costs nothing but its entry here.
+   * active one, so a tab costs nothing but its entry here (and the drawer
+   * state it was left with, see {@link OpenTab}).
    */
-  openTabs: OpenItem[];
+  openTabs: OpenTab[];
 
   // Computed flags (re-derived each sync)
   canConvertToPretext: boolean;
@@ -455,11 +468,8 @@ export interface EditorStoreState {
   /** True when the host passed `onFeedbackSubmit`. Controls whether feedback UI is shown. */
   hasFeedback: boolean;
 
-  /** True when the host passed `onAssetDuplicate`. Controls whether Duplicate is offered. */
-  hasAssetDuplicate: boolean;
-
-  /** True when the host passed `onSnippetDuplicate`. Controls whether Duplicate is offered. */
-  hasSnippetDuplicate: boolean;
+  /** Which kinds of record can be duplicated, by the hooks the host passed. */
+  duplicateSupport: DuplicateSupport;
 
   // ── UI state owned by the store ────────────────────────────────────────────
 
@@ -480,8 +490,9 @@ export interface EditorStoreState {
   isFullSourceOpen: boolean;
   /**
    * The settings drawer under the editor's title bar — the open item's
-   * properties and actions. Opening another item resets it to that item's
-   * default: closed for a division, open for a snippet or asset.
+   * properties and actions. Each tab remembers it (see {@link OpenTab}); an
+   * item opened without a tab of its own starts at its kind's default:
+   * closed for a division, open for anything else.
    */
   isSettingsDrawerOpen: boolean;
   /**
@@ -629,6 +640,12 @@ export interface EditorStoreState {
    * division goes through `addSection`, which drafts its defaults first).
    */
   startCreate: (request: CreateRequest) => void;
+  /**
+   * Open the form that duplicates `item`. Any typing still on the code
+   * editor's debounce is flushed first, so the form copies what the author
+   * last typed.
+   */
+  startDuplicate: (item: OpenItem) => void;
   /** Abandon the creation form; nothing was created. */
   cancelCreate: () => void;
   setEditDraft: (draft: EditDraft) => void;
@@ -659,8 +676,6 @@ export interface EditorStoreState {
   removeAsset: (asset: Asset) => void;
   /** Remove every placeholder for an unresolved `ref` from the document. */
   removeAssetRefFromDocument: (ref: string) => void;
-  /** Duplicate a project asset under a fresh ref. Resolves when the host settles. */
-  duplicateAsset: (asset: Asset) => Promise<void>;
   /**
    * Optimistically add an asset to the pool (no-op if one with the same
    * ref already exists). Used when an asset is uploaded, created, added
@@ -688,8 +703,6 @@ export interface EditorStoreState {
   removeSnippet: (snippet: Snippet) => void;
   /** Remove every placeholder for an unresolved `ref` from the document. */
   removeSnippetRefFromDocument: (ref: string) => void;
-  /** Duplicate a project snippet under a fresh ref. Resolves when the host settles. */
-  duplicateSnippet: (snippet: Snippet) => Promise<void>;
   /**
    * Optimistically add a snippet to the pool (no-op if one with the same
    * ref already exists). Used when a snippet is created, added, or inserted,
@@ -745,8 +758,7 @@ export type EditorSyncableState = Pick<
   | "canConvertToPretext"
   | "activeEditorSource"
   | "hasFeedback"
-  | "hasAssetDuplicate"
-  | "hasSnippetDuplicate"
+  | "duplicateSupport"
 >;
 
 // ── Factory ─────────────────────────────────────────────────────────────────
@@ -797,10 +809,10 @@ export const sameOpenItem = (a: OpenItem, b: OpenItem): boolean =>
  * the tab is their way back.
  */
 export const openTabsAfterOpening = (
-  tabs: OpenItem[],
+  tabs: OpenTab[],
   active: OpenItem,
   item: OpenItem,
-): OpenItem[] => {
+): OpenTab[] => {
   if (tabs.some((t) => sameOpenItem(t, item))) return tabs;
   const at = tabs.findIndex((t) => sameOpenItem(t, active));
   if (at === -1) return [...tabs, item];
@@ -812,12 +824,12 @@ export const openTabsAfterOpening = (
 
 /** `tabs` with the tab for `kind`/`oldRef` renamed to `newRef`. */
 const renameTab = (
-  tabs: OpenItem[],
+  tabs: OpenTab[],
   kind: OpenItem["kind"],
   oldRef: string,
   newRef: string,
-): OpenItem[] =>
-  tabs.map((t) => (t.kind === kind && t.ref === oldRef ? { kind, ref: newRef } : t));
+): OpenTab[] =>
+  tabs.map((t) => (t.kind === kind && t.ref === oldRef ? { ...t, ref: newRef } : t));
 
 /** The state change that abandons the creation form, if one is open. */
 const noCreation = {
@@ -826,31 +838,53 @@ const noCreation = {
 } satisfies Partial<EditorStoreState>;
 
 /**
- * Whether `item`'s settings drawer starts out open: a snippet's or asset's
- * settings are most of what there is to it, so they show unless closed; a
- * division's stay out of the way of its source unless asked for.
+ * Whether `item`'s settings drawer starts out open, before its tab remembers
+ * otherwise. A snippet's, exercise's or file image's settings are most of
+ * what there is to it, so they show unless closed. A division's, and an
+ * authored image's — PreTeXt or a generator's source, which the author is
+ * there to edit — stay out of the way unless asked for. (A newly created one
+ * is opened with its drawer showing, by whoever created it.)
  */
-const drawerOpenByDefault = (item: OpenItem) => item.kind !== "division";
+const drawerOpenByDefault = (
+  item: OpenItem,
+  projectAssets: readonly Asset[] | undefined,
+): boolean => {
+  if (item.kind === "division") return false;
+  if (item.kind !== "asset") return true;
+  const asset = projectAssets?.find((a) => a.ref === item.ref);
+  return asset ? !!asset.isFile : true;
+};
 
 /**
- * The state change that opens `item`. A different item resets the settings
- * drawer — which belongs to the item being left — to the new item's default. When the author opens an item
+ * The state change that opens `item`. The drawer belongs to the item: the tab
+ * being left records whether it was open, and the item opened gets back
+ * whatever its tab recorded — or its kind's default, for an item with no tab
+ * yet (or one whose tab another division just replaced). When the author opens an item
  * — even the current one, since clicking its row is how they get back to it —
  * the creation form is abandoned too. When the host or a peer changes what is
  * open (`byAuthor` false: the host restating the open division, the open item
  * being removed), the form is the author's and stays.
  */
 const openItemState = (
-  s: Pick<EditorStoreState, "openItem" | "openTabs" | "creating">,
+  s: Pick<
+    EditorStoreState,
+    "openItem" | "openTabs" | "creating" | "isSettingsDrawerOpen" | "projectAssets"
+  >,
   item: OpenItem,
   byAuthor = true,
 ): Partial<EditorStoreState> => {
   const leaveCreation = s.creating && byAuthor ? noCreation : {};
   if (sameOpenItem(s.openItem, item)) return leaveCreation;
+  const left = s.openTabs.map((t) =>
+    sameOpenItem(t, s.openItem) ? { ...t, drawerOpen: s.isSettingsDrawerOpen } : t,
+  );
+  const openTabs = openTabsAfterOpening(left, s.openItem, item);
+  const remembered = openTabs.find((t) => sameOpenItem(t, item))?.drawerOpen;
   return {
-    openItem: item,
-    openTabs: openTabsAfterOpening(s.openTabs, s.openItem, item),
-    isSettingsDrawerOpen: drawerOpenByDefault(item),
+    // The item itself, not its tab: `openItem` names what is open, nothing more.
+    openItem: { kind: item.kind, ref: item.ref },
+    openTabs,
+    isSettingsDrawerOpen: remembered ?? drawerOpenByDefault(item, s.projectAssets),
     ...leaveCreation,
   };
 };
@@ -864,7 +898,13 @@ const openItemState = (
 const closeTabState = (
   s: Pick<
     EditorStoreState,
-    "openItem" | "openTabs" | "creating" | "rootDivisionId" | "divisions"
+    | "openItem"
+    | "openTabs"
+    | "creating"
+    | "isSettingsDrawerOpen"
+    | "projectAssets"
+    | "rootDivisionId"
+    | "divisions"
   >,
   item: OpenItem,
   byAuthor = true,
@@ -942,8 +982,7 @@ export function createEditorStore(init: EditorStoreInit): EditorStoreHandle {
     canConvertToPretext: true,
     activeEditorSource: init.source,
     hasFeedback: false,
-    hasAssetDuplicate: false,
-    hasSnippetDuplicate: false,
+    duplicateSupport: NO_DUPLICATE_SUPPORT,
 
     // ── Initial UI state ───────────────────────────────────────────────────
     isTocCollapsed: defaultTocCollapsed(),
@@ -1129,22 +1168,25 @@ export function createEditorStore(init: EditorStoreInit): EditorStoreHandle {
       return undefined;
     },
     // A creation form takes the editor's place; the open item's drawer is
-    // back at its default when the form goes away. On a narrow screen the form
-    // is on the Editor tab, so that's where the author is taken.
+    // left as it was, for when the form goes away (Cancel from a Duplicate
+    // started in the drawer comes back to it). On a narrow screen the form is
+    // on the Editor tab, so that's where the author is taken.
     startNewDivision: (parentXmlId, editDraft) =>
-      set((s) => ({
+      set({
         editDraft,
         creating: { kind: "division", parentXmlId },
-        isSettingsDrawerOpen: drawerOpenByDefault(s.openItem),
         activeTab: "editor",
-      })),
+      }),
     startCreate: (creating) =>
-      set((s) => ({
+      set({
         creating,
         editDraft: null,
-        isSettingsDrawerOpen: drawerOpenByDefault(s.openItem),
         activeTab: "editor",
-      })),
+      }),
+    startDuplicate: (of) => {
+      bag.cbs.flushPendingEdit?.();
+      get().startCreate({ kind: "duplicate", of });
+    },
     cancelCreate: () => set(noCreation),
     setEditDraft: (editDraft) => set({ editDraft }),
 
@@ -1197,9 +1239,6 @@ export function createEditorStore(init: EditorStoreInit): EditorStoreHandle {
     insertAtCursor: (content) => bag.cbs.insertContentAtCursor?.(content),
     removeAsset: (asset) => bag.cbs.assetRemove?.(asset),
     removeAssetRefFromDocument: (ref) => bag.cbs.assetRefRemove?.(ref),
-    duplicateAsset: async (asset) => {
-      await bag.cbs.assetDuplicate?.(asset);
-    },
     addAssetToPool: (asset) =>
       set((s) => {
         const base = s.projectAssets ?? [];
@@ -1245,9 +1284,6 @@ export function createEditorStore(init: EditorStoreInit): EditorStoreHandle {
     insertSnippet: (snippet) => bag.cbs.snippetInsert(snippet),
     removeSnippet: (snippet) => bag.cbs.snippetRemove?.(snippet),
     removeSnippetRefFromDocument: (ref) => bag.cbs.snippetRefRemove?.(ref),
-    duplicateSnippet: async (snippet) => {
-      await bag.cbs.snippetDuplicate?.(snippet);
-    },
     addSnippetToPool: (snippet) =>
       set((s) => {
         const base = s.projectSnippets ?? [];

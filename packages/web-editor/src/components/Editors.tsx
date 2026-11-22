@@ -35,6 +35,8 @@ import DocinfoEditor from "./DocinfoEditor";
 import FullSourceModal from "./FullSourceModal";
 import { DialogHostContext } from "./dialogHost";
 import NewItemPane from "./create/NewItemPane";
+import type { DuplicateFields } from "./create/DuplicateForm";
+import { NO_DUPLICATE_SUPPORT, type DuplicateSupport } from "../duplicate";
 import EditorTargetBar from "./EditorTargetBar";
 import EditorTabs, { type EditorTab } from "./EditorTabs";
 import AssetPreview from "./AssetPreview";
@@ -100,6 +102,7 @@ import {
   removeExerciseRef,
   normalizeDivisionsOnLoad,
   isRootDivisionType,
+  findDivisionParent,
 } from "../sectionUtils";
 import {
   defaultChildDivisionType,
@@ -107,9 +110,7 @@ import {
   TYPE_FULL_LABELS,
   type EditDraft,
 } from "./toc/types";
-import { buildProjectAssetView, makeUniqueAssetRef } from "../assetView";
 import { assetWrapperLines } from "../assetTransforms";
-import { buildProjectSnippetView, makeUniqueSnippetRef } from "../snippetView";
 import ExerciseDesigner, { type ExerciseSourceValue } from "../exerciseDesigner/ExerciseDesigner";
 import DoenetEditorPane from "./DoenetEditorPane";
 import { effectiveDoenetmlVersion } from "../doenet";
@@ -120,6 +121,7 @@ import {
   createEditorStore,
   defaultTocCollapsed,
   isNarrowViewport,
+  sameOpenItem,
   type CreateRequest,
   type DivisionChanges,
   type EditorCallbacks,
@@ -513,11 +515,6 @@ export interface editorProps {
    * so all three must be persisted.
    */
   onSnippetUpdate?: (snippet: Snippet) => Promise<void> | void;
-  /**
-   * Called when the user duplicates a snippet from its settings drawer.
-   * When omitted, the Duplicate control is hidden.
-   */
-  onSnippetDuplicate?: (snippet: Snippet) => void | Promise<void>;
   /** If true, the explorer's Snippets view and the "New Snippet…" menu item are hidden. */
   hideSnippets?: boolean;
 
@@ -943,8 +940,8 @@ const EditorsInner = (props: EditorsInnerProps) => {
         null,
         projectExercises,
       );
-      if (target && (target.kind === item.kind || item === openItem)) {
-        tabs.push({ item, target });
+      if (target && (target.kind === item.kind || sameOpenItem(item, openItem))) {
+        tabs.push({ item: { kind: item.kind, ref: item.ref }, target });
       }
     }
     return tabs;
@@ -1573,63 +1570,9 @@ const EditorsInner = (props: EditorsInnerProps) => {
     props.onAssetRemove?.(asset);
   };
 
-  // Duplicate and Replace don't need bespoke host hooks — they compose the
-  // asset operations the host already provides. Duplicate re-fetches the
-  // original's bytes and re-uploads them as an independent asset; Replace
-  // uploads the new image, hands it the old ref, and drops the old asset.
-  const canDuplicateAsset = !!(
-    props.onAssetUpload &&
-    props.onAssetFetchUrl &&
-    props.onAssetUpdate
-  );
   // Replace swaps in a chosen/created asset and drops the old one, so it needs
   // a removal hook plus an upload source for the replacement.
   const canReplaceAsset = !!(props.onAssetRemove && props.onAssetUpload);
-
-  /**
-   * Duplicate an asset under a fresh, non-colliding ref by re-fetching its bytes
-   * (`onAssetFetchUrl`) and re-uploading them (`onAssetUpload`) as a new asset,
-   * then giving that asset the new ref and the original's source
-   * (`onAssetUpdate`). The copy is "unused" (no placeholder yet) until its embed
-   * code is pasted; we open it in the editor so the user can tweak it.
-   */
-  const handleAssetDuplicate = async (asset: Asset) => {
-    if (
-      !props.onAssetUpload ||
-      !props.onAssetFetchUrl ||
-      !asset.ref ||
-      !asset.url
-    )
-      return;
-    const taken = new Set(
-      buildProjectAssetView(divisions, projectAssets).map((r) => r.ref),
-    );
-    const newRef = makeUniqueAssetRef(asset.ref, taken);
-    const file = await props.onAssetFetchUrl(asset.url);
-    // `file.name` comes from the source URL (often an opaque, server-generated
-    // path segment, e.g. a storage key) rather than anything human-readable.
-    // Hosts commonly derive the asset's persisted title/ref from the uploaded
-    // file's name, so rename it to `newRef` before handing it to
-    // `onAssetUpload` — otherwise that opaque name leaks through as the
-    // duplicate's default title/ref instead of the friendly "-copy" we just
-    // computed.
-    const extension = /\.[^./\\]+$/.exec(file.name)?.[0] ?? "";
-    const renamedFile = new File([file], `${newRef}${extension}`, {
-      type: file.type,
-    });
-    const uploaded = await props.onAssetUpload(renamedFile);
-    const copy: Asset = {
-      ...uploaded,
-      ref: newRef,
-      title: `${asset.title} (copy)`,
-      source: asset.source,
-      shortDescription: asset.shortDescription,
-    };
-    await props.onAssetUpdate?.(copy);
-    addAssetToPool(copy);
-    bridge?.localAssetAdd(copy);
-    openAsset(newRef);
-  };
 
   /**
    * Replace an asset with the user's freshly created `newAsset` (from the
@@ -1709,33 +1652,6 @@ const EditorsInner = (props: EditorsInnerProps) => {
     removeSnippetFromPool(snippet);
     bridge?.localSnippetRemove(snippet);
     props.onSnippetRemove?.(snippet);
-  };
-
-  const canDuplicateSnippet = !!(props.onCreateSnippet && props.onSnippetUpdate);
-
-  /**
-   * Duplicate a snippet under a fresh, non-colliding ref: create a bare record
-   * under the new ref, then give it the original's title/source/format. Unlike an
-   * asset there are no bytes to re-fetch, so this is a plain create + update.
-   */
-  const handleSnippetDuplicate = async (snippet: Snippet) => {
-    if (!props.onCreateSnippet || !props.onSnippetUpdate || !snippet.ref) return;
-    const taken = new Set(
-      buildProjectSnippetView(divisions, projectSnippets).map((r) => r.ref),
-    );
-    const newRef = makeUniqueSnippetRef(snippet.ref, taken);
-    const created = await props.onCreateSnippet(newRef, snippet.sourceFormat, snippet.title ?? "");
-    const copy: Snippet = {
-      ...created,
-      ref: newRef,
-      title: snippet.title,
-      source: snippet.source,
-      sourceFormat: snippet.sourceFormat,
-    };
-    await props.onSnippetUpdate(copy);
-    addSnippetToPool(copy);
-    bridge?.localSnippetAdd(copy);
-    openSnippet(newRef);
   };
 
   /**
@@ -1856,6 +1772,139 @@ const EditorsInner = (props: EditorsInnerProps) => {
       renameAssetRefEverywhere(request.resolveRef, asset.ref);
     }
     openAsset(asset.ref);
+    // A new asset shows its settings — its embed code is what the author
+    // needs next — even an authored one, whose drawer is otherwise shut.
+    setSettingsDrawerOpen(true);
+  };
+
+  // ── Duplicate ────────────────────────────────────────────────────────────
+  // A copy is a new record made with the kind's own creation hook, then given
+  // the original's source (and whatever else the hook can't take) — so a host
+  // needs nothing duplicate-specific, only the hooks below for each kind.
+  const duplicateSupport: DuplicateSupport = props.readOnly
+    ? NO_DUPLICATE_SUPPORT
+    : {
+      division: true,
+      snippet: !!(props.onCreateSnippet && props.onSnippetUpdate),
+      exercise: !!props.onCreateExercise,
+      fileAsset: !!(props.onAssetUpload && props.onAssetFetchUrl && props.onAssetUpdate),
+      authoredAsset: !!(props.onCreateAuthored && props.onAssetUpdate),
+      generatedAsset: !!(props.onCreateGenerated && props.onAssetUpdate),
+    };
+
+  /**
+   * Make the copy the "Duplicate" form describes: a new record of the
+   * original's kind, type and format under the author's ref and title, with
+   * `source` (the original's, its inner ids made unique — see `copySource`).
+   * A division is placed right after the original; anything else is left
+   * unused, like any new snippet or asset, for its embed code to be pasted.
+   *
+   * The copy joins the pool and the doc even if the author has left the form
+   * meanwhile — the host has made it either way — but is opened only if they
+   * are still waiting on it.
+   */
+  const handleDuplicate = async (
+    request: CreateRequest & { kind: "duplicate" },
+    { ref, title, source }: DuplicateFields,
+  ): Promise<void> => {
+    const { of } = request;
+    const state = storeApi.getState();
+    const missing = () => new Error(`"${of.ref}" no longer exists, so there is nothing to copy.`);
+    const unsupported = () => new Error("This project can't make copies of that.");
+
+    if (of.kind === "division") {
+      const all = settledDivisions();
+      const original = all.find((d) => d.xmlId === of.ref);
+      if (!original) throw missing();
+      const parent = findDivisionParent(all, original.xmlId);
+      const copy: Division = {
+        id: ref,
+        xmlId: ref,
+        title,
+        type: original.type,
+        sourceFormat: original.sourceFormat,
+        source,
+        ...(original.attrs && { attrs: { ...original.attrs } }),
+      };
+      // As with a new division: the record and the placeholder that places it
+      // reach peers together.
+      collabTransact(() => {
+        applyDivisionAdd(copy);
+        if (parent) {
+          emitContentChange(
+            parent.xmlId,
+            insertDivisionRef(parent.source, ref, copy.type, original.xmlId, parent.sourceFormat),
+            parent.sourceFormat,
+          );
+        }
+      });
+      openDivision(ref);
+      return;
+    }
+
+    if (of.kind === "snippet") {
+      const original = state.projectSnippets?.find((s) => s.ref === of.ref);
+      if (!original) throw missing();
+      if (!props.onCreateSnippet || !props.onSnippetUpdate) throw unsupported();
+      const created = await props.onCreateSnippet(ref, original.sourceFormat, title);
+      const copy: Snippet = { ...created, ref, title, source, sourceFormat: original.sourceFormat };
+      await props.onSnippetUpdate(copy);
+      handleSnippetAdded(copy);
+      if (isCurrentRequest(request)) openSnippet(ref);
+      return;
+    }
+
+    if (of.kind === "exercise") {
+      const original = state.projectExercises?.find((e) => e.ref === of.ref);
+      if (!original) throw missing();
+      if (!props.onCreateExercise) throw unsupported();
+      // The exercise hook takes a whole record, so one request makes the copy.
+      const created = await props.onCreateExercise({
+        ref,
+        title,
+        source,
+        ...(original.sourceFormat && { sourceFormat: original.sourceFormat }),
+        attrs: { ...(original.attrs ?? {}) },
+      });
+      handleExerciseAdded(created);
+      if (isCurrentRequest(request)) openExercise(created.ref);
+      return;
+    }
+
+    const original = state.projectAssets?.find((a) => a.ref === of.ref);
+    if (!original) throw missing();
+    if (!props.onAssetUpdate) throw unsupported();
+    let created: Asset;
+    if (generatorFor(original.sourceFormat)) {
+      // No picture is copied: the copy's is drawn from its own source, the
+      // same way any new diagram's is.
+      if (!props.onCreateGenerated) throw unsupported();
+      created = await props.onCreateGenerated(original.sourceFormat as GeneratorId, title, ref);
+    } else if (original.isFile) {
+      if (!props.onAssetUpload || !props.onAssetFetchUrl || !original.url) throw unsupported();
+      const file = await props.onAssetFetchUrl(original.url);
+      // The fetched name comes from the URL — often an opaque storage key — so
+      // the upload is named after the copy, keeping the file's extension.
+      const extension = /\.[^./\\]+$/.exec(file.name)?.[0] ?? "";
+      const renamed = new File([file], `${ref}${extension}`, { type: file.type });
+      created = await props.onAssetUpload(renamed, title, ref);
+    } else {
+      if (!props.onCreateAuthored) throw unsupported();
+      created = await props.onCreateAuthored(title, ref);
+    }
+    const copy: Asset = {
+      ...created,
+      ref,
+      title,
+      source,
+      shortDescription: original.shortDescription,
+    };
+    await props.onAssetUpdate(copy);
+    handleAssetAdded(copy);
+    if (isCurrentRequest(request)) {
+      openAsset(ref);
+      setSettingsDrawerOpen(true); // as for a new asset, see handleAssetCreated
+    }
   };
 
   // ── Snippet / asset buffers ──────────────────────────────────────────────
@@ -2004,15 +2053,14 @@ const EditorsInner = (props: EditorsInnerProps) => {
       assetInsert: handleAssetAdded,
       assetRemove: handleAssetRemove,
       assetRefRemove: removeAssetRefEverywhere,
-      assetDuplicate: canDuplicateAsset ? handleAssetDuplicate : undefined,
       snippetInsert: handleSnippetAdded,
       snippetRemove: handleSnippetRemove,
       snippetRefRemove: removeSnippetRefEverywhere,
-      snippetDuplicate: canDuplicateSnippet ? handleSnippetDuplicate : undefined,
       exerciseRemove: handleExerciseRemove,
       exerciseRefRemove: removeExerciseRefEverywhere,
       insertContentAtCursor: (content) =>
         codeEditorRef.current?.insertAtCursor(content),
+      flushPendingEdit: () => codeEditorRef.current?.flushPendingChange(),
       updateTitle: (value) => {
         setTitle(value);
         bridge?.localTitleChange(value);
@@ -2043,8 +2091,7 @@ const EditorsInner = (props: EditorsInnerProps) => {
       canConvertToPretext: divisionConvertedPretext !== undefined,
       activeEditorSource: editorContent,
       hasFeedback: props.onFeedbackSubmit !== undefined,
-      hasAssetDuplicate: canDuplicateAsset,
-      hasSnippetDuplicate: canDuplicateSnippet,
+      duplicateSupport,
     });
   });
 
@@ -2846,6 +2893,7 @@ const EditorsInner = (props: EditorsInnerProps) => {
           onSnippetCreated={handleSnippetCreated}
           onExerciseCreated={handleExerciseCreated}
           onAssetCreated={(asset, request) => void handleAssetCreated(asset, request)}
+          onDuplicate={handleDuplicate}
         />
       )}
       <div
