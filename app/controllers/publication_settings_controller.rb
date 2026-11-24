@@ -148,7 +148,9 @@ class PublicationSettingsController < ApplicationController
       return @submitted_document if defined?(@submitted_document)
 
       @submitted_document = submitted_xml &&
-        Publication::Document.new(submitted_xml, subscriber: Publication::Settings.new(@owner).subscriber?)
+        Publication::Document.new(submitted_xml, subscriber: Publication::Settings.new(@owner).subscriber?,
+                                                 theme_above: @owner.publication_theme_above,
+                                                 asset_names: @owner.publication_asset_names)
     end
 
     # What did not save, and only that -- everything else already has by the time this is

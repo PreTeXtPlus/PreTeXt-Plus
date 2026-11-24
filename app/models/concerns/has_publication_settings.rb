@@ -35,7 +35,34 @@ module HasPublicationSettings
 
     @publication_documents = {} unless @publication_documents_for == publication_xml
     @publication_documents_for = publication_xml
-    @publication_documents[subscriber] ||= Publication::Document.new(publication_xml, subscriber:)
+    @publication_documents[subscriber] ||=
+      Publication::Document.new(publication_xml, subscriber:, theme_above: publication_theme_above,
+                                                 asset_names: publication_asset_names)
+  end
+
+  # The filenames of the project's assets, which this level's file references (a logo, a
+  # cover) are checked against -- or nil for an account, whose settings reach every one of
+  # its projects and so cannot be checked against any one of them.
+  def publication_asset_names
+    project = case self
+    when Project then self
+    when Target then self.project
+    end
+    return nil if project.nil?
+
+    project.assets.with_attached_files.filter_map(&:external_filename).to_set
+  end
+
+  # The HTML theme the nearest level above this one chooses, and that level's name -- what
+  # this level builds with when it chooses none itself, and so the theme its own html/css
+  # options are checked against (Publication::Document). nil when no level above chooses.
+  def publication_theme_above
+    levels = Publication::Settings.new(self).chain[0...-1]
+    levels.reverse_each do |level|
+      theme = level.publication_document&.theme_choice
+      return [ theme, Publication::Settings::LEVELS[level.class.name] ] if theme
+    end
+    nil
   end
 
   # What this level sets, as the modal sees it: catalog keys => values, read from the XML.
