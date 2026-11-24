@@ -35,7 +35,29 @@ module Publication
         attributes(path).dig(name, "default")
       end
 
+      # The HTML themes PreTeXt knows, as named in html/css/@theme.
+      def theme?(theme)
+        themes.key?(theme)
+      end
+
+      # Whether a theme reads this html/css option. PreTeXt hands a custom theme every
+      # attribute on html/css, whatever its own list says (get-theme-option in
+      # publisher-variables.xsl).
+      def theme_reads?(theme, name)
+        theme == "custom" || themes.fetch(theme, []).include?(name)
+      end
+
+      # The themes that read this html/css option -- empty for one that is not a theme
+      # option at all, like theme itself.
+      def themes_reading(name)
+        themes.select { |_, options| options.include?(name) }.keys
+      end
+
       private
+
+        def themes
+          @themes ||= YAML.load_file(SOURCE).fetch("themes").freeze
+        end
 
         def attributes(path)
           paths.fetch(path.join("/"), {})

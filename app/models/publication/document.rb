@@ -60,7 +60,8 @@ module Publication
 
     # Attributes PreTeXt resolves as a file in the external directory. A path here would
     # let a build read whatever is beside the project on the build server into its output,
-    # so the value has to be a bare filename, as the modal's own pickers write.
+    # so what is read is a bare filename, as the modal's own pickers write -- see
+    # #read_filename for what happens to one that is not.
     FILE_ATTRIBUTES = {
       %w[ latex cover ] => %w[ front back ],
       %w[ epub cover ] => %w[ front ],
@@ -68,15 +69,45 @@ module Publication
       %w[ common qrcode ] => %w[ image ]
     }.freeze
 
+    CSS = %w[ html css ].freeze
+
+    # What PreTeXt builds a site with when no level chooses a theme ($html-theme-name).
+    DEFAULT_THEME = "default-modern"
+
+    # What #theme_choice answers for XML that picks its theme the old way, with css/@style
+    # or css/@shell: PreTeXt maps those onto a theme by substring, so which one it lands on
+    # is not worth second-guessing here.
+    LEGACY_THEME = :legacy
+
     attr_reader :errors, :warnings
 
-    def initialize(text, subscriber: true)
+    # `theme_above` is the HTML theme the levels above this one choose, as
+    # [theme, level name] -- see HasPublicationSettings#publication_theme_above -- or nil
+    # when none does. It decides which theme's options this level's html/css is checked
+    # against when it does not choose a theme itself.
+    #
+    # `asset_names` is the filenames of the project's assets
+    # (Content::AttachedFiles#external_filename), which a file reference is checked
+    # against; nil where there is no one project to check against, as on an account.
+    def initialize(text, subscriber: true, theme_above: nil, asset_names: nil)
       @text = text.to_s
       @subscriber = subscriber
+      @theme_above = theme_above
+      @asset_names = asset_names
       @errors = []
       @warnings = []
       @paths = {}
+      @lines = {}
       parse
+    end
+
+    # The HTML theme this XML itself chooses: html/css/@theme, LEGACY_THEME, or nil when
+    # it says nothing about the theme.
+    def theme_choice
+      attributes = paths.dig(CSS, :attributes) || {}
+      if attributes["theme"].present? then attributes["theme"]
+      elsif attributes["style"].present? || attributes["shell"].present? then LEGACY_THEME
+      end
     end
 
     def valid?
@@ -235,6 +266,7 @@ module Publication
         end
 
         walk(root, [])
+        note_options_the_theme_ignores
       end
 
       def walk(element, path)
@@ -247,6 +279,7 @@ module Publication
           return if managed_element?(element, path)
 
           node = (@paths[path] ||= { attributes: {}, text: nil })
+          @lines[path] ||= element.line
           note_unknown_element(element, path)
           read_attributes(element, path, node)
 
@@ -301,15 +334,54 @@ module Publication
             next
           end
 
-          if FILE_ATTRIBUTES.fetch(path, []).include?(name) && !value.match?(Catalog::EXTERNAL_FILENAME)
-            error("#{name} on <#{element.name}> must be the bare filename of a file in this " \
-                  "project's assets, like cover.pdf.", element.line)
-            next
+          if FILE_ATTRIBUTES.fetch(path, []).include?(name)
+            value = read_filename(element, name, value)
+            next if value.nil?
           end
 
           note_unknown_attribute(element, path, name, value)
           node[:attributes][name] = value
         end
+      end
+
+      # The filename a file reference is read as, or nil when it has none.
+      #
+      # A publication file from a CLI project names its files by a path into the external
+      # directory -- source="images/logo.png", as the PreTeXt Guide and its samples do. A
+      # project here keeps all its files in one folder, so the folders are dropped and the
+      # filename kept, with a warning, rather than refusing a pasted file over them. The
+      # stored XML stays as typed; it is what a build reads that changes.
+      #
+      # The filename is then checked against the project's assets: a warning, never a
+      # refusal, since the asset may simply not be uploaded yet, and one deleted later must
+      # not make a level unsaveable.
+      def read_filename(element, name, value)
+        filename = value.split(%r{[/\\]}).last.to_s
+        unless filename.match?(Catalog::EXTERNAL_FILENAME)
+          return error("#{name} on <#{element.name}> must name a file in this project's " \
+                       "assets, like cover.pdf.", element.line)
+        end
+
+        if filename != value
+          warning("#{name} on <#{element.name}> is read as #{filename}: a project's files " \
+                  "are all kept in one folder, so the folder in “#{value}” is dropped.", element.line)
+        end
+        note_missing_asset(element, name, filename)
+        filename
+      end
+
+      def note_missing_asset(element, name, filename)
+        return if @asset_names.nil? || @asset_names.include?(filename)
+
+        ref = File.basename(filename, ".*")
+        other = @asset_names.find { |asset| File.basename(asset, ".*") == ref }
+        hint = if other
+          " The asset with Reference ID #{ref} is #{other}; use that name instead."
+        else
+          " Upload one with the Reference ID #{ref}, or choose a different file."
+        end
+        warning("#{name} on <#{element.name}> names #{filename}, but this project has no " \
+                "asset by that name yet, so the build will not find it.#{hint}", element.line)
       end
 
       # Whether this whole element is one PreTeXt.Plus manages, in which case it is warned
@@ -364,6 +436,37 @@ module Publication
 
         warning("#{name} on <#{element.name}> should be one of #{options.join(', ')}; " \
                 "PreTeXt will ignore “#{value}”.", element.line)
+      end
+
+      # Every theme option is one PreTeXt reads, so none is warned about as a typo -- but a
+      # theme reads only its own, and ignores the rest without a word: color-main does
+      # nothing under default-modern, primary-color nothing under denver. That is the
+      # mistake of an author who switched themes and kept their colors, or followed the
+      # Guide's entry for a different theme.
+      #
+      # Checked against the theme this level builds with: its own, else the nearest level
+      # above that chooses one, else PreTeXt's default. Not checked when that is a theme
+      # we have no list for, or one picked the legacy way.
+      def note_options_the_theme_ignores
+        attributes = @paths.dig(CSS, :attributes)
+        return if attributes.blank?
+
+        theme, which = if theme_choice
+          [ theme_choice, "the #{theme_choice} theme" ]
+        elsif @theme_above
+          [ @theme_above.first, "the #{@theme_above.first} theme (from #{@theme_above.last})" ]
+        else
+          [ DEFAULT_THEME, "the #{DEFAULT_THEME} theme, which is used when no theme is chosen," ]
+        end
+        return unless Schema.theme?(theme)
+
+        attributes.each_key do |name|
+          readers = Schema.themes_reading(name)
+          next if readers.empty? || Schema.theme_reads?(theme, name)
+
+          warning("#{name} on <css> is read only by the #{readers.to_sentence} " \
+                  "#{readers.one? ? 'theme' : 'themes'}, so #{which} ignores it.", @lines[CSS])
+        end
       end
 
       def error(message, line = nil)

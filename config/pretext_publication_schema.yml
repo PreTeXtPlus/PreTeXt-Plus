@@ -3,9 +3,10 @@
 # Every element and attribute PreTeXt's XSL reads from a publication file, from the
 # <pi:publisher> table in publisher-variables.xsl and from literal $publication/...
 # paths across the stylesheets in @pretextbook/pretext-html. `options`, where present,
-# are the values PreTeXt accepts; anything else falls back to `default`. Used only to
-# warn about hand-written XML in the build settings -- see Publication::Schema.
-# Refreshed 2026-11-21.
+# are the values PreTeXt accepts; anything else falls back to `default`. `themes` is
+# the html/css attributes each HTML theme reads, from html-theme-option-list. Used
+# only to warn about hand-written XML in the build settings -- see Publication::Schema.
+# Refreshed 2026-11-24.
 ---
 paths:
   beamer:
@@ -233,10 +234,19 @@ paths:
       - cross-page
   html/css:
     banner: {}
+    color-do: {}
+    color-fact: {}
+    color-main: {}
+    color-meta: {}
     colors: {}
+    entry-point: {}
     knowls: {}
     navbar: {}
     palette: {}
+    primary-color: {}
+    primary-color-dark: {}
+    provide-dark-mode: {}
+    secondary-color: {}
     shell: {}
     style: {}
     theme: {}
@@ -687,3 +697,41 @@ paths:
     user:
       default: anonymous
     userpassword: {}
+themes:
+  default-modern:
+  - palette
+  - primary-color
+  - primary-color-dark
+  - provide-dark-mode
+  - secondary-color
+  denver:
+  - color-do
+  - color-fact
+  - color-main
+  - color-meta
+  - palette
+  - primary-color-dark
+  - provide-dark-mode
+  tacoma:
+  - primary-color
+  - primary-color-dark
+  - provide-dark-mode
+  salem:
+  - color-do
+  - color-fact
+  - color-main
+  - color-meta
+  - palette
+  - primary-color-dark
+  - provide-dark-mode
+  greeley:
+  - primary-color
+  - primary-color-dark
+  - provide-dark-mode
+  boulder:
+  - primary-color
+  - primary-color-dark
+  - provide-dark-mode
+  custom:
+  - entry-point
+  - provide-dark-mode

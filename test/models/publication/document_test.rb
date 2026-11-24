@@ -77,11 +77,61 @@ class Publication::DocumentTest < ActiveSupport::TestCase
 
   # PreTeXt resolves these against the external directory, so a path would let a build
   # read whatever is beside the project into its output.
-  test "a file reference must be a bare filename" do
-    [ "../secret.pdf", "/etc/passwd", "sub/cover.pdf" ].each do |value|
-      assert_not document(%(<publication><latex><cover front="#{value}"/></latex></publication>)).valid?, value
+  #
+  # A CLI project's publication file names them by a path into its external directory, as
+  # the Guide's samples do, so the folders are dropped rather than the file refused.
+  test "a file reference with folders is read as its bare filename, with a warning" do
+    { "images/cover.pdf" => "cover.pdf", "../secret.pdf" => "secret.pdf",
+      "/srv/a/b/cover.pdf" => "cover.pdf", 'images\\cover.pdf' => "cover.pdf" }.each do |value, filename|
+      result = document(%(<publication><latex><cover front="#{value}"/></latex></publication>))
+
+      assert result.valid?, value
+      assert_equal filename, result.value_at(%w[ latex cover ], "front")
+      assert_match(/front on <cover> is read as #{Regexp.escape(filename)}/, messages(result.warnings))
     end
-    assert document(%(<publication><latex><cover front="cover.pdf"/></latex></publication>)).valid?
+
+    assert_empty document(%(<publication><latex><cover front="cover.pdf"/></latex></publication>)).warnings
+  end
+
+  test "a file reference with no usable filename is refused" do
+    [ "/etc/passwd", "images/", "my cover.pdf", "..", "" ].each do |value|
+      result = document(%(<publication><latex><cover front="#{value}"/></latex></publication>))
+
+      assert_not result.valid?, value
+      assert_match(/must name a file in this project's assets/, messages(result.errors))
+    end
+  end
+
+  test "a file reference is checked against the project's assets" do
+    xml = ->(source) { %(<publication><html><brandlogo source="#{source}"/></html></publication>) }
+    assets = Set["diagram.png", "cover.pdf"]
+
+    assert_empty Publication::Document.new(xml["diagram.png"], asset_names: assets).warnings
+
+    missing = Publication::Document.new(xml["logo.png"], asset_names: assets)
+    assert missing.valid?
+    assert_match(/names logo.png, but this project has no asset by that name yet.*Upload one with the Reference ID logo/,
+                 messages(missing.warnings))
+
+    # The asset is there, under the extension its content type gave it.
+    other = Publication::Document.new(xml["diagram.jpg"], asset_names: assets)
+    assert_match(/The asset with Reference ID diagram is diagram.png; use that name instead/, messages(other.warnings))
+
+    # No project to check against.
+    assert_empty Publication::Document.new(xml["logo.png"], asset_names: nil).warnings
+  end
+
+  test "a pasted CLI logo path finds the project's asset, and an account's is not checked" do
+    project = projects(:one)
+    project.update!(publication_xml: %(<publication><html><brandlogo source="images/diagram.png"/></html></publication>))
+
+    document = project.reload.publication_document
+    assert_equal "diagram.png", document.value_at(%w[ html brandlogo ], "source")
+    assert_equal 1, document.warnings.size, messages(document.warnings)
+    assert_match(/read as diagram.png/, messages(document.warnings))
+
+    project.user.update!(publication_xml: %(<publication><html><brandlogo source="logo.png"/></html></publication>))
+    assert_empty project.user.reload.publication_document.warnings
   end
 
   test "an overlay over the size limit is refused" do
@@ -150,6 +200,78 @@ class Publication::DocumentTest < ActiveSupport::TestCase
   # scan cannot see -- the catalog's own paths are merged in so it is not a false alarm.
   test "an attribute the modal itself writes is never warned about" do
     assert_empty document(%(<publication><html><css theme="salem"/></html></publication>)).warnings
+  end
+
+  # Theme options are read by name through get-theme-option, and which ones apply depends
+  # on the theme: default-modern takes primary-color, salem and denver take color-main and
+  # friends. All of them are PreTeXt's, so none is a typo.
+  test "the color options of every HTML theme are not warned about" do
+    [
+      %(<css theme="default-modern" palette="blue-green" primary-color="#123456"
+             secondary-color="rgb(1,2,3)" primary-color-dark="hsl(0,50%,50%)"/>),
+      %(<css theme="denver" palette="ice-fire" color-main="#a00" color-do="#0a0"
+             color-fact="#00a" color-meta="#555" primary-color-dark="#eee"/>),
+      %(<css theme="tacoma" primary-color="teal" provide-dark-mode="no"/>),
+      %(<css theme="custom" entry-point="my-theme.scss"/>)
+    ].each do |css|
+      result = document("<publication><html>#{css}</html></publication>")
+      assert_empty result.warnings, messages(result.warnings)
+    end
+  end
+
+  test "a color option the chosen theme does not read is warned about and kept" do
+    result = document(%(<publication><html><css theme="denver" primary-color="#123" color-main="#456"/></html></publication>))
+
+    assert result.valid?
+    assert_equal 1, result.warnings.size, messages(result.warnings)
+    assert_match(/primary-color on <css> is read only by the default-modern, tacoma, greeley, and boulder themes, so the denver theme ignores it/,
+                 messages(result.warnings))
+    assert_equal "#123", result.value_at(%w[ html css ], "primary-color")
+  end
+
+  test "with no theme chosen anywhere, options are checked against default-modern" do
+    result = document(%(<publication><html><css color-main="#456" palette="blues"/></html></publication>))
+
+    assert_equal 1, result.warnings.size, messages(result.warnings)
+    assert_match(/read only by the denver and salem themes, so the default-modern theme, which is used when no theme is chosen, ignores it/,
+                 messages(result.warnings))
+  end
+
+  test "with no theme chosen here, options are checked against the theme from the level above" do
+    xml = %(<publication><html><css color-main="#456" primary-color="#123"/></html></publication>)
+    result = Publication::Document.new(xml, theme_above: [ "salem", "your account" ])
+
+    assert_equal 1, result.warnings.size, messages(result.warnings)
+    assert_match(/primary-color .* so the salem theme \(from your account\) ignores it/, messages(result.warnings))
+
+    # This level's own choice wins over the one above.
+    own = %(<publication><html><css theme="tacoma" primary-color="#123"/></html></publication>)
+    assert_empty Publication::Document.new(own, theme_above: [ "salem", "your account" ]).warnings
+  end
+
+  test "themes whose options cannot be known are not checked" do
+    [
+      %(<css theme="custom" entry-point="mine.scss" color-main="#456" primary-color="#123"/>),
+      %(<css style="wide" primary-color="#123"/>),
+      %(<css theme="somebody-elses" primary-color="#123"/>)
+    ].each do |css|
+      result = document("<publication><html>#{css}</html></publication>")
+      assert_empty result.warnings, messages(result.warnings)
+    end
+
+    legacy_above = [ Publication::Document::LEGACY_THEME, "your account" ]
+    xml = %(<publication><html><css primary-color="#123"/></html></publication>)
+    assert_empty Publication::Document.new(xml, theme_above: legacy_above).warnings
+  end
+
+  test "a level is checked against the theme an account chooses" do
+    project = projects(:one)
+    project.user.update!(publication_xml: %(<publication><html><css theme="denver"/></html></publication>))
+    project.update!(publication_xml: %(<publication><html><css color-main="#456" primary-color="#123"/></html></publication>))
+
+    warnings = messages(project.reload.publication_document.warnings)
+    assert_match(/primary-color .* so the denver theme \(from your account\) ignores it/, warnings)
+    assert_no_match(/color-main/, warnings)
   end
 
   test "a repeated element is merged, with a warning" do
