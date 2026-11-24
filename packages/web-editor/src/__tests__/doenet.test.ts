@@ -28,6 +28,7 @@ import {
 import {
   DEFAULT_DOENETML_VERSION,
   DOENET_STARTER,
+  DOENET_STATIC_FALLBACK,
   docinfoDoenetmlVersion,
   effectiveDoenetmlVersion,
   doenetmlCdata,
@@ -86,19 +87,38 @@ const assemble = (source: string, docinfo = "") =>
   assembleFullProjectSource([root(source)], "root", docinfo, [], undefined, [], [doenet, designer]);
 
 describe("wrapExerciseSource for a Doenet activity", () => {
-  it("wraps the DoenetML, verbatim in CDATA, in an <interactive> inside an <exercise>", () => {
+  it("makes an exercise dual: the activity in <dynamic>, a static version in <static>", () => {
     expect(wrapExerciseSource(doenet)).toBe(
       '<exercise xml:id="drag" label="drag">\n<title>Drag <m>P</m></title>\n' +
-        '<interactive xml:id="drag-doenet" label="drag-doenet" platform="doenetml" width="100%" aspect="4:3">\n' +
+        "<dynamic>\n<statement>\n" +
+        '<interactive xml:id="drag-doenet" label="drag-doenet" platform="doenetml" resize-behavior="responsive" width="100%">\n' +
         '<slate surface="doenetml"><![CDATA[<p>What is <m>2 &amp; 2</m>? <answer name="a">4</answer></p>]]></slate>\n' +
-        "</interactive>\n</exercise>",
+        "</interactive>\n</statement>\n</dynamic>\n" +
+        `<static>\n${DOENET_STATIC_FALLBACK}\n</static>\n</exercise>`,
     );
+  });
+
+  it("drops a stored aspect: the frame's height follows the activity", () => {
+    for (const tag of EXERCISE_PLACEMENT_TAGS) {
+      const xml = wrapExerciseSource(doenet, tag);
+      expect(xml).not.toContain("aspect=");
+      expect(xml).toContain('resize-behavior="responsive"');
+    }
+  });
+
+  it("makes every wrapper dual, the project-likes as well as an exercise", () => {
+    for (const tag of EXERCISE_WRAPPER_TAGS) {
+      const xml = wrapExerciseSource(doenet, tag);
+      expect(xml).toMatch(new RegExp(`^<${tag} xml:id="drag" label="drag">\\n<title>Drag <m>P</m></title>\\n<dynamic>\\n<statement>\\n<interactive `));
+      expect(xml).toMatch(new RegExp(`</interactive>\\n</statement>\\n</dynamic>\\n<static>\\n[\\s\\S]*\\n</static>\\n</${tag}>$`));
+      expect(xml).toContain(DOENET_STATIC_FALLBACK);
+    }
   });
 
   it("wraps in the project-like element the tag names", () => {
     const xml = wrapExerciseSource(doenet, "activity");
     expect(xml).toMatch(/^<activity xml:id="drag" label="drag">\n<title>/);
-    expect(xml).toMatch(/<\/interactive>\n<\/activity>$/);
+    expect(xml).toMatch(/<\/static>\n<\/activity>$/);
   });
 
   it("places the bare interactive under the record's own ref", () => {
@@ -150,7 +170,7 @@ describe("placement tags", () => {
 
   it("passes placement attributes to the element and qualifies an instance", () => {
     const doc = assemble('<plus:interactive ref="drag" width="50%" instance="two"/>');
-    expect(doc).toContain('<interactive xml:id="drag-two" label="drag-two" platform="doenetml" width="50%"');
+    expect(doc).toContain('<interactive xml:id="drag-two" label="drag-two" platform="doenetml" resize-behavior="responsive" width="50%"');
     // The DoenetML inside the slate is text: nothing in it is qualified.
     expect(doc).toContain('<![CDATA[<p>What is <m>2 &amp; 2</m>? <answer name="a">4</answer></p>]]>');
   });
@@ -163,14 +183,14 @@ describe("placement tags", () => {
       '<plus:exercise ref="quiz"/><plus:image ref="nope"/>';
     const tricky: Exercise = { ...doenet, ref: "tricky", source };
     const doc = assembleFullProjectSource(
-      [root('<plus:project ref="tricky"/><plus:interactive ref="tricky" instance="two" width="50%"/>')],
+      [root('<plus:exercise ref="tricky"/><plus:interactive ref="tricky" instance="two" width="50%"/>')],
       "root", "", [], undefined, [], [tricky, designer],
     );
     const slates = [...doc.matchAll(/<slate surface="doenetml">([\s\S]*?)<\/slate>/g)].map((m) =>
       [...m[1].matchAll(/<!\[CDATA\[([\s\S]*?)\]\]>/g)].map((c) => c[1]).join(""),
     );
     expect(slates).toEqual([source, source]);
-    expect(doc).toContain('<interactive xml:id="tricky-two" label="tricky-two" platform="doenetml" width="50%"');
+    expect(doc).toContain('<interactive xml:id="tricky-two" label="tricky-two" platform="doenetml" resize-behavior="responsive" width="50%"');
     expect(await validatePretextDocument(doc)).toEqual([]);
   });
 
@@ -247,18 +267,39 @@ describe("the schema", () => {
     expect(diagnostics.map((d) => d.message)).toEqual([]);
   };
 
-  it("accepts a Doenet activity under every placement tag", async () => {
+  it("accepts a Doenet activity as an exercise, in a figure and in a task", async () => {
     await valid(
       assemble(
         [
           "<p>Intro.</p>",
-          ...EXERCISE_WRAPPER_TAGS.map((tag) => `<plus:${tag} ref="drag" instance="${tag}"/>`),
+          '<plus:exercise ref="drag" instance="exercise"/>',
           '<figure xml:id="fig"><caption>In a figure.</caption><plus:interactive ref="drag"/></figure>',
           '<exercise xml:id="hand"><title>Hand-written</title><introduction><p>Two parts.</p></introduction>',
           '<task><plus:interactive ref="drag" instance="task"/></task>',
           '<task><statement><p>And a plain one.</p></statement></task></exercise>',
         ].join("\n"),
       ),
+    );
+  });
+
+  // PreTeXt's XSL treats a dual project-like as it does a dual exercise, and
+  // Runestone books place Doenet that way, but the development schema admits
+  // the form for <exercise> only so far. The live lint draws none of this on
+  // the author's buffer (it falls inside the expanded placement). When the
+  // schema catches up this test fails: fold the project-likes into the one above.
+  it("is rejected by the schema for a dual project-like only for the dual shape itself", async () => {
+    const projectLikes = EXERCISE_WRAPPER_TAGS.filter((tag) => tag !== "exercise");
+    const doc = assemble(projectLikes.map((tag) => `<plus:${tag} ref="drag" instance="${tag}"/>`).join("\n"));
+    const lines = doc.split("\n");
+    const flagged = (await validatePretextDocument(doc)).map(
+      (d) => `${lines[d.range.start.line].trim()} ${String(d.message).split(".")[0]}`,
+    );
+    expect(flagged).toEqual(
+      projectLikes.flatMap((tag) => [
+        "<dynamic> <dynamic> is not allowed here",
+        "<static> <static> is not allowed here",
+        `</${tag}> Missing required content`,
+      ]),
     );
   });
 

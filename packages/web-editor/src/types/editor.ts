@@ -201,8 +201,8 @@ export type ExerciseSourceFormat = "pretext" | "doenetml";
  *
  * A Doenet activity (`sourceFormat: "doenetml"`) differs in what `source` and
  * `attrs` are: `source` is DoenetML, and `attrs` are the attributes of the
- * `<interactive platform="doenetml">` assembly builds from it (`width`,
- * `aspect`, …), not of the `<exercise>` — the wrapper the placement chooses
+ * `<interactive platform="doenetml">` assembly builds from it (`width`, …),
+ * not of the `<exercise>` — the wrapper the placement chooses
  * (`<plus:exercise>`, `<plus:project>`, a bare `<plus:interactive>`) needs
  * nothing of its own beyond the ref and title.
  */

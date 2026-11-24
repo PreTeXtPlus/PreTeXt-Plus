@@ -33,8 +33,20 @@ export const DOENET_STARTER = `<p>Drag the point to change <m>x</m>.</p>
 <p>What is <m>2 + 2</m>? <answer name="sum">4</answer></p>
 `;
 
-/** The `<interactive>` attributes a new activity starts with (see the plan, Decision 2). */
-export const DOENET_DEFAULT_ATTRS: Readonly<Record<string, string>> = { width: "100%", aspect: "4:3" };
+/**
+ * The `<interactive>` attributes a new activity starts with (see the plan,
+ * Decision 2). No `aspect`: the frame's height follows the activity (see
+ * `doenetInteractiveAttrs` in sectionUtils).
+ */
+export const DOENET_DEFAULT_ATTRS: Readonly<Record<string, string>> = { width: "100%" };
+
+/**
+ * The `<static>` half of a placed activity: what a PDF, braille or a solutions
+ * manual shows in its place. The same note for every activity until Doenet
+ * can supply a static rendering of its own.
+ */
+export const DOENET_STATIC_FALLBACK =
+  "<statement>\n<p>This exercise is interactive, and is available in the online version.</p>\n</statement>";
 
 /**
  * DoenetML as the content of a `<slate surface="doenetml">`: one CDATA

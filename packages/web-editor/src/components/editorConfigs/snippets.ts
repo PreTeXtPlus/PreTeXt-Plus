@@ -673,9 +673,11 @@ const PRETEXT_BODIES: Record<string, string> = {
   iframe:
     '<interactive iframe="${1:https://example.org/}" xml:id="${2:interactive-name}" width="80%" aspect="4:3"/>',
   // The slate's text is DoenetML, kept verbatim in a CDATA section as assembly
-  // writes a Doenet activity's (docs/doenet-plan.md, Decision 4).
+  // writes a Doenet activity's (docs/doenet-plan.md, Decision 4). No aspect,
+  // and a responsive frame: its height follows the activity and its width the
+  // column (Decision 8).
   doenetml: lines(
-    '<interactive platform="doenetml" xml:id="${1:interactive-name}" width="100%" aspect="4:3">',
+    '<interactive platform="doenetml" xml:id="${1:interactive-name}" width="100%" resize-behavior="responsive">',
     '\t<slate surface="doenetml">',
     "\t\t<![CDATA[<p>What is <m>2 + 2</m>? <answer>${2:4}</answer></p>]]>",
     "\t</slate>",

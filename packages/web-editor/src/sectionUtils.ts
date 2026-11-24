@@ -21,7 +21,7 @@ import type {
 import { derivePretextContent } from "./contentConversion";
 import { resolveAssetRef, type GeneratedSourceIncluder } from "./assetTransforms";
 import { escapeAttribute, escapeText, unescapeAttribute } from "./xmlUtils";
-import { DEFAULT_DOENETML_VERSION, docinfoHasDoenetml, doenetmlCdata } from "./doenet";
+import { DEFAULT_DOENETML_VERSION, DOENET_STATIC_FALLBACK, docinfoHasDoenetml, doenetmlCdata } from "./doenet";
 import { DEFAULT_LATEX_IMAGE_PREAMBLE } from "./generators/tikz/document";
 import { findTagEnd, isNameStart, readName } from "./components/editorConfigs/xmlTags";
 
@@ -3674,13 +3674,23 @@ function attributePairs(ref: string, attrs: Record<string, string> | undefined):
 }
 
 /**
- * A Doenet activity as PreTeXt: `<interactive platform="doenetml">` with the
- * record's `attrs` (its width and aspect) and a `<slate surface="doenetml">`
- * holding the DoenetML verbatim in a CDATA section, which PreTeXt writes raw
- * into the page's `<script type="text/doenetml">`. Under a wrapper tag the wrapper carries the
+ * A Doenet activity as PreTeXt: `<interactive platform="doenetml">` with a
+ * `<slate surface="doenetml">` holding the DoenetML verbatim in a CDATA
+ * section, which PreTeXt writes raw into the page's
+ * `<script type="text/doenetml">`. Under a wrapper tag the wrapper carries the
  * record's ref and title and the interactive is named `<ref>-doenet` (a
  * PreTeXt build names its page after that id); placed bare, the interactive
- * itself is the ref. See `docs/doenet-plan.md`, Decisions 2–4.
+ * itself is the ref. See `docs/doenet-plan.md`, Decisions 2–4 and 8.
+ *
+ * Under a wrapper the activity is a *dual* exercise: `<dynamic>` holds it, in
+ * a `<statement>`, and `<static>` {@link DOENET_STATIC_FALLBACK}, a statement
+ * saying the activity is online. Each output takes one of the two -- HTML the
+ * activity, a PDF or braille the note -- and only a wrapper of that shape
+ * reaches a Runestone manifest, which is what lets an activity be assigned and
+ * graded there through SPLICE. PreTeXt's XSL treats the project-likes as it
+ * does `<exercise>` here (Active Calculus places Doenet in projects on
+ * Runestone this way); its development schema admits the form for `<exercise>`
+ * alone so far.
  *
  * `slateContent` replaces the CDATA section with something that stands for the
  * same text — the `<xi:include parse="text"/>` a multi-file project uses.
@@ -3691,14 +3701,37 @@ function wrapDoenetActivity(
   slateContent: string = doenetmlCdata(exercise.source.trim()),
 ): string {
   const interactiveRef = tag === "interactive" ? exercise.ref : `${exercise.ref}-doenet`;
-  const attrs = attributePairs(interactiveRef, { platform: "doenetml", ...(exercise.attrs ?? {}) });
+  const attrs = attributePairs(interactiveRef, doenetInteractiveAttrs(exercise.attrs));
   const interactive =
     `<interactive${attrs}>\n` +
     `<slate surface="doenetml">${slateContent}</slate>\n` +
     `</interactive>`;
   if (tag === "interactive") return interactive;
   const title = exercise.title?.trim() ? `<title>${exercise.title.trim()}</title>\n` : "";
-  return `<${tag}${attributePairs(exercise.ref, undefined)}>\n${title}${interactive}\n</${tag}>`;
+  return (
+    `<${tag}${attributePairs(exercise.ref, undefined)}>\n${title}` +
+    `<dynamic>\n<statement>\n${interactive}\n</statement>\n</dynamic>\n` +
+    `<static>\n${DOENET_STATIC_FALLBACK}\n</static>\n</${tag}>`
+  );
+}
+
+/**
+ * The `<interactive>`'s attributes: the platform, PreTeXt's `responsive`
+ * resize behavior, then the record's `attrs` less `aspect`.
+ *
+ * Doenet's viewer reports its content's height to the page (a SPLICE
+ * `lti.frameResize` message, which PreTeXt's `lti_iframe_resizer.js` applies),
+ * so the frame's height follows the activity and an `aspect` only ever set the
+ * height it opened at -- dropped, including from records that still store one.
+ * The frame's *width* is what `responsive` is for: under PreTeXt's default,
+ * `fixed-height`, `width="100%"` becomes a fixed 600px, wider than an
+ * exercise's padded box (570px) and far wider than a phone, so the frame's
+ * container scrolls sideways. `responsive` makes it `width: 100%` of that box.
+ */
+function doenetInteractiveAttrs(attrs: Record<string, string> | undefined): Record<string, string> {
+  const rest = { ...(attrs ?? {}) };
+  delete rest.aspect;
+  return { platform: "doenetml", "resize-behavior": "responsive", ...rest };
 }
 
 /**

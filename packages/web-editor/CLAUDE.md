@@ -407,8 +407,8 @@ build input.
 
 An exercise record whose `sourceFormat` is `"doenetml"` (`ExerciseSourceFormat`;
 absent means `"pretext"`, so every older record and collab entry reads as before)
-holds DoenetML in `source`, and its `attrs` are the `<interactive>`'s (`width`,
-`aspect`), not an `<exercise>`'s. See `docs/doenet-plan.md`.
+holds DoenetML in `source`, and its `attrs` are the `<interactive>`'s (`width`), not
+an `<exercise>`'s. See `docs/doenet-plan.md`.
 
 - **Placement names the wrapper.** `EXERCISE_PLACEMENT_TAGS`: `<plus:exercise>`,
   `<plus:project>`/`activity`/`exploration`/`investigation` wrap the activity in
@@ -418,9 +418,17 @@ holds DoenetML in `source`, and its `attrs` are the `<interactive>`'s (`width`,
   them before its division fallback, which would otherwise read `plus:project` as
   a division. A designer exercise resolves only under `exercise` (a comment
   otherwise). `exerciseEmbedCode(ref, format, tag)` writes the three syntaxes;
-  `ExerciseSettings` offers the tag in a "Place as" picker, with width and aspect.
-- **Assembly** (`wrapExerciseSource(exercise, tag)`): `<interactive platform="doenetml">`
-  named `<ref>-doenet` under a wrapper (the ref itself when bare), with a
+  `ExerciseSettings` offers the tag in a "Place as" picker, with the width.
+- **Assembly** (`wrapExerciseSource(exercise, tag)`): `<interactive platform="doenetml"
+  resize-behavior="responsive">` (any stored `aspect` dropped: Doenet reports its
+  height and PreTeXt's resizer applies it; `responsive` keeps the frame inside its
+  box — `doenetInteractiveAttrs`) named `<ref>-doenet` under a wrapper (the ref itself
+  when bare). Under every wrapper it is a *dual* exercise: `<dynamic><statement>`
+  holds the interactive and `<static>` `DOENET_STATIC_FALLBACK` (a note that the
+  activity is online, until Doenet supplies a static rendering) — the shape a
+  Runestone manifest picks up. The development schema admits dual for `<exercise>`
+  only so far; `doenet.test.ts` pins what it says about the project-likes, which the
+  live lint does not draw (it falls inside the expansion). The interactive has a
   `<slate surface="doenetml">` holding the source verbatim in a CDATA section
   (`doenetmlCdata`; a `]]>` in the source is split across two sections) — PreTeXt
   writes it back raw into the page's `<script type="text/doenetml">`. The activity's
