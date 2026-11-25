@@ -187,6 +187,19 @@ remains is listed under "Later".
      unnamed placement under a different tag needs an `instance` just as one
      under the same tag does.
 
+10. **A doenet.org embed code pasted into a PreTeXt buffer becomes an iframe
+    interactive** (2026-11-25), a third way in beside the record and Insert's
+    in-place activity: `<interactive iframe="https://doenet.org/embed/<id>"
+    width="100%" resize-behavior="responsive"/>`, the activity staying on
+    doenet.org. Only the `/embed/<id>` page: measured in headless Chromium, it
+    posts `lti.frameResize` with its content's height (and SPLICE
+    `getState`/score messages, which PreTeXt's Runestone SPLICE wrapper reads for an
+    `@iframe` in a dual exercise). Rendered with pretext-html 0.21.1 at 1280 and
+    390px, bare and inside an `<exercise>`, the resizer set each frame to the
+    activity's height (about 850px) and no frame overflowed its box. Any lone
+    `<iframe>` pasted is read as the link in its `src`, so YouTube's, Desmos's and
+    GeoGebra's embed codes convert too (`mediaUrls.ts`).
+
 ## Work
 
 Rails: `source_format` gains `doenetml: 7`; an exercise accepts `pretext` or

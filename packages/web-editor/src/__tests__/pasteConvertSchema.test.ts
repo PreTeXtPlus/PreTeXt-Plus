@@ -191,6 +191,11 @@ const MEDIA_LINKS: [name: string, link: string, element: RegExp][] = [
   ["a Desmos graph", "https://www.desmos.com/calculator/jvnxfq0n4e", /^<interactive desmos="jvnxfq0n4e"/],
   ["a GeoGebra material", "https://www.geogebra.org/m/jybewqhg", /^<interactive geogebra="jybewqhg"/],
   ["a YouTube video", "https://youtu.be/M7lc1UVf-VE?t=90", /^<video youtube="M7lc1UVf-VE" start="90"/],
+  [
+    "doenet.org's embed code",
+    '<iframe src="https://doenet.org/embed/ogp7kp5cGaCUCEYyWeQ8mF" width="100%" height="800" style="border: 0"></iframe>',
+    /^<interactive iframe="https:\/\/doenet\.org\/embed\/ogp7kp5cGaCUCEYyWeQ8mF" width="100%" resize-behavior="responsive"\/>$/,
+  ],
 ];
 
 describe("a pasted link to an interactive or a video", () => {
