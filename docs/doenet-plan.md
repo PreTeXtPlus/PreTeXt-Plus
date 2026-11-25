@@ -168,6 +168,25 @@ remains is listed under "Later".
      did, and the height still followed the content. `aspect` made no difference
      to either.
 
+9. **A placement decides whether its exercise is titled** (2026-11-25). A `title`
+   attribute on any exercise placement — designer exercise or activity, every
+   wrapper tag — replaces the record's title for that placement: `title="no"` (or
+   empty) leaves the wrapper untitled, anything else is the title, as XML text.
+   Assembly consumes it (`resolveExerciseRef`), so it never reaches the element as
+   an attribute; on a bare `<plus:interactive>` it does nothing. The placement, not
+   the record, because the choice follows where the exercise sits (untitled in an
+   `<exercises>` division, titled as a project) and one record can be placed both
+   ways under `instance`; and because the record's title is also its name in the
+   explorer, tabs and title bar, which a blank title would leave to the ref.
+   Context-based defaults (untitled inside `<exercises>`) were considered and left
+   until authors show they want them. The LaTeX converter keeps the braces of
+   `\plus[title={A, B}]` in the value — an upstream fix, not one made here.
+   - The duplicate-placement lint compares exercise placements by record, not by
+     tag: `<plus:exercise ref="x"/>` and `<plus:project ref="x"/>` both write
+     `xml:id="x"` and `x-doenet`, and a bare interactive is `x`, so a second
+     unnamed placement under a different tag needs an `instance` just as one
+     under the same tag does.
+
 ## Work
 
 Rails: `source_format` gains `doenetml: 7`; an exercise accepts `pretext` or

@@ -3273,8 +3273,13 @@ function parsePlaceholderAttrs(attrs: string): PlaceholderAttr[] {
 
 /** The placeholder's `instance` name, or undefined when it has none. */
 function placeholderInstance(attrs: string): string | undefined {
+  return placeholderAttr(attrs, "instance")?.trim() || undefined;
+}
+
+/** The placeholder's `name` attribute as written, or undefined when it has none. */
+function placeholderAttr(attrs: string, name: string): string | undefined {
   for (const m of attrs.matchAll(ATTR_RE)) {
-    if (m[1] === "instance") return (m[2] ?? m[3] ?? "").trim() || undefined;
+    if (m[1] === name) return m[2] ?? m[3] ?? "";
   }
   return undefined;
 }
@@ -3545,18 +3550,19 @@ function expandRefs(
       // The exercise tags come before the division fallback, which takes any
       // tag it is handed as a division placeholder.
       const instance = placeholderInstance(attrs);
+      const isExercise = isExercisePlacementTag(tag);
       // A placement that names its instance has every identifier beneath it
       // rewritten, which cannot reach into a file included from there: below
       // it, divisions stay inline and the placement is one file (or none).
       const inner = sink && instance ? { ...sink, divisions: false } : sink;
-      const isDivision = tag !== "image" && tag !== "snippet" && !isExercisePlacementTag(tag);
+      const isDivision = tag !== "image" && tag !== "snippet" && !isExercise;
       const resolved =
         tag === "image"
           ? resolveAssetRef(ref, pools.assets, sink && generatedSourceIncluder(sink))
           : tag === "snippet"
             ? resolveSnippetRef(ref, pools, ancestors, inner)
-            : isExercisePlacementTag(tag)
-              ? resolveExerciseRef(ref, pools, ancestors, tag, inner)
+            : isExercise
+              ? resolveExerciseRef(ref, pools, ancestors, tag, inner, placeholderAttr(attrs, "title"))
               : resolveDivisionXml(ref, pools, ancestors, inner);
       // Raw text is CDATA, not elements: there is nothing to qualify or to
       // copy attributes onto, and the tag scanners would misread its text.
@@ -3564,7 +3570,9 @@ function expandRefs(
         return resolved;
       }
       const placed = instance ? qualifyIdentifiers(resolved, instance) : resolved;
-      const finished = applyPlaceholderAttrs(placed, parsePlaceholderAttrs(attrs));
+      // An exercise placement's `title` became its `<title>` (or none) above.
+      const passed = parsePlaceholderAttrs(attrs).filter((a) => !(isExercise && a.name === "title"));
+      const finished = applyPlaceholderAttrs(placed, passed);
       return sink?.divisions && isDivision
         ? includeDivisionFile(sink, ref, instance, finished)
         : finished;
@@ -3739,6 +3747,12 @@ function doenetInteractiveAttrs(attrs: Record<string, string> | undefined): Reco
  * other {@link EXERCISE_PLACEMENT_TAGS} tag — to the matching {@link Exercise}'s
  * element built around its body ({@link wrapExerciseSource}), with any
  * `<plus:image>` or other placeholder inside it expanded in turn.
+ *
+ * `title` is the placement's own `title` attribute, when it has one, and
+ * replaces the record's title for this placement: `"no"` (or empty) leaves the
+ * wrapper untitled, anything else is the title. The record's title is also its
+ * name in the explorer and tabs, so an author keeps it and says here where it
+ * should not print — an exercise in an `<exercises>` division, say.
  */
 function resolveExerciseRef(
   ref: string,
@@ -3746,9 +3760,11 @@ function resolveExerciseRef(
   ancestors: Set<string>,
   tag: ExercisePlacementTag = "exercise",
   sink?: SourceFileSink,
+  title?: string,
 ): string {
-  const exercise = pools.exercises.find((e) => e.ref === ref);
-  if (!exercise) return `<!-- missing exercise: ${ref} -->`;
+  const record = pools.exercises.find((e) => e.ref === ref);
+  if (!record) return `<!-- missing exercise: ${ref} -->`;
+  const exercise = title === undefined ? record : { ...record, title: placementTitle(title) };
   if (ancestors.has(ref)) return `<!-- circular reference: ${ref} -->`;
 
   // A Doenet activity's source is DoenetML sitting verbatim in a CDATA
@@ -3759,6 +3775,15 @@ function resolveExerciseRef(
 
   const nextAncestors = new Set(ancestors).add(ref);
   return expandRefs(wrapExerciseSource(exercise, tag), pools, nextAncestors, sink);
+}
+
+/**
+ * The title an exercise placement's `title="…"` asks for: none for `no` (or an
+ * empty value), otherwise the value, which is already XML text as written.
+ */
+function placementTitle(value: string): string {
+  const trimmed = value.trim();
+  return trimmed === "no" ? "" : trimmed;
 }
 
 /**

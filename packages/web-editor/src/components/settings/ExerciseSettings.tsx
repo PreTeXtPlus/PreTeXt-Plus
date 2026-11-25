@@ -134,6 +134,11 @@ const ExerciseSettings = ({ exercise, embedFormat, onSave, readOnly }: ExerciseS
           disabled={readOnly}
           placeholder="My exercise"
         />
+        <SettingsNote>
+          Printed wherever the exercise is placed. To leave it off one placement, add{" "}
+          <code>title="no"</code> to that placement's embed code; <code>title="…"</code> gives it
+          a different title there.
+        </SettingsNote>
       </SettingsField>
       <SettingsField label="ID" htmlFor="exercise-settings-ref">
         <CommitField

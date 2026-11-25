@@ -175,6 +175,41 @@ describe("placement tags", () => {
     expect(doc).toContain('<![CDATA[<p>What is <m>2 &amp; 2</m>? <answer name="a">4</answer></p>]]>');
   });
 
+  it("takes the wrapper's title from the placement: none for title=\"no\", or a replacement", async () => {
+    const doc = assemble(
+      '<plus:exercise ref="drag" title="no"/>' +
+        '<plus:project ref="drag" instance="p" title="Try it &amp; see"/>' +
+        '<plus:activity ref="drag" instance="a"/>' +
+        '<plus:interactive ref="drag" instance="i" title="no"/>',
+    );
+    expect(doc).toMatch(/<exercise xml:id="drag" label="drag">\n<dynamic>/);
+    expect(doc).toContain('<project xml:id="drag-p" label="drag-p">\n<title>Try it &amp; see</title>\n');
+    expect(doc).toContain('<activity xml:id="drag-a" label="drag-a">\n<title>Drag <m>P</m></title>\n');
+    // Consumed, never copied onto the element as an attribute.
+    expect(doc).not.toMatch(/<[a-z]+ [^>]*\btitle="/);
+    expect(await validatePretextDocument(doc.replace(/<project[\s\S]*<\/activity>/, ""))).toEqual([]);
+  });
+
+  it("drops or replaces a designer exercise's title from the placement too", () => {
+    const titled = { ...designer, title: "Pick one" };
+    const pools = (source: string) =>
+      assembleFullProjectSource([root(source)], "root", "", [], undefined, [], [titled]);
+    expect(pools('<plus:exercise ref="quiz"/>')).toContain("<title>Pick one</title>");
+    expect(pools('<plus:exercise ref="quiz" title="no"/>')).toMatch(/<exercise xml:id="quiz" label="quiz">\n<statement>/);
+    expect(pools('<plus:exercise ref="quiz" title="Warm-up"/>')).toContain("<title>Warm-up</title>");
+  });
+
+  it("reads the title from a Markdown and a LaTeX placement", () => {
+    const md = assembleFullProjectSource(
+      [root('Text.\n\n::exercise{ref="drag" title="no"}\n', "markdown")], "root", "", [], undefined, [], [doenet],
+    );
+    expect(md).toMatch(/<exercise xml:id="drag" label="drag">\n<dynamic>/);
+    const tex = assembleFullProjectSource(
+      [root("Text.\n\n\\plus[title=no]{exercise}{drag}\n", "latex")], "root", "", [], undefined, [], [doenet],
+    );
+    expect(tex).toMatch(/<exercise xml:id="drag" label="drag">\n<dynamic>/);
+  });
+
   it("leaves DoenetML that looks like PreTeXt, or like a placeholder, alone", async () => {
     // DoenetML has its own <section>, <title> and <exercise>, and nothing
     // stops an author typing an xml:id or a placeholder into it.

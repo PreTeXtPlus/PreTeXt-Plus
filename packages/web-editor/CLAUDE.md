@@ -419,6 +419,11 @@ an `<exercise>`'s. See `docs/doenet-plan.md`.
   a division. A designer exercise resolves only under `exercise` (a comment
   otherwise). `exerciseEmbedCode(ref, format, tag)` writes the three syntaxes;
   `ExerciseSettings` offers the tag in a "Place as" picker, with the width.
+- **The placement decides the title.** A `title` attribute on any exercise placement
+  (designer or Doenet) replaces the record's title there: `title="no"` (or empty)
+  omits the `<title>`, any other value is the title. `expandRefs` consumes it rather
+  than passing it through, and `placementDiagnostics` compares exercise placements
+  by record, not tag, since every wrapper tag writes the same identifiers.
 - **Assembly** (`wrapExerciseSource(exercise, tag)`): `<interactive platform="doenetml"
   resize-behavior="responsive">` (any stored `aspect` dropped: Doenet reports its
   height and PreTeXt's resizer applies it; `responsive` keeps the frame inside its
