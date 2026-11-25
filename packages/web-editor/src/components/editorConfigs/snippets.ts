@@ -675,11 +675,12 @@ const PRETEXT_BODIES: Record<string, string> = {
   // The slate's text is DoenetML, kept verbatim in a CDATA section as assembly
   // writes a Doenet activity's (docs/doenet-plan.md, Decision 4). No aspect,
   // and a responsive frame: its height follows the activity and its width the
-  // column (Decision 8).
+  // column (Decision 8). The answer's short description is what Doenet's
+  // accessibility check asks of the input it creates (see DOENET_STARTER).
   doenetml: lines(
     '<interactive platform="doenetml" xml:id="${1:interactive-name}" width="100%" resize-behavior="responsive">',
     '\t<slate surface="doenetml">',
-    "\t\t<![CDATA[<p>What is <m>2 + 2</m>? <answer>${2:4}</answer></p>]]>",
+    "\t\t<![CDATA[<p>What is <m>2 + 2</m>? <answer><shortDescription>${2:two plus two}</shortDescription>${3:4}</answer></p>]]>",
     "\t</slate>",
     "</interactive>",
   ),

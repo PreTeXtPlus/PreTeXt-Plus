@@ -338,6 +338,18 @@ describe("the schema", () => {
     );
   });
 
+  it("gives the starter's graph and answer the short descriptions Doenet's accessibility check asks for", () => {
+    // Each <graph> and <answer> holds a <shortDescription> of words, no math.
+    for (const tag of ["graph", "answer"]) {
+      const elements = [...DOENET_STARTER.matchAll(new RegExp(`<${tag}\\b[^>]*>([\\s\\S]*?)</${tag}>`, "g"))];
+      expect(elements.length).toBeGreaterThan(0);
+      for (const [, inner] of elements) {
+        const description = /<shortDescription>([^<]+)<\/shortDescription>/.exec(inner)?.[1];
+        expect(description?.trim(), `<${tag}>`).toBeTruthy();
+      }
+    }
+  });
+
   it("accepts the starter activity in its preview document", async () => {
     await valid(
       assembleExercisePreviewSource(
