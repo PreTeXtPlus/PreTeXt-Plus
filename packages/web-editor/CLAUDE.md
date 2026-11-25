@@ -85,7 +85,7 @@ Book projects add a chapter layer: the host passes a `chapters` array, and the e
 
 ### Interactives and media
 
-- **Pasting a link** (`src/mediaUrls.ts`, called from `pasteConvert.ts`): a paste that is nothing but a link to a Desmos graph, a GeoGebra material or a YouTube video becomes the `<interactive>`/`<video>` that frames it, with the id (and a YouTube start time) read out of the address. Only where a block belongs — in running text it stays a link — and under the same switches as LaTeX paste conversion (the Edit menu toggle, Ctrl+Shift+V). An address whose id is not certain is left alone.
+- **Pasting a link** (`src/mediaUrls.ts`, called from `pasteConvert.ts`): a paste that is nothing but a link to a Desmos graph, a GeoGebra material, a YouTube video or a doenet.org activity (`/embed/<id>`) becomes the `<interactive>`/`<video>` that frames it, with the id (and a YouTube start time) read out of the address. A site's embed code — one lone `<iframe>`, which is what doenet.org hands out — is read as the link in its `src`. A doenet.org activity becomes `<interactive iframe="https://doenet.org/embed/<id>" width="100%" resize-behavior="responsive"/>`: its embed page posts `lti.frameResize`, so its height follows the activity as a placed one's does. Only where a block belongs — in running text it stays a link — and under the same switches as LaTeX paste conversion (the Edit menu toggle, Ctrl+Shift+V). An address whose id is not certain is left alone.
 - **Lint** (`editorConfigs/interactiveDiagnostics.ts`, `useInteractiveDiagnostics.ts`, owner `pretext-interactives`): what the schema accepts and the author did not mean. `@calcplot3d` without `@variant` is a warning with a quick fix; an interactive with no `@preview` and no `<static>` is a note, only when the host says the project builds something that is not a web page (`Editors`' `hasStaticOutput`). Read from the live buffer, like the placement check.
 
 ### Content Conversion (`src/contentConversion.ts`)
@@ -407,8 +407,8 @@ build input.
 
 An exercise record whose `sourceFormat` is `"doenetml"` (`ExerciseSourceFormat`;
 absent means `"pretext"`, so every older record and collab entry reads as before)
-holds DoenetML in `source`, and its `attrs` are the `<interactive>`'s (`width`,
-`aspect`), not an `<exercise>`'s. See `docs/doenet-plan.md`.
+holds DoenetML in `source`, and its `attrs` are the `<interactive>`'s (`width`), not
+an `<exercise>`'s. See `docs/doenet-plan.md`.
 
 - **Placement names the wrapper.** `EXERCISE_PLACEMENT_TAGS`: `<plus:exercise>`,
   `<plus:project>`/`activity`/`exploration`/`investigation` wrap the activity in
@@ -418,9 +418,22 @@ holds DoenetML in `source`, and its `attrs` are the `<interactive>`'s (`width`,
   them before its division fallback, which would otherwise read `plus:project` as
   a division. A designer exercise resolves only under `exercise` (a comment
   otherwise). `exerciseEmbedCode(ref, format, tag)` writes the three syntaxes;
-  `ExerciseSettings` offers the tag in a "Place as" picker, with width and aspect.
-- **Assembly** (`wrapExerciseSource(exercise, tag)`): `<interactive platform="doenetml">`
-  named `<ref>-doenet` under a wrapper (the ref itself when bare), with a
+  `ExerciseSettings` offers the tag in a "Place as" picker, with the width.
+- **The placement decides the title.** A `title` attribute on any exercise placement
+  (designer or Doenet) replaces the record's title there: `title="no"` (or empty)
+  omits the `<title>`, any other value is the title. `expandRefs` consumes it rather
+  than passing it through, and `placementDiagnostics` compares exercise placements
+  by record, not tag, since every wrapper tag writes the same identifiers.
+- **Assembly** (`wrapExerciseSource(exercise, tag)`): `<interactive platform="doenetml"
+  resize-behavior="responsive">` (any stored `aspect` dropped: Doenet reports its
+  height and PreTeXt's resizer applies it; `responsive` keeps the frame inside its
+  box — `doenetInteractiveAttrs`) named `<ref>-doenet` under a wrapper (the ref itself
+  when bare). Under every wrapper it is a *dual* exercise: `<dynamic><statement>`
+  holds the interactive and `<static>` `DOENET_STATIC_FALLBACK` (a note that the
+  activity is online, until Doenet supplies a static rendering) — the shape a
+  Runestone manifest picks up. The development schema admits dual for `<exercise>`
+  only so far; `doenet.test.ts` pins what it says about the project-likes, which the
+  live lint does not draw (it falls inside the expansion). The interactive has a
   `<slate surface="doenetml">` holding the source verbatim in a CDATA section
   (`doenetmlCdata`; a `]]>` in the source is split across two sections) — PreTeXt
   writes it back raw into the page's `<script type="text/doenetml">`. The activity's

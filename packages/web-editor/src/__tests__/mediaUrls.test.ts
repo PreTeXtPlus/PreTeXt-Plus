@@ -17,6 +17,19 @@ describe("parseMediaLink", () => {
     ["https://www.youtube.com/watch?v=M7lc1UVf-VE&t=1m30s", { kind: "youtube", id: "M7lc1UVf-VE", start: 90 }],
     ["https://www.youtube.com/embed/M7lc1UVf-VE?start=12", { kind: "youtube", id: "M7lc1UVf-VE", start: 12 }],
     ["https://www.youtube.com/shorts/M7lc1UVf-VE", { kind: "youtube", id: "M7lc1UVf-VE" }],
+    ["https://doenet.org/embed/ogp7kp5cGaCUCEYyWeQ8mF", { kind: "doenet", id: "ogp7kp5cGaCUCEYyWeQ8mF" }],
+    ["https://www.doenet.org/embed/ogp7kp5cGaCUCEYyWeQ8mF", { kind: "doenet", id: "ogp7kp5cGaCUCEYyWeQ8mF" }],
+    // A site's embed code is read as the link in its src.
+    [
+      '<iframe src="https://doenet.org/embed/ogp7kp5cGaCUCEYyWeQ8mF" width="100%" height="800" style="border: 0"></iframe>',
+      { kind: "doenet", id: "ogp7kp5cGaCUCEYyWeQ8mF" },
+    ],
+    [
+      '  <iframe width="560" height="315" src="https://www.youtube.com/embed/M7lc1UVf-VE?si=x&amp;start=12" ' +
+        'title="YouTube video player" frameborder="0" allowfullscreen></iframe>\n',
+      { kind: "youtube", id: "M7lc1UVf-VE", start: 12 },
+    ],
+    ["<IFRAME SRC='https://www.desmos.com/calculator/jvnxfq0n4e?embed'/>", { kind: "desmos", id: "jvnxfq0n4e" }],
   ])("reads %s", (text, link) => {
     expect(parseMediaLink(text)).toEqual(link);
   });
@@ -33,6 +46,11 @@ describe("parseMediaLink", () => {
     "https://example.org/watch?v=M7lc1UVf-VE",
     "https://notdesmos.com/calculator/jvnxfq0n4e",
     "desmos.com/calculator/jvnxfq0n4e",
+    "https://doenet.org/activityViewer/ogp7kp5cGaCUCEYyWeQ8mF", // only the embed page reports its height
+    "https://doenet.org/embed/short",
+    '<iframe src="https://doenet.org/embed/ogp7kp5cGaCUCEYyWeQ8mF"></iframe><p>And more.</p>',
+    '<iframe src="https://example.org/page"></iframe>',
+    "<iframe></iframe>",
     "",
   ])("leaves %s alone", (text) => {
     expect(parseMediaLink(text)).toBeUndefined();
@@ -49,6 +67,12 @@ describe("mediaElement", () => {
     );
     expect(mediaElement({ kind: "youtube", id: "M7lc1UVf-VE", start: 90 })).toBe(
       '<video youtube="M7lc1UVf-VE" start="90" width="80%"/>',
+    );
+  });
+
+  it("frames a doenet.org activity at full width, its height following the activity", () => {
+    expect(mediaElement({ kind: "doenet", id: "ogp7kp5cGaCUCEYyWeQ8mF" })).toBe(
+      '<interactive iframe="https://doenet.org/embed/ogp7kp5cGaCUCEYyWeQ8mF" width="100%" resize-behavior="responsive"/>',
     );
   });
 });

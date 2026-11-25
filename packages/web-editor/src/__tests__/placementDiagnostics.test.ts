@@ -50,6 +50,22 @@ describe("findPlacementProblems", () => {
     expect(problems[0].message).toContain("more than once here");
   });
 
+  it("counts an exercise placed under different tags as one record", () => {
+    // <plus:exercise> and <plus:project> both write xml:id="drag" on their
+    // wrapper and drag-doenet on the activity; a bare interactive is "drag".
+    const elsewhere = placementUses([
+      { name: "Projects", source: '<plus:project ref="drag"/>', sourceFormat: "pretext" },
+    ]);
+    const [problem] = findPlacementProblems('<plus:exercise ref="drag"/>', input({ elsewhere }));
+    expect(problem).toMatchObject({ severity: "warning", suggestedInstance: "sec-intro" });
+    expect(problem.message).toContain('The exercise "drag" is used here and in Projects.');
+
+    expect(findPlacementProblems('<plus:interactive ref="drag"/>', input({ elsewhere }))).toHaveLength(1);
+    expect(
+      findPlacementProblems('<plus:activity ref="drag" instance="sec-intro"/>', input({ elsewhere })),
+    ).toEqual([]);
+  });
+
   it("does not count an image and a snippet with the same ref as one record", () => {
     expect(findPlacementProblems('<plus:image ref="x"/><plus:snippet ref="x"/>', input())).toEqual([]);
   });

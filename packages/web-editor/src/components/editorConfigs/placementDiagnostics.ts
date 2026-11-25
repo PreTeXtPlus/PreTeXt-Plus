@@ -84,6 +84,17 @@ const KIND_NAME: Record<PlacementTag, string> = {
   interactive: "exercise",
 };
 
+/**
+ * Whether `use` places the record `tag`/`ref` names. Every exercise placement
+ * tag places the same exercise, and they all give it the same identifiers —
+ * `<plus:exercise>` and `<plus:project>` both write `xml:id="ref"` on their
+ * wrapper and `ref-doenet` on the activity, and `<plus:interactive>` puts the
+ * ref on the activity itself — so they are compared by kind, not by tag.
+ */
+function sameRecord(use: PlacementUse, tag: PlacementTag, ref: string): boolean {
+  return use.ref === ref && KIND_NAME[use.tag] === KIND_NAME[tag];
+}
+
 /** An instance name for a placement of `tag`/`ref` that nothing else uses. */
 function suggestInstance(
   tag: PlacementTag,
@@ -91,7 +102,7 @@ function suggestInstance(
   uses: readonly PlacementUse[],
   input: PlacementCheckInput,
 ): string {
-  const taken = new Set(uses.filter((u) => u.tag === tag && u.ref === ref && u.instance).map((u) => u.instance));
+  const taken = new Set(uses.filter((u) => sameRecord(u, tag, ref) && u.instance).map((u) => u.instance));
   const base = input.recordRef.replace(/[^A-Za-z0-9_-]/g, "-") || "again";
   for (let n = 1; ; n++) {
     const candidate = n === 1 ? base : `${base}-${n}`;
@@ -114,7 +125,7 @@ export function findPlacementProblems(text: string, input: PlacementCheckInput):
     ...input.elsewhere,
     ...here.map(({ tag, ref, instance }) => ({ tag, ref, instance, placedIn: "" })),
   ];
-  const same = (tag: PlacementTag, ref: string) => all.filter((u) => u.tag === tag && u.ref === ref);
+  const same = (tag: PlacementTag, ref: string) => all.filter((u) => sameRecord(u, tag, ref));
 
   const problems: PlacementProblem[] = [];
   for (const { tag, ref, instance, index, length } of here) {

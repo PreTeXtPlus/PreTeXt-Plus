@@ -21,20 +21,40 @@ export const DEFAULT_DOENETML_VERSION = "0.7.29";
 export const doenetStandaloneUrl = (version: string, file: "style.css" | "doenet-standalone.js"): string =>
   `https://cdn.jsdelivr.net/npm/@doenet/standalone@${encodeURIComponent(version)}/${file}`;
 
-/** What a new Doenet activity opens with. */
+/**
+ * What a new Doenet activity opens with. It passes Doenet's accessibility
+ * checks, since it is the example authors copy from: a `<graph>` needs a
+ * `<shortDescription>` (or `decorative`), and so does the input an `<answer>`
+ * creates (or a `<label>`). A short description is words only — Doenet flags
+ * math inside one. Checked with @doenet/standalone 0.7.29's editor: no
+ * accessibility diagnostics, and 4 is still graded correct.
+ */
 export const DOENET_STARTER = `<p>Drag the point to change <m>x</m>.</p>
 
 <graph size="small" xmin="-5" xmax="5" ymin="-5" ymax="5">
+  <shortDescription>A coordinate grid with one point you can drag</shortDescription>
   <point name="P">(1, 2)</point>
 </graph>
 
 <p>The point is at <m>x = $P.x</m>.</p>
 
-<p>What is <m>2 + 2</m>? <answer name="sum">4</answer></p>
+<p>What is <m>2 + 2</m>? <answer name="sum"><shortDescription>two plus two</shortDescription>4</answer></p>
 `;
 
-/** The `<interactive>` attributes a new activity starts with (see the plan, Decision 2). */
-export const DOENET_DEFAULT_ATTRS: Readonly<Record<string, string>> = { width: "100%", aspect: "4:3" };
+/**
+ * The `<interactive>` attributes a new activity starts with (see the plan,
+ * Decision 2). No `aspect`: the frame's height follows the activity (see
+ * `doenetInteractiveAttrs` in sectionUtils).
+ */
+export const DOENET_DEFAULT_ATTRS: Readonly<Record<string, string>> = { width: "100%" };
+
+/**
+ * The `<static>` half of a placed activity: what a PDF, braille or a solutions
+ * manual shows in its place. The same note for every activity until Doenet
+ * can supply a static rendering of its own.
+ */
+export const DOENET_STATIC_FALLBACK =
+  "<statement>\n<p>This exercise is interactive, and is available in the online version.</p>\n</statement>";
 
 /**
  * DoenetML as the content of a `<slate surface="doenetml">`: one CDATA

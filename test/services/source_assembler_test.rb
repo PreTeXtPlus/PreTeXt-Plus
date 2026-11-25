@@ -97,6 +97,35 @@ class SourceAssemblerTest < ActionDispatch::IntegrationTest
     assert_not_includes source, "plus:exercise"
   end
 
+  # ---- Doenet activities -----------------------------------------------------
+
+  # A build is handed a dual exercise -- the activity for HTML, a note for every
+  # static output -- under every wrapper, which is what puts it in a Runestone
+  # manifest; and a frame that fits its box, with no aspect to fix its height.
+  test "a placed Doenet activity is assembled dual, in a responsive frame" do
+    skip_without_bundle
+    @project.exercises.create!(ref: "act", title: "Try it", source_format: "doenetml",
+      attrs: { "width" => "100%", "aspect" => "4:3" }, source: "<p>Is <m>x < 2</m>?</p>")
+    child = @project.divisions.find_by!(ref: "subdivision")
+    child.update!(source: "#{child.source}\n<plus:exercise ref=\"act\"/>\n<plus:project ref=\"act\" instance=\"p\"/>\n" \
+                          "<figure><caption>Bare</caption><plus:interactive ref=\"act\" instance=\"f\"/></figure>")
+
+    document = Nokogiri::XML(SourceAssembler.new(@project).call)
+
+    %w[ exercise project ].each do |tag|
+      wrapper = document.at_xpath("//#{tag}[starts-with(@xml:id, 'act')]")
+      assert_equal %w[ title dynamic static ], wrapper.element_children.map(&:name), tag
+      assert_equal "<p>Is <m>x < 2</m>?</p>", wrapper.at_xpath("dynamic/statement/interactive/slate").text
+      assert_match(/available in the online version/, wrapper.at_xpath("static/statement/p").text)
+    end
+    interactives = document.xpath("//interactive[@platform='doenetml']")
+    assert_equal 3, interactives.size
+    interactives.each do |interactive|
+      assert_equal "responsive", interactive["resize-behavior"]
+      assert_nil interactive["aspect"]
+    end
+  end
+
   # ---- the multi-file project ---------------------------------------------
 
   # What an author downloads. The claim that matters is that it is the same

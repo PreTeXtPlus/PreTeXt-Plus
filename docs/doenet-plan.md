@@ -54,10 +54,11 @@ remains is listed under "Later".
    meant a new placeholder tag in three syntaxes, a new explorer view and a new
    collab map for the same record.
 2. **`attrs` are the `<interactive>`'s attributes** for a `doenetml` record (`width`,
-   `aspect`, `version`, …), where for a designer exercise they are the `<exercise>`'s.
+   `version`, …), where for a designer exercise they are the `<exercise>`'s.
    The wrapper an activity is placed in needs nothing but its `xml:id`/`label` and
    title; the interactive is what has a size. A new activity starts with
-   `width="100%" aspect="4:3"`.
+   `width="100%"`. (Until 2026-11-24 also `aspect="4:3"`; see Decision 8 for why
+   assembly now drops it.)
 3. **The placeholder's tag names the surrounding PreTeXt.** `<plus:exercise ref="x"/>`
    wraps the activity in an `<exercise>`; `<plus:project ref="x"/>`, `<plus:activity>`,
    `<plus:exploration>` and `<plus:investigation>` in the project-like element of that
@@ -125,6 +126,80 @@ remains is listed under "Later".
    the exercise designer has already set the shape "a record edited outside Monaco,
    whole-source writes". Project-wide Find still reads the record's source.
 
+8. **A wrapped activity is a *dual* exercise, with a fixed static half, in a frame
+   sized by PreTeXt's `responsive` behavior** (2026-11-24).
+   - Every wrapper placement — `<plus:exercise>`, `<plus:project>`, `activity`,
+     `exploration`, `investigation` — assembles to that element holding
+     `<dynamic><statement><interactive …/></statement></dynamic>` and
+     `<static>…</static>`. PreTeXt classifies only that shape as `dual`
+     (`pretext-assembly.xsl`, which matches `exercise` and the project-likes
+     alike), and only a classified one reaches a Runestone manifest: a wrapper
+     holding a bare `<interactive>` is "static" there, so it could not be assigned
+     or graded through SPLICE. Each output takes one half — HTML the activity, a
+     PDF, braille or a solutions manual the static one. The sample is
+     `examples/sample-book/rune.xml`'s `doenet-average-velocity` (marked
+     experimental upstream, 2025-11-05); Active Calculus places Doenet in
+     project-likes this way on Runestone.
+   - **The schema lags for the project-likes.** The development schema admits the
+     dual form for `<exercise>` only, so a dual project-like is reported at its
+     `<dynamic>`, `<static>` and closing tag. Those lines are inside the expanded
+     placement, so the live lint draws nothing on the author's buffer;
+     `doenet.test.ts` pins the exact complaints so it fails once the schema
+     catches up.
+   - **The static half is always `DOENET_STATIC_FALLBACK`**, a statement saying
+     the activity is available online. A per-activity static version was built and
+     withdrawn the same day: Doenet is to supply a static rendering itself, so the
+     record grows no field for one. A bare `<plus:interactive>` has no static half;
+     PreTeXt draws it in a PDF as its preview and QR code.
+   - **No `aspect`, and `resize-behavior="responsive"`, for every placement,
+     bare included.** Doenet's viewer posts its content's height (a SPLICE
+     `lti.frameResize`, height only) and PreTeXt's `lti_iframe_resizer.js`, on
+     every page, applies it, so the frame's height follows the activity: `aspect`
+     only set the height it opened at. Assembly drops a stored one (an attribute
+     an author writes on the placeholder itself still passes through, as every
+     placement attribute does). The horizontal scroll bar authors saw was the
+     *width*: under PreTeXt's default `fixed-height`, `width="100%"` is a fixed
+     `width:600px`, while an exercise's knowl box is 570px wide (and a phone's
+     ~300px), so `.interactive-iframe-container` (`overflow-x: auto`) scrolled
+     sideways. `responsive` writes `max-width: 100%; width: 100%` instead.
+     Measured 2026-11-24 with pretext-html 0.21.1 and `@doenet/standalone` 0.7.29
+     in headless Chromium at 1280, 900, 700 and 390px: with `fixed-height` every
+     frame overflowed its container by 30px (296px at 390); with `responsive` none
+     did, and the height still followed the content. `aspect` made no difference
+     to either.
+
+9. **A placement decides whether its exercise is titled** (2026-11-25). A `title`
+   attribute on any exercise placement — designer exercise or activity, every
+   wrapper tag — replaces the record's title for that placement: `title="no"` (or
+   empty) leaves the wrapper untitled, anything else is the title, as XML text.
+   Assembly consumes it (`resolveExerciseRef`), so it never reaches the element as
+   an attribute; on a bare `<plus:interactive>` it does nothing. The placement, not
+   the record, because the choice follows where the exercise sits (untitled in an
+   `<exercises>` division, titled as a project) and one record can be placed both
+   ways under `instance`; and because the record's title is also its name in the
+   explorer, tabs and title bar, which a blank title would leave to the ref.
+   Context-based defaults (untitled inside `<exercises>`) were considered and left
+   until authors show they want them. The LaTeX converter keeps the braces of
+   `\plus[title={A, B}]` in the value — an upstream fix, not one made here.
+   - The duplicate-placement lint compares exercise placements by record, not by
+     tag: `<plus:exercise ref="x"/>` and `<plus:project ref="x"/>` both write
+     `xml:id="x"` and `x-doenet`, and a bare interactive is `x`, so a second
+     unnamed placement under a different tag needs an `instance` just as one
+     under the same tag does.
+
+10. **A doenet.org embed code pasted into a PreTeXt buffer becomes an iframe
+    interactive** (2026-11-25), a third way in beside the record and Insert's
+    in-place activity: `<interactive iframe="https://doenet.org/embed/<id>"
+    width="100%" resize-behavior="responsive"/>`, the activity staying on
+    doenet.org. Only the `/embed/<id>` page: measured in headless Chromium, it
+    posts `lti.frameResize` with its content's height (and SPLICE
+    `getState`/score messages, which PreTeXt's Runestone SPLICE wrapper reads for an
+    `@iframe` in a dual exercise). Rendered with pretext-html 0.21.1 at 1280 and
+    390px, bare and inside an `<exercise>`, the resizer set each frame to the
+    activity's height (about 850px) and no frame overflowed its box. Any lone
+    `<iframe>` pasted is read as the link in its `src`, so YouTube's, Desmos's and
+    GeoGebra's embed codes convert too (`mediaUrls.ts`).
+
 ## Work
 
 Rails: `source_format` gains `doenetml: 7`; an exercise accepts `pretext` or
@@ -180,9 +255,9 @@ Host: `railsProjectMapping.js` and `editor.jsx` pass `source_format` both ways.
   done: a real `pretext build` of a downloaded archive, files for snippets and
   designer exercises, and LaTeX/Markdown divisions in
   their own format (they are converted to PreTeXt).
-- **Static outputs.** A PDF needs a `<static>` or `@preview` for every interactive;
-  the existing lint notes that when the project has such a target. A Doenet record
-  has nowhere to put one yet; a `static` field on the record is the natural home.
+- **Static outputs.** A wrapped activity's static half is a fixed note (Decision 8)
+  until Doenet can render a static version of an activity itself; that, not a
+  field on the record, is where a real one will come from.
 - **Doenet's version per record** (`@version` on the interactive) is already an
   `attrs` entry assembly writes through; the settings drawer does not offer it.
 - **Runestone/SCORM** builds give the activity an id and SPLICE messaging; nothing

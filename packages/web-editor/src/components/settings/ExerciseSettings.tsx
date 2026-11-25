@@ -85,7 +85,7 @@ const ExerciseSettings = ({ exercise, embedFormat, onSave, readOnly }: ExerciseS
     await onSave({ ...exercise, ref }, exercise.ref);
   };
 
-  /** A Doenet activity's `<interactive>` attribute (its width or aspect); blank removes it. */
+  /** A Doenet activity's `<interactive>` attribute (its width); blank removes it. */
   const commitAttr = (name: string) => async (next: string): Promise<void> => {
     const value = next.trim();
     const attrs = { ...(exercise.attrs ?? {}) };
@@ -134,6 +134,11 @@ const ExerciseSettings = ({ exercise, embedFormat, onSave, readOnly }: ExerciseS
           disabled={readOnly}
           placeholder="My exercise"
         />
+        <SettingsNote>
+          Printed wherever the exercise is placed. To leave it off one placement, add{" "}
+          <code>title="no"</code> to that placement's embed code; <code>title="…"</code> gives it
+          a different title there.
+        </SettingsNote>
       </SettingsField>
       <SettingsField label="ID" htmlFor="exercise-settings-ref">
         <CommitField
@@ -156,19 +161,9 @@ const ExerciseSettings = ({ exercise, embedFormat, onSave, readOnly }: ExerciseS
               disabled={readOnly}
               mono
             />
-          </SettingsField>
-          <SettingsField label="Aspect" htmlFor="exercise-settings-aspect">
-            <CommitField
-              id="exercise-settings-aspect"
-              placeholder="4:3"
-              value={exercise.attrs?.aspect ?? ""}
-              onCommit={commitAttr("aspect")}
-              disabled={readOnly}
-              mono
-            />
             <SettingsNote>
-              The frame's width and shape in the page, as PreTeXt's <code>width</code> and{" "}
-              <code>aspect</code>. DoenetML {effectiveDoenetmlVersion(docinfo ?? "")}
+              The frame's width in the page, as PreTeXt's <code>width</code>. Its height follows the
+              activity. DoenetML {effectiveDoenetmlVersion(docinfo ?? "")}
               {docinfo && /<doenetml\b/.test(docinfo) ? ", from the docinfo." : ", the default."}
             </SettingsNote>
           </SettingsField>
