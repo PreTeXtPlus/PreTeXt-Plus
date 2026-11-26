@@ -5,11 +5,12 @@
  * `set_host_api`.
  *
  * Ported from the PreFigure playground's `src/worker/compat-api.ts` (Jason
- * Siefken, David Austin; GPL-3.0 — see NOTICE in this directory), minus braille:
- * this editor renders SVG only, so the speech-rule-engine and liblouis builds
- * that tactile output needs are not carried. The two braille entry points say so
- * rather than silently returning the text.
+ * Siefken, David Austin; GPL-3.0 — see NOTICE in this directory). Braille is
+ * not here but in a module of its own (`../braille`), a few megabytes the
+ * worker imports only for a tactile render and hands over with `setBraille`;
+ * until then the two braille entry points throw rather than return print.
  */
+import type { BrailleTranslator } from "../braille";
 import type { PrefigHostApi } from "./handler";
 import { mathjax } from "@mathjax/src/mjs/mathjax.js";
 import { TeX } from "@mathjax/src/mjs/input/tex.js";
@@ -20,6 +21,8 @@ import type { MathDocument } from "@mathjax/src/mjs/core/MathDocument.js";
 import type { LiteElement } from "@mathjax/src/mjs/adaptors/lite/Element.js";
 import type { LiteText } from "@mathjax/src/mjs/adaptors/lite/Text.js";
 import type { LiteDocument } from "@mathjax/src/mjs/adaptors/lite/Document.js";
+import { SerializedMmlVisitor } from "@mathjax/src/mjs/core/MmlTree/SerializedMmlVisitor.js";
+import type { MmlNode } from "@mathjax/src/mjs/core/MmlTree/MmlNode.js";
 // TeX packages beyond `base`, registered by import; the names below pick them.
 import "@mathjax/src/mjs/input/tex/ams/AmsConfiguration.js";
 import "@mathjax/src/mjs/input/tex/newcommand/NewcommandConfiguration.js";
@@ -29,8 +32,7 @@ import "@mathjax/src/mjs/input/tex/color/ColorConfiguration.js";
 
 const TEX_PACKAGES = ["base", "ams", "newcommand", "noundefined", "boldsymbol", "color"];
 
-const TACTILE_UNSUPPORTED =
-  "Tactile (braille) output is not available in the editor; build the project for it.";
+const BRAILLE_NOT_LOADED = "Braille translation is not loaded";
 
 export class PrefigBrowserApi implements PrefigHostApi {
   private macros = "";
@@ -38,6 +40,9 @@ export class PrefigBrowserApi implements PrefigHostApi {
   private ctx: OffscreenCanvasRenderingContext2D | null = null;
   private readonly adaptor = liteAdaptor();
   private readonly svgDocument: MathDocument<LiteElement, LiteText, LiteDocument>;
+  // TeX → MathML only, for Nemeth: no output jax.
+  private readonly mmlDocument: MathDocument<LiteElement, LiteText, LiteDocument>;
+  private braille: BrailleTranslator | null = null;
 
   constructor() {
     RegisterHTMLHandler(this.adaptor);
@@ -45,6 +50,12 @@ export class PrefigBrowserApi implements PrefigHostApi {
       InputJax: new TeX({ packages: TEX_PACKAGES }),
       OutputJax: new SVG({ linebreaks: { inline: false } }),
     });
+    this.mmlDocument = mathjax.document("", { InputJax: new TeX({ packages: TEX_PACKAGES }) });
+  }
+
+  /** The translator a tactile render's labels go through. */
+  setBraille(braille: BrailleTranslator): void {
+    this.braille = braille;
   }
 
   /** `[width, ascent, descent]` of `text` set in `fontString` (a CSS font). */
@@ -57,14 +68,18 @@ export class PrefigBrowserApi implements PrefigHostApi {
     return [metrics.width, metrics.actualBoundingBoxAscent, metrics.actualBoundingBoxDescent];
   }
 
-  // Called by Python with (text, typeform) / (expression); the arguments are
-  // not read because there is no braille translator to hand them to.
-  translate_text(): string {
-    throw new Error(TACTILE_UNSUPPORTED);
+  /** A text label in contracted UEB; `typeform` is each character's emphasis. */
+  translate_text(text: string, typeform: number[]): string {
+    if (!this.braille) throw new Error(BRAILLE_NOT_LOADED);
+    return this.braille.text(text, typeform);
   }
 
-  processBraille(): string {
-    throw new Error(TACTILE_UNSUPPORTED);
+  /** A TeX label in Nemeth, by way of MathML, with the document's macros in scope. */
+  processBraille(expression: string): string {
+    if (!this.braille) throw new Error(BRAILLE_NOT_LOADED);
+    const tex = this.macros ? `${this.macros}\n${expression}` : expression;
+    const math = this.mmlDocument.convert(tex, { display: true, end: "mathml" }) as MmlNode;
+    return this.braille.math(new SerializedMmlVisitor().visitTree(math));
   }
 
   /**

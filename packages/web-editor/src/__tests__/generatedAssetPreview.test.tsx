@@ -340,4 +340,74 @@ describe("GeneratedAssetPreview", () => {
       expect(screen.getByTestId("generated-asset-log")).toHaveTextContent("sine.sage");
     });
   });
+
+  describe("the tactile diagram", () => {
+    const tactileRuntime = () => {
+      const runtime = fakeRuntime("ready");
+      const asked: boolean[] = [];
+      runtime.render = vi.fn(async (source: string, options): Promise<RenderResult> => {
+        asked.push(!!options?.tactile);
+        return { svg: options?.tactile ? "<svg>tactile</svg>" : SVG, annotations: null, source };
+      });
+      return Object.assign(runtime, { asked });
+    };
+
+    it("is offered for a generator that has one", () => {
+      render(<GeneratedAssetPreview asset={asset} docinfo="" runtime={fakeRuntime("ready")} debounceMs={0} />);
+      expect(screen.getByTestId("generated-asset-view-tactile")).toHaveAttribute("aria-pressed", "false");
+    });
+
+    it("is not offered for one that has none, or to a reader", () => {
+      const tikz = { ...asset, sourceFormat: "tikz" as const };
+      const { unmount } = render(<GeneratedAssetPreview asset={tikz} docinfo="" runtime={fakeRuntime("ready")} />);
+      expect(screen.queryByTestId("generated-asset-view")).not.toBeInTheDocument();
+      unmount();
+      render(<GeneratedAssetPreview asset={asset} docinfo="" runtime={fakeRuntime("ready")} readOnly />);
+      expect(screen.queryByTestId("generated-asset-view")).not.toBeInTheDocument();
+    });
+
+    it("renders when chosen, downloads as <ref>-tactile.svg, and is never stored", async () => {
+      const createObjectURL = vi
+        .spyOn(URL, "createObjectURL")
+        .mockImplementation((blob) => ((blob as Blob).size === SVG.length ? "blob:visual" : "blob:tactile"));
+      const runtime = tactileRuntime();
+      const onOutput = vi.fn();
+      render(<GeneratedAssetPreview asset={asset} docinfo="" runtime={runtime} onOutput={onOutput} debounceMs={0} />);
+      await waitFor(() => expect(onOutput).toHaveBeenCalledTimes(1));
+      expect(runtime.asked).toEqual([false]);
+
+      fireEvent.click(screen.getByTestId("generated-asset-view-tactile"));
+      await waitFor(() => expect(screen.getByRole("img")).toHaveAttribute("src", "blob:tactile"));
+      expect(runtime.asked).toEqual([false, true]);
+      expect(screen.getByTestId("generated-asset-status")).toHaveTextContent("Tactile version, up to date.");
+      const link = screen.getByTestId("download-generated-asset");
+      expect(link).toHaveAttribute("href", "blob:tactile");
+      expect(link).toHaveAttribute("download", "graph-tactile.svg");
+      expect(link).toHaveTextContent("Download tactile SVG");
+      expect(onOutput).toHaveBeenCalledTimes(1);
+
+      // Back to the visual picture, already current: shown without another render.
+      fireEvent.click(screen.getByTestId("generated-asset-view-visual"));
+      expect(screen.getByRole("img")).toHaveAttribute("src", "blob:visual");
+      expect(screen.getByTestId("download-generated-asset")).toHaveAttribute("download", "graph.svg");
+      await new Promise((r) => setTimeout(r, 20));
+      expect(runtime.asked).toEqual([false, true]);
+      createObjectURL.mockRestore();
+    });
+
+    it("shows a tactile failure only in the tactile view", async () => {
+      const runtime = fakeRuntime("ready");
+      runtime.render = vi.fn(async (source: string, options): Promise<RenderResult> => {
+        if (options?.tactile) throw new GeneratorRenderError("Tactile diagrams aren't available here.");
+        return { svg: SVG, annotations: null, source };
+      });
+      render(<GeneratedAssetPreview asset={asset} docinfo="" runtime={runtime} debounceMs={0} />);
+      fireEvent.click(screen.getByTestId("generated-asset-view-tactile"));
+      await waitFor(() =>
+        expect(screen.getByTestId("generated-asset-error")).toHaveTextContent("Tactile diagrams aren't available here."),
+      );
+      fireEvent.click(screen.getByTestId("generated-asset-view-visual"));
+      expect(screen.queryByTestId("generated-asset-error")).not.toBeInTheDocument();
+    });
+  });
 });

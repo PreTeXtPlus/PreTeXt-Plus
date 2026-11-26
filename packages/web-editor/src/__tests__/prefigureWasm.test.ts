@@ -18,22 +18,38 @@ import {
 } from "../generators/prefigure/worker/handler";
 import { PREFIG_WASM_BINARY, PREFIG_WASM_GLUE, PREFIG_WASM_VERSION, type PrefigureWorkerResponse } from "../generators/prefigure/worker/protocol";
 import { PREFIGURE_STARTER_SOURCE } from "../generators/prefigure/definition";
+import type { BrailleTranslator } from "../generators/prefigure/braille";
 
 const vendor = resolve(__dirname, "../../../../vendor/prefigure");
 const glue = resolve(vendor, PREFIG_WASM_GLUE);
 const binary = resolve(vendor, PREFIG_WASM_BINARY);
 
-/** What the engine asks for, answered with made-up but well-formed values. */
-const stubHost: PrefigHostApi & { math: string[] } = {
+/**
+ * What the engine asks for, answered with made-up but well-formed values —
+ * except text braille, which goes through the real translator once the worker
+ * has handed it over (math braille needs MathJax's MathML, which this stub has not).
+ */
+const stubHost: PrefigHostApi & { math: string[]; brailleMath: string[]; braille: BrailleTranslator | null } = {
   math: [],
+  brailleMath: [],
+  braille: null,
   measure_text: (text) => [6 * text.length, 8, 2],
-  translate_text: (text) => text,
+  translate_text(text) {
+    if (!this.braille) throw new Error("no braille");
+    return this.braille.text(text);
+  },
   processMath(expression) {
     this.math.push(expression);
     return '<svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 12 12"><text>m</text></svg>';
   },
-  processBraille: () => "",
+  processBraille(expression) {
+    this.brailleMath.push(expression);
+    return "⠭";
+  },
   setMacros() {},
+  setBraille(braille) {
+    this.braille = braille;
+  },
 };
 
 const run = async (request: Parameters<typeof handlePrefigureWorkerRequest>[0]) => {
@@ -45,6 +61,7 @@ const run = async (request: Parameters<typeof handlePrefigureWorkerRequest>[0]) 
       return { ...mod, default: () => mod.default({ module_or_path: readFileSync(binary) }) };
     },
     createHostApi: async () => stubHost,
+    importBraille: () => import("../prefigureBraille"),
   });
   return responses;
 };
@@ -52,7 +69,7 @@ const run = async (request: Parameters<typeof handlePrefigureWorkerRequest>[0]) 
 describe.skipIf(!existsSync(binary))("the vendored PreFigure engine", () => {
   beforeAll(async () => {
     resetPrefigureEngineForTests();
-    const responses = await run({ type: "load", token: 1, glueUrl: glue, wasmUrl: binary });
+    const responses = await run({ type: "load", token: 1, glueUrl: glue, wasmUrl: binary, brailleUrl: "braille.js" });
     expect(responses[responses.length - 1]).toEqual({ type: "loaded", token: 1 });
   });
 
@@ -68,6 +85,25 @@ describe.skipIf(!existsSync(binary))("the vendored PreFigure engine", () => {
     expect(response.svg).toMatch(/^<svg/);
     expect(response.svg).toContain("<path");
     expect(stubHost.math).toContain("(1, f(1))");
+  });
+
+  it("renders a tactile diagram, with braille labels", async () => {
+    const source = `<diagram dimensions="(300,300)" margins="5">
+  <coordinates bbox="(-4,-4,4,4)">
+    <axes/>
+    <label anchor="(1,1)">the peak</label>
+    <label anchor="(-1,-1)"><m>x^2</m></label>
+  </coordinates>
+</diagram>`;
+    const responses = await run({ type: "render", token: 4, source, macros: "", tactile: true });
+    const response = responses[responses.length - 1];
+    expect(response.type).toBe("rendered");
+    if (response.type !== "rendered") return;
+    expect(responses).toContainEqual({ type: "progress", token: 4, message: "Loading braille translation…" });
+    // "the peak" in contracted UEB: "the" and "ea" are one cell each.
+    expect(response.svg).toContain("&#10286;&#10240;&#10255;&#10242;&#10245;"); // ⠮⠀⠏⠂⠅
+    expect(stubHost.brailleMath).toContain("x^2");
+    expect(stubHost.math).not.toContain("x^2");
   });
 
   it("reports a malformed diagram as the engine's own message", async () => {

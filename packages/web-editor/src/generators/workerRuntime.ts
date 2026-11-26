@@ -44,7 +44,7 @@ export interface WorkerRuntimeConfig<Request> {
   createWorker: () => GeneratorWorkerLike<Request>;
   /** The worker's `load` message. Throwing fails the load before any worker starts. */
   loadRequest: () => WithoutToken<Request>;
-  renderRequest: (source: string, docinfo: DocinfoInputs) => WithoutToken<Request>;
+  renderRequest: (source: string, docinfo: DocinfoInputs, options: { tactile: boolean }) => WithoutToken<Request>;
   /** Applied to each picture here on the main thread, where there is a DOM. A throw fails the render. */
   finishSvg?: (svg: string) => string;
   /**
@@ -211,23 +211,29 @@ export function createWorkerRuntime<Request>(config: WorkerRuntimeConfig<Request
   };
 
   // At most one render on the worker, at most one waiting (see renderQueue.ts).
-  const enqueue = createRenderQueue(async ({ source, docinfo }: { source: string; docinfo: DocinfoInputs }) => {
+  type Job = { source: string; docinfo: DocinfoInputs; tactile: boolean; onProgress?: (message: string) => void };
+  const enqueue = createRenderQueue(async ({ source, docinfo, tactile, onProgress }: Job) => {
     // The watchdog may have stopped the worker since this job was queued.
     await ensureWorker();
     const unwatch = watchRender();
     try {
-      const response = await send(config.renderRequest(source, docinfo));
+      const response = await send(config.renderRequest(source, docinfo, { tactile }), onProgress);
       if (response.type !== "rendered") throw new Error("Unexpected worker response");
       const svg = config.finishSvg ? config.finishSvg(response.svg) : response.svg;
       return { svg, annotations: response.annotations, source };
     } finally {
       unwatch();
     }
-  });
+  }, (job) => (job.tactile ? "tactile" : "visual"));
 
   const render = async (source: string, renderOptions: RenderOptions = {}): Promise<RenderResult> => {
     await ensureWorker();
-    return enqueue({ source, docinfo: renderOptions.docinfo ?? {} });
+    return enqueue({
+      source,
+      docinfo: renderOptions.docinfo ?? {},
+      tactile: !!renderOptions.tactile,
+      onProgress: renderOptions.onProgress,
+    });
   };
 
   return {

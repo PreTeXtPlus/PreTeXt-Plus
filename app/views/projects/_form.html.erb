@@ -12,7 +12,7 @@
     data-editor-sign-out-path-value="<%= destroy_user_session_path %>"
     data-editor-preview-worker-url-value="<%= asset_path("preview_worker.js") %>"
     data-editor-prefigure-worker-url-value="<%= asset_path("prefigure_worker.js") %>"
-    data-editor-prefigure-asset-urls-value="<%= %w[ prefig_wasm.js prefig_wasm_bg.wasm ].index_with { |name| asset_path("prefigure/#{name}") }.to_json %>"
+    data-editor-prefigure-asset-urls-value="<%= %w[ prefig_wasm.js prefig_wasm_bg.wasm ].index_with { |name| asset_path("prefigure/#{name}") }.merge("prefigure_braille.js" => asset_path("prefigure_braille.js")).to_json %>"
     data-editor-tikz-worker-url-value="<%= asset_path("tikz_worker.js") %>"
     data-editor-tikz-engine-url-value="<%= tikz_engine_url %>"
     data-editor-asset-render-url-value="<%= asset_render_url(project) %>"

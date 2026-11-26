@@ -1860,14 +1860,16 @@ class ProjectsControllerTest < ActionDispatch::IntegrationTest
 
   # /assets is cached for a year by URL, and a rebuilt engine keeps its filenames, so
   # the editor must be pointed at digested ones.
-  test "edit hands the editor a digested URL for each PreFigure engine file" do
+  test "edit hands the editor a digested URL for each PreFigure engine file, and for braille" do
     get edit_project_url(@project)
     assert_response :success
 
     urls = JSON.parse(css_select("[data-editor-prefigure-asset-urls-value]").first["data-editor-prefigure-asset-urls-value"])
-    assert_equal %w[ prefig_wasm.js prefig_wasm_bg.wasm ], urls.keys
+    assert_equal %w[ prefig_wasm.js prefig_wasm_bg.wasm prefigure_braille.js ], urls.keys
     assert_match %r{\A/assets/prefigure/prefig_wasm-\h+\.js\z}, urls["prefig_wasm.js"]
     assert_match %r{\A/assets/prefigure/prefig_wasm_bg-\h+\.wasm\z}, urls["prefig_wasm_bg.wasm"]
+    # The tactile output's braille translation, its own bundle (app/javascript/prefigure_braille.js).
+    assert_match %r{\A/assets/prefigure_braille-\h+\.js\z}, urls["prefigure_braille.js"]
   end
 
   test "edit hands the editor the TikZ worker, and the engine's directory only once it has been fetched" do

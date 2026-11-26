@@ -17,6 +17,7 @@
     ".": "./src/index.ts",
     "./preview-worker": "./src/previewWorker.ts",
     "./prefigure-worker": "./src/prefigureWorker.ts",
+    "./prefigure-braille": "./src/prefigureBraille.ts",
     "./tikz-worker": "./src/tikzWorker.ts"
   },
   "peerDependencies": {
@@ -54,6 +55,7 @@
     "dompurify": "^3.4.17",
     "nspell": "^2.1.5",
     "react-resizable-panels": "^4.12.2",
+    "speech-rule-engine": "5.0.0-rc.4",
     "tailwindcss": "^4.3.3",
     "xast-util-from-xml": "^4.0.0",
     "zustand": "^5.0.15"

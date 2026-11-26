@@ -346,7 +346,14 @@ build input.
   a stale engine), with MathJax 4 answering the
   engine's host API for TeX labels and the docinfo `<macros>` in scope
   (`worker/compat-api.ts`, ported from the PreFigure playground — see the NOTICE
-  there). SVG only: no tactile/braille. One runtime per generator per page
+  there). It also makes PreFigure's tactile diagram (`AssetGenerator.tactile`,
+  asked for with `RenderOptions.tactile`): braille labels — contracted UEB from
+  liblouis, Nemeth from Speech Rule Engine — come from `prefigure/braille/`, a
+  separate few-megabyte bundle (`@pretextbook/web-editor/prefigure-braille`) the
+  worker imports by URL (`assetUrls["prefigure_braille.js"]`; without it a
+  tactile render fails saying so) on the first tactile render only. The render
+  queue keeps tactile and visual jobs apart (`createRenderQueue`'s `kindOf`), so
+  neither answers for the other. One runtime per generator per page
   (`runtimeFor`), started when a generated asset's pane mounts; renders are
   latest-wins. `__tests__/prefigureWasm.test.ts` drives the real engine through
   the worker handler with a stub host.
@@ -388,7 +395,10 @@ build input.
   `onAssetOutput` to the host with the SVG and the digest of exactly the source
   rendered. A render that typing overtook is
   shown but not sent; a failed store is shown with a retry. A failed render
-  shows its message, with any transcript folded under it. The picture on screen
+  shows its message, with any transcript folded under it. A generator with a
+  tactile output gets a Visual / Tactile switch: the tactile view renders live
+  the same way, but its picture is only shown and downloadable
+  (`<ref>-tactile.svg`) — never stored, since the asset's picture is visual. The picture on screen
   can be downloaded as `<ref>.svg`: a render from its blob, a stored picture from
   the host's `assetDownloadUrl` (the Rails host's `content_file?download=1`, an
   attachment redirect, since `download` is ignored once a redirect leaves the

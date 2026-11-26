@@ -38,6 +38,11 @@ export interface RenderOptions {
   ref?: string;
   /** Word from the engine while the render is under way ("Queued on the build server…"). */
   onProgress?: (message: string) => void;
+  /**
+   * The generator's tactile output (braille labels, sized for embossing)
+   * instead of its visual one, for a generator that has one (`tactile`).
+   */
+  tactile?: boolean;
 }
 
 /** What a host's server render is asked for: one figure, from the source as typed. */
@@ -161,4 +166,10 @@ export interface AssetGenerator {
   renderTrigger: "live" | "manual";
   /** Absent when the generator has no runtime, in the browser or on a server. */
   createRuntime?(options: GeneratorRuntimeOptions): GeneratorRuntime;
+  /**
+   * The generator also makes a tactile diagram (PreFigure), which its runtime
+   * renders when asked with `RenderOptions.tactile`. The preview offers it to
+   * look at and download; the stored picture is always the visual one.
+   */
+  tactile?: boolean;
 }
