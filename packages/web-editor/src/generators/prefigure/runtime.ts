@@ -4,7 +4,12 @@
  */
 import type { GeneratorRuntime, GeneratorRuntimeOptions } from "../types";
 import { createWorkerRuntime, type GeneratorWorkerLike } from "../workerRuntime";
-import { PREFIG_WASM_BINARY, PREFIG_WASM_GLUE, type PrefigureWorkerRequest } from "./worker/protocol";
+import {
+  PREFIG_BRAILLE_MODULE,
+  PREFIG_WASM_BINARY,
+  PREFIG_WASM_GLUE,
+  type PrefigureWorkerRequest,
+} from "./worker/protocol";
 
 export type PrefigureWorkerLike = GeneratorWorkerLike<PrefigureWorkerRequest>;
 
@@ -33,7 +38,18 @@ export function createPrefigureRuntime(
         if (!options.workerUrl) throw new Error("The host gave no URL for the PreFigure worker");
         return new Worker(options.workerUrl, { type: "module", name: "prefigure" }) as PrefigureWorkerLike;
       }),
-    loadRequest: () => ({ type: "load", glueUrl: urlOf(PREFIG_WASM_GLUE), wasmUrl: urlOf(PREFIG_WASM_BINARY) }),
-    renderRequest: (source, docinfo) => ({ type: "render", source, macros: docinfo.macros ?? "" }),
+    loadRequest: () => ({
+      type: "load",
+      glueUrl: urlOf(PREFIG_WASM_GLUE),
+      wasmUrl: urlOf(PREFIG_WASM_BINARY),
+      // Optional: a host that doesn't serve braille has visual diagrams only.
+      brailleUrl: options.assetUrls?.[PREFIG_BRAILLE_MODULE] ? urlOf(PREFIG_BRAILLE_MODULE) : undefined,
+    }),
+    renderRequest: (source, docinfo, { tactile }) => ({
+      type: "render",
+      source,
+      macros: docinfo.macros ?? "",
+      ...(tactile ? { tactile } : {}),
+    }),
   });
 }

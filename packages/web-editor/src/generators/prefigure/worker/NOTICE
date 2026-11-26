@@ -3,3 +3,8 @@ The worker in this directory is derived from the PreFigure playground
 copyright Jason Siefken and David Austin, licensed under the GNU General Public
 License v3.0. PreFigure itself (the `prefig` wheel the worker loads) is GPL-3.0.
 This editor is AGPL-3.0, which GPLv3 section 13 permits combining with.
+
+The braille translation in ../braille (for tactile diagrams) follows the same
+playground: liblouis (LGPL-2.1-or-later), its emscripten build and tables taken
+from the playground's src/worker/liblouis, and Speech Rule Engine (Apache-2.0).
+See ../braille/README.md.

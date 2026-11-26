@@ -20,8 +20,16 @@ export const PREFIG_WASM_VERSION = "0.7.9";
 export const PREFIG_WASM_GLUE = "prefig_wasm.js";
 export const PREFIG_WASM_BINARY = "prefig_wasm_bg.wasm";
 
+/**
+ * Braille translation for tactile output (`@pretextbook/web-editor/prefigure-braille`,
+ * bundled by the host), keyed so in `assetUrls` too. Optional: without it a
+ * tactile render fails saying so, and visual renders are unaffected.
+ */
+export const PREFIG_BRAILLE_MODULE = "prefigure_braille.js";
+
 export type PrefigureWorkerRequest =
-  | { type: "load"; token: number; glueUrl: string; wasmUrl: string }
-  | { type: "render"; token: number; source: string; macros: string };
+  | { type: "load"; token: number; glueUrl: string; wasmUrl: string; brailleUrl?: string }
+  /** `tactile`: PreFigure's tactile output — braille labels, sized for embossing. */
+  | { type: "render"; token: number; source: string; macros: string; tactile?: boolean };
 
 export type PrefigureWorkerResponse = GeneratorWorkerResponse;

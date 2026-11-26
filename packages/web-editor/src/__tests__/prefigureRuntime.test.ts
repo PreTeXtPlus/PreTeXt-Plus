@@ -87,6 +87,29 @@ describe("createPrefigureRuntime", () => {
     expect(createWorker).not.toHaveBeenCalled();
   });
 
+  it("hands the worker the braille module's URL when the host serves it, and asks for tactile output", async () => {
+    const worker = new FakeWorker();
+    const runtime = createPrefigureRuntime(
+      { ...options, assetUrls: { ...options.assetUrls, "prefigure_braille.js": "https://host.test/assets/prefigure_braille-9f.js" } },
+      { createWorker: () => worker },
+    );
+    const result = runtime.render("<diagram/>", { tactile: true });
+    await flush();
+    const load = worker.requests[0] as Extract<PrefigureWorkerRequest, { type: "load" }>;
+    expect(load.brailleUrl).toBe("https://host.test/assets/prefigure_braille-9f.js");
+    expect(worker.requests.find((r) => r.type === "render")).toMatchObject({ tactile: true });
+    worker.answerRender();
+    await result;
+    runtime.dispose();
+
+    // Without it, the load says nothing of braille.
+    const plain = new FakeWorker();
+    const visualOnly = createPrefigureRuntime(options, { createWorker: () => plain });
+    await visualOnly.load();
+    expect((plain.requests[0] as Extract<PrefigureWorkerRequest, { type: "load" }>).brailleUrl).toBeUndefined();
+    visualOnly.dispose();
+  });
+
   it("renders to the SVG and annotations, forwarding the macros, and reports the source rendered", async () => {
     const worker = new FakeWorker();
     const runtime = createPrefigureRuntime(options, { createWorker: () => worker });

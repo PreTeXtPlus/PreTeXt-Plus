@@ -9,9 +9,12 @@
  * repo's `packages/prefig-wasm`, MathJax variant): the glue is imported from the
  * URL the host serves it at with a dynamic `import()` of a computed string,
  * which no bundler follows, and the binary's URL is handed to the glue's `init`.
- * What the engine cannot do itself — typeset TeX labels, measure text — it asks
- * the host object for (`./compat-api.ts`).
+ * What the engine cannot do itself — typeset TeX labels, measure text, write
+ * braille — it asks the host object for (`./compat-api.ts`). Braille comes from
+ * a module of its own (`../braille`), imported by URL like the glue, and only
+ * when a tactile render is first asked for.
  */
+import type { BrailleTranslator } from "../braille";
 import type { PrefigureWorkerRequest, PrefigureWorkerResponse } from "./protocol";
 import { PREFIG_WASM_VERSION } from "./protocol";
 
@@ -35,32 +38,64 @@ export interface PrefigHostApi {
   processBraille(expression: string): string;
   /** TeX macro definitions to put in scope for every label of the next render. */
   setMacros(macros: string): void;
+  /** The braille translator, before the first tactile render. */
+  setBraille(braille: BrailleTranslator): void;
+}
+
+/** What the braille module (`@pretextbook/web-editor/prefigure-braille`) exports. */
+export interface PrefigBrailleModule {
+  createBrailleTranslator(): Promise<BrailleTranslator>;
 }
 
 /** The pieces a test replaces: how the glue is imported and what host it gets. */
 export interface PrefigureWorkerDeps {
   importGlue?: (glueUrl: string) => Promise<PrefigWasmModule>;
   createHostApi?: () => Promise<PrefigHostApi>;
+  importBraille?: (brailleUrl: string) => Promise<PrefigBrailleModule>;
 }
 
 interface Engine {
   wasm: PrefigWasmModule;
   host: PrefigHostApi;
+  /** Where the braille module is served, when the host serves it. */
+  brailleUrl: string | undefined;
 }
 
 let engine: Engine | null = null;
 let loading: Promise<Engine> | null = null;
+let brailleLoading: Promise<void> | null = null;
 
 const defaultDeps: Required<PrefigureWorkerDeps> = {
   importGlue: (glueUrl) => import(/* @vite-ignore */ glueUrl) as Promise<PrefigWasmModule>,
   // Imported here rather than at the top so a worker that never gets its engine
   // never pays for MathJax.
   createHostApi: async () => new (await import("./compat-api")).PrefigBrowserApi(),
+  importBraille: (brailleUrl) => import(/* @vite-ignore */ brailleUrl) as Promise<PrefigBrailleModule>,
 };
+
+/** Give the engine's host a braille translator, importing it the first time. */
+function loadBraille(
+  current: Engine,
+  progress: (message: string) => void,
+  deps: Required<PrefigureWorkerDeps>,
+): Promise<void> {
+  const { brailleUrl } = current;
+  if (!brailleUrl) return Promise.reject(new Error("Tactile diagrams aren't available here."));
+  brailleLoading ??= (async () => {
+    progress("Loading braille translation…");
+    const module = await deps.importBraille(brailleUrl);
+    current.host.setBraille(await module.createBrailleTranslator());
+  })().catch((error) => {
+    brailleLoading = null;
+    throw error;
+  });
+  return brailleLoading;
+}
 
 async function loadEngine(
   glueUrl: string,
   wasmUrl: string,
+  brailleUrl: string | undefined,
   progress: (message: string) => void,
   deps: Required<PrefigureWorkerDeps>,
 ): Promise<Engine> {
@@ -76,7 +111,7 @@ async function loadEngine(
   progress("Loading MathJax…");
   const host = await deps.createHostApi();
   wasm.set_host_api(host);
-  return { wasm, host };
+  return { wasm, host, brailleUrl };
 }
 
 export async function handlePrefigureWorkerRequest(
@@ -85,6 +120,7 @@ export async function handlePrefigureWorkerRequest(
   deps: PrefigureWorkerDeps = {},
 ): Promise<void> {
   const { token } = request;
+  const resolved = { ...defaultDeps, ...deps };
   const fail = (error: unknown) =>
     post({ type: "failed", token, message: error instanceof Error ? error.message : String(error) });
 
@@ -93,8 +129,9 @@ export async function handlePrefigureWorkerRequest(
       loading ??= loadEngine(
         request.glueUrl,
         request.wasmUrl,
+        request.brailleUrl,
         (message) => post({ type: "progress", token, message }),
-        { ...defaultDeps, ...deps },
+        resolved,
       );
       engine = await loading;
       post({ type: "loaded", token });
@@ -110,8 +147,11 @@ export async function handlePrefigureWorkerRequest(
     return;
   }
   try {
+    if (request.tactile) {
+      await loadBraille(engine, (message) => post({ type: "progress", token, message }), resolved);
+    }
     engine.host.setMacros(request.macros);
-    const result = engine.wasm.build_from_string("svg", request.source);
+    const result = engine.wasm.build_from_string(request.tactile ? "tactile" : "svg", request.source);
     // An empty string means it found no <diagram>.
     if (!result.svg) {
       fail("PreFigure produced no diagram. Is there a <diagram> element?");
@@ -127,4 +167,5 @@ export async function handlePrefigureWorkerRequest(
 export function resetPrefigureEngineForTests(): void {
   engine = null;
   loading = null;
+  brailleLoading = null;
 }

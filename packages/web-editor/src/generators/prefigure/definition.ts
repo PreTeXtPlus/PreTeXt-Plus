@@ -33,4 +33,5 @@ export const prefigure: AssetGenerator = {
   docinfoInputElements: ["macros", "prefigure-preamble"],
   renderTrigger: "live",
   createRuntime: createPrefigureRuntime,
+  tactile: true,
 };

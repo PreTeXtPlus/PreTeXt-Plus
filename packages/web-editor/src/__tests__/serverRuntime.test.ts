@@ -102,4 +102,31 @@ describe("createRenderQueue", () => {
     await expect(enqueue("bad")).rejects.toThrow("boom");
     expect((await enqueue("good")).source).toBe("good");
   });
+
+  it("never lets a job of one kind supersede a job of another", async () => {
+    const ran: string[] = [];
+    let release: (() => void) | undefined;
+    type Job = { source: string; tactile: boolean };
+    const enqueue = createRenderQueue(
+      async ({ source, tactile }: Job) => {
+        ran.push(`${source}${tactile ? " (tactile)" : ""}`);
+        if (source === "first") await new Promise<void>((resolve) => (release = resolve));
+        return { svg: tactile ? "<svg>tactile</svg>" : "<svg/>", annotations: null, source };
+      },
+      (job) => (job.tactile ? "tactile" : "visual"),
+    );
+
+    const first = enqueue({ source: "first", tactile: false });
+    const visual = enqueue({ source: "a", tactile: false });
+    const tactile = enqueue({ source: "a", tactile: true });
+    const newerVisual = enqueue({ source: "b", tactile: false });
+    release!();
+
+    await first;
+    expect((await visual).source).toBe("b");
+    expect((await newerVisual).svg).toBe("<svg/>");
+    expect((await tactile).svg).toBe("<svg>tactile</svg>");
+    // In the order each kind was first queued.
+    expect(ran).toEqual(["first", "b", "a (tactile)"]);
+  });
 });

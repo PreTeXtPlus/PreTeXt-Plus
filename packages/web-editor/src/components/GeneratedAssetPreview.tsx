@@ -1,4 +1,5 @@
 import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from "react";
+import clsx from "clsx";
 import type { Asset } from "../types/editor";
 import { PREVIEW_IMAGE_CLASS } from "./AssetPreview";
 import {
@@ -84,6 +85,10 @@ const useElapsedSeconds = (startedAt: number | null) => {
  * retry. The picture on screen, fresh or stored, can be downloaded as
  * `<ref>.svg`.
  *
+ * A generator with a tactile output (PreFigure) gets a Visual / Tactile switch.
+ * Tactile renders live the same way, but are only shown and offered for
+ * download (`<ref>-tactile.svg`), never stored: the asset's picture is visual.
+ *
  * Holds the picture of one asset, so `Editors` gives each asset its own pane.
  */
 const GeneratedAssetPreview = forwardRef<GeneratedAssetPreviewHandle, GeneratedAssetPreviewProps>(
@@ -116,12 +121,17 @@ const GeneratedAssetPreview = forwardRef<GeneratedAssetPreviewHandle, GeneratedA
     }, [runtime, status, generator, readOnly]);
 
     const [rendered, setRendered] = useState<{ url: string; digest: string } | null>(null);
+    // Which output the pane shows, for a generator with a tactile one.
+    const [view, setView] = useState<"visual" | "tactile">("visual");
+    const tactileView = view === "tactile" && !!generator?.tactile;
+    const [tactile, setTactile] = useState<{ url: string; digest: string } | null>(null);
     const [isRendering, setIsRendering] = useState(false);
     const [renderProgress, setRenderProgress] = useState<string | null>(null);
     // When the render under way began, for the seconds beside a server render's progress.
     const [renderStartedAt, setRenderStartedAt] = useState<number | null>(null);
     const elapsed = useElapsedSeconds(manual ? renderStartedAt : null);
-    const [renderError, setRenderError] = useState<{ message: string; log?: string } | null>(null);
+    // Which output's render failed, so switching views shows only its own error.
+    const [renderError, setRenderError] = useState<{ message: string; log?: string; tactile: boolean } | null>(null);
     const [failedUrl, setFailedUrl] = useState<string | null>(null);
     const [saveFailure, setSaveFailure] = useState<{ message: string; output: GeneratedAssetOutput } | null>(null);
     // What the host has been handed this session, so the same render is not sent twice.
@@ -150,11 +160,12 @@ const GeneratedAssetPreview = forwardRef<GeneratedAssetPreviewHandle, GeneratedA
     };
 
     useEffect(() => () => void (rendered && URL.revokeObjectURL(rendered.url)), [rendered]);
+    useEffect(() => () => void (tactile && URL.revokeObjectURL(tactile.url)), [tactile]);
 
     // Render `source` against `docinfo`: show the picture, and hand the host
     // only a render of the source as it is *now* — one that typing has
-    // overtaken is shown but not stored.
-    const runRender = async (renderSource: string, renderDocinfo: string) => {
+    // overtaken is shown but not stored. A tactile render is only shown.
+    const runRender = async (renderSource: string, renderDocinfo: string, asTactile = false) => {
       if (!runtime || !generator) return;
       const inputs: DocinfoInputs = docinfoInputsFor(generator, renderDocinfo);
       setIsRendering(true);
@@ -165,9 +176,14 @@ const GeneratedAssetPreview = forwardRef<GeneratedAssetPreviewHandle, GeneratedA
           docinfo: inputs,
           ref: latest.current.asset.ref,
           onProgress: (message) => setRenderProgress(message),
+          ...(asTactile ? { tactile: true } : {}),
         });
         const digest = await sha256Hex(renderInputFor(generator, result.source, renderDocinfo));
-        setRenderError(null);
+        setRenderError((previous) => (previous?.tactile === asTactile ? null : previous));
+        if (asTactile) {
+          setTactile({ url: URL.createObjectURL(new Blob([result.svg], { type: "image/svg+xml" })), digest });
+          return;
+        }
         setRendered((previous) => {
           if (previous) URL.revokeObjectURL(previous.url);
           return { url: URL.createObjectURL(new Blob([result.svg], { type: "image/svg+xml" })), digest };
@@ -181,6 +197,7 @@ const GeneratedAssetPreview = forwardRef<GeneratedAssetPreviewHandle, GeneratedA
         setRenderError({
           message: cause instanceof Error ? cause.message : String(cause),
           log: cause instanceof GeneratorRenderError ? cause.log : undefined,
+          tactile: asTactile,
         });
       } finally {
         setIsRendering(false);
@@ -198,12 +215,22 @@ const GeneratedAssetPreview = forwardRef<GeneratedAssetPreviewHandle, GeneratedA
     const canRender = !!runtime && status === "ready" && !!generator && !!asset.ref && !readOnly;
 
     // A live engine renders on a debounce whenever the source (or docinfo)
-    // change; a manual one only when asked.
+    // change; a manual one only when asked. Only the output on view renders,
+    // at once when the author has just switched to it — unless its picture is
+    // already of the source as it stands.
+    const shownDigest = tactileView ? tactile?.digest : rendered?.digest;
+    const upToDate = !!currentDigest && shownDigest === currentDigest;
+    const lastView = useRef(tactileView);
     useEffect(() => {
-      if (manual || !canRender) return;
-      const timer = setTimeout(() => void runRenderRef.current(source, docinfo), debounceMs);
+      const switched = lastView.current !== tactileView;
+      lastView.current = tactileView;
+      if (manual || !canRender || upToDate) return;
+      const timer = setTimeout(
+        () => void runRenderRef.current(source, docinfo, tactileView),
+        switched ? 0 : debounceMs,
+      );
       return () => clearTimeout(timer);
-    }, [manual, canRender, source, docinfo, debounceMs]);
+    }, [manual, canRender, source, docinfo, debounceMs, tactileView, upToDate]);
 
     const renderNow = () => {
       if (!manual || !canRender || isRendering) return;
@@ -221,17 +248,23 @@ const GeneratedAssetPreview = forwardRef<GeneratedAssetPreviewHandle, GeneratedA
 
     const storedIsCurrent = !!asset.url && !!currentDigest && asset.previewInputDigest === currentDigest;
     const showingFresh = rendered && rendered.digest === currentDigest;
-    const imageUrl = rendered?.url ?? asset.url;
+    // A tactile picture is never stored, so the tactile view has only its renders.
+    const imageUrl = tactileView ? tactile?.url : (rendered?.url ?? asset.url);
     const hasPicture = !!imageUrl;
     // A render is already here as a blob. The stored file may be a redirect to
     // another origin, where `download` is ignored, so the host says how to ask for
     // it as an attachment; a new tab keeps the editor if a host hasn't.
-    const downloadUrl = rendered?.url ?? downloadUrlFor?.(asset) ?? asset.url;
+    const downloadUrl = tactileView ? tactile?.url : (rendered?.url ?? downloadUrlFor?.(asset) ?? asset.url);
+    const viewError = renderError && renderError.tactile === tactileView ? renderError : null;
 
     const rendering = `${renderProgress ?? "Making preview…"}${manual && elapsed > 0 ? ` (${elapsed}s)` : ""}`;
     let statusLine: string;
     if (isRendering) statusLine = rendering;
-    else if (showingFresh || (!rendered && storedIsCurrent)) statusLine = "Up to date.";
+    else if (tactileView) {
+      if (tactile && tactile.digest === currentDigest) statusLine = "Tactile version, up to date.";
+      else if (tactile) statusLine = "The source has changed since this preview.";
+      else statusLine = "No tactile preview yet.";
+    } else if (showingFresh || (!rendered && storedIsCurrent)) statusLine = "Up to date.";
     else if (rendered || asset.url) statusLine = "The source has changed since this preview.";
     else statusLine = manual && canRender ? "Click Preview to see the image." : "No preview yet.";
 
@@ -240,6 +273,36 @@ const GeneratedAssetPreview = forwardRef<GeneratedAssetPreviewHandle, GeneratedA
         data-testid="asset-preview"
         className="flex flex-1 h-full min-h-0 flex-col items-center justify-center gap-3 p-6 bg-[#fafafa]"
       >
+        {generator.tactile && runtime && !readOnly && (
+          <div
+            role="group"
+            aria-label="Diagram output"
+            data-testid="generated-asset-view"
+            className="flex flex-none overflow-hidden rounded border border-slate-300 text-[0.8rem]"
+          >
+            {(["visual", "tactile"] as const).map((option) => (
+              <button
+                key={option}
+                type="button"
+                data-testid={`generated-asset-view-${option}`}
+                aria-pressed={view === option}
+                title={
+                  option === "visual"
+                    ? "The diagram as it appears on the page"
+                    : "The diagram for embossing or a tactile display, with braille labels"
+                }
+                className={clsx(
+                  "px-3 py-1",
+                  option === "tactile" && "border-l border-slate-300",
+                  view === option ? "bg-slate-700 text-white" : "bg-white text-slate-800 hover:bg-slate-100",
+                )}
+                onClick={() => setView(option)}
+              >
+                {option === "visual" ? "Visual" : "Tactile"}
+              </button>
+            ))}
+          </div>
+        )}
         {imageUrl && failedUrl !== imageUrl ? (
           <img
             src={imageUrl}
@@ -267,19 +330,19 @@ const GeneratedAssetPreview = forwardRef<GeneratedAssetPreviewHandle, GeneratedA
             {isRendering ? "Making preview…" : hasPicture ? "Refresh" : "Preview"}
           </button>
         )}
-        {renderError && (
+        {viewError && (
           <pre
             data-testid="generated-asset-error"
             className="max-w-full max-h-48 flex-none overflow-auto whitespace-pre-wrap rounded border border-red-200 bg-red-50 px-3 py-2 text-[0.75rem] text-red-800"
           >
-            {renderError.message}
+            {viewError.message}
           </pre>
         )}
-        {renderError?.log && (
+        {viewError?.log && (
           <details data-testid="generated-asset-log" className="max-w-full flex-none text-[0.75rem] text-slate-600">
             <summary className="cursor-pointer text-center">Details</summary>
             <pre className="mt-1 max-h-64 overflow-auto whitespace-pre-wrap rounded border border-slate-200 bg-white px-3 py-2 text-[0.7rem]">
-              {renderError.log}
+              {viewError.log}
             </pre>
           </details>
         )}
@@ -327,12 +390,12 @@ const GeneratedAssetPreview = forwardRef<GeneratedAssetPreviewHandle, GeneratedA
           <a
             data-testid="download-generated-asset"
             href={downloadUrl}
-            download={`${asset.ref}.svg`}
+            download={tactileView ? `${asset.ref}-tactile.svg` : `${asset.ref}.svg`}
             target="_blank"
             rel="noreferrer"
             className="rounded border border-slate-300 bg-white px-3 py-1 text-[0.8rem] text-slate-800 no-underline hover:bg-slate-100"
           >
-            Download SVG
+            {tactileView ? "Download tactile SVG" : "Download SVG"}
           </a>
         )}
       </div>
