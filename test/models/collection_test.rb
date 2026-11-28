@@ -105,4 +105,23 @@ class CollectionTest < ActiveSupport::TestCase
     projects(:one).update!(title: "Renamed")
     assert_includes projects(:one).reload.collections, collections(:one)
   end
+
+  test "move! swaps with the neighbour and stops at the ends" do
+    collection = collections(:one)
+    collection_memberships(:one_one).move!(:up)
+    assert_equal [ projects(:one), projects(:slides) ], collection.reload.projects.to_a
+
+    collection_memberships(:one_one).reload.move!(:up)
+    assert_equal [ projects(:one), projects(:slides) ], collection.reload.projects.to_a
+
+    assert_raises(ArgumentError) { collection_memberships(:one_one).move!(:sideways) }
+  end
+
+  test "changing membership counts as updating the collection" do
+    collection = collections(:public_one)
+    collection.update_column(:updated_at, 1.day.ago)
+
+    collection.collection_memberships.create!(project: projects(:one))
+    assert_operator collection.reload.updated_at, :>, 1.minute.ago
+  end
 end

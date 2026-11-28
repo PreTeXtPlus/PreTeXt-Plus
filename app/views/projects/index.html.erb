@@ -48,6 +48,8 @@
       <p class="text-center my-10">No projects matched "<%= @query %>".</p>
     <% end %>
   <% else %>
+    <%= render "collections/dashboard_row", collections: @collections %>
+
     <% owned = @projects.first(5) %>
     <% if owned.any? %>
       <%= render partial: "card", collection: owned, as: :project %>

@@ -161,6 +161,12 @@
 
   <%= render "collaborations/panel", project: @project %>
 
+  <%# Filing is the owner's alone (see CollectionMembership); not even an admin
+      files someone else's project into their own collections. %>
+  <% if @project.user == current_user %>
+    <%= render "projects/collections", project: @project %>
+  <% end %>
+
   <%= render "projects/assets", project: @project %>
 
   <%= render "projects/backups", project: @project %>

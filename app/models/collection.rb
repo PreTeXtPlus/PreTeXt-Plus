@@ -15,6 +15,11 @@ class Collection < ApplicationRecord
   enum :visibility, { private: 0, unlisted: 1, public: 2 }, default: :private, suffix: true, validate: true
 
   scope :publicly_listed, -> { where(visibility: :public) }
+  # Adds a `projects_count` attribute without a query per row.
+  scope :with_projects_count, -> {
+    left_joins(:collection_memberships).group(:id)
+      .select("collections.*, COUNT(collection_memberships.id) AS projects_count")
+  }
 
   # Lowercase words joined by single hyphens, so it can sit in a URL beside the
   # owner's username. Unique among one user's collections only; the

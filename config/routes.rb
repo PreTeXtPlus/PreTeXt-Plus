@@ -130,7 +130,19 @@ Rails.application.routes.draw do
       post "invoice" => "subscription_types#invoice", as: "invoice"
     end
   end
+  # Named, ordered groups of an author's own projects. Memberships are what the
+  # collection page adds, removes and reorders.
+  resources :collections do
+    resources :memberships, only: %i[ create destroy ], controller: "collection_memberships" do
+      member do
+        patch :move
+      end
+    end
+  end
+
   resources :projects do
+    # Which of the owner's collections hold this project, set from its dashboard.
+    resource :collections, only: :update, controller: "project_collections"
     member do
       get "download" => "projects#download", as: "download"
     end

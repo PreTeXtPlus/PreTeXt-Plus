@@ -1,0 +1,15 @@
+<% content_for :title, "Edit #{@collection.name}" %>
+<% content_for :breadcrumb do %>
+  <%= link_to "Projects", projects_path, class: "hover:underline" %> /
+  <%= link_to "Collections", collections_path, class: "hover:underline" %> /
+  <%= link_to @collection.name, @collection, class: "hover:underline" %> /
+<% end %>
+<% content_for :heading, "Edit collection" %>
+
+<%= render "form", collection: @collection %>
+
+<div class="mt-10 max-w-2xl border-t border-gray-200 pt-5">
+  <%= button_to "Delete this collection", @collection, method: :delete,
+        class: "cursor-pointer rounded-md px-3 py-2 text-sm text-red-700 hover:bg-red-50",
+        data: { turbo_confirm: "Delete “#{@collection.name}”? The projects in it are not deleted." } %>
+</div>

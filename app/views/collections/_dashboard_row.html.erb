@@ -1,0 +1,27 @@
+<%# The projects dashboard's row of the author's four most recently updated
+    collections, above their projects. %>
+<section aria-labelledby="dashboard-collections-heading">
+  <div class="flex items-center justify-between gap-3">
+    <h2 id="dashboard-collections-heading" class="font-mono text-xs font-semibold uppercase tracking-widest text-gray-500">
+      Collections
+    </h2>
+    <% if collections.any? %>
+      <%= link_to "All collections →", collections_path, class: "text-sm text-blue-600 hover:underline" %>
+    <% end %>
+  </div>
+  <% if collections.any? %>
+    <div class="mt-2 grid grid-cols-2 gap-3 sm:grid-cols-4">
+      <% collections.each do |collection| %>
+        <%= link_to collection, class: "#{button_classes(color: "gray", outlined: true)} flex min-w-0 flex-col items-start px-3 py-2 text-left" do %>
+          <span class="w-full truncate text-sm"><%= collection.name %></span>
+          <span class="text-xs font-normal text-gray-500"><%= pluralize(collection.projects_count, "project") %></span>
+        <% end %>
+      <% end %>
+    </div>
+  <% else %>
+    <p class="mt-2 text-sm text-gray-500">
+      Group related projects into
+      <%= link_to "a collection", new_collection_path, class: "text-blue-600 hover:underline" %>.
+    </p>
+  <% end %>
+</section>

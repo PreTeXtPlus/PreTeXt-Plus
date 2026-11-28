@@ -1,0 +1,56 @@
+<%= form_with model: collection, class: "space-y-6 max-w-2xl" do |form| %>
+  <% if collection.errors.any? %>
+    <div class="rounded-lg border border-red-200 bg-red-50 p-4 text-red-800 text-sm">
+      <ul class="list-disc pl-4 space-y-1">
+        <% collection.errors.full_messages.each do |msg| %>
+          <li><%= msg %></li>
+        <% end %>
+      </ul>
+    </div>
+  <% end %>
+
+  <%# Set when this collection is being made from a project's dashboard; that
+      project is filed into it once it exists. %>
+  <% if local_assigns[:project] %>
+    <%= hidden_field_tag :project_id, project.id %>
+    <p class="text-sm text-gray-600">“<%= project.title %>” will be added to this collection.</p>
+  <% end %>
+
+  <div>
+    <%= form.label :name, class: "block text-sm font-medium text-gray-700" %>
+    <%= form.text_field :name, required: true, autofocus: true, placeholder: "Calculus sequence",
+          class: "mt-2 w-full rounded-md border border-gray-300 px-3 py-2 text-sm" %>
+  </div>
+
+  <div>
+    <%= form.label :slug, "Short name for links", class: "block text-sm font-medium text-gray-700" %>
+    <p class="mt-1 text-xs text-gray-500">
+      Lowercase letters, numbers and hyphens.
+      <%= collection.new_record? ? "Leave blank to make one from the name." : "Changing it changes this collection's future links." %>
+    </p>
+    <%= form.text_field :slug, placeholder: "calculus-sequence",
+          class: "mt-2 w-full rounded-md border border-gray-300 px-3 py-2 font-mono text-sm" %>
+  </div>
+
+  <div>
+    <%= form.label :description, class: "block text-sm font-medium text-gray-700" %>
+    <%= form.text_area :description, rows: 3, placeholder: "What ties these projects together?",
+          class: "mt-2 w-full rounded-md border border-gray-300 px-3 py-2 text-sm" %>
+  </div>
+
+  <div>
+    <%= form.label :visibility, class: "block text-sm font-medium text-gray-700" %>
+    <%= form.select :visibility, Collection.visibilities.keys.map { |v| [ v.humanize, v ] }, {},
+          class: "mt-2 rounded-md bg-white border border-gray-300 px-3 py-2 text-sm" %>
+    <p class="mt-1 text-xs text-gray-500">
+      Public: may be listed on your profile. Unlisted: anyone with the link can see it. Private: only you.
+      Private projects in a collection stay hidden from everyone else either way.
+    </p>
+  </div>
+
+  <div class="flex gap-2">
+    <%= form.submit class: "#{button_classes(color: "blue")} px-3.5 py-2" %>
+    <%= link_to "Cancel", (local_assigns[:project] || (collection.persisted? ? collection : collections_path)),
+          class: "#{button_classes(color: "gray")} px-3.5 py-2" %>
+  </div>
+<% end %>

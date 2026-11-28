@@ -1906,4 +1906,36 @@ class ProjectsControllerTest < ActionDispatch::IntegrationTest
     assert_match(%r{<divisions level="0"/>}, publication)
     assert_no_match(/brandlogo/, publication, "the default logo is a file only a build archive holds")
   end
+
+  test "dashboard shows the four most recently updated collections and a link to all" do
+    names = %w[A B C D E].map { |n| @user.collections.create!(name: "Collection #{n}") }
+    names.first.touch # now the most recent
+
+    get projects_url
+
+    section = "section[aria-labelledby=dashboard-collections-heading]"
+    assert_select "#{section} a[href=?]", collections_path, text: "All collections →"
+    links = css_select("#{section} a").map { |a| a["href"] } - [ collections_path ]
+    assert_equal 4, links.size
+    assert_equal collection_path(names.first), links.first
+  end
+
+  test "dashboard invites a first collection when there are none" do
+    @user.collections.destroy_all
+    get projects_url
+    assert_select "a[href=?]", new_collection_path, text: "a collection"
+  end
+
+  test "project page offers collections to its owner only" do
+    get project_url(@project)
+    assert_select "form[action=?]", project_collections_path(@project) do
+      assert_select "input[type=checkbox][value=?][checked]", collections(:one).id
+      assert_select "input[type=checkbox][value=?]:not([checked])", collections(:public_one).id
+    end
+
+    sign_in users(:two) # collaborator
+    get project_url(@project)
+    assert_response :success
+    assert_select "form[action=?]", project_collections_path(@project), count: 0
+  end
 end
