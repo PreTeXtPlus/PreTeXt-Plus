@@ -16,6 +16,9 @@ class User < ApplicationRecord
   has_many :collaborations, dependent: :destroy
   has_many :shared_projects, through: :collaborations, source: :project
 
+  # Named, ordered groups of this user's own projects. See Collection.
+  has_many :collections, dependent: :destroy
+
   belongs_to :tos, class_name: "Term", required: false
   belongs_to :privacy, class_name: "Term", required: false
 

@@ -66,6 +66,8 @@ class ProjectsController < ApplicationController
       @projects = Project.where(user: current_user).includes(targets: [ :current_build, :latest_build ]).limit(6)
       # Shared projects render the identical row, so they need the identical eager load.
       @shared_projects = current_user.shared_projects.includes(targets: [ :current_build, :latest_build ]).limit(6)
+      # The row of collections above the projects: the four most recently touched.
+      @collections = current_user.collections.with_projects_count.order(updated_at: :desc).limit(4)
     end
   end
 

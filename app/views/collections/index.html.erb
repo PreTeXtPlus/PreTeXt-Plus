@@ -1,0 +1,40 @@
+<% content_for :title, "Collections" %>
+<% content_for :breadcrumb do %>
+  <%= link_to "Projects", projects_path, class: "hover:underline" %> /
+<% end %>
+<% content_for :heading, "Collections" %>
+<% content_for :subtitle do %>
+  <p>Group your projects — a course sequence, a series, a reading list — and put them in the order you want.</p>
+<% end %>
+<% content_for :actions do %>
+  <%= link_to "+ New collection", new_collection_path, class: "#{button_classes(color: "green")} px-4 py-2" %>
+<% end %>
+
+<% if @collections.any? %>
+  <div class="mt-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+    <% @collections.each do |collection| %>
+      <%= link_to collection, class: "block rounded-xl bg-white p-4 ring-2 ring-gray-100 hover:ring-indigo-200" do %>
+        <div class="flex items-center justify-between gap-2">
+          <h2 class="truncate text-lg font-medium"><%= collection.name %></h2>
+          <%= project_visibility_pill(collection) %>
+        </div>
+        <p class="mt-1 text-sm text-gray-500">
+          <%= pluralize(collection.projects_count, "project") %> ·
+          updated <%= local_time_tag(collection.updated_at, relative: true) %>
+        </p>
+        <% if collection.description.present? %>
+          <p class="mt-2 text-sm text-gray-700 line-clamp-2"><%= collection.description %></p>
+        <% end %>
+      <% end %>
+    <% end %>
+  </div>
+  <div class="mt-6 text-center">
+    <%= paginate @collections %>
+  </div>
+<% else %>
+  <p class="my-10 text-center text-gray-700">
+    You don't have any collections yet.
+    <%= link_to "Create one", new_collection_path, class: "text-blue-600 hover:underline" %>
+    to group related projects.
+  </p>
+<% end %>

@@ -1,0 +1,66 @@
+<% content_for :title, @collection.name %>
+<% content_for :breadcrumb do %>
+  <%= link_to "Projects", projects_path, class: "hover:underline" %> /
+  <%= link_to "Collections", collections_path, class: "hover:underline" %> /
+<% end %>
+<% content_for :heading do %>
+  <%= @collection.name %>
+  <%= project_visibility_pill(@collection) %>
+<% end %>
+<% content_for :subtitle do %>
+  <p><%= pluralize(@memberships.size, "project") %></p>
+<% end %>
+<% content_for :actions do %>
+  <%= link_to "Edit", edit_collection_path(@collection),
+        class: "#{button_classes(color: "gray", outlined: true)} px-3.5 py-2" %>
+<% end %>
+
+<% if @collection.description.present? %>
+  <p class="mt-4 text-sm text-gray-700 whitespace-pre-line"><%= @collection.description %></p>
+<% end %>
+
+<div class="mt-4">
+  <% if @memberships.any? %>
+    <% @memberships.each_with_index do |membership, index| %>
+      <div class="flex items-center gap-1">
+        <div class="min-w-0 flex-1">
+          <%= render "projects/card", project: membership.project %>
+        </div>
+        <%# The buttons go to the order the author sees, so the first can't go up and
+            the last can't go down. %>
+        <div class="flex shrink-0 flex-col items-center gap-1">
+          <%= button_to "↑", move_collection_membership_path(@collection, membership, direction: "up"),
+                method: :patch, disabled: index.zero?, title: "Move up",
+                aria: { label: "Move “#{membership.project.title}” up" },
+                class: "#{button_classes(color: "gray", outlined: true)} px-2.5 py-1 text-sm disabled:opacity-30 disabled:cursor-default" %>
+          <%= button_to "↓", move_collection_membership_path(@collection, membership, direction: "down"),
+                method: :patch, disabled: index == @memberships.size - 1, title: "Move down",
+                aria: { label: "Move “#{membership.project.title}” down" },
+                class: "#{button_classes(color: "gray", outlined: true)} px-2.5 py-1 text-sm disabled:opacity-30 disabled:cursor-default" %>
+          <%= button_to "Remove", collection_membership_path(@collection, membership),
+                method: :delete, title: "Remove from this collection",
+                aria: { label: "Remove “#{membership.project.title}” from this collection" },
+                class: "cursor-pointer rounded-md px-2 py-1 text-xs text-red-700 hover:bg-red-50" %>
+        </div>
+      </div>
+    <% end %>
+  <% else %>
+    <p class="my-10 text-center text-gray-700">This collection has no projects yet.</p>
+  <% end %>
+</div>
+
+<% if @addable_projects.any? %>
+  <%= form_with url: collection_memberships_path(@collection),
+        class: "mt-6 flex flex-wrap items-end gap-3 rounded-lg border border-dashed border-gray-300 p-4" do |form| %>
+    <div>
+      <%= form.label :project_id, "Add a project", class: "block text-xs text-gray-600" %>
+      <%= form.select :project_id, @addable_projects.map { |p| [ p.title, p.id ] }, {},
+            class: "mt-1 rounded-md bg-white border border-gray-300 px-2 py-1.5 text-sm" %>
+    </div>
+    <%= form.submit "Add", class: "#{button_classes(color: "indigo")} px-3 py-2 text-sm" %>
+  <% end %>
+<% elsif @memberships.any? %>
+  <p class="mt-6 text-sm text-gray-500">Every project you own is already in this collection.</p>
+<% else %>
+  <p class="mt-6 text-sm text-gray-500">Projects you own can be added here once you've made one.</p>
+<% end %>

@@ -1,0 +1,11 @@
+one:
+  user: one
+  name: My Collection
+  slug: my-collection
+  visibility: private
+
+public_one:
+  user: one
+  name: My Public Collection
+  slug: my-public-collection
+  visibility: public

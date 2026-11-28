@@ -29,6 +29,12 @@ class Ability
       !project.private_visibility? && !project.user.pending_deletion?
     end
 
+    # A collection that isn't private is readable by anyone, on the same terms as a
+    # project's source. That says nothing about the projects inside it: whatever
+    # renders a collection must still check each project on its own. Hash conditions
+    # (not a block) so Collection.accessible_by can list them.
+    can :read, Collection, visibility: %w[unlisted public], user: { deletion_requested_at: nil }
+
     return if user.nil?
 
     if user.admin?
@@ -102,6 +108,12 @@ class Ability
     end
     can :manage, Build, project: { user_id: user.id }
     can :manage, Build, project: { collaborations: { user_id: user.id } }
+
+    # Collections: an owner manages their own, and files only projects they own
+    # themselves -- collaborating on a project is not enough (CollectionMembership
+    # validates the same).
+    can :manage, Collection, user_id: user.id
+    can :manage, CollectionMembership, collection: { user_id: user.id }, project: { user_id: user.id }
 
     can :subscribe, Announcement
 

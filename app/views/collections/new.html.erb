@@ -1,0 +1,8 @@
+<% content_for :title, "New collection" %>
+<% content_for :breadcrumb do %>
+  <%= link_to "Projects", projects_path, class: "hover:underline" %> /
+  <%= link_to "Collections", collections_path, class: "hover:underline" %> /
+<% end %>
+<% content_for :heading, "New collection" %>
+
+<%= render "form", collection: @collection, project: @project %>
