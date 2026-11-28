@@ -104,11 +104,12 @@ ActiveRecord::Schema[8.1].define(version: 2026_11_28_120100) do
   create_table "collections", id: :uuid, default: -> { "gen_random_uuid()" }, force: :cascade do |t|
     t.uuid "user_id", null: false
     t.string "name", null: false
+    t.string "slug", null: false
     t.text "description"
     t.integer "visibility", default: 0, null: false
     t.datetime "created_at", null: false
     t.datetime "updated_at", null: false
-    t.index ["user_id"], name: "index_collections_on_user_id"
+    t.index ["user_id", "slug"], name: "index_collections_on_user_id_and_slug", unique: true
   end
 
   create_table "contents", id: :uuid, default: -> { "gen_random_uuid()" }, force: :cascade do |t|

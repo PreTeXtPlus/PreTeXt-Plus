@@ -7,6 +7,32 @@ class CollectionTest < ActiveSupport::TestCase
     assert collection.errors.added?(:name, :blank)
   end
 
+  test "derives a slug from the name, unique among the owner's collections" do
+    assert_equal "reading-list", users(:one).collections.create!(name: "Reading List!").slug
+    assert_equal "reading-list-2", users(:one).collections.create!(name: "Reading list").slug
+    assert_equal "my-collection-2", users(:one).collections.create!(name: "My Collection").slug
+    # Another user's collections don't count.
+    assert_equal "my-collection", users(:two).collections.create!(name: "My Collection").slug
+    assert_equal "collection", users(:two).collections.create!(name: "★").slug
+  end
+
+  test "keeps a slug given explicitly, normalized" do
+    assert_equal "intro-courses", users(:one).collections.create!(name: "Intro", slug: " Intro-Courses ").slug
+  end
+
+  test "rejects a slug that is malformed or already taken by the same owner" do
+    [ "two words", "trailing-", "double--hyphen", "under_score" ].each do |slug|
+      collection = users(:one).collections.build(name: "X", slug: slug)
+      assert_not collection.valid?, slug
+      assert collection.errors.of_kind?(:slug, :invalid), slug
+    end
+
+    renamed = collections(:public_one)
+    renamed.slug = "my-collection"
+    assert_not renamed.valid?
+    assert renamed.errors.of_kind?(:slug, :taken)
+  end
+
   test "defaults to private" do
     assert users(:one).collections.create!(name: "New").private_visibility?
   end

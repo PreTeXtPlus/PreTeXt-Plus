@@ -16,7 +16,20 @@ class Collection < ApplicationRecord
 
   scope :publicly_listed, -> { where(visibility: :public) }
 
+  # Lowercase words joined by single hyphens, so it can sit in a URL beside the
+  # owner's username. Unique among one user's collections only; the
+  # [user_id, slug] index backs this against concurrent creates.
+  SLUG_FORMAT = /\A[a-z0-9]+(?:-[a-z0-9]+)*\z/
+
+  normalizes :slug, with: ->(slug) { slug.strip.downcase.presence }
+
   validates :name, presence: true, length: { maximum: 255 }
+  validates :slug, presence: true, length: { maximum: 100 },
+    format: { with: SLUG_FORMAT, message: "may only contain lowercase letters, numbers, and single hyphens" },
+    uniqueness: { scope: :user_id }
+
+  # Derived from the name when none is given; set or change it explicitly to choose one.
+  before_validation :assign_slug, on: :create
 
   # Puts the listed projects first, in the given order; ids that are not in this
   # collection are ignored, and any member left out of the list keeps its relative
@@ -35,5 +48,22 @@ class Collection < ApplicationRecord
     collection_memberships.reset
     projects.reset
     self
+  end
+
+  private
+
+  # The name, parameterized and trimmed to fit, with -2, -3, ... appended until it is
+  # free among the owner's collections. A name with nothing URL-safe in it ("★")
+  # falls back to "collection".
+  def assign_slug
+    return if slug.present? || name.blank?
+
+    base = name.parameterize.first(90).delete_suffix("-").presence || "collection"
+    self.slug = base
+    suffix = 2
+    while user&.collections&.exists?(slug: slug)
+      self.slug = "#{base}-#{suffix}"
+      suffix += 1
+    end
   end
 end
