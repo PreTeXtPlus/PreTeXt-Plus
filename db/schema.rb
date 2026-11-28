@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_11_21_120000) do
+ActiveRecord::Schema[8.1].define(version: 2026_11_28_120100) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
   enable_extension "pgcrypto"
@@ -88,6 +88,27 @@ ActiveRecord::Schema[8.1].define(version: 2026_11_21_120000) do
     t.index ["project_id", "invited_email"], name: "index_collaborations_on_project_id_and_invited_email", unique: true
     t.index ["project_id"], name: "index_collaborations_on_project_id"
     t.index ["user_id"], name: "index_collaborations_on_user_id"
+  end
+
+  create_table "collection_memberships", id: :uuid, default: -> { "gen_random_uuid()" }, force: :cascade do |t|
+    t.uuid "collection_id", null: false
+    t.uuid "project_id", null: false
+    t.integer "position", null: false
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["collection_id", "position"], name: "index_collection_memberships_on_collection_id_and_position"
+    t.index ["collection_id", "project_id"], name: "index_collection_memberships_on_collection_id_and_project_id", unique: true
+    t.index ["project_id"], name: "index_collection_memberships_on_project_id"
+  end
+
+  create_table "collections", id: :uuid, default: -> { "gen_random_uuid()" }, force: :cascade do |t|
+    t.uuid "user_id", null: false
+    t.string "name", null: false
+    t.text "description"
+    t.integer "visibility", default: 0, null: false
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["user_id"], name: "index_collections_on_user_id"
   end
 
   create_table "contents", id: :uuid, default: -> { "gen_random_uuid()" }, force: :cascade do |t|
@@ -407,6 +428,9 @@ ActiveRecord::Schema[8.1].define(version: 2026_11_21_120000) do
   add_foreign_key "builds", "targets"
   add_foreign_key "collaborations", "projects"
   add_foreign_key "collaborations", "users"
+  add_foreign_key "collection_memberships", "collections"
+  add_foreign_key "collection_memberships", "projects"
+  add_foreign_key "collections", "users"
   add_foreign_key "contents", "projects"
   add_foreign_key "pay_charges", "pay_customers", column: "customer_id"
   add_foreign_key "pay_charges", "pay_subscriptions", column: "subscription_id"

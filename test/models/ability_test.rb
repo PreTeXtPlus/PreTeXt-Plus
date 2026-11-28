@@ -180,4 +180,44 @@ class AbilityTest < ActiveSupport::TestCase
     users(:one).update!(admin: true)
     assert Ability.new(users(:one)).can?(:manage, workshop)
   end
+
+  test "an owner manages their own collections" do
+    ability = Ability.new(users(:one))
+    assert ability.can?(:manage, collections(:one))
+    assert_equal collections(:one, :public_one).to_set,
+      Collection.accessible_by(ability, :update).to_set
+  end
+
+  test "only non-private collections are readable by others" do
+    [ Ability.new(users(:two)), Ability.new(nil) ].each do |ability|
+      assert_not ability.can?(:read, collections(:one))
+      assert ability.can?(:read, collections(:public_one))
+      assert_not ability.can?(:update, collections(:public_one))
+    end
+
+    collections(:one).update!(visibility: :unlisted)
+    assert Ability.new(nil).can?(:read, collections(:one))
+    assert_equal [ collections(:one), collections(:public_one) ].to_set,
+      Collection.accessible_by(Ability.new(nil), :read).to_set
+  end
+
+  test "an owner pending deletion takes their collections down" do
+    users(:one).update!(deletion_requested_at: Time.current)
+    assert_not Ability.new(nil).can?(:read, collections(:public_one))
+    assert_empty Collection.accessible_by(Ability.new(nil), :read)
+  end
+
+  test "only a project's owner adds it to their own collection" do
+    owner = Ability.new(users(:one))
+    assert owner.can?(:create, CollectionMembership.new(collection: collections(:one), project: projects(:slides)))
+    # users(:one) does not own project two.
+    assert_not owner.can?(:create, CollectionMembership.new(collection: collections(:one), project: projects(:two)))
+
+    # users(:two) collaborates on project one, which is not enough.
+    collaborator = Ability.new(users(:two))
+    theirs = users(:two).collections.create!(name: "Theirs")
+    assert_not collaborator.can?(:create, CollectionMembership.new(collection: theirs, project: projects(:one)))
+    # Nor can anyone file into someone else's collection.
+    assert_not collaborator.can?(:create, CollectionMembership.new(collection: collections(:one), project: projects(:two)))
+  end
 end

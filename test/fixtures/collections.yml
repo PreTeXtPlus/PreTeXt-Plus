@@ -1,0 +1,9 @@
+one:
+  user: one
+  name: My Collection
+  visibility: private
+
+public_one:
+  user: one
+  name: My Public Collection
+  visibility: public

@@ -1,0 +1,10 @@
+# Positions deliberately run against fixture order, so ordering tests mean something.
+one_slides:
+  collection: one
+  project: slides
+  position: 0
+
+one_one:
+  collection: one
+  project: one
+  position: 1

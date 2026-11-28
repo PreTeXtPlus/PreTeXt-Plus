@@ -47,6 +47,12 @@ class Project < ApplicationRecord
   has_many :targets, dependent: :destroy
   has_many :builds, dependent: :destroy
 
+  # The owner's collections this project is filed in. Only the owner files a
+  # project, so a change of owner takes it out of all of them; see
+  # #leave_collections.
+  has_many :collection_memberships, dependent: :destroy
+  has_many :collections, through: :collection_memberships
+
   # Every nested collection accepts ids the editor minted itself; see
   # #tolerate_client_minted_ids for why, and for what these overrides do.
   # Divisions additionally never lose their root this way; see #keep_root_division.
@@ -154,6 +160,8 @@ class Project < ApplicationRecord
   # because these are denormalized flags, not a change worth a callback chain per row
   # (mirrors Target#sync_from_builds! using update_columns for the same reason).
   after_update :unpublish_targets_if_private, if: :saved_change_to_visibility?
+  # Collections belong to the previous owner, who no longer owns this project.
+  after_update :leave_collections, if: :saved_change_to_user_id?
 
   def backup?
     backup_of_id.present?
@@ -533,6 +541,10 @@ class Project < ApplicationRecord
       return if backup? || targets.any?
 
       targets.build(**(slideshow_document_type? ? DEFAULT_SLIDESHOW_TARGET : DEFAULT_TARGET))
+    end
+
+    def leave_collections
+      collection_memberships.destroy_all
     end
 
     def unpublish_targets_if_private
